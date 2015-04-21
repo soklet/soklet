@@ -32,8 +32,8 @@ Coming soon
 <!--
 ```xml
 <dependency>
-  <groupId>com.pyranid</groupId>
-  <artifactId>pyranid</artifactId>
+  <groupId>com.soklet</groupId>
+  <artifactId>soklet</artifactId>
   <version>1.0.0</version>
 </dependency>
 ```
@@ -41,10 +41,10 @@ Coming soon
 #### Direct Download
 
 Coming soon
-<!-- [https://www.pyranid.com/releases/pyranid-1.0.0.jar](https://www.pyranid.com/releases/pyranid-1.0.0.jar) -->
-## Configuration
-
+<!-- [https://www.soklet.com/releases/soklet-1.0.0.jar](https://www.soklet.com/releases/soklet-1.0.0.jar) -->
 ## Example Code
+
+#### Resource Endpoints
 
 ```java
 // Any class containing URL-resource methods must have the @Resource annotation applied.
