@@ -103,17 +103,16 @@ For a request to `/users/junk`, an `IllegalPathParameterException` would bubble 
 #### Startup
 
 ```java
+// Assumes you're using Guice as your DI framework via soklet-guice
 public static void main(String[] args) throws Exception {
-  // Bootstrap Guice
-  Injector injector = createInjector(new SokletModule(), new AppModule());
+  Injector injector = createInjector(Modules.override(new SokletModule()).with(new AppModule()));
   Server server = injector.getInstance(Server.class);
   server.start();
   System.in.read(); // Wait for keypress
   server.stop();
 }
 
-// If you're using Guice
-public static class AppModule extends AbstractModule {
+class AppModule extends AbstractModule {
   @Inject
   @Provides
   @Singleton
