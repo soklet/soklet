@@ -117,7 +117,7 @@ class AppModule extends AbstractModule {
   @Provides
   @Singleton
   public Server provideServer(InstanceProvider instanceProvider) {
-    return new JettyServer(JettyServerConfiguration.builder(instanceProvider).port(8080).build());
+    return JettyServer.forInstanceProvider(instanceProvider).port(8080).build();
   }
 }
 ```
