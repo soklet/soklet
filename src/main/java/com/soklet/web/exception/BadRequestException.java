@@ -35,10 +35,6 @@ import java.util.Optional;
  * @since 1.0.0
  */
 public class BadRequestException extends RuntimeException {
-  /**
-   * 
-   * @param message
-   */
   public BadRequestException(String message) {
     super(requireNonNull(message));
   }

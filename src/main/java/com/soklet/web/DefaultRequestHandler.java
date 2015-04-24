@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
@@ -56,6 +57,7 @@ import com.soklet.web.exception.IllegalPathParameterException;
 import com.soklet.web.exception.IllegalQueryParameterException;
 import com.soklet.web.exception.MissingQueryParameterException;
 import com.soklet.web.exception.MissingRequestBodyException;
+import com.soklet.web.exception.ResourceMethodExecutionException;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
@@ -96,9 +98,15 @@ public class DefaultRequestHandler implements RequestHandler {
     // Ask our injector for an instance of the class associated with the method
     Object resourceMethodDeclaringInstance = instanceProvider.provide(route.resourceMethod().getDeclaringClass());
 
-    // Call the method
-    return Optional.ofNullable(route.resourceMethod().invoke(resourceMethodDeclaringInstance,
-      parametersToPass.toArray()));
+    // Call the method via reflection
+    try {
+      return Optional.ofNullable(route.resourceMethod().invoke(resourceMethodDeclaringInstance,
+        parametersToPass.toArray()));
+    } catch (InvocationTargetException e) {
+      throw new ResourceMethodExecutionException(route, e.getCause());
+    } catch (Exception e) {
+      throw new ResourceMethodExecutionException(route, e);
+    }
   }
 
   protected Object extractParameterValueToPassToResourceMethod(HttpServletRequest httpServletRequest,
