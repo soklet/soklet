@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.web.deploy;
+package com.soklet.deploy;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>

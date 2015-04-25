@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.web.deploy;
+package com.soklet.deploy;
 
 import java.nio.file.Path;
 import java.util.ArrayList;

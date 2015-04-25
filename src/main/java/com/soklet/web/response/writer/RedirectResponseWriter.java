@@ -20,7 +20,9 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web.response;
+package com.soklet.web.response.writer;
+
+import com.soklet.web.response.RedirectResponse;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>

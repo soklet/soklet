@@ -20,7 +20,7 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web.response;
+package com.soklet.web.response.writer;
 
 import static java.util.Objects.requireNonNull;
 
@@ -30,22 +30,23 @@ import java.util.Optional;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.soklet.web.response.ApiResponse;
 import com.soklet.web.routing.Route;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public class DefaultRedirectResponseWriter implements RedirectResponseWriter {
+public class DefaultApiResponseWriter implements ApiResponseWriter {
   @Override
   public void writeResponse(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
-      Optional<RedirectResponse> response, Optional<Route> route, Optional<Exception> exception) throws IOException {
+      Optional<ApiResponse> response, Optional<Route> route, Optional<Exception> exception) throws IOException {
     requireNonNull(httpServletRequest);
     requireNonNull(httpServletResponse);
     requireNonNull(route);
     requireNonNull(response);
     requireNonNull(exception);
 
-    httpServletResponse.setHeader("Location", response.get().url());
+    System.out.println("TODO: write default API response");
   }
 }

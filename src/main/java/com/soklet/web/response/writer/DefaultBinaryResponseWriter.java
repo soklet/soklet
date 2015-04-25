@@ -20,7 +20,10 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web.response;
+package com.soklet.web.response.writer;
+
+import static com.soklet.util.IoUtils.copyStreamCloseAfterwards;
+import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -28,13 +31,24 @@ import java.util.Optional;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.soklet.web.response.BinaryResponse;
 import com.soklet.web.routing.Route;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public interface ResponseWriter<T> {
-  void writeResponse(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
-      Optional<T> response, Optional<Route> route, Optional<Exception> exception) throws IOException;
+public class DefaultBinaryResponseWriter implements BinaryResponseWriter {
+  @Override
+  public void writeResponse(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
+      Optional<BinaryResponse> response, Optional<Route> route, Optional<Exception> exception) throws IOException {
+    requireNonNull(httpServletRequest);
+    requireNonNull(httpServletResponse);
+    requireNonNull(route);
+    requireNonNull(response);
+    requireNonNull(exception);
+
+    httpServletResponse.setContentType(response.get().contentType());
+    copyStreamCloseAfterwards(response.get().inputStream(), httpServletResponse.getOutputStream());
+  }
 }

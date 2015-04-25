@@ -20,10 +20,12 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web.response;
+package com.soklet.web.response.writer;
+
+import com.soklet.web.response.ApiResponse;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public interface BinaryResponseWriter extends ResponseWriter<BinaryResponse> {}
+public interface ApiResponseWriter extends ResponseWriter<ApiResponse> {}

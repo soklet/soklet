@@ -20,10 +20,33 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web.response;
+package com.soklet.web.response.writer;
+
+import static java.util.Objects.requireNonNull;
+
+import java.io.IOException;
+import java.util.Optional;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import com.soklet.web.response.PageResponse;
+import com.soklet.web.routing.Route;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public interface ApiResponseWriter extends ResponseWriter<ApiResponse> {}
+public class DefaultPageResponseWriter implements PageResponseWriter {
+  @Override
+  public void writeResponse(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
+      Optional<PageResponse> response, Optional<Route> route, Optional<Exception> exception) throws IOException {
+    requireNonNull(httpServletRequest);
+    requireNonNull(httpServletResponse);
+    requireNonNull(route);
+    requireNonNull(response);
+    requireNonNull(exception);
+
+    System.out.println("TODO: write default API response");
+  }
+}
