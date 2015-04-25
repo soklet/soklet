@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.web;
+package com.soklet.web.routing;
 
 import static com.soklet.util.IoUtils.copyStreamCloseAfterwards;
 import static java.lang.String.format;
@@ -35,6 +35,10 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import com.soklet.web.HttpMethod;
+import com.soklet.web.request.RequestHandler;
+import com.soklet.web.response.ResponseHandler;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>

@@ -20,28 +20,10 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web.exception;
-
-import static java.lang.String.format;
-import static java.util.Objects.requireNonNull;
-
-import com.soklet.web.routing.Route;
+package com.soklet.web.response;
 
 /**
- * Indicates that an error occurred when executing the resource {@link java.lang.reflect.Method} of a
- * {@link com.soklet.web.routing.Route}.
- * 
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public class ResourceMethodExecutionException extends RuntimeException {
-  public ResourceMethodExecutionException(Route route, Throwable cause) {
-    super(format("An error occurred while executing %s when attempting to handle %s %s", requireNonNull(route)
-      .resourceMethod(), requireNonNull(route).httpMethod(), requireNonNull(route).resourcePath().path()),
-      requireNonNull(cause));
-  }
-
-  public ResourceMethodExecutionException(String message, Throwable cause) {
-    super(requireNonNull(message), requireNonNull(cause));
-  }
-}
+public interface ApiResponseWriter extends ResponseWriter<ApiResponse> {}

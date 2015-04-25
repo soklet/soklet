@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.web;
+package com.soklet.web.routing;
 
 import static java.lang.String.format;
 import static java.util.Collections.unmodifiableMap;
@@ -32,6 +32,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.soklet.classindex.ClassIndex;
+import com.soklet.web.HttpMethod;
+import com.soklet.web.ResourcePath;
 import com.soklet.web.ResourcePath.Component;
 import com.soklet.web.annotation.DELETE;
 import com.soklet.web.annotation.GET;

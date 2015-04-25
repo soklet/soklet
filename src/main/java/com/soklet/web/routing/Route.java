@@ -20,13 +20,16 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web;
+package com.soklet.web.routing;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 import java.lang.reflect.Method;
 import java.util.Objects;
+
+import com.soklet.web.HttpMethod;
+import com.soklet.web.ResourcePath;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>

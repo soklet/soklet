@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.web;
+package com.soklet.web.request;
 
 import static com.soklet.util.IoUtils.copyStreamToBytesCloseAfterwards;
 import static com.soklet.util.IoUtils.stringFromStreamCloseAfterwards;
@@ -50,6 +50,7 @@ import com.soklet.converter.ValueConversionException;
 import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.util.InstanceProvider;
+import com.soklet.web.ResourcePath;
 import com.soklet.web.annotation.PathParameter;
 import com.soklet.web.annotation.QueryParameter;
 import com.soklet.web.annotation.RequestBody;
@@ -58,6 +59,7 @@ import com.soklet.web.exception.IllegalQueryParameterException;
 import com.soklet.web.exception.MissingQueryParameterException;
 import com.soklet.web.exception.MissingRequestBodyException;
 import com.soklet.web.exception.ResourceMethodExecutionException;
+import com.soklet.web.routing.Route;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>

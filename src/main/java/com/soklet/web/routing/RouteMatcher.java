@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-package com.soklet.web;
+package com.soklet.web.routing;
 
 import java.util.Optional;
+
+import com.soklet.web.HttpMethod;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>

@@ -20,8 +20,6 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
-import com.soklet.web.ResourcePath;
-
 /**
  * @author Transmogrify LLC.
  */

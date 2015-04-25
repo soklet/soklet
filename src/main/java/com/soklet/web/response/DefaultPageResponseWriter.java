@@ -20,28 +20,32 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web.exception;
+package com.soklet.web.response;
 
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
+
+import java.io.IOException;
+import java.util.Optional;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import com.soklet.web.routing.Route;
 
 /**
- * Indicates that an error occurred when executing the resource {@link java.lang.reflect.Method} of a
- * {@link com.soklet.web.routing.Route}.
- * 
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public class ResourceMethodExecutionException extends RuntimeException {
-  public ResourceMethodExecutionException(Route route, Throwable cause) {
-    super(format("An error occurred while executing %s when attempting to handle %s %s", requireNonNull(route)
-      .resourceMethod(), requireNonNull(route).httpMethod(), requireNonNull(route).resourcePath().path()),
-      requireNonNull(cause));
-  }
+public class DefaultPageResponseWriter implements PageResponseWriter {
+  @Override
+  public void writeResponse(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
+      Optional<PageResponse> response, Optional<Route> route, Optional<Exception> exception) throws IOException {
+    requireNonNull(httpServletRequest);
+    requireNonNull(httpServletResponse);
+    requireNonNull(route);
+    requireNonNull(response);
+    requireNonNull(exception);
 
-  public ResourceMethodExecutionException(String message, Throwable cause) {
-    super(requireNonNull(message), requireNonNull(cause));
+    System.out.println("TODO: write default API response");
   }
 }

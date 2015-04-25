@@ -20,28 +20,27 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web.exception;
+package com.soklet.web;
 
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
-import com.soklet.web.routing.Route;
+import com.soklet.web.exception.BadRequestException;
+import com.soklet.web.exception.MethodNotAllowedException;
 
 /**
- * Indicates that an error occurred when executing the resource {@link java.lang.reflect.Method} of a
- * {@link com.soklet.web.routing.Route}.
- * 
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public class ResourceMethodExecutionException extends RuntimeException {
-  public ResourceMethodExecutionException(Route route, Throwable cause) {
-    super(format("An error occurred while executing %s when attempting to handle %s %s", requireNonNull(route)
-      .resourceMethod(), requireNonNull(route).httpMethod(), requireNonNull(route).resourcePath().path()),
-      requireNonNull(cause));
-  }
+public class DefaultExceptionStatusMapper implements ExceptionStatusMapper {
+  @Override
+  public int statusForException(Exception exception) {
+    requireNonNull(exception);
 
-  public ResourceMethodExecutionException(String message, Throwable cause) {
-    super(requireNonNull(message), requireNonNull(cause));
+    if (exception instanceof BadRequestException)
+      return 400;
+    if (exception instanceof MethodNotAllowedException)
+      return 405;
+
+    return 500;
   }
 }

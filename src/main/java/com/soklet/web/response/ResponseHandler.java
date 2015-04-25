@@ -14,13 +14,16 @@
  * limitations under the License.
  */
 
-package com.soklet.web;
+package com.soklet.web.response;
 
 import java.io.IOException;
 import java.util.Optional;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import com.soklet.web.request.RequestHandler;
+import com.soklet.web.routing.Route;
 
 /**
  * Contract for writing an HTTP response.

@@ -20,28 +20,56 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web.exception;
+package com.soklet.web.response;
 
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
-import com.soklet.web.routing.Route;
+import java.util.Map;
+import java.util.Optional;
 
 /**
- * Indicates that an error occurred when executing the resource {@link java.lang.reflect.Method} of a
- * {@link com.soklet.web.routing.Route}.
- * 
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public class ResourceMethodExecutionException extends RuntimeException {
-  public ResourceMethodExecutionException(Route route, Throwable cause) {
-    super(format("An error occurred while executing %s when attempting to handle %s %s", requireNonNull(route)
-      .resourceMethod(), requireNonNull(route).httpMethod(), requireNonNull(route).resourcePath().path()),
-      requireNonNull(cause));
+public class PageResponse implements Response {
+  private final int status;
+  private final String name;
+  private final Optional<Map<String, Object>> model;
+
+  public PageResponse(String name) {
+    this.status = 200;
+    this.name = requireNonNull(name);
+    this.model = Optional.empty();
   }
 
-  public ResourceMethodExecutionException(String message, Throwable cause) {
-    super(requireNonNull(message), requireNonNull(cause));
+  public PageResponse(int status, String name) {
+    this.status = status;
+    this.name = requireNonNull(name);
+    this.model = Optional.empty();
+  }
+
+  public PageResponse(String name, Map<String, Object> model) {
+    this.status = 200;
+    this.name = requireNonNull(name);
+    this.model = Optional.ofNullable(model);
+  }
+
+  public PageResponse(int status, String name, Map<String, Object> model) {
+    this.status = status;
+    this.name = requireNonNull(name);
+    this.model = Optional.ofNullable(model);
+  }
+
+  @Override
+  public int status() {
+    return status;
+  }
+
+  public String name() {
+    return name;
+  }
+
+  public Optional<Map<String, Object>> model() {
+    return model;
   }
 }
