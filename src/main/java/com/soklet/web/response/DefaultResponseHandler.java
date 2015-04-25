@@ -184,7 +184,7 @@ public class DefaultResponseHandler implements ResponseHandler {
     // Note: if your API resource method is declared to return something other than ApiResponse (e.g. Object), this will
     // not work. You should subclass and override this method to compensate, possibly using a condition like
     // route.resourcePath().path().startsWith("/api/")
-    if (route.resourceMethod().getReturnType().isAssignableFrom(ApiResponse.class))
+    if (ApiResponse.class.isAssignableFrom(route.resourceMethod().getReturnType()))
       return apiResponseWriter;
 
     return pageResponseWriter;
