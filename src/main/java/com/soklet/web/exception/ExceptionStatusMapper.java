@@ -20,7 +20,7 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web;
+package com.soklet.web.exception;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>

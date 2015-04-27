@@ -33,7 +33,7 @@ import javax.inject.Singleton;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import com.soklet.web.ExceptionStatusMapper;
+import com.soklet.web.exception.ExceptionStatusMapper;
 import com.soklet.web.response.writer.ApiResponseWriter;
 import com.soklet.web.response.writer.BinaryResponseWriter;
 import com.soklet.web.response.writer.PageResponseWriter;

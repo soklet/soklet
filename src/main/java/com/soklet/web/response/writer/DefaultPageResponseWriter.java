@@ -47,6 +47,6 @@ public class DefaultPageResponseWriter implements PageResponseWriter {
     requireNonNull(response);
     requireNonNull(exception);
 
-    System.out.println("TODO: write default API response");
+    throw new UnsupportedOperationException("TODO: write default page response");
   }
 }

@@ -20,12 +20,9 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.web;
+package com.soklet.web.exception;
 
 import static java.util.Objects.requireNonNull;
-
-import com.soklet.web.exception.BadRequestException;
-import com.soklet.web.exception.MethodNotAllowedException;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>

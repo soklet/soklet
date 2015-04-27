@@ -38,15 +38,15 @@ import com.soklet.json.JSONObject;
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public class CachedUrlMapper {
+public class CachedUrlManifest {
   private final Map<String, String> cachedUrlsByUrl;
 
-  public CachedUrlMapper(Map<String, String> cachedUrlsByUrl) {
+  public CachedUrlManifest(Map<String, String> cachedUrlsByUrl) {
     requireNonNull(cachedUrlsByUrl);
     this.cachedUrlsByUrl = unmodifiableMap(new HashMap<>(cachedUrlsByUrl));
   }
 
-  public CachedUrlMapper(Path cachedUrlManifestFile, ErrorStrategy errorStrategy) {
+  public CachedUrlManifest(Path cachedUrlManifestFile, ErrorStrategy errorStrategy) {
     requireNonNull(cachedUrlManifestFile);
     requireNonNull(errorStrategy);
     this.cachedUrlsByUrl = unmodifiableMap(cachedUrlsByUrlFromUrlManifestFile(cachedUrlManifestFile, errorStrategy));

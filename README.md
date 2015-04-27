@@ -8,7 +8,7 @@ It's under active development and will be available for production use soon.
 
 #### Design Goals
 
-* Minimalist, unopinionated
+* Minimal, unopinionated
 * No external servlet container required
 * Fast startup
 * No 3rd party dependencies - uses only standard JDK APIs
