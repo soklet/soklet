@@ -45,6 +45,9 @@
 				<configuration>
 					<source>1.8</source>
 					<target>1.8</target>
+					<!-- Maven compiler plugin discovers Soklet's internal annotation processor 
+						and tries to apply it to itself...prevent that here -->
+					<proc>none</proc>
 				</configuration>
 			</plugin>
 			<plugin>
