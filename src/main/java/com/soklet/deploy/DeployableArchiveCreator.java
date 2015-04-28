@@ -52,7 +52,8 @@ public abstract class DeployableArchiveCreator {
   private final Logger logger = Logger.getLogger(getClass().getName());
 
   {
-    archiveName = format("%s.zip", DateTimeFormatter.ofPattern("yyyyMMdd-hhmmss").format(LocalDateTime.now()));
+    archiveName =
+        format("%s-deployment.zip", DateTimeFormatter.ofPattern("yyyyMMdd-hhmmss").format(LocalDateTime.now()));
   }
 
   public abstract Set<DeploymentPath> pathsToInclude();

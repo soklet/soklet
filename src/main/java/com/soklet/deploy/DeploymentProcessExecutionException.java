@@ -27,6 +27,11 @@ import java.util.Optional;
 public class DeploymentProcessExecutionException extends RuntimeException {
   private final Optional<Process> process;
 
+  public DeploymentProcessExecutionException(String message) {
+    super(message);
+    this.process = Optional.empty();
+  }
+
   public DeploymentProcessExecutionException(String message, Throwable cause) {
     super(message, cause);
     this.process = Optional.empty();

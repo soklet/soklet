@@ -77,7 +77,12 @@ public abstract class MavenDeployableArchiveCreator extends DeployableArchiveCre
     String mavenHome = trimToNull(System.getenv("MAVEN_HOME"));
 
     if (mavenHome == null)
-      throw new IllegalArgumentException("The MAVEN_HOME environment variable must be defined");
+      mavenHome = trimToNull(System.getProperty("soklet.MAVEN_HOME"));
+
+    if (mavenHome == null)
+      throw new DeploymentProcessExecutionException(
+        "In order to determine the absolute path to your mvn executable, the soklet.MAVEN_HOME system property "
+            + "or the MAVEN_HOME environment variable must be defined");
 
     return Paths.get(format("%s/bin/mvn", mavenHome));
   }
