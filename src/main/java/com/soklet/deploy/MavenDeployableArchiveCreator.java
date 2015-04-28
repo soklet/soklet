@@ -16,7 +16,11 @@
 
 package com.soklet.deploy;
 
+import static com.soklet.util.StringUtils.trimToNull;
+import static java.lang.String.format;
+
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
@@ -31,11 +35,6 @@ public abstract class MavenDeployableArchiveCreator extends DeployableArchiveCre
   @Override
   public void preProcess() throws Exception {
     super.preProcess();
-
-    boolean skip = true;
-
-    if (skip)
-      return;
 
     Path mavenExecutableFile = mavenExecutableFile();
 
@@ -74,5 +73,12 @@ public abstract class MavenDeployableArchiveCreator extends DeployableArchiveCre
     };
   }
 
-  protected abstract Path mavenExecutableFile();
+  protected Path mavenExecutableFile() {
+    String mavenHome = trimToNull(System.getenv("MAVEN_HOME"));
+
+    if (mavenHome == null)
+      throw new IllegalArgumentException("The MAVEN_HOME environment variable must be defined");
+
+    return Paths.get(format("%s/bin/mvn", mavenHome));
+  }
 }

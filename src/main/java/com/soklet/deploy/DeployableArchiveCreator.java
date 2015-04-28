@@ -59,8 +59,6 @@ public abstract class DeployableArchiveCreator {
 
   public abstract Set<Path> staticFileDirectories();
 
-  public abstract Set<Path> stringsDirectories();
-
   public void preProcess() throws Exception {}
 
   public void postProcess() throws Exception {}
@@ -85,14 +83,12 @@ public abstract class DeployableArchiveCreator {
       Set<DeploymentPath> pathsToInclude = pathsToInclude();
       Set<Path> pathsToExclude = pathsToExclude();
       Set<Path> staticFileDirectories = staticFileDirectories();
-      Set<Path> stringsDirectories = stringsDirectories();
 
       logger.info(format("Creating deployment archive %s...", archiveName));
 
       preProcess();
 
       staticFileDirectories.stream().forEach(this::verifyValidDirectory);
-      stringsDirectories.stream().forEach(this::verifyValidDirectory);
 
       Set<DeploymentPath> filesToInclude = extractAllFilesFromPaths(pathsToInclude, pathsToExclude);
 
@@ -160,21 +156,20 @@ public abstract class DeployableArchiveCreator {
       if (Files.exists(deploymentPath.sourcePath())) {
         if (Files.isDirectory(deploymentPath.sourcePath())) {
           try {
-            Files.walk(deploymentPath.sourcePath()).forEach(childPath -> {
-              if (!Files.isDirectory(childPath) && shouldIncludePath(childPath, pathsToExclude)) {
-                // System.out.println("Adding leaf " + childPath + ": "
-                // + deploymentPath.sourcePath().relativize(childPath));
+            Files.walk(deploymentPath.sourcePath()).forEach(
+              childPath -> {
+                if (!Files.isDirectory(childPath) && shouldIncludePath(childPath, pathsToExclude)) {
 
-              Path destinationDirectory =
-                  Paths.get(deploymentPath.destinationDirectory() + "/"
-                      + deploymentPath.sourcePath().relativize(childPath));
+                  Path destinationDirectory =
+                      Paths.get(format("%s/%s", deploymentPath.destinationDirectory(), deploymentPath.sourcePath()
+                        .relativize(childPath)));
 
-              if (destinationDirectory.getParent() != null)
-                destinationDirectory = destinationDirectory.getParent();
+                  if (destinationDirectory.getParent() != null)
+                    destinationDirectory = destinationDirectory.getParent();
 
-              filesToInclude.add(DeploymentPaths.get(childPath, destinationDirectory));
-            }
-          } );
+                  filesToInclude.add(DeploymentPaths.get(childPath, destinationDirectory));
+                }
+              });
           } catch (IOException e) {
             throw new UncheckedIOException(e);
           }
@@ -282,25 +277,5 @@ public abstract class DeployableArchiveCreator {
   protected boolean invalidProcessExitValue(Process process) {
     requireNonNull(process);
     return process.exitValue() != 0;
-  }
-
-  // TODO: keep these 3 methods or remove them?
-
-  protected Set<Path> allFilesInDirectory(Path directory, DirectoryWalkingDepth directoryWalkingDepth) {
-    return allFilesInDirectory(directory, directoryWalkingDepth, emptySet());
-  }
-
-  protected Set<Path> allFilesInDirectory(Path directory, DirectoryWalkingDepth directoryWalkingDepth,
-      Set<Path> pathsToExclude) {
-    requireNonNull(directory);
-    requireNonNull(directoryWalkingDepth);
-    requireNonNull(pathsToExclude);
-    verifyValidDirectory(directory);
-
-    throw new UnsupportedOperationException();
-  }
-
-  protected static enum DirectoryWalkingDepth {
-    CURRENT_DIRECTORY, ALL_SUBDIRECTORIES
   }
 }

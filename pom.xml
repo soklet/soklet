@@ -43,8 +43,10 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.2</version>
 				<configuration>
+					<fork>true</fork>
 					<source>1.8</source>
 					<target>1.8</target>
+					<compilerArgument>-parameters</compilerArgument>
 					<!-- Maven compiler plugin discovers Soklet's internal annotation processor 
 						and tries to apply it to itself...prevent that here -->
 					<proc>none</proc>
