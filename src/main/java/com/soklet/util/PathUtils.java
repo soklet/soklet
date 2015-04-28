@@ -47,10 +47,12 @@ public final class PathUtils {
       }
 
       @Override
-      public FileVisitResult postVisitDirectory(Path director, IOException e) throws IOException {
+      public FileVisitResult postVisitDirectory(Path directory, IOException e) throws IOException {
         Files.delete(directory);
         return FileVisitResult.CONTINUE;
       }
     });
+
+    Files.deleteIfExists(directory);
   }
 }
