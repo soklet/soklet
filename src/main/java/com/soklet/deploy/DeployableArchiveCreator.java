@@ -146,11 +146,11 @@ public abstract class DeployableArchiveCreator {
       // Remove static files for now - we handle them specially below and add them back as we go
       filesToInclude.removeAll(staticFilesToInclude);
 
+      // Figure out mappings of static file URLs to their hashed variants
+      HashedUrlManifest hashedUrlManifest = createHashedUrlManifest(staticFilesToInclude);
+
       Path temporaryDirectory =
           Files.createTempDirectory(format("com.soklet.%s-%s-", getClass().getSimpleName(), randomUUID()));
-
-      // Keep track of our hashed URLs for manifest creation
-      Map<String, String> hashedUrlsByUrl = new HashMap<>(staticFilesToInclude.size());
 
       try {
         for (DeploymentPath staticFileToInclude : staticFilesToInclude) {
@@ -190,14 +190,14 @@ public abstract class DeployableArchiveCreator {
             filesToInclude.add(new DeploymentPath(copiedHashedFile, staticFileToInclude.destinationDirectory()));
 
             // Update manifest
-            Path relativizedStaticFileDirectory =
-                staticFileRootDirectory.get().relativize(staticFileToInclude.destinationDirectory());
-
-            hashedUrlsByUrl.put(
-              format("/%s/%s/%s", staticFileRootDirectory.get().getFileName(), relativizedStaticFileDirectory,
-                staticFileToInclude.sourcePath().getFileName()),
-              format("/%s/%s/%s", staticFileRootDirectory.get().getFileName(), relativizedStaticFileDirectory,
-                hashedFilename(staticFileToInclude.sourcePath().getFileName().toString(), hash)));
+            // Path relativizedStaticFileDirectory =
+            // staticFileRootDirectory.get().relativize(staticFileToInclude.destinationDirectory());
+            //
+            // hashedUrlsByUrl.put(
+            // format("/%s/%s/%s", staticFileRootDirectory.get().getFileName(), relativizedStaticFileDirectory,
+            // staticFileToInclude.sourcePath().getFileName()),
+            // format("/%s/%s/%s", staticFileRootDirectory.get().getFileName(), relativizedStaticFileDirectory,
+            // hashedFilename(staticFileToInclude.sourcePath().getFileName().toString(), hash)));
           }
 
           if (shouldZipStaticFile(staticFileToInclude.sourcePath())) {
@@ -226,7 +226,6 @@ public abstract class DeployableArchiveCreator {
         }
 
         if (shouldCreateHashedStaticFiles()) {
-          HashedUrlManifest hashedUrlManifest = new HashedUrlManifest(hashedUrlsByUrl);
           Path hashedUrlManifestFile = Paths.get(temporaryDirectory.toString(), hashedUrlManifestFile().toString());
 
           try (OutputStream outputStream = Files.newOutputStream(hashedUrlManifestFile)) {
@@ -249,6 +248,32 @@ public abstract class DeployableArchiveCreator {
         logger.log(WARNING, "Unable to perform cleanup", e);
       }
     }
+  }
+
+  protected HashedUrlManifest createHashedUrlManifest(Set<DeploymentPath> staticFilesToInclude) throws Exception {
+    Optional<Path> staticFileRootDirectory = staticFileRootDirectory();
+
+    // Keep track of our hashed URLs for manifest creation
+    Map<String, String> hashedUrlsByUrl = new HashMap<>(staticFilesToInclude.size());
+
+    // Figure out the static file manifest
+    for (DeploymentPath staticFileToInclude : staticFilesToInclude) {
+      Path staticFile = staticFileToInclude.sourcePath();
+
+      String hash = hash(Files.readAllBytes(staticFile));
+
+      // Update manifest
+      Path relativizedStaticFileDirectory =
+          staticFileRootDirectory.get().relativize(staticFileToInclude.destinationDirectory());
+
+      hashedUrlsByUrl.put(
+        format("/%s/%s/%s", staticFileRootDirectory.get().getFileName(), relativizedStaticFileDirectory,
+          staticFileToInclude.sourcePath().getFileName()),
+        format("/%s/%s/%s", staticFileRootDirectory.get().getFileName(), relativizedStaticFileDirectory,
+          hashedFilename(staticFileToInclude.sourcePath().getFileName().toString(), hash)));
+    }
+
+    return new HashedUrlManifest(hashedUrlsByUrl);
   }
 
   protected boolean shouldZipStaticFile(Path staticFile) {
