@@ -21,6 +21,8 @@ import static java.util.Arrays.stream;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singleton;
+import static java.util.Collections.unmodifiableSet;
+import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 import static java.util.UUID.randomUUID;
 import static java.util.logging.Level.WARNING;
@@ -52,9 +54,11 @@ import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.logging.Logger;
+import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import com.soklet.util.IoUtils;
 import com.soklet.util.PathUtils;
 import com.soklet.web.HashedUrlManifest;
 import com.soklet.web.HashedUrlManifest.PersistenceFormat;
@@ -65,11 +69,34 @@ import com.soklet.web.HashedUrlManifest.PersistenceFormat;
  */
 public abstract class DeployableArchiveCreator {
   private final String archiveName;
+  private final Set<String> staticFileUnzippableExtensions;
   private final Logger logger = Logger.getLogger(getClass().getName());
 
   {
     archiveName =
         format("%s-deployment.zip", DateTimeFormatter.ofPattern("yyyyMMdd-hhmmss").format(LocalDateTime.now()));
+
+    /**
+     * We don't want to pre-gzip file formats that are already compressed by default.
+     */
+    staticFileUnzippableExtensions = unmodifiableSet(new HashSet<String>() {
+      {
+        // Images
+        add("png");
+        add("jpeg");
+        add("jpg");
+        add("gif");
+
+        // Audio
+        add("aif");
+        add("m4a");
+        add("m4v");
+        add("mp3");
+        add("mp4");
+        add("mpa");
+        add("wma");
+      }
+    });
   }
 
   public abstract Set<DeploymentPath> pathsToInclude();
@@ -90,8 +117,12 @@ public abstract class DeployableArchiveCreator {
     return Paths.get(".");
   }
 
+  protected Set<String> staticFileUnzippableExtensions() {
+    return this.staticFileUnzippableExtensions;
+  }
+
   public String archiveName() {
-    return archiveName;
+    return this.archiveName;
   }
 
   public Path hashedUrlManifestFile() {
@@ -154,11 +185,10 @@ public abstract class DeployableArchiveCreator {
           Path copiedHashedFile =
               Files.copy(staticFileToInclude.sourcePath(), temporaryDirectory.resolve(hashedFilename));
 
-          if (createHashedStaticFiles()) {
+          if (shouldCreateHashedStaticFiles()) {
             filesToInclude.add(new DeploymentPath(copiedHashedFile, staticFileToInclude.destinationDirectory()));
 
             // Update manifest
-            System.out.println("staticFileRootDirectory.get(): " + staticFileRootDirectory.get());
             Path relativizedStaticFileDirectory =
                 staticFileRootDirectory.get().relativize(staticFileToInclude.destinationDirectory());
 
@@ -169,15 +199,34 @@ public abstract class DeployableArchiveCreator {
                 hashedFilename(staticFileToInclude.sourcePath().getFileName().toString(), hash)));
           }
 
-          // 3. The pre-gzipped static file, e.g. test.css.gz
-          // TODO
+          if (shouldZipStaticFile(staticFileToInclude.sourcePath())) {
+            // 3. The pre-gzipped static file, e.g. test.css.gz
+            Path copiedGzippedFile = Paths.get(format("%s.gz", copiedFile.toAbsolutePath()));
 
-          // 4. The pre-gzipped hashed static file, e.g. test.BE9748F56259CA49B7E5F249BE1030BE.css.gz
-          // TODO
+            try (InputStream inputStream = Files.newInputStream(copiedFile);
+                GZIPOutputStream outputStream = new GZIPOutputStream(Files.newOutputStream(copiedGzippedFile))) {
+              IoUtils.copyStream(inputStream, outputStream);
+              outputStream.flush();
+            }
+
+            filesToInclude.add(new DeploymentPath(copiedGzippedFile, staticFileToInclude.destinationDirectory()));
+
+            // 4. The pre-gzipped hashed static file, e.g. test.BE9748F56259CA49B7E5F249BE1030BE.css.gz
+            Path copiedHashedGzippedFile = Paths.get(format("%s.gz", copiedHashedFile.toAbsolutePath()));
+
+            try (InputStream inputStream = Files.newInputStream(copiedFile);
+                GZIPOutputStream outputStream = new GZIPOutputStream(Files.newOutputStream(copiedHashedGzippedFile))) {
+              IoUtils.copyStream(inputStream, outputStream);
+              outputStream.flush();
+            }
+
+            filesToInclude.add(new DeploymentPath(copiedHashedGzippedFile, staticFileToInclude.destinationDirectory()));
+          }
         }
 
-        if (createHashedStaticFiles()) {
+        if (shouldCreateHashedStaticFiles()) {
           HashedUrlManifest hashedUrlManifest = new HashedUrlManifest(hashedUrlsByUrl);
+          // TODO: allow custom path instead of hardcoding name
           Path hashedUrlManifestFile = Paths.get(temporaryDirectory.toString(), "hashedUrlManifest");
 
           try (OutputStream outputStream = Files.newOutputStream(hashedUrlManifestFile)) {
@@ -203,15 +252,26 @@ public abstract class DeployableArchiveCreator {
     }
   }
 
-  protected boolean createHashedStaticFiles() {
-    return staticFileRootDirectory().isPresent();
+  protected boolean shouldZipStaticFile(Path staticFile) {
+    requireNonNull(staticFile);
+
+    String filename = staticFile.getFileName().toString().toLowerCase(ENGLISH);
+    int lastIndexOfPeriod = filename.lastIndexOf(".");
+
+    if (lastIndexOfPeriod == -1 || filename.endsWith("."))
+      return true;
+
+    String extension = filename.substring(lastIndexOfPeriod + 1);
+
+    return !staticFileUnzippableExtensions().contains(extension);
   }
 
-  protected boolean createZippedStaticFiles() {
+  protected boolean shouldCreateHashedStaticFiles() {
     return staticFileRootDirectory().isPresent();
   }
 
   protected Optional<InputStream> transformStaticFile(Path staticFile) {
+    requireNonNull(staticFile);
     return Optional.empty();
   }
 
@@ -428,6 +488,9 @@ public abstract class DeployableArchiveCreator {
 
     if (lastIndexOfPeriod == -1)
       return format("%s.%s", filename, hash);
+
+    if (filename.endsWith("."))
+      return format("%s%s", filename, hash);
 
     return format("%s.%s%s", filename.substring(0, lastIndexOfPeriod), hash, filename.substring(lastIndexOfPeriod));
   }
