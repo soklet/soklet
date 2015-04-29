@@ -16,6 +16,7 @@
 
 package com.soklet.deploy;
 
+import static com.soklet.util.IoUtils.copyStream;
 import static java.lang.String.format;
 import static java.util.Arrays.stream;
 import static java.util.Collections.emptyList;
@@ -127,9 +128,10 @@ public abstract class DeployableArchiveCreator {
     try {
       Set<DeploymentPath> pathsToInclude = pathsToInclude();
       Set<Path> pathsToExclude = pathsToExclude();
+      Path archiveFile = archiveFile();
       Optional<Path> staticFileRootDirectory = staticFileRootDirectory();
 
-      logger.info(format("Creating deployment archive %s...", archiveFile()));
+      logger.info(format("Creating deployment archive %s...", archiveFile));
 
       preProcess();
 
@@ -161,8 +163,15 @@ public abstract class DeployableArchiveCreator {
           Optional<InputStream> transformedStaticFile = transformStaticFile(staticFileToInclude.sourcePath());
           Path copiedFile = null;
 
+          // Allow for transforms to be applied to static files.
+          // For example, you might want to compress Javascript
           if (transformedStaticFile.isPresent()) {
-            // TODO: write transformed bytes out as copiedFile
+            copiedFile = temporaryDirectory.resolve(staticFileToInclude.sourcePath());
+
+            try (InputStream inputStream = transformedStaticFile.get();
+                OutputStream outputStream = Files.newOutputStream(copiedFile)) {
+              copyStream(inputStream, outputStream);
+            }
           } else {
             copiedFile =
                 Files.copy(staticFileToInclude.sourcePath(),
@@ -173,10 +182,9 @@ public abstract class DeployableArchiveCreator {
           filesToInclude.add(new DeploymentPath(copiedFile, staticFileToInclude.destinationDirectory()));
 
           // 2. The static file with its hash embedded, e.g. test.BE9748F56259CA49B7E5F249BE1030BE.css
-          String hash = hash(Files.readAllBytes(staticFileToInclude.sourcePath()));
-          String hashedFilename = hashedFilename(staticFileToInclude.sourcePath().toString(), hash);
-          Path copiedHashedFile =
-              Files.copy(staticFileToInclude.sourcePath(), temporaryDirectory.resolve(hashedFilename));
+          String hash = hash(Files.readAllBytes(copiedFile));
+          String hashedFilename = hashedFilename(copiedFile.toString(), hash);
+          Path copiedHashedFile = Files.copy(copiedFile, temporaryDirectory.resolve(hashedFilename));
 
           if (shouldCreateHashedStaticFiles()) {
             filesToInclude.add(new DeploymentPath(copiedHashedFile, staticFileToInclude.destinationDirectory()));
@@ -227,10 +235,9 @@ public abstract class DeployableArchiveCreator {
           }
         }
 
-        // TODO: permit manual filtering
-
         postProcess();
-        createZip(archiveFile().toString(), filesToInclude);
+
+        createZip(archiveFile, filesToInclude);
       } finally {
         PathUtils.deleteDirectory(temporaryDirectory);
       }
@@ -288,16 +295,16 @@ public abstract class DeployableArchiveCreator {
     return staticPathsToInclude;
   }
 
-  protected void createZip(String archiveName, Set<DeploymentPath> filesToInclude) {
-    requireNonNull(archiveName);
+  protected void createZip(Path archiveFile, Set<DeploymentPath> filesToInclude) {
+    requireNonNull(archiveFile);
     requireNonNull(filesToInclude);
 
     FileOutputStream fileOutputStream = null;
 
     try {
-      fileOutputStream = new FileOutputStream(archiveName);
+      fileOutputStream = new FileOutputStream(archiveFile.toFile());
     } catch (IOException e) {
-      throw new UncheckedIOException(format("Unable to create zip archive %s", archiveName), e);
+      throw new UncheckedIOException(format("Unable to create zip archive %s", archiveFile), e);
     }
 
     ZipOutputStream zipOutputStream = null;
@@ -308,6 +315,12 @@ public abstract class DeployableArchiveCreator {
     try {
       zipOutputStream = new ZipOutputStream(fileOutputStream);
       zipOutputStream.setLevel(9);
+
+      // Zip root is the name of the archive without the extension, e.g. "app.zip" would be "app".
+      String zipRoot = archiveFile.getFileName().toString();
+      int indexOfPeriod = zipRoot.indexOf(".");
+      if (indexOfPeriod != -1 && zipRoot.length() > 1)
+        zipRoot = zipRoot.substring(0, indexOfPeriod);
 
       SortedSet<DeploymentPath> sortedFilesToInclude = new TreeSet<DeploymentPath>(new Comparator<DeploymentPath>() {
         @Override
@@ -321,13 +334,13 @@ public abstract class DeployableArchiveCreator {
       for (DeploymentPath deploymentPath : sortedFilesToInclude) {
         String zipEntryName = zipEntryNameProvider.apply(deploymentPath);
         logger.info(format("Adding %s...", zipEntryName));
-        zipOutputStream.putNextEntry(new ZipEntry(zipEntryName));
+        zipOutputStream.putNextEntry(new ZipEntry(format("%s/%s", zipRoot, zipEntryName)));
         zipOutputStream.write(Files.readAllBytes(deploymentPath.sourcePath()));
       }
 
       zipOutputStream.flush();
     } catch (IOException e) {
-      throw new UncheckedIOException(format("An error occurred while creating zip archive %s", archiveName), e);
+      throw new UncheckedIOException(format("An error occurred while creating zip archive %s", archiveFile), e);
     } finally {
       if (zipOutputStream != null) {
         try {
