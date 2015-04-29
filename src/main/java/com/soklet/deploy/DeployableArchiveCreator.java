@@ -20,6 +20,7 @@ import static java.lang.String.format;
 import static java.util.Arrays.stream;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptySet;
+import static java.util.Collections.singleton;
 import static java.util.Objects.requireNonNull;
 import static java.util.UUID.randomUUID;
 import static java.util.logging.Level.WARNING;
@@ -30,6 +31,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,6 +41,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +56,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import com.soklet.util.PathUtils;
+import com.soklet.web.HashedUrlManifest;
+import com.soklet.web.HashedUrlManifest.PersistenceFormat;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
@@ -69,7 +74,7 @@ public abstract class DeployableArchiveCreator {
 
   public abstract Set<DeploymentPath> pathsToInclude();
 
-  public abstract Set<Path> staticFileDirectories();
+  public abstract Optional<Path> staticFileRootDirectory();
 
   public void preProcess() throws Exception {}
 
@@ -89,27 +94,37 @@ public abstract class DeployableArchiveCreator {
     return archiveName;
   }
 
+  public Path hashedUrlManifestFile() {
+    return Paths.get("hashedUrlManifest");
+  }
+
   public void run() throws Exception {
     try {
       String archiveName = archiveName();
       Set<DeploymentPath> pathsToInclude = pathsToInclude();
       Set<Path> pathsToExclude = pathsToExclude();
-      Set<Path> staticFileDirectories = staticFileDirectories();
+      Optional<Path> staticFileRootDirectory = staticFileRootDirectory();
 
       logger.info(format("Creating deployment archive %s...", archiveName));
 
       preProcess();
 
-      staticFileDirectories.stream().forEach(this::verifyValidDirectory);
+      if (staticFileRootDirectory.isPresent())
+        verifyValidDirectory(staticFileRootDirectory.get());
 
       Set<DeploymentPath> filesToInclude = extractAllFilesFromPaths(pathsToInclude, pathsToExclude);
-      Set<DeploymentPath> staticFilesToInclude = extractStaticFilesFromPaths(staticFileDirectories, filesToInclude);
+      Set<DeploymentPath> staticFilesToInclude =
+          staticFileRootDirectory.isPresent() ? extractStaticFilesFromPaths(singleton(staticFileRootDirectory.get()),
+            filesToInclude) : emptySet();
 
       // Remove static files for now - we handle them specially below and add them back as we go
       filesToInclude.removeAll(staticFilesToInclude);
 
       Path temporaryDirectory =
           Files.createTempDirectory(format("com.soklet.%s-%s-", getClass().getSimpleName(), randomUUID()));
+
+      // Keep track of our hashed URLs for manifest creation
+      Map<String, String> hashedUrlsByUrl = new HashMap<>(staticFilesToInclude.size());
 
       try {
         for (DeploymentPath staticFileToInclude : staticFilesToInclude) {
@@ -139,14 +154,36 @@ public abstract class DeployableArchiveCreator {
           Path copiedHashedFile =
               Files.copy(staticFileToInclude.sourcePath(), temporaryDirectory.resolve(hashedFilename));
 
-          if (createHashedStaticFiles())
+          if (createHashedStaticFiles()) {
             filesToInclude.add(new DeploymentPath(copiedHashedFile, staticFileToInclude.destinationDirectory()));
+
+            // Update manifest
+            System.out.println("staticFileRootDirectory.get(): " + staticFileRootDirectory.get());
+            Path relativizedStaticFileDirectory =
+                staticFileRootDirectory.get().relativize(staticFileToInclude.destinationDirectory());
+
+            hashedUrlsByUrl.put(
+              format("/%s/%s/%s", staticFileRootDirectory.get().getFileName(), relativizedStaticFileDirectory,
+                staticFileToInclude.sourcePath().getFileName()),
+              format("/%s/%s/%s", staticFileRootDirectory.get().getFileName(), relativizedStaticFileDirectory,
+                hashedFilename(staticFileToInclude.sourcePath().getFileName().toString(), hash)));
+          }
 
           // 3. The pre-gzipped static file, e.g. test.css.gz
           // TODO
 
           // 4. The pre-gzipped hashed static file, e.g. test.BE9748F56259CA49B7E5F249BE1030BE.css.gz
           // TODO
+        }
+
+        if (createHashedStaticFiles()) {
+          HashedUrlManifest hashedUrlManifest = new HashedUrlManifest(hashedUrlsByUrl);
+          Path hashedUrlManifestFile = Paths.get(temporaryDirectory.toString(), "hashedUrlManifest");
+
+          try (OutputStream outputStream = Files.newOutputStream(hashedUrlManifestFile)) {
+            hashedUrlManifest.writeToOutputStream(outputStream, PersistenceFormat.PRETTY_PRINTED);
+            filesToInclude.add(new DeploymentPath(hashedUrlManifestFile, Paths.get(".")));
+          }
         }
 
         // TODO: permit manual filtering
@@ -167,11 +204,11 @@ public abstract class DeployableArchiveCreator {
   }
 
   protected boolean createHashedStaticFiles() {
-    return true;
+    return staticFileRootDirectory().isPresent();
   }
 
   protected boolean createZippedStaticFiles() {
-    return true;
+    return staticFileRootDirectory().isPresent();
   }
 
   protected Optional<InputStream> transformStaticFile(Path staticFile) {
