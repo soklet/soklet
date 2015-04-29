@@ -21,6 +21,7 @@ import static com.soklet.util.IoUtils.copyStreamToBytes;
 import static java.lang.String.format;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.Files.readAllBytes;
+import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toMap;
@@ -32,6 +33,7 @@ import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -46,6 +48,15 @@ import com.soklet.json.JSONObject;
 public class HashedUrlManifest {
   private final Map<String, String> hashedUrlsByUrl;
 
+  public HashedUrlManifest() {
+    Path defaultManifestFile = defaultManifestFile();
+
+    if (Files.isRegularFile(defaultManifestFile))
+      this.hashedUrlsByUrl = unmodifiableMap(hashedUrlsByUrlFromManifestFile(defaultManifestFile));
+    else
+      this.hashedUrlsByUrl = emptyMap();
+  }
+
   public HashedUrlManifest(Map<String, String> hashedUrlsByUrl) {
     requireNonNull(hashedUrlsByUrl);
     this.hashedUrlsByUrl = unmodifiableMap(new HashMap<>(hashedUrlsByUrl));
@@ -59,6 +70,10 @@ public class HashedUrlManifest {
   public HashedUrlManifest(Path hashedUrlManifestFile) {
     requireNonNull(hashedUrlManifestFile);
     this.hashedUrlsByUrl = unmodifiableMap(hashedUrlsByUrlFromManifestFile(hashedUrlManifestFile));
+  }
+
+  public static Path defaultManifestFile() {
+    return Paths.get("hashedUrlManifest");
   }
 
   public String hashedUrlWithFallback(String url) {

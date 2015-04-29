@@ -39,8 +39,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -68,14 +66,10 @@ import com.soklet.web.HashedUrlManifest.PersistenceFormat;
  * @since 1.0.0
  */
 public abstract class DeployableArchiveCreator {
-  private final String archiveName;
   private final Set<String> staticFileUnzippableExtensions;
   private final Logger logger = Logger.getLogger(getClass().getName());
 
   {
-    archiveName =
-        format("%s-deployment.zip", DateTimeFormatter.ofPattern("yyyyMMdd-hhmmss").format(LocalDateTime.now()));
-
     /**
      * We don't want to pre-gzip file formats that are already compressed by default.
      */
@@ -121,22 +115,21 @@ public abstract class DeployableArchiveCreator {
     return this.staticFileUnzippableExtensions;
   }
 
-  public String archiveName() {
-    return this.archiveName;
+  public Path archiveFile() {
+    return Paths.get("archive.zip");
   }
 
   public Path hashedUrlManifestFile() {
-    return Paths.get("hashedUrlManifest");
+    return HashedUrlManifest.defaultManifestFile();
   }
 
   public void run() throws Exception {
     try {
-      String archiveName = archiveName();
       Set<DeploymentPath> pathsToInclude = pathsToInclude();
       Set<Path> pathsToExclude = pathsToExclude();
       Optional<Path> staticFileRootDirectory = staticFileRootDirectory();
 
-      logger.info(format("Creating deployment archive %s...", archiveName));
+      logger.info(format("Creating deployment archive %s...", archiveFile()));
 
       preProcess();
 
@@ -226,8 +219,7 @@ public abstract class DeployableArchiveCreator {
 
         if (shouldCreateHashedStaticFiles()) {
           HashedUrlManifest hashedUrlManifest = new HashedUrlManifest(hashedUrlsByUrl);
-          // TODO: allow custom path instead of hardcoding name
-          Path hashedUrlManifestFile = Paths.get(temporaryDirectory.toString(), "hashedUrlManifest");
+          Path hashedUrlManifestFile = Paths.get(temporaryDirectory.toString(), hashedUrlManifestFile().toString());
 
           try (OutputStream outputStream = Files.newOutputStream(hashedUrlManifestFile)) {
             hashedUrlManifest.writeToOutputStream(outputStream, PersistenceFormat.PRETTY_PRINTED);
@@ -238,7 +230,7 @@ public abstract class DeployableArchiveCreator {
         // TODO: permit manual filtering
 
         postProcess();
-        createZip(archiveName, filesToInclude);
+        createZip(archiveFile().toString(), filesToInclude);
       } finally {
         PathUtils.deleteDirectory(temporaryDirectory);
       }
