@@ -18,6 +18,7 @@ package com.soklet.deploy;
 
 import static com.soklet.util.IoUtils.copyStream;
 import static java.lang.String.format;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.stream;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptySet;
@@ -27,6 +28,8 @@ import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 import static java.util.UUID.randomUUID;
 import static java.util.logging.Level.WARNING;
+import static java.util.regex.Pattern.CASE_INSENSITIVE;
+import static java.util.regex.Pattern.compile;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 
@@ -53,6 +56,8 @@ import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -131,7 +136,7 @@ public abstract class DeployableArchiveCreator {
       Path archiveFile = archiveFile();
       Optional<Path> staticFileRootDirectory = staticFileRootDirectory();
 
-      logger.info(format("Creating deployment archive %s...", archiveFile));
+      logger.info("Creating deployment archive...");
 
       preProcess();
 
@@ -178,6 +183,10 @@ public abstract class DeployableArchiveCreator {
                   temporaryDirectory.resolve(staticFileToInclude.sourcePath()));
           }
 
+          // Rewrite CSS URL references to use their hashed versions
+          if (shouldRewriteCssUrls() && copiedFile.getFileName().toString().toLowerCase(ENGLISH).endsWith(".css"))
+            rewriteCssUrls(copiedFile, "/static", hashedUrlManifest);
+
           // 1. The static file by itself, e.g. test.css
           filesToInclude.add(new DeploymentPath(copiedFile, staticFileToInclude.destinationDirectory()));
 
@@ -186,19 +195,8 @@ public abstract class DeployableArchiveCreator {
           String hashedFilename = hashedFilename(copiedFile.toString(), hash);
           Path copiedHashedFile = Files.copy(copiedFile, temporaryDirectory.resolve(hashedFilename));
 
-          if (shouldCreateHashedStaticFiles()) {
+          if (shouldCreateHashedStaticFiles())
             filesToInclude.add(new DeploymentPath(copiedHashedFile, staticFileToInclude.destinationDirectory()));
-
-            // Update manifest
-            // Path relativizedStaticFileDirectory =
-            // staticFileRootDirectory.get().relativize(staticFileToInclude.destinationDirectory());
-            //
-            // hashedUrlsByUrl.put(
-            // format("/%s/%s/%s", staticFileRootDirectory.get().getFileName(), relativizedStaticFileDirectory,
-            // staticFileToInclude.sourcePath().getFileName()),
-            // format("/%s/%s/%s", staticFileRootDirectory.get().getFileName(), relativizedStaticFileDirectory,
-            // hashedFilename(staticFileToInclude.sourcePath().getFileName().toString(), hash)));
-          }
 
           if (shouldZipStaticFile(staticFileToInclude.sourcePath())) {
             // 3. The pre-gzipped static file, e.g. test.css.gz
@@ -324,6 +322,8 @@ public abstract class DeployableArchiveCreator {
     requireNonNull(archiveFile);
     requireNonNull(filesToInclude);
 
+    logger.info(format("Assembling archive %s...", archiveFile));
+
     FileOutputStream fileOutputStream = null;
 
     try {
@@ -364,6 +364,8 @@ public abstract class DeployableArchiveCreator {
       }
 
       zipOutputStream.flush();
+
+      logger.info(format("Deployment archive %s was created successfully.", archiveFile));
     } catch (IOException e) {
       throw new UncheckedIOException(format("An error occurred while creating zip archive %s", archiveFile), e);
     } finally {
@@ -424,6 +426,10 @@ public abstract class DeployableArchiveCreator {
     return true;
   }
 
+  protected boolean shouldRewriteCssUrls() {
+    return shouldCreateHashedStaticFiles();
+  }
+
   protected void verifyValidDirectory(Path directory) {
     requireNonNull(directory);
 
@@ -440,6 +446,134 @@ public abstract class DeployableArchiveCreator {
       throw new IllegalArgumentException(format("File %s does not exist!", file));
     if (Files.isDirectory(file))
       throw new IllegalArgumentException(format("%s is a directory!", file));
+  }
+
+  protected void rewriteCssUrls(Path cssFile, String urlPrefix, HashedUrlManifest hashedUrlManifest) throws IOException {
+    verifyValidFile(cssFile);
+    requireNonNull(urlPrefix);
+    requireNonNull(hashedUrlManifest);
+
+    logger.fine(format("Rewriting URL references in %s...", cssFile.getFileName()));
+
+    String css = new String(Files.readAllBytes(cssFile), UTF_8);
+
+    // Don't use StringBuilder as regex methods like appendTail require a StringBuffer
+    StringBuffer stringBuffer = new StringBuffer();
+
+    Pattern cssUrlPattern = createCssUrlPattern();
+    Matcher matcher = cssUrlPattern.matcher(css);
+
+    while (matcher.find()) {
+      // Is true if this a match on something like @import "/static/test.css";
+      boolean processingImportUrl = false;
+
+      String originalUrl = matcher.group(1);
+
+      if (matcher.group(2) != null) {
+        originalUrl = matcher.group(2);
+        processingImportUrl = true;
+      }
+
+      String url = originalUrl;
+      boolean dataUrl = false;
+
+      // Try to expand relative URL components.
+      // Since full expansion of relative components is a lot of work and tricky, we have to enforce some basic rules
+      // like any relative URL must start with "../" (URLs like "/static/../whatever.png" are not
+      // permitted) and you can't nest relative paths (URLs like "../../test/../whatever.png" are not permitted).
+      if (url.startsWith("../")) {
+        String temporaryUrl = url;
+        int relativePathCount = 0;
+
+        while (temporaryUrl.startsWith("../")) {
+          ++relativePathCount;
+          temporaryUrl = temporaryUrl.substring(3);
+        }
+
+        // Rejects URLs like "../../test/../whatever.png"
+        if (temporaryUrl.contains("../")) {
+          logger.warning(format("URL '%s' has nested relative path component[s] so we can't process it.", url));
+        } else {
+          File parent = cssFile.toFile().getParentFile();
+          String parentPath = "";
+
+          for (int i = 0; i < relativePathCount - 1; i++) {
+            parentPath += parent.getName() + "/";
+            parent = parent.getParentFile();
+          }
+
+          url = urlPrefix + parentPath + temporaryUrl;
+          logger.fine(format("Relative URL %s was rewritten to %s", originalUrl, url));
+        }
+      } else if (url.contains("../")) {
+        // Rejects URLs like "/static/../whatever.png"
+        logger.warning(format(
+          "URL '%s' has relative path component[s] does not start with ../ so we can't process it.", url));
+      } else if (url.toLowerCase(ENGLISH).startsWith("data:")) {
+        dataUrl = true;
+      }
+
+      String cleanedUrl = url;
+
+      // Clean up - see comments on createCssUrlPattern() to see why.
+      // TODO: fix the pattern so we don't have to do this.
+      int indexOfQuestionMark = cleanedUrl.indexOf("?");
+      if (indexOfQuestionMark > 0)
+        cleanedUrl = cleanedUrl.substring(0, indexOfQuestionMark);
+
+      int indexOfHash = cleanedUrl.indexOf("#");
+      if (indexOfHash > 0)
+        cleanedUrl = cleanedUrl.substring(0, indexOfHash);
+
+      Optional<String> hashedUrl = hashedUrlManifest.hashedUrl(cleanedUrl);
+      String rewrittenUrl = url;
+
+      if (hashedUrl.isPresent()) {
+        rewrittenUrl = url.replace(cleanedUrl, hashedUrl.get());
+        logger.fine(format("Rewrote CSS URL reference '%s' to be '%s' in %s", originalUrl, rewrittenUrl,
+          cssFile.getFileName()));
+      } else if (!dataUrl) {
+        logger.warning(format("Unable to resolve CSS URL reference '%s' in %s", originalUrl, cssFile));
+      }
+
+      String replacement;
+
+      if (processingImportUrl)
+        replacement = format("@import \"%s\";", rewrittenUrl);
+      else
+        replacement = format("url(\"%s\")", rewrittenUrl);
+
+      matcher.appendReplacement(stringBuffer, replacement);
+    }
+
+    matcher.appendTail(stringBuffer);
+
+    String rewrittenFileContents = stringBuffer.toString();
+
+    try {
+      Files.write(cssFile, rewrittenFileContents.getBytes(UTF_8));
+    } catch (IOException e) {
+      throw new UncheckedIOException(format("Unable to write rewritten CSS file %s", cssFile), e);
+    }
+  }
+
+  protected Pattern createCssUrlPattern() {
+    // TODO: use a better regex, currently it fails in these cases.
+    // This is OK since we work around it manually, but would be good to fix once and for all in the pattern.
+    // src: url("/static/fonts/example/myfont.eot?#iefix") format('embedded-opentype')
+    // will match as
+    // /static/fonts/example/myfont.eot?#iefix
+    // instead of
+    // /static/fonts/example/myfont.eot
+    // and
+    // url("/static/fonts/example/myfont.svg#ExampleRegular")
+    // will match as
+    // /static/fonts/example/myfont.svg#ExampleRegular
+    // instead of
+    // /static/fonts/example/myfont.svg
+    String cssUrlPattern = "url\\s*\\(\\s*['\"]?(.+?)\\s*['\"]?\\s*\\)";
+    String cssImportUrlPattern = "@import\\s+['\"](.+?)['\"];";
+    return compile(format("%s|%s", cssUrlPattern, cssImportUrlPattern), CASE_INSENSITIVE);
   }
 
   protected ProcessBuilder createProcessBuilder(Path executableFile, String... arguments) {
