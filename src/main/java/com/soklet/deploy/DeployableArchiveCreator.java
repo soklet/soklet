@@ -185,7 +185,7 @@ public abstract class DeployableArchiveCreator {
 
           // Rewrite CSS URL references to use their hashed versions
           if (shouldRewriteCssUrls() && copiedFile.getFileName().toString().toLowerCase(ENGLISH).endsWith(".css"))
-            rewriteCssUrls(copiedFile, "/static", hashedUrlManifest);
+            rewriteCssUrls(copiedFile, hashedUrlManifest);
 
           // 1. The static file by itself, e.g. test.css
           filesToInclude.add(new DeploymentPath(copiedFile, staticFileToInclude.destinationDirectory()));
@@ -448,14 +448,14 @@ public abstract class DeployableArchiveCreator {
       throw new IllegalArgumentException(format("%s is a directory!", file));
   }
 
-  protected void rewriteCssUrls(Path cssFile, String urlPrefix, HashedUrlManifest hashedUrlManifest) throws IOException {
+  protected void rewriteCssUrls(Path cssFile, HashedUrlManifest hashedUrlManifest) throws IOException {
     verifyValidFile(cssFile);
-    requireNonNull(urlPrefix);
     requireNonNull(hashedUrlManifest);
 
     logger.fine(format("Rewriting URL references in %s...", cssFile.getFileName()));
 
     String css = new String(Files.readAllBytes(cssFile), UTF_8);
+    String urlPrefix = format("/%s", staticFileRootDirectory().get().getFileName());
 
     // Don't use StringBuilder as regex methods like appendTail require a StringBuffer
     StringBuffer stringBuffer = new StringBuffer();
