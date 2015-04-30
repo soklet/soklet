@@ -73,7 +73,7 @@ import com.soklet.web.HashedUrlManifest.PersistenceFormat;
  */
 public abstract class DeployableArchiveCreator {
   private final Set<String> staticFileUnzippableExtensions;
-  private final Logger logger = Logger.getLogger(getClass().getName());
+  private final Logger logger = Logger.getLogger(DeployableArchiveCreator.class.getName());
 
   {
     /**
@@ -322,7 +322,7 @@ public abstract class DeployableArchiveCreator {
     requireNonNull(archiveFile);
     requireNonNull(filesToInclude);
 
-    logger.info(format("Assembling archive %s...", archiveFile));
+    logger.info(format("Assembling %s...", archiveFile));
 
     FileOutputStream fileOutputStream = null;
 
@@ -358,7 +358,7 @@ public abstract class DeployableArchiveCreator {
 
       for (DeploymentPath deploymentPath : sortedFilesToInclude) {
         String zipEntryName = zipEntryNameProvider.apply(deploymentPath);
-        logger.info(format("Adding %s...", zipEntryName));
+        logger.fine(format("Adding %s...", zipEntryName));
         zipOutputStream.putNextEntry(new ZipEntry(format("%s/%s", zipRoot, zipEntryName)));
         zipOutputStream.write(Files.readAllBytes(deploymentPath.sourcePath()));
       }
