@@ -158,6 +158,9 @@ public abstract class DeployableArchiveCreator {
           Files.createTempDirectory(format("com.soklet.%s-%s-", getClass().getSimpleName(), randomUUID()));
 
       try {
+        Map<DeploymentPath, Path> deploymentPathsToCopiedFiles = new HashMap<>(staticFilesToInclude.size());
+
+        // First, copy all static files to a temporary directory and perform any transforms required on them
         for (DeploymentPath staticFileToInclude : staticFilesToInclude) {
           // Make sure we have a place to put it by creating any intermediate directories.
           // File.mkdirs() actually creates the file so we delete it right after (the directories will stay)
@@ -183,9 +186,38 @@ public abstract class DeployableArchiveCreator {
                   temporaryDirectory.resolve(staticFileToInclude.sourcePath()));
           }
 
-          // Rewrite CSS URL references to use their hashed versions
-          if (shouldRewriteCssUrls() && copiedFile.getFileName().toString().toLowerCase(ENGLISH).endsWith(".css"))
-            rewriteCssUrls(copiedFile, hashedUrlManifest);
+          deploymentPathsToCopiedFiles.put(staticFileToInclude, copiedFile);
+        }
+
+        // Rewrite CSS URL references to use their hashed versions
+        Set<DeploymentPath> copiedCssDeploymentPaths = new HashSet<>();
+
+        if (shouldRewriteCssUrls()) {
+          for (DeploymentPath staticFileToInclude : staticFilesToInclude) {
+            Path copiedFile = deploymentPathsToCopiedFiles.get(staticFileToInclude);
+
+            if (copiedFile == null)
+              throw new IllegalStateException(format("Missing copy of %s", staticFileToInclude));
+
+            if (copiedFile.getFileName().toString().toLowerCase(ENGLISH).endsWith(".css")) {
+              rewriteCssUrls(copiedFile, hashedUrlManifest);
+              copiedCssDeploymentPaths.add(new DeploymentPath(copiedFile, staticFileToInclude.destinationDirectory()));
+            }
+          }
+        }
+
+        // Rewrite the manifest now that we've rewritten CSS URLs (CSS files will hash differently now!)
+        // TODO: need to think about how to handle CSS imports
+        Map<String, String> hashedUrlsByUrl = new HashMap<>(hashedUrlManifest.hashedUrlsByUrl());
+        hashedUrlsByUrl.putAll(createHashedUrlManifest(copiedCssDeploymentPaths).hashedUrlsByUrl());
+
+        hashedUrlManifest = new HashedUrlManifest(hashedUrlsByUrl);
+
+        for (DeploymentPath staticFileToInclude : staticFilesToInclude) {
+          Path copiedFile = deploymentPathsToCopiedFiles.get(staticFileToInclude);
+
+          if (copiedFile == null)
+            throw new IllegalStateException(format("Missing copy of %s", staticFileToInclude));
 
           // 1. The static file by itself, e.g. test.css
           filesToInclude.add(new DeploymentPath(copiedFile, staticFileToInclude.destinationDirectory()));
@@ -452,8 +484,6 @@ public abstract class DeployableArchiveCreator {
     verifyValidFile(cssFile);
     requireNonNull(hashedUrlManifest);
 
-    logger.fine(format("Rewriting URL references in %s...", cssFile.getFileName()));
-
     String css = new String(Files.readAllBytes(cssFile), UTF_8);
     String urlPrefix = format("/%s", staticFileRootDirectory().get().getFileName());
 
@@ -544,6 +574,11 @@ public abstract class DeployableArchiveCreator {
         replacement = format("url(\"%s\")", rewrittenUrl);
 
       matcher.appendReplacement(stringBuffer, replacement);
+
+      if (processingImportUrl)
+        logger.warning(format(
+          "Caution: CSS import URL hash rewriting is not fully supported yet. Detected CSS import URL in %s",
+          cssFile.getFileName()));
     }
 
     matcher.appendTail(stringBuffer);
