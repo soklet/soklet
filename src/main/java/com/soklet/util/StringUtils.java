@@ -30,4 +30,8 @@ public final class StringUtils {
     string = string.trim();
     return string.length() == 0 ? null : string;
   }
+
+  public static boolean isBlank(String string) {
+    return string == null ? true : trimToNull(string) == null;
+  }
 }

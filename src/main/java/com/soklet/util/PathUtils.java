@@ -58,20 +58,36 @@ public final class PathUtils {
     Files.walkFileTree(directory, new SimpleFileVisitor<Path>() {
       @Override
       public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-        // System.out.println("File: " + file.toAbsolutePath());
         Files.delete(file);
         return FileVisitResult.CONTINUE;
       }
 
       @Override
       public FileVisitResult postVisitDirectory(Path directory, IOException e) throws IOException {
-        // System.out.println("Dir: " + directory.toAbsolutePath());
         Files.delete(directory);
         return FileVisitResult.CONTINUE;
       }
     });
 
     Files.deleteIfExists(directory);
+  }
+
+  public static void walkDirectory(Path directory, FileOperation fileOperation) throws IOException {
+    requireNonNull(directory);
+    requireNonNull(fileOperation);
+
+    if (!Files.isDirectory(directory))
+      throw new IOException(format("%s is not a directory - cannot walk it", directory.toAbsolutePath()));
+
+    Files.walkFileTree(directory, new SimpleFileVisitor<Path>() {
+      @Override
+      public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+        if (!Files.isDirectory(file))
+          fileOperation.perform(file);
+
+        return FileVisitResult.CONTINUE;
+      }
+    });
   }
 
   /**
@@ -205,5 +221,10 @@ public final class PathUtils {
           return FileVisitResult.CONTINUE;
         }
       });
+  }
+
+  @FunctionalInterface
+  public static interface FileOperation {
+    void perform(Path file) throws IOException;
   }
 }
