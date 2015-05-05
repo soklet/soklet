@@ -29,6 +29,7 @@ import static java.lang.String.format;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Collections.unmodifiableSet;
+import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 import static java.util.UUID.randomUUID;
 
@@ -39,8 +40,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.logging.Logger;
@@ -170,20 +174,42 @@ public class Archiver {
             }
           });
 
-      // Hash static filenames
+      // Hash static files
       if (temporaryStaticFileRootDirectory.isPresent()) {
+        Map<String, String> hashedUrlsByUrl = new HashMap<>();
+
+        // Pass 1: hash everything but CSS files (we rewrite those later)
         for (Path file : allFilesInDirectory(temporaryStaticFileRootDirectory.get())) {
+          if (file.getFileName().toString().toLowerCase(ENGLISH).endsWith(".css"))
+            continue;
+
           byte[] fileData = Files.readAllBytes(file);
           String hash = fileHasher().hash(fileData);
           String hashedFilename = filenameHasher().hashFilename(file, hash);
 
+          // Keep track of mapping between static URLs and hashed counterparts
+          Path relativeStaticFile = temporaryStaticFileRootDirectory.get().getParent().relativize(file);
+          Path relativeHashedStaticFile =
+              temporaryStaticFileRootDirectory.get().getParent().relativize(Paths.get(hashedFilename));
+
+          hashedUrlsByUrl.put(format("/%s", relativeStaticFile), format("/%s", relativeHashedStaticFile));
+
           copyStreamCloseAfterwards(Files.newInputStream(file), Files.newOutputStream(Paths.get(hashedFilename)));
         }
-      }
 
-      PathUtils.walkDirectory(temporaryStaticFileRootDirectory.get(), (file) -> {
-        System.out.println(file.getFileName());
-      });
+        PathUtils.walkDirectory(temporaryStaticFileRootDirectory.get(), (file) -> {
+          // System.out.println(file.getFileName());
+        });
+
+        System.out.println("Pass 1:");
+
+        for (Entry<String, String> entry : hashedUrlsByUrl.entrySet())
+          System.out.println(entry.getKey() + " -> " + entry.getValue());
+
+        // Pass 2: rewrite CSS files with manifest created in step 1
+
+        // Pass 3: add final CSS file hashes to manifest created in step 1
+      }
 
       // Run any client-supplied postprocessing code
       if (postProcessOperation().isPresent())
