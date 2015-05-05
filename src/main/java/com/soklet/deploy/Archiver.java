@@ -23,6 +23,7 @@
 package com.soklet.deploy;
 
 import static com.soklet.util.IoUtils.copyStreamCloseAfterwards;
+import static com.soklet.util.PathUtils.allFilesInDirectory;
 import static com.soklet.util.StringUtils.trimToNull;
 import static java.lang.String.format;
 import static java.util.Collections.emptySet;
@@ -36,6 +37,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -56,6 +58,45 @@ public class Archiver {
     }
   });
 
+  private static final Hasher DEFAULT_FILE_HASHER = (bytes) -> {
+    requireNonNull(bytes);
+
+    MessageDigest messageDigest = null;
+
+    try {
+      messageDigest = MessageDigest.getInstance("MD5");
+    } catch (Exception e) {
+      throw new RuntimeException("Unable to create hasher", e);
+    }
+
+    byte[] hashBytes = messageDigest.digest(bytes);
+    StringBuilder stringBuilder = new StringBuilder(2 * hashBytes.length);
+
+    for (byte b : hashBytes) {
+      stringBuilder.append("0123456789ABCDEF".charAt((b & 0xF0) >> 4));
+      stringBuilder.append("0123456789ABCDEF".charAt((b & 0x0F)));
+    }
+
+    return stringBuilder.toString();
+  };
+
+  private static final FilenameHasher DEFAULT_FILENAME_HASHER = (file, hash) -> {
+    requireNonNull(file);
+    requireNonNull(hash);
+
+    String filename = file.toAbsolutePath().toString();
+
+    int lastIndexOfPeriod = filename.lastIndexOf(".");
+
+    if (lastIndexOfPeriod == -1)
+      return format("%s.%s", filename, hash);
+
+    if (filename.endsWith("."))
+      return format("%s%s", filename, hash);
+
+    return format("%s.%s%s", filename.substring(0, lastIndexOfPeriod), hash, filename.substring(lastIndexOfPeriod));
+  };
+
   private final Path archiveFile;
   private final Set<DeploymentPath> deploymentPathsToInclude;
   private final Set<Path> pathsToExclude;
@@ -64,6 +105,8 @@ public class Archiver {
   private final Optional<ArchiveSupportOperation> preProcessOperation;
   private final Optional<ArchiveSupportOperation> postProcessOperation;
   private final Optional<FileAlterationOperation> fileAlterationOperation;
+  private final Hasher fileHasher;
+  private final FilenameHasher filenameHasher;
 
   private final Logger logger = Logger.getLogger(Archiver.class.getName());
 
@@ -78,6 +121,8 @@ public class Archiver {
     this.preProcessOperation = builder.preProcessOperation;
     this.postProcessOperation = builder.postProcessOperation;
     this.fileAlterationOperation = builder.fileAlterationOperation;
+    this.fileHasher = builder.fileHasher;
+    this.filenameHasher = builder.filenameHasher;
   }
 
   public void run() throws Exception {
@@ -86,15 +131,27 @@ public class Archiver {
     Path temporaryDirectory =
         Files.createTempDirectory(format("com.soklet.%s-%s-", getClass().getSimpleName(), randomUUID()));
 
+    Optional<Path> temporaryStaticFileRootDirectory = Optional.empty();
+
+    if (staticFileRootDirectory().isPresent()) {
+      Path relativeStaticFileRootDirectory =
+          Paths.get(".").toAbsolutePath().getParent().relativize(staticFileRootDirectory.get().toAbsolutePath());
+      temporaryStaticFileRootDirectory = Optional.of(temporaryDirectory.resolve(relativeStaticFileRootDirectory));
+    }
+
     try {
+      // Copy everything over to our temporary working directory
       PathUtils.copyDirectory(Paths.get("."), temporaryDirectory, pathsToExclude);
 
+      // Run any client-supplied preprocessing code
       if (preProcessOperation().isPresent())
         preProcessOperation().get().perform(this, temporaryDirectory);
 
+      // Run any Maven tasks
       if (mavenSupport().isPresent())
         performMavenSupport(mavenSupport.get(), temporaryDirectory);
 
+      // Permit client code to modify files in-place (for example, compress JS and CSS)
       if (fileAlterationOperation().isPresent())
         PathUtils.walkDirectory(
           temporaryDirectory,
@@ -113,6 +170,22 @@ public class Archiver {
             }
           });
 
+      // Hash static filenames
+      if (temporaryStaticFileRootDirectory.isPresent()) {
+        for (Path file : allFilesInDirectory(temporaryStaticFileRootDirectory.get())) {
+          byte[] fileData = Files.readAllBytes(file);
+          String hash = fileHasher().hash(fileData);
+          String hashedFilename = filenameHasher().hashFilename(file, hash);
+
+          copyStreamCloseAfterwards(Files.newInputStream(file), Files.newOutputStream(Paths.get(hashedFilename)));
+        }
+      }
+
+      PathUtils.walkDirectory(temporaryStaticFileRootDirectory.get(), (file) -> {
+        System.out.println(file.getFileName());
+      });
+
+      // Run any client-supplied postprocessing code
       if (postProcessOperation().isPresent())
         postProcessOperation().get().perform(this, temporaryDirectory);
     } finally {
@@ -146,6 +219,8 @@ public class Archiver {
     private Optional<ArchiveSupportOperation> preProcessOperation = Optional.empty();
     private Optional<ArchiveSupportOperation> postProcessOperation = Optional.empty();
     private Optional<FileAlterationOperation> fileAlterationOperation = Optional.empty();
+    private Hasher fileHasher = DEFAULT_FILE_HASHER;
+    private FilenameHasher filenameHasher = DEFAULT_FILENAME_HASHER;
 
     protected Builder(Path archiveFile) {
       this.archiveFile = requireNonNull(archiveFile);
@@ -183,6 +258,16 @@ public class Archiver {
 
     public Builder fileAlterationOperation(FileAlterationOperation fileAlterationOperation) {
       this.fileAlterationOperation = Optional.ofNullable(fileAlterationOperation);
+      return this;
+    }
+
+    public Builder fileHasher(Hasher fileHasher) {
+      this.fileHasher = requireNonNull(fileHasher);
+      return this;
+    }
+
+    public Builder filenameHasher(FilenameHasher filenameHasher) {
+      this.filenameHasher = requireNonNull(filenameHasher);
       return this;
     }
 
@@ -327,6 +412,14 @@ public class Archiver {
     return this.fileAlterationOperation;
   }
 
+  public Hasher fileHasher() {
+    return this.fileHasher;
+  }
+
+  public FilenameHasher filenameHasher() {
+    return this.filenameHasher;
+  }
+
   @FunctionalInterface
   public interface ArchiveSupportOperation {
     /**
@@ -354,9 +447,17 @@ public class Archiver {
      * @param file
      *          the file to (possibly) alter
      * @return bytes for the altered file, or empty if the file does not need to be altered
-     * @throws Exception
-     *           if an error occurs while executing the archive support operation
      */
     Optional<InputStream> alterFile(Archiver archiver, Path workingDirectory, Path file) throws Exception;
+  }
+
+  @FunctionalInterface
+  public interface Hasher {
+    String hash(byte[] data);
+  }
+
+  @FunctionalInterface
+  public interface FilenameHasher {
+    String hashFilename(Path file, String hash);
   }
 }

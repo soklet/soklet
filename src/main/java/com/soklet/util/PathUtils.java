@@ -39,7 +39,9 @@ import java.nio.file.attribute.FileOwnerAttributeView;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.UserDefinedFileAttributeView;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -88,6 +90,18 @@ public final class PathUtils {
         return FileVisitResult.CONTINUE;
       }
     });
+  }
+
+  public static List<Path> allFilesInDirectory(Path directory) throws IOException {
+    requireNonNull(directory);
+
+    if (!Files.isDirectory(directory))
+      throw new IOException(format("%s is not a directory - cannot extract files from it", directory.toAbsolutePath()));
+
+    List<Path> files = new ArrayList<>();
+    PathUtils.walkDirectory(directory, file -> files.add(file));
+
+    return files;
   }
 
   /**
