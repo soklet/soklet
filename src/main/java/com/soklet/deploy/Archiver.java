@@ -26,15 +26,21 @@ import static com.soklet.util.IoUtils.copyStreamCloseAfterwards;
 import static com.soklet.util.PathUtils.allFilesInDirectory;
 import static com.soklet.util.StringUtils.trimToNull;
 import static java.lang.String.format;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 import static java.util.UUID.randomUUID;
+import static java.util.regex.Pattern.CASE_INSENSITIVE;
+import static java.util.regex.Pattern.compile;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -44,12 +50,15 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.soklet.util.PathUtils;
+import com.soklet.web.HashedUrlManifest;
+import com.soklet.web.HashedUrlManifest.PersistenceFormat;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
@@ -157,58 +166,19 @@ public class Archiver {
 
       // Permit client code to modify files in-place (for example, compress JS and CSS)
       if (fileAlterationOperation().isPresent())
-        PathUtils.walkDirectory(
-          temporaryDirectory,
-          (file) -> {
-            try {
-              Optional<InputStream> alteredFile =
-                  fileAlterationOperation().get().alterFile(this, temporaryDirectory, file);
+        performFileAlterations(temporaryDirectory);
 
-              // TODO: need to document that we will close the InputStream - the caller is not responsible for that
-              if (alteredFile.isPresent())
-                copyStreamCloseAfterwards(alteredFile.get(), Files.newOutputStream(file));
-            } catch (IOException e) {
-              throw e;
-            } catch (Exception e) {
-              throw new IOException(format("Unable to alter file %s", file.toAbsolutePath()), e);
-            }
-          });
-
-      // Hash static files
+      // Hash static files and store off the manifest
       if (temporaryStaticFileRootDirectory.isPresent()) {
-        Map<String, String> hashedUrlsByUrl = new HashMap<>();
+        // 1. Do the hashing
+        HashedUrlManifest hashedUrlManifest = performStaticFileHashing(temporaryStaticFileRootDirectory.get());
 
-        // Pass 1: hash everything but CSS files (we rewrite those later)
-        for (Path file : allFilesInDirectory(temporaryStaticFileRootDirectory.get())) {
-          if (file.getFileName().toString().toLowerCase(ENGLISH).endsWith(".css"))
-            continue;
+        // 2. Write the manifest to disk for inclusion in the archive
+        Path hashedUrlManifestFile = temporaryDirectory.resolve(HashedUrlManifest.defaultManifestFile());
 
-          byte[] fileData = Files.readAllBytes(file);
-          String hash = fileHasher().hash(fileData);
-          String hashedFilename = filenameHasher().hashFilename(file, hash);
-
-          // Keep track of mapping between static URLs and hashed counterparts
-          Path relativeStaticFile = temporaryStaticFileRootDirectory.get().getParent().relativize(file);
-          Path relativeHashedStaticFile =
-              temporaryStaticFileRootDirectory.get().getParent().relativize(Paths.get(hashedFilename));
-
-          hashedUrlsByUrl.put(format("/%s", relativeStaticFile), format("/%s", relativeHashedStaticFile));
-
-          copyStreamCloseAfterwards(Files.newInputStream(file), Files.newOutputStream(Paths.get(hashedFilename)));
+        try (OutputStream outputStream = Files.newOutputStream(hashedUrlManifestFile)) {
+          hashedUrlManifest.writeToOutputStream(outputStream, PersistenceFormat.PRETTY_PRINTED);
         }
-
-        PathUtils.walkDirectory(temporaryStaticFileRootDirectory.get(), (file) -> {
-          // System.out.println(file.getFileName());
-        });
-
-        System.out.println("Pass 1:");
-
-        for (Entry<String, String> entry : hashedUrlsByUrl.entrySet())
-          System.out.println(entry.getKey() + " -> " + entry.getValue());
-
-        // Pass 2: rewrite CSS files with manifest created in step 1
-
-        // Pass 3: add final CSS file hashes to manifest created in step 1
       }
 
       // Run any client-supplied postprocessing code
@@ -219,6 +189,117 @@ public class Archiver {
     }
 
     logger.info(format("Deployment archive %s was created successfully.", archiveFile()));
+  }
+
+  protected void performFileAlterations(Path workingDirectory) throws IOException {
+    requireNonNull(workingDirectory);
+
+    if (!Files.exists(workingDirectory))
+      throw new IllegalArgumentException(format("Directory %s does not exist!", workingDirectory.toAbsolutePath()));
+    if (!Files.isDirectory(workingDirectory))
+      throw new IllegalArgumentException(format("%s is not a directory!", workingDirectory.toAbsolutePath()));
+
+    PathUtils.walkDirectory(workingDirectory, (file) -> {
+      try {
+        Optional<InputStream> alteredFile = fileAlterationOperation().get().alterFile(this, workingDirectory, file);
+
+        // TODO: need to document that we will close the InputStream - the caller is not responsible for that
+      if (alteredFile.isPresent())
+        copyStreamCloseAfterwards(alteredFile.get(), Files.newOutputStream(file));
+    } catch (IOException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new IOException(format("Unable to alter file %s", file.toAbsolutePath()), e);
+    }
+  } );
+  }
+
+  protected HashedUrlManifest performStaticFileHashing(Path staticFileRootDirectory) throws IOException {
+    requireNonNull(staticFileRootDirectory);
+
+    if (!Files.exists(staticFileRootDirectory))
+      throw new IllegalArgumentException(format("Directory %s does not exist!",
+        staticFileRootDirectory.toAbsolutePath()));
+    if (!Files.isDirectory(staticFileRootDirectory))
+      throw new IllegalArgumentException(format("%s is not a directory!", staticFileRootDirectory.toAbsolutePath()));
+
+    Map<String, String> hashedUrlsByUrl = new HashMap<>();
+
+    // Step 1: hash everything but CSS files (we rewrite those next)
+    for (Path file : allFilesInDirectory(staticFileRootDirectory)) {
+      if (isCssFile(file))
+        continue;
+
+      HashedFileUrlMapping hashedFileUrlMapping = createHashedFile(file, staticFileRootDirectory);
+      hashedUrlsByUrl.put(hashedFileUrlMapping.url(), hashedFileUrlMapping.hashedUrl());
+    }
+
+    // Step 2: rewrite CSS files with manifest created in step 1
+    for (Path file : allFilesInDirectory(staticFileRootDirectory))
+      if (isCssFile(file))
+        rewriteCssUrls(file, new HashedUrlManifest(hashedUrlsByUrl));
+
+    // Step 3: add final CSS file hashes to manifest created in step 1
+    for (Path file : allFilesInDirectory(staticFileRootDirectory)) {
+      if (!isCssFile(file))
+        continue;
+
+      HashedFileUrlMapping hashedFileUrlMapping = createHashedFile(file, staticFileRootDirectory);
+      hashedUrlsByUrl.put(hashedFileUrlMapping.url(), hashedFileUrlMapping.hashedUrl());
+    }
+
+    return new HashedUrlManifest(hashedUrlsByUrl);
+  }
+
+  protected HashedFileUrlMapping createHashedFile(Path file, Path staticFileRootDirectory) throws IOException {
+    requireNonNull(file);
+    requireNonNull(staticFileRootDirectory);
+
+    if (!Files.exists(file))
+      throw new IllegalArgumentException(format("File %s does not exist!", file.toAbsolutePath()));
+    if (Files.isDirectory(file))
+      throw new IllegalArgumentException(format("%s is a directory!", file.toAbsolutePath()));
+
+    if (!Files.exists(staticFileRootDirectory))
+      throw new IllegalArgumentException(format("Directory %s does not exist!",
+        staticFileRootDirectory.toAbsolutePath()));
+    if (!Files.isDirectory(staticFileRootDirectory))
+      throw new IllegalArgumentException(format("%s is not a directory!", staticFileRootDirectory.toAbsolutePath()));
+
+    byte[] fileData = Files.readAllBytes(file);
+    String hash = fileHasher().hash(fileData);
+    String hashedFilename = filenameHasher().hashFilename(file, hash);
+
+    // Keep track of mapping between static URLs and hashed counterparts
+    Path relativeStaticFile = staticFileRootDirectory.getParent().relativize(file);
+    Path relativeHashedStaticFile = staticFileRootDirectory.getParent().relativize(Paths.get(hashedFilename));
+
+    copyStreamCloseAfterwards(Files.newInputStream(file), Files.newOutputStream(Paths.get(hashedFilename)));
+
+    return new HashedFileUrlMapping(format("/%s", relativeStaticFile), format("/%s", relativeHashedStaticFile));
+  }
+
+  protected static class HashedFileUrlMapping {
+    private final String url;
+    private final String hashedUrl;
+
+    public HashedFileUrlMapping(String url, String hashedUrl) {
+      this.url = requireNonNull(url);
+      this.hashedUrl = requireNonNull(hashedUrl);
+    }
+
+    public String url() {
+      return this.url;
+    }
+
+    public String hashedUrl() {
+      return this.hashedUrl;
+    }
+  }
+
+  protected boolean isCssFile(Path file) {
+    requireNonNull(file);
+    return file.getFileName().toString().toLowerCase(ENGLISH).endsWith(".css");
   }
 
   protected void performMavenSupport(MavenSupport mavenSupport, Path workingDirectory) {
@@ -234,6 +315,146 @@ public class Archiver {
 
   public static Builder forArchiveFile(Path archiveFile) {
     return new Builder(archiveFile);
+  }
+
+  protected void rewriteCssUrls(Path cssFile, HashedUrlManifest hashedUrlManifest) throws IOException {
+    requireNonNull(cssFile);
+    requireNonNull(hashedUrlManifest);
+
+    if (!Files.exists(cssFile))
+      throw new IllegalArgumentException(format("CSS file %s does not exist!", cssFile.toAbsolutePath()));
+    if (Files.isDirectory(cssFile))
+      throw new IllegalArgumentException(format("%s is a directory!", cssFile.toAbsolutePath()));
+
+    String css = new String(Files.readAllBytes(cssFile), UTF_8);
+    String urlPrefix = format("/%s", staticFileRootDirectory().get().getFileName());
+
+    // Don't use StringBuilder as regex methods like appendTail require a StringBuffer
+    StringBuffer stringBuffer = new StringBuffer();
+
+    Pattern cssUrlPattern = createCssUrlPattern();
+    Matcher matcher = cssUrlPattern.matcher(css);
+
+    while (matcher.find()) {
+      // Is true if this a match on something like @import "/static/test.css";
+      boolean processingImportUrl = false;
+
+      String originalUrl = matcher.group(1);
+
+      if (matcher.group(2) != null) {
+        originalUrl = matcher.group(2);
+        processingImportUrl = true;
+      } else if (matcher.group(3) != null) {
+        originalUrl = matcher.group(3);
+        processingImportUrl = true;
+      }
+
+      String url = originalUrl;
+      boolean dataUrl = false;
+
+      // Try to expand relative URL components.
+      // Since full expansion of relative components is a lot of work and tricky, we have to enforce some basic rules
+      // like any relative URL must start with "../" (URLs like "/static/../whatever.png" are not
+      // permitted) and you can't nest relative paths (URLs like "../../test/../whatever.png" are not permitted).
+      if (url.startsWith("../")) {
+        String temporaryUrl = url;
+        int relativePathCount = 0;
+
+        while (temporaryUrl.startsWith("../")) {
+          ++relativePathCount;
+          temporaryUrl = temporaryUrl.substring(3);
+        }
+
+        // Rejects URLs like "../../test/../whatever.png"
+        if (temporaryUrl.contains("../")) {
+          logger.warning(format("URL '%s' has nested relative path component[s] so we can't process it.", url));
+        } else {
+          File parent = cssFile.toFile().getParentFile();
+          String parentPath = "";
+
+          for (int i = 0; i < relativePathCount - 1; i++) {
+            parentPath += parent.getName() + "/";
+            parent = parent.getParentFile();
+          }
+
+          url = urlPrefix + parentPath + temporaryUrl;
+          logger.fine(format("Relative URL %s was rewritten to %s", originalUrl, url));
+        }
+      } else if (url.contains("../")) {
+        // Rejects URLs like "/static/../whatever.png"
+        logger.warning(format(
+          "URL '%s' has relative path component[s] which do not start with ../ so we can't process it.", url));
+      } else if (url.toLowerCase(ENGLISH).startsWith("data:")) {
+        dataUrl = true;
+      }
+
+      String cleanedUrl = url;
+
+      // Clean up - see comments on createCssUrlPattern() to see why.
+      // TODO: fix the pattern so we don't have to do this.
+      int indexOfQuestionMark = cleanedUrl.indexOf("?");
+      if (indexOfQuestionMark > 0)
+        cleanedUrl = cleanedUrl.substring(0, indexOfQuestionMark);
+
+      int indexOfHash = cleanedUrl.indexOf("#");
+      if (indexOfHash > 0)
+        cleanedUrl = cleanedUrl.substring(0, indexOfHash);
+
+      Optional<String> hashedUrl = hashedUrlManifest.hashedUrl(cleanedUrl);
+      String rewrittenUrl = url;
+
+      if (hashedUrl.isPresent()) {
+        rewrittenUrl = url.replace(cleanedUrl, hashedUrl.get());
+        logger.fine(format("Rewrote CSS URL reference '%s' to '%s' in %s", originalUrl, rewrittenUrl,
+          cssFile.getFileName()));
+      } else if (!dataUrl && !processingImportUrl) {
+        logger.warning(format("Unable to resolve CSS URL reference '%s' in %s", originalUrl, cssFile.getFileName()));
+      }
+
+      String replacement;
+
+      if (processingImportUrl) {
+        logger.warning(format(
+          "Warning: CSS @import statements are not fully supported yet. Detected @import of %s in %s", originalUrl,
+          cssFile.getFileName()));
+        replacement = format("@import \"%s\";", rewrittenUrl);
+      } else {
+        replacement = format("url(\"%s\")", rewrittenUrl);
+      }
+
+      matcher.appendReplacement(stringBuffer, replacement);
+    }
+
+    matcher.appendTail(stringBuffer);
+
+    String rewrittenFileContents = stringBuffer.toString();
+
+    try {
+      Files.write(cssFile, rewrittenFileContents.getBytes(UTF_8));
+    } catch (IOException e) {
+      throw new UncheckedIOException(format("Unable to write rewritten CSS file %s", cssFile.getFileName()), e);
+    }
+  }
+
+  protected Pattern createCssUrlPattern() {
+    // TODO: use a better regex, currently it fails in these cases.
+    // This is OK since we work around it manually, but would be good to fix once and for all in the pattern.
+    // src: url("/static/fonts/example/myfont.eot?#iefix") format('embedded-opentype')
+    // will match as
+    // /static/fonts/example/myfont.eot?#iefix
+    // instead of
+    // /static/fonts/example/myfont.eot
+    // and
+    // url("/static/fonts/example/myfont.svg#ExampleRegular")
+    // will match as
+    // /static/fonts/example/myfont.svg#ExampleRegular
+    // instead of
+    // /static/fonts/example/myfont.svg
+    String cssUrlPattern = "url\\s*\\(\\s*['\"]?(.+?)\\s*['\"]?\\s*\\)";
+    String cssImportUrlPattern = "@import\\s+['\"](.+?)['\"].*;";
+    String alternateCssImportUrlPattern = "@import\\s+url\\(\\s*['\"](.+?)['\"]\\).*;";
+    return compile(format("%s|%s|%s", cssUrlPattern, cssImportUrlPattern, alternateCssImportUrlPattern),
+      CASE_INSENSITIVE);
   }
 
   public static class Builder {

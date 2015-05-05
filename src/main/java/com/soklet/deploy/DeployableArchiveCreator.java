@@ -538,7 +538,7 @@ public abstract class DeployableArchiveCreator {
       } else if (url.contains("../")) {
         // Rejects URLs like "/static/../whatever.png"
         logger.warning(format(
-          "URL '%s' has relative path component[s] does not start with ../ so we can't process it.", url));
+          "URL '%s' has relative path component[s] which do not start with ../ so we can't process it.", url));
       } else if (url.toLowerCase(ENGLISH).startsWith("data:")) {
         dataUrl = true;
       }

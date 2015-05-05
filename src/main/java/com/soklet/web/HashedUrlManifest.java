@@ -36,6 +36,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import com.soklet.json.JSONException;
@@ -70,6 +71,29 @@ public class HashedUrlManifest {
   public HashedUrlManifest(Path hashedUrlManifestFile) {
     requireNonNull(hashedUrlManifestFile);
     this.hashedUrlsByUrl = unmodifiableMap(hashedUrlsByUrlFromManifestFile(hashedUrlManifestFile));
+  }
+
+  @Override
+  public String toString() {
+    return format("%s{hashedUrlsByUrl=%s}", getClass().getSimpleName(), hashedUrlsByUrl());
+  }
+
+  @Override
+  public boolean equals(Object object) {
+    if (this == object)
+      return true;
+
+    if (!(object instanceof HashedUrlManifest))
+      return false;
+
+    HashedUrlManifest hashedUrlManifest = (HashedUrlManifest) object;
+
+    return Objects.equals(hashedUrlsByUrl(), hashedUrlManifest.hashedUrlsByUrl());
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(hashedUrlsByUrl());
   }
 
   public static Path defaultManifestFile() {
