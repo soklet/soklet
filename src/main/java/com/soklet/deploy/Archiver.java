@@ -33,10 +33,13 @@ import static java.util.Collections.unmodifiableSet;
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 import static java.util.UUID.randomUUID;
+import static java.util.logging.Level.WARNING;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
 import static java.util.regex.Pattern.compile;
+import static java.util.stream.Collectors.toSet;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -46,15 +49,21 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import com.soklet.util.PathUtils;
 import com.soklet.web.HashedUrlManifest;
@@ -136,6 +145,18 @@ public class Archiver {
     this.fileAlterationOperation = builder.fileAlterationOperation;
     this.fileHasher = builder.fileHasher;
     this.filenameHasher = builder.filenameHasher;
+
+    // Enforce relative paths
+    for (DeploymentPath deploymentPath : deploymentPathsToInclude) {
+      if (deploymentPath.sourcePath().isAbsolute())
+        throw new IllegalArgumentException(format(
+          "Deployment paths cannot be absolute, they must be relative. Offending source path was %s",
+          deploymentPath.sourcePath()));
+      if (deploymentPath.destinationDirectory().isAbsolute())
+        throw new IllegalArgumentException(format(
+          "Deployment paths cannot be absolute, they must be relative. Offending destination directory was %s",
+          deploymentPath.destinationDirectory()));
+    }
   }
 
   public void run() throws Exception {
@@ -184,11 +205,117 @@ public class Archiver {
       // Run any client-supplied postprocessing code
       if (postProcessOperation().isPresent())
         postProcessOperation().get().perform(this, temporaryDirectory);
+
+      // Re-root the provided deployment paths to point to the temporary directory
+      Set<DeploymentPath> workingDeploymentPaths = new HashSet<>(deploymentPathsToInclude().size());
+
+      workingDeploymentPaths = deploymentPathsToInclude().stream().map(deploymentPath -> {
+        Path sourcePath = temporaryDirectory.resolve(deploymentPath.sourcePath());
+        return DeploymentPaths.get(sourcePath, deploymentPath.destinationDirectory());
+      }).collect(toSet());
+
+      // Finally - create the archive
+      createZip(archiveFile(), extractFilesFromDeploymentPaths(workingDeploymentPaths));
+
+      logger.info(format("Deployment archive %s was created successfully.", archiveFile));
     } finally {
       PathUtils.deleteDirectory(temporaryDirectory);
     }
+  }
 
-    logger.info(format("Deployment archive %s was created successfully.", archiveFile()));
+  protected void createZip(Path archiveFile, Set<DeploymentPath> deploymentPathsToInclude) {
+    requireNonNull(archiveFile);
+    requireNonNull(deploymentPathsToInclude);
+
+    logger.info(format("Assembling %s...", archiveFile));
+
+    FileOutputStream fileOutputStream = null;
+
+    try {
+      fileOutputStream = new FileOutputStream(archiveFile.toFile());
+    } catch (IOException e) {
+      throw new UncheckedIOException(format("Unable to create zip archive %s", archiveFile), e);
+    }
+
+    ZipOutputStream zipOutputStream = null;
+    Function<DeploymentPath, String> zipEntryNameProvider =
+        (deploymentPath) -> format("%s/%s", deploymentPath.destinationDirectory(), deploymentPath.sourcePath()
+          .getFileName());
+
+    try {
+      zipOutputStream = new ZipOutputStream(fileOutputStream);
+      zipOutputStream.setLevel(9);
+
+      // Zip root is the name of the archive without the extension, e.g. "app.zip" would be "app".
+      String zipRoot = archiveFile.getFileName().toString();
+      int indexOfPeriod = zipRoot.indexOf(".");
+      if (indexOfPeriod != -1 && zipRoot.length() > 1)
+        zipRoot = zipRoot.substring(0, indexOfPeriod);
+
+      SortedSet<DeploymentPath> sortedDeploymentPathsToInclude =
+          new TreeSet<DeploymentPath>(new Comparator<DeploymentPath>() {
+            @Override
+            public int compare(DeploymentPath deploymentPath1, DeploymentPath deploymentPath2) {
+              return zipEntryNameProvider.apply(deploymentPath1).compareTo(zipEntryNameProvider.apply(deploymentPath2));
+            }
+          });
+
+      sortedDeploymentPathsToInclude.addAll(deploymentPathsToInclude);
+
+      for (DeploymentPath deploymentPath : sortedDeploymentPathsToInclude) {
+        String zipEntryName = zipEntryNameProvider.apply(deploymentPath);
+        logger.fine(format("Adding %s...", zipEntryName));
+        zipOutputStream.putNextEntry(new ZipEntry(format("%s/%s", zipRoot, zipEntryName)));
+        zipOutputStream.write(Files.readAllBytes(deploymentPath.sourcePath()));
+      }
+
+      zipOutputStream.flush();
+    } catch (IOException e) {
+      throw new UncheckedIOException(format("An error occurred while creating deployment archive %s", archiveFile), e);
+    } finally {
+      if (zipOutputStream != null) {
+        try {
+          zipOutputStream.close();
+        } catch (IOException e) {
+          logger.log(WARNING, format("Unable to close %s. Continuing on...", ZipOutputStream.class.getSimpleName()), e);
+        }
+      }
+    }
+  }
+
+  protected Set<DeploymentPath> extractFilesFromDeploymentPaths(Set<DeploymentPath> pathsToInclude) {
+    requireNonNull(pathsToInclude);
+
+    Set<DeploymentPath> filesToInclude = new HashSet<>();
+
+    pathsToInclude.forEach(deploymentPath -> {
+      if (Files.exists(deploymentPath.sourcePath())) {
+        if (Files.isDirectory(deploymentPath.sourcePath())) {
+          try {
+            Files.walk(deploymentPath.sourcePath()).forEach(
+              childPath -> {
+                if (!Files.isDirectory(childPath)) {
+
+                  Path destinationDirectory =
+                      Paths.get(format("%s/%s", deploymentPath.destinationDirectory(), deploymentPath.sourcePath()
+                        .relativize(childPath)));
+
+                  if (destinationDirectory.getParent() != null)
+                    destinationDirectory = destinationDirectory.getParent();
+
+                  filesToInclude.add(DeploymentPaths.get(childPath, destinationDirectory));
+                }
+              });
+          } catch (IOException e) {
+            throw new UncheckedIOException(e);
+          }
+        } else {
+          filesToInclude.add(deploymentPath);
+        }
+      }
+    });
+
+    return filesToInclude;
   }
 
   protected void performFileAlterations(Path workingDirectory) throws IOException {
@@ -474,7 +601,7 @@ public class Archiver {
     }
 
     public Builder deploymentPathsToInclude(Set<DeploymentPath> deploymentPaths) {
-      this.deploymentPathsToInclude = unmodifiableSet(new HashSet<>(requireNonNull(deploymentPathsToInclude)));
+      this.deploymentPathsToInclude = unmodifiableSet(new HashSet<>(requireNonNull(deploymentPaths)));
       return this;
     }
 
