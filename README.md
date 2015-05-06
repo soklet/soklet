@@ -42,6 +42,15 @@ Coming soon
 
 Coming soon
 <!-- [https://www.soklet.com/releases/soklet-1.0.0.jar](https://www.soklet.com/releases/soklet-1.0.0.jar) -->
+
+#### Getting Started
+
+```
+$ git clone https://github.com/soklet/soklet.git
+$ cd soklet
+$ mvn exec:java -Dexec.mainClass="com.soklet.bootstrap.Bootstrapper"
+```
+
 ## Example Code
 
 #### Resource Endpoints
