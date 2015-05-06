@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.deploy;
+package com.soklet.archive;
 
 import static java.util.Objects.requireNonNull;
 
@@ -25,28 +25,28 @@ import java.nio.file.Paths;
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public final class DeploymentPaths {
-  private DeploymentPaths() {}
+public final class ArchivePaths {
+  private ArchivePaths() {}
 
-  public static DeploymentPath get(String sourcePath) {
+  public static ArchivePath get(String sourcePath) {
     requireNonNull(sourcePath);
-    return new DeploymentPath(Paths.get(sourcePath), Paths.get(sourcePath));
+    return new ArchivePath(Paths.get(sourcePath), Paths.get(sourcePath));
   }
 
-  public static DeploymentPath get(String sourcePath, String destinationDirectory) {
+  public static ArchivePath get(String sourcePath, String destinationDirectory) {
     requireNonNull(sourcePath);
     requireNonNull(destinationDirectory);
-    return new DeploymentPath(Paths.get(sourcePath), Paths.get(destinationDirectory));
+    return new ArchivePath(Paths.get(sourcePath), Paths.get(destinationDirectory));
   }
 
-  public static DeploymentPath get(Path sourcePath) {
+  public static ArchivePath get(Path sourcePath) {
     requireNonNull(sourcePath);
-    return new DeploymentPath(sourcePath, sourcePath);
+    return new ArchivePath(sourcePath, sourcePath);
   }
 
-  public static DeploymentPath get(Path sourcePath, Path destinationDirectory) {
+  public static ArchivePath get(Path sourcePath, Path destinationDirectory) {
     requireNonNull(sourcePath);
     requireNonNull(destinationDirectory);
-    return new DeploymentPath(sourcePath, destinationDirectory);
+    return new ArchivePath(sourcePath, destinationDirectory);
   }
 }

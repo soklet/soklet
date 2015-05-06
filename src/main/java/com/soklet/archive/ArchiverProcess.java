@@ -20,7 +20,7 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.deploy;
+package com.soklet.archive;
 
 import static com.soklet.util.StringUtils.isBlank;
 import static java.lang.String.format;
@@ -134,17 +134,17 @@ public class ArchiverProcess {
         logger.info(format("Completed process (exit value %d): %s", exitValue, processDescription));
 
         if (invalidProcessExitValue(process))
-          throw new DeploymentProcessExecutionException(format("Invalid process exit value: %d", exitValue), process);
+          throw new ArchiveProcessException(format("Invalid process exit value: %d", exitValue), process);
 
         return exitValue;
       } else {
         process.destroyForcibly();
-        throw new DeploymentProcessExecutionException("Process timed out, forcibly terminating.", process);
+        throw new ArchiveProcessException("Process timed out, forcibly terminating.", process);
       }
     } catch (IOException e) {
-      throw new DeploymentProcessExecutionException("Unable to execute process.", e);
+      throw new ArchiveProcessException("Unable to execute process.", e);
     } catch (InterruptedException e) {
-      throw new DeploymentProcessExecutionException("Process was interrupted.", e);
+      throw new ArchiveProcessException("Process was interrupted.", e);
     }
   }
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.deploy;
+package com.soklet.archive;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -27,11 +27,11 @@ import java.util.Objects;
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public class DeploymentPath implements Comparable<DeploymentPath> {
+public class ArchivePath implements Comparable<ArchivePath> {
   private final Path sourcePath;
   private final Path destinationDirectory;
 
-  DeploymentPath(Path sourcePath, Path destinationDirectory) {
+  ArchivePath(Path sourcePath, Path destinationDirectory) {
     requireNonNull(sourcePath);
     requireNonNull(destinationDirectory);
 
@@ -44,9 +44,9 @@ public class DeploymentPath implements Comparable<DeploymentPath> {
   }
 
   @Override
-  public int compareTo(DeploymentPath deploymentPath) {
-    requireNonNull(deploymentPath);
-    return sourcePath().compareTo(deploymentPath.sourcePath());
+  public int compareTo(ArchivePath archivePath) {
+    requireNonNull(archivePath);
+    return sourcePath().compareTo(archivePath.sourcePath());
   }
 
   @Override
@@ -60,13 +60,13 @@ public class DeploymentPath implements Comparable<DeploymentPath> {
     if (this == object)
       return true;
 
-    if (!(object instanceof DeploymentPath))
+    if (!(object instanceof ArchivePath))
       return false;
 
-    DeploymentPath deploymentPath = (DeploymentPath) object;
+    ArchivePath archivePath = (ArchivePath) object;
 
-    return Objects.equals(sourcePath(), deploymentPath.sourcePath())
-        && Objects.equals(destinationDirectory(), deploymentPath.destinationDirectory());
+    return Objects.equals(sourcePath(), archivePath.sourcePath())
+        && Objects.equals(destinationDirectory(), archivePath.destinationDirectory());
   }
 
   @Override

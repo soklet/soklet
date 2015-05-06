@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.deploy;
+package com.soklet.archive;
 
 import static java.util.Objects.requireNonNull;
 
@@ -24,25 +24,25 @@ import java.util.Optional;
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public class DeploymentProcessExecutionException extends RuntimeException {
+public class ArchiveProcessException extends RuntimeException {
   private final Optional<Process> process;
 
-  public DeploymentProcessExecutionException(String message) {
+  public ArchiveProcessException(String message) {
     super(message);
     this.process = Optional.empty();
   }
 
-  public DeploymentProcessExecutionException(String message, Throwable cause) {
+  public ArchiveProcessException(String message, Throwable cause) {
     super(message, cause);
     this.process = Optional.empty();
   }
 
-  public DeploymentProcessExecutionException(String message, Process process) {
+  public ArchiveProcessException(String message, Process process) {
     super(message);
     this.process = Optional.of(requireNonNull(process));
   }
 
-  public DeploymentProcessExecutionException(String message, Throwable cause, Process process) {
+  public ArchiveProcessException(String message, Throwable cause, Process process) {
     super(message, cause);
     this.process = Optional.of(requireNonNull(process));
   }

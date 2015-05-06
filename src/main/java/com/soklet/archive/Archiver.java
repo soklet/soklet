@@ -20,7 +20,7 @@
  * THE SOFTWARE.
  */
 
-package com.soklet.deploy;
+package com.soklet.archive;
 
 import static com.soklet.util.IoUtils.copyStreamCloseAfterwards;
 import static com.soklet.util.PathUtils.allFilesInDirectory;
@@ -141,7 +141,7 @@ public class Archiver {
   };
 
   private final Path archiveFile;
-  private final Set<DeploymentPath> deploymentPathsToInclude;
+  private final Set<ArchivePath> archivePathsToInclude;
   private final Set<Path> pathsToExclude;
   private final Optional<Path> staticFileRootDirectory;
   private final Optional<MavenSupport> mavenSupport;
@@ -158,7 +158,7 @@ public class Archiver {
     requireNonNull(builder);
 
     this.archiveFile = builder.archiveFile;
-    this.deploymentPathsToInclude = builder.deploymentPathsToInclude;
+    this.archivePathsToInclude = builder.archivePathsToInclude;
     this.pathsToExclude = builder.pathsToExclude;
     this.staticFileRootDirectory = builder.staticFileRootDirectory;
     this.mavenSupport = builder.mavenSupport;
@@ -170,15 +170,15 @@ public class Archiver {
     this.staticFileUnzippableExtensions = builder.staticFileUnzippableExtensions;
 
     // Enforce relative paths
-    for (DeploymentPath deploymentPath : deploymentPathsToInclude) {
-      if (deploymentPath.sourcePath().isAbsolute())
+    for (ArchivePath archivePath : archivePathsToInclude) {
+      if (archivePath.sourcePath().isAbsolute())
         throw new IllegalArgumentException(format(
           "Deployment paths cannot be absolute, they must be relative. Offending source path was %s",
-          deploymentPath.sourcePath()));
-      if (deploymentPath.destinationDirectory().isAbsolute())
+          archivePath.sourcePath()));
+      if (archivePath.destinationDirectory().isAbsolute())
         throw new IllegalArgumentException(format(
           "Deployment paths cannot be absolute, they must be relative. Offending destination directory was %s",
-          deploymentPath.destinationDirectory()));
+          archivePath.destinationDirectory()));
     }
   }
 
@@ -246,17 +246,17 @@ public class Archiver {
         postProcessOperation().get().perform(this, temporaryDirectory);
 
       // Re-root the provided deployment paths to point to the temporary directory
-      Set<DeploymentPath> workingDeploymentPaths = deploymentPathsToInclude().stream().map(deploymentPath -> {
-        Path sourcePath = temporaryDirectory.resolve(deploymentPath.sourcePath());
-        return DeploymentPaths.get(sourcePath, deploymentPath.destinationDirectory());
+      Set<ArchivePath> workingArchivePaths = archivePathsToInclude().stream().map(archivePath -> {
+        Path sourcePath = temporaryDirectory.resolve(archivePath.sourcePath());
+        return ArchivePaths.get(sourcePath, archivePath.destinationDirectory());
       }).collect(toSet());
 
       // If we generated a hashed url manifest, add it to the archive
       if (hashedUrlManifestFile.isPresent())
-        workingDeploymentPaths.add(DeploymentPaths.get(hashedUrlManifestFile.get(), Paths.get(".")));
+        workingArchivePaths.add(ArchivePaths.get(hashedUrlManifestFile.get(), Paths.get(".")));
 
       // Finally - create the archive
-      createZip(archiveFile(), extractFilesFromDeploymentPaths(workingDeploymentPaths));
+      createZip(archiveFile(), extractFilesFromarchivePaths(workingArchivePaths));
 
       logger.info(format("Deployment archive %s was created successfully.", archiveFile));
     } finally {
@@ -264,9 +264,9 @@ public class Archiver {
     }
   }
 
-  protected void createZip(Path archiveFile, Set<DeploymentPath> deploymentPathsToInclude) {
+  protected void createZip(Path archiveFile, Set<ArchivePath> archivePathsToInclude) {
     requireNonNull(archiveFile);
-    requireNonNull(deploymentPathsToInclude);
+    requireNonNull(archivePathsToInclude);
 
     logger.info(format("Assembling %s...", archiveFile));
 
@@ -279,9 +279,8 @@ public class Archiver {
     }
 
     ZipOutputStream zipOutputStream = null;
-    Function<DeploymentPath, String> zipEntryNameProvider =
-        (deploymentPath) -> format("%s/%s", deploymentPath.destinationDirectory(), deploymentPath.sourcePath()
-          .getFileName());
+    Function<ArchivePath, String> zipEntryNameProvider =
+        (archivePath) -> format("%s/%s", archivePath.destinationDirectory(), archivePath.sourcePath().getFileName());
 
     try {
       zipOutputStream = new ZipOutputStream(fileOutputStream);
@@ -293,21 +292,20 @@ public class Archiver {
       if (indexOfPeriod != -1 && zipRoot.length() > 1)
         zipRoot = zipRoot.substring(0, indexOfPeriod);
 
-      SortedSet<DeploymentPath> sortedDeploymentPathsToInclude =
-          new TreeSet<DeploymentPath>(new Comparator<DeploymentPath>() {
-            @Override
-            public int compare(DeploymentPath deploymentPath1, DeploymentPath deploymentPath2) {
-              return zipEntryNameProvider.apply(deploymentPath1).compareTo(zipEntryNameProvider.apply(deploymentPath2));
-            }
-          });
+      SortedSet<ArchivePath> sortedarchivePathsToInclude = new TreeSet<ArchivePath>(new Comparator<ArchivePath>() {
+        @Override
+        public int compare(ArchivePath archivePath1, ArchivePath archivePath2) {
+          return zipEntryNameProvider.apply(archivePath1).compareTo(zipEntryNameProvider.apply(archivePath2));
+        }
+      });
 
-      sortedDeploymentPathsToInclude.addAll(deploymentPathsToInclude);
+      sortedarchivePathsToInclude.addAll(archivePathsToInclude);
 
-      for (DeploymentPath deploymentPath : sortedDeploymentPathsToInclude) {
-        String zipEntryName = zipEntryNameProvider.apply(deploymentPath);
+      for (ArchivePath archivePath : sortedarchivePathsToInclude) {
+        String zipEntryName = zipEntryNameProvider.apply(archivePath);
         logger.fine(format("Adding %s...", zipEntryName));
         zipOutputStream.putNextEntry(new ZipEntry(format("%s/%s", zipRoot, zipEntryName)));
-        zipOutputStream.write(Files.readAllBytes(deploymentPath.sourcePath()));
+        zipOutputStream.write(Files.readAllBytes(archivePath.sourcePath()));
       }
 
       zipOutputStream.flush();
@@ -324,34 +322,34 @@ public class Archiver {
     }
   }
 
-  protected Set<DeploymentPath> extractFilesFromDeploymentPaths(Set<DeploymentPath> pathsToInclude) {
+  protected Set<ArchivePath> extractFilesFromarchivePaths(Set<ArchivePath> pathsToInclude) {
     requireNonNull(pathsToInclude);
 
-    Set<DeploymentPath> filesToInclude = new HashSet<>();
+    Set<ArchivePath> filesToInclude = new HashSet<>();
 
-    pathsToInclude.forEach(deploymentPath -> {
-      if (Files.exists(deploymentPath.sourcePath())) {
-        if (Files.isDirectory(deploymentPath.sourcePath())) {
+    pathsToInclude.forEach(archivePath -> {
+      if (Files.exists(archivePath.sourcePath())) {
+        if (Files.isDirectory(archivePath.sourcePath())) {
           try {
-            Files.walk(deploymentPath.sourcePath()).forEach(
+            Files.walk(archivePath.sourcePath()).forEach(
               childPath -> {
                 if (!Files.isDirectory(childPath)) {
 
                   Path destinationDirectory =
-                      Paths.get(format("%s/%s", deploymentPath.destinationDirectory(), deploymentPath.sourcePath()
+                      Paths.get(format("%s/%s", archivePath.destinationDirectory(), archivePath.sourcePath()
                         .relativize(childPath)));
 
                   if (destinationDirectory.getParent() != null)
                     destinationDirectory = destinationDirectory.getParent();
 
-                  filesToInclude.add(DeploymentPaths.get(childPath, destinationDirectory));
+                  filesToInclude.add(ArchivePaths.get(childPath, destinationDirectory));
                 }
               });
           } catch (IOException e) {
             throw new UncheckedIOException(e);
           }
         } else {
-          filesToInclude.add(deploymentPath);
+          filesToInclude.add(archivePath);
         }
       }
     });
@@ -641,7 +639,7 @@ public class Archiver {
 
   public static class Builder {
     private final Path archiveFile;
-    private Set<DeploymentPath> deploymentPathsToInclude = emptySet();
+    private Set<ArchivePath> archivePathsToInclude = emptySet();
     private Set<Path> pathsToExclude = defaultPathsToExclude();
     private Optional<Path> staticFileRootDirectory = Optional.empty();
     private Optional<MavenSupport> mavenSupport = Optional.empty();
@@ -656,8 +654,8 @@ public class Archiver {
       this.archiveFile = requireNonNull(archiveFile);
     }
 
-    public Builder deploymentPathsToInclude(Set<DeploymentPath> deploymentPaths) {
-      this.deploymentPathsToInclude = unmodifiableSet(new HashSet<>(requireNonNull(deploymentPaths)));
+    public Builder archivePathsToInclude(Set<ArchivePath> archivePaths) {
+      this.archivePathsToInclude = unmodifiableSet(new HashSet<>(requireNonNull(archivePaths)));
       return this;
     }
 
@@ -767,7 +765,7 @@ public class Archiver {
           mavenHome = trimToNull(System.getenv("MAVEN_HOME"));
 
         if (mavenHome == null)
-          throw new DeploymentProcessExecutionException(
+          throw new ArchiveProcessException(
             "In order to determine the absolute path to your mvn executable, the soklet.MAVEN_HOME system property "
                 + "or the MAVEN_HOME environment variable must be defined");
 
@@ -820,8 +818,8 @@ public class Archiver {
     return this.archiveFile;
   }
 
-  public Set<DeploymentPath> deploymentPathsToInclude() {
-    return this.deploymentPathsToInclude;
+  public Set<ArchivePath> archivePathsToInclude() {
+    return this.archivePathsToInclude;
   }
 
   public Set<Path> pathsToExclude() {
