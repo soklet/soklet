@@ -141,7 +141,7 @@ public class Archiver {
   };
 
   private final Path archiveFile;
-  private final Set<ArchivePath> archivePathsToInclude;
+  private final Set<ArchivePath> archivePaths;
   private final Set<Path> pathsToExclude;
   private final Optional<Path> staticFileRootDirectory;
   private final Optional<MavenSupport> mavenSupport;
@@ -158,7 +158,7 @@ public class Archiver {
     requireNonNull(builder);
 
     this.archiveFile = builder.archiveFile;
-    this.archivePathsToInclude = builder.archivePathsToInclude;
+    this.archivePaths = builder.archivePaths;
     this.pathsToExclude = builder.pathsToExclude;
     this.staticFileRootDirectory = builder.staticFileRootDirectory;
     this.mavenSupport = builder.mavenSupport;
@@ -170,20 +170,20 @@ public class Archiver {
     this.staticFileUnzippableExtensions = builder.staticFileUnzippableExtensions;
 
     // Enforce relative paths
-    for (ArchivePath archivePath : archivePathsToInclude) {
+    for (ArchivePath archivePath : archivePaths) {
       if (archivePath.sourcePath().isAbsolute())
         throw new IllegalArgumentException(format(
-          "Deployment paths cannot be absolute, they must be relative. Offending source path was %s",
+          "Archive paths cannot be absolute, they must be relative. Offending source path was %s",
           archivePath.sourcePath()));
       if (archivePath.destinationDirectory().isAbsolute())
         throw new IllegalArgumentException(format(
-          "Deployment paths cannot be absolute, they must be relative. Offending destination directory was %s",
+          "Archive paths cannot be absolute, they must be relative. Offending destination directory was %s",
           archivePath.destinationDirectory()));
     }
   }
 
   public void run() throws Exception {
-    logger.info(format("Creating deployment archive %s...", archiveFile()));
+    logger.info(format("Creating archive %s...", archiveFile()));
 
     Path temporaryDirectory =
         Files.createTempDirectory(format("com.soklet.%s-%s-", getClass().getSimpleName(), randomUUID()));
@@ -245,8 +245,8 @@ public class Archiver {
       if (postProcessOperation().isPresent())
         postProcessOperation().get().perform(this, temporaryDirectory);
 
-      // Re-root the provided deployment paths to point to the temporary directory
-      Set<ArchivePath> workingArchivePaths = archivePathsToInclude().stream().map(archivePath -> {
+      // Re-root the provided archive paths to point to the temporary directory
+      Set<ArchivePath> workingArchivePaths = archivePaths().stream().map(archivePath -> {
         Path sourcePath = temporaryDirectory.resolve(archivePath.sourcePath());
         return ArchivePaths.get(sourcePath, archivePath.destinationDirectory());
       }).collect(toSet());
@@ -258,7 +258,7 @@ public class Archiver {
       // Finally - create the archive
       createZip(archiveFile(), extractFilesFromarchivePaths(workingArchivePaths));
 
-      logger.info(format("Deployment archive %s was created successfully.", archiveFile));
+      logger.info(format("Archive %s was created successfully.", archiveFile));
     } finally {
       PathUtils.deleteDirectory(temporaryDirectory);
     }
@@ -310,7 +310,7 @@ public class Archiver {
 
       zipOutputStream.flush();
     } catch (IOException e) {
-      throw new UncheckedIOException(format("An error occurred while creating deployment archive %s", archiveFile), e);
+      throw new UncheckedIOException(format("An error occurred while creating archive %s", archiveFile), e);
     } finally {
       if (zipOutputStream != null) {
         try {
@@ -639,7 +639,7 @@ public class Archiver {
 
   public static class Builder {
     private final Path archiveFile;
-    private Set<ArchivePath> archivePathsToInclude = emptySet();
+    private Set<ArchivePath> archivePaths = emptySet();
     private Set<Path> pathsToExclude = defaultPathsToExclude();
     private Optional<Path> staticFileRootDirectory = Optional.empty();
     private Optional<MavenSupport> mavenSupport = Optional.empty();
@@ -654,8 +654,8 @@ public class Archiver {
       this.archiveFile = requireNonNull(archiveFile);
     }
 
-    public Builder archivePathsToInclude(Set<ArchivePath> archivePaths) {
-      this.archivePathsToInclude = unmodifiableSet(new HashSet<>(requireNonNull(archivePaths)));
+    public Builder archivePaths(Set<ArchivePath> archivePaths) {
+      this.archivePaths = unmodifiableSet(new HashSet<>(requireNonNull(archivePaths)));
       return this;
     }
 
@@ -666,6 +666,11 @@ public class Archiver {
 
     public Builder staticFileRootDirectory(Path staticFileRootDirectory) {
       this.staticFileRootDirectory = Optional.ofNullable(staticFileRootDirectory);
+      return this;
+    }
+
+    public Builder mavenSupport() {
+      this.mavenSupport = Optional.of(MavenSupport.standard());
       return this;
     }
 
@@ -818,8 +823,8 @@ public class Archiver {
     return this.archiveFile;
   }
 
-  public Set<ArchivePath> archivePathsToInclude() {
-    return this.archivePathsToInclude;
+  public Set<ArchivePath> archivePaths() {
+    return this.archivePaths;
   }
 
   public Set<Path> pathsToExclude() {
