@@ -62,9 +62,11 @@ import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import com.soklet.util.IoUtils;
 import com.soklet.util.PathUtils;
 import com.soklet.web.HashedUrlManifest;
 import com.soklet.web.HashedUrlManifest.PersistenceFormat;
@@ -77,6 +79,25 @@ public class Archiver {
   private static final Set<Path> DEFAULT_PATHS_TO_EXCLUDE = unmodifiableSet(new HashSet<Path>() {
     {
       add(Paths.get(".git"));
+    }
+  });
+
+  private static final Set<String> DEFAULT_STATIC_FILE_UNZIPPABLE_EXTENSIONS = unmodifiableSet(new HashSet<String>() {
+    {
+      // Image
+      add("png");
+      add("jpeg");
+      add("jpg");
+      add("gif");
+
+      // Audio
+      add("aif");
+      add("m4a");
+      add("m4v");
+      add("mp3");
+      add("mp4");
+      add("mpa");
+      add("wma");
     }
   });
 
@@ -129,6 +150,7 @@ public class Archiver {
   private final Optional<FileAlterationOperation> fileAlterationOperation;
   private final Hasher fileHasher;
   private final FilenameHasher filenameHasher;
+  private final Set<String> staticFileUnzippableExtensions;
 
   private final Logger logger = Logger.getLogger(Archiver.class.getName());
 
@@ -145,6 +167,7 @@ public class Archiver {
     this.fileAlterationOperation = builder.fileAlterationOperation;
     this.fileHasher = builder.fileHasher;
     this.filenameHasher = builder.filenameHasher;
+    this.staticFileUnzippableExtensions = builder.staticFileUnzippableExtensions;
 
     // Enforce relative paths
     for (DeploymentPath deploymentPath : deploymentPathsToInclude) {
@@ -202,6 +225,20 @@ public class Archiver {
         try (OutputStream outputStream = Files.newOutputStream(hashedUrlManifestFile.get())) {
           hashedUrlManifest.writeToOutputStream(outputStream, PersistenceFormat.PRETTY_PRINTED);
         }
+
+        // 3. Create gzipped versions of static files as appropriate
+        for (Path staticFile : PathUtils.allFilesInDirectory(temporaryStaticFileRootDirectory.get())) {
+          if (!shouldZipStaticFile(staticFile))
+            continue;
+
+          Path gzippedFile = Paths.get(format("%s.gz", staticFile.toAbsolutePath()));
+
+          try (InputStream inputStream = Files.newInputStream(staticFile);
+              GZIPOutputStream outputStream = new GZIPOutputStream(Files.newOutputStream(gzippedFile))) {
+            IoUtils.copyStream(inputStream, outputStream);
+            outputStream.flush();
+          }
+        }
       }
 
       // Run any client-supplied postprocessing code
@@ -209,9 +246,7 @@ public class Archiver {
         postProcessOperation().get().perform(this, temporaryDirectory);
 
       // Re-root the provided deployment paths to point to the temporary directory
-      Set<DeploymentPath> workingDeploymentPaths = new HashSet<>(deploymentPathsToInclude().size());
-
-      workingDeploymentPaths = deploymentPathsToInclude().stream().map(deploymentPath -> {
+      Set<DeploymentPath> workingDeploymentPaths = deploymentPathsToInclude().stream().map(deploymentPath -> {
         Path sourcePath = temporaryDirectory.resolve(deploymentPath.sourcePath());
         return DeploymentPaths.get(sourcePath, deploymentPath.destinationDirectory());
       }).collect(toSet());
@@ -590,6 +625,20 @@ public class Archiver {
       CASE_INSENSITIVE);
   }
 
+  protected boolean shouldZipStaticFile(Path staticFile) {
+    requireNonNull(staticFile);
+
+    String filename = staticFile.getFileName().toString().toLowerCase(ENGLISH);
+    int lastIndexOfPeriod = filename.lastIndexOf(".");
+
+    if (lastIndexOfPeriod == -1 || filename.endsWith("."))
+      return true;
+
+    String extension = filename.substring(lastIndexOfPeriod + 1);
+
+    return !staticFileUnzippableExtensions().contains(extension);
+  }
+
   public static class Builder {
     private final Path archiveFile;
     private Set<DeploymentPath> deploymentPathsToInclude = emptySet();
@@ -601,6 +650,7 @@ public class Archiver {
     private Optional<FileAlterationOperation> fileAlterationOperation = Optional.empty();
     private Hasher fileHasher = DEFAULT_FILE_HASHER;
     private FilenameHasher filenameHasher = DEFAULT_FILENAME_HASHER;
+    private Set<String> staticFileUnzippableExtensions = DEFAULT_STATIC_FILE_UNZIPPABLE_EXTENSIONS;
 
     protected Builder(Path archiveFile) {
       this.archiveFile = requireNonNull(archiveFile);
@@ -648,6 +698,12 @@ public class Archiver {
 
     public Builder filenameHasher(FilenameHasher filenameHasher) {
       this.filenameHasher = requireNonNull(filenameHasher);
+      return this;
+    }
+
+    public Builder staticFileUnzippableExtensions(Set<String> staticFileUnzippableExtensions) {
+      this.staticFileUnzippableExtensions =
+          unmodifiableSet(new HashSet<>(requireNonNull(staticFileUnzippableExtensions)));
       return this;
     }
 
@@ -798,6 +854,10 @@ public class Archiver {
 
   public FilenameHasher filenameHasher() {
     return this.filenameHasher;
+  }
+
+  public Set<String> staticFileUnzippableExtensions() {
+    return this.staticFileUnzippableExtensions;
   }
 
   @FunctionalInterface
