@@ -190,14 +190,16 @@ public class Archiver {
         performFileAlterations(temporaryDirectory);
 
       // Hash static files and store off the manifest
+      Optional<Path> hashedUrlManifestFile = Optional.empty();
+
       if (temporaryStaticFileRootDirectory.isPresent()) {
         // 1. Do the hashing
         HashedUrlManifest hashedUrlManifest = performStaticFileHashing(temporaryStaticFileRootDirectory.get());
 
         // 2. Write the manifest to disk for inclusion in the archive
-        Path hashedUrlManifestFile = temporaryDirectory.resolve(HashedUrlManifest.defaultManifestFile());
+        hashedUrlManifestFile = Optional.of(temporaryDirectory.resolve(HashedUrlManifest.defaultManifestFile()));
 
-        try (OutputStream outputStream = Files.newOutputStream(hashedUrlManifestFile)) {
+        try (OutputStream outputStream = Files.newOutputStream(hashedUrlManifestFile.get())) {
           hashedUrlManifest.writeToOutputStream(outputStream, PersistenceFormat.PRETTY_PRINTED);
         }
       }
@@ -213,6 +215,10 @@ public class Archiver {
         Path sourcePath = temporaryDirectory.resolve(deploymentPath.sourcePath());
         return DeploymentPaths.get(sourcePath, deploymentPath.destinationDirectory());
       }).collect(toSet());
+
+      // If we generated a hashed url manifest, add it to the archive
+      if (hashedUrlManifestFile.isPresent())
+        workingDeploymentPaths.add(DeploymentPaths.get(hashedUrlManifestFile.get(), Paths.get(".")));
 
       // Finally - create the archive
       createZip(archiveFile(), extractFilesFromDeploymentPaths(workingDeploymentPaths));
