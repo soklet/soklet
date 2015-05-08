@@ -29,18 +29,33 @@ import static java.lang.System.out;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
 public class Bootstrapper {
-  public static void main(String[] args) throws IOException {
-    new Bootstrapper().run();
+  private final Path bootstrapDirectory;
+
+  public Bootstrapper() {
+    this.bootstrapDirectory = Paths.get("bootstrap");
+
+    if (!Files.exists(bootstrapDirectory()))
+      throw new RuntimeException(format("Specified bootstrap directory %s does not exist", bootstrapDirectory()
+        .toAbsolutePath()));
+    if (!Files.isDirectory(bootstrapDirectory()))
+      throw new RuntimeException(format("Specified bootstrap directory %s is not a directory", bootstrapDirectory()
+        .toAbsolutePath()));
   }
 
   public void run() throws IOException {
-    out.println("*** Welcome to Soklet! ***");
+    out.println();
+    out.println("Welcome to Soklet!");
+    out.println("Enter '\\q' to quit at any time.");
+    out.println();
 
     try (BufferedReader inputReader = new BufferedReader(new InputStreamReader(in))) {
       String appName = valueFromInput(inputReader, "What's the name of your app? (e.g. ExampleApp)");
@@ -49,9 +64,14 @@ public class Bootstrapper {
           valueFromInput(inputReader, "What's your app's base package name? (e.g. com.mycompany)",
             new PackageNameInputValidator());
 
+      String mavenGroupId = basePackageName;
+      String mavenArtifactId = appName.toLowerCase().replace(" ", "-");
+
       out.println(format("Application name is %s", appName));
       out.println(format("Author name is %s", authorName));
-      out.println(format("Back package is %s", basePackageName));
+      out.println(format("Base package is %s", basePackageName));
+      out.println(format("Maven group ID is %s", mavenGroupId));
+      out.println(format("Maven artifact ID is %s", mavenArtifactId));
 
       throw new UnsupportedOperationException();
     }
@@ -72,9 +92,16 @@ public class Bootstrapper {
     do {
       out.print(format("%s\n-> ", prompt));
       value = reader.readLine().trim();
+
+      if ("\\q".equals(value))
+        System.exit(0);
     } while (!inputValidator.isValid(value));
 
     return value;
+  }
+
+  protected Path bootstrapDirectory() {
+    return this.bootstrapDirectory;
   }
 
   protected static interface InputValidator {
@@ -86,5 +113,9 @@ public class Bootstrapper {
       input = input.trim();
       return input.length() > 0 && input.matches("^([a-zA-Z_]{1}[a-zA-Z0-9_]*(\\.[a-zA-Z_]{1}[a-zA-Z0-9_]*)*)?$");
     }
+  }
+
+  public static void main(String[] args) throws IOException {
+    new Bootstrapper().run();
   }
 }

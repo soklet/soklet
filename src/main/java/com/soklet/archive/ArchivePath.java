@@ -21,6 +21,7 @@ import static java.util.Objects.requireNonNull;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Objects;
 
 /**
@@ -40,7 +41,7 @@ public class ArchivePath implements Comparable<ArchivePath> {
     if (sourcePath.equals(destinationDirectory) && !Files.isDirectory(sourcePath))
       destinationDirectory = sourcePath.getParent();
 
-    this.destinationDirectory = destinationDirectory;
+    this.destinationDirectory = destinationDirectory == null ? Paths.get(".") : destinationDirectory;
   }
 
   @Override

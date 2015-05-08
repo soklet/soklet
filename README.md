@@ -48,7 +48,7 @@ Coming soon
 ```
 $ git clone https://github.com/soklet/soklet.git
 $ cd soklet
-$ mvn exec:java -Dexec.mainClass="com.soklet.bootstrap.Bootstrapper"
+$ mvn -q exec:exec
 ```
 
 ## Example Code

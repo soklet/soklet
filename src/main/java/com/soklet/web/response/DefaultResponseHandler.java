@@ -34,6 +34,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import com.soklet.web.exception.ExceptionStatusMapper;
+import com.soklet.web.exception.ResourceMethodExecutionException;
 import com.soklet.web.response.writer.ApiResponseWriter;
 import com.soklet.web.response.writer.BinaryResponseWriter;
 import com.soklet.web.response.writer.PageResponseWriter;
@@ -72,6 +73,13 @@ public class DefaultResponseHandler implements ResponseHandler {
     requireNonNull(route);
     requireNonNull(response);
     requireNonNull(exception);
+
+    // Unwrap ResourceMethodExecutionExceptions to get at the real cause.
+    // TODO: maybe the signature for this method should take a Throwable instead of Exception
+    if (exception.isPresent() && exception.get() instanceof ResourceMethodExecutionException)
+      exception =
+          Optional.of(exception.get().getCause() instanceof Exception ? (Exception) exception.get().getCause()
+              : exception.get());
 
     // Do nothing at all if this was an async response
     if (response.isPresent() && response.get() instanceof AsyncResponse)
