@@ -48,7 +48,7 @@ public class RoutingServlet extends HttpServlet {
   private final RouteMatcher routeMatcher;
   private final RequestHandler requestHandler;
   private final ResponseHandler responseHandler;
-  private final Logger logger = Logger.getLogger(getClass().getName());
+  private final Logger logger = Logger.getLogger(RoutingServlet.class.getName());
 
   @Inject
   public RoutingServlet(RouteMatcher routeMatcher, RequestHandler requestHandler, ResponseHandler responseHandler) {

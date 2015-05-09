@@ -38,7 +38,7 @@ import com.soklet.util.TypeReference;
  */
 public class ValueConverterRegistry {
   private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConverterCache = new ConcurrentHashMap<>();
-  private final Logger logger = Logger.getLogger(getClass().getName());
+  private final Logger logger = Logger.getLogger(ValueConverterRegistry.class.getName());
 
   public ValueConverterRegistry() {
     initializeDefaultValueConverters();
