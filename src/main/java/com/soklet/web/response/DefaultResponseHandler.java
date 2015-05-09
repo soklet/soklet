@@ -130,19 +130,6 @@ public class DefaultResponseHandler implements ResponseHandler {
       throw new IllegalArgumentException(format(
         "Not sure what to do with resource method return value of type %s. Resource method was %s", response.get()
           .getClass(), route.get().resourceMethod()));
-
-    // If we have a response, use the corresponding writer
-
-    // If we have no response, use the corresponding writer (via writerForMissingRoute)
-    // If we have an exception, use the corresponding writer (via writerForException)
-
-    // Q: If we have no response, how do we know which writer to use?
-    // A: Examine method signature, possibly accept header if signature is ambiguous (e.g. Object)
-
-    // if (responseWriter == this.pageResponseWriter)
-    // pageResponseWriter.writeResponse(httpServletRequest, httpServletResponse, (Optional<PageResponse>) response,
-    // route, exception);
-
   }
 
   protected void writeAdditionalHeaders(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
