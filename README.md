@@ -4,7 +4,7 @@
 
 Minimalist infrastructure for Java webapps and microservices.
 
-It's under active development and will be available for production use soon.
+**Note:** Soklet is under active development and will be ready for production use soon.
 
 #### Design Goals
 
@@ -28,19 +28,17 @@ It's under active development and will be available for production use soon.
 
 #### Maven Installation
 
-Coming soon
-<!--
 ```xml
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.0.0</version>
+  <version>0.1.0</version>
 </dependency>
 ```
--->
+
 #### Direct Download
 
-Coming soon
+Coming soon, will coincide with 1.0.0 release
 <!-- [https://www.soklet.com/releases/soklet-1.0.0.jar](https://www.soklet.com/releases/soklet-1.0.0.jar) -->
 
 #### Getting Started
