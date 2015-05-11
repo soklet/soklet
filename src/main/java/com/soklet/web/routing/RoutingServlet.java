@@ -18,6 +18,7 @@ package com.soklet.web.routing;
 
 import static com.soklet.util.IoUtils.copyStreamCloseAfterwards;
 import static java.lang.String.format;
+import static java.lang.System.nanoTime;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
@@ -27,6 +28,8 @@ import static java.util.logging.Level.FINER;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Optional;
 import java.util.logging.Logger;
 
@@ -37,6 +40,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import com.soklet.web.HttpMethod;
+import com.soklet.web.exception.ResourceMethodExecutionException;
 import com.soklet.web.request.RequestHandler;
 import com.soklet.web.response.ResponseHandler;
 
@@ -63,6 +67,8 @@ public class RoutingServlet extends HttpServlet {
     requireNonNull(httpServletRequest);
     requireNonNull(httpServletResponse);
 
+    long time = nanoTime();
+
     HttpMethod httpMethod = HttpMethod.valueOf(httpServletRequest.getMethod().toUpperCase(ENGLISH));
     String requestPath = httpServletRequest.getPathInfo();
 
@@ -85,20 +91,54 @@ public class RoutingServlet extends HttpServlet {
 
       responseHandler.handleResponse(httpServletRequest, httpServletResponse, route, response, Optional.empty());
     } catch (Exception e) {
-      if (logger.isLoggable(FINE))
-        logger.fine(format("%s occurred while handling %s", e.getClass().getSimpleName(),
-          httpServletRequestDescription(httpServletRequest)));
+      logException(httpServletRequest, httpServletResponse, route, response, e);
 
       try {
         responseHandler.handleResponse(httpServletRequest, httpServletResponse, route, response, Optional.of(e));
       } catch (Exception e2) {
         logger.warning(format(
-          "%s occurred while trying to handle an error response, falling back to a failsafe response...", e2.getClass()
-            .getSimpleName()));
+          "Exception occurred while trying to handle an error response, falling back to a failsafe response...\n%s",
+          stackTraceForThrowable(e2)));
 
         writeFailsafeErrorResponse(httpServletRequest, httpServletResponse);
       }
+    } finally {
+      time = nanoTime() - time;
+
+      if (logger.isLoggable(FINE))
+        logger.fine(format("Took %.2fms to handle %s", time / 1_000_000f,
+          httpServletRequestDescription(httpServletRequest)));
     }
+  }
+
+  protected void logException(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
+      Optional<Route> route, Optional<Object> response, Exception exception) {
+    requireNonNull(httpServletRequest);
+    requireNonNull(httpServletResponse);
+    requireNonNull(route);
+    requireNonNull(response);
+    requireNonNull(exception);
+
+    if (!logger.isLoggable(FINE))
+      return;
+
+    Throwable throwable = exception;
+
+    // Unwrap these for more compact stack traces
+    if (exception instanceof ResourceMethodExecutionException)
+      throwable = exception.getCause();
+
+    logger.fine(format("Exception occurred while handling %s\n%s", httpServletRequestDescription(httpServletRequest),
+      stackTraceForThrowable(throwable)));
+  }
+
+  protected String stackTraceForThrowable(Throwable throwable) {
+    requireNonNull(throwable);
+
+    StringWriter stringWriter = new StringWriter();
+    PrintWriter printWriter = new PrintWriter(stringWriter);
+    throwable.printStackTrace(printWriter);
+    return stringWriter.toString().trim();
   }
 
   protected String httpServletRequestDescription(HttpServletRequest httpServletRequest) {
@@ -120,7 +160,7 @@ public class RoutingServlet extends HttpServlet {
     httpServletResponse.setStatus(500);
 
     try (OutputStream outputStream = httpServletResponse.getOutputStream()) {
-      copyStreamCloseAfterwards(new ByteArrayInputStream("500".getBytes(UTF_8)), outputStream);
+      copyStreamCloseAfterwards(new ByteArrayInputStream("500 error".getBytes(UTF_8)), outputStream);
     }
   }
 }
