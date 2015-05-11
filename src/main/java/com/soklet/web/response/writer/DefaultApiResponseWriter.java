@@ -22,8 +22,12 @@
 
 package com.soklet.web.response.writer;
 
+import static com.soklet.util.IoUtils.copyStreamCloseAfterwards;
+import static java.lang.String.format;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.requireNonNull;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Optional;
 
@@ -47,6 +51,13 @@ public class DefaultApiResponseWriter implements ApiResponseWriter {
     requireNonNull(response);
     requireNonNull(exception);
 
-    throw new UnsupportedOperationException("TODO: write default API response");
+    httpServletResponse.setContentType("application/json;charset=UTF-8");
+
+    copyStreamCloseAfterwards(
+      new ByteArrayInputStream(
+        format(
+          "{\n  \"message\": \"In order to use %s, you must provide Soklet with your own %s. See http://soklet.com/response-writers for more information.\"\n}",
+          ApiResponse.class.getSimpleName(), ApiResponseWriter.class.getSimpleName()).getBytes(UTF_8)),
+      httpServletResponse.getOutputStream());
   }
 }
