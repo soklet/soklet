@@ -154,11 +154,11 @@ public class DefaultResponseHandler implements ResponseHandler {
     requireNonNull(response);
     requireNonNull(exception);
 
-    if (!route.isPresent())
-      return 404;
-
     if (exception.isPresent())
       return exceptionStatusMapper.statusForException(exception.get());
+
+    if (!route.isPresent())
+      return 404;
 
     if (!response.isPresent())
       return 204;

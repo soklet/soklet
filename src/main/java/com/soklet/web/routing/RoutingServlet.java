@@ -24,12 +24,15 @@ import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINER;
+import static java.util.stream.Collectors.joining;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 
@@ -40,6 +43,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import com.soklet.web.HttpMethod;
+import com.soklet.web.exception.MethodNotAllowedException;
 import com.soklet.web.exception.ResourceMethodExecutionException;
 import com.soklet.web.request.RequestHandler;
 import com.soklet.web.response.ResponseHandler;
@@ -87,6 +91,18 @@ public class RoutingServlet extends HttpServlet {
       } else {
         if (logger.isLoggable(FINER))
           logger.finer(format("No matching handler found for %s", httpServletRequestDescription(httpServletRequest)));
+
+        // If this resource matches a different method, error out specially
+        List<HttpMethod> otherHttpMethods = new ArrayList<>(HttpMethod.values().length);
+
+        for (HttpMethod otherHttpMethod : HttpMethod.values())
+          if (httpMethod != otherHttpMethod && routeMatcher.match(otherHttpMethod, requestPath).isPresent())
+            otherHttpMethods.add(otherHttpMethod);
+
+        if (otherHttpMethods.size() > 0)
+          throw new MethodNotAllowedException(format("%s is not supported for this resource. Supported method%s %s",
+            httpMethod, (otherHttpMethods.size() == 1 ? " is" : "s are"),
+            otherHttpMethods.stream().map(method -> method.name()).collect(joining(","))));
       }
 
       responseHandler.handleResponse(httpServletRequest, httpServletResponse, route, response, Optional.empty());
