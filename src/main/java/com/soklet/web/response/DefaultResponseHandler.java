@@ -93,7 +93,7 @@ public class DefaultResponseHandler implements ResponseHandler {
     // Tack on any extra headers (no-cache, for example)
     writeAdditionalHeaders(httpServletRequest, httpServletResponse, route, response, exception);
 
-    // No route? It's a 404 page
+    // No route? It's a 404 or 405 page
     if (!route.isPresent()) {
       ResponseWriter<?> responseWriter = responseWriterForMissingRoute(httpServletRequest, httpServletResponse);
       responseWriter.writeResponse(httpServletRequest, httpServletResponse, Optional.empty(), Optional.empty(),
