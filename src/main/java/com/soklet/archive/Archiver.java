@@ -38,6 +38,7 @@ import static java.util.regex.Pattern.CASE_INSENSITIVE;
 import static java.util.regex.Pattern.compile;
 import static java.util.stream.Collectors.toSet;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -66,6 +67,7 @@ import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import com.soklet.json.JSONObject;
 import com.soklet.util.IoUtils;
 import com.soklet.util.PathUtils;
 import com.soklet.web.HashedUrlManifest;
@@ -82,75 +84,14 @@ public class Archiver {
     }
   });
 
-  private static final Set<String> DEFAULT_STATIC_FILE_UNZIPPABLE_EXTENSIONS = unmodifiableSet(new HashSet<String>() {
-    {
-      // Image
-      add("png");
-      add("jpeg");
-      add("jpg");
-      add("gif");
-
-      // Audio
-      add("aif");
-      add("m4a");
-      add("m4v");
-      add("mp3");
-      add("mp4");
-      add("mpa");
-      add("wma");
-    }
-  });
-
-  private static final Hasher DEFAULT_FILE_HASHER = (bytes) -> {
-    requireNonNull(bytes);
-
-    MessageDigest messageDigest = null;
-
-    try {
-      messageDigest = MessageDigest.getInstance("MD5");
-    } catch (Exception e) {
-      throw new RuntimeException("Unable to create hasher", e);
-    }
-
-    byte[] hashBytes = messageDigest.digest(bytes);
-    StringBuilder stringBuilder = new StringBuilder(2 * hashBytes.length);
-
-    for (byte b : hashBytes) {
-      stringBuilder.append("0123456789ABCDEF".charAt((b & 0xF0) >> 4));
-      stringBuilder.append("0123456789ABCDEF".charAt((b & 0x0F)));
-    }
-
-    return stringBuilder.toString();
-  };
-
-  private static final FilenameHasher DEFAULT_FILENAME_HASHER = (file, hash) -> {
-    requireNonNull(file);
-    requireNonNull(hash);
-
-    String filename = file.toAbsolutePath().toString();
-
-    int lastIndexOfPeriod = filename.lastIndexOf(".");
-
-    if (lastIndexOfPeriod == -1)
-      return format("%s.%s", filename, hash);
-
-    if (filename.endsWith("."))
-      return format("%s%s", filename, hash);
-
-    return format("%s.%s%s", filename.substring(0, lastIndexOfPeriod), hash, filename.substring(lastIndexOfPeriod));
-  };
-
   private final Path archiveFile;
   private final Set<ArchivePath> archivePaths;
   private final Set<Path> pathsToExclude;
-  private final Optional<Path> staticFileRootDirectory;
+  private final Optional<StaticFileConfiguration> staticFileConfiguration;
   private final Optional<MavenSupport> mavenSupport;
   private final Optional<ArchiveSupportOperation> preProcessOperation;
   private final Optional<ArchiveSupportOperation> postProcessOperation;
   private final Optional<FileAlterationOperation> fileAlterationOperation;
-  private final Hasher fileHasher;
-  private final FilenameHasher filenameHasher;
-  private final Set<String> staticFileUnzippableExtensions;
 
   private final Logger logger = Logger.getLogger(Archiver.class.getName());
 
@@ -160,14 +101,11 @@ public class Archiver {
     this.archiveFile = builder.archiveFile;
     this.archivePaths = builder.archivePaths;
     this.pathsToExclude = builder.pathsToExclude;
-    this.staticFileRootDirectory = builder.staticFileRootDirectory;
+    this.staticFileConfiguration = builder.staticFileConfiguration;
     this.mavenSupport = builder.mavenSupport;
     this.preProcessOperation = builder.preProcessOperation;
     this.postProcessOperation = builder.postProcessOperation;
     this.fileAlterationOperation = builder.fileAlterationOperation;
-    this.fileHasher = builder.fileHasher;
-    this.filenameHasher = builder.filenameHasher;
-    this.staticFileUnzippableExtensions = builder.staticFileUnzippableExtensions;
 
     // Enforce relative paths
     for (ArchivePath archivePath : archivePaths) {
@@ -180,6 +118,19 @@ public class Archiver {
           "Archive paths cannot be absolute, they must be relative. Offending destination directory was %s",
           archivePath.destinationDirectory()));
     }
+
+    if (staticFileConfiguration().isPresent()) {
+      if (staticFileConfiguration().get().rootDirectory().isAbsolute())
+        throw new IllegalArgumentException(format(
+          "Static file root directory path cannot be absolute, it must be relative. Offending directory path was %s",
+          staticFileConfiguration().get().rootDirectory()));
+
+      if (staticFileConfiguration().get().hashedUrlManifestJsFile().isPresent()
+          && staticFileConfiguration().get().hashedUrlManifestJsFile().get().isAbsolute())
+        throw new IllegalArgumentException(format(
+          "Hashed URL manifest JS file path cannot be absolute, it must be relative. Offending file path was %s",
+          staticFileConfiguration().get().hashedUrlManifestJsFile().get()));
+    }
   }
 
   public void run() throws Exception {
@@ -190,9 +141,10 @@ public class Archiver {
 
     Optional<Path> temporaryStaticFileRootDirectory = Optional.empty();
 
-    if (staticFileRootDirectory().isPresent()) {
+    if (staticFileConfiguration().isPresent()) {
       Path relativeStaticFileRootDirectory =
-          Paths.get(".").toAbsolutePath().getParent().relativize(staticFileRootDirectory.get().toAbsolutePath());
+          Paths.get(".").toAbsolutePath().getParent()
+            .relativize(staticFileConfiguration.get().rootDirectory().toAbsolutePath());
       temporaryStaticFileRootDirectory = Optional.of(temporaryDirectory.resolve(relativeStaticFileRootDirectory));
     }
 
@@ -200,11 +152,11 @@ public class Archiver {
       // Copy everything over to our temporary working directory
       PathUtils.copyDirectory(Paths.get("."), temporaryDirectory, pathsToExclude);
 
-      // Run any client-supplied preprocessing code
+      // Run any client-supplied preprocessing code (for example, compile LESS files into CSS)
       if (preProcessOperation().isPresent())
         preProcessOperation().get().perform(this, temporaryDirectory);
 
-      // Run any Maven tasks
+      // Run any Maven tasks (for example, build and extract dependency JARs for inclusion in archive)
       if (mavenSupport().isPresent())
         performMavenSupport(mavenSupport.get(), temporaryDirectory);
 
@@ -390,10 +342,20 @@ public class Archiver {
       throw new IllegalArgumentException(format("%s is not a directory!", staticFileRootDirectory.toAbsolutePath()));
 
     Map<String, String> hashedUrlsByUrl = new HashMap<>();
+    Optional<Path> hashedUrlManifestJsFile = Optional.empty();
 
-    // Step 1: hash everything but CSS files (we rewrite those next)
+    if (staticFileConfiguration().get().hashedUrlManifestJsFile().isPresent())
+      hashedUrlManifestJsFile =
+          Optional.of(staticFileRootDirectory.resolve(staticFileConfiguration().get().hashedUrlManifestJsFile().get()));
+
+    // Step 1: hash everything but CSS files (we rewrite those next) and the preexisting manifest file (if present)
     for (Path file : allFilesInDirectory(staticFileRootDirectory)) {
+      // Ignore CSS
       if (isCssFile(file))
+        continue;
+
+      // Ignore preexisting manifest
+      if (hashedUrlManifestJsFile.isPresent() && file.equals(hashedUrlManifestJsFile.get()))
         continue;
 
       HashedFileUrlMapping hashedFileUrlMapping = createHashedFile(file, staticFileRootDirectory);
@@ -414,12 +376,60 @@ public class Archiver {
       hashedUrlsByUrl.put(hashedFileUrlMapping.url(), hashedFileUrlMapping.hashedUrl());
     }
 
+    // Step 4 (optional): create JS manifest, which includes a reference to itself (chicken-and-egg)
+    if (staticFileConfiguration().get().hashedUrlManifestJsFile().isPresent()) {
+      // First, compute the hash of the manifest
+      HashedUrlManifest hashedUrlManifest = new HashedUrlManifest(hashedUrlsByUrl);
+      ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+      hashedUrlManifest.writeToOutputStream(byteArrayOutputStream, PersistenceFormat.COMPACT);
+      byteArrayOutputStream.flush();
+
+      // Figure out the mapping between the manifest URL and its hashed counterpart
+      String precomputedManifestFileHash =
+          staticFileConfiguration().get().fileHasher().hash(byteArrayOutputStream.toByteArray());
+      Path manifestFile =
+          staticFileRootDirectory.resolve(staticFileConfiguration().get().hashedUrlManifestJsFile().get());
+      String hashedManifestFilename =
+          staticFileConfiguration().get().filenameHasher().hashFilename(manifestFile, precomputedManifestFileHash);
+
+      Path relativeManifestFile = staticFileRootDirectory.getParent().relativize(manifestFile);
+      Path relativeHashedManifestFile =
+          staticFileRootDirectory.getParent().relativize(Paths.get(hashedManifestFilename));
+
+      Map<String, Object> hashedUrlsByUrlForJson = new HashMap<>(hashedUrlManifest.hashedUrlsByUrl());
+      hashedUrlsByUrlForJson.put(format("/%s", relativeManifestFile), format("/%s", relativeHashedManifestFile));
+
+      // Create the manifest JS content
+      JSONObject jsonObject = new JSONObject(hashedUrlsByUrlForJson);
+
+      // TODO: let clients provide a method to hook this for arbitrary formatting
+      String hashedUrlManifestJsFileContents =
+          format("(function(scope){if(!scope.soklet)scope.soklet={};scope.soklet.hashedUrls=%s;})(this);", jsonObject);
+
+      // Finally, write the manifest JS to disk
+      Files.write(manifestFile, hashedUrlManifestJsFileContents.getBytes(UTF_8));
+
+      HashedFileUrlMapping hashedFileUrlMapping =
+          createHashedFile(manifestFile, staticFileRootDirectory, Optional.of(precomputedManifestFileHash));
+
+      hashedUrlsByUrl.put(hashedFileUrlMapping.url(), hashedFileUrlMapping.hashedUrl());
+    }
+
     return new HashedUrlManifest(hashedUrlsByUrl);
   }
 
   protected HashedFileUrlMapping createHashedFile(Path file, Path staticFileRootDirectory) throws IOException {
     requireNonNull(file);
     requireNonNull(staticFileRootDirectory);
+
+    return createHashedFile(file, staticFileRootDirectory, Optional.empty());
+  }
+
+  protected HashedFileUrlMapping createHashedFile(Path file, Path staticFileRootDirectory,
+      Optional<String> precomputedHash) throws IOException {
+    requireNonNull(file);
+    requireNonNull(staticFileRootDirectory);
+    requireNonNull(precomputedHash);
 
     if (!Files.exists(file))
       throw new IllegalArgumentException(format("File %s does not exist!", file.toAbsolutePath()));
@@ -432,9 +442,8 @@ public class Archiver {
     if (!Files.isDirectory(staticFileRootDirectory))
       throw new IllegalArgumentException(format("%s is not a directory!", staticFileRootDirectory.toAbsolutePath()));
 
-    byte[] fileData = Files.readAllBytes(file);
-    String hash = fileHasher().hash(fileData);
-    String hashedFilename = filenameHasher().hashFilename(file, hash);
+    String hash = precomputedHash.orElse(staticFileConfiguration().get().fileHasher().hash(Files.readAllBytes(file)));
+    String hashedFilename = staticFileConfiguration().get().filenameHasher().hashFilename(file, hash);
 
     // Keep track of mapping between static URLs and hashed counterparts
     Path relativeStaticFile = staticFileRootDirectory.getParent().relativize(file);
@@ -452,6 +461,11 @@ public class Archiver {
     public HashedFileUrlMapping(String url, String hashedUrl) {
       this.url = requireNonNull(url);
       this.hashedUrl = requireNonNull(hashedUrl);
+    }
+
+    @Override
+    public String toString() {
+      return format("%s{url=%s, hashedUrl=%s}", getClass().getSimpleName(), url(), hashedUrl());
     }
 
     public String url() {
@@ -493,7 +507,7 @@ public class Archiver {
       throw new IllegalArgumentException(format("%s is a directory!", cssFile.toAbsolutePath()));
 
     String css = new String(Files.readAllBytes(cssFile), UTF_8);
-    String urlPrefix = format("/%s", staticFileRootDirectory().get().getFileName());
+    String urlPrefix = format("/%s", staticFileConfiguration().get().rootDirectory().getFileName());
 
     // Don't use StringBuilder as regex methods like appendTail require a StringBuffer
     StringBuffer stringBuffer = new StringBuffer();
@@ -634,21 +648,18 @@ public class Archiver {
 
     String extension = filename.substring(lastIndexOfPeriod + 1);
 
-    return !staticFileUnzippableExtensions().contains(extension);
+    return !staticFileConfiguration().get().unzippableExtensions().contains(extension);
   }
 
   public static class Builder {
     private final Path archiveFile;
     private Set<ArchivePath> archivePaths = emptySet();
     private Set<Path> pathsToExclude = defaultPathsToExclude();
-    private Optional<Path> staticFileRootDirectory = Optional.empty();
+    private Optional<StaticFileConfiguration> staticFileConfiguration = Optional.empty();
     private Optional<MavenSupport> mavenSupport = Optional.empty();
     private Optional<ArchiveSupportOperation> preProcessOperation = Optional.empty();
     private Optional<ArchiveSupportOperation> postProcessOperation = Optional.empty();
     private Optional<FileAlterationOperation> fileAlterationOperation = Optional.empty();
-    private Hasher fileHasher = DEFAULT_FILE_HASHER;
-    private FilenameHasher filenameHasher = DEFAULT_FILENAME_HASHER;
-    private Set<String> staticFileUnzippableExtensions = DEFAULT_STATIC_FILE_UNZIPPABLE_EXTENSIONS;
 
     protected Builder(Path archiveFile) {
       this.archiveFile = requireNonNull(archiveFile);
@@ -664,8 +675,8 @@ public class Archiver {
       return this;
     }
 
-    public Builder staticFileRootDirectory(Path staticFileRootDirectory) {
-      this.staticFileRootDirectory = Optional.ofNullable(staticFileRootDirectory);
+    public Builder staticFileConfiguration(StaticFileConfiguration staticFileConfiguration) {
+      this.staticFileConfiguration = Optional.ofNullable(staticFileConfiguration);
       return this;
     }
 
@@ -694,22 +705,6 @@ public class Archiver {
       return this;
     }
 
-    public Builder fileHasher(Hasher fileHasher) {
-      this.fileHasher = requireNonNull(fileHasher);
-      return this;
-    }
-
-    public Builder filenameHasher(FilenameHasher filenameHasher) {
-      this.filenameHasher = requireNonNull(filenameHasher);
-      return this;
-    }
-
-    public Builder staticFileUnzippableExtensions(Set<String> staticFileUnzippableExtensions) {
-      this.staticFileUnzippableExtensions =
-          unmodifiableSet(new HashSet<>(requireNonNull(staticFileUnzippableExtensions)));
-      return this;
-    }
-
     public Archiver build() {
       return new Archiver(this);
     }
@@ -729,12 +724,12 @@ public class Archiver {
       this.dependenciesArguments = builder.dependenciesArguments;
     }
 
-    public static Builder create() {
+    public static Builder newBuilder() {
       return new Builder();
     }
 
     public static MavenSupport standard() {
-      return new MavenSupport(create());
+      return new MavenSupport(newBuilder());
     }
 
     public static class Builder {
@@ -831,8 +826,8 @@ public class Archiver {
     return this.pathsToExclude;
   }
 
-  public Optional<Path> staticFileRootDirectory() {
-    return this.staticFileRootDirectory;
+  public Optional<StaticFileConfiguration> staticFileConfiguration() {
+    return this.staticFileConfiguration;
   }
 
   public Optional<MavenSupport> mavenSupport() {
@@ -851,16 +846,139 @@ public class Archiver {
     return this.fileAlterationOperation;
   }
 
-  public Hasher fileHasher() {
-    return this.fileHasher;
-  }
+  public static class StaticFileConfiguration {
+    public static final Set<String> DEFAULT_UNZIPPABLE_EXTENSIONS = unmodifiableSet(new HashSet<String>() {
+      {
+        // Image
+        add("png");
+        add("jpeg");
+        add("jpg");
+        add("gif");
 
-  public FilenameHasher filenameHasher() {
-    return this.filenameHasher;
-  }
+        // Audio
+        add("aif");
+        add("m4a");
+        add("m4v");
+        add("mp3");
+        add("mp4");
+        add("mpa");
+        add("wma");
+      }
+    });
 
-  public Set<String> staticFileUnzippableExtensions() {
-    return this.staticFileUnzippableExtensions;
+    public static final Hasher DEFAULT_FILE_HASHER = (bytes) -> {
+      requireNonNull(bytes);
+
+      MessageDigest messageDigest = null;
+
+      try {
+        messageDigest = MessageDigest.getInstance("MD5");
+      } catch (Exception e) {
+        throw new RuntimeException("Unable to create hasher", e);
+      }
+
+      byte[] hashBytes = messageDigest.digest(bytes);
+      StringBuilder stringBuilder = new StringBuilder(2 * hashBytes.length);
+
+      for (byte b : hashBytes) {
+        stringBuilder.append("0123456789ABCDEF".charAt((b & 0xF0) >> 4));
+        stringBuilder.append("0123456789ABCDEF".charAt((b & 0x0F)));
+      }
+
+      return stringBuilder.toString();
+    };
+
+    public static final FilenameHasher DEFAULT_FILENAME_HASHER = (file, hash) -> {
+      requireNonNull(file);
+      requireNonNull(hash);
+
+      String filename = file.toAbsolutePath().toString();
+
+      int lastIndexOfPeriod = filename.lastIndexOf(".");
+
+      if (lastIndexOfPeriod == -1)
+        return format("%s.%s", filename, hash);
+
+      if (filename.endsWith("."))
+        return format("%s%s", filename, hash);
+
+      return format("%s.%s%s", filename.substring(0, lastIndexOfPeriod), hash, filename.substring(lastIndexOfPeriod));
+    };
+
+    private final Path rootDirectory;
+    private final Optional<Path> hashedUrlManifestJsFile;
+    private final Hasher fileHasher;
+    private final FilenameHasher filenameHasher;
+    private final Set<String> unzippableExtensions;
+
+    protected StaticFileConfiguration(Builder builder) {
+      this.rootDirectory = builder.rootDirectory;
+      this.hashedUrlManifestJsFile = builder.hashedUrlManifestJsFile;
+      this.fileHasher = builder.fileHasher;
+      this.filenameHasher = builder.filenameHasher;
+      this.unzippableExtensions = builder.unzippableExtensions;
+    }
+
+    public static Builder forRootDirectory(Path rootDirectory) {
+      requireNonNull(rootDirectory);
+      return new Builder(rootDirectory);
+    }
+
+    public static class Builder {
+      private final Path rootDirectory;
+      private Optional<Path> hashedUrlManifestJsFile;
+      private Hasher fileHasher = DEFAULT_FILE_HASHER;
+      private FilenameHasher filenameHasher = DEFAULT_FILENAME_HASHER;
+      private Set<String> unzippableExtensions = DEFAULT_UNZIPPABLE_EXTENSIONS;
+
+      private Builder(Path rootDirectory) {
+        this.rootDirectory = requireNonNull(rootDirectory);
+      }
+
+      public Builder hashedUrlManifestJsFile(Path hashedUrlManifestJsFile) {
+        this.hashedUrlManifestJsFile = Optional.ofNullable(hashedUrlManifestJsFile);
+        return this;
+      }
+
+      public Builder fileHasher(Hasher fileHasher) {
+        this.fileHasher = requireNonNull(fileHasher);
+        return this;
+      }
+
+      public Builder filenameHasher(FilenameHasher filenameHasher) {
+        this.filenameHasher = requireNonNull(filenameHasher);
+        return this;
+      }
+
+      public Builder unzippableExtensions(Set<String> unzippableExtensions) {
+        this.unzippableExtensions = unmodifiableSet(new HashSet<>(requireNonNull(unzippableExtensions)));
+        return this;
+      }
+
+      public StaticFileConfiguration build() {
+        return new StaticFileConfiguration(this);
+      }
+    }
+
+    public Path rootDirectory() {
+      return this.rootDirectory;
+    }
+
+    public Optional<Path> hashedUrlManifestJsFile() {
+      return this.hashedUrlManifestJsFile;
+    }
+
+    public Hasher fileHasher() {
+      return this.fileHasher;
+    }
+
+    public FilenameHasher filenameHasher() {
+      return this.filenameHasher;
+    }
+
+    public Set<String> unzippableExtensions() {
+      return this.unzippableExtensions;
+    }
   }
 
   @FunctionalInterface
