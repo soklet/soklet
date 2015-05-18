@@ -102,7 +102,7 @@ public class Archiver {
     this.archivePaths = builder.archivePaths;
     this.pathsToExclude = builder.pathsToExclude;
     this.staticFileConfiguration = builder.staticFileConfiguration;
-    this.mavenSupport = Optional.empty(); // builder.mavenSupport;
+    this.mavenSupport = builder.mavenSupport;
     this.preProcessOperation = builder.preProcessOperation;
     this.postProcessOperation = builder.postProcessOperation;
     this.fileAlterationOperation = builder.fileAlterationOperation;
