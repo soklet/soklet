@@ -110,6 +110,21 @@ public class HashedUrlManifest {
     return Optional.ofNullable(hashedUrlsByUrl.get(url));
   }
 
+  /**
+   * Serializes this manifest to the given {@code outputStream}. The inverse of this operation is
+   * {@link #HashedUrlManifest(InputStream)}.
+   * <p>
+   * Caller is responsible for flushing and closing the {@code outputStream} after this method has completed.
+   * <p>
+   * Note that the serialization format is not formally specified and is subject to change in the future.
+   * 
+   * @param outputStream
+   *          the stream to write to
+   * @param persistenceFormat
+   *          how the manifest should be written to the {@code outputStream}
+   * @throws IOException
+   *           if an error occurs while writing to {@code outputStream}
+   */
   public void writeToOutputStream(OutputStream outputStream, PersistenceFormat persistenceFormat) throws IOException {
     requireNonNull(outputStream);
     requireNonNull(persistenceFormat);

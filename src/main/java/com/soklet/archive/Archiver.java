@@ -38,6 +38,7 @@ import static java.util.regex.Pattern.CASE_INSENSITIVE;
 import static java.util.regex.Pattern.compile;
 import static java.util.stream.Collectors.toSet;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -66,6 +67,7 @@ import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import com.soklet.json.JSONObject;
 import com.soklet.util.IoUtils;
 import com.soklet.util.PathUtils;
 import com.soklet.web.HashedUrlManifest;
@@ -100,7 +102,7 @@ public class Archiver {
     this.archivePaths = builder.archivePaths;
     this.pathsToExclude = builder.pathsToExclude;
     this.staticFileConfiguration = builder.staticFileConfiguration;
-    this.mavenSupport = builder.mavenSupport;
+    this.mavenSupport = Optional.empty(); // builder.mavenSupport;
     this.preProcessOperation = builder.preProcessOperation;
     this.postProcessOperation = builder.postProcessOperation;
     this.fileAlterationOperation = builder.fileAlterationOperation;
@@ -340,10 +342,20 @@ public class Archiver {
       throw new IllegalArgumentException(format("%s is not a directory!", staticFileRootDirectory.toAbsolutePath()));
 
     Map<String, String> hashedUrlsByUrl = new HashMap<>();
+    Optional<Path> hashedUrlManifestJsFile = Optional.empty();
 
-    // Step 1: hash everything but CSS files (we rewrite those next)
+    if (staticFileConfiguration().get().hashedUrlManifestJsFile().isPresent())
+      hashedUrlManifestJsFile =
+          Optional.of(staticFileRootDirectory.resolve(staticFileConfiguration().get().hashedUrlManifestJsFile().get()));
+
+    // Step 1: hash everything but CSS files (we rewrite those next) and the preexisting manifest file (if present)
     for (Path file : allFilesInDirectory(staticFileRootDirectory)) {
+      // Ignore CSS
       if (isCssFile(file))
+        continue;
+
+      // Ignore preexisting manifest
+      if (hashedUrlManifestJsFile.isPresent() && file.equals(hashedUrlManifestJsFile.get()))
         continue;
 
       HashedFileUrlMapping hashedFileUrlMapping = createHashedFile(file, staticFileRootDirectory);
@@ -364,9 +376,43 @@ public class Archiver {
       hashedUrlsByUrl.put(hashedFileUrlMapping.url(), hashedFileUrlMapping.hashedUrl());
     }
 
-    // Step 4 (optional):
-    if (staticFileConfiguration().isPresent() && staticFileConfiguration().get().hashedUrlManifestJsFile().isPresent()) {
-      System.out.println("TODO: finish");
+    // Step 4 (optional): create JS manifest, which includes a reference to itself (chicken-and-egg)
+    if (staticFileConfiguration().get().hashedUrlManifestJsFile().isPresent()) {
+      // First, compute the hash of the manifest
+      HashedUrlManifest hashedUrlManifest = new HashedUrlManifest(hashedUrlsByUrl);
+      ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+      hashedUrlManifest.writeToOutputStream(byteArrayOutputStream, PersistenceFormat.COMPACT);
+      byteArrayOutputStream.flush();
+
+      // Figure out the mapping between the manifest URL and its hashed counterpart
+      String precomputedManifestFileHash =
+          staticFileConfiguration().get().fileHasher().hash(byteArrayOutputStream.toByteArray());
+      Path manifestFile =
+          staticFileRootDirectory.resolve(staticFileConfiguration().get().hashedUrlManifestJsFile().get());
+      String hashedManifestFilename =
+          staticFileConfiguration().get().filenameHasher().hashFilename(manifestFile, precomputedManifestFileHash);
+
+      Path relativeManifestFile = staticFileRootDirectory.getParent().relativize(manifestFile);
+      Path relativeHashedManifestFile =
+          staticFileRootDirectory.getParent().relativize(Paths.get(hashedManifestFilename));
+
+      Map<String, Object> hashedUrlsByUrlForJson = new HashMap<>(hashedUrlManifest.hashedUrlsByUrl());
+      hashedUrlsByUrlForJson.put(format("/%s", relativeManifestFile), format("/%s", relativeHashedManifestFile));
+
+      // Create the manifest JS content
+      JSONObject jsonObject = new JSONObject(hashedUrlsByUrlForJson);
+
+      // TODO: let clients provide a method to hook this for arbitrary formatting
+      String hashedUrlManifestJsFileContents =
+          format("(function(scope){if(!scope.soklet)scope.soklet={};scope.soklet.hashedUrls=%s;})(this);", jsonObject);
+
+      // Finally, write the manifest JS to disk
+      Files.write(manifestFile, hashedUrlManifestJsFileContents.getBytes(UTF_8));
+
+      HashedFileUrlMapping hashedFileUrlMapping =
+          createHashedFile(manifestFile, staticFileRootDirectory, Optional.of(precomputedManifestFileHash));
+
+      hashedUrlsByUrl.put(hashedFileUrlMapping.url(), hashedFileUrlMapping.hashedUrl());
     }
 
     return new HashedUrlManifest(hashedUrlsByUrl);
@@ -375,6 +421,15 @@ public class Archiver {
   protected HashedFileUrlMapping createHashedFile(Path file, Path staticFileRootDirectory) throws IOException {
     requireNonNull(file);
     requireNonNull(staticFileRootDirectory);
+
+    return createHashedFile(file, staticFileRootDirectory, Optional.empty());
+  }
+
+  protected HashedFileUrlMapping createHashedFile(Path file, Path staticFileRootDirectory,
+      Optional<String> precomputedHash) throws IOException {
+    requireNonNull(file);
+    requireNonNull(staticFileRootDirectory);
+    requireNonNull(precomputedHash);
 
     if (!Files.exists(file))
       throw new IllegalArgumentException(format("File %s does not exist!", file.toAbsolutePath()));
@@ -387,8 +442,7 @@ public class Archiver {
     if (!Files.isDirectory(staticFileRootDirectory))
       throw new IllegalArgumentException(format("%s is not a directory!", staticFileRootDirectory.toAbsolutePath()));
 
-    byte[] fileData = Files.readAllBytes(file);
-    String hash = staticFileConfiguration().get().fileHasher().hash(fileData);
+    String hash = precomputedHash.orElse(staticFileConfiguration().get().fileHasher().hash(Files.readAllBytes(file)));
     String hashedFilename = staticFileConfiguration().get().filenameHasher().hashFilename(file, hash);
 
     // Keep track of mapping between static URLs and hashed counterparts
@@ -407,6 +461,11 @@ public class Archiver {
     public HashedFileUrlMapping(String url, String hashedUrl) {
       this.url = requireNonNull(url);
       this.hashedUrl = requireNonNull(hashedUrl);
+    }
+
+    @Override
+    public String toString() {
+      return format("%s{url=%s, hashedUrl=%s}", getClass().getSimpleName(), url(), hashedUrl());
     }
 
     public String url() {
