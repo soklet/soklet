@@ -926,7 +926,7 @@ public class Archiver {
 
     public static class Builder {
       private final Path rootDirectory;
-      private Optional<Path> hashedUrlManifestJsFile;
+      private Optional<Path> hashedUrlManifestJsFile = Optional.empty();
       private Hasher fileHasher = DEFAULT_FILE_HASHER;
       private FilenameHasher filenameHasher = DEFAULT_FILENAME_HASHER;
       private Set<String> unzippableExtensions = DEFAULT_UNZIPPABLE_EXTENSIONS;

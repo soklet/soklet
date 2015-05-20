@@ -93,8 +93,7 @@ public class RoutingServlet extends HttpServlet {
         if (logger.isLoggable(FINER))
           logger.finer(format("No matching handler found for %s", httpServletRequestDescription(httpServletRequest)));
 
-        executeResponseHandler =
-            handleMismatchedHttpMethod(httpServletRequest, httpServletResponse, httpMethod, requestPath);
+        executeResponseHandler = handleUnmatchedRoute(httpServletRequest, httpServletResponse, httpMethod, requestPath);
       }
 
       if (executeResponseHandler)
@@ -121,9 +120,13 @@ public class RoutingServlet extends HttpServlet {
   }
 
   /**
+   * Performs custom processing when a route was not matched.
+   * <p>
+   * Useful for handling special cases like 405 errors if we detect the route would match for a different HTTP method.
+   * 
    * @return {@code true} if the response handler should be invoked, {@code false} otherwise
    */
-  protected boolean handleMismatchedHttpMethod(HttpServletRequest httpServletRequest,
+  protected boolean handleUnmatchedRoute(HttpServletRequest httpServletRequest,
       HttpServletResponse httpServletResponse, HttpMethod httpMethod, String requestPath) {
     // If this resource matches a different method, error out specially
     List<HttpMethod> otherHttpMethods = new ArrayList<>(HttpMethod.values().length);
@@ -132,19 +135,19 @@ public class RoutingServlet extends HttpServlet {
       if (httpMethod != otherHttpMethod && routeMatcher.match(otherHttpMethod, requestPath).isPresent())
         otherHttpMethods.add(otherHttpMethod);
 
-    // Handle OPTIONS specially by writing the "Allow" response header.
+    // Handle OPTIONS specially by indicating we don't want to invoke the response handler
     // Otherwise, throw an exception indicating a 405
     if (otherHttpMethods.size() > 0) {
-      if (httpMethod == HttpMethod.OPTIONS) {
-        httpServletResponse.setHeader("Allow",
-          otherHttpMethods.stream().map(method -> method.name()).collect(joining(", ")));
+      // Always write the Allow header
+      httpServletResponse.setHeader("Allow",
+        otherHttpMethods.stream().map(method -> method.name()).collect(joining(", ")));
 
+      if (httpMethod == HttpMethod.OPTIONS)
         return false;
-      } else {
-        throw new MethodNotAllowedException(format("%s is not supported for this resource. Supported method%s %s",
-          httpMethod, (otherHttpMethods.size() == 1 ? " is" : "s are"),
-          otherHttpMethods.stream().map(method -> method.name()).collect(joining(", "))));
-      }
+
+      throw new MethodNotAllowedException(format("%s is not supported for this resource. Supported method%s %s",
+        httpMethod, (otherHttpMethods.size() == 1 ? " is" : "s are"),
+        otherHttpMethods.stream().map(method -> method.name()).collect(joining(", "))));
     }
 
     return true;
