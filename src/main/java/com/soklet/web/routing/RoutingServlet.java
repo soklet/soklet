@@ -81,6 +81,7 @@ public class RoutingServlet extends HttpServlet {
 
     Optional<Route> route = routeMatcher.match(httpMethod, requestPath);
     Optional<Object> response = Optional.ofNullable(null);
+    boolean executeResponseHandler = true;
 
     try {
       if (route.isPresent()) {
@@ -92,20 +93,12 @@ public class RoutingServlet extends HttpServlet {
         if (logger.isLoggable(FINER))
           logger.finer(format("No matching handler found for %s", httpServletRequestDescription(httpServletRequest)));
 
-        // If this resource matches a different method, error out specially
-        List<HttpMethod> otherHttpMethods = new ArrayList<>(HttpMethod.values().length);
-
-        for (HttpMethod otherHttpMethod : HttpMethod.values())
-          if (httpMethod != otherHttpMethod && routeMatcher.match(otherHttpMethod, requestPath).isPresent())
-            otherHttpMethods.add(otherHttpMethod);
-
-        if (otherHttpMethods.size() > 0)
-          throw new MethodNotAllowedException(format("%s is not supported for this resource. Supported method%s %s",
-            httpMethod, (otherHttpMethods.size() == 1 ? " is" : "s are"),
-            otherHttpMethods.stream().map(method -> method.name()).collect(joining(","))));
+        executeResponseHandler =
+            handleMismatchedHttpMethod(httpServletRequest, httpServletResponse, httpMethod, requestPath);
       }
 
-      responseHandler.handleResponse(httpServletRequest, httpServletResponse, route, response, Optional.empty());
+      if (executeResponseHandler)
+        responseHandler.handleResponse(httpServletRequest, httpServletResponse, route, response, Optional.empty());
     } catch (Exception e) {
       logException(httpServletRequest, httpServletResponse, route, response, e);
 
@@ -125,6 +118,36 @@ public class RoutingServlet extends HttpServlet {
         logger.fine(format("Took %.2fms to handle %s", time / 1_000_000f,
           httpServletRequestDescription(httpServletRequest)));
     }
+  }
+
+  /**
+   * @return {@code true} if the response handler should be invoked, {@code false} otherwise
+   */
+  protected boolean handleMismatchedHttpMethod(HttpServletRequest httpServletRequest,
+      HttpServletResponse httpServletResponse, HttpMethod httpMethod, String requestPath) {
+    // If this resource matches a different method, error out specially
+    List<HttpMethod> otherHttpMethods = new ArrayList<>(HttpMethod.values().length);
+
+    for (HttpMethod otherHttpMethod : HttpMethod.values())
+      if (httpMethod != otherHttpMethod && routeMatcher.match(otherHttpMethod, requestPath).isPresent())
+        otherHttpMethods.add(otherHttpMethod);
+
+    // Handle OPTIONS specially by writing the "Allow" response header.
+    // Otherwise, throw an exception indicating a 405
+    if (otherHttpMethods.size() > 0) {
+      if (httpMethod == HttpMethod.OPTIONS) {
+        httpServletResponse.setHeader("Allow",
+          otherHttpMethods.stream().map(method -> method.name()).collect(joining(", ")));
+
+        return false;
+      } else {
+        throw new MethodNotAllowedException(format("%s is not supported for this resource. Supported method%s %s",
+          httpMethod, (otherHttpMethods.size() == 1 ? " is" : "s are"),
+          otherHttpMethods.stream().map(method -> method.name()).collect(joining(", "))));
+      }
+    }
+
+    return true;
   }
 
   protected void logException(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
