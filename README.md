@@ -4,8 +4,6 @@
 
 Minimalist infrastructure for Java webapps and microservices.
 
-**Note:** Soklet is under active development and will be ready for production use soon.
-
 #### Design Goals
 
 * Minimal, unopinionated
@@ -20,7 +18,7 @@ Minimalist infrastructure for Java webapps and microservices.
 
 * Dictation of what libraries and versions to use (GSON vs. Jackson, Mustache vs. Velocity, etc.)
 * Baked-in authentication and authorization
-* Database support
+* Database support (you can bring your own with [Pyranid](http://www.pyranid.com))
 
 #### License
 
@@ -32,14 +30,13 @@ Minimalist infrastructure for Java webapps and microservices.
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
 </dependency>
 ```
 
 #### Direct Download
 
-Coming soon
-<!-- [https://www.soklet.com/releases/soklet-1.0.0.jar](https://www.soklet.com/releases/soklet-1.0.0.jar) -->
+If you don't use Maven, you can drop [soklet-1.0.1.jar](http://central.maven.org/maven2/com/soklet/soklet/1.0.1/soklet-1.0.1.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
 
 #### Getting Started
 
