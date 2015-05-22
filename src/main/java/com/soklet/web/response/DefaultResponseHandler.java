@@ -22,9 +22,11 @@
 
 package com.soklet.web.response;
 
-import static java.lang.String.format;
+import static com.soklet.util.StringUtils.isBlank;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.requireNonNull;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Optional;
 
@@ -126,10 +128,17 @@ public class DefaultResponseHandler implements ResponseHandler {
     else if (response.get() instanceof RedirectResponse)
       this.redirectResponseWriter.writeResponse(httpServletRequest, httpServletResponse,
         Optional.of((RedirectResponse) response.get()), route, exception);
-    else
-      throw new IllegalArgumentException(format(
-        "Not sure what to do with resource method return value of type %s. Resource method was %s", response.get()
-          .getClass(), route.get().resourceMethod()));
+
+    // Special case to handle anything else as plain text in toString() format - useful for debugging
+    String responseAsString = response.get().toString();
+
+    // toString() should never return null, but you never know...
+    if (isBlank(responseAsString))
+      httpServletResponse.setStatus(204);
+
+    this.binaryResponseWriter.writeResponse(httpServletRequest, httpServletResponse, Optional
+      .ofNullable(isBlank(responseAsString) ? null : new BinaryResponse("text/plain;charset=UTF-8",
+        new ByteArrayInputStream(responseAsString.getBytes(UTF_8)))), route, exception);
   }
 
   protected void writeAdditionalHeaders(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,

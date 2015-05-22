@@ -172,12 +172,15 @@ class MustachePageResponseWriter implements PageResponseWriter {
   @Override
   public void writeResponse(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
       Optional<PageResponse> response, Optional<Route> route, Optional<Exception> exception) throws IOException {
+    // Make sure our content type is correct
+    httpServletResponse.setContentType("text/html;charset=UTF-8");
+
     // Keep track of what to write to the response
     String name = null;
     Map<String, Object> model = null;
 
     if (response.isPresent()) {
-      // Happy path
+      // Happy path - resource method completed successfully and returned a value
       name = response.get().name();
       model = response.get().model().orElse(null);
     } else {
@@ -190,9 +193,7 @@ class MustachePageResponseWriter implements PageResponseWriter {
       };
     }
 
-    httpServletResponse.setContentType("text/html;charset=UTF-8");
-
-    // Finally, create a mustache instance and write the merged output to the response
+    // Create a mustache instance and write the merged output to the response
     Mustache mustache = this.mustacheFactory.compile(format("%s.html", name));
 
     try (OutputStream outputStream = httpServletResponse.getOutputStream()) {
@@ -211,11 +212,14 @@ class JacksonApiResponseWriter implements ApiResponseWriter {
   @Override
   public void writeResponse(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
       Optional<ApiResponse> response, Optional<Route> route, Optional<Exception> exception) throws IOException {
+    // Make sure our content type is correct
+    httpServletResponse.setContentType("application/json;charset=UTF-8");
+
     // Keep track of what to write to the response
     Map<String, Object> model = null;
 
     if (response.isPresent()) {
-      // Happy path
+      // Happy path - resource method completed successfully and returned a value
       model = response.get().model().orElse(null);
     } else {
       // There was a problem - render an error response
@@ -227,9 +231,7 @@ class JacksonApiResponseWriter implements ApiResponseWriter {
       };
     }
 
-    httpServletResponse.setContentType("application/json;charset=UTF-8");
-
-    // Finally, write JSON to the response
+    // Write JSON to the response
     try (OutputStream outputStream = httpServletResponse.getOutputStream()) {
       objectWriter.writeValue(outputStream, model);
     }
