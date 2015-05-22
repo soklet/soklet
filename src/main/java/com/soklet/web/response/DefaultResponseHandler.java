@@ -97,7 +97,7 @@ public class DefaultResponseHandler implements ResponseHandler {
     if (!route.isPresent()) {
       ResponseWriter<?> responseWriter = responseWriterForMissingRoute(httpServletRequest, httpServletResponse);
       responseWriter.writeResponse(httpServletRequest, httpServletResponse, Optional.empty(), Optional.empty(),
-        Optional.empty());
+        exception);
       return;
     }
 
@@ -156,9 +156,6 @@ public class DefaultResponseHandler implements ResponseHandler {
 
     if (exception.isPresent())
       return exceptionStatusMapper.statusForException(exception.get());
-
-    if (!route.isPresent())
-      return 404;
 
     if (!response.isPresent())
       return 204;

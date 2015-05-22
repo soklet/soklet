@@ -10,7 +10,7 @@ Minimalist infrastructure for Java webapps and microservices.
 * No external servlet container required
 * Fast startup
 * No 3rd party dependencies - uses only standard JDK APIs
-* Extensible - applications can easily hook/override core functionality
+* Extensible - applications can easily hook/override core functionality vi DI
 * Deployment artifact is a single zip file
 * Java 8+, Servlet 3.1+
 
@@ -52,57 +52,190 @@ $ mvn -q exec:exec
 
 ```java
 // Any class containing URL-resource methods must have the @Resource annotation applied.
-// This is a performance optimization for fast startup time.
+// This is a performance optimization for fast startup time. Soklet uses an annotation processor
+// at compile time to create a lookup table which avoids runtime reflection
 @Resource
 public class HelloResource {
-  // You can return whatever you like from resource methods.
-  // It's up to you to implement your own ResponseHandler to do something meaningful with the value.
-  // For example, you might write a JSON API response or render an HTML template.
-  // By default, Soklet writes the toString() value to the servlet response (or 204 for voids).
+  // Use BinaryResponse to write whatever you'd like to the response.
+  // Normally this is useful for binary data like PDFs and CSVs but here we write a string
   @GET("/hello")
-  public String hello() {
-    return "Hello, world!";
+  public BinaryResponse hello() {
+    return new BinaryResponse("text/plain", new ByteArrayInputStream("Hello, World!".getBytes(UTF_8)));
   }
-  
-  // 
+
+  // Methods with a void return type are 204s
+  @GET("/no-response")
+  public void noResponse() {
+    out.println("I'll return a 204");
+  }
+
+  // Methods that return nulls are 204s
+  @GET("/another-no-response")
+  public Object anotherNoResponse() {
+    out.println("I'll also return a 204");
+    return null;
+  }  
+
+  // Path parameters and query parameters are easy to access via annotations.
+  // By default, reflection is used to determine their names,
+  // but you can override by supplying an explicit name.
+  //
+  // If a parameter is not required, you must wrap it in an Optional.
+  // Path parameters are implicitly required as they are part of the URL itself.
+  //
+  // If a value cannot be converted to the declared type (for example, t=abc below)
+  // or is required but missing, an appropriate exception is thrown and a 400 response is returned.
+  //
+  // Value conversion strategies are customizable - Soklet supports many standard Java types
+  // out of the box, but you can add more or override as needed via a custom ValueConverterRegistry.
+  // See the "Customization" section for details
+  //
   // Example URL: /hello/everyone?t=10
   @GET("/hello/{target}")
-  public String hello(@PathParameter String target, @QueryParameter("t") Optional<Integer> times) {
+  public void hello(@PathParameter String target, @QueryParameter("t") Optional<Integer> times) {
     if (times.isPresent())
-      return format("Saying %d hellos to %s!", times.get(), target);
-
-    return format("Not saying hello to %s!", target);
+      out.println(format("Saying %d hellos to %s!", times.get(), target));
+    else
+      out.println(format("Not saying hello to %s!", target));
   }
-  
+
+  //
+  // Example URL: /users/d276e191-eed6-4ee2-b2ed-7e9ae4b5f05b?=10
+  @GET("/users/{userId}")
+  public String user(@PathParameter UUID userId, @QueryParameter BigDecimal amount) {
+    return format("User ID is %s", userId);
+  }
+
   // The same method can handle multiple URLs
   @GET("/twins")
   @GET("/triplets")
   @POST("/quadruplets")
-  public String hello() {
-    return "Hello, everyone!";
+  public void multiples() {
+    out.println("Multiples work as expected");
+  }
+
+  // Soklet has the concept of a PageResponse, which associates a logical page name with an optional
+  // map of data to be merged into it and written to the HTTP response.
+  //
+  // Each application will do it differently - Velocity, Freemarker, Mustache, etc.
+  // You just need to provide Soklet with a PageResponseWriter implementation.
+  //
+  // Example URL: /hello-there?name=Steve
+  @GET("/hello-there")
+  public PageResponse helloTherePage(@QueryParameter String name) {
+    return new PageResponse("hello-there", new HashMap<String, Object>() {
+      {
+        put("name", name);
+      }
+    });
   }  
-}
-```
 
-#### Error Handling
-
-```java
-@Resource
-public class UserResource {
-  @GET("/users/{userId}")
-  public String user(@PathParameter UUID userId) {
-    return format("User ID %s", userId);
+  // ApiResponse is similar to PageResponse, except that it accepts an arbitrary Object
+  // intended to be written to the HTTP response.
+  //
+  // Each application will do it differently - Jackson, GSON, XML, Protocol Buffers, etc.
+  // You just need to provide Soklet with an ApiResponseWriter implementation.
+  //
+  // Example URL: /api/hello-there?name=Steve
+  @GET("/api/hello-there")
+  public ApiResponse helloThereApi(@QueryParameter String name) {
+    return new ApiResponse(new HashMap<String, Object>() {
+      {
+        put("name", name);
+      }
+    });
   }
 }
 ```
 
-The return value for a request to `/users/eccee47d-b0b3-47eb-ac9a-8e9d5da4b208` would be
+#### Default Response Types
 
-    User ID eccee47d-b0b3-47eb-ac9a-8e9d5da4b208
+* ```ApiResponse```
+* ```AsyncResponse``` signifies to Soklet that no response should be written and you plan to use Servlet 3.1 nonblocking I/O to handle it yourself
+* ```BinaryResponse``` is designed for writing arbitrary content to the response, e.g. streaming a PDF
+* ```PageResponse```
+* ```RedirectResponse``` performs standard 301 and 302 redirects
 
-For a request to `/users/junk`, an `IllegalPathParameterException` would bubble out
+#### Response Writers
 
-    IllegalPathParameterException: Illegal value 'junk' was specified for path parameter 'userId' (was expecting a value convertible to class java.util.UUID)
+You might implement a [Mustache.java](https://github.com/spullara/mustache.java) ```PageResponseWriter``` like this:
+
+```java
+class MustachePageResponseWriter implements PageResponseWriter {
+  private final MustacheFactory mustacheFactory;
+
+  MustachePageResponseWriter() {
+    // Mustache templates live in the "pages" directory
+    this.mustacheFactory = new DefaultMustacheFactory(Paths.get("pages").toFile());
+  }
+
+  @Override
+  public void writeResponse(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
+      Optional<PageResponse> response, Optional<Route> route, Optional<Exception> exception) throws IOException {
+    // Keep track of what to write to the response
+    String name = null;
+    Map<String, Object> model = null;
+
+    if (response.isPresent()) {
+      // Happy path
+      name = response.get().name();
+      model = response.get().model().orElse(null);
+    } else {
+      // There was a problem - render an error page
+      name = "error";
+      model = new HashMap<String, Object>() {
+        {
+          put("status", httpServletResponse.getStatus());
+        }
+      };
+    }
+
+    httpServletResponse.setContentType("text/html;charset=UTF-8");
+
+    // Finally, create a mustache instance and write the merged output to the response
+    Mustache mustache = this.mustacheFactory.compile(format("%s.html", name));
+
+    try (OutputStream outputStream = httpServletResponse.getOutputStream()) {
+      mustache.execute(new OutputStreamWriter(outputStream, UTF_8), model).flush();
+    }
+  }  
+}
+```
+
+You might implement a [Jackson](https://github.com/FasterXML/jackson) ```ApiResponseWriter``` like this:
+
+```java
+class JacksonApiResponseWriter implements ApiResponseWriter {
+  private final ObjectMapper objectMapper = new ObjectMapper();
+
+  @Override
+  public void writeResponse(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
+      Optional<ApiResponse> response, Optional<Route> route, Optional<Exception> exception) throws IOException {
+    // Keep track of what to write to the response
+    Map<String, Object> model = null;
+
+    if (response.isPresent()) {
+      // Happy path
+      model = response.get().model().orElse(null);
+    } else {
+      // There was a problem - render an error response
+      model = new HashMap<String, Object>() {
+        {
+          put("status", httpServletResponse.getStatus());
+          put("message", "An error occurred!");
+        }
+      };
+    }
+
+    httpServletResponse.setContentType("application/json;charset=UTF-8");
+
+    // Finally, write JSON to the response
+    try (OutputStream outputStream = httpServletResponse.getOutputStream()) {
+      objectWriter.writeValue(outputStream, model);
+    }
+  }  
+}
+```
 
 #### Startup
 
@@ -125,3 +258,11 @@ class AppModule extends AbstractModule {
   }
 }
 ```
+
+#### Customization
+
+Coming soon
+
+#### Deployment
+
+Coming soon

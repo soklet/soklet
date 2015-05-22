@@ -44,6 +44,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import com.soklet.web.HttpMethod;
 import com.soklet.web.exception.MethodNotAllowedException;
+import com.soklet.web.exception.NotFoundException;
 import com.soklet.web.exception.ResourceMethodExecutionException;
 import com.soklet.web.request.RequestHandler;
 import com.soklet.web.response.ResponseHandler;
@@ -75,13 +76,13 @@ public class RoutingServlet extends HttpServlet {
 
     HttpMethod httpMethod = HttpMethod.valueOf(httpServletRequest.getMethod().toUpperCase(ENGLISH));
     String requestPath = httpServletRequest.getPathInfo();
+    boolean executeResponseHandler = true;
 
     if (logger.isLoggable(FINE))
       logger.fine(format("Received %s", httpServletRequestDescription(httpServletRequest)));
 
     Optional<Route> route = routeMatcher.match(httpMethod, requestPath);
     Optional<Object> response = Optional.ofNullable(null);
-    boolean executeResponseHandler = true;
 
     try {
       if (route.isPresent()) {
@@ -122,13 +123,14 @@ public class RoutingServlet extends HttpServlet {
   /**
    * Performs custom processing when a route was not matched.
    * <p>
-   * Useful for handling special cases like 405 errors if we detect the route would match for a different HTTP method.
+   * Detects 404s, also useful for handling special cases like 405 errors if we detect the route would match for a
+   * different HTTP method.
    * 
    * @return {@code true} if the response handler should be invoked, {@code false} otherwise
    */
   protected boolean handleUnmatchedRoute(HttpServletRequest httpServletRequest,
       HttpServletResponse httpServletResponse, HttpMethod httpMethod, String requestPath) {
-    // If this resource matches a different method, error out specially
+    // If this resource matches a different method[s], error out specially
     List<HttpMethod> otherHttpMethods = new ArrayList<>(HttpMethod.values().length);
 
     for (HttpMethod otherHttpMethod : HttpMethod.values())
@@ -150,7 +152,8 @@ public class RoutingServlet extends HttpServlet {
         otherHttpMethods.stream().map(method -> method.name()).collect(joining(", "))));
     }
 
-    return true;
+    // No matching route, and no possible alternatives? It's a 404
+    throw new NotFoundException(format("No route was found for %s %s", httpMethod.name(), requestPath));
   }
 
   protected void logException(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,

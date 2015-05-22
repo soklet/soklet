@@ -16,14 +16,12 @@
 
 package com.soklet.web.exception;
 
-import static java.util.Objects.requireNonNull;
-
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
 public class MissingRequestBodyException extends BadRequestException {
   public MissingRequestBodyException(String message) {
-    super(requireNonNull(message));
+    super(message);
   }
 }

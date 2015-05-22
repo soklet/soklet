@@ -153,8 +153,8 @@ public class DefaultRequestHandler implements RequestHandler {
             } catch (ValueConversionException e) {
               throw new IllegalQueryParameterException(format(
                 "Illegal value '%s' was specified for query parameter '%s' (was expecting a value convertible to %s)",
-                queryParameterValue, queryParameterName, valueConverter.get().toType()), Optional.of(e),
-                queryParameterName, Optional.ofNullable(queryParameterValue));
+                queryParameterValue, queryParameterName, valueConverter.get().toType()), e, queryParameterName,
+                Optional.ofNullable(queryParameterValue));
             }
         }
 
@@ -182,7 +182,7 @@ public class DefaultRequestHandler implements RequestHandler {
       } catch (ValueConversionException e) {
         throw new IllegalQueryParameterException(format(
           "Illegal value '%s' was specified for query parameter '%s' (was expecting a value convertible to %s)",
-          queryParameterValue, queryParameterName, valueConverter.get().toType()), Optional.of(e), queryParameterName,
+          queryParameterValue, queryParameterName, valueConverter.get().toType()), e, queryParameterName,
           Optional.ofNullable(queryParameterValue));
       }
 
@@ -220,7 +220,7 @@ public class DefaultRequestHandler implements RequestHandler {
       } catch (ValueConversionException e) {
         throw new IllegalPathParameterException(format(
           "Illegal value '%s' was specified for path parameter '%s' (was expecting a value convertible to %s)",
-          pathParameterValue, pathParameterName, valueConverter.get().toType()), Optional.of(e), pathParameterName,
+          pathParameterValue, pathParameterName, valueConverter.get().toType()), e, pathParameterName,
           Optional.ofNullable(pathParameterValue));
       }
 

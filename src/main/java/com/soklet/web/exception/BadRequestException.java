@@ -16,10 +16,6 @@
 
 package com.soklet.web.exception;
 
-import static java.util.Objects.requireNonNull;
-
-import java.util.Optional;
-
 /**
  * Indicates that an illegally-formatted HTTP request was made.
  * <p>
@@ -36,14 +32,14 @@ import java.util.Optional;
  */
 public class BadRequestException extends RuntimeException {
   public BadRequestException(String message) {
-    super(requireNonNull(message));
-  }
-
-  public BadRequestException(String message, Optional<Throwable> cause) {
-    super(requireNonNull(message), requireNonNull(cause).orElse(null));
+    super(message);
   }
 
   public BadRequestException(Throwable cause) {
-    super(requireNonNull(cause));
+    super(cause);
+  }
+
+  public BadRequestException(String message, Throwable cause) {
+    super(message, cause);
   }
 }

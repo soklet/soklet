@@ -37,11 +37,10 @@ import com.soklet.web.routing.Route;
 public class ResourceMethodExecutionException extends RuntimeException {
   public ResourceMethodExecutionException(Route route, Throwable cause) {
     super(format("An error occurred while executing %s when attempting to handle %s %s", requireNonNull(route)
-      .resourceMethod(), requireNonNull(route).httpMethod(), requireNonNull(route).resourcePath().path()),
-      requireNonNull(cause));
+      .resourceMethod(), requireNonNull(route).httpMethod(), requireNonNull(route).resourcePath().path()), cause);
   }
 
   public ResourceMethodExecutionException(String message, Throwable cause) {
-    super(requireNonNull(message), requireNonNull(cause));
+    super(message, cause);
   }
 }

@@ -29,14 +29,14 @@ public class IllegalQueryParameterException extends BadRequestException {
   private final Optional<String> queryParameterValue;
 
   public IllegalQueryParameterException(String message, String queryParameterName, Optional<String> queryParameterValue) {
-    super(requireNonNull(message));
+    super(message);
     this.queryParameterName = requireNonNull(queryParameterName);
     this.queryParameterValue = requireNonNull(queryParameterValue);
   }
 
-  public IllegalQueryParameterException(String message, Optional<Throwable> cause, String queryParameterName,
+  public IllegalQueryParameterException(String message, Throwable cause, String queryParameterName,
       Optional<String> queryParameterValue) {
-    super(requireNonNull(message), requireNonNull(cause));
+    super(message, cause);
     this.queryParameterName = requireNonNull(queryParameterName);
     this.queryParameterValue = requireNonNull(queryParameterValue);
   }

@@ -22,24 +22,28 @@
 
 package com.soklet.web.exception;
 
-import static java.util.Objects.requireNonNull;
-
 /**
+ * Indicates that the server does not have a resource for the requested URL.
+ * <p>
+ * This normally corresponds to an HTTP {@code 404} response.
+ * 
  * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.0
+ * @since 1.0.3
  */
-public class DefaultExceptionStatusMapper implements ExceptionStatusMapper {
-  @Override
-  public int statusForException(Exception exception) {
-    requireNonNull(exception);
+public class NotFoundException extends RuntimeException {
+  public NotFoundException() {
+    super();
+  }
 
-    if (exception instanceof BadRequestException)
-      return 400;
-    if (exception instanceof NotFoundException)
-      return 404;
-    if (exception instanceof MethodNotAllowedException)
-      return 405;
+  public NotFoundException(String message) {
+    super(message);
+  }
 
-    return 500;
+  public NotFoundException(Throwable cause) {
+    super(cause);
+  }
+
+  public NotFoundException(String message, Throwable cause) {
+    super(message, cause);
   }
 }
