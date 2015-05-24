@@ -34,7 +34,7 @@ import com.soklet.web.routing.Route;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.3
+ * @since 1.1.0
  */
 public class RequestContext {
   private static final ThreadLocal<RequestContext> REQUEST_CONTEXT_HOLDER = new ThreadLocal<>();

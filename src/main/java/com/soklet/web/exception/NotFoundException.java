@@ -28,7 +28,7 @@ package com.soklet.web.exception;
  * This normally corresponds to an HTTP {@code 404} response.
  * 
  * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.3
+ * @since 1.1.0
  */
 public class NotFoundException extends RuntimeException {
   public NotFoundException() {

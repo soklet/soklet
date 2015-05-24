@@ -22,28 +22,28 @@
 
 package com.soklet.web.exception;
 
-import static java.util.Objects.requireNonNull;
-
 /**
+ * Indicates that the requested URL requires authentication.
+ * <p>
+ * This normally corresponds to an HTTP {@code 401} response.
+ * 
  * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.0
+ * @since 1.1.0
  */
-public class DefaultExceptionStatusMapper implements ExceptionStatusMapper {
-  @Override
-  public int statusForException(Exception exception) {
-    requireNonNull(exception);
+public class AuthenticationException extends RuntimeException {
+  public AuthenticationException() {
+    super();
+  }
 
-    if (exception instanceof BadRequestException)
-      return 400;
-    if (exception instanceof AuthenticationException)
-      return 401;
-    if (exception instanceof AuthorizationException)
-      return 403;
-    if (exception instanceof NotFoundException)
-      return 404;
-    if (exception instanceof MethodNotAllowedException)
-      return 405;
+  public AuthenticationException(String message) {
+    super(message);
+  }
 
-    return 500;
+  public AuthenticationException(Throwable cause) {
+    super(cause);
+  }
+
+  public AuthenticationException(String message, Throwable cause) {
+    super(message, cause);
   }
 }
