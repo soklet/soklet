@@ -31,13 +31,13 @@ Minimalist infrastructure for Java webapps and microservices.
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.0.3</version>
+  <version>1.1.0</version>
 </dependency>
 ```
 
 #### Direct Download
 
-If you don't use Maven, you can drop [soklet-1.0.3.jar](http://central.maven.org/maven2/com/soklet/soklet/1.0.3/soklet-1.0.3.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
+If you don't use Maven, you can drop [soklet-1.1.0.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.0/soklet-1.1.0.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
 
 ## Bootstrap Your App
 
@@ -140,6 +140,7 @@ public class HelloResource {
   //
   // Each application will do it differently - Velocity, Freemarker, Mustache, etc.
   // You just need to provide Soklet with a PageResponseWriter implementation.
+  // See "Response Writers" section for details
   //
   // Example URL: /hello-there?name=Steve
   @GET("/hello-there")
@@ -156,6 +157,7 @@ public class HelloResource {
   //
   // Each application will do it differently - Jackson, GSON, XML, Protocol Buffers, etc.
   // You just need to provide Soklet with an ApiResponseWriter implementation.
+  // See "Response Writers" section for details
   //
   // Example URL: /api/hello-there?name=Steve
   @GET("/api/hello-there")
@@ -167,9 +169,14 @@ public class HelloResource {
     });
   }
 
+  // You may specify @RequestBody on a String or InputStream parameter for easy access.
+  // As elsewhere, if the request body is not required, wrap the parameter in an Optional<T>
   @POST("/api/hello")
-  public ApiResponse createHello(String requestBody) {
-    // TODO
+  public ApiResponse createHello(@RequestBody String requestBody) {
+    // It's up to you to parse the request body however you'd like
+    HelloCreateCommand command = parse(requestBody, HelloCreateCommand.class);
+    helloService.createHello(command);
+    return new ApiResponse(201);
   }
 
   // BinaryResponse allows you to specify arbitrary data and content type.
@@ -216,15 +223,15 @@ public class HelloResource {
 
 There are 5 standard resource method return types provided by Soklet.
 
-* ```ApiResponse``` Holds an arbitrary object that
+* ```ApiResponse``` Holds an arbitrary object that is meant to be written as an "API" response (often JSON or XML)
 * ```AsyncResponse``` Signifies to Soklet that no response should be written and you plan to use Servlet 3.1 nonblocking I/O to handle it yourself.  Useful if you have an expensive computation to perform and don't want to tie up a request thread
 * ```BinaryResponse``` Designed for writing arbitrary content to the response, e.g. streaming a PDF
-* ```PageResponse```
+* ```PageResponse``` Holds a logical page template name and optional model data to merge with it, meant to be written as an HTML page response. Some popular templating technologies are Velocity, Freemarker, and Mustache  
 * ```RedirectResponse``` Performs standard 301 and 302 redirects
 
 Returning ```void``` or ```null``` will result in a ```204``` with an empty response body.
 
-Returning different types like ```UUID``` or ```Double``` will invoke Soklet's default behavior of writing their ```toString()``` value to the response with content type ```text/plain;charset=UTF-8```.
+Returning types other than those listed above (e.g. ```UUID``` or ```Double``` or ```MyCustomType```) will invoke Soklet's default behavior of writing their ```toString()``` value to the response with content type ```text/plain;charset=UTF-8```.
 
 #### Response Writers
 
@@ -317,4 +324,42 @@ Coming soon
 
 Coming soon
 
+#### java.util.Logging
+
+Soklet uses ```java.util.Logging``` internally.  The usual way to hook into this is with [SLF4J](http://slf4j.org), which can funnel all the different logging mechanisms in your app through a single one, normally [Logback](http://logback.qos.ch).  Your Maven configuration might look like this:
+
+```xml
+<dependency>
+  <groupId>org.slf4j</groupId>
+  <artifactId>jul-to-slf4j</artifactId>
+  <version>1.7.7</version>
+</dependency>
+```
+
+You might have code like this which runs at startup:
+
+```java
+// Bridge all java.util.logging to SLF4J
+java.util.logging.Logger rootLogger = java.util.logging.LogManager.getLogManager().getLogger("");
+for (Handler handler : rootLogger.getHandlers())
+  rootLogger.removeHandler(handler);
+
+SLF4JBridgeHandler.install();
+```
+
+Don't forget to uninstall the bridge at shutdown time:
+
+```java
+// Sometime later
+SLF4JBridgeHandler.uninstall();
+```
+
+Note: ```SLF4JBridgeHandler``` can impact performance.  You can mitigate that with Logback's ```LevelChangePropagator``` configuration option [as described here](http://logback.qos.ch/manual/configuration.html#LevelChangePropagator).
+
 ## FAQ
+
+Coming soon
+
+## About
+
+Soklet was created by [Mark Allen](http://revetkn.com) and sponsored by [Transmogrify, LLC.](http://xmog.com)

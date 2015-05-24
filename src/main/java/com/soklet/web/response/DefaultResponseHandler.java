@@ -116,29 +116,30 @@ public class DefaultResponseHandler implements ResponseHandler {
     }
 
     // Normal response
-    if (response.get() instanceof PageResponse)
+    if (response.get() instanceof PageResponse) {
       this.pageResponseWriter.writeResponse(httpServletRequest, httpServletResponse,
         Optional.of((PageResponse) response.get()), route, exception);
-    else if (response.get() instanceof ApiResponse)
+    } else if (response.get() instanceof ApiResponse) {
       this.apiResponseWriter.writeResponse(httpServletRequest, httpServletResponse,
         Optional.of((ApiResponse) response.get()), route, exception);
-    else if (response.get() instanceof BinaryResponse)
+    } else if (response.get() instanceof BinaryResponse) {
       this.binaryResponseWriter.writeResponse(httpServletRequest, httpServletResponse,
         Optional.of((BinaryResponse) response.get()), route, exception);
-    else if (response.get() instanceof RedirectResponse)
+    } else if (response.get() instanceof RedirectResponse) {
       this.redirectResponseWriter.writeResponse(httpServletRequest, httpServletResponse,
         Optional.of((RedirectResponse) response.get()), route, exception);
+    } else {
+      // Special case to handle anything else as plain text in toString() format - useful for debugging
+      String responseAsString = response.get().toString();
 
-    // Special case to handle anything else as plain text in toString() format - useful for debugging
-    String responseAsString = response.get().toString();
+      // toString() should never return null, but you never know...
+      if (isBlank(responseAsString))
+        httpServletResponse.setStatus(204);
 
-    // toString() should never return null, but you never know...
-    if (isBlank(responseAsString))
-      httpServletResponse.setStatus(204);
-
-    this.binaryResponseWriter.writeResponse(httpServletRequest, httpServletResponse, Optional
-      .ofNullable(isBlank(responseAsString) ? null : new BinaryResponse("text/plain;charset=UTF-8",
-        new ByteArrayInputStream(responseAsString.getBytes(UTF_8)))), route, exception);
+      this.binaryResponseWriter.writeResponse(httpServletRequest, httpServletResponse, Optional
+        .ofNullable(isBlank(responseAsString) ? null : new BinaryResponse("text/plain;charset=UTF-8",
+          new ByteArrayInputStream(responseAsString.getBytes(UTF_8)))), route, exception);
+    }
   }
 
   protected void writeAdditionalHeaders(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,

@@ -46,6 +46,7 @@ import com.soklet.web.HttpMethod;
 import com.soklet.web.exception.MethodNotAllowedException;
 import com.soklet.web.exception.NotFoundException;
 import com.soklet.web.exception.ResourceMethodExecutionException;
+import com.soklet.web.request.RequestContext;
 import com.soklet.web.request.RequestHandler;
 import com.soklet.web.response.ResponseHandler;
 
@@ -84,6 +85,8 @@ public class RoutingServlet extends HttpServlet {
     Optional<Route> route = routeMatcher.match(httpMethod, requestPath);
     Optional<Object> response = Optional.ofNullable(null);
 
+    RequestContext.set(new RequestContext(httpServletRequest, httpServletResponse, route));
+
     try {
       if (route.isPresent()) {
         if (logger.isLoggable(FINER))
@@ -112,6 +115,8 @@ public class RoutingServlet extends HttpServlet {
         writeFailsafeErrorResponse(httpServletRequest, httpServletResponse);
       }
     } finally {
+      RequestContext.clear();
+
       time = nanoTime() - time;
 
       if (logger.isLoggable(FINE))
