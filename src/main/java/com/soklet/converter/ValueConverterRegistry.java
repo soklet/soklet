@@ -95,6 +95,34 @@ public class ValueConverterRegistry {
     ValueConverter<F, T> valueConverter =
         (ValueConverter<F, T>) valueConverterCache.get(new CacheKey(fromType, toType));
 
+    // Special case for enums
+    if (valueConverter == null && String.class.equals(fromType) && toType instanceof Class) {
+      @SuppressWarnings("rawtypes")
+      Class toClass = (Class) toType;
+
+      if (toClass.isEnum()) {
+        valueConverter = new AbstractValueConverter<F, T>() {
+          @Override
+          public T convert(Object from) throws ValueConversionException {
+            if (from == null)
+              return null;
+
+            try {
+              return (T) Enum.valueOf(toClass, from.toString());
+            } catch (Exception e) {
+              throw new ValueConversionException(format("Unable to convert value '%s' of type %s to an instance of %s",
+                from, fromType(), toType()), e, fromType(), toType());
+            }
+          }
+
+          @Override
+          public String toString() {
+            return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), fromType(), toType());
+          }
+        };
+      }
+    }
+
     return Optional.ofNullable(valueConverter);
   }
 

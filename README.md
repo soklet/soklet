@@ -41,6 +41,9 @@ If you don't use Maven, you can drop [soklet-1.1.0.jar](http://central.maven.org
 
 ## Bootstrap Your App
 
+Coming soon
+
+<!--
 TODO - discussion
 
 ```
@@ -48,10 +51,11 @@ $ git clone https://github.com/soklet/soklet.git
 $ cd soklet
 $ mvn -q exec:exec
 ```
+-->
 
 ## App Startup
 
-Soklet applications are designed to launch via ```public static void main()``` like a regular Java application.  You do not have to worry about environment and server setup, deployment headaches, and tricky debugging.
+Soklet applications are designed to launch via ```public static void main()```, just like a regular Java application.  You do not have to worry about environment and server setup, deployment headaches, and tricky debugging.
 
 ```java
 // Assumes you're using Guice as your DI framework via soklet-guice
