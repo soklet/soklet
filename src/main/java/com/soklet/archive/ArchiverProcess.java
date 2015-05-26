@@ -134,17 +134,17 @@ public class ArchiverProcess {
         logger.info(format("Completed process (exit value %d): %s", exitValue, processDescription));
 
         if (invalidProcessExitValue(process))
-          throw new ArchiveProcessException(format("Invalid process exit value: %d", exitValue), process);
+          throw new ArchiveException(format("Invalid process exit value: %d", exitValue), process);
 
         return exitValue;
       } else {
         process.destroyForcibly();
-        throw new ArchiveProcessException("Process timed out, forcibly terminating.", process);
+        throw new ArchiveException("Process timed out, forcibly terminating.", process);
       }
     } catch (IOException e) {
-      throw new ArchiveProcessException("Unable to execute process.", e);
+      throw new ArchiveException("Unable to execute process.", e);
     } catch (InterruptedException e) {
-      throw new ArchiveProcessException("Process was interrupted.", e);
+      throw new ArchiveException("Process was interrupted.", e);
     }
   }
 
