@@ -339,6 +339,8 @@ The difference between archiving and just running an app is that archiving is a 
 * Hashing static resources (handled by Soklet; see **Hashed Files** section below)
 * Pre-gzipping static resources for efficient serving (handled by Soklet)
 
+Note that archiving is done in a temporary sandbox directory, so your current working directory is untouched.
+
 ```java
 public static void main(String[] args) throws Exception {
   // Archive file to create
@@ -389,8 +391,9 @@ public static void main(String[] args) throws Exception {
   // Maybe we use grunt to do some extra build-time processing (LESS -> CSS, for example).
   // You can launch arbitrary processes using ArchiverProcess
   ArchiveSupportOperation preProcessOperation = (archiver, workingDirectory) -> {
-    new ArchiverProcess("grunt", workingDirectory).execute("clean");
-    new ArchiverProcess("grunt", workingDirectory).execute();
+    // The working directory is Soklet's temporary archive-building sandbox directory
+    new ArchiverProcess("/usr/local/bin/grunt", workingDirectory).execute("clean");
+    new ArchiverProcess("/usr/local/bin/grunt", workingDirectory).execute();
   };
 
   // Build and run our Archiver.
@@ -398,13 +401,12 @@ public static void main(String[] args) throws Exception {
   // and dependency goals are used as part of the archiving process.
   // If you don't use Maven, it's your responsibility to compile your code
   // and include dependency JARs in the archive
-  Archiver archiver =
-      Archiver.forArchiveFile(archiveFile)
-        .archivePaths(archivePaths)
-        .staticFileConfiguration(staticFileConfiguration)
-        .fileAlterationOperation(fileAlterationOperation)
-        .preProcessOperation(preProcessOperation)
-        .mavenSupport().build();
+  Archiver archiver = Archiver.forArchiveFile(archiveFile)
+    .archivePaths(archivePaths)
+    .staticFileConfiguration(staticFileConfiguration)
+    .fileAlterationOperation(fileAlterationOperation)
+    .preProcessOperation(preProcessOperation)
+    .mavenSupport().build();
 
   archiver.run();
 }
@@ -548,7 +550,7 @@ myapp.hashedUrl = function(url) {
 $("body").append("<img src='" + myapp.hashedUrl("/static/images/cartoon.png") + "'/>);
 ```
 
-#### CSS Files
+#### CSS File Hashing
 
 During the archive process, Soklet will automatically detect and rewrite references to hashed URLs in your CSS files.
 
