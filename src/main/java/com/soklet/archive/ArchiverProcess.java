@@ -45,31 +45,38 @@ import java.util.logging.Logger;
  * @since 1.0.0
  */
 public class ArchiverProcess {
-  private final Path executableFile;
+  private final String executableFile;
   private final Path workingDirectory;
   private final long timeout;
   private final TimeUnit timeUnit;
 
   private final Logger logger = Logger.getLogger(ArchiverProcess.class.getName());
 
-  public ArchiverProcess(Path executableFile) {
+  public ArchiverProcess(String executableFile) {
     this(executableFile, Paths.get("."));
   }
 
+  public ArchiverProcess(Path executableFile) {
+    this(requireNonNull(executableFile).toAbsolutePath().toString(), Paths.get("."));
+  }
+
   public ArchiverProcess(Path executableFile, Path workingDirectory) {
+    this(requireNonNull(executableFile).toAbsolutePath().toString(), workingDirectory, 5, TimeUnit.MINUTES);
+  }
+
+  public ArchiverProcess(String executableFile, Path workingDirectory) {
     this(executableFile, workingDirectory, 5, TimeUnit.MINUTES);
   }
 
   public ArchiverProcess(Path executableFile, Path workingDirectory, long timeout, TimeUnit timeUnit) {
+    this(requireNonNull(executableFile).toAbsolutePath().toString(), workingDirectory, timeout, timeUnit);
+  }
+
+  public ArchiverProcess(String executableFile, Path workingDirectory, long timeout, TimeUnit timeUnit) {
     this.executableFile = requireNonNull(executableFile);
     this.workingDirectory = requireNonNull(workingDirectory);
     this.timeout = timeout;
     this.timeUnit = requireNonNull(timeUnit);
-
-    if (!Files.exists(executableFile))
-      throw new IllegalArgumentException(format("File %s does not exist!", executableFile.toAbsolutePath()));
-    if (!Files.isExecutable(executableFile))
-      throw new IllegalArgumentException(format("%s is not an executable file", executableFile.toAbsolutePath()));
 
     if (!Files.exists(workingDirectory))
       throw new IllegalArgumentException(format("Directory %s does not exist!", workingDirectory.toAbsolutePath()));
@@ -86,12 +93,12 @@ public class ArchiverProcess {
     return execute(createProcessBuilder(executableFile, arguments));
   }
 
-  protected ProcessBuilder createProcessBuilder(Path executableFile, List<String> arguments) {
+  protected ProcessBuilder createProcessBuilder(String executableFile, List<String> arguments) {
     requireNonNull(executableFile);
     requireNonNull(arguments);
 
     List<String> finalArguments = new ArrayList<>(arguments.size() + 1);
-    finalArguments.add(executableFile.toAbsolutePath().toString());
+    finalArguments.add(executableFile);
     finalArguments.addAll(arguments);
 
     ProcessBuilder processBuilder = new ProcessBuilder(finalArguments.toArray(new String[] {})).inheritIO();
@@ -153,7 +160,7 @@ public class ArchiverProcess {
     return process.exitValue() != 0;
   }
 
-  public Path executableFile() {
+  public String executableFile() {
     return this.executableFile;
   }
 
