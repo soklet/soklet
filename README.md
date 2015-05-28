@@ -89,6 +89,13 @@ class AppModule extends AbstractModule {
 }
 ```
 
+You'll need to pick a ```Server``` implementation.
+
+* Jetty support is provided by [soklet-jetty](https://github.com/soklet/soklet-jetty)
+* Experimental Tomcat support is provided by [soklet-tomcat](https://github.com/soklet/soklet-tomcat) 
+
+Jetty is recommended unless you have special requirements.
+
 ## Resource Methods
 
 Soklet's main job is mapping Java methods to URLs.  We refer to these methods as  _resource methods_.
@@ -579,9 +586,9 @@ Currently, there are restrictions on CSS rewriting.  They are:
 
 Soklet will warn you if it detects either of these conditions.
 
-## java.util.Logging
+## java.util.logging
 
-Soklet uses ```java.util.Logging``` internally.  The usual way to hook into this is with [SLF4J](http://slf4j.org), which can funnel all the different logging mechanisms in your app through a single one, normally [Logback](http://logback.qos.ch).  Your Maven configuration might look like this:
+Soklet uses ```java.util.logging``` internally.  The usual way to hook into this is with [SLF4J](http://slf4j.org), which can funnel all the different logging mechanisms in your app through a single one, normally [Logback](http://logback.qos.ch).  Your Maven configuration might look like this:
 
 ```xml
 <dependency>
