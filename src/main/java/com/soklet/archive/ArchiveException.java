@@ -24,25 +24,25 @@ import java.util.Optional;
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-public class ArchiveProcessException extends RuntimeException {
+public class ArchiveException extends RuntimeException {
   private final Optional<Process> process;
 
-  public ArchiveProcessException(String message) {
+  public ArchiveException(String message) {
     super(message);
     this.process = Optional.empty();
   }
 
-  public ArchiveProcessException(String message, Throwable cause) {
+  public ArchiveException(String message, Throwable cause) {
     super(message, cause);
     this.process = Optional.empty();
   }
 
-  public ArchiveProcessException(String message, Process process) {
+  public ArchiveException(String message, Process process) {
     super(message);
     this.process = Optional.of(requireNonNull(process));
   }
 
-  public ArchiveProcessException(String message, Throwable cause, Process process) {
+  public ArchiveException(String message, Throwable cause, Process process) {
     super(message, cause);
     this.process = Optional.of(requireNonNull(process));
   }

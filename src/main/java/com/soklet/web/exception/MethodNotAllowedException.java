@@ -16,10 +16,6 @@
 
 package com.soklet.web.exception;
 
-import static java.util.Objects.requireNonNull;
-
-import java.util.Optional;
-
 /**
  * Indicates that an HTTP request was made with an incorrect method.
  * <p>
@@ -32,14 +28,14 @@ import java.util.Optional;
  */
 public class MethodNotAllowedException extends RuntimeException {
   public MethodNotAllowedException(String message) {
-    super(requireNonNull(message));
-  }
-
-  public MethodNotAllowedException(String message, Optional<Throwable> cause) {
-    super(requireNonNull(message), requireNonNull(cause).orElse(null));
+    super(message);
   }
 
   public MethodNotAllowedException(Throwable cause) {
-    super(requireNonNull(cause));
+    super(cause);
+  }
+
+  public MethodNotAllowedException(String message, Throwable cause) {
+    super(message, cause);
   }
 }

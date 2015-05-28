@@ -35,6 +35,12 @@ public class DefaultExceptionStatusMapper implements ExceptionStatusMapper {
 
     if (exception instanceof BadRequestException)
       return 400;
+    if (exception instanceof AuthenticationException)
+      return 401;
+    if (exception instanceof AuthorizationException)
+      return 403;
+    if (exception instanceof NotFoundException)
+      return 404;
     if (exception instanceof MethodNotAllowedException)
       return 405;
 

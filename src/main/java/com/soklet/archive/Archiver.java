@@ -765,7 +765,7 @@ public class Archiver {
           mavenHome = trimToNull(System.getenv("MAVEN_HOME"));
 
         if (mavenHome == null)
-          throw new ArchiveProcessException(
+          throw new ArchiveException(
             "In order to determine the absolute path to your mvn executable, the soklet.MAVEN_HOME system property "
                 + "or the MAVEN_HOME environment variable must be defined");
 

@@ -24,4 +24,6 @@ public interface Server {
   void start() throws ServerException;
 
   void stop() throws ServerException;
+
+  boolean isRunning();
 }

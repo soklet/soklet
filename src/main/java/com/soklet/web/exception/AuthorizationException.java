@@ -22,25 +22,28 @@
 
 package com.soklet.web.exception;
 
-import static java.lang.String.format;
-import static java.util.Objects.requireNonNull;
-
-import com.soklet.web.routing.Route;
-
 /**
- * Indicates that an error occurred when executing the resource {@link java.lang.reflect.Method} of a
- * {@link com.soklet.web.routing.Route}.
+ * Indicates that the requested URL requires authorization.
+ * <p>
+ * This normally corresponds to an HTTP {@code 403} response.
  * 
  * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.0
+ * @since 1.1.0
  */
-public class ResourceMethodExecutionException extends RuntimeException {
-  public ResourceMethodExecutionException(Route route, Throwable cause) {
-    super(format("An error occurred while executing %s when attempting to handle %s %s", requireNonNull(route)
-      .resourceMethod(), requireNonNull(route).httpMethod(), requireNonNull(route).resourcePath().path()), cause);
+public class AuthorizationException extends RuntimeException {
+  public AuthorizationException() {
+    super();
   }
 
-  public ResourceMethodExecutionException(String message, Throwable cause) {
+  public AuthorizationException(String message) {
+    super(message);
+  }
+
+  public AuthorizationException(Throwable cause) {
+    super(cause);
+  }
+
+  public AuthorizationException(String message, Throwable cause) {
     super(message, cause);
   }
 }

@@ -22,25 +22,28 @@
 
 package com.soklet.web.exception;
 
-import static java.lang.String.format;
-import static java.util.Objects.requireNonNull;
-
-import com.soklet.web.routing.Route;
-
 /**
- * Indicates that an error occurred when executing the resource {@link java.lang.reflect.Method} of a
- * {@link com.soklet.web.routing.Route}.
+ * Indicates that the server does not have a resource for the requested URL.
+ * <p>
+ * This normally corresponds to an HTTP {@code 404} response.
  * 
  * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.0
+ * @since 1.1.0
  */
-public class ResourceMethodExecutionException extends RuntimeException {
-  public ResourceMethodExecutionException(Route route, Throwable cause) {
-    super(format("An error occurred while executing %s when attempting to handle %s %s", requireNonNull(route)
-      .resourceMethod(), requireNonNull(route).httpMethod(), requireNonNull(route).resourcePath().path()), cause);
+public class NotFoundException extends RuntimeException {
+  public NotFoundException() {
+    super();
   }
 
-  public ResourceMethodExecutionException(String message, Throwable cause) {
+  public NotFoundException(String message) {
+    super(message);
+  }
+
+  public NotFoundException(Throwable cause) {
+    super(cause);
+  }
+
+  public NotFoundException(String message, Throwable cause) {
     super(message, cause);
   }
 }

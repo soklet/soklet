@@ -26,7 +26,7 @@ public class MissingQueryParameterException extends BadRequestException {
   private final String queryParameterName;
 
   public MissingQueryParameterException(String message, String queryParameterName) {
-    super(requireNonNull(message));
+    super(message);
     this.queryParameterName = requireNonNull(queryParameterName);
   }
 

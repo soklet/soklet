@@ -29,14 +29,14 @@ public class IllegalPathParameterException extends BadRequestException {
   private final Optional<String> pathParameterValue;
 
   public IllegalPathParameterException(String message, String pathParameterName, Optional<String> pathParameterValue) {
-    super(requireNonNull(message));
+    super(message);
     this.pathParameterName = requireNonNull(pathParameterName);
     this.pathParameterValue = requireNonNull(pathParameterValue);
   }
 
-  public IllegalPathParameterException(String message, Optional<Throwable> cause, String pathParameterName,
+  public IllegalPathParameterException(String message, Throwable cause, String pathParameterName,
       Optional<String> pathParameterValue) {
-    super(requireNonNull(message), requireNonNull(cause));
+    super(message, cause);
     this.pathParameterName = requireNonNull(pathParameterName);
     this.pathParameterValue = requireNonNull(pathParameterValue);
   }
