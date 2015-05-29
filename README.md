@@ -89,13 +89,6 @@ class AppModule extends AbstractModule {
 }
 ```
 
-You'll need to pick a ```Server``` implementation.
-
-* Jetty support is provided by [soklet-jetty](https://github.com/soklet/soklet-jetty)
-* Experimental Tomcat support is provided by [soklet-tomcat](https://github.com/soklet/soklet-tomcat) 
-
-Jetty is recommended unless you have special requirements.
-
 ## Resource Methods
 
 Soklet's main job is mapping Java methods to URLs.  We refer to these methods as  _resource methods_.
@@ -369,7 +362,6 @@ public ApiResponse user(@PathParameter UUID userId) {
 #### Customizing Status Codes
 
 ```java
-// Assumes you're using Guice as your DI framework via soklet-guice
 public static void main(String[] args) throws Exception {
   Injector injector = Guice.createInjector(Modules.override(new SokletModule()).with(new AppModule()));
   Server server = injector.getInstance(Server.class);
@@ -396,9 +388,157 @@ class AppModule extends AbstractModule {
 }
 ```
 
-## Servlets, Filters, and Interceptors
+## App Configuration
 
-TODO
+#### Server Setup
+
+There's no need for a `web.xml` file.  Your server is configured in code.  You just need to pick a ```Server``` implementation.
+
+* Jetty support is provided by [soklet-jetty](https://github.com/soklet/soklet-jetty)
+* Experimental Tomcat support is provided by [soklet-tomcat](https://github.com/soklet/soklet-tomcat) 
+
+Jetty is recommended unless you have special requirements.
+
+```java
+public static void main(String[] args) throws Exception {
+  Injector injector = Guice.createInjector(Modules.override(new SokletModule()).with(new AppModule()));
+  Server server = injector.getInstance(Server.class);
+  new ServerLauncher(server).launch(StoppingStrategy.ON_KEYPRESS);
+}
+
+class AppModule extends AbstractModule {
+  @Provides
+  @Singleton
+  public Server provideServer(InstanceProvider instanceProvider) {
+    // Assumes you're using Jetty as your server via soklet-jetty.
+    // If you prefer soklet-tomcat, the only change is specifying
+    // "TomcatServer" instead of "JettyServer"
+    
+    // Listen on a specific IP - default is "0.0.0.0", which listens on anything
+    String host = "127.0.0.1";
+    int port = 8080;
+    
+    // Tells Jetty about your static files (CSS, JS, etc.)
+    //
+    // First parameter: static file URL pattern
+    // Second parameter: static file root directory on disk
+    // Third parameter: special cache-header handling (default, cache-never, or cache-forever)
+    //
+    // Static files are served using Jetty's DefaultServlet for efficiency.
+    // For even more better performance in production, you can instead serve these with nginx
+    StaticFilesConfiguration staticFilesConfiguration =
+      new StaticFilesConfiguration("/static/*", Paths.get("web/public"), CacheStrategy.DEFAULT);
+
+    // In general, Soklet prefers mapping URLs to regular Java methods and sidestepping
+    // traditional Servlets and Filters. However, there is a large existing ecosystem of useful
+    // Servlets and Filters, so it's often useful to incorporate a few into your app.
+    //
+    // Soklet uses your dependency injection framework to instantiate Servlets and Filters.
+    
+    // Standard Jetty CrossOriginFilter (CORS) configuration.
+    // These security options are unsafe, but may be useful for development
+    FilterConfiguration corsFilter = new FilterConfiguration(CrossOriginFilter.class, "/*", new HashMap<String, String>() {
+      {
+        put(CrossOriginFilter.ALLOWED_METHODS_PARAM, "GET,POST,PUT,DELETE");
+        put(CrossOriginFilter.ALLOWED_ORIGINS_PARAM, "*");
+        put(CrossOriginFilter.ALLOWED_HEADERS_PARAM, "*");
+      }
+    }));
+    
+    // Captcha servlet configuration
+    ServletConfiguration captchaServlet = new ServletConfiguration(ExampleCaptchaServlet.class, "/captcha");    
+    
+    // Finally, build the server instance
+    return JettyServer.forInstanceProvider(instanceProvider)
+      .host(host)
+      .port(port)
+      .staticFilesConfiguration(staticFilesConfiguration)
+      .servletConfigurations(singletonList(captchaServlet))
+      .filterConfigurations(singletonList(corsFilter))      
+      .build();
+  }
+}
+```
+
+#### Interceptors
+
+It's preferred to use resource method interceptors instead of Servlet Filters when possible.  DI frameworks normally provide interceptor functionality on which you can build.
+
+Examples of common interceptors follow. Note that Soklet does not provide any interceptors, database access, or security features out of the box - these examples are for illustration only.
+
+```java
+public static void main(String[] args) throws Exception {
+  Injector injector = Guice.createInjector(Modules.override(new SokletModule()).with(new AppModule()));
+  Server server = injector.getInstance(Server.class);
+  new ServerLauncher(server).launch(StoppingStrategy.ON_KEYPRESS);
+}
+
+class AppModule extends AbstractModule {
+  @Override
+  protected void configure() {
+    // These interceptors are executed any time a resource method is invoked
+            
+    // 1. Perform the resource method in the context of a database transaction 
+    bindInterceptor(Matchers.annotatedWith(Resource.class),
+      SokletMatchers.httpMethodMatcher(), new TransactionInterceptor(new Database()));
+      
+    // 2. Verify the user is who she says she is!
+    bindInterceptor(Matchers.annotatedWith(Resource.class),
+      SokletMatchers.httpMethodMatcher(), new SecurityInterceptor(new SecurityService()));           
+  }
+  
+  // Rest of module would follow
+}
+
+// Guice interceptor that wraps each resource method in a database transaction
+class TransactionInterceptor implements MethodInterceptor {
+  private final Database database;
+  
+  TransactionInterceptor(Database database) {
+    this.database = requireNonNull(database);
+  }
+  
+  @Override
+  public Object invoke(MethodInvocation methodInvocation) throws Throwable {
+    // Note: Database is not part of Soklet, this is for illustration only.
+    // If you want simple JDBC functionality, check out http://pyranid.com
+    return this.database.transaction(() -> {
+      return methodInvocation.proceed();
+    });  
+  }  
+}
+
+// Guice interceptor that performs security checks
+class SecurityInterceptor implements MethodInterceptor {
+  private final SecurityService securityService;
+  
+  SecurityInterceptor(SecurityService securityService) {
+    this.securityService = requireNonNull(securityService);
+  }
+  
+  @Override
+  public Object invoke(MethodInvocation methodInvocation) throws Throwable {
+    // Special use of Soklet's RequestContext to get at current request and route information
+    RequestContext requestContext = RequestContext.get();    
+    Optional<Route> route = requestContext.route();
+    
+    // If a route matched the URL, get the Java method that should be executed
+    // and examine its @RoleRequired annotation to see what access requirements are (if any).
+    // Note: SecurityService, @RoleRequired, and Role are not part of Soklet, they are for illustration only
+    if(route.isPresent()) {
+      String authorization = requestContext.httpServletRequest().getHeader("Authorization");
+    
+      Method resourceMethod = route.get().resourceMethod();            
+      RoleRequired roleRequired = resourceMethod.getAnnotation(RoleRequired.class);
+      Role[] requiredRoles = roleRequired == null ? null : roleRequired.value();
+      
+      // Do some kind of security check
+      this.securityService.authorize(authorization, requiredRoles);
+    }
+  }  
+}
+```
+
 
 ## Deployment Archives
 

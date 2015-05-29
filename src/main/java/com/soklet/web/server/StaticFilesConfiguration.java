@@ -64,6 +64,6 @@ public class StaticFilesConfiguration {
   }
 
   public static enum CacheStrategy {
-    DEFAULT, NEVER
+    DEFAULT, NEVER, FOREVER
   }
 }
