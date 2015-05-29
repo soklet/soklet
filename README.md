@@ -8,7 +8,7 @@ Minimalist infrastructure for Java webapps and microservices.
 
 * Single focus, unopinionated
 * No external servlet container required
-* Fast startup
+* Fast startup, under a second on modern hardware
 * No 3rd party dependencies - uses only standard JDK APIs
 * Extensible - applications can easily hook/override core functionality vi DI
 * Self-contained deployment (single zip file)
@@ -131,7 +131,7 @@ public class HelloResource {
   // Path parameters are implicitly required as they are part of the URL itself.
   //
   // If a value cannot be converted to the declared type (for example, t=abc below)
-  // or is required but missing, an appropriate exception is thrown and a 400 response is returned.
+  // or is required but missing, an exception is thrown and a 400 response is returned.
   //
   // Value conversion strategies are customizable - Soklet supports many standard Java types
   // out of the box, but you can add more or override as needed via a custom ValueConverterRegistry.
@@ -170,12 +170,18 @@ public class HelloResource {
   // You just need to provide Soklet with an ApiResponseWriter implementation.
   // See "Response Writers" section for details
   //
-  // Example URL: /api/hello-there?name=Steve
+  // Example URL: /api/hello-there?name=Steve&type=FRIENDLY
+  
+  public static enum GreetingType {
+    FRIENDLY, UNFRIENDLY
+  }  
+  
   @GET("/api/hello-there")
-  public ApiResponse helloThereApi(@QueryParameter String name) {
+  public ApiResponse helloThereApi(@QueryParameter String name, @QueryParameter GreetingType type) {
     return new ApiResponse(new HashMap<String, Object>() {
       {
         put("name", name);
+        put("type", type);
       }
     });
   }
@@ -327,12 +333,72 @@ class JacksonApiResponseWriter implements ApiResponseWriter {
 }
 ```
 
-<!--
-## Customization
+## Error Handling
 
-Coming soon
+When an exception is thrown by a resource method, it's up to your ```ExceptionStatusMapper``` to determine the appropriate HTTP status code and your ```ResponseWriter``` implementations to figure out how to communicate details back to the user (for example, render a custom error page or a special JSON for your API).
 
--->
+
+#### Standard Exception Types
+
+Soklet provides these exceptions out of the box, but any exception your code throws will work.  By default, other exception types will return a 500 status, but you can customize this behavior - see the **Customizing Status Codes** section below. 
+
+* ```BadRequestException``` - 400
+* ```AuthenticationException``` - 401
+* ```AuthorizationException``` - 403
+* ```NotFoundException``` - 404
+* ```MethodNotAllowedException``` - 405
+
+#### Example Resource Method
+
+```java
+// Example URL: /users/ba19be82-5d90-4b3b-b78f-284c5b86ae11
+@GET("/users/{userId}")
+public ApiResponse user(@PathParameter UUID userId) {
+  Optional<User> user = userService.find(userId);
+
+  if(!user.isPresent())
+    throw new NotFoundException(format("No user was found with ID %s", userId));
+    
+  if(user.get().isTopSecret() && !currentContext.isAdministrator())
+    throw new MyCustomException("You can't see this top-secret user!");
+  
+  return new ApiResponse(user); 
+}
+```
+
+#### Customizing Status Codes
+
+```java
+// Assumes you're using Guice as your DI framework via soklet-guice
+public static void main(String[] args) throws Exception {
+  Injector injector = Guice.createInjector(Modules.override(new SokletModule()).with(new AppModule()));
+  Server server = injector.getInstance(Server.class);
+  new ServerLauncher(server).launch(StoppingStrategy.ON_KEYPRESS);
+}
+
+class AppModule extends AbstractModule {
+  // Override Soklet's default ExceptionStatusMapper
+  @Provides
+  @Singleton
+  public ExceptionStatusMapper provideExceptionStatusMapper() {
+    return new DefaultExceptionStatusMapper() {
+      @Override
+      public int statusForException(Exception exception) {
+        // Special status for this exception 
+        if(exception instanceof MyCustomException)
+          return 403;
+          
+        // Fall back to defaults for others
+        return super.statusForException(exception);
+      }
+    };
+  }
+}
+```
+
+## Servlets, Filters, and Interceptors
+
+TODO
 
 ## Deployment Archives
 
