@@ -38,7 +38,7 @@ public class StaticFilesConfiguration {
   private final CacheStrategy cacheStrategy;
 
   public StaticFilesConfiguration(String urlPattern, Path rootDirectory) {
-    this(urlPattern, rootDirectory, CacheStrategy.NEVER);
+    this(urlPattern, rootDirectory, CacheStrategy.DEFAULT);
   }
 
   public StaticFilesConfiguration(String urlPattern, Path rootDirectory, CacheStrategy cacheStrategy) {
@@ -64,6 +64,6 @@ public class StaticFilesConfiguration {
   }
 
   public static enum CacheStrategy {
-    DEFAULT, NEVER
+    DEFAULT, NEVER, FOREVER
   }
 }

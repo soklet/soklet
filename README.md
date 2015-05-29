@@ -8,7 +8,7 @@ Minimalist infrastructure for Java webapps and microservices.
 
 * Single focus, unopinionated
 * No external servlet container required
-* Fast startup
+* Fast startup, under a second on modern hardware
 * No 3rd party dependencies - uses only standard JDK APIs
 * Extensible - applications can easily hook/override core functionality vi DI
 * Self-contained deployment (single zip file)
@@ -31,13 +31,13 @@ Minimalist infrastructure for Java webapps and microservices.
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.1.0</version>
+  <version>1.1.1</version>
 </dependency>
 ```
 
 #### Direct Download
 
-If you don't use Maven, you can drop [soklet-1.1.0.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.0/soklet-1.1.0.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
+If you don't use Maven, you can drop [soklet-1.1.1.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.1/soklet-1.1.1.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
 
 <!--
 ## Bootstrap Your App
@@ -124,7 +124,7 @@ public class HelloResource {
   // Path parameters are implicitly required as they are part of the URL itself.
   //
   // If a value cannot be converted to the declared type (for example, t=abc below)
-  // or is required but missing, an appropriate exception is thrown and a 400 response is returned.
+  // or is required but missing, an exception is thrown and a 400 response is returned.
   //
   // Value conversion strategies are customizable - Soklet supports many standard Java types
   // out of the box, but you can add more or override as needed via a custom ValueConverterRegistry.
@@ -163,12 +163,18 @@ public class HelloResource {
   // You just need to provide Soklet with an ApiResponseWriter implementation.
   // See "Response Writers" section for details
   //
-  // Example URL: /api/hello-there?name=Steve
+  // Example URL: /api/hello-there?name=Steve&type=FRIENDLY
+  
+  public static enum GreetingType {
+    FRIENDLY, UNFRIENDLY
+  }  
+  
   @GET("/api/hello-there")
-  public ApiResponse helloThereApi(@QueryParameter String name) {
+  public ApiResponse helloThereApi(@QueryParameter String name, @QueryParameter GreetingType type) {
     return new ApiResponse(new HashMap<String, Object>() {
       {
         put("name", name);
+        put("type", type);
       }
     });
   }
@@ -320,12 +326,219 @@ class JacksonApiResponseWriter implements ApiResponseWriter {
 }
 ```
 
-<!--
-## Customization
+## Error Handling
 
-Coming soon
+When an exception is thrown by a resource method, it's up to your ```ExceptionStatusMapper``` to determine the appropriate HTTP status code and your ```ResponseWriter``` implementations to figure out how to communicate details back to the user (for example, render a custom error page or a special JSON for your API).
 
--->
+
+#### Standard Exception Types
+
+Soklet provides these exceptions out of the box, but any exception your code throws will work.  By default, other exception types will return a 500 status, but you can customize this behavior - see the **Customizing Status Codes** section below. 
+
+* ```BadRequestException``` - 400
+* ```AuthenticationException``` - 401
+* ```AuthorizationException``` - 403
+* ```NotFoundException``` - 404
+* ```MethodNotAllowedException``` - 405
+
+#### Example Resource Method
+
+```java
+// Example URL: /users/ba19be82-5d90-4b3b-b78f-284c5b86ae11
+@GET("/users/{userId}")
+public ApiResponse user(@PathParameter UUID userId) {
+  Optional<User> user = userService.find(userId);
+
+  if(!user.isPresent())
+    throw new NotFoundException(format("No user was found with ID %s", userId));
+    
+  if(user.get().isTopSecret() && !currentContext.isAdministrator())
+    throw new MyCustomException("You can't see this top-secret user!");
+  
+  return new ApiResponse(user); 
+}
+```
+
+#### Customizing Status Codes
+
+```java
+public static void main(String[] args) throws Exception {
+  Injector injector = Guice.createInjector(Modules.override(new SokletModule()).with(new AppModule()));
+  Server server = injector.getInstance(Server.class);
+  new ServerLauncher(server).launch(StoppingStrategy.ON_KEYPRESS);
+}
+
+class AppModule extends AbstractModule {
+  // Override Soklet's default ExceptionStatusMapper
+  @Provides
+  @Singleton
+  public ExceptionStatusMapper provideExceptionStatusMapper() {
+    return new DefaultExceptionStatusMapper() {
+      @Override
+      public int statusForException(Exception exception) {
+        // Special status for this exception 
+        if(exception instanceof MyCustomException)
+          return 403;
+          
+        // Fall back to defaults for others
+        return super.statusForException(exception);
+      }
+    };
+  }
+}
+```
+
+## App Configuration
+
+#### Server Setup
+
+There's no need for a `web.xml` file.  Your server is configured in code.  You just need to pick a ```Server``` implementation.
+
+* Jetty support is provided by [soklet-jetty](https://github.com/soklet/soklet-jetty)
+* Experimental Tomcat support is provided by [soklet-tomcat](https://github.com/soklet/soklet-tomcat) 
+
+Jetty is recommended unless you have special requirements.
+
+```java
+public static void main(String[] args) throws Exception {
+  Injector injector = Guice.createInjector(Modules.override(new SokletModule()).with(new AppModule()));
+  Server server = injector.getInstance(Server.class);
+  new ServerLauncher(server).launch(StoppingStrategy.ON_KEYPRESS);
+}
+
+class AppModule extends AbstractModule {
+  @Provides
+  @Singleton
+  public Server provideServer(InstanceProvider instanceProvider) {
+    // Assumes you're using Jetty as your server via soklet-jetty.
+    // If you prefer soklet-tomcat, the only change is specifying
+    // "TomcatServer" instead of "JettyServer"
+    
+    // Listen on a specific IP - default is "0.0.0.0", which listens on anything
+    String host = "127.0.0.1";
+    int port = 8080;
+    
+    // Tells Jetty about your static files (CSS, JS, etc.)
+    //
+    // First parameter: static file URL pattern
+    // Second parameter: static file root directory on disk
+    // Third parameter: special cache-header handling (default, cache-never, or cache-forever)
+    //
+    // Static files are served using Jetty's DefaultServlet for efficiency.
+    // For even more better performance in production, you can instead serve these with nginx
+    StaticFilesConfiguration staticFilesConfiguration =
+      new StaticFilesConfiguration("/static/*", Paths.get("web/public"), CacheStrategy.DEFAULT);
+
+    // In general, Soklet prefers mapping URLs to regular Java methods and sidestepping
+    // traditional Servlets and Filters. However, there is a large existing ecosystem of useful
+    // Servlets and Filters, so it's often useful to incorporate a few into your app.
+    //
+    // Soklet uses your dependency injection framework to instantiate Servlets and Filters.
+    
+    // Standard Jetty CrossOriginFilter (CORS) configuration.
+    // These security options are unsafe, but may be useful for development
+    FilterConfiguration corsFilter = new FilterConfiguration(CrossOriginFilter.class, "/*", new HashMap<String, String>() {
+      {
+        put(CrossOriginFilter.ALLOWED_METHODS_PARAM, "GET,POST,PUT,DELETE");
+        put(CrossOriginFilter.ALLOWED_ORIGINS_PARAM, "*");
+        put(CrossOriginFilter.ALLOWED_HEADERS_PARAM, "*");
+      }
+    }));
+    
+    // Captcha servlet configuration
+    ServletConfiguration captchaServlet = new ServletConfiguration(ExampleCaptchaServlet.class, "/captcha");    
+    
+    // Finally, build the server instance
+    return JettyServer.forInstanceProvider(instanceProvider)
+      .host(host)
+      .port(port)
+      .staticFilesConfiguration(staticFilesConfiguration)
+      .servletConfigurations(singletonList(captchaServlet))
+      .filterConfigurations(singletonList(corsFilter))      
+      .build();
+  }
+}
+```
+
+#### Interceptors
+
+It's preferred to use resource method interceptors instead of Servlet Filters when possible.  DI frameworks normally provide interceptor functionality on which you can build.
+
+Examples of common interceptors follow. Note that Soklet does not provide any interceptors, database access, or security features out of the box - these examples are for illustration only.
+
+```java
+public static void main(String[] args) throws Exception {
+  Injector injector = Guice.createInjector(Modules.override(new SokletModule()).with(new AppModule()));
+  Server server = injector.getInstance(Server.class);
+  new ServerLauncher(server).launch(StoppingStrategy.ON_KEYPRESS);
+}
+
+class AppModule extends AbstractModule {
+  @Override
+  protected void configure() {
+    // These interceptors are executed any time a resource method is invoked
+            
+    // 1. Perform the resource method in the context of a database transaction 
+    bindInterceptor(Matchers.annotatedWith(Resource.class),
+      SokletMatchers.httpMethodMatcher(), new TransactionInterceptor(new Database()));
+      
+    // 2. Verify the user is who she says she is!
+    bindInterceptor(Matchers.annotatedWith(Resource.class),
+      SokletMatchers.httpMethodMatcher(), new SecurityInterceptor(new SecurityService()));           
+  }
+  
+  // Rest of module would follow
+}
+
+// Guice interceptor that wraps each resource method in a database transaction
+class TransactionInterceptor implements MethodInterceptor {
+  private final Database database;
+  
+  TransactionInterceptor(Database database) {
+    this.database = requireNonNull(database);
+  }
+  
+  @Override
+  public Object invoke(MethodInvocation methodInvocation) throws Throwable {
+    // Note: Database is not part of Soklet, this is for illustration only.
+    // If you want simple JDBC functionality, check out http://pyranid.com
+    return this.database.transaction(() -> {
+      return methodInvocation.proceed();
+    });  
+  }  
+}
+
+// Guice interceptor that performs security checks
+class SecurityInterceptor implements MethodInterceptor {
+  private final SecurityService securityService;
+  
+  SecurityInterceptor(SecurityService securityService) {
+    this.securityService = requireNonNull(securityService);
+  }
+  
+  @Override
+  public Object invoke(MethodInvocation methodInvocation) throws Throwable {
+    // Special use of Soklet's RequestContext to get at current request and route information
+    RequestContext requestContext = RequestContext.get();    
+    Optional<Route> route = requestContext.route();
+    
+    // If a route matched the URL, get the Java method that should be executed
+    // and examine its @RoleRequired annotation to see what access requirements are (if any).
+    // Note: SecurityService, @RoleRequired, and Role are not part of Soklet, they are for illustration only
+    if(route.isPresent()) {
+      String authorization = requestContext.httpServletRequest().getHeader("Authorization");
+    
+      Method resourceMethod = route.get().resourceMethod();            
+      RoleRequired roleRequired = resourceMethod.getAnnotation(RoleRequired.class);
+      Role[] requiredRoles = roleRequired == null ? null : roleRequired.value();
+      
+      // Do some kind of security check
+      this.securityService.authorize(authorization, requiredRoles);
+    }
+  }  
+}
+```
+
 
 ## Deployment Archives
 
@@ -579,9 +792,9 @@ Currently, there are restrictions on CSS rewriting.  They are:
 
 Soklet will warn you if it detects either of these conditions.
 
-## java.util.Logging
+## java.util.logging
 
-Soklet uses ```java.util.Logging``` internally.  The usual way to hook into this is with [SLF4J](http://slf4j.org), which can funnel all the different logging mechanisms in your app through a single one, normally [Logback](http://logback.qos.ch).  Your Maven configuration might look like this:
+Soklet uses ```java.util.logging``` internally.  The usual way to hook into this is with [SLF4J](http://slf4j.org), which can funnel all the different logging mechanisms in your app through a single one, normally [Logback](http://logback.qos.ch).  Your Maven configuration might look like this:
 
 ```xml
 <dependency>
