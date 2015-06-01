@@ -16,18 +16,12 @@
 
 package com.soklet.web.request;
 
-import static com.soklet.util.IoUtils.copyStreamToBytesCloseAfterwards;
 import static com.soklet.util.IoUtils.stringFromStreamCloseAfterwards;
 import static com.soklet.util.StringUtils.trimToNull;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -40,10 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import javax.servlet.ReadListener;
-import javax.servlet.ServletInputStream;
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
 
 import com.soklet.converter.ValueConversionException;
@@ -85,9 +76,6 @@ public class DefaultRequestHandler implements RequestHandler {
     requireNonNull(httpServletRequest);
     requireNonNull(httpServletResponse);
     requireNonNull(route);
-
-    if (shouldAllowRequestBodyRepeatableReads(httpServletRequest, httpServletResponse, route))
-      httpServletRequest = new RequestBodyRepeatableReadWrapper(httpServletRequest);
 
     // Load up values to pass as the method's parameters (if any)
     Parameter[] parameters = route.resourceMethod().getParameters();
@@ -227,6 +215,7 @@ public class DefaultRequestHandler implements RequestHandler {
       return result;
     }
 
+    // TODO: complete these
     // RequestHeader requestHeader = parameter.getAnnotation(RequestHeader.class);
     // RequestCookie requestCookie = parameter.getAnnotation(RequestCookie.class);
 
@@ -249,44 +238,8 @@ public class DefaultRequestHandler implements RequestHandler {
       return requestBodyValue;
     }
 
-    // TODO: want to support async stuff as easily as possible
-    // See http://www.jayway.com/2014/05/16/async-servlets/
-    // We might want to inject Route and ResponseHandler parameters so async calls can write responses "normally".
-    // Or introduce a new type that wraps AsyncContext stuff and inject that
-    //
-    // Further TODO: need to figure out how to signify a method is async so RoutingServlet does not try to write a
-    // response. Either an annotation or magic return value from the method? Leaning toward latter since annotation
-    // locks you into "always async"
-
-    // TODO: throw IllegalStateException since we don't know what to do with the parameter?
-    // Probably better to explicitly error out than keep the user guessing why things aren't working
-    return null;
-  }
-
-  /**
-   * Should this request body be cached in-memory to support repeated reads?
-   * <p>
-   * This is helpful for common cases (request body logging and parsing) but if you have special requirements (need
-   * non-blocking I/O or have to handle large request bodies like file uploads) then you should override this method to
-   * return {@code false}.
-   * <p>
-   * By default this method returns {@code true}.
-   * 
-   * @param httpServletRequest
-   *          Servlet request
-   * @param httpServletResponse
-   *          Servlet request
-   * @param route
-   *          The route for this request
-   * @return {@code true} if the filter should be applied, {@code false} otherwise
-   */
-  public boolean shouldAllowRequestBodyRepeatableReads(HttpServletRequest httpServletRequest,
-      HttpServletResponse httpServletResponse, Route route) {
-    requireNonNull(httpServletRequest);
-    requireNonNull(httpServletResponse);
-    requireNonNull(route);
-
-    return true;
+    throw new IllegalArgumentException(format("Not sure what to do with parameter '%s' on resource method %s. "
+        + "Are you missing an annotation?", parameter, route.resourceMethod()));
   }
 
   protected String extractParameterName(Method method, Parameter parameter, Annotation annotation,
@@ -364,73 +317,6 @@ public class DefaultRequestHandler implements RequestHandler {
 
     public boolean isOptional() {
       return optional;
-    }
-  }
-
-  protected static class RequestBodyRepeatableReadWrapper extends HttpServletRequestWrapper {
-    private final byte[] requestBody;
-
-    public RequestBodyRepeatableReadWrapper(HttpServletRequest httpServletRequest) {
-      super(requireNonNull(httpServletRequest));
-      try {
-        this.requestBody =
-            httpServletRequest.getInputStream() == null ? new byte[] {}
-                : copyStreamToBytesCloseAfterwards(httpServletRequest.getInputStream());
-      } catch (IOException e) {
-        throw new IllegalStateException("Unable to read request body", e);
-      }
-    }
-
-    @Override
-    public ServletInputStream getInputStream() throws IOException {
-      return new RepeatableReadServletInputStream(new ByteArrayInputStream(requestBody));
-    }
-
-    @Override
-    public BufferedReader getReader() throws IOException {
-      String characterEncoding = getCharacterEncoding();
-      return new BufferedReader(new InputStreamReader(getInputStream(), characterEncoding == null ? "UTF-8"
-          : characterEncoding));
-    }
-
-    protected static class RepeatableReadServletInputStream extends ServletInputStream {
-      private final InputStream inputStream;
-
-      public RepeatableReadServletInputStream(InputStream inputStream) {
-        this.inputStream = requireNonNull(inputStream);
-      }
-
-      @Override
-      public int read() throws IOException {
-        return inputStream.read();
-      }
-
-      @Override
-      public boolean markSupported() {
-        return false;
-      }
-
-      @Override
-      public boolean isFinished() {
-        return true;
-      }
-
-      @Override
-      public boolean isReady() {
-        return false;
-      }
-
-      @Override
-      public void setReadListener(ReadListener readListener) {
-        requireNonNull(readListener);
-
-        // Since we've already read the request body, we're immediately done...fire callback right away
-        try {
-          readListener.onAllDataRead();
-        } catch (IOException e) {
-          throw new RuntimeException(e);
-        }
-      }
     }
   }
 }
