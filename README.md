@@ -667,7 +667,7 @@ You can use it in Java code like this:
 
 ```java
 // Default ctor loads manifest from file named ```hashedUrlManifest``` in working directory
-HashedUrlManifest hashedUrlManifest = new hashedUrlManifest();
+HashedUrlManifest hashedUrlManifest = new HashedUrlManifest();
 Optional<String> hashedUrl = hashedUrlManifest.hashedUrl("/static/js/jquery.js");
 
 // Output is "Optional[/static/js/jquery.D1F585EEEC4308D432181FF88068830A.js]"
