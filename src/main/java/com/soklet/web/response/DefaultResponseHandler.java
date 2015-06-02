@@ -167,6 +167,11 @@ public class DefaultResponseHandler implements ResponseHandler {
     if (exception.isPresent())
       return exceptionStatusMapper.statusForException(exception.get());
 
+    // Special case: if status was already set to some kind of error (e.g. static file server had a 404), then keep the
+    // status in place
+    if (httpServletResponse.getStatus() >= 400)
+      return httpServletResponse.getStatus();
+
     if (!response.isPresent())
       return 204;
 
