@@ -20,6 +20,8 @@ import static java.lang.String.format;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.toSet;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -30,6 +32,7 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.logging.Logger;
 
 import com.soklet.classindex.ClassIndex;
 import com.soklet.web.HttpMethod;
@@ -59,6 +62,7 @@ public class DefaultRouteMatcher implements RouteMatcher {
   private final Set<Method> resourceMethods;
   private final Map<HttpMethod, Set<Method>> resourceMethodsByHttpMethod;
   private final Map<Method, Set<HttpMethodResourcePath>> httpMethodResourcePathsByResourceMethod;
+  private final Logger logger = Logger.getLogger(DefaultRouteMatcher.class.getName());
 
   public DefaultRouteMatcher() {
     this.resourceMethods = unmodifiableSet(new HashSet<>(extractResourceMethods()));
@@ -161,16 +165,35 @@ public class DefaultRouteMatcher implements RouteMatcher {
       return Optional.empty();
 
     ResourcePath resourcePath = ResourcePath.fromPathInstance(requestPath);
+    Set<Route> matchingRoutes = new HashSet<>(4); // Normally there are few (if any) potential route matches
 
+    // TODO: faster route matching via path component tree structure instead of linear scan
     for (Entry<Method, Set<HttpMethodResourcePath>> entry : httpMethodResourcePathsByResourceMethod().entrySet()) {
       Method method = entry.getKey();
       Set<HttpMethodResourcePath> httpMethodResourcePaths = entry.getValue();
 
-      for (HttpMethodResourcePath HttpMethodResourcePath : httpMethodResourcePaths)
-        if (HttpMethodResourcePath.httpMethod().equals(httpMethod)
-            && resourcePath.matches(HttpMethodResourcePath.resourcePath()))
-          return Optional.of(new Route(HttpMethodResourcePath.httpMethod(), HttpMethodResourcePath.resourcePath(),
+      for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths)
+        if (httpMethodResourcePath.httpMethod().equals(httpMethod)
+            && resourcePath.matches(httpMethodResourcePath.resourcePath()))
+          matchingRoutes.add(new Route(httpMethodResourcePath.httpMethod(), httpMethodResourcePath.resourcePath(),
             method));
+    }
+
+    // Simple case - exact route match
+    if (matchingRoutes.size() == 1)
+      return matchingRoutes.stream().findFirst();
+
+    // Multiple matches are OK so long as one is a literal match.
+    // If none are a literal match, we have a problem
+    if (matchingRoutes.size() > 1) {
+      Set<Route> literalMatchingRoutes =
+          matchingRoutes.stream().filter(matchingRoute -> matchingRoute.resourcePath().isLiteral()).collect(toSet());
+
+      if (literalMatchingRoutes.size() == 1)
+        return literalMatchingRoutes.stream().findFirst();
+
+      logger.severe(format("Multiple routes match '%s %s'. Ambiguous matches were:\n%s", httpMethod.name(),
+        requestPath, matchingRoutes.stream().map(route -> route.toString()).collect(joining("\n"))));
     }
 
     return Optional.empty();

@@ -106,11 +106,19 @@ public class ResourcePath {
   }
 
   public String path() {
-    return path;
+    return this.path;
   }
 
   public List<Component> components() {
-    return components;
+    return this.components;
+  }
+  
+  public boolean isLiteral() {
+    for(Component component : components)
+      if(component.type() != ComponentType.LITERAL)
+        return false;
+    
+    return true;
   }
 
   protected String normalizePath(String path) {
