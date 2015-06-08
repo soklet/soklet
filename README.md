@@ -31,13 +31,13 @@ Minimalist infrastructure for Java webapps and microservices.
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.1.3</version>
+  <version>1.1.4</version>
 </dependency>
 ```
 
 #### Direct Download
 
-If you don't use Maven, you can drop [soklet-1.1.3.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.3/soklet-1.1.3.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
+If you don't use Maven, you can drop [soklet-1.1.4.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.4/soklet-1.1.4.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
 
 <!--
 ## Bootstrap Your App
@@ -798,31 +798,24 @@ Soklet uses ```java.util.logging``` internally.  The usual way to hook into this
 
 ```xml
 <dependency>
+  <groupId>ch.qos.logback</groupId>
+  <artifactId>logback-classic</artifactId>
+  <version>1.1.3</version>
+</dependency>
+<dependency>
   <groupId>org.slf4j</groupId>
   <artifactId>jul-to-slf4j</artifactId>
-  <version>1.7.7</version>
+  <version>1.7.12</version>
 </dependency>
 ```
 
+Because it is such a common operation, Soklet provides an optional facility for configuring Logback.
 You might have code like this which runs at startup:
 
 ```java
-// Bridge all java.util.logging to SLF4J
-java.util.logging.Logger rootLogger = java.util.logging.LogManager.getLogManager().getLogger("");
-for (Handler handler : rootLogger.getHandlers())
-  rootLogger.removeHandler(handler);
-
-SLF4JBridgeHandler.install();
+// Configures Logback; also bridges java.util.Logging calls
+LoggingUtils.initializeLogback(Paths.get("config/logback.xml"));
 ```
-
-Don't forget to uninstall the bridge at shutdown time:
-
-```java
-// Sometime later
-SLF4JBridgeHandler.uninstall();
-```
-
-Note: ```SLF4JBridgeHandler``` can impact performance.  You can mitigate that with Logback's ```LevelChangePropagator``` configuration option [as described here](http://logback.qos.ch/manual/configuration.html#LevelChangePropagator).
 
 <!--
 ## FAQ

@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.soklet</groupId>
 	<artifactId>soklet</artifactId>
-	<version>1.1.3</version>
+	<version>1.1.4</version>
 	<packaging>jar</packaging>
 	<name>Soklet</name>
 	<description>Soklet is a minimalist infrastructure for Java webapps and microservices.</description>
@@ -153,6 +153,20 @@
 			<version>3.1.0</version>
 		</dependency>
 
+		<!-- Optional run-time dependencies -->
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-classic</artifactId>
+			<version>1.1.3</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>jul-to-slf4j</artifactId>
+			<version>1.7.12</version>
+			<scope>provided</scope>
+		</dependency>
+		
 		<!-- Test dependencies -->
 		<dependency>
 			<groupId>junit</groupId>
