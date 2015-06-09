@@ -21,8 +21,15 @@ import static java.util.Collections.unmodifiableSet;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.UUID;
 
 /**
@@ -58,6 +65,13 @@ public final class ValueConverters {
     defaultValueConverters.add(new StringToBigDecimalValueConverter());
     defaultValueConverters.add(new StringToNumberValueConverter());
     defaultValueConverters.add(new StringToUuidValueConverter());
+    defaultValueConverters.add(new StringToInstantValueConverter());
+    defaultValueConverters.add(new StringToDateValueConverter());
+    defaultValueConverters.add(new StringToLocalDateValueConverter());
+    defaultValueConverters.add(new StringToLocalTimeValueConverter());
+    defaultValueConverters.add(new StringToLocalDateTimeValueConverter());
+    defaultValueConverters.add(new StringToZoneIdValueConverter());
+    defaultValueConverters.add(new StringToTimeZoneValueConverter());
 
     return defaultValueConverters;
   }
@@ -65,8 +79,7 @@ public final class ValueConverters {
   private static abstract class BasicValueConverter<T, F> extends AbstractValueConverter<T, F> {
     @Override
     public F convert(T from) throws ValueConversionException {
-      if (from == null)
-        return null;
+      if (from == null) return null;
 
       try {
         return performConversion(from);
@@ -178,6 +191,57 @@ public final class ValueConverters {
     @Override
     protected UUID performConversion(String from) throws Exception {
       return UUID.fromString(from);
+    }
+  };
+
+  private static final class StringToDateValueConverter extends BasicValueConverter<String, Date> {
+    @Override
+    protected Date performConversion(String from) throws Exception {
+      return new Date(Long.parseLong(from));
+    }
+  };
+
+  private static final class StringToInstantValueConverter extends BasicValueConverter<String, Instant> {
+    @Override
+    protected Instant performConversion(String from) throws Exception {
+      return Instant.ofEpochMilli(Long.parseLong(from));
+    }
+  };
+
+  private static final class StringToLocalDateValueConverter extends BasicValueConverter<String, LocalDate> {
+    @Override
+    protected LocalDate performConversion(String from) throws Exception {
+      return LocalDate.parse(from);
+    }
+  };
+
+  private static final class StringToLocalTimeValueConverter extends BasicValueConverter<String, LocalTime> {
+    @Override
+    protected LocalTime performConversion(String from) throws Exception {
+      return LocalTime.parse(from);
+    }
+  };
+
+  private static final class StringToLocalDateTimeValueConverter extends BasicValueConverter<String, LocalDateTime> {
+    @Override
+    protected LocalDateTime performConversion(String from) throws Exception {
+      return LocalDateTime.parse(from);
+    }
+  };
+
+  private static final class StringToZoneIdValueConverter extends BasicValueConverter<String, ZoneId> {
+    @Override
+    protected ZoneId performConversion(String from) throws Exception {
+      return ZoneId.of(from);
+    }
+  };
+
+  private static final class StringToTimeZoneValueConverter extends BasicValueConverter<String, TimeZone> {
+    @Override
+    protected TimeZone performConversion(String from) throws Exception {
+      // Use ZoneId.of since it will throw an exception if the format is invalid.
+      // TimeZone.getTimeZone() returns GMT for invalid formats, which is not the behavior we want
+      return TimeZone.getTimeZone(ZoneId.of(from));
     }
   };
 }
