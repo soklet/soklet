@@ -697,7 +697,7 @@ If you use [Mustache.java](https://github.com/spullara/mustache.java) to render 
 
 ```java
 // Define a custom Mustache TemplateFunction
-model.put("hashedUrl", new TemplateFunction() {
+model.put("hashedUrl", new Function<String, String>() {
   @Override
   public String apply(String url) {
     return hashedUrlManifest.hashedUrlWithFallback(url);
