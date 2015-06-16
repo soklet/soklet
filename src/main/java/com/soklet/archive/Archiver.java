@@ -39,7 +39,6 @@ import static java.util.regex.Pattern.compile;
 import static java.util.stream.Collectors.toSet;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -150,24 +149,33 @@ public class Archiver {
 
     try {
       // Copy everything over to our temporary working directory
+      logger.info("Copying files to temporary directory...");
       PathUtils.copyDirectory(Paths.get("."), temporaryDirectory, pathsToExclude);
 
       // Run any client-supplied preprocessing code (for example, compile LESS files into CSS)
-      if (preProcessOperation().isPresent())
+      if (preProcessOperation().isPresent()) {
+        logger.info("Performing pre-processing operation...");
         preProcessOperation().get().perform(this, temporaryDirectory);
+      }
 
       // Run any Maven tasks (for example, build and extract dependency JARs for inclusion in archive)
-      if (mavenSupport().isPresent())
+      if (mavenSupport().isPresent()) {
+        logger.info("Performing Maven operations...");
         performMavenSupport(mavenSupport.get(), temporaryDirectory);
+      }
 
       // Permit client code to modify files in-place (for example, compress JS and CSS)
-      if (fileAlterationOperation().isPresent())
+      if (fileAlterationOperation().isPresent()) {
+        logger.info("Performing file alteration operation...");
         performFileAlterations(temporaryDirectory);
+      }
 
       // Hash static files and store off the manifest
       Optional<Path> hashedUrlManifestFile = Optional.empty();
 
       if (temporaryStaticFileRootDirectory.isPresent()) {
+        logger.info("Performing static file hashing...");
+
         // 1. Do the hashing
         HashedUrlManifest hashedUrlManifest = performStaticFileHashing(temporaryStaticFileRootDirectory.get());
 
@@ -179,9 +187,9 @@ public class Archiver {
         }
 
         // 3. Create gzipped versions of static files as appropriate
+        logger.info("GZIPping static files...");
         for (Path staticFile : PathUtils.allFilesInDirectory(temporaryStaticFileRootDirectory.get())) {
-          if (!shouldZipStaticFile(staticFile))
-            continue;
+          if (!shouldZipStaticFile(staticFile)) continue;
 
           Path gzippedFile = Paths.get(format("%s.gz", staticFile.toAbsolutePath()));
 
@@ -194,8 +202,10 @@ public class Archiver {
       }
 
       // Run any client-supplied postprocessing code
-      if (postProcessOperation().isPresent())
+      if (postProcessOperation().isPresent()) {
+        logger.info("Performing post-processing operation...");
         postProcessOperation().get().perform(this, temporaryDirectory);
+      }
 
       // Re-root the provided archive paths to point to the temporary directory
       Set<ArchivePath> workingArchivePaths = archivePaths().stream().map(archivePath -> {
@@ -241,8 +251,7 @@ public class Archiver {
       // Zip root is the name of the archive without the extension, e.g. "app.zip" would be "app".
       String zipRoot = archiveFile.getFileName().toString();
       int indexOfPeriod = zipRoot.indexOf(".");
-      if (indexOfPeriod != -1 && zipRoot.length() > 1)
-        zipRoot = zipRoot.substring(0, indexOfPeriod);
+      if (indexOfPeriod != -1 && zipRoot.length() > 1) zipRoot = zipRoot.substring(0, indexOfPeriod);
 
       SortedSet<ArchivePath> sortedarchivePathsToInclude = new TreeSet<ArchivePath>(new Comparator<ArchivePath>() {
         @Override
@@ -322,8 +331,7 @@ public class Archiver {
         Optional<InputStream> alteredFile = fileAlterationOperation().get().alterFile(this, workingDirectory, file);
 
         // TODO: need to document that we will close the InputStream - the caller is not responsible for that
-      if (alteredFile.isPresent())
-        copyStreamCloseAfterwards(alteredFile.get(), Files.newOutputStream(file));
+      if (alteredFile.isPresent()) copyStreamCloseAfterwards(alteredFile.get(), Files.newOutputStream(file));
     } catch (IOException e) {
       throw e;
     } catch (Exception e) {
@@ -351,12 +359,10 @@ public class Archiver {
     // Step 1: hash everything but CSS files (we rewrite those next) and the preexisting manifest file (if present)
     for (Path file : allFilesInDirectory(staticFileRootDirectory)) {
       // Ignore CSS
-      if (isCssFile(file))
-        continue;
+      if (isCssFile(file)) continue;
 
       // Ignore preexisting manifest
-      if (hashedUrlManifestJsFile.isPresent() && file.equals(hashedUrlManifestJsFile.get()))
-        continue;
+      if (hashedUrlManifestJsFile.isPresent() && file.equals(hashedUrlManifestJsFile.get())) continue;
 
       HashedFileUrlMapping hashedFileUrlMapping = createHashedFile(file, staticFileRootDirectory);
       hashedUrlsByUrl.put(hashedFileUrlMapping.url(), hashedFileUrlMapping.hashedUrl());
@@ -364,13 +370,11 @@ public class Archiver {
 
     // Step 2: rewrite CSS files with manifest created in step 1
     for (Path file : allFilesInDirectory(staticFileRootDirectory))
-      if (isCssFile(file))
-        rewriteCssUrls(file, new HashedUrlManifest(hashedUrlsByUrl));
+      if (isCssFile(file)) rewriteCssUrls(file, staticFileRootDirectory, new HashedUrlManifest(hashedUrlsByUrl));
 
     // Step 3: add final CSS file hashes to manifest created in step 1
     for (Path file : allFilesInDirectory(staticFileRootDirectory)) {
-      if (!isCssFile(file))
-        continue;
+      if (!isCssFile(file)) continue;
 
       HashedFileUrlMapping hashedFileUrlMapping = createHashedFile(file, staticFileRootDirectory);
       hashedUrlsByUrl.put(hashedFileUrlMapping.url(), hashedFileUrlMapping.hashedUrl());
@@ -497,7 +501,8 @@ public class Archiver {
     return new Builder(archiveFile);
   }
 
-  protected void rewriteCssUrls(Path cssFile, HashedUrlManifest hashedUrlManifest) throws IOException {
+  protected void rewriteCssUrls(Path cssFile, Path staticFileRootDirectory, HashedUrlManifest hashedUrlManifest)
+      throws IOException {
     requireNonNull(cssFile);
     requireNonNull(hashedUrlManifest);
 
@@ -507,7 +512,9 @@ public class Archiver {
       throw new IllegalArgumentException(format("%s is a directory!", cssFile.toAbsolutePath()));
 
     String css = new String(Files.readAllBytes(cssFile), UTF_8);
-    String urlPrefix = format("/%s", staticFileConfiguration().get().rootDirectory().getFileName());
+    String cssFileRelativeFilename =
+        staticFileConfiguration().get().rootDirectory().getFileName()
+          .resolve(staticFileRootDirectory.relativize(cssFile)).toString();
 
     // Don't use StringBuilder as regex methods like appendTail require a StringBuffer
     StringBuffer stringBuffer = new StringBuffer();
@@ -547,25 +554,42 @@ public class Archiver {
 
         // Rejects URLs like "../../test/../whatever.png"
         if (temporaryUrl.contains("../")) {
-          logger.warning(format("URL '%s' has nested relative path component[s] so we can't process it.", url));
+          logger.warning(format(
+            "URL '%s' has nested relative path component[s] so we can't process it. Issue is in %s", url,
+            cssFileRelativeFilename));
         } else {
-          File parent = cssFile.toFile().getParentFile();
-          String parentPath = "";
+          // Rewrite relative URLs, e.g. ../images/test.jpg
+          Path parentDirectory = cssFile.getParent();
 
-          for (int i = 0; i < relativePathCount - 1; i++) {
-            parentPath += parent.getName() + "/";
-            parent = parent.getParentFile();
-          }
+          for (int i = 0; i < relativePathCount; ++i)
+            parentDirectory = parentDirectory.getParent();
 
-          url = urlPrefix + parentPath + temporaryUrl;
-          logger.fine(format("Relative URL %s was rewritten to %s", originalUrl, url));
+          Path resolvedRelativeFile =
+              staticFileRootDirectory.getFileName().resolve(staticFileRootDirectory.relativize(parentDirectory))
+                .resolve(Paths.get(temporaryUrl));
+
+          url = format("/%s", resolvedRelativeFile.toString());
+
+          logger.fine(format("Relative URL %s was rewritten to %s in %s", originalUrl, url, cssFileRelativeFilename));
         }
       } else if (url.contains("../")) {
         // Rejects URLs like "/static/../whatever.png"
         logger.warning(format(
-          "URL '%s' has relative path component[s] which do not start with ../ so we can't process it.", url));
+          "URL '%s' has relative path component[s] which do not start with ../ so we can't process it. Issue is in %s",
+          url, cssFileRelativeFilename));
       } else if (url.toLowerCase(ENGLISH).startsWith("data:")) {
         dataUrl = true;
+      } else if (!url.startsWith("/")) {
+        // Rewrite same-directory URLs, e.g. images/test.jpg
+        Path parentDirectory = cssFile.getParent();
+
+        Path resolvedRelativeFile =
+            staticFileRootDirectory.getFileName().resolve(staticFileRootDirectory.relativize(parentDirectory))
+              .resolve(Paths.get(url));
+
+        url = format("/%s", resolvedRelativeFile.toString());
+
+        logger.fine(format("Relative URL %s was rewritten to %s in %s", originalUrl, url, cssFileRelativeFilename));
       }
 
       String cleanedUrl = url;
@@ -573,12 +597,10 @@ public class Archiver {
       // Clean up - see comments on createCssUrlPattern() to see why.
       // TODO: fix the pattern so we don't have to do this.
       int indexOfQuestionMark = cleanedUrl.indexOf("?");
-      if (indexOfQuestionMark > 0)
-        cleanedUrl = cleanedUrl.substring(0, indexOfQuestionMark);
+      if (indexOfQuestionMark > 0) cleanedUrl = cleanedUrl.substring(0, indexOfQuestionMark);
 
       int indexOfHash = cleanedUrl.indexOf("#");
-      if (indexOfHash > 0)
-        cleanedUrl = cleanedUrl.substring(0, indexOfHash);
+      if (indexOfHash > 0) cleanedUrl = cleanedUrl.substring(0, indexOfHash);
 
       Optional<String> hashedUrl = hashedUrlManifest.hashedUrl(cleanedUrl);
       String rewrittenUrl = url;
@@ -586,9 +608,9 @@ public class Archiver {
       if (hashedUrl.isPresent()) {
         rewrittenUrl = url.replace(cleanedUrl, hashedUrl.get());
         logger.fine(format("Rewrote CSS URL reference '%s' to '%s' in %s", originalUrl, rewrittenUrl,
-          cssFile.getFileName()));
+          cssFileRelativeFilename));
       } else if (!dataUrl && !processingImportUrl) {
-        logger.warning(format("Unable to resolve CSS URL reference '%s' in %s", originalUrl, cssFile.getFileName()));
+        logger.warning(format("Unable to resolve CSS URL reference '%s' in %s", originalUrl, cssFileRelativeFilename));
       }
 
       String replacement;
@@ -596,7 +618,7 @@ public class Archiver {
       if (processingImportUrl) {
         logger.warning(format(
           "Warning: CSS @import statements are not fully supported yet. Detected @import of %s in %s", originalUrl,
-          cssFile.getFileName()));
+          cssFileRelativeFilename));
         replacement = format("@import \"%s\";", rewrittenUrl);
       } else {
         replacement = format("url(\"%s\")", rewrittenUrl);
@@ -612,7 +634,7 @@ public class Archiver {
     try {
       Files.write(cssFile, rewrittenFileContents.getBytes(UTF_8));
     } catch (IOException e) {
-      throw new UncheckedIOException(format("Unable to write rewritten CSS file %s", cssFile.getFileName()), e);
+      throw new UncheckedIOException(format("Unable to write rewritten CSS file %s", cssFileRelativeFilename), e);
     }
   }
 
@@ -643,8 +665,7 @@ public class Archiver {
     String filename = staticFile.getFileName().toString().toLowerCase(ENGLISH);
     int lastIndexOfPeriod = filename.lastIndexOf(".");
 
-    if (lastIndexOfPeriod == -1 || filename.endsWith("."))
-      return true;
+    if (lastIndexOfPeriod == -1 || filename.endsWith(".")) return true;
 
     String extension = filename.substring(lastIndexOfPeriod + 1);
 
@@ -761,8 +782,7 @@ public class Archiver {
         // TODO: support configuration of this through code as well
         String mavenHome = trimToNull(System.getProperty("soklet.MAVEN_HOME"));
 
-        if (mavenHome == null)
-          mavenHome = trimToNull(System.getenv("MAVEN_HOME"));
+        if (mavenHome == null) mavenHome = trimToNull(System.getenv("MAVEN_HOME"));
 
         if (mavenHome == null)
           throw new ArchiveException(
@@ -896,11 +916,9 @@ public class Archiver {
 
       int lastIndexOfPeriod = filename.lastIndexOf(".");
 
-      if (lastIndexOfPeriod == -1)
-        return format("%s.%s", filename, hash);
+      if (lastIndexOfPeriod == -1) return format("%s.%s", filename, hash);
 
-      if (filename.endsWith("."))
-        return format("%s%s", filename, hash);
+      if (filename.endsWith(".")) return format("%s%s", filename, hash);
 
       return format("%s.%s%s", filename.substring(0, lastIndexOfPeriod), hash, filename.substring(lastIndexOfPeriod));
     };

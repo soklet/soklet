@@ -31,13 +31,13 @@ Minimalist infrastructure for Java webapps and microservices.
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.1.5</version>
+  <version>1.1.6</version>
 </dependency>
 ```
 
 #### Direct Download
 
-If you don't use Maven, you can drop [soklet-1.1.5.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.5/soklet-1.1.5.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
+If you don't use Maven, you can drop [soklet-1.1.6.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.6/soklet-1.1.6.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
 
 <!--
 ## Bootstrap Your App
@@ -783,11 +783,23 @@ body {
 }
 ```
 
+Relative paths are automatically rewritten as well:
+
+```css
+body {
+  background-image: url("images/cartoon.png");
+}
+
+.example {
+  background-image: url("../images/cartoon.png");
+}
+```
+
 **WARNING!**
 
 Currently, there are restrictions on CSS rewriting.  They are:
 
-* Any static file references must be absolute, e.g. ```/static/images/cartoon.png``` is OK but ```../images/cartoon.png``` is not (Soklet attempts to resolve relative paths but success is not guaranteed)
+* URLs cannot contain inner ```..``` and ```.``` values.  For example, ```../images/cartoon.png``` is OK but ```../images/../cartoon.png``` is not
 * CSS ```@import``` URLs should be avoided (Soklet will rewrite the URLs, but the hashes may be "stale" in cases where there are chains of imports, e.g. CSS file 1 imports CSS file 2 which imports CSS file 3)
 
 Soklet will warn you if it detects either of these conditions.
