@@ -321,7 +321,7 @@ class JacksonApiResponseWriter implements ApiResponseWriter {
 
     // Write JSON to the response
     try (OutputStream outputStream = httpServletResponse.getOutputStream()) {
-      objectWriter.writeValue(outputStream, model);
+      objectMapper.writeValue(outputStream, model);
     }
   }  
 }
