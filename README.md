@@ -31,13 +31,13 @@ Minimalist infrastructure for Java webapps and microservices.
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.1.6</version>
+  <version>1.1.7</version>
 </dependency>
 ```
 
 #### Direct Download
 
-If you don't use Maven, you can drop [soklet-1.1.6.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.6/soklet-1.1.6.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
+If you don't use Maven, you can drop [soklet-1.1.7.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.7/soklet-1.1.7.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
 
 <!--
 ## Bootstrap Your App
@@ -231,11 +231,12 @@ public class HelloResource {
 
 #### Resource Method Return Types
 
-There are 5 standard resource method return types provided by Soklet.
+There are 6 standard resource method return types provided by Soklet.
 
 * ```ApiResponse``` Holds an arbitrary object that is meant to be written as an "API" response (often JSON or XML)
 * ```AsyncResponse``` Signifies to Soklet that no response should be written and you plan to use Servlet 3.1 nonblocking I/O to handle it yourself.  Useful if you have an expensive computation to perform and don't want to tie up a request thread
 * ```BinaryResponse``` Designed for writing arbitrary content to the response, e.g. streaming a PDF
+* ```CustomResponse``` Indicates Soklet should take no action - you are responsible for writing the response yourself
 * ```PageResponse``` Holds a logical page template name and optional model data to merge with it, meant to be written as an HTML page response. Some popular templating technologies are Velocity, Freemarker, and Mustache  
 * ```RedirectResponse``` Performs standard 301 and 302 redirects
 

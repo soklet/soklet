@@ -83,8 +83,8 @@ public class DefaultResponseHandler implements ResponseHandler {
           Optional.of(exception.get().getCause() instanceof Exception ? (Exception) exception.get().getCause()
               : exception.get());
 
-    // Do nothing at all if this was an async response
-    if (response.isPresent() && response.get() instanceof AsyncResponse)
+    // Do nothing at all if this was an async or custom response
+    if (response.isPresent() && (response.get() instanceof AsyncResponse || response.get() instanceof CustomResponse))
       return;
 
     // Figure out status code
@@ -104,8 +104,7 @@ public class DefaultResponseHandler implements ResponseHandler {
     }
 
     // Don't write anything if it's a 204 or a successful request where no response is available
-    if (status == 204 || (!exception.isPresent() && !response.isPresent()))
-      return;
+    if (status == 204 || (!exception.isPresent() && !response.isPresent())) return;
 
     // Exception?
     if (exception.isPresent()) {
@@ -133,8 +132,7 @@ public class DefaultResponseHandler implements ResponseHandler {
       String responseAsString = response.get().toString();
 
       // toString() should never return null, but you never know...
-      if (isBlank(responseAsString))
-        httpServletResponse.setStatus(204);
+      if (isBlank(responseAsString)) httpServletResponse.setStatus(204);
 
       this.binaryResponseWriter.writeResponse(httpServletRequest, httpServletResponse, Optional
         .ofNullable(isBlank(responseAsString) ? null : new BinaryResponse("text/plain;charset=UTF-8",
@@ -164,19 +162,15 @@ public class DefaultResponseHandler implements ResponseHandler {
     requireNonNull(response);
     requireNonNull(exception);
 
-    if (exception.isPresent())
-      return exceptionStatusMapper.statusForException(exception.get());
+    if (exception.isPresent()) return exceptionStatusMapper.statusForException(exception.get());
 
     // Special case: if status was already set to some kind of error (e.g. static file server had a 404), then keep the
     // status in place
-    if (httpServletResponse.getStatus() >= 400)
-      return httpServletResponse.getStatus();
+    if (httpServletResponse.getStatus() >= 400) return httpServletResponse.getStatus();
 
-    if (!response.isPresent())
-      return 204;
+    if (!response.isPresent()) return 204;
 
-    if (response.get() instanceof Response)
-      return ((Response) response.get()).status();
+    if (response.get() instanceof Response) return ((Response) response.get()).status();
 
     return 200;
   }
@@ -191,8 +185,7 @@ public class DefaultResponseHandler implements ResponseHandler {
     // Note: if your API resource method is declared to return something other than ApiResponse (e.g. Object), this will
     // not work. You should subclass and override this method to compensate, possibly using a condition like
     // route.resourcePath().path().startsWith("/api/")
-    if (ApiResponse.class.isAssignableFrom(route.resourceMethod().getReturnType()))
-      return apiResponseWriter;
+    if (ApiResponse.class.isAssignableFrom(route.resourceMethod().getReturnType())) return apiResponseWriter;
 
     return pageResponseWriter;
   }
