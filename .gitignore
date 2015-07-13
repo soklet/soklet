@@ -1,2 +1,4 @@
 /.apt_generated/
 /target/
+.idea
+soklet.iml
