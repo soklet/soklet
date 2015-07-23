@@ -238,8 +238,8 @@ public class DefaultRequestHandler implements RequestHandler {
       return requestBodyValue;
     }
 
-    throw new IllegalArgumentException(format("Not sure what to do with parameter '%s' on resource method %s. "
-        + "Are you missing an annotation?", parameter, route.resourceMethod()));
+    // Don't recognize what's being asked for?  Have the InstanceProvider try to vend something
+    return this.instanceProvider.provide(parameter.getType());
   }
 
   protected String extractParameterName(Method method, Parameter parameter, Annotation annotation,
