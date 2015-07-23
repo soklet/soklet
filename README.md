@@ -231,10 +231,9 @@ public class HelloResource {
 
 #### Resource Method Return Types
 
-There are 6 standard resource method return types provided by Soklet.
+There are 5 standard resource method return types provided by Soklet.
 
 * ```ApiResponse``` Holds an arbitrary object that is meant to be written as an "API" response (often JSON or XML)
-* ```AsyncResponse``` Signifies to Soklet that no response should be written and you plan to use Servlet 3.1 nonblocking I/O to handle it yourself.  Useful if you have an expensive computation to perform and don't want to tie up a request thread
 * ```BinaryResponse``` Designed for writing arbitrary content to the response, e.g. streaming a PDF
 * ```CustomResponse``` Indicates Soklet should take no action - you are responsible for writing the response yourself
 * ```PageResponse``` Holds a logical page template name and optional model data to merge with it, meant to be written as an HTML page response. Some popular templating technologies are Velocity, Freemarker, and Mustache  

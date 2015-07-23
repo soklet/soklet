@@ -83,8 +83,8 @@ public class DefaultResponseHandler implements ResponseHandler {
           Optional.of(exception.get().getCause() instanceof Exception ? (Exception) exception.get().getCause()
               : exception.get());
 
-    // Do nothing at all if this was an async or custom response
-    if (response.isPresent() && (response.get() instanceof AsyncResponse || response.get() instanceof CustomResponse))
+    // Do nothing at all if this was a custom response
+    if (response.isPresent() && response.get() instanceof CustomResponse)
       return;
 
     // Figure out status code
