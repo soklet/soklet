@@ -106,76 +106,11 @@ public class DefaultRequestHandler implements RequestHandler {
     requireNonNull(route);
     requireNonNull(parameter);
 
-    if (parameter.getType().isAssignableFrom(HttpServletRequest.class))
-      return httpServletRequest;
+    if (parameter.getType().isAssignableFrom(HttpServletRequest.class)) return httpServletRequest;
 
-    if (parameter.getType().isAssignableFrom(HttpServletResponse.class))
-      return httpServletResponse;
+    if (parameter.getType().isAssignableFrom(HttpServletResponse.class)) return httpServletResponse;
 
     ParameterType parameterType = new ParameterType(parameter);
-
-    QueryParameter queryParameter = parameter.getAnnotation(QueryParameter.class);
-
-    if (queryParameter != null) {
-      String queryParameterName =
-          extractParameterName(route.resourceMethod(), parameter, queryParameter, queryParameter.value());
-
-      String[] rawQueryParameterValues = httpServletRequest.getParameterValues(queryParameterName);
-      List<String> queryParameterValues =
-          rawQueryParameterValues == null ? emptyList() : Arrays.asList(rawQueryParameterValues);
-      Type toType = parameterType.isList() ? parameterType.listElementType().get() : parameterType.normalizedType();
-
-      Optional<ValueConverter<Object, Object>> valueConverter = valueConverterRegistry.get(String.class, toType);
-
-      if (!valueConverter.isPresent())
-        throwValueConverterMissingException(valueConverter, parameter, String.class, toType, route);
-
-      // Special handling for Lists (support for multiple query parameters with the same name)
-      if (parameterType.isList()) {
-        List<Object> results = new ArrayList<>(queryParameterValues.size());
-
-        for (String queryParameterValue : queryParameterValues) {
-          if (queryParameterValue != null && queryParameterValue.trim().length() > 0)
-            try {
-              results.add(valueConverter.get().convert(queryParameterValue));
-            } catch (ValueConversionException e) {
-              throw new IllegalQueryParameterException(format(
-                "Illegal value '%s' was specified for query parameter '%s' (was expecting a value convertible to %s)",
-                queryParameterValue, queryParameterName, valueConverter.get().toType()), e, queryParameterName,
-                Optional.ofNullable(queryParameterValue));
-            }
-        }
-
-        if (!parameterType.isOptional() && results.size() == 0)
-          throw new MissingQueryParameterException(format("Required query parameter '%s' was not specified.",
-            queryParameterName), queryParameterName);
-
-        return parameterType.isOptional() ? (results.size() == 0 ? Optional.empty() : Optional.of(results)) : results;
-      }
-
-      // Non-list support
-      String queryParameterValue = queryParameterValues.size() > 0 ? queryParameterValues.get(0) : null;
-
-      if (queryParameterValue != null && queryParameterValue.trim().length() == 0)
-        queryParameterValue = null;
-
-      if (!parameterType.isOptional() && queryParameterValue == null)
-        throw new MissingQueryParameterException(format("Required query parameter '%s' was not specified.",
-          queryParameterName), queryParameterName);
-
-      Object result = null;
-
-      try {
-        result = valueConverter.get().convert(queryParameterValue);
-      } catch (ValueConversionException e) {
-        throw new IllegalQueryParameterException(format(
-          "Illegal value '%s' was specified for query parameter '%s' (was expecting a value convertible to %s)",
-          queryParameterValue, queryParameterName, valueConverter.get().toType()), e, queryParameterName,
-          Optional.ofNullable(queryParameterValue));
-      }
-
-      return parameterType.isOptional() ? Optional.ofNullable(result) : result;
-    }
 
     PathParameter pathParameter = parameter.getAnnotation(PathParameter.class);
 
@@ -215,6 +150,11 @@ public class DefaultRequestHandler implements RequestHandler {
       return result;
     }
 
+    QueryParameter queryParameter = parameter.getAnnotation(QueryParameter.class);
+
+    if (queryParameter != null)
+      return extractQueryParameterValue(httpServletRequest, route, parameter, queryParameter, parameterType);
+
     // TODO: complete these
     // RequestHeader requestHeader = parameter.getAnnotation(RequestHeader.class);
     // RequestCookie requestCookie = parameter.getAnnotation(RequestCookie.class);
@@ -229,8 +169,7 @@ public class DefaultRequestHandler implements RequestHandler {
 
       String requestBodyValue = trimToNull(stringFromStreamCloseAfterwards(httpServletRequest.getInputStream()));
 
-      if (parameterType.isOptional())
-        return Optional.ofNullable(requestBodyValue);
+      if (parameterType.isOptional()) return Optional.ofNullable(requestBodyValue);
 
       if (requestBodyValue == null)
         throw new MissingRequestBodyException(format("A request body is required for this resource."));
@@ -238,8 +177,75 @@ public class DefaultRequestHandler implements RequestHandler {
       return requestBodyValue;
     }
 
-    // Don't recognize what's being asked for?  Have the InstanceProvider try to vend something
+    // Don't recognize what's being asked for? Have the InstanceProvider try to vend something
     return this.instanceProvider.provide(parameter.getType());
+  }
+
+  protected Object extractQueryParameterValue(HttpServletRequest httpServletRequest, Route route, Parameter parameter,
+      QueryParameter queryParameter, ParameterType parameterType) {
+    requireNonNull(httpServletRequest);
+    requireNonNull(route);
+    requireNonNull(parameter);
+    requireNonNull(queryParameter);
+    requireNonNull(parameterType);
+
+    String queryParameterName =
+        extractParameterName(route.resourceMethod(), parameter, queryParameter, queryParameter.value());
+
+    String[] rawQueryParameterValues = httpServletRequest.getParameterValues(queryParameterName);
+    List<String> queryParameterValues =
+        rawQueryParameterValues == null ? emptyList() : Arrays.asList(rawQueryParameterValues);
+    Type toType = parameterType.isList() ? parameterType.listElementType().get() : parameterType.normalizedType();
+
+    Optional<ValueConverter<Object, Object>> valueConverter = valueConverterRegistry.get(String.class, toType);
+
+    if (!valueConverter.isPresent())
+      throwValueConverterMissingException(valueConverter, parameter, String.class, toType, route);
+
+    // Special handling for Lists (support for multiple query parameters with the same name)
+    if (parameterType.isList()) {
+      List<Object> results = new ArrayList<>(queryParameterValues.size());
+
+      for (String queryParameterValue : queryParameterValues) {
+        if (queryParameterValue != null && queryParameterValue.trim().length() > 0)
+          try {
+            results.add(valueConverter.get().convert(queryParameterValue));
+          } catch (ValueConversionException e) {
+            throw new IllegalQueryParameterException(format(
+              "Illegal value '%s' was specified for query parameter '%s' (was expecting a value convertible to %s)",
+              queryParameterValue, queryParameterName, valueConverter.get().toType()), e, queryParameterName,
+              Optional.ofNullable(queryParameterValue));
+          }
+      }
+
+      if (!parameterType.isOptional() && results.size() == 0)
+        throw new MissingQueryParameterException(format("Required query parameter '%s' was not specified.",
+          queryParameterName), queryParameterName);
+
+      return parameterType.isOptional() ? (results.size() == 0 ? Optional.empty() : Optional.of(results)) : results;
+    }
+
+    // Non-list support
+    String queryParameterValue = queryParameterValues.size() > 0 ? queryParameterValues.get(0) : null;
+
+    if (queryParameterValue != null && queryParameterValue.trim().length() == 0) queryParameterValue = null;
+
+    if (!parameterType.isOptional() && queryParameterValue == null)
+      throw new MissingQueryParameterException(format("Required query parameter '%s' was not specified.",
+        queryParameterName), queryParameterName);
+
+    Object result = null;
+
+    try {
+      result = valueConverter.get().convert(queryParameterValue);
+    } catch (ValueConversionException e) {
+      throw new IllegalQueryParameterException(format(
+        "Illegal value '%s' was specified for query parameter '%s' (was expecting a value convertible to %s)",
+        queryParameterValue, queryParameterName, valueConverter.get().toType()), e, queryParameterName,
+        Optional.ofNullable(queryParameterValue));
+    }
+
+    return parameterType.isOptional() ? Optional.ofNullable(result) : result;
   }
 
   protected String extractParameterName(Method method, Parameter parameter, Annotation annotation,
@@ -251,14 +257,13 @@ public class DefaultRequestHandler implements RequestHandler {
 
     String parameterName = trimToNull(annotationValue);
 
-    if (parameterName == null && parameter.isNamePresent())
-      parameterName = parameter.getName();
+    if (parameterName == null && parameter.isNamePresent()) parameterName = parameter.getName();
 
     if (parameterName == null)
-      throw new IllegalArgumentException(format(
-        "You must specify a @%s value for parameter '%s' for resource method %s "
-            + "or compile with -g:vars to preserve variable names", annotation.getClass().getSimpleName(), parameter,
-        method));
+      throw new IllegalArgumentException(format("Unable to automatically detect resource method parameter name. "
+          + "You must either explicitly specify a @%s value for parameter '%s' for resource method %s "
+          + "or compile with javac parameters -g:vars or -parameters to preserve parameter names for reflection",
+        annotation.annotationType().getSimpleName(), parameter, method));
 
     return parameterName;
   }
