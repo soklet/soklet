@@ -30,10 +30,12 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -45,10 +47,16 @@ import com.soklet.web.ResourcePath;
 import com.soklet.web.annotation.PathParameter;
 import com.soklet.web.annotation.QueryParameter;
 import com.soklet.web.annotation.RequestBody;
+import com.soklet.web.annotation.RequestCookie;
+import com.soklet.web.annotation.RequestHeader;
 import com.soklet.web.exception.IllegalPathParameterException;
 import com.soklet.web.exception.IllegalQueryParameterException;
+import com.soklet.web.exception.IllegalRequestCookieException;
+import com.soklet.web.exception.IllegalRequestHeaderException;
 import com.soklet.web.exception.MissingQueryParameterException;
 import com.soklet.web.exception.MissingRequestBodyException;
+import com.soklet.web.exception.MissingRequestCookieException;
+import com.soklet.web.exception.MissingRequestHeaderException;
 import com.soklet.web.exception.ResourceMethodExecutionException;
 import com.soklet.web.routing.Route;
 
@@ -151,13 +159,16 @@ public class DefaultRequestHandler implements RequestHandler {
     }
 
     QueryParameter queryParameter = parameter.getAnnotation(QueryParameter.class);
-
     if (queryParameter != null)
       return extractQueryParameterValue(httpServletRequest, route, parameter, queryParameter, parameterType);
 
-    // TODO: complete these
-    // RequestHeader requestHeader = parameter.getAnnotation(RequestHeader.class);
-    // RequestCookie requestCookie = parameter.getAnnotation(RequestCookie.class);
+    RequestHeader requestHeader = parameter.getAnnotation(RequestHeader.class);
+    if (requestHeader != null)
+      return extractRequestHeaderValue(httpServletRequest, route, parameter, requestHeader, parameterType);
+
+    RequestCookie requestCookie = parameter.getAnnotation(RequestCookie.class);
+    if (requestCookie != null)
+      return extractRequestCookieValue(httpServletRequest, route, parameter, requestCookie, parameterType);
 
     RequestBody requestBody = parameter.getAnnotation(RequestBody.class);
 
@@ -189,12 +200,103 @@ public class DefaultRequestHandler implements RequestHandler {
     requireNonNull(queryParameter);
     requireNonNull(parameterType);
 
-    String queryParameterName =
-        extractParameterName(route.resourceMethod(), parameter, queryParameter, queryParameter.value());
+    String name = extractParameterName(route.resourceMethod(), parameter, queryParameter, queryParameter.value());
 
-    String[] rawQueryParameterValues = httpServletRequest.getParameterValues(queryParameterName);
-    List<String> queryParameterValues =
-        rawQueryParameterValues == null ? emptyList() : Arrays.asList(rawQueryParameterValues);
+    String[] rawValues = httpServletRequest.getParameterValues(name);
+    List<String> values = rawValues == null ? emptyList() : Arrays.asList(rawValues);
+
+    return extractRequestValue(httpServletRequest, route, parameter, parameterType, name, values, "query parameter", (
+        message, ignored) -> {
+      return new MissingQueryParameterException(message, name);
+    }, (message, cause, ignored, value, valueMetadatum) -> {
+      return new IllegalQueryParameterException(message, cause, name, value);
+    });
+  }
+
+  protected Object extractRequestHeaderValue(HttpServletRequest httpServletRequest, Route route, Parameter parameter,
+      RequestHeader requestHeader, ParameterType parameterType) {
+    requireNonNull(httpServletRequest);
+    requireNonNull(route);
+    requireNonNull(parameter);
+    requireNonNull(requestHeader);
+    requireNonNull(parameterType);
+
+    String name = extractParameterName(route.resourceMethod(), parameter, requestHeader, requestHeader.value());
+    List<String> values = new ArrayList<>();
+
+    for (Enumeration<String> specificValues = httpServletRequest.getHeaders(name); specificValues.hasMoreElements();)
+      values.add(specificValues.nextElement());
+
+    return extractRequestValue(httpServletRequest, route, parameter, parameterType, name, values, "request header", (
+        message, ignored) -> {
+      return new MissingRequestHeaderException(message, name);
+    }, (message, cause, ignored, value, valueMetadatum) -> {
+      return new IllegalRequestHeaderException(message, cause, name, value);
+    });
+  }
+
+  protected Object extractRequestCookieValue(HttpServletRequest httpServletRequest, Route route, Parameter parameter,
+      RequestCookie requestCookie, ParameterType parameterType) {
+    requireNonNull(httpServletRequest);
+    requireNonNull(route);
+    requireNonNull(parameter);
+    requireNonNull(requestCookie);
+    requireNonNull(parameterType);
+
+    String name = extractParameterName(route.resourceMethod(), parameter, requestCookie, requestCookie.value());
+    Cookie[] cookies = httpServletRequest.getCookies();
+    List<String> values = new ArrayList<>();
+    List<Cookie> valuesMetadata = new ArrayList<>();
+
+    if (cookies != null) {
+      for (Cookie cookie : cookies) {
+        if (name.equals(cookie.getName())) {
+          values.add(cookie.getValue());
+          valuesMetadata.add(cookie);
+        }
+      }
+    }
+
+    return extractRequestValue(httpServletRequest, route, parameter, parameterType, name, values, "request cookie", (
+        message, ignored) -> {
+      return new MissingRequestCookieException(message, name);
+    }, (message, cause, ignored, value, valueMetadatum) -> {
+      return new IllegalRequestCookieException(message, cause, (Cookie) valueMetadatum.orElse(null));
+    });
+  }
+
+  @FunctionalInterface
+  protected static interface MissingExceptionProvider {
+    RuntimeException provide(String message, String name);
+  }
+
+  @FunctionalInterface
+  protected static interface IllegalExceptionProvider {
+    RuntimeException provide(String message, Exception cause, String name, Optional<String> value,
+        Optional<Object> valueMetadatum);
+  }
+
+  protected Object extractRequestValue(HttpServletRequest httpServletRequest, Route route, Parameter parameter,
+      ParameterType parameterType, String name, List<String> values, String description,
+      MissingExceptionProvider missingExceptionProvider, IllegalExceptionProvider illegalExceptionProvider) {
+    return extractRequestValue(httpServletRequest, route, parameter, parameterType, name, values, emptyList(),
+      description, missingExceptionProvider, illegalExceptionProvider);
+  }
+
+  protected Object extractRequestValue(HttpServletRequest httpServletRequest, Route route, Parameter parameter,
+      ParameterType parameterType, String name, List<String> values, List<Object> valuesMetadata, String description,
+      MissingExceptionProvider missingExceptionProvider, IllegalExceptionProvider illegalExceptionProvider) {
+    requireNonNull(httpServletRequest);
+    requireNonNull(route);
+    requireNonNull(parameter);
+    requireNonNull(parameterType);
+    requireNonNull(name);
+    requireNonNull(values);
+    requireNonNull(valuesMetadata);
+    requireNonNull(description);
+    requireNonNull(missingExceptionProvider);
+    requireNonNull(illegalExceptionProvider);
+
     Type toType = parameterType.isList() ? parameterType.listElementType().get() : parameterType.normalizedType();
 
     Optional<ValueConverter<Object, Object>> valueConverter = valueConverterRegistry.get(String.class, toType);
@@ -204,45 +306,45 @@ public class DefaultRequestHandler implements RequestHandler {
 
     // Special handling for Lists (support for multiple query parameters with the same name)
     if (parameterType.isList()) {
-      List<Object> results = new ArrayList<>(queryParameterValues.size());
+      List<Object> results = new ArrayList<>(values.size());
 
-      for (String queryParameterValue : queryParameterValues) {
-        if (queryParameterValue != null && queryParameterValue.trim().length() > 0)
+      for (int i = 0; i < values.size(); ++i) {
+        String value = values.get(i);
+
+        if (value != null && value.trim().length() > 0)
           try {
-            results.add(valueConverter.get().convert(queryParameterValue));
+            results.add(valueConverter.get().convert(value));
           } catch (ValueConversionException e) {
-            throw new IllegalQueryParameterException(format(
-              "Illegal value '%s' was specified for query parameter '%s' (was expecting a value convertible to %s)",
-              queryParameterValue, queryParameterName, valueConverter.get().toType()), e, queryParameterName,
-              Optional.ofNullable(queryParameterValue));
+            throw illegalExceptionProvider.provide(
+              format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
+                description, name, valueConverter.get().toType()), e, name, Optional.ofNullable(value), Optional
+                .ofNullable(valuesMetadata.size() > i ? valuesMetadata.get(i) : null));
           }
       }
 
       if (!parameterType.isOptional() && results.size() == 0)
-        throw new MissingQueryParameterException(format("Required query parameter '%s' was not specified.",
-          queryParameterName), queryParameterName);
+        throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
 
       return parameterType.isOptional() ? (results.size() == 0 ? Optional.empty() : Optional.of(results)) : results;
     }
 
     // Non-list support
-    String queryParameterValue = queryParameterValues.size() > 0 ? queryParameterValues.get(0) : null;
+    String value = values.size() > 0 ? values.get(0) : null;
 
-    if (queryParameterValue != null && queryParameterValue.trim().length() == 0) queryParameterValue = null;
+    if (value != null && value.trim().length() == 0) value = null;
 
-    if (!parameterType.isOptional() && queryParameterValue == null)
-      throw new MissingQueryParameterException(format("Required query parameter '%s' was not specified.",
-        queryParameterName), queryParameterName);
+    if (!parameterType.isOptional() && value == null)
+      throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
 
     Object result = null;
 
     try {
-      result = valueConverter.get().convert(queryParameterValue);
+      result = valueConverter.get().convert(value);
     } catch (ValueConversionException e) {
-      throw new IllegalQueryParameterException(format(
-        "Illegal value '%s' was specified for query parameter '%s' (was expecting a value convertible to %s)",
-        queryParameterValue, queryParameterName, valueConverter.get().toType()), e, queryParameterName,
-        Optional.ofNullable(queryParameterValue));
+      throw illegalExceptionProvider.provide(
+        format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
+          description, name, valueConverter.get().toType()), e, name, Optional.ofNullable(value), Optional
+          .ofNullable(valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null));
     }
 
     return parameterType.isOptional() ? Optional.ofNullable(result) : result;

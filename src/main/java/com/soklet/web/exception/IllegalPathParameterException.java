@@ -42,10 +42,10 @@ public class IllegalPathParameterException extends BadRequestException {
   }
 
   public String pathParameterName() {
-    return pathParameterName;
+    return this.pathParameterName;
   }
 
   public Optional<String> pathParameterValue() {
-    return pathParameterValue;
+    return this.pathParameterValue;
   }
 }

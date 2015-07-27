@@ -42,10 +42,10 @@ public class IllegalQueryParameterException extends BadRequestException {
   }
 
   public String queryParameterName() {
-    return queryParameterName;
+    return this.queryParameterName;
   }
 
   public Optional<String> queryParameterValue() {
-    return queryParameterValue;
+    return this.queryParameterValue;
   }
 }
