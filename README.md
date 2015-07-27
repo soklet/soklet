@@ -10,7 +10,7 @@ Minimalist infrastructure for Java webapps and microservices.
 * No external servlet container required
 * Fast startup, under a second on modern hardware
 * No 3rd party dependencies - uses only standard JDK APIs
-* Extensible - applications can easily hook/override core functionality vi DI
+* Extensible - applications can easily hook/override core functionality via DI
 * Self-contained deployment (single zip file)
 * Static resource filename hashing for efficient HTTP caching and versioning
 * Java 8+, Servlet 3.1+
