@@ -98,21 +98,18 @@ public class RequestFilter implements Filter {
     HttpMethod httpMethod = HttpMethod.valueOf(httpServletRequest.getMethod().toUpperCase(ENGLISH));
     String requestPath = httpServletRequest.getPathInfo();
 
-    if (logger.isLoggable(FINE))
-      logger.fine(format("Received %s", httpServletRequestDescription(httpServletRequest)));
+    if (logger.isLoggable(FINE)) logger.fine(format("Received %s", httpServletRequestDescription(httpServletRequest)));
 
     Optional<Route> route = routeMatcher.match(httpMethod, requestPath);
 
     if (shouldAllowRequestBodyRepeatableReads(httpServletRequest, httpServletResponse, route))
       httpServletRequest = new RequestBodyRepeatableReadWrapper(httpServletRequest);
 
-    RequestContext.set(new RequestContext(httpServletRequest, httpServletResponse, route));
-
     try {
-      filterChain.doFilter(httpServletRequest, httpServletResponse);
+      RequestContext.perform(new RequestContext(httpServletRequest, httpServletResponse, route), (requestContext) -> {
+        filterChain.doFilter(requestContext.httpServletRequest(), requestContext.httpServletResponse());
+      });
     } finally {
-      RequestContext.clear();
-
       time = nanoTime() - time;
 
       if (logger.isLoggable(FINE))
@@ -128,8 +125,7 @@ public class RequestFilter implements Filter {
     requireNonNull(httpServletRequest);
     requireNonNull(httpServletResponse);
 
-    if (!this.staticFilesUrlPattern.isPresent())
-      return false;
+    if (!this.staticFilesUrlPattern.isPresent()) return false;
 
     String pathInfo = httpServletRequest.getRequestURI();
     String normalizedStaticFilesUrlPattern = this.staticFilesUrlPattern.get();

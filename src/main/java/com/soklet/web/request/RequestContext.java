@@ -25,8 +25,10 @@ package com.soklet.web.request;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
+import java.io.IOException;
 import java.util.Optional;
 
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -50,9 +52,17 @@ public class RequestContext {
     this.route = requireNonNull(route);
   }
 
-  public static void set(RequestContext requestContext) {
+  public static void perform(RequestContext requestContext, RequestContextOperation requestContextOperation)
+      throws ServletException, IOException {
     requireNonNull(requestContext);
+    requireNonNull(requestContextOperation);
+
     REQUEST_CONTEXT_HOLDER.set(requestContext);
+    try {
+      requestContextOperation.perform(requestContext);
+    } finally {
+      REQUEST_CONTEXT_HOLDER.remove();
+    }
   }
 
   /**
@@ -63,13 +73,11 @@ public class RequestContext {
     RequestContext requestContext = REQUEST_CONTEXT_HOLDER.get();
 
     if (requestContext == null)
-      throw new IllegalStateException(format("No %s was set for this request.", RequestContext.class.getSimpleName()));
+      throw new IllegalStateException(format(
+        "No %s was set for this request. It must be set via %s#perform(RequestContext, RequestContextOperation)",
+        RequestContext.class.getSimpleName(), RequestContext.class.getSimpleName()));
 
     return requestContext;
-  }
-
-  public static void clear() {
-    REQUEST_CONTEXT_HOLDER.remove();
   }
 
   public HttpServletRequest httpServletRequest() {
@@ -82,5 +90,13 @@ public class RequestContext {
 
   public Optional<Route> route() {
     return this.route;
+  }
+
+  @FunctionalInterface
+  public static interface RequestContextOperation {
+    /**
+     * Executes an operation in the context of a web request.
+     */
+    void perform(RequestContext requestContext) throws ServletException, IOException;
   }
 }
