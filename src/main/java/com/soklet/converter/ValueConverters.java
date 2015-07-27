@@ -28,6 +28,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.UUID;
@@ -72,6 +73,7 @@ public final class ValueConverters {
     defaultValueConverters.add(new StringToLocalDateTimeValueConverter());
     defaultValueConverters.add(new StringToZoneIdValueConverter());
     defaultValueConverters.add(new StringToTimeZoneValueConverter());
+    defaultValueConverters.add(new StringToLocaleValueConverter());
 
     return defaultValueConverters;
   }
@@ -242,6 +244,13 @@ public final class ValueConverters {
       // Use ZoneId.of since it will throw an exception if the format is invalid.
       // TimeZone.getTimeZone() returns GMT for invalid formats, which is not the behavior we want
       return TimeZone.getTimeZone(ZoneId.of(from));
+    }
+  };
+
+  private static final class StringToLocaleValueConverter extends BasicValueConverter<String, Locale> {
+    @Override
+    protected Locale performConversion(String from) throws Exception {
+      return new Locale.Builder().setLanguageTag(from).build();
     }
   };
 }
