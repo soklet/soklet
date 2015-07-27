@@ -115,7 +115,6 @@ public class DefaultRequestHandler implements RequestHandler {
     requireNonNull(parameter);
 
     if (parameter.getType().isAssignableFrom(HttpServletRequest.class)) return httpServletRequest;
-
     if (parameter.getType().isAssignableFrom(HttpServletResponse.class)) return httpServletResponse;
 
     ParameterType parameterType = new ParameterType(parameter);
@@ -257,12 +256,21 @@ public class DefaultRequestHandler implements RequestHandler {
       }
     }
 
-    return extractRequestValue(httpServletRequest, route, parameter, parameterType, name, values, "request cookie", (
-        message, ignored) -> {
-      return new MissingRequestCookieException(message, name);
-    }, (message, cause, ignored, value, valueMetadatum) -> {
-      return new IllegalRequestCookieException(message, cause, (Cookie) valueMetadatum.orElse(null));
-    });
+    // Special hack to return Cookie instances directly if the parameter wants a Cookie
+    String cookieTypeName = Cookie.class.getTypeName();
+    boolean isCookieScalarType = cookieTypeName.equals(parameterType.normalizedType().getTypeName());
+    boolean isCookieListType =
+        parameterType.listElementType().isPresent()
+            && cookieTypeName.equals(parameterType.listElementType().get().getTypeName());
+
+    boolean returnWholeCookies = isCookieScalarType || isCookieListType;
+
+    return extractRequestValue(httpServletRequest, route, parameter, parameterType, name, values, valuesMetadata,
+      returnWholeCookies, "request cookie", (message, ignored) -> {
+        return new MissingRequestCookieException(message, name);
+      }, (message, cause, ignored, value, valueMetadatum) -> {
+        return new IllegalRequestCookieException(message, cause, (Cookie) valueMetadatum.get());
+      });
   }
 
   @FunctionalInterface
@@ -279,13 +287,14 @@ public class DefaultRequestHandler implements RequestHandler {
   protected Object extractRequestValue(HttpServletRequest httpServletRequest, Route route, Parameter parameter,
       ParameterType parameterType, String name, List<String> values, String description,
       MissingExceptionProvider missingExceptionProvider, IllegalExceptionProvider illegalExceptionProvider) {
-    return extractRequestValue(httpServletRequest, route, parameter, parameterType, name, values, emptyList(),
+    return extractRequestValue(httpServletRequest, route, parameter, parameterType, name, values, emptyList(), false,
       description, missingExceptionProvider, illegalExceptionProvider);
   }
 
   protected Object extractRequestValue(HttpServletRequest httpServletRequest, Route route, Parameter parameter,
-      ParameterType parameterType, String name, List<String> values, List<Object> valuesMetadata, String description,
-      MissingExceptionProvider missingExceptionProvider, IllegalExceptionProvider illegalExceptionProvider) {
+      ParameterType parameterType, String name, List<String> values, List<?> valuesMetadata,
+      boolean returnMetadataInsteadOfValues, String description, MissingExceptionProvider missingExceptionProvider,
+      IllegalExceptionProvider illegalExceptionProvider) {
     requireNonNull(httpServletRequest);
     requireNonNull(route);
     requireNonNull(parameter);
@@ -298,28 +307,32 @@ public class DefaultRequestHandler implements RequestHandler {
     requireNonNull(illegalExceptionProvider);
 
     Type toType = parameterType.isList() ? parameterType.listElementType().get() : parameterType.normalizedType();
-
     Optional<ValueConverter<Object, Object>> valueConverter = valueConverterRegistry.get(String.class, toType);
 
-    if (!valueConverter.isPresent())
+    if (!valueConverter.isPresent() && !returnMetadataInsteadOfValues)
       throwValueConverterMissingException(valueConverter, parameter, String.class, toType, route);
 
-    // Special handling for Lists (support for multiple query parameters with the same name)
+    // Special handling for Lists (support for multiple query parameters/headers/cookies with the same name)
     if (parameterType.isList()) {
       List<Object> results = new ArrayList<>(values.size());
 
-      for (int i = 0; i < values.size(); ++i) {
-        String value = values.get(i);
+      if (returnMetadataInsteadOfValues) {
+        for (Object valuesMetadatum : valuesMetadata)
+          results.add(valuesMetadatum);
+      } else {
+        for (int i = 0; i < values.size(); ++i) {
+          String value = values.get(i);
 
-        if (value != null && value.trim().length() > 0)
-          try {
-            results.add(valueConverter.get().convert(value));
-          } catch (ValueConversionException e) {
-            throw illegalExceptionProvider.provide(
-              format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
-                description, name, valueConverter.get().toType()), e, name, Optional.ofNullable(value), Optional
-                .ofNullable(valuesMetadata.size() > i ? valuesMetadata.get(i) : null));
-          }
+          if (value != null && value.trim().length() > 0)
+            try {
+              results.add(valueConverter.get().convert(value));
+            } catch (ValueConversionException e) {
+              throw illegalExceptionProvider.provide(
+                format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
+                  description, name, valueConverter.get().toType()), e, name, Optional.ofNullable(value), Optional
+                  .ofNullable(valuesMetadata.size() > i ? valuesMetadata.get(i) : null));
+            }
+        }
       }
 
       if (!parameterType.isOptional() && results.size() == 0)
@@ -329,22 +342,29 @@ public class DefaultRequestHandler implements RequestHandler {
     }
 
     // Non-list support
-    String value = values.size() > 0 ? values.get(0) : null;
-
-    if (value != null && value.trim().length() == 0) value = null;
-
-    if (!parameterType.isOptional() && value == null)
-      throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
-
     Object result = null;
 
-    try {
-      result = valueConverter.get().convert(value);
-    } catch (ValueConversionException e) {
-      throw illegalExceptionProvider.provide(
-        format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
-          description, name, valueConverter.get().toType()), e, name, Optional.ofNullable(value), Optional
-          .ofNullable(valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null));
+    if (returnMetadataInsteadOfValues) {
+      result = valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null;
+
+      if (!parameterType.isOptional() && result == null)
+        throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
+    } else {
+      String value = values.size() > 0 ? values.get(0) : null;
+
+      if (value != null && value.trim().length() == 0) value = null;
+
+      if (!parameterType.isOptional() && value == null)
+        throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
+
+      try {
+        result = valueConverter.get().convert(value);
+      } catch (ValueConversionException e) {
+        throw illegalExceptionProvider.provide(
+          format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
+            description, name, valueConverter.get().toType()), e, name, Optional.ofNullable(value), Optional
+            .ofNullable(valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null));
+      }
     }
 
     return parameterType.isOptional() ? Optional.ofNullable(result) : result;
