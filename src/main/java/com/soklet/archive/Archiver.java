@@ -39,6 +39,7 @@ import static java.util.regex.Pattern.compile;
 import static java.util.stream.Collectors.toSet;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -663,9 +664,11 @@ public class Archiver {
     requireNonNull(staticFile);
 
     String filename = staticFile.getFileName().toString().toLowerCase(ENGLISH);
+
+    int lastIndexOfFileSeparator = filename.lastIndexOf(File.separator);
     int lastIndexOfPeriod = filename.lastIndexOf(".");
 
-    if (lastIndexOfPeriod == -1 || filename.endsWith(".")) return true;
+    if (lastIndexOfPeriod == -1 || filename.endsWith(".") || lastIndexOfFileSeparator > lastIndexOfPeriod) return true;
 
     String extension = filename.substring(lastIndexOfPeriod + 1);
 
@@ -914,14 +917,19 @@ public class Archiver {
 
       String filename = file.toAbsolutePath().toString();
 
+      int lastIndexOfFileSeparator = filename.lastIndexOf(File.separator);
       int lastIndexOfPeriod = filename.lastIndexOf(".");
 
-      if (lastIndexOfPeriod == -1) return format("%s.%s", filename, hash);
+      // Handles files with no extensions
+        if (lastIndexOfPeriod == -1 || lastIndexOfFileSeparator > lastIndexOfPeriod)
+          return format("%s.%s", filename, hash);
 
-      if (filename.endsWith(".")) return format("%s%s", filename, hash);
+        // Handles files that end with a dot
+        if (filename.endsWith(".")) return format("%s%s", filename, hash);
 
-      return format("%s.%s%s", filename.substring(0, lastIndexOfPeriod), hash, filename.substring(lastIndexOfPeriod));
-    };
+        // Default behavior
+        return format("%s.%s%s", filename.substring(0, lastIndexOfPeriod), hash, filename.substring(lastIndexOfPeriod));
+      };
 
     private final Path rootDirectory;
     private final Optional<Path> hashedUrlManifestJsFile;
