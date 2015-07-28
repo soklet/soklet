@@ -188,9 +188,25 @@ public class HelloResource {
     Hello hello = helloService.createHello(command);
     return new ApiResponse(201, hello);
   }
+  
+  // Similar to @QueryParameter, you may use @RequestHeader and @RequestCookie to marshal
+  // request data to strongly-typed parameter values.
+  //
+  // It's possible to have multiple values for the same name for headers and cookies, so
+  // mapping as List is supported.
+  //
+  // For cookies, you may map to either javax.servlet.http.Cookie or other types (e.g. String)
+  // if you only need the value
+  @GET("/headers-and-cookies")
+  public String headersAndCookies(@RequestHeader("Accept-Language") String acceptLanguage,
+    @RequestCookie Cookie securityCookie, @RequestCookie Optional<List<Float>> numbers) {
+    return format("Language: %s, Security: %s, Numbers: %s", acceptLanguage, securityCookie, numbers);
+  }    
 
   // BinaryResponse allows you to specify arbitrary data and content type.
-  // Useful for PDFs, CSVs, edge cases
+  // Useful for PDFs, CSVs, edge cases.
+  //
+  // Soklet will automatically close the InputStream after the response has been written.
   @GET("/hello.pdf")
   public BinaryResponse helloPdf() {
     InputStream pdfInputStream = generateMyPdf();
@@ -205,6 +221,31 @@ public class HelloResource {
     return new RedirectResponse("http://google.com",
       temporary ? RedirectResponse.Type.TEMPORARY : RedirectResponse.Type.PERMANENT);
   }  
+  
+  // Returning a CustomResponse signifies that you want to do your own response
+  // handling and Soklet should take no action.
+  @GET("/oauth/token")
+  public CustomResponse oauthToken(HttpServletResponse httpServletResponse) {
+    // Example of Oltu OAuth integration
+    String accessToken = oauthIssuer.accessToken();
+    String refreshToken = oauthIssuer.refreshToken();
+		
+    OAuthResponse oauthResponse = OAuthASResponse
+      .tokenResponse(HttpServletResponse.SC_OK)
+      .setAccessToken(accessToken)
+      .setExpiresIn("3600")
+      .setRefreshToken(refreshToken)
+      .buildJSONMessage();
+		
+    httpServletResponse.setStatus(oauthResponse.getResponseStatus());
+		
+    PrintWriter printWriter = httpServletResponse.getWriter();
+    printWriter.print(oauthResponse.getBody());
+    printWriter.flush();
+    printWriter.close();  
+		
+    return CustomResponse.instance();
+  }
 
   // Methods with a void return type are 204s
   @GET("/no-response")
@@ -225,6 +266,22 @@ public class HelloResource {
   @POST("/quadruplets")
   public String multiples() {
     return "Multiples work as expected";
+  }
+  
+  // If your resource method accepts arguments Soklet doesn't recognize, Soklet
+  // asks your DI mechanism to provide them.
+  //
+  // Note: UserContext is not a Soklet construct, but it is a useful concept for many apps
+  @GET("/widgets")
+  public PageResponse widgets(UserContext userContext, WidgetService widgetService) {  
+    User currentUser = userContext.currentUser();
+    List<Widget> widgets = widgetService.findWidgetsForUser(currentUser);
+    
+    return new PageResponse("widgets", new HashMap<String, Object>() {
+      {
+        put("widgets", widgets);
+      }
+    });    
   }
 }
 ```
@@ -511,15 +568,17 @@ class TransactionInterceptor implements MethodInterceptor {
 // Guice interceptor that performs security checks
 class SecurityInterceptor implements MethodInterceptor {
   private final SecurityService securityService;
+  private final Provider<RequestContext> requestContextProvider;
   
-  SecurityInterceptor(SecurityService securityService) {
+  SecurityInterceptor(SecurityService securityService, Provider<RequestContext> requestContextProvider) {
     this.securityService = requireNonNull(securityService);
+    this.requestContextProvider = requireNonNull(requestContextProvider);
   }
   
   @Override
   public Object invoke(MethodInvocation methodInvocation) throws Throwable {
     // Special use of Soklet's RequestContext to get at current request and route information
-    RequestContext requestContext = RequestContext.get();    
+    RequestContext requestContext = requestContextProvider.get();    
     Optional<Route> route = requestContext.route();
     
     // If a route matched the URL, get the Java method that should be executed
