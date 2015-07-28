@@ -26,4 +26,12 @@ package com.soklet.web.response;
  * @author <a href="http://revetkn.com">Mark Allen</a>
  * @since 1.1.7
  */
-public class CustomResponse {}
+public class CustomResponse {
+  private static final CustomResponse INSTANCE = new CustomResponse();
+
+  public CustomResponse() {}
+
+  public static CustomResponse instance() {
+    return INSTANCE;
+  }
+}
