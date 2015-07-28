@@ -149,11 +149,9 @@ public class HelloResource {
   // Example URL: /hello-there?name=Steve
   @GET("/hello-there")
   public PageResponse helloTherePage(@QueryParameter String name) {
-    return new PageResponse("hello-there", new HashMap<String, Object>() {
-      {
-        put("name", name);
-      }
-    });
+    return new PageResponse("hello-there", new HashMap<String, Object>() {{
+      put("name", name);     
+    }});
   }  
 
   // ApiResponse is similar to PageResponse, except that it accepts an arbitrary Object
@@ -171,12 +169,10 @@ public class HelloResource {
   
   @GET("/api/hello-there")
   public ApiResponse helloThereApi(@QueryParameter String name, @QueryParameter GreetingType type) {
-    return new ApiResponse(new HashMap<String, Object>() {
-      {
-        put("name", name);
-        put("type", type);
-      }
-    });
+    return new ApiResponse(new HashMap<String, Object>() {{      
+      put("name", name);
+      put("type", type);      
+    }});
   }
 
   // You may specify @RequestBody on a String or InputStream parameter for easy access.
@@ -277,11 +273,9 @@ public class HelloResource {
     User currentUser = userContext.currentUser();
     List<Widget> widgets = widgetService.findWidgetsForUser(currentUser);
     
-    return new PageResponse("widgets", new HashMap<String, Object>() {
-      {
-        put("widgets", widgets);
-      }
-    });    
+    return new PageResponse("widgets", new HashMap<String, Object>() {{
+      put("widgets", widgets);
+    }});
   }
 }
 ```
@@ -330,11 +324,9 @@ class MustachePageResponseWriter implements PageResponseWriter {
     } else {
       // There was a problem - render an error page
       name = "error";
-      model = new HashMap<String, Object>() {
-        {
-          put("status", httpServletResponse.getStatus());
-        }
-      };
+      model = new HashMap<String, Object>() {{
+        put("status", httpServletResponse.getStatus());
+      }};
     }
 
     // Create a mustache instance and write the merged output to the response
@@ -367,12 +359,10 @@ class JacksonApiResponseWriter implements ApiResponseWriter {
       model = apiResponse.get().model().orElse(null);
     } else {
       // There was a problem - render an error response
-      model = new HashMap<String, Object>() {
-        {
-          put("status", httpServletResponse.getStatus());
-          put("message", "An error occurred!");
-        }
-      };
+      model = new HashMap<String, Object>() {{
+        put("status", httpServletResponse.getStatus());
+        put("message", "An error occurred!");        
+      }};
     }
 
     // Write JSON to the response
@@ -494,13 +484,11 @@ class AppModule extends AbstractModule {
     
     // Standard Jetty CrossOriginFilter (CORS) configuration.
     // These security options are unsafe, but may be useful for development
-    FilterConfiguration corsFilter = new FilterConfiguration(CrossOriginFilter.class, "/*", new HashMap<String, String>() {
-      {
-        put(CrossOriginFilter.ALLOWED_METHODS_PARAM, "GET,POST,PUT,DELETE");
-        put(CrossOriginFilter.ALLOWED_ORIGINS_PARAM, "*");
-        put(CrossOriginFilter.ALLOWED_HEADERS_PARAM, "*");
-      }
-    }));
+    FilterConfiguration corsFilter = new FilterConfiguration(CrossOriginFilter.class, "/*", new HashMap<String, String>() {{
+      put(CrossOriginFilter.ALLOWED_METHODS_PARAM, "GET,POST,PUT,DELETE");
+      put(CrossOriginFilter.ALLOWED_ORIGINS_PARAM, "*");
+      put(CrossOriginFilter.ALLOWED_HEADERS_PARAM, "*");
+    }}));
     
     // Captcha servlet configuration
     ServletConfiguration captchaServlet = new ServletConfiguration(ExampleCaptchaServlet.class, "/captcha");    
