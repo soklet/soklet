@@ -382,10 +382,12 @@ public class DefaultRequestHandler implements RequestHandler {
     if (parameterName == null && parameter.isNamePresent()) parameterName = parameter.getName();
 
     if (parameterName == null)
-      throw new IllegalArgumentException(format("Unable to automatically detect resource method parameter name. "
-          + "You must either explicitly specify a @%s value for parameter '%s' for resource method %s "
-          + "or compile with javac parameters -g:vars or -parameters to preserve parameter names for reflection",
-        annotation.annotationType().getSimpleName(), parameter, method));
+      throw new IllegalArgumentException(
+        format(
+          "Unable to automatically detect resource method parameter name. "
+              + "You must either explicitly specify a @%s value for parameter %s - for example, @%s(\"name-goes-here\") - "
+              + "or compile with javac flag \"-parameters\" to preserve parameter names for reflection. Offending resource method was %s",
+          annotation.annotationType().getSimpleName(), parameter, annotation.annotationType().getSimpleName(), method));
 
     return parameterName;
   }
