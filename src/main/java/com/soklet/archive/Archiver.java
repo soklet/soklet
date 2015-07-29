@@ -786,11 +786,11 @@ public class Archiver {
         String mavenHome = trimToNull(System.getProperty("soklet.MAVEN_HOME"));
 
         if (mavenHome == null) mavenHome = trimToNull(System.getenv("MAVEN_HOME"));
-
+        if (mavenHome == null) mavenHome = trimToNull(System.getenv("M2_HOME"));
         if (mavenHome == null)
           throw new ArchiveException(
             "In order to determine the absolute path to your mvn executable, the soklet.MAVEN_HOME system property "
-                + "or the MAVEN_HOME environment variable must be defined");
+                + "or either the M2_HOME or MAVEN_HOME environment variables must be defined");
 
         this.mavenExecutableFile = Paths.get(format("%s/bin/mvn", mavenHome));
       }
