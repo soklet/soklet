@@ -89,7 +89,14 @@ public class RequestFilter implements Filter {
     HttpServletResponse httpServletResponse = (HttpServletResponse) servletResponse;
 
     if (shouldSkipFilter(httpServletRequest, httpServletResponse)) {
-      filterChain.doFilter(httpServletRequest, httpServletResponse);
+      HttpServletRequest pinnedHttpServletRequest = httpServletRequest;
+
+      // We still bind request/response to the current thread, but skip route matching and any other work
+      RequestContext.perform(new RequestContext(httpServletRequest, httpServletResponse, Optional.empty()), (
+          requestContext) -> {
+        filterChain.doFilter(pinnedHttpServletRequest, httpServletResponse);
+      });
+      
       return;
     }
 
