@@ -1034,6 +1034,8 @@ public class Archiver {
      * @param file
      *          the file to (possibly) alter
      * @return bytes for the altered file, or empty if the file does not need to be altered
+     * @throws Exception
+     *           if an error occurs while altering the file
      */
     Optional<InputStream> alterFile(Archiver archiver, Path workingDirectory, Path file) throws Exception;
   }
