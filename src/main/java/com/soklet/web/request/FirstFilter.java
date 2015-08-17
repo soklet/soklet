@@ -62,15 +62,15 @@ import com.soklet.web.routing.RouteMatcher;
  * @since 1.1.2
  */
 @Singleton
-public class RequestFilter implements Filter {
+public class FirstFilter implements Filter {
   public static String STATIC_FILES_URL_PATTERN_PARAM = "STATIC_FILES_URL_PATTERN";
 
   private final RouteMatcher routeMatcher;
   private Optional<String> staticFilesUrlPattern = Optional.empty();
-  private final Logger logger = Logger.getLogger(RequestFilter.class.getName());
+  private final Logger logger = Logger.getLogger(FirstFilter.class.getName());
 
   @Inject
-  public RequestFilter(RouteMatcher routeMatcher) {
+  public FirstFilter(RouteMatcher routeMatcher) {
     this.routeMatcher = Objects.requireNonNull(routeMatcher);
   }
 

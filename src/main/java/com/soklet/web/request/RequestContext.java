@@ -41,31 +41,20 @@ import com.soklet.web.routing.Route;
 public class RequestContext {
   private static final ThreadLocal<RequestContext> REQUEST_CONTEXT_HOLDER = new ThreadLocal<>();
 
-  private final HttpServletRequest httpServletRequest;
-  private final HttpServletResponse httpServletResponse;
+  // Should not be possible to update these outside of the context of a single thread, but marking volatile just in case
+  private volatile HttpServletRequest httpServletRequest;
+  private volatile HttpServletResponse httpServletResponse;
+
   private final Optional<Route> route;
 
-  public RequestContext(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
-      Optional<Route> route) {
+  RequestContext(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, Optional<Route> route) {
     this.httpServletRequest = requireNonNull(httpServletRequest);
     this.httpServletResponse = requireNonNull(httpServletResponse);
     this.route = requireNonNull(route);
   }
 
-  public static void perform(RequestContext requestContext, RequestContextOperation requestContextOperation)
-      throws ServletException, IOException {
-    requireNonNull(requestContext);
-    requireNonNull(requestContextOperation);
-
-    REQUEST_CONTEXT_HOLDER.set(requestContext);
-    try {
-      requestContextOperation.perform(requestContext);
-    } finally {
-      REQUEST_CONTEXT_HOLDER.remove();
-    }
-  }
-
   /**
+   * @return the request context for the current thread
    * @throws IllegalStateException
    *           if no {@code RequestContext} has been set
    */
@@ -78,6 +67,29 @@ public class RequestContext {
         RequestContext.class.getSimpleName(), RequestContext.class.getSimpleName()));
 
     return requestContext;
+  }
+
+  static void perform(RequestContext requestContext, RequestContextOperation requestContextOperation)
+      throws ServletException, IOException {
+    requireNonNull(requestContext);
+    requireNonNull(requestContextOperation);
+
+    REQUEST_CONTEXT_HOLDER.set(requestContext);
+    try {
+      requestContextOperation.perform(requestContext);
+    } finally {
+      REQUEST_CONTEXT_HOLDER.remove();
+    }
+  }
+
+  void updateHttpServletRequest(HttpServletRequest httpServletRequest) {
+    requireNonNull(httpServletRequest);
+    this.httpServletRequest = httpServletRequest;
+  }
+
+  void updateHttpServletResponse(HttpServletResponse httpServletResponse) {
+    requireNonNull(httpServletResponse);
+    this.httpServletResponse = httpServletResponse;
   }
 
   public HttpServletRequest httpServletRequest() {
@@ -93,7 +105,7 @@ public class RequestContext {
   }
 
   @FunctionalInterface
-  public static interface RequestContextOperation {
+  static interface RequestContextOperation {
     /**
      * Executes an operation in the context of a web request.
      */
