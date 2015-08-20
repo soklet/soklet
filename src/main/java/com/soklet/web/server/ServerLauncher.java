@@ -75,17 +75,38 @@ public class ServerLauncher {
 
   public void launch(StoppingStrategy stoppingStrategy) throws ServerException {
     requireNonNull(stoppingStrategy);
-    launch(stoppingStrategy, () -> {});
+    launch(stoppingStrategy, () -> {}, () -> {});
   }
 
-  public void launch(StoppingStrategy stoppingStrategy, ServerLifecycleOperation onShutdownOperation)
+  public void launchWithStartupOperation(StoppingStrategy stoppingStrategy, ServerLifecycleOperation onStartupOperation)
       throws ServerException {
     requireNonNull(stoppingStrategy);
+    requireNonNull(onStartupOperation);
+    launch(stoppingStrategy, onStartupOperation, () -> {});
+  }
+
+  public void launchWithShutdownOperation(StoppingStrategy stoppingStrategy,
+      ServerLifecycleOperation onShutdownOperation) throws ServerException {
+    requireNonNull(stoppingStrategy);
+    requireNonNull(onShutdownOperation);
+    launch(stoppingStrategy, () -> {}, onShutdownOperation);
+  }
+
+  public void launch(StoppingStrategy stoppingStrategy, ServerLifecycleOperation onStartupOperation,
+      ServerLifecycleOperation onShutdownOperation) throws ServerException {
+    requireNonNull(stoppingStrategy);
+    requireNonNull(onStartupOperation);
     requireNonNull(onShutdownOperation);
 
     stopExistingServerProcess();
     server.start();
     createProcessIdFile();
+
+    try {
+      onStartupOperation.perform();
+    } catch (Throwable e) {
+      throw new ServerException("An error occurred while performing server startup callback", e);
+    }
 
     getRuntime().addShutdownHook(new Thread() {
       public void run() {
@@ -117,8 +138,7 @@ public class ServerLauncher {
   }
 
   protected void stopExistingServerProcess() {
-    if (!Files.isRegularFile(processIdFile()))
-      return;
+    if (!Files.isRegularFile(processIdFile())) return;
 
     String previousProcessId;
     try {
@@ -157,8 +177,7 @@ public class ServerLauncher {
   }
 
   protected void deleteProcessIdFile() {
-    if (!Files.isRegularFile(processIdFile()))
-      return;
+    if (!Files.isRegularFile(processIdFile())) return;
 
     try {
       Files.delete(processIdFile());
@@ -204,13 +223,11 @@ public class ServerLauncher {
   protected String currentProcessId() {
     String currentProcessId = getRuntimeMXBean().getName();
 
-    if (isBlank(currentProcessId))
-      throw new IllegalStateException("Unable to extract current process ID.");
+    if (isBlank(currentProcessId)) throw new IllegalStateException("Unable to extract current process ID.");
 
     int indexOfAtSymbol = currentProcessId.indexOf("@");
 
-    if (indexOfAtSymbol > 0)
-      currentProcessId = currentProcessId.substring(0, indexOfAtSymbol);
+    if (indexOfAtSymbol > 0) currentProcessId = currentProcessId.substring(0, indexOfAtSymbol);
 
     return currentProcessId;
   }
