@@ -800,19 +800,25 @@ public class Archiver {
         return this;
       }
 
-      public Builder cleanArguments(List<String> cleanArguments) {
-        this.cleanArguments = unmodifiableList(new ArrayList<>(requireNonNull(cleanArguments)));
+      public Builder cleanArguments(Function<List<String>, List<String>> function) {
+        this.cleanArguments = unmodifiableList(new ArrayList<>(requireNonNull(function.apply(this.cleanArguments))));
         return this;
       }
 
-      public Builder compileArguments(List<String> compileArguments) {
-        this.compileArguments = unmodifiableList(new ArrayList<>(requireNonNull(compileArguments)));
+      public Builder compileArguments(Function<List<String>, List<String>> function) {
+        this.compileArguments =
+            unmodifiableList(new ArrayList<>(requireNonNull(function.apply(this.compileArguments))));
         return this;
       }
 
-      public Builder dependenciesArguments(List<String> dependenciesArguments) {
-        this.dependenciesArguments = unmodifiableList(new ArrayList<>(requireNonNull(dependenciesArguments)));
+      public Builder dependenciesArguments(Function<List<String>, List<String>> function) {
+        this.dependenciesArguments =
+            unmodifiableList(new ArrayList<>(requireNonNull(function.apply(this.dependenciesArguments))));
         return this;
+      }
+
+      public MavenSupport build() {
+        return new MavenSupport(this);
       }
     }
 
