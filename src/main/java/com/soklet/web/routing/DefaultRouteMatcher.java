@@ -17,11 +17,11 @@
 package com.soklet.web.routing;
 
 import static java.lang.String.format;
+import static java.util.Collections.emptySet;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.joining;
-import static java.util.stream.Collectors.toSet;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -32,12 +32,15 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.logging.Logger;
 
 import com.soklet.classindex.ClassIndex;
 import com.soklet.web.HttpMethod;
 import com.soklet.web.ResourcePath;
 import com.soklet.web.ResourcePath.Component;
+import com.soklet.web.ResourcePath.ComponentType;
 import com.soklet.web.annotation.DELETE;
 import com.soklet.web.annotation.GET;
 import com.soklet.web.annotation.HEAD;
@@ -183,20 +186,40 @@ public class DefaultRouteMatcher implements RouteMatcher {
     if (matchingRoutes.size() == 1)
       return matchingRoutes.stream().findFirst();
 
-    // Multiple matches are OK so long as one is a literal match.
+    // Multiple matches are OK so long as one is more specific than any others.
     // If none are a literal match, we have a problem
     if (matchingRoutes.size() > 1) {
-      Set<Route> literalMatchingRoutes =
-          matchingRoutes.stream().filter(matchingRoute -> matchingRoute.resourcePath().isLiteral()).collect(toSet());
+      Set<Route> mostSpecificRoutes = mostSpecificRoutes(matchingRoutes);
 
-      if (literalMatchingRoutes.size() == 1)
-        return literalMatchingRoutes.stream().findFirst();
+      if (mostSpecificRoutes.size() == 1)
+        return mostSpecificRoutes.stream().findFirst();
 
       logger.severe(format("Multiple routes match '%s %s'. Ambiguous matches were:\n%s", httpMethod.name(),
         requestPath, matchingRoutes.stream().map(route -> route.toString()).collect(joining("\n"))));
     }
 
     return Optional.empty();
+  }
+  
+  protected Set<Route> mostSpecificRoutes(Set<Route> routes) {
+    requireNonNull(routes);
+    
+    SortedMap<Long, Set<Route>> routesByPlaceholderComponentCount = new TreeMap<>(); 
+    
+    for(Route route : routes) {
+      long literalComponentCount = route.resourcePath().components().stream().filter(component -> component.type() == ComponentType.PLACEHOLDER).count();
+      Set<Route> routesWithEquivalentComponentCount = routesByPlaceholderComponentCount.get(literalComponentCount);
+      
+      if(routesWithEquivalentComponentCount == null) {
+        routesWithEquivalentComponentCount = new HashSet<>();
+        routesByPlaceholderComponentCount.put(literalComponentCount, routesWithEquivalentComponentCount);
+      }
+      
+      routesWithEquivalentComponentCount.add(route);
+    }
+    
+    return routesByPlaceholderComponentCount.size() == 0 ? emptySet() : 
+      routesByPlaceholderComponentCount.get(routesByPlaceholderComponentCount.keySet().stream().findFirst().get());
   }
 
   protected Map<HttpMethod, Set<Method>> createResourceMethodsByHttpMethod(Set<Method> resourceMethods) {
