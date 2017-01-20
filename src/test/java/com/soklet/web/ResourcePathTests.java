@@ -21,7 +21,8 @@ import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 /**
- * @author Transmogrify LLC.
+ * @author <a href="http://revetkn.com">Mark Allen</a>
+ * @since 1.0.0
  */
 public class ResourcePathTests {
   @Test
