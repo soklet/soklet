@@ -33,5 +33,5 @@ Once granted, make sure your ```~/.m2/settings.xml``` file has ```ossrh``` entri
 You can then push to Maven central:
 
 ```
-$ mvn clean deploy
+$ mvn clean deploy -Dgpg.passphrase=YOUR_PASSPHRASE
 ```
