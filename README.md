@@ -31,13 +31,13 @@ Minimalist infrastructure for Java webapps and microservices.
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.1.12</version>
+  <version>1.1.13</version>
 </dependency>
 ```
 
 #### Direct Download
 
-If you don't use Maven, you can drop [soklet-1.1.12.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.12/soklet-1.1.12.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
+If you don't use Maven, you can drop [soklet-1.1.13.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.13/soklet-1.1.13.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
 
 <!--
 ## Bootstrap Your App
@@ -118,7 +118,7 @@ public class HelloResource {
     return new BigDecimal(100.25);
   }
 
-  // Path parameters and query parameters are easy to access via annotations.
+  // Path parameters, query parameters, and form parameters are easy to access via annotations.
   // By default, reflection is used to determine their names,
   // but you can override by supplying an explicit name.
   //
@@ -139,6 +139,13 @@ public class HelloResource {
       out.println(format("Saying %d hellos to %s!", times.get(), target));
     else
       out.println(format("Not saying hello to %s!", target));
+  }
+
+  // Currently Soklet does not have built-in multipart support (coming soon!)
+  // But you can pull out form parameters if your form's content type is application/x-www-form-urlencoded.
+  @POST("/example-non-multipart-post")
+  public void examplePost(@FormParameter Long id, @FormParameter Optional<String> name) {
+    database.executeInsert("INSERT INTO account VALUES (?,?)", id, name.orElse("Anonymous"));
   }
 
   // Soklet has the concept of a PageResponse, which associates a logical page name with an optional
@@ -509,7 +516,7 @@ class AppModule extends AbstractModule {
 
 #### Interceptors
 
-It's preferred to use resource method interceptors instead of Servlet Filters when possible.  DI frameworks normally provide interceptor functionality on which you can build.
+Resource method interceptors are an alternative to traditional Servlet Filters.  DI frameworks normally provide interceptor functionality on which you can build.
 
 Examples of common interceptors follow. Note that Soklet does not provide any interceptors, database access, or security features out of the box - these examples are for illustration only.
 
