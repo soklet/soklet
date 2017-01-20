@@ -22,7 +22,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.1.13
+ * @since 1.1.12
  */
 public class IllegalFormParameterException extends BadRequestException {
 	private final String formParameterName;

@@ -23,7 +23,7 @@ import static com.soklet.util.StringUtils.trimToNull;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.1.13
+ * @since 1.1.12
  */
 public final class RequestUtils {
 	private RequestUtils() {
