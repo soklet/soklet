@@ -522,76 +522,78 @@ class AppModule extends AbstractModule {
 
 ### WebSockets
 
-Oracle provides a nice explanation of WebSockets in its <a href="http://docs.oracle.com/middleware/1213/wls/WLPRG/websockets.htm">WebLogic documentation</a>.  Here's an important quote:
+Oracle provides a nice explanation of WebSockets in its <a href="http://docs.oracle.com/middleware/1213/wls/WLPRG/websockets.htm" target="_blank">WebLogic documentation</a>.  Here's an important quote:
 
 > As opposed to servlets, WebSocket endpoints are instantiated multiple times. The container creates one instance of an endpoint for each connection to its deployment URI. Each instance is associated with one and only one connection. This behavior facilitates keeping user state for each connection and simplifies development because only one thread is executing the code of an endpoint instance at any given time.
 
 A common implementation pattern is for a WebSocket to listen for events from some other system component using a Listener pattern or event bus and, when system state changes, data is written to the client.
 
 ```java
-// Example of a WebSocket that listens for events from the backend and sends notifications down to the client.
+// Example of a WebSocket that listens for events from the backend
+// and sends notifications down to the client.
 public class TeamWebSocket implements MyLeaderboardServiceListener {
-	// WebSocket session
-	private Session session;
-	// Hypothetical backend service
-	private MyLeaderboardService leaderboardService;
+  // WebSocket session
+  private Session session;
+  // Hypothetical backend service
+  private MyLeaderboardService leaderboardService;
 
   @Inject
-	public TeamWebSocket(MyLeaderboardService leaderboardService) {
-		this.leaderboardService = leaderboardService;
-	}
+  public TeamWebSocket(MyLeaderboardService leaderboardService) {
+    this.leaderboardService = leaderboardService;
+  }
 
-	@OnOpen
-	public void onWebSocketConnect(Session session) {
+  @OnOpen
+  public void onWebSocketConnect(Session session) {
     // Hold a reference to our session - this is how we communicate with the client
     this.session = session;
 
-		// Listen for events from our backend
-		leaderboardService.registerListener(this);
-	}
+    // Listen for events from our backend
+    leaderboardService.registerListener(this);
+  }
 
-	@OnMessage
-	public void onWebSocketText(String message) {
-		out.println("WebSocket received a message: " + message);
-	}
+  @OnMessage
+  public void onWebSocketText(String message) {
+    out.println("WebSocket received a message: " + message);
+  }
 
-	@OnClose
-	public void onWebSocketClose(CloseReason closeReason) {
-		out.println("WebSocket closed. Reason: " + closeReason.getCloseCode());
+  @OnClose
+  public void onWebSocketClose(CloseReason closeReason) {
+    out.println("WebSocket closed. Reason: " + closeReason.getCloseCode());
 
-		// Do some cleanup.  Be careful if your service holds strong reference to
-		// its listeners - this could cause memory leaks
-		leaderboardService.deregisterListener(this);
+    // Do some cleanup.  Be careful if your service holds strong reference to
+    // its listeners - this could cause memory leaks
+    leaderboardService.deregisterListener(this);
 
-		this.session = null;
-	}
+    this.session = null;
+  }
 
-	@OnError
-	public void onWebSocketError(Throwable throwable) {
-		out.println("WebSocket encountered an error: " + throwable.getMessage());
-	}
+  @OnError
+  public void onWebSocketError(Throwable throwable) {
+    out.println("WebSocket encountered an error: " + throwable.getMessage());
+  }
 
-	// Implements our hypothetical MyLeaderboardServiceListener.
-	// If the backend tells us data has changed, write some data to the client
-	@Override
-	public void onLeaderboardChanged() {
-		if(session == null)
-			return;
+  // Implements our hypothetical MyLeaderboardServiceListener.
+  // If the backend tells us data has changed, write some data to the client
+  @Override
+  public void onLeaderboardChanged() {
+    if(session == null)
+      return;
 
-		try {
-			MyLeaderboard latestLeaderboard = leaderboardService.findLeaderboard();
-			session.getBasicRemote().sendText(MyJsonUtils.toJson(latestLeaderboard));
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
+    try {
+      MyLeaderboard latestLeaderboard = leaderboardService.findLeaderboard();
+      session.getBasicRemote().sendText(MyJsonUtils.toJson(latestLeaderboard));
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+  }
 }
 ```
 
-It is important to be careful of memory leaks.  Suppose your backend maintains a collection of strong references to its webSocket Listeners.  If your webSockets don't deregister themselves correctly, they will never be deallocated.  A good strategy here is to store your listeners using weak references, like this:
+It is important to be careful of memory leaks.  Suppose your backend maintains a collection of strong references to its WebSocket Listeners.  If your WebSockets don't deregister themselves correctly, they will never be deallocated.  A good strategy here is to store listeners using weak references, like this:
 
 ```java
 public class MyLeaderboardService {
+  // This set automatically purges itself of "expired" weak references thanks to WeakHashMap!
   private final Set<MyLeaderboardServiceListener> listeners =
     Collections.newSetFromMap(new WeakHashMap<MyLeaderboardServiceListener, Object>());
 
