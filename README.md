@@ -493,14 +493,15 @@ class AppModule extends AbstractModule {
     
     // Standard Jetty CrossOriginFilter (CORS) configuration.
     // These security options are unsafe, but may be useful for development
-    FilterConfiguration corsFilter = new FilterConfiguration(CrossOriginFilter.class, "/*", new HashMap<String, String>() {{
-      put(CrossOriginFilter.ALLOWED_METHODS_PARAM, "GET,POST,PUT,DELETE");
-      put(CrossOriginFilter.ALLOWED_ORIGINS_PARAM, "*");
-      put(CrossOriginFilter.ALLOWED_HEADERS_PARAM, "*");
-    }}));
+    FilterConfiguration corsFilter = new FilterConfiguration(CrossOriginFilter.class, "/*",
+      new HashMap<String, String>() {{
+        put(CrossOriginFilter.ALLOWED_METHODS_PARAM, "GET,POST,PUT,DELETE");
+        put(CrossOriginFilter.ALLOWED_ORIGINS_PARAM, "*");
+        put(CrossOriginFilter.ALLOWED_HEADERS_PARAM, "*");
+      }}));
     
     // Captcha servlet configuration
-    ServletConfiguration captchaServlet = new ServletConfiguration(ExampleCaptchaServlet.class, "/captcha");
+    ServletConfiguration captchaServlet = new ServletConfiguration(MyCaptchaServlet.class, "/captcha");
 
     // WebSocket configuration.
     // See "WebSockets" section below for an example of how you might implement one
@@ -526,12 +527,14 @@ Oracle provides a nice explanation of WebSockets in its <a href="http://docs.ora
 
 > As opposed to servlets, WebSocket endpoints are instantiated multiple times. The container creates one instance of an endpoint for each connection to its deployment URI. Each instance is associated with one and only one connection. This behavior facilitates keeping user state for each connection and simplifies development because only one thread is executing the code of an endpoint instance at any given time.
 
+Like Servlets and Filters, Soklet will use your dependency injection library to provide WebSocket instances.  All you have to do is build your WebSockets using JSR-356 standard annotations like `@OnOpen`, `@OnMessage`, `@OnClose`, and `@OnError`.
+
 A common implementation pattern is for a WebSocket to listen for events from some other system component using a Listener pattern or event bus and, when system state changes, data is written to the client.
 
 ```java
 // Example of a WebSocket that listens for events from the backend
 // and sends notifications down to the client.
-public class TeamWebSocket implements MyLeaderboardServiceListener {
+public class LeaderboardWebSocket implements MyLeaderboardServiceListener {
   // WebSocket session
   private Session session;
   // Hypothetical backend service
