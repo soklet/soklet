@@ -528,7 +528,7 @@ Oracle provides a nice explanation of WebSockets in its <a href="http://docs.ora
 
 A common implementation pattern is for a WebSocket to listen for events from some other system component using a Listener pattern or event bus and, when system state changes, data is written to the client.
 
-```
+```java
 // Example of a WebSocket that listens for events from the backend and sends notifications down to the client.
 public class TeamWebSocket implements MyLeaderboardServiceListener {
 	// WebSocket session
@@ -590,7 +590,7 @@ public class TeamWebSocket implements MyLeaderboardServiceListener {
 
 It is important to be careful of memory leaks.  Suppose your backend maintains a collection of strong references to its webSocket Listeners.  If your webSockets don't deregister themselves correctly, they will never be deallocated.  A good strategy here is to store your listeners using weak references, like this:
 
-```
+```java
 public class MyLeaderboardService {
   private final Set<MyLeaderboardServiceListener> listeners =
     Collections.newSetFromMap(new WeakHashMap<MyLeaderboardServiceListener, Object>());
