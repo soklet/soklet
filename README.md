@@ -533,7 +533,7 @@ A common implementation pattern is for a WebSocket to listen for events from som
 ```java
 // Example of a WebSocket that listens for events from the backend
 // and sends notifications down to the client.
-@ServerEndpoint(value = "/websockets/team")
+@ServerEndpoint(value = "/websockets/leaderboard")
 public class LeaderboardWebSocket implements MyLeaderboardServiceListener {
   // WebSocket session
   private Session session;
