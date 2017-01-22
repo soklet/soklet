@@ -541,7 +541,7 @@ public class LeaderboardWebSocket implements MyLeaderboardServiceListener {
   private MyLeaderboardService leaderboardService;
 
   @Inject
-  public TeamWebSocket(MyLeaderboardService leaderboardService) {
+  public LeaderboardWebSocket(MyLeaderboardService leaderboardService) {
     this.leaderboardService = leaderboardService;
   }
 
