@@ -598,7 +598,8 @@ It is important to be careful of memory leaks.  Suppose your backend maintains a
 public class MyLeaderboardService {
   // This set automatically purges itself of "expired" weak references thanks to WeakHashMap!
   private final Set<MyLeaderboardServiceListener> listeners =
-    Collections.newSetFromMap(new WeakHashMap<MyLeaderboardServiceListener, Object>());
+    Collections.synchronizedSet(Collections.newSetFromMap(
+      new WeakHashMap<MyLeaderboardServiceListener, Boolean>()));
 
   public void registerListener(MyLeaderboardServiceListener listener) {
     listeners.add(listener);
