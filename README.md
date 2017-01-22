@@ -31,13 +31,13 @@ Minimalist infrastructure for Java webapps and microservices.
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.1.14</version>
+  <version>1.1.15</version>
 </dependency>
 ```
 
 #### Direct Download
 
-If you don't use Maven, you can drop [soklet-1.1.14.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.14/soklet-1.1.14.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
+If you don't use Maven, you can drop [soklet-1.1.15.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.15/soklet-1.1.15.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
 
 <!--
 ## Bootstrap Your App
@@ -500,7 +500,12 @@ class AppModule extends AbstractModule {
     }}));
     
     // Captcha servlet configuration
-    ServletConfiguration captchaServlet = new ServletConfiguration(ExampleCaptchaServlet.class, "/captcha");    
+    ServletConfiguration captchaServlet = new ServletConfiguration(ExampleCaptchaServlet.class, "/captcha");
+
+    // WebSocket configuration.
+    // See "WebSockets" section below for an example of how you might implement one
+    WebSocketConfiguration leaderboardWebSocket = new WebSocketConfiguration(LeaderboardWebSocket.class,
+      "/webSockets/leaderboard");
     
     // Finally, build the server instance
     return JettyServer.forInstanceProvider(instanceProvider)
@@ -508,9 +513,93 @@ class AppModule extends AbstractModule {
       .port(port)
       .staticFilesConfiguration(staticFilesConfiguration)
       .servletConfigurations(singletonList(captchaServlet))
-      .filterConfigurations(singletonList(corsFilter))      
+      .filterConfigurations(singletonList(corsFilter))
+      .webSocketConfigurations(singletonList(leaderboardWebSocket))
       .build();
   }
+}
+```
+
+### WebSockets
+
+Oracle provides a nice explanation of WebSockets in its <a href="http://docs.oracle.com/middleware/1213/wls/WLPRG/websockets.htm">WebLogic documentation</a>.  Here's an important quote:
+
+> As opposed to servlets, WebSocket endpoints are instantiated multiple times. The container creates one instance of an endpoint for each connection to its deployment URI. Each instance is associated with one and only one connection. This behavior facilitates keeping user state for each connection and simplifies development because only one thread is executing the code of an endpoint instance at any given time.
+
+A common implementation pattern is for a WebSocket to listen for events from some other system component using a Listener pattern or event bus and, when system state changes, data is written to the client.
+
+```
+// Example of a WebSocket that listens for events from the backend and sends notifications down to the client.
+public class TeamWebSocket implements MyLeaderboardServiceListener {
+	// WebSocket session
+	private Session session;
+	// Hypothetical backend service
+	private MyLeaderboardService leaderboardService;
+
+  @Inject
+	public TeamWebSocket(MyLeaderboardService leaderboardService) {
+		this.leaderboardService = leaderboardService;
+	}
+
+	@OnOpen
+	public void onWebSocketConnect(Session session) {
+    // Hold a reference to our session - this is how we communicate with the client
+    this.session = session;
+
+		// Listen for events from our backend
+		leaderboardService.registerListener(this);
+	}
+
+	@OnMessage
+	public void onWebSocketText(String message) {
+		out.println("WebSocket received a message: " + message);
+	}
+
+	@OnClose
+	public void onWebSocketClose(CloseReason closeReason) {
+		out.println("WebSocket closed. Reason: " + closeReason.getCloseCode());
+
+		// Do some cleanup.  Be careful if your service holds strong reference to
+		// its listeners - this could cause memory leaks
+		leaderboardService.deregisterListener(this);
+
+		this.session = null;
+	}
+
+	@OnError
+	public void onWebSocketError(Throwable throwable) {
+		out.println("WebSocket encountered an error: " + throwable.getMessage());
+	}
+
+	// Implements our hypothetical MyLeaderboardServiceListener.
+	// If the backend tells us data has changed, write some data to the client
+	@Override
+	public void onLeaderboardChanged() {
+		if(session == null)
+			return;
+
+		try {
+			MyLeaderboard latestLeaderboard = leaderboardService.findLeaderboard();
+			session.getBasicRemote().sendText(MyJsonUtils.toJson(latestLeaderboard));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+}
+```
+
+It is important to be careful of memory leaks.  Suppose your backend maintains a collection of strong references to its webSocket Listeners.  If your webSockets don't deregister themselves correctly, they will never be deallocated.  A good strategy here is to store your listeners using weak references, like this:
+
+```
+public class MyLeaderboardService {
+  private final Set<MyLeaderboardServiceListener> listeners =
+    Collections.newSetFromMap(new WeakHashMap<MyLeaderboardServiceListener, Object>());
+
+  public void registerListener(MyLeaderboardServiceListener listener) {
+    listeners.add(listener);
+  }
+
+  // Rest of implementation elided
 }
 ```
 
@@ -884,12 +973,6 @@ You might have code like this which runs at startup:
 // Configures Logback; also bridges java.util.Logging calls
 LoggingUtils.initializeLogback(Paths.get("config/logback.xml"));
 ```
-
-<!--
-## FAQ
-
-Coming soon
--->
 
 ## About
 
