@@ -31,13 +31,13 @@ Minimalist infrastructure for Java webapps and microservices.
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.1.15</version>
+  <version>1.1.16</version>
 </dependency>
 ```
 
 #### Direct Download
 
-If you don't use Maven, you can drop [soklet-1.1.15.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.15/soklet-1.1.15.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
+If you don't use Maven, you can drop [soklet-1.1.16.jar](http://central.maven.org/maven2/com/soklet/soklet/1.1.16/soklet-1.1.16.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
 
 <!--
 ## Bootstrap Your App
@@ -505,8 +505,7 @@ class AppModule extends AbstractModule {
 
     // WebSocket configuration.
     // See "WebSockets" section below for an example of how you might implement one
-    WebSocketConfiguration leaderboardWebSocket = new WebSocketConfiguration(LeaderboardWebSocket.class,
-      "/webSockets/leaderboard");
+    WebSocketConfiguration leaderboardWebSocket = new WebSocketConfiguration(LeaderboardWebSocket.class);
     
     // Finally, build the server instance
     return JettyServer.forInstanceProvider(instanceProvider)
@@ -527,13 +526,14 @@ Oracle provides a nice explanation of WebSockets in its <a href="http://docs.ora
 
 > As opposed to servlets, WebSocket endpoints are instantiated multiple times. The container creates one instance of an endpoint for each connection to its deployment URI. Each instance is associated with one and only one connection. This behavior facilitates keeping user state for each connection and simplifies development because only one thread is executing the code of an endpoint instance at any given time.
 
-Like Servlets and Filters, Soklet will use your dependency injection library to provide WebSocket instances.  All you have to do is build your WebSockets using JSR-356 standard annotations like `@OnOpen`, `@OnMessage`, `@OnClose`, and `@OnError`.
+Like Servlets and Filters, Soklet will use your dependency injection library to provide WebSocket instances.  All you have to do is build your WebSockets using standard JSR-356 annotations like `@ServerEndpoint`, `@OnOpen`, `@OnMessage`, `@OnClose`, and `@OnError`.  The `@ServerEndpoint` annotation is required for the WebSocket to function.
 
 A common implementation pattern is for a WebSocket to listen for events from some other system component using a Listener pattern or event bus and, when system state changes, data is written to the client.
 
 ```java
 // Example of a WebSocket that listens for events from the backend
 // and sends notifications down to the client.
+@ServerEndpoint(value = "/websockets/team")
 public class LeaderboardWebSocket implements MyLeaderboardServiceListener {
   // WebSocket session
   private Session session;

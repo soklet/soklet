@@ -24,6 +24,7 @@ package com.soklet.web.server;
 
 import javax.servlet.http.HttpServlet;
 import java.util.Objects;
+import java.util.Optional;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -36,9 +37,13 @@ public class WebSocketConfiguration {
 	private final Class<? extends HttpServlet> webSocketClass;
 	private final String url;
 
+	public WebSocketConfiguration(Class<? extends HttpServlet> webSocketClass) {
+		this(webSocketClass, null);
+	}
+
 	public WebSocketConfiguration(Class<? extends HttpServlet> webSocketClass, String url) {
 		this.webSocketClass = requireNonNull(webSocketClass);
-		this.url = requireNonNull(url);
+		this.url = url;
 	}
 
 	@Override
@@ -70,7 +75,7 @@ public class WebSocketConfiguration {
 		return webSocketClass;
 	}
 
-	public String url() {
-		return url;
+	public Optional<String> url() {
+		return Optional.ofNullable(url);
 	}
 }
