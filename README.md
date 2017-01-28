@@ -573,7 +573,7 @@ public class LeaderboardWebSocket implements MyLeaderboardServiceListener {
 
     // Do some cleanup.  Be careful if your service holds strong reference to
     // its listeners - this could cause memory leaks
-    leaderboardService.deregisterListener(this);
+    leaderboardService.unregisterListener(this);
 
     this.session = null;
   }
