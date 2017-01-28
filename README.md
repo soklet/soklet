@@ -531,6 +531,15 @@ Like Servlets and Filters, Soklet will use your dependency injection library to 
 A common implementation pattern is for a WebSocket to listen for events from some other system component using a Listener pattern or event bus and, when system state changes, data is written to the client.
 
 ```java
+import javax.websocket.OnClose;
+import javax.websocket.OnError;
+import javax.websocket.OnMessage;
+import javax.websocket.OnOpen;
+import javax.websocket.Session;
+import javax.websocket.server.ServerEndpoint;
+
+// Other imports elided
+
 // Example of a WebSocket that listens for events from the backend
 // and sends notifications down to the client.
 @ServerEndpoint(value = "/websockets/leaderboard")
