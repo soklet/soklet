@@ -571,7 +571,7 @@ public class LeaderboardWebSocket implements MyLeaderboardServiceListener {
   public void onWebSocketClose(CloseReason closeReason) {
     out.println("WebSocket closed. Reason: " + closeReason.getCloseCode());
 
-    // Do some cleanup.  Be careful if your service holds strong reference to
+    // Do some cleanup.  Be careful if your service holds strong references to
     // its listeners - this could cause memory leaks
     leaderboardService.unregisterListener(this);
 
@@ -608,7 +608,7 @@ import javax.inject.singleton;
 
 @Singleton
 public class MyLeaderboardService {
-  // This set automatically purges itself of "expired" weak references thanks to WeakHashMap
+  // This Set automatically purges itself of "expired" weak references thanks to WeakHashMap
   private final Set<MyLeaderboardServiceListener> listeners =
     Collections.synchronizedSet(Collections.newSetFromMap(
       new WeakHashMap<MyLeaderboardServiceListener, Boolean>()));
