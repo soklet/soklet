@@ -531,14 +531,13 @@ Like Servlets and Filters, Soklet will use your dependency injection library to 
 A common implementation pattern is for a WebSocket to listen for events from some other system component using a Listener pattern or event bus and, when system state changes, data is written to the client.
 
 ```java
+// Other imports elided
 import javax.websocket.OnClose;
 import javax.websocket.OnError;
 import javax.websocket.OnMessage;
 import javax.websocket.OnOpen;
 import javax.websocket.Session;
 import javax.websocket.server.ServerEndpoint;
-
-// Other imports elided
 
 // Example of a WebSocket that listens for events from the backend
 // and sends notifications down to the client.
@@ -604,14 +603,32 @@ public class LeaderboardWebSocket implements MyLeaderboardServiceListener {
 It is important to be careful of memory leaks.  Suppose your backend maintains a collection of strong references to its WebSocket Listeners.  If your WebSockets don't deregister themselves correctly, they will never be deallocated.  A good strategy here is to store listeners using weak references, like this:
 
 ```java
+// Other imports elided
+import javax.inject.singleton;
+
+@Singleton
 public class MyLeaderboardService {
-  // This set automatically purges itself of "expired" weak references thanks to WeakHashMap!
+  // This set automatically purges itself of "expired" weak references thanks to WeakHashMap
   private final Set<MyLeaderboardServiceListener> listeners =
     Collections.synchronizedSet(Collections.newSetFromMap(
       new WeakHashMap<MyLeaderboardServiceListener, Boolean>()));
 
   public void registerListener(MyLeaderboardServiceListener listener) {
     listeners.add(listener);
+  }
+
+  public void unregisterListener(MyLeaderboardServiceListener listener) {
+    listeners.remove(listener);
+  }
+
+  protected void notifyListeners() {
+    synchronized (listeners) {
+      for(MyLeaderboardServiceListener listener : listeners) {
+        // A real implementation might invoke this method via an ExecutorService.
+        // You don't want to block waiting for lots of WebSockets to finish processing
+        listener.onLeaderboardChanged();
+      }
+    }
   }
 
   // Rest of implementation elided
