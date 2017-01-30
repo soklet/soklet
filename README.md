@@ -989,12 +989,12 @@ Soklet uses ```java.util.logging``` internally.  The usual way to hook into this
 <dependency>
   <groupId>ch.qos.logback</groupId>
   <artifactId>logback-classic</artifactId>
-  <version>1.1.3</version>
+  <version>1.1.9</version>
 </dependency>
 <dependency>
   <groupId>org.slf4j</groupId>
   <artifactId>jul-to-slf4j</artifactId>
-  <version>1.7.12</version>
+  <version>1.7.22</version>
 </dependency>
 ```
 
