@@ -141,13 +141,6 @@ public class HelloResource {
       out.println(format("Not saying hello to %s!", target));
   }
 
-  // Currently Soklet does not have built-in multipart support (coming soon!)
-  // But you can pull out form parameters if your form's content type is application/x-www-form-urlencoded.
-  @POST("/example-non-multipart-post")
-  public void examplePost(@FormParameter Long id, @FormParameter Optional<String> name) {
-    database.executeInsert("INSERT INTO account VALUES (?,?)", id, name.orElse("Anonymous"));
-  }
-
   // Soklet has the concept of a PageResponse, which associates a logical page name with an optional
   // map of data to be merged into it and written to the HTTP response.
   //
@@ -192,6 +185,14 @@ public class HelloResource {
     HelloCreateCommand command = parse(requestBody, HelloCreateCommand.class);
     Hello hello = helloService.createHello(command);
     return new ApiResponse(201, hello);
+  }
+
+  // Currently Soklet does not have built-in multipart support (coming soon!)
+  // But you can pull out form parameters if your form's content type is
+  // application/x-www-form-urlencoded.
+  @POST("/example-non-multipart-post")
+  public void examplePost(@FormParameter Long id, @FormParameter Optional<String> name) {
+    database.executeInsert("INSERT INTO account VALUES (?,?)", id, name.orElse("Anonymous"));
   }
   
   // Similar to @QueryParameter, you may use @RequestHeader and @RequestCookie to marshal
@@ -889,13 +890,13 @@ mustache.execute(writer, model).flush();
 Your Mustache markup might look like this:
 
 ```html
-<link href="{{#hashedUrl}}/static/css/myapp.css{{/hashedUrl}}" type="text/css" rel="stylesheet" />
+<link href="{{#hashedUrl}}/static/css/my-app.css{{/hashedUrl}}" type="text/css" rel="stylesheet" />
 ```
 
 ...and then at runtime:
 
 ```html
-<link href="/static/css/myapp.7EA2BAEF93DA17B978E20E0507A1F56E.css" type="text/css" rel="stylesheet" />
+<link href="/static/css/my-app.7EA2BAEF93DA17B978E20E0507A1F56E.css" type="text/css" rel="stylesheet" />
 ```
 
 #### Hashing Example: API Responses
@@ -931,13 +932,13 @@ Might render
 #### Hashing Example: JavaScript
 
 ```js
-myapp.hashedUrl = function(url) {
+myApp.hashedUrl = function(url) {
   var hashedUrl = soklet.hashedUrls[url];
   return hashedUrl ? hashedUrl : url;
 };
 
 // Creates a tag like <img src='/static/images/cartoon.D958A21CF25246CA0ED6AA8BF0B1940E.png'/>
-$("body").append("<img src='" + myapp.hashedUrl("/static/images/cartoon.png") + "'/>);
+$("body").append("<img src='" + myApp.hashedUrl("/static/images/cartoon.png") + "'/>");
 ```
 
 #### CSS File Hashing
