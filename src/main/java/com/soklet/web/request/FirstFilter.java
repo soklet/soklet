@@ -24,7 +24,10 @@ package com.soklet.web.request;
 
 import com.soklet.util.RequestUtils;
 import com.soklet.util.RequestUtils.QueryStringParseStrategy;
+import com.soklet.util.ResponseUtils;
 import com.soklet.web.HttpMethod;
+import com.soklet.web.exception.ResourceMethodExecutionException;
+import com.soklet.web.response.ResponseHandler;
 import com.soklet.web.routing.Route;
 import com.soklet.web.routing.RouteMatcher;
 
@@ -41,6 +44,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.soklet.util.FormatUtils.httpServletRequestDescription;
+import static com.soklet.util.FormatUtils.stackTraceForThrowable;
+import static com.soklet.util.IoUtils.copyStreamCloseAfterwards;
 import static com.soklet.util.IoUtils.copyStreamToBytesCloseAfterwards;
 import static java.lang.String.format;
 import static java.lang.System.nanoTime;
@@ -58,12 +63,14 @@ public class FirstFilter implements Filter {
 	public static String STATIC_FILES_URL_PATTERN_PARAM = "STATIC_FILES_URL_PATTERN";
 
 	private final RouteMatcher routeMatcher;
+	private final ResponseHandler responseHandler;
 	private Optional<String> staticFilesUrlPattern = Optional.empty();
 	private final Logger logger = Logger.getLogger(FirstFilter.class.getName());
 
 	@Inject
-	public FirstFilter(RouteMatcher routeMatcher) {
+	public FirstFilter(RouteMatcher routeMatcher, ResponseHandler responseHandler) {
 		this.routeMatcher = Objects.requireNonNull(routeMatcher);
+		this.responseHandler = Objects.requireNonNull(responseHandler);
 	}
 
 	@Override
@@ -109,6 +116,18 @@ public class FirstFilter implements Filter {
 			RequestContext.perform(new RequestContext(httpServletRequest, httpServletResponse, route), (requestContext) -> {
 				filterChain.doFilter(requestContext.httpServletRequest(), requestContext.httpServletResponse());
 			});
+		} catch(Exception e) {
+			logException(httpServletRequest, httpServletResponse, route, Optional.empty(), e);
+
+			try {
+				responseHandler.handleResponse(httpServletRequest, httpServletResponse, route, Optional.empty(), Optional.of(e));
+			} catch (Exception e2) {
+				logger.warning(format(
+						"Exception occurred while trying to handle an error response, falling back to a failsafe response...\n%s",
+						stackTraceForThrowable(e2)));
+
+				writeFailsafeErrorResponse(httpServletRequest, httpServletResponse);
+			}
 		} finally {
 			time = nanoTime() - time;
 
@@ -158,6 +177,25 @@ public class FirstFilter implements Filter {
 		requireNonNull(route);
 
 		return true;
+	}
+
+	protected void logException(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
+															Optional<Route> route, Optional<Object> response, Exception exception) {
+		requireNonNull(httpServletRequest);
+		requireNonNull(httpServletResponse);
+		requireNonNull(route);
+		requireNonNull(response);
+		requireNonNull(exception);
+
+		ResponseUtils.logException(httpServletRequest, httpServletResponse, route, response, exception);
+	}
+
+	protected void writeFailsafeErrorResponse(HttpServletRequest httpServletRequest,
+																						HttpServletResponse httpServletResponse) throws ServletException, IOException {
+		requireNonNull(httpServletRequest);
+		requireNonNull(httpServletResponse);
+
+		ResponseUtils.writeFailsafeErrorResponse(httpServletRequest, httpServletResponse);
 	}
 
 	/**

@@ -41,6 +41,7 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.soklet.util.ResponseUtils;
 import com.soklet.web.HttpMethod;
 import com.soklet.web.exception.MethodNotAllowedException;
 import com.soklet.web.exception.NotFoundException;
@@ -146,36 +147,21 @@ public class RoutingServlet extends HttpServlet {
   }
 
   protected void logException(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
-      Optional<Route> route, Optional<Object> response, Exception exception) {
+                              Optional<Route> route, Optional<Object> response, Exception exception) {
     requireNonNull(httpServletRequest);
     requireNonNull(httpServletResponse);
     requireNonNull(route);
     requireNonNull(response);
     requireNonNull(exception);
 
-    if (!logger.isLoggable(FINE))
-      return;
-
-    Throwable throwable = exception;
-
-    // Unwrap these for more compact stack traces
-    if (exception instanceof ResourceMethodExecutionException)
-      throwable = exception.getCause();
-
-    logger.fine(format("Exception occurred while handling %s\n%s", httpServletRequestDescription(httpServletRequest),
-      stackTraceForThrowable(throwable)));
+    ResponseUtils.logException(httpServletRequest, httpServletResponse, route, response, exception);
   }
 
   protected void writeFailsafeErrorResponse(HttpServletRequest httpServletRequest,
-      HttpServletResponse httpServletResponse) throws ServletException, IOException {
+                                            HttpServletResponse httpServletResponse) throws ServletException, IOException {
     requireNonNull(httpServletRequest);
     requireNonNull(httpServletResponse);
 
-    httpServletResponse.setContentType("text/html;charset=UTF-8");
-    httpServletResponse.setStatus(500);
-
-    try (OutputStream outputStream = httpServletResponse.getOutputStream()) {
-      copyStreamCloseAfterwards(new ByteArrayInputStream("500 error".getBytes(UTF_8)), outputStream);
-    }
+    ResponseUtils.writeFailsafeErrorResponse(httpServletRequest, httpServletResponse);
   }
 }
