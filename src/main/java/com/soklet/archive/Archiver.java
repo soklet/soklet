@@ -615,11 +615,17 @@ public class Archiver {
       }
 
       String replacement;
+      boolean isAbsoluteUrl = originalUrl.startsWith("http:") || originalUrl.startsWith("https:") || originalUrl.startsWith("://");
+
+      if(isAbsoluteUrl)
+        rewrittenUrl = originalUrl;
 
       if (processingImportUrl) {
-        logger.warning(format(
-          "Warning: CSS @import statements are not fully supported yet. Detected @import of %s in %s", originalUrl,
-          cssFileRelativeFilename));
+        if(!isAbsoluteUrl)
+          logger.warning(format(
+            "Warning: CSS @import statements are not fully supported yet. Detected @import of %s in %s", originalUrl,
+            cssFileRelativeFilename));
+
         replacement = format("@import \"%s\";", rewrittenUrl);
       } else {
         replacement = format("url(\"%s\")", rewrittenUrl);
