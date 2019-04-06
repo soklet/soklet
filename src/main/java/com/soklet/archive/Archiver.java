@@ -60,6 +60,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -92,6 +93,7 @@ public class Archiver {
   private final Optional<ArchiveSupportOperation> preProcessOperation;
   private final Optional<ArchiveSupportOperation> postProcessOperation;
   private final Optional<FileAlterationOperation> fileAlterationOperation;
+  private final Optional<Supplier<String>> zipRootSupplier;
 
   private final Logger logger = Logger.getLogger(Archiver.class.getName());
 
@@ -106,6 +108,7 @@ public class Archiver {
     this.preProcessOperation = builder.preProcessOperation;
     this.postProcessOperation = builder.postProcessOperation;
     this.fileAlterationOperation = builder.fileAlterationOperation;
+    this.zipRootSupplier = builder.zipRootSupplier;
 
     // Enforce relative paths
     for (ArchivePath archivePath : archivePaths) {
@@ -219,7 +222,7 @@ public class Archiver {
         workingArchivePaths.add(ArchivePaths.get(hashedUrlManifestFile.get(), Paths.get(".")));
 
       // Finally - create the archive
-      createZip(archiveFile(), extractFilesFromarchivePaths(workingArchivePaths));
+      createZip(archiveFile(), extractFilesFromArchivePaths(workingArchivePaths));
 
       logger.info(format("Archive %s was created successfully.", archiveFile));
     } finally {
@@ -249,10 +252,20 @@ public class Archiver {
       zipOutputStream = new ZipOutputStream(fileOutputStream);
       zipOutputStream.setLevel(9);
 
-      // Zip root is the name of the archive without the extension, e.g. "app.zip" would be "app".
-      String zipRoot = archiveFile.getFileName().toString();
-      int indexOfPeriod = zipRoot.indexOf(".");
-      if (indexOfPeriod != -1 && zipRoot.length() > 1) zipRoot = zipRoot.substring(0, indexOfPeriod);
+      String zipRoot;
+
+      if(zipRootSupplier.isPresent()) {
+        zipRoot = zipRootSupplier.get().get();
+      } else {
+        // Default zip root is the name of the archive without the extension, e.g. "app.zip" would be "app".
+        zipRoot = archiveFile.getFileName().toString();
+        int indexOfPeriod = zipRoot.indexOf(".");
+        if (indexOfPeriod != -1 && zipRoot.length() > 1) zipRoot = zipRoot.substring(0, indexOfPeriod);
+      }
+
+      // Failsafe if supplier returns null
+      if(zipRoot == null)
+        zipRoot = ".";
 
       SortedSet<ArchivePath> sortedarchivePathsToInclude = new TreeSet<ArchivePath>(new Comparator<ArchivePath>() {
         @Override
@@ -284,7 +297,7 @@ public class Archiver {
     }
   }
 
-  protected Set<ArchivePath> extractFilesFromarchivePaths(Set<ArchivePath> pathsToInclude) {
+  protected Set<ArchivePath> extractFilesFromArchivePaths(Set<ArchivePath> pathsToInclude) {
     requireNonNull(pathsToInclude);
 
     Set<ArchivePath> filesToInclude = new HashSet<>();
@@ -690,6 +703,7 @@ public class Archiver {
     private Optional<ArchiveSupportOperation> preProcessOperation = Optional.empty();
     private Optional<ArchiveSupportOperation> postProcessOperation = Optional.empty();
     private Optional<FileAlterationOperation> fileAlterationOperation = Optional.empty();
+    private Optional<Supplier<String>> zipRootSupplier = Optional.empty();
 
     protected Builder(Path archiveFile) {
       this.archiveFile = requireNonNull(archiveFile);
@@ -732,6 +746,11 @@ public class Archiver {
 
     public Builder fileAlterationOperation(FileAlterationOperation fileAlterationOperation) {
       this.fileAlterationOperation = Optional.ofNullable(fileAlterationOperation);
+      return this;
+    }
+
+    public Builder zipRootSupplier(Supplier<String> zipRootSupplier) {
+      this.zipRootSupplier = Optional.ofNullable(zipRootSupplier);
       return this;
     }
 
