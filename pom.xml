@@ -81,6 +81,7 @@
 				<artifactId>maven-javadoc-plugin</artifactId>
 				<version>2.10.2</version>
 				<configuration>
+					<source>1.8</source>
 					<links>
 						<link>https://docs.oracle.com/javase/8/docs/api/</link>
 						<link>http://docs.oracle.com/javaee/7/api/</link>
@@ -151,6 +152,23 @@
 			<groupId>javax.servlet</groupId>
 			<artifactId>javax.servlet-api</artifactId>
 			<version>3.1.0</version>
+		</dependency>
+
+		<!-- For ClassIndex - now required as of Java 11 -->
+		<dependency>
+			<groupId>javax.xml.bind</groupId>
+			<artifactId>jaxb-api</artifactId>
+			<version>2.3.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.sun.xml.bind</groupId>
+			<artifactId>jaxb-core</artifactId>
+			<version>2.3.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.sun.xml.bind</groupId>
+			<artifactId>jaxb-impl</artifactId>
+			<version>2.3.0</version>
 		</dependency>
 
 		<!-- Optional run-time dependencies -->
