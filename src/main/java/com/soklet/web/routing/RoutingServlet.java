@@ -16,39 +16,30 @@
 
 package com.soklet.web.routing;
 
-import static com.soklet.util.FormatUtils.httpServletRequestDescription;
-import static com.soklet.util.FormatUtils.stackTraceForThrowable;
-import static com.soklet.util.IoUtils.copyStreamCloseAfterwards;
-import static java.lang.String.format;
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Locale.ENGLISH;
-import static java.util.Objects.requireNonNull;
-import static java.util.logging.Level.FINE;
-import static java.util.logging.Level.FINER;
-import static java.util.stream.Collectors.joining;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.logging.Logger;
+import com.soklet.web.HttpMethod;
+import com.soklet.web.exception.MethodNotAllowedException;
+import com.soklet.web.exception.NotFoundException;
+import com.soklet.web.request.RequestContext;
+import com.soklet.web.request.RequestHandler;
+import com.soklet.web.response.ResponseHandler;
 
 import javax.inject.Inject;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.logging.Logger;
 
-import com.soklet.util.ResponseUtils;
-import com.soklet.web.HttpMethod;
-import com.soklet.web.exception.MethodNotAllowedException;
-import com.soklet.web.exception.NotFoundException;
-import com.soklet.web.exception.ResourceMethodExecutionException;
-import com.soklet.web.request.RequestContext;
-import com.soklet.web.request.RequestHandler;
-import com.soklet.web.response.ResponseHandler;
+import static com.soklet.util.FormatUtils.httpServletRequestDescription;
+import static java.lang.String.format;
+import static java.util.Locale.ENGLISH;
+import static java.util.Objects.requireNonNull;
+import static java.util.logging.Level.FINER;
+import static java.util.stream.Collectors.joining;
 
 /**
  * @author <a href="http://revetkn.com">Mark Allen</a>
@@ -95,18 +86,11 @@ public class RoutingServlet extends HttpServlet {
 
       if (executeResponseHandler)
         responseHandler.handleResponse(httpServletRequest, httpServletResponse, route, response, Optional.empty());
+    } catch (RuntimeException | ServletException | IOException e) {
+      // Exceptions are handled further up by FirstFilter
+      throw e;
     } catch (Exception e) {
-      logException(httpServletRequest, httpServletResponse, route, response, e);
-
-      try {
-        responseHandler.handleResponse(httpServletRequest, httpServletResponse, route, response, Optional.of(e));
-      } catch (Exception e2) {
-        logger.warning(format(
-          "Exception occurred while trying to handle an error response, falling back to a failsafe response...\n%s",
-          stackTraceForThrowable(e2)));
-
-        writeFailsafeErrorResponse(httpServletRequest, httpServletResponse);
-      }
+      throw new ServletException(e);
     }
   }
 
@@ -144,24 +128,5 @@ public class RoutingServlet extends HttpServlet {
 
     // No matching route, and no possible alternatives? It's a 404
     throw new NotFoundException(format("No route was found for %s %s", httpMethod.name(), requestPath));
-  }
-
-  protected void logException(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse,
-                              Optional<Route> route, Optional<Object> response, Exception exception) {
-    requireNonNull(httpServletRequest);
-    requireNonNull(httpServletResponse);
-    requireNonNull(route);
-    requireNonNull(response);
-    requireNonNull(exception);
-
-    ResponseUtils.logException(httpServletRequest, httpServletResponse, route, response, exception);
-  }
-
-  protected void writeFailsafeErrorResponse(HttpServletRequest httpServletRequest,
-                                            HttpServletResponse httpServletResponse) throws ServletException, IOException {
-    requireNonNull(httpServletRequest);
-    requireNonNull(httpServletResponse);
-
-    ResponseUtils.writeFailsafeErrorResponse(httpServletRequest, httpServletResponse);
   }
 }
