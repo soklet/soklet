@@ -102,11 +102,10 @@ public class FirstFilter implements Filter {
 
 		long time = nanoTime();
 
+		logRequestStart(httpServletRequest);
+
 		HttpMethod httpMethod = HttpMethod.valueOf(httpServletRequest.getMethod().toUpperCase(ENGLISH));
 		String requestPath = httpServletRequest.getPathInfo();
-
-		if (logger.isLoggable(FINE)) logger.fine(format("Received %s", httpServletRequestDescription(httpServletRequest)));
-
 		Optional<Route> route = routeMatcher.match(httpMethod, requestPath);
 
 		if (shouldAllowRequestBodyRepeatableReads(httpServletRequest, httpServletResponse, route))
@@ -129,12 +128,19 @@ public class FirstFilter implements Filter {
 				writeFailsafeErrorResponse(httpServletRequest, httpServletResponse);
 			}
 		} finally {
-			time = nanoTime() - time;
-
-			if (logger.isLoggable(FINE))
-				logger.fine(format("Took %.2fms to handle %s", time / 1_000_000f,
-						httpServletRequestDescription(httpServletRequest)));
+			logRequestEnd(httpServletRequest, nanoTime() - time);
 		}
+	}
+
+	protected void logRequestStart(HttpServletRequest httpServletRequest) {
+		if (logger.isLoggable(FINE))
+			logger.fine(format("Received %s", httpServletRequestDescription(httpServletRequest)));
+	}
+
+	protected void logRequestEnd(HttpServletRequest httpServletRequest, long elapsedNanoTime) {
+		if (logger.isLoggable(FINE))
+			logger.fine(format("Took %.2fms to handle %s", elapsedNanoTime / 1_000_000f,
+					httpServletRequestDescription(httpServletRequest)));
 	}
 
 	/**
