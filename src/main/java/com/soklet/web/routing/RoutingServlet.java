@@ -87,7 +87,7 @@ public class RoutingServlet extends HttpServlet {
       if (executeResponseHandler)
         responseHandler.handleResponse(httpServletRequest, httpServletResponse, route, response, Optional.empty());
     } catch (RuntimeException | ServletException | IOException e) {
-      // Exceptions are handled further up by FirstFilter
+      // Exceptions are handled further up by SokletFilter
       throw e;
     } catch (Exception e) {
       throw new ServletException(e);

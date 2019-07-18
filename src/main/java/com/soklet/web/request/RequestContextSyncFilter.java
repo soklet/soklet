@@ -39,7 +39,7 @@ import javax.servlet.http.HttpServletResponse;
  * @since 1.1.9
  */
 @Singleton
-public class LastFilter implements Filter {
+public class RequestContextSyncFilter implements Filter {
   @Override
   public void init(FilterConfig filterConfig) throws ServletException {}
 

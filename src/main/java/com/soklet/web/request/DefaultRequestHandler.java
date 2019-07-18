@@ -23,7 +23,7 @@ import com.soklet.util.InstanceProvider;
 import com.soklet.web.ResourcePath;
 import com.soklet.web.annotation.*;
 import com.soklet.web.exception.*;
-import com.soklet.web.request.FirstFilter.SokletHttpServletRequest;
+import com.soklet.web.request.SokletFilter.SokletHttpServletRequest;
 import com.soklet.web.routing.Route;
 
 import javax.servlet.http.Cookie;
