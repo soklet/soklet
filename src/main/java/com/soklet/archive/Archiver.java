@@ -177,7 +177,7 @@ public class Archiver {
       // Hash static files and store off the manifest
       Optional<Path> hashedUrlManifestFile = Optional.empty();
 
-      if (temporaryStaticFileRootDirectory.isPresent()) {
+      if (temporaryStaticFileRootDirectory.isPresent() && Files.exists(temporaryStaticFileRootDirectory.get())) {
         logger.info("Performing static file hashing...");
 
         // 1. Do the hashing
