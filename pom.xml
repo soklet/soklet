@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.soklet</groupId>
 	<artifactId>soklet</artifactId>
-	<version>1.2.7-SNAPSHOT</version>
+	<version>1.2.7</version>
 	<packaging>jar</packaging>
 	<name>Soklet</name>
 	<description>Soklet is a minimalist infrastructure for Java webapps and microservices.</description>
