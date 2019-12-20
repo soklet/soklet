@@ -105,7 +105,7 @@ public class RequestContext {
   }
 
   @FunctionalInterface
-  static interface RequestContextOperation {
+  interface RequestContextOperation {
     /**
      * Executes an operation in the context of a web request.
      */

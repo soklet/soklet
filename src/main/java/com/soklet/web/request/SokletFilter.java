@@ -109,24 +109,28 @@ public class SokletFilter implements Filter {
 		if (shouldAllowRequestBodyRepeatableReads(httpServletRequest, httpServletResponse, route))
 			httpServletRequest = new SokletHttpServletRequest(httpServletRequest);
 
-		try {
-			RequestContext.perform(new RequestContext(httpServletRequest, httpServletResponse, route), (requestContext) -> {
-				filterChain.doFilter(requestContext.httpServletRequest(), requestContext.httpServletResponse());
-			});
-		} catch(Exception e) {
-			logException(httpServletRequest, httpServletResponse, route, Optional.empty(), e);
-
+		RequestContext.perform(new RequestContext(httpServletRequest, httpServletResponse, route), (requestContext) -> {
 			try {
-				responseHandler.handleResponse(httpServletRequest, httpServletResponse, route, Optional.empty(), Optional.of(e));
-			} catch (Exception e2) {
-				logger.warning(format(
-						"Exception occurred while trying to handle an error response, falling back to a failsafe response...\n%s",
-						stackTraceForThrowable(e2)));
-
-				writeFailsafeErrorResponse(httpServletRequest, httpServletResponse);
+				handleRequest(requestContext, filterChain);
+			} catch(Exception e) {
+				logger.warning(format("Exception occurred, falling back to a failsafe response...\n%s", stackTraceForThrowable(e)));
+				writeFailsafeErrorResponse(requestContext.httpServletRequest(), requestContext.httpServletResponse());
+			} finally {
+				logRequestEnd(requestContext.httpServletRequest(), nanoTime() - time);
 			}
-		} finally {
-			logRequestEnd(httpServletRequest, nanoTime() - time);
+		});
+	}
+
+	protected void handleRequest(RequestContext requestContext, FilterChain filterChain) {
+		try {
+			filterChain.doFilter(requestContext.httpServletRequest(), requestContext.httpServletResponse());
+		} catch(Exception e) {
+			logException(requestContext.httpServletRequest(), requestContext.httpServletResponse(), requestContext.route(), Optional.empty(), e);
+			try {
+				responseHandler.handleResponse(requestContext.httpServletRequest(), requestContext.httpServletResponse(), requestContext.route(), Optional.empty(), Optional.of(e));
+			} catch(IOException ioe) {
+				throw new UncheckedIOException(ioe);
+			}
 		}
 	}
 
