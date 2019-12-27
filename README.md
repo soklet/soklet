@@ -19,7 +19,7 @@ Minimalist infrastructure for Java webapps and microservices.
 
 * Dictation of what libraries and versions to use (GSON vs. Jackson, Mustache vs. Velocity, etc.)
 * Baked-in authentication and authorization
-* Database support (you can bring your own with [Pyranid](http://www.pyranid.com))
+* Database support (you can bring your own with [Pyranid](https://www.pyranid.com))
 
 #### License
 
@@ -38,18 +38,6 @@ Minimalist infrastructure for Java webapps and microservices.
 #### Direct Download
 
 If you don't use Maven, you can drop [soklet-1.2.7.jar](http://central.maven.org/maven2/com/soklet/soklet/1.2.7/soklet-1.2.7.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
-
-<!--
-## Bootstrap Your App
-
-TODO - discussion
-
-```
-$ git clone https://github.com/soklet/soklet.git
-$ cd soklet
-$ mvn -q exec:exec
-```
--->
 
 ## App Startup
 
@@ -677,7 +665,7 @@ class TransactionInterceptor implements MethodInterceptor {
   @Override
   public Object invoke(MethodInvocation methodInvocation) throws Throwable {
     // Note: Database is not part of Soklet, this is for illustration only.
-    // If you want simple JDBC functionality, check out http://pyranid.com
+    // If you want simple JDBC functionality, check out https://www.pyranid.com
     return this.database.transaction(() -> {
       return methodInvocation.proceed();
     });  

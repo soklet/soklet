@@ -72,7 +72,7 @@ public class DefaultPageResponseWriter implements PageResponseWriter {
               + "      // Your code here\n"
               + "    }\n"
               + "  };\n"
-              + "}</pre><p>See <a href=\"http://soklet.com/response-writers\">http://soklet.com/response-writers</a> for more information.</p>",
+              + "}</pre><p>See <a href=\"https://www.soklet.com/response-writers\">https://www.soklet.com/response-writers</a> for more information.</p>",
           bodyStyle, PageResponseWriter.class.getSimpleName(), preStyle).getBytes(UTF_8)),
       httpServletResponse.getOutputStream());
   }

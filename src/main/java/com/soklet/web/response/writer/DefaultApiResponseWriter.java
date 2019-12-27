@@ -56,7 +56,7 @@ public class DefaultApiResponseWriter implements ApiResponseWriter {
     copyStreamCloseAfterwards(
       new ByteArrayInputStream(
         format(
-          "{\n  \"message\": \"In order to use %s, you must provide Soklet with your own %s. See http://soklet.com/response-writers for more information.\"\n}",
+          "{\n  \"message\": \"In order to use %s, you must provide Soklet with your own %s. See https://www.soklet.com/response-writers for more information.\"\n}",
           ApiResponse.class.getSimpleName(), ApiResponseWriter.class.getSimpleName()).getBytes(UTF_8)),
       httpServletResponse.getOutputStream());
   }

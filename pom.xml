@@ -7,7 +7,7 @@
 	<packaging>jar</packaging>
 	<name>Soklet</name>
 	<description>Soklet is a minimalist infrastructure for Java webapps and microservices.</description>
-	<url>http://soklet.com</url>
+	<url>https://www.soklet.com</url>
 
 	<licenses>
 		<license>
