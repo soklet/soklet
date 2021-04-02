@@ -31,13 +31,13 @@ Minimalist infrastructure for Java webapps and microservices.
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>1.2.8-SNAPSHOT</version>
+  <version>2.0.0-SNAPSHOT</version>
 </dependency>
 ```
 
 #### Direct Download
 
-If you don't use Maven, you can drop [soklet-1.2.8-SNAPSHOT.jar](http://central.maven.org/maven2/com/soklet/soklet/1.2.8-SNAPSHOT/soklet-1.2.8-SNAPSHOT.jar) directly into your project.  You'll also need [javax.inject-1.jar](http://central.maven.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-3.1.0.jar](http://central.maven.org/maven2/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar) as dependencies.
+If you don't use Maven, you can drop [soklet-2.0.0-SNAPSHOT.jar](https://repo.maven.apache.org/maven2/com/soklet/soklet/2.0.0-SNAPSHOT/soklet-2.0.0-SNAPSHOT.jar) directly into your project.  You'll also need [javax.inject-1.jar](https://repo.maven.apache.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar) and [javax.servlet-api-4.0.1.jar](https://repo.maven.apache.org/maven2/javax/servlet/javax.servlet-api/4.0.1/javax.servlet-api-4.0.1.jar) as dependencies.
 
 ## App Startup
 
