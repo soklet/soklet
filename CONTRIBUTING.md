@@ -4,9 +4,17 @@
 
 Pull requests and bug reports are welcomed.  For enhancement pull requests, please ask first to save time!  It's possible the proposed enhancement is outside the scope or design goals of the project.
 
+#### Local Installation
+
+```shell
+$ mvn install
+```
+
+This will build artifacts and install to your local system's Maven repository.
+
 #### Pushing to Maven Central
 
-Contact Mark Allen at maa@xmog.com to request Sonatype deployment access.
+Contact Mark Allen at mark@revetware.com to request Sonatype deployment access.
 
 Once granted, make sure your ```~/.m2/settings.xml``` file has ```ossrh``` entries:
 
@@ -32,6 +40,6 @@ Once granted, make sure your ```~/.m2/settings.xml``` file has ```ossrh``` entri
 
 You can then push to Maven central:
 
-```
+```shell
 $ mvn clean deploy -Dgpg.passphrase=YOUR_PASSPHRASE
 ```

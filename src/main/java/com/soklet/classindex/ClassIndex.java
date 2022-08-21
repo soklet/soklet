@@ -25,8 +25,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import com.soklet.classindex.processor.ClassIndexProcessor;
-
 /**
  * Access to the compile-time generated index of classes.
  * <p/>
@@ -89,12 +87,13 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The class must be annotated with {@link IndexSubclasses} for it's subclasses to be indexed
-	 * at compile-time by {@link ClassIndexProcessor}.
+	 * at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param superClass class to find subclasses for
 	 * @return list of subclasses
 	 */
+	@SuppressWarnings("unchecked")
 	public static <T> Iterable<Class<? extends T>> getSubclasses(Class<T> superClass) {
 		return getSubclasses(superClass, Thread.currentThread().getContextClassLoader());
 	}
@@ -104,7 +103,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The class must be annotated with {@link IndexSubclasses} for it's subclasses to be indexed
-	 * at compile-time by {@link ClassIndexProcessor}.
+	 * at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param superClass class to find subclasses for
@@ -132,13 +131,13 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The class must be annotated with {@link IndexSubclasses} for it's subclasses to be indexed
-	 * at compile-time by {@link ClassIndexProcessor}.
+	 * at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param superClass class to find subclasses for
-	 * @param classLoader classloader for loading index file
 	 * @return names of subclasses
 	 */
+	@SuppressWarnings("unchecked")
 	public static <T> Iterable<String> getSubclassesNames(Class<T> superClass) {
 		return getSubclassesNames(superClass, Thread.currentThread().getContextClassLoader());
 	}
@@ -148,13 +147,14 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The class must be annotated with {@link IndexSubclasses} for it's subclasses to be indexed
-	 * at compile-time by {@link ClassIndexProcessor}.
+	 * at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param superClass class to find subclasses for
 	 * @param classLoader classloader for loading index file
 	 * @return names of subclasses
 	 */
+	@SuppressWarnings("unchecked")
 	public static <T> Iterable<String> getSubclassesNames(Class<T> superClass, ClassLoader classLoader) {
 		return readIndexFile(classLoader, SUBCLASS_INDEX_PREFIX + superClass.getCanonicalName());
 	}
@@ -164,7 +164,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The package must be annotated with {@link IndexSubclasses} for the classes inside
-	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param packageName name of the package to search classes for
@@ -179,7 +179,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The package must be annotated with {@link IndexSubclasses} for the classes inside
-	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param packageName name of the package to search classes for
@@ -203,7 +203,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The package must be annotated with {@link IndexSubclasses} for the classes inside
-	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param packageName name of the package to search classes for
@@ -218,7 +218,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The package must be annotated with {@link IndexSubclasses} for the classes inside
-	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param packageName name of the package to search classes for
@@ -239,7 +239,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The annotation must be annotated with {@link IndexAnnotated} for annotated classes
-	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param annotation annotation to search class for
@@ -254,7 +254,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The annotation must be annotated with {@link IndexAnnotated} for annotated classes
-	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param annotation annotation to search class for
@@ -273,7 +273,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The annotation must be annotated with {@link IndexAnnotated} for annotated classes
-	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 * <p>
 	 * Please note there is no verification if the class really exists. It can be missing when incremental
@@ -291,7 +291,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The annotation must be annotated with {@link IndexAnnotated} for annotated classes
-	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
 	 * </p>
 	 * <p>
 	 * Please note there is no verification if the class really exists. It can be missing when incremental
@@ -344,8 +344,7 @@ public class ClassIndex {
 			return null;
 		}
 		try {
-			try (@SuppressWarnings("resource")
-      BufferedReader reader = new BufferedReader(new InputStreamReader(resource.openStream(), "UTF-8"))) {
+			try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource.openStream(), "UTF-8"))) {
 				StringBuilder builder = new StringBuilder();
 				String line = reader.readLine();
 				while (line != null) {
@@ -402,7 +401,7 @@ public class ClassIndex {
 			Class<?> klass;
 			try {
 				klass = classLoader.loadClass(entry);
-			} catch (ClassNotFoundException e) {
+			} catch (ClassNotFoundException | NoClassDefFoundError e) {
 				continue;
 			}
 			classes.add(klass);
@@ -418,7 +417,7 @@ public class ClassIndex {
 			Class<?> klass;
 			try {
 				klass = classLoader.loadClass(packageName + "." + entry);
-			} catch (ClassNotFoundException e) {
+			} catch (ClassNotFoundException | NoClassDefFoundError e) {
 				continue;
 			}
 			classes.add(klass);

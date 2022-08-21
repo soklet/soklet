@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Transmogrify LLC.
+ * Copyright 2022 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,187 +16,223 @@
 
 package com.soklet.converter;
 
-import static com.soklet.converter.ValueConverters.defaultValueConverters;
-import static java.lang.String.format;
-import static java.util.Objects.requireNonNull;
-import static java.util.logging.Level.FINEST;
-import static java.util.stream.Collectors.toList;
-
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.Immutable;
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Logger;
 import java.util.stream.StreamSupport;
 
-import com.soklet.util.TypeReference;
+import static com.soklet.converter.ValueConverters.defaultValueConverters;
+import static java.lang.String.format;
+import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.toList;
 
 /**
- * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.0
+ * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
+@ThreadSafe
 public class ValueConverterRegistry {
-  private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConverterCache = new ConcurrentHashMap<>();
-  private final Logger logger = Logger.getLogger(ValueConverterRegistry.class.getName());
+	@Nonnull
+	private static final ValueConverter<?, ?> REFLEXIVE_VALUE_CONVERTER;
 
-  public ValueConverterRegistry() {
-    initializeDefaultValueConverters();
-  }
+	@Nonnull
+	private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConverterCache;
 
-  public boolean add(ValueConverter<?, ?> valueConverter) {
-    requireNonNull(valueConverter);
+	static {
+		REFLEXIVE_VALUE_CONVERTER = new ReflexiveValueConverter<>();
+	}
 
-    if (logger.isLoggable(FINEST))
-      logger.finest(format("Registering ValueConverter for %s -> %s", valueConverter.fromType(),
-        valueConverter.toType()));
+	public ValueConverterRegistry() {
+		this.valueConverterCache = new ConcurrentHashMap<>();
+		initializeDefaultValueConverters();
+	}
 
-    return valueConverterCache.put(extractCacheKeyFromValueConverter(valueConverter), valueConverter) != null;
-  }
+	@Nonnull
+	public Boolean add(@Nonnull ValueConverter<?, ?> valueConverter) {
+		requireNonNull(valueConverter);
+		return getValueConverterCache().put(extractCacheKeyFromValueConverter(valueConverter), valueConverter) != null;
+	}
 
-  public List<Boolean> addAll(Iterable<ValueConverter<?, ?>> valueConverters) {
-    requireNonNull(valueConverters);
-    return StreamSupport.stream(valueConverters.spliterator(), false).map(valueConverter -> add(valueConverter))
-      .collect(toList());
-  }
+	@Nonnull
+	public List<Boolean> addAll(@Nonnull Iterable<ValueConverter<?, ?>> valueConverters) {
+		requireNonNull(valueConverters);
+		return StreamSupport.stream(valueConverters.spliterator(), false)
+				.map(valueConverter -> add(valueConverter))
+				.collect(toList());
+	}
 
-  public boolean remove(ValueConverter<?, ?> valueConverter) {
-    requireNonNull(valueConverter);
-    return valueConverterCache.remove(extractCacheKeyFromValueConverter(valueConverter)) != null;
-  }
+	@Nonnull
+	public Boolean remove(@Nonnull ValueConverter<?, ?> valueConverter) {
+		requireNonNull(valueConverter);
+		return getValueConverterCache().remove(extractCacheKeyFromValueConverter(valueConverter)) != null;
+	}
 
-  public boolean remove(TypeReference<?> fromTypeReference, TypeReference<?> toTypeReference) {
-    requireNonNull(fromTypeReference);
-    requireNonNull(toTypeReference);
-    return remove(fromTypeReference.type(), toTypeReference.type());
-  }
+	@Nonnull
+	public Boolean remove(@Nonnull TypeReference<?> fromTypeReference,
+												@Nonnull TypeReference<?> toTypeReference) {
+		requireNonNull(fromTypeReference);
+		requireNonNull(toTypeReference);
 
-  public boolean remove(Type fromType, Type toType) {
-    requireNonNull(fromType);
-    requireNonNull(toType);
-    return valueConverterCache.remove(new CacheKey(fromType, toType)) != null;
-  }
+		return remove(fromTypeReference.getType(), toTypeReference.getType());
+	}
 
-  public <F, T> Optional<ValueConverter<F, T>> get(TypeReference<F> fromTypeReference, TypeReference<T> toTypeReference) {
-    requireNonNull(fromTypeReference);
-    requireNonNull(toTypeReference);
+	@Nonnull
+	public Boolean remove(@Nonnull Type fromType,
+												@Nonnull Type toType) {
+		requireNonNull(fromType);
+		requireNonNull(toType);
 
-    return get(fromTypeReference.type(), toTypeReference.type());
-  }
+		return getValueConverterCache().remove(new CacheKey(fromType, toType)) != null;
+	}
 
-  @SuppressWarnings("unchecked")
-  public <F, T> Optional<ValueConverter<F, T>> get(Type fromType, Type toType) {
-    requireNonNull(fromType);
-    requireNonNull(toType);
+	@Nonnull
+	public <F, T> Optional<ValueConverter<F, T>> get(@Nonnull TypeReference<F> fromTypeReference,
+																									 @Nonnull TypeReference<T> toTypeReference) {
+		requireNonNull(fromTypeReference);
+		requireNonNull(toTypeReference);
 
-    if (fromType.equals(toType))
-      return Optional.of((ValueConverter<F, T>) REFLEXIVE_VALUE_CONVERTER);
+		return get(fromTypeReference.getType(), toTypeReference.getType());
+	}
 
-    ValueConverter<F, T> valueConverter =
-        (ValueConverter<F, T>) valueConverterCache.get(new CacheKey(fromType, toType));
+	@SuppressWarnings("unchecked")
+	@Nonnull
+	public <F, T> Optional<ValueConverter<F, T>> get(@Nonnull Type fromType,
+																									 @Nonnull Type toType) {
+		requireNonNull(fromType);
+		requireNonNull(toType);
 
-    // Special case for enums.
-    // If no converter was registered for converting a String to an Enum<?>, create a simple converter and cache it off
-    if (valueConverter == null && String.class.equals(fromType) && toType instanceof Class) {
-      @SuppressWarnings("rawtypes")
-      Class toClass = (Class) toType;
+		if (fromType.equals(toType))
+			return Optional.of((ValueConverter<F, T>) REFLEXIVE_VALUE_CONVERTER);
 
-      if (toClass.isEnum()) {
-        valueConverter = new ValueConverter<F, T>() {
-          @Override
-          public T convert(Object from) throws ValueConversionException {
-            if (from == null)
-              return null;
+		ValueConverter<F, T> valueConverter = (ValueConverter<F, T>) getValueConverterCache().get(new CacheKey(fromType, toType));
 
-            try {
-              return (T) Enum.valueOf(toClass, from.toString());
-            } catch (Exception e) {
-              throw new ValueConversionException(format("Unable to convert value '%s' of type %s to an instance of %s",
-                from, fromType(), toType()), e, fromType(), toType());
-            }
-          }
+		// Special case for enums.
+		// If no converter was registered for converting a String to an Enum<?>, create a simple converter and cache it off
+		if (valueConverter == null && String.class.equals(fromType) && toType instanceof Class) {
+			@SuppressWarnings("rawtypes")
+			Class toClass = (Class) toType;
 
-          @Override
-          public Type fromType() {
-            return fromType;
-          }
+			if (toClass.isEnum()) {
+				valueConverter = new ValueConverter<>() {
+					@Override
+					@Nullable
+					public T convert(@Nullable Object from) throws ValueConversionException {
+						if (from == null)
+							return null;
 
-          @Override
-          public Type toType() {
-            return toType;
-          }
+						try {
+							return (T) Enum.valueOf(toClass, from.toString());
+						} catch (Exception e) {
+							throw new ValueConversionException(format("Unable to convert value '%s' of type %s to an instance of %s",
+									from, getFromType(), getToType()), e, getFromType(), getToType());
+						}
+					}
 
-          @Override
-          public String toString() {
-            return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), fromType(), toType());
-          }
-        };
+					@Override
+					@Nonnull
+					public Type getFromType() {
+						return fromType;
+					}
 
-        valueConverterCache.putIfAbsent(new CacheKey(fromType, toType), valueConverter);
-      }
-    }
+					@Override
+					@Nonnull
+					public Type getToType() {
+						return toType;
+					}
 
-    return Optional.ofNullable(valueConverter);
-  }
+					@Override
+					@Nonnull
+					public String toString() {
+						return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), getFromType(), getToType());
+					}
+				};
 
-  protected CacheKey extractCacheKeyFromValueConverter(ValueConverter<?, ?> valueConverter) {
-    requireNonNull(valueConverter);
-    return new CacheKey(valueConverter.fromType(), valueConverter.toType());
-  }
+				getValueConverterCache().putIfAbsent(new CacheKey(fromType, toType), valueConverter);
+			}
+		}
 
-  /**
-   * Hook for subclasses to provide different default converters.
-   */
-  protected void initializeDefaultValueConverters() {
-    addAll(defaultValueConverters());
-  }
+		return Optional.ofNullable(valueConverter);
+	}
 
-  private static final ValueConverter<?, ?> REFLEXIVE_VALUE_CONVERTER = new ReflexiveValueConverter<Object, Object>();
+	@Nonnull
+	protected CacheKey extractCacheKeyFromValueConverter(@Nonnull ValueConverter<?, ?> valueConverter) {
+		requireNonNull(valueConverter);
+		return new CacheKey(valueConverter.getFromType(), valueConverter.getToType());
+	}
 
-  private static final class ReflexiveValueConverter<T, T2> extends AbstractValueConverter<T, T> {
-    @Override
-    public T convert(T from) throws ValueConversionException {
-      return from;
-    }
-  }
+	/**
+	 * Hook for subclasses to provide different default converters.
+	 */
+	protected void initializeDefaultValueConverters() {
+		addAll(defaultValueConverters());
+	}
 
-  private static final class CacheKey {
-    private final Type fromType;
-    private final Type toType;
+	@Nonnull
+	protected ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> getValueConverterCache() {
+		return valueConverterCache;
+	}
 
-    private CacheKey(Type fromType, Type toType) {
-      this.fromType = requireNonNull(fromType);
-      this.toType = requireNonNull(toType);
-    }
+	@Nonnull
+	@Immutable
+	private static final class ReflexiveValueConverter<T> extends AbstractValueConverter<T, T> {
+		@Override
+		@Nullable
+		public T convert(@Nullable T from) throws ValueConversionException {
+			return from;
+		}
+	}
 
-    @Override
-    public String toString() {
-      return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), getFromType(), getToType());
-    }
+	@ThreadSafe
+	protected static final class CacheKey {
+		@Nonnull
+		private final Type fromType;
+		@Nonnull
+		private final Type toType;
 
-    @Override
-    public boolean equals(Object object) {
-      if (this == object)
-        return true;
-      if (!(object instanceof CacheKey))
-        return false;
+		public CacheKey(@Nonnull Type fromType,
+										@Nonnull Type toType) {
+			requireNonNull(fromType);
+			requireNonNull(toType);
 
-      CacheKey cacheKey = (CacheKey) object;
+			this.fromType = fromType;
+			this.toType = toType;
+		}
 
-      return Objects.equals(getFromType(), cacheKey.getFromType()) && Objects.equals(getToType(), cacheKey.getToType());
-    }
+		@Override
+		public String toString() {
+			return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), getFromType(), getToType());
+		}
 
-    @Override
-    public int hashCode() {
-      return Objects.hash(getFromType(), getToType());
-    }
+		@Override
+		public boolean equals(@Nullable Object object) {
+			if (this == object)
+				return true;
+			if (!(object instanceof CacheKey))
+				return false;
 
-    private Type getFromType() {
-      return fromType;
-    }
+			CacheKey cacheKey = (CacheKey) object;
 
-    private Type getToType() {
-      return toType;
-    }
-  }
+			return Objects.equals(getFromType(), cacheKey.getFromType()) && Objects.equals(getToType(), cacheKey.getToType());
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(getFromType(), getToType());
+		}
+
+		@Nonnull
+		public Type getFromType() {
+			return this.fromType;
+		}
+
+		@Nonnull
+		public Type getToType() {
+			return this.toType;
+		}
+	}
 }

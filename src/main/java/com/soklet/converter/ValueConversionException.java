@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Transmogrify LLC.
+ * Copyright 2022 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,41 +16,67 @@
 
 package com.soklet.converter;
 
-import static java.util.Objects.requireNonNull;
-
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 import java.lang.reflect.Type;
 
+import static java.util.Objects.requireNonNull;
+
 /**
- * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.0
+ * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
+@NotThreadSafe
 public class ValueConversionException extends Exception {
-  private Type fromType;
-  private Type toType;
+	@Nonnull
+	private final Type fromType;
+	@Nonnull
+	private final Type toType;
 
-  public ValueConversionException(String message, Type fromType, Type toType) {
-    super(message);
-    this.fromType = requireNonNull(fromType);
-    this.toType = requireNonNull(toType);
-  }
+	public ValueConversionException(@Nullable String message,
+																	@Nonnull Type fromType,
+																	@Nonnull Type toType) {
+		super(message);
 
-  public ValueConversionException(Throwable cause, Type fromType, Type toType) {
-    super(cause);
-    this.fromType = requireNonNull(fromType);
-    this.toType = requireNonNull(toType);
-  }
+		requireNonNull(fromType);
+		requireNonNull(toType);
 
-  public ValueConversionException(String message, Throwable cause, Type fromType, Type toType) {
-    super(message, cause);
-    this.fromType = requireNonNull(fromType);
-    this.toType = requireNonNull(toType);
-  }
+		this.fromType = fromType;
+		this.toType = toType;
+	}
 
-  public Type getFromType() {
-    return fromType;
-  }
+	public ValueConversionException(@Nullable Throwable cause,
+																	@Nonnull Type fromType,
+																	@Nonnull Type toType) {
+		super(cause);
 
-  public Type getToType() {
-    return toType;
-  }
+		requireNonNull(fromType);
+		requireNonNull(toType);
+
+		this.fromType = fromType;
+		this.toType = toType;
+	}
+
+	public ValueConversionException(@Nullable String message,
+																	@Nullable Throwable cause,
+																	@Nonnull Type fromType,
+																	@Nonnull Type toType) {
+		super(message, cause);
+
+		requireNonNull(fromType);
+		requireNonNull(toType);
+
+		this.fromType = fromType;
+		this.toType = toType;
+	}
+
+	@Nonnull
+	public Type getFromType() {
+		return this.fromType;
+	}
+
+	@Nonnull
+	public Type getToType() {
+		return this.toType;
+	}
 }

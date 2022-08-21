@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Transmogrify LLC.
+ * Copyright 2022 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 
 package com.soklet.converter;
 
-import static java.lang.String.format;
-import static java.util.Collections.unmodifiableSet;
-
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Locale;
@@ -33,224 +34,276 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.UUID;
 
+import static java.lang.String.format;
+
 /**
- * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.0
+ * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
+@ThreadSafe
 public final class ValueConverters {
-  private static final Set<ValueConverter<?, ?>> DEFAULT_VALUE_CONVERTERS;
+	@Nonnull
+	private static final Set<ValueConverter<?, ?>> DEFAULT_VALUE_CONVERTERS;
 
-  static {
-    DEFAULT_VALUE_CONVERTERS = unmodifiableSet(createDefaultValueConverters());
-  }
+	static {
+		DEFAULT_VALUE_CONVERTERS = Collections.unmodifiableSet(createDefaultValueConverters());
+	}
 
-  private ValueConverters() {}
+	private ValueConverters() {
+		// Cannot instantiate
+	}
 
-  public static Set<ValueConverter<?, ?>> defaultValueConverters() {
-    return DEFAULT_VALUE_CONVERTERS;
-  }
+	@Nonnull
+	public static Set<ValueConverter<?, ?>> defaultValueConverters() {
+		return DEFAULT_VALUE_CONVERTERS;
+	}
 
-  private static Set<ValueConverter<?, ?>> createDefaultValueConverters() {
-    Set<ValueConverter<?, ?>> defaultValueConverters = new HashSet<>();
+	@Nonnull
+	private static Set<ValueConverter<?, ?>> createDefaultValueConverters() {
+		Set<ValueConverter<?, ?>> defaultValueConverters = new HashSet<>();
 
-    // Primitives
-    defaultValueConverters.add(new StringToIntegerValueConverter());
-    defaultValueConverters.add(new StringToLongValueConverter());
-    defaultValueConverters.add(new StringToDoubleValueConverter());
-    defaultValueConverters.add(new StringToFloatValueConverter());
-    defaultValueConverters.add(new StringToByteValueConverter());
-    defaultValueConverters.add(new StringToShortValueConverter());
-    defaultValueConverters.add(new StringToCharacterValueConverter());
-    defaultValueConverters.add(new StringToBooleanValueConverter());
-    defaultValueConverters.add(new StringToBigIntegerValueConverter());
-    defaultValueConverters.add(new StringToBigDecimalValueConverter());
-    defaultValueConverters.add(new StringToNumberValueConverter());
-    defaultValueConverters.add(new StringToUuidValueConverter());
-    defaultValueConverters.add(new StringToInstantValueConverter());
-    defaultValueConverters.add(new StringToDateValueConverter());
-    defaultValueConverters.add(new StringToLocalDateValueConverter());
-    defaultValueConverters.add(new StringToLocalTimeValueConverter());
-    defaultValueConverters.add(new StringToLocalDateTimeValueConverter());
-    defaultValueConverters.add(new StringToZoneIdValueConverter());
-    defaultValueConverters.add(new StringToTimeZoneValueConverter());
-    defaultValueConverters.add(new StringToLocaleValueConverter());
+		// Primitives
+		defaultValueConverters.add(new StringToIntegerValueConverter());
+		defaultValueConverters.add(new StringToLongValueConverter());
+		defaultValueConverters.add(new StringToDoubleValueConverter());
+		defaultValueConverters.add(new StringToFloatValueConverter());
+		defaultValueConverters.add(new StringToByteValueConverter());
+		defaultValueConverters.add(new StringToShortValueConverter());
+		defaultValueConverters.add(new StringToCharacterValueConverter());
+		defaultValueConverters.add(new StringToBooleanValueConverter());
+		defaultValueConverters.add(new StringToBigIntegerValueConverter());
+		defaultValueConverters.add(new StringToBigDecimalValueConverter());
+		defaultValueConverters.add(new StringToNumberValueConverter());
+		defaultValueConverters.add(new StringToUuidValueConverter());
+		defaultValueConverters.add(new StringToInstantValueConverter());
+		defaultValueConverters.add(new StringToDateValueConverter());
+		defaultValueConverters.add(new StringToLocalDateValueConverter());
+		defaultValueConverters.add(new StringToLocalTimeValueConverter());
+		defaultValueConverters.add(new StringToLocalDateTimeValueConverter());
+		defaultValueConverters.add(new StringToZoneIdValueConverter());
+		defaultValueConverters.add(new StringToTimeZoneValueConverter());
+		defaultValueConverters.add(new StringToLocaleValueConverter());
 
-    return defaultValueConverters;
-  }
+		return defaultValueConverters;
+	}
 
-  private static abstract class BasicValueConverter<T, F> extends AbstractValueConverter<T, F> {
-    @Override
-    public F convert(T from) throws ValueConversionException {
-      if (from == null) return null;
+	@ThreadSafe
+	private static abstract class BasicValueConverter<T, F> extends AbstractValueConverter<T, F> {
+		@Override
+		@Nullable
+		public F convert(@Nullable T from) throws ValueConversionException {
+			if (from == null)
+				return null;
 
-      try {
-        return performConversion(from);
-      } catch (ValueConversionException e) {
-        throw e;
-      } catch (Exception e) {
-        throw new ValueConversionException(format("Unable to convert value '%s' of type %s to an instance of %s", from,
-          fromType(), toType()), e, fromType(), toType());
-      }
-    }
+			try {
+				return performConversion(from);
+			} catch (ValueConversionException e) {
+				throw e;
+			} catch (Exception e) {
+				throw new ValueConversionException(format("Unable to convert value '%s' of type %s to an instance of %s", from,
+						getFromType(), getToType()), e, getFromType(), getToType());
+			}
+		}
 
-    protected abstract F performConversion(T from) throws Exception;
+		@Nullable
+		protected abstract F performConversion(@Nullable T from) throws Exception;
 
-    @Override
-    public String toString() {
-      return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), fromType(), toType());
-    }
-  }
+		@Override
+		@Nonnull
+		public String toString() {
+			return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), getFromType(), getToType());
+		}
+	}
 
-  // Primitives
+	// Primitives
 
-  private static final class StringToIntegerValueConverter extends BasicValueConverter<String, Integer> {
-    @Override
-    protected Integer performConversion(String from) throws Exception {
-      return Integer.parseInt(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToIntegerValueConverter extends BasicValueConverter<String, Integer> {
+		@Override
+		@Nullable
+		protected Integer performConversion(@Nullable String from) throws Exception {
+			return Integer.parseInt(from);
+		}
+	}
 
-  private static final class StringToLongValueConverter extends BasicValueConverter<String, Long> {
-    @Override
-    protected Long performConversion(String from) throws Exception {
-      return Long.parseLong(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToLongValueConverter extends BasicValueConverter<String, Long> {
+		@Override
+		@Nullable
+		protected Long performConversion(@Nullable String from) throws Exception {
+			return Long.parseLong(from);
+		}
+	}
 
-  private static final class StringToDoubleValueConverter extends BasicValueConverter<String, Double> {
-    @Override
-    protected Double performConversion(String from) throws Exception {
-      return Double.parseDouble(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToDoubleValueConverter extends BasicValueConverter<String, Double> {
+		@Override
+		@Nullable
+		protected Double performConversion(@Nullable String from) throws Exception {
+			return Double.parseDouble(from);
+		}
+	}
 
-  private static final class StringToFloatValueConverter extends BasicValueConverter<String, Float> {
-    @Override
-    protected Float performConversion(String from) throws Exception {
-      return Float.parseFloat(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToFloatValueConverter extends BasicValueConverter<String, Float> {
+		@Override
+		@Nullable
+		protected Float performConversion(@Nullable String from) throws Exception {
+			return Float.parseFloat(from);
+		}
+	}
 
-  private static final class StringToByteValueConverter extends BasicValueConverter<String, Byte> {
-    @Override
-    protected Byte performConversion(String from) throws Exception {
-      return Byte.parseByte(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToByteValueConverter extends BasicValueConverter<String, Byte> {
+		@Override
+		@Nullable
+		protected Byte performConversion(@Nullable String from) throws Exception {
+			return Byte.parseByte(from);
+		}
+	}
 
-  private static final class StringToShortValueConverter extends BasicValueConverter<String, Short> {
-    @Override
-    protected Short performConversion(String from) throws Exception {
-      return Short.parseShort(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToShortValueConverter extends BasicValueConverter<String, Short> {
+		@Override
+		@Nullable
+		protected Short performConversion(@Nullable String from) throws Exception {
+			return Short.parseShort(from);
+		}
+	}
 
-  private static final class StringToCharacterValueConverter extends BasicValueConverter<String, Character> {
-    @Override
-    protected Character performConversion(String from) throws Exception {
-      from = from.trim();
+	@ThreadSafe
+	private static final class StringToCharacterValueConverter extends BasicValueConverter<String, Character> {
+		@Override
+		@Nullable
+		protected Character performConversion(@Nullable String from) throws Exception {
+			from = from.trim();
 
-      if (from.length() != 1)
-        throw new ValueConversionException(format(
-          "Unable to convert %s value '%s' to %s. Reason: '%s' is not a single-character String.", fromType(), from,
-          toType(), from), fromType(), toType());
+			if (from.length() != 1)
+				throw new ValueConversionException(format(
+						"Unable to convert %s value '%s' to %s. Reason: '%s' is not a single-character String.", getFromType(), from,
+						getToType(), from), getFromType(), getToType());
 
-      return from.charAt(0);
-    }
-  };
+			return from.charAt(0);
+		}
+	}
 
-  private static final class StringToBooleanValueConverter extends BasicValueConverter<String, Boolean> {
-    @Override
-    protected Boolean performConversion(String from) throws Exception {
-      return Boolean.parseBoolean(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToBooleanValueConverter extends BasicValueConverter<String, Boolean> {
+		@Override
+		@Nullable
+		protected Boolean performConversion(@Nullable String from) throws Exception {
+			return Boolean.parseBoolean(from);
+		}
+	}
 
-  // Nonprimitives
+	// Nonprimitives
 
-  private static final class StringToBigIntegerValueConverter extends BasicValueConverter<String, BigInteger> {
-    @Override
-    protected BigInteger performConversion(String from) throws Exception {
-      return new BigInteger(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToBigIntegerValueConverter extends BasicValueConverter<String, BigInteger> {
+		@Override
+		@Nullable
+		protected BigInteger performConversion(@Nullable String from) throws Exception {
+			return new BigInteger(from);
+		}
+	}
 
-  private static final class StringToBigDecimalValueConverter extends BasicValueConverter<String, BigDecimal> {
-    @Override
-    protected BigDecimal performConversion(String from) throws Exception {
-      return new BigDecimal(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToBigDecimalValueConverter extends BasicValueConverter<String, BigDecimal> {
+		@Override
+		@Nullable
+		protected BigDecimal performConversion(@Nullable String from) throws Exception {
+			return new BigDecimal(from);
+		}
+	}
 
-  private static final class StringToNumberValueConverter extends BasicValueConverter<String, Number> {
-    @Override
-    protected BigDecimal performConversion(String from) throws Exception {
-      return new BigDecimal(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToNumberValueConverter extends BasicValueConverter<String, Number> {
+		@Override
+		@Nullable
+		protected BigDecimal performConversion(@Nullable String from) throws Exception {
+			return new BigDecimal(from);
+		}
+	}
 
-  private static final class StringToUuidValueConverter extends BasicValueConverter<String, UUID> {
-    @Override
-    protected UUID performConversion(String from) throws Exception {
-      return UUID.fromString(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToUuidValueConverter extends BasicValueConverter<String, UUID> {
+		@Override
+		@Nullable
+		protected UUID performConversion(@Nullable String from) throws Exception {
+			return UUID.fromString(from);
+		}
+	}
 
-  private static final class StringToDateValueConverter extends BasicValueConverter<String, Date> {
-    @Override
-    protected Date performConversion(String from) throws Exception {
-      return new Date(Long.parseLong(from));
-    }
-  };
+	@ThreadSafe
+	private static final class StringToDateValueConverter extends BasicValueConverter<String, Date> {
+		@Override
+		@Nullable
+		protected Date performConversion(@Nullable String from) throws Exception {
+			return new Date(Long.parseLong(from));
+		}
+	}
 
-  private static final class StringToInstantValueConverter extends BasicValueConverter<String, Instant> {
-    @Override
-    protected Instant performConversion(String from) throws Exception {
-      return Instant.ofEpochMilli(Long.parseLong(from));
-    }
-  };
+	@ThreadSafe
+	private static final class StringToInstantValueConverter extends BasicValueConverter<String, Instant> {
+		@Override
+		@Nullable
+		protected Instant performConversion(@Nullable String from) throws Exception {
+			return Instant.ofEpochMilli(Long.parseLong(from));
+		}
+	}
 
-  private static final class StringToLocalDateValueConverter extends BasicValueConverter<String, LocalDate> {
-    @Override
-    protected LocalDate performConversion(String from) throws Exception {
-      return LocalDate.parse(from);
-    }
-  };
+	@ThreadSafe
+	@Nullable
+	private static final class StringToLocalDateValueConverter extends BasicValueConverter<String, LocalDate> {
+		@Override
+		protected LocalDate performConversion(@Nullable String from) throws Exception {
+			return LocalDate.parse(from);
+		}
+	}
 
-  private static final class StringToLocalTimeValueConverter extends BasicValueConverter<String, LocalTime> {
-    @Override
-    protected LocalTime performConversion(String from) throws Exception {
-      return LocalTime.parse(from);
-    }
-  };
+	@ThreadSafe
+	@Nullable
+	private static final class StringToLocalTimeValueConverter extends BasicValueConverter<String, LocalTime> {
+		@Override
+		protected LocalTime performConversion(@Nullable String from) throws Exception {
+			return LocalTime.parse(from);
+		}
+	}
 
-  private static final class StringToLocalDateTimeValueConverter extends BasicValueConverter<String, LocalDateTime> {
-    @Override
-    protected LocalDateTime performConversion(String from) throws Exception {
-      return LocalDateTime.parse(from);
-    }
-  };
+	@ThreadSafe
+	@Nullable
+	private static final class StringToLocalDateTimeValueConverter extends BasicValueConverter<String, LocalDateTime> {
+		@Override
+		protected LocalDateTime performConversion(@Nullable String from) throws Exception {
+			return LocalDateTime.parse(from);
+		}
+	}
 
-  private static final class StringToZoneIdValueConverter extends BasicValueConverter<String, ZoneId> {
-    @Override
-    protected ZoneId performConversion(String from) throws Exception {
-      return ZoneId.of(from);
-    }
-  };
+	@ThreadSafe
+	private static final class StringToZoneIdValueConverter extends BasicValueConverter<String, ZoneId> {
+		@Override
+		@Nullable
+		protected ZoneId performConversion(@Nullable String from) throws Exception {
+			return ZoneId.of(from);
+		}
+	}
 
-  private static final class StringToTimeZoneValueConverter extends BasicValueConverter<String, TimeZone> {
-    @Override
-    protected TimeZone performConversion(String from) throws Exception {
-      // Use ZoneId.of since it will throw an exception if the format is invalid.
-      // TimeZone.getTimeZone() returns GMT for invalid formats, which is not the behavior we want
-      return TimeZone.getTimeZone(ZoneId.of(from));
-    }
-  };
+	@ThreadSafe
+	private static final class StringToTimeZoneValueConverter extends BasicValueConverter<String, TimeZone> {
+		@Override
+		@Nullable
+		protected TimeZone performConversion(@Nullable String from) throws Exception {
+			// Use ZoneId.of since it will throw an exception if the format is invalid.
+			// TimeZone.getTimeZone() returns GMT for invalid formats, which is not the behavior we want
+			return TimeZone.getTimeZone(ZoneId.of(from));
+		}
+	}
 
-  private static final class StringToLocaleValueConverter extends BasicValueConverter<String, Locale> {
-    @Override
-    protected Locale performConversion(String from) throws Exception {
-      return new Locale.Builder().setLanguageTag(from).build();
-    }
-  };
+	@ThreadSafe
+	private static final class StringToLocaleValueConverter extends BasicValueConverter<String, Locale> {
+		@Override
+		@Nullable
+		protected Locale performConversion(@Nullable String from) throws Exception {
+			return new Locale.Builder().setLanguageTag(from).build();
+		}
+	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Transmogrify LLC.
+ * Copyright 2022 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,62 +16,68 @@
 
 package com.soklet.converter;
 
-import static java.lang.String.format;
-
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.List;
 
+import static java.lang.String.format;
+
 /**
- * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.0
+ * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
+@ThreadSafe
 public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, T> {
-  private final Type fromType;
-  private final Type toType;
+	@Nonnull
+	private final Type fromType;
+	@Nonnull
+	private final Type toType;
 
-  public AbstractValueConverter() {
-    Type fromType = null;
-    Type toType = null;
+	public AbstractValueConverter() {
+		Type fromType = null;
+		Type toType = null;
 
-    // TODO: this only works for simple cases (direct subclass or direct use of ValueConverter interface) and doesn't do
-    // full error handling. Probably also want to pull this into a ReflectionUtils class
-    List<Type> genericInterfaces = Arrays.asList(getClass().getGenericInterfaces());
+		// TODO: this only works for simple cases (direct subclass or direct use of ValueConverter interface) and doesn't do
+		// full error handling. Probably also want to pull this into a ReflectionUtils class
+		List<Type> genericInterfaces = Arrays.asList(getClass().getGenericInterfaces());
 
-    // If not direct use of interface, try superclass (no error handling done yet)
-    if (genericInterfaces.size() == 0)
-      genericInterfaces = Arrays.asList(getClass().getGenericSuperclass());
+		// If not direct use of interface, try superclass (no error handling done yet)
+		if (genericInterfaces.size() == 0)
+			genericInterfaces = Arrays.asList(getClass().getGenericSuperclass());
 
-    // Figure out what the two type arguments are for ValueConverter
-    for (Type genericInterface : genericInterfaces) {
-      if (genericInterface instanceof ParameterizedType) {
-        Object rawType = ((ParameterizedType) genericInterface).getRawType();
+		// Figure out what the two type arguments are for ValueConverter
+		for (Type genericInterface : genericInterfaces) {
+			if (genericInterface instanceof ParameterizedType) {
+				Object rawType = ((ParameterizedType) genericInterface).getRawType();
 
-        if (!ValueConverter.class.isAssignableFrom((Class<?>) rawType))
-          continue;
+				if (!ValueConverter.class.isAssignableFrom((Class<?>) rawType))
+					continue;
 
-        Type[] genericTypes = ((ParameterizedType) genericInterface).getActualTypeArguments();
-        fromType = genericTypes[0];
-        toType = genericTypes[1];
-      }
-    }
+				Type[] genericTypes = ((ParameterizedType) genericInterface).getActualTypeArguments();
+				fromType = genericTypes[0];
+				toType = genericTypes[1];
+			}
+		}
 
-    if (fromType == null || toType == null)
-      throw new IllegalStateException(format("Unable to extract generic %s type information from %s",
-        ValueConverter.class.getSimpleName(), this));
+		if (fromType == null || toType == null)
+			throw new IllegalStateException(format("Unable to extract generic %s type information from %s",
+					ValueConverter.class.getSimpleName(), this));
 
-    this.fromType = fromType;
-    this.toType = toType;
-  }
+		this.fromType = fromType;
+		this.toType = toType;
+	}
 
-  @Override
-  public Type fromType() {
-    return fromType;
-  }
+	@Override
+	@Nonnull
+	public Type getFromType() {
+		return this.fromType;
+	}
 
-  @Override
-  public Type toType() {
-    return toType;
-  }
+	@Override
+	@Nonnull
+	public Type getToType() {
+		return this.toType;
+	}
 }

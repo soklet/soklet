@@ -22,9 +22,11 @@ import java.io.Reader;
 import java.io.Writer;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.Inherited;
+import java.lang.annotation.Repeatable;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -36,6 +38,7 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
+import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
@@ -151,6 +154,7 @@ public class ClassIndexProcessor extends AbstractProcessor {
 					public Void visitType(TypeElement typeElement, Void o) {
 						try {
 							for (AnnotationMirror mirror : typeElement.getAnnotationMirrors()) {
+								storeRepeatableAnnotation(mirror, typeElement);
 								final TypeElement annotationElement = (TypeElement) mirror.getAnnotationType().asElement();
 								storeAnnotation(annotationElement, typeElement);
 							}
@@ -160,6 +164,10 @@ public class ClassIndexProcessor extends AbstractProcessor {
 							}
 						} catch (IOException e) {
 							messager.printMessage(Diagnostic.Kind.ERROR, "[ClassIndexProcessor] " + e.getMessage());
+						}
+
+						if (typeElement.getKind().toString().equals("RECORD")) {
+						    return null;
 						}
 						return super.visitType(typeElement, o);
 					}
@@ -188,18 +196,43 @@ public class ClassIndexProcessor extends AbstractProcessor {
 		return false;
 	}
 
+	private void storeRepeatableAnnotation(final AnnotationMirror annotation, final TypeElement typeElement) throws IOException {
+		for (final AnnotationValue annotationField : annotation.getElementValues().values()) {
+			if (!(annotationField.getValue() instanceof List)) {
+				continue;
+			}
+			for (final Object annotationFieldValue : (List)annotationField.getValue()) {
+				if (!(annotationFieldValue instanceof AnnotationMirror)) {
+					continue;
+				}
+
+				final AnnotationMirror mirror = (AnnotationMirror) annotationFieldValue;
+				final TypeElement annotationElement = (TypeElement) mirror.getAnnotationType().asElement();
+
+				Repeatable repeatable = annotationElement.getAnnotation(Repeatable.class);
+
+				if (repeatable == null) {
+					continue;
+				}
+
+				storeAnnotation(annotationElement, typeElement);
+			}
+		}
+	}
+
 	private void writeIndexFiles(String prefix, Map<String, Set<String>> indexMap) throws IOException {
 		for (Map.Entry<String, Set<String>> entry : indexMap.entrySet()) {
 			writeSimpleNameIndexFile(entry.getValue(), prefix + entry.getKey());
 		}
 	}
 
-	private void readOldIndexFile(Set<String> entries, String resourceName) throws IOException {
+	private FileObject readOldIndexFile(Set<String> entries, String resourceName) throws IOException {
 		Reader reader = null;
 		try {
 			final FileObject resource = filer.getResource(StandardLocation.CLASS_OUTPUT, "", resourceName);
 			reader = resource.openReader(true);
 			readOldIndexFile(entries, reader);
+			return resource;
 		} catch (FileNotFoundException e) {
 			/**
 			 * Ugly hack for Intellij IDEA incremental compilation.
@@ -221,6 +254,7 @@ public class ClassIndexProcessor extends AbstractProcessor {
 				reader.close();
 			}
 		}
+		return null;
 	}
 
 	private static void readOldIndexFile(Set<String> entries, Reader reader) throws IOException {
@@ -233,8 +267,11 @@ public class ClassIndexProcessor extends AbstractProcessor {
 		}
 	}
 
-	private void writeIndexFile(Set<String> entries, String resourceName) throws IOException {
-		FileObject file = filer.createResource(StandardLocation.CLASS_OUTPUT, "", resourceName);
+	private void writeIndexFile(Set<String> entries, String resourceName, FileObject overrideFile) throws IOException {
+		FileObject file = overrideFile;
+		if (file == null) {
+			file = filer.createResource(StandardLocation.CLASS_OUTPUT, "", resourceName);
+		}
 		try (Writer writer = file.openWriter()) {
 			for (String entry : entries) {
 				writer.write(entry);
@@ -245,8 +282,21 @@ public class ClassIndexProcessor extends AbstractProcessor {
 
 	private void writeSimpleNameIndexFile(Set<String> elementList, String resourceName)
 			throws IOException {
-		readOldIndexFile(elementList, resourceName);
-		writeIndexFile(elementList, resourceName);
+		FileObject file = readOldIndexFile(elementList, resourceName);
+		if (file != null) {
+			/**
+			 * Ugly hack for Eclipse JDT incremental compilation.
+			 * Eclipse JDT can't createResource() after successful getResource().
+			 * But we can file.openWriter().
+			 */
+			try {
+				writeIndexFile(elementList, resourceName, file);
+				return;
+			} catch (IllegalStateException e) {
+				// Thrown by HotSpot Java Compiler
+			}
+		}
+		writeIndexFile(elementList, resourceName, null);
 	}
 
 	private void writeFile(String content, String resourceName) throws IOException {

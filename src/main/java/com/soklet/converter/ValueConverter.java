@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Transmogrify LLC.
+ * Copyright 2022 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,34 +16,36 @@
 
 package com.soklet.converter;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.lang.reflect.Type;
 
 /**
  * Contract for converting objects from one type to another. For example, you might have a
  * {@code ValueConverter<String, List<Integer>>} which converts text like {@code "1,2,3"} to a list of numbers.
- * 
- * @author <a href="http://revetkn.com">Mark Allen</a>
- * @since 1.0.0
+ *
+ * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
 public interface ValueConverter<F, T> {
-  /**
-   * Converts {@code from} to an instance of {@code T}.
-   * 
-   * @param from
-   *          The value from which to convert. May be {@code null}.
-   * @return The {@code T} representation of {@code from}.
-   * @throws ValueConversionException
-   *           If an error occurs during conversion.
-   */
-  T convert(F from) throws ValueConversionException;
+	/**
+	 * Converts {@code from} to an instance of {@code T}.
+	 *
+	 * @param from The value from which to convert. May be {@code null}.
+	 * @return The {@code T} representation of {@code from}.
+	 * @throws ValueConversionException If an error occurs during conversion.
+	 */
+	@Nullable
+	T convert(@Nullable F from) throws ValueConversionException;
 
-  /**
-   * @return The type represented by {@code F}.
-   */
-  Type fromType();
+	/**
+	 * @return The type represented by {@code F}.
+	 */
+	@Nonnull
+	Type getFromType();
 
-  /**
-   * @return The type represented by {@code T}.
-   */
-  Type toType();
+	/**
+	 * @return The type represented by {@code T}.
+	 */
+	@Nonnull
+	Type getToType();
 }
