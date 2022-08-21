@@ -114,7 +114,7 @@ public class MicroHttpServer implements Server {
 	private volatile EventLoop eventLoop;
 
 	static {
-		DEFAULT_HOST = "localhost";
+		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;

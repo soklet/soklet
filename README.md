@@ -39,6 +39,11 @@ Similarly-flavored commercial-friendly OSS libraries are available.
 
 [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
+Soklet includes code from the following:
+
+* [ClassIndex](https://github.com/atteo/classindex) - Apache 2.0 License
+* [Microhttp](https://github.com/ebarlas/microhttp) - MIT License
+
 ### Maven Installation
 
 ```xml
