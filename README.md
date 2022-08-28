@@ -89,7 +89,7 @@ class App {
 For Soklet to be useful, create one or more `@Resource`-annotated classes (hereafter _Resources_), which use annotation metadata
 to declare how HTTP inputs (methods, paths, query parameters, cookies, etc.) map to Java methods. 
 
-Soklet detects Resources using a compile-time annotation processor and constructs a lookup table to avoid expensive classpath scans during app startup. 
+Soklet detects Resources using a compile-time annotation processor and constructs a lookup table to avoid expensive classpath scans during startup. 
 
 ```java
 @Resource
@@ -131,9 +131,106 @@ TBD: more info here?
 
 ## Configuration
 
-TBD
+All of Soklet's components are programmatically pluggable via the [SokletConfiguration](https://www.soklet.com/javadoc/com/soklet/SokletConfiguration.html) builder.
 
-### MicrohttpServer
+The components you'll likely want to customize are:
+
+* [Server](#server) - handles HTTP 1.1 requests and responses
+* [Response Marshaler](#response-marshaler) - turns Java objects into bytes to send over the wire
+* [Instance Provider](#instance-provider) - creates class instances on your behalf
+* [Lifecycle Interceptor](#lifecycle-interceptor) - provides hooks to customize phases of request/response processing
+* [Value Converters](#value-converters) - convert input strings (e.g. query parameters) to Java types (e.g. [LocalDateTime](https://docs.oracle.com/en/java/javase/18/docs/api/java.base/java/time/LocalDateTime.html))
+* [CORS Authorizer](#cors-authorizer) - handles [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
+
+The "experts only" components are:
+
+* [Request Method Resolver](#request-method-resolver-experts-only) - determines how to map HTTP requests to Java Resource methods 
+* [Resource Method Parameter Provider](#resource-method-parameter-provider-experts-only) - determines how to inject appropriate parameter values when invoking Java Resource methods
+
+Here's an example 
+
+
+```java
+int port = 8080;
+
+SokletConfiguration sokletConfiguration = new SokletConfiguration.Builder(
+  // Use the default Microhttp Server
+  new MicrohttpServer.Builder(port).build()
+)
+
+// Hook into lifecycle events to log/customize behavior
+.lifecycleInterceptor(new LifecycleInterceptor() {
+  @Override
+  public void didStartRequestHandling(@Nonnull Request request,
+                                      @Nullable ResourceMethod resourceMethod) {
+    // Soklet received the request and figured out which Java method
+    // it maps to (might be none in the case of a 404)
+    System.out.printf("Received %s, which maps to %s\n", request, resourceMethod);
+  }
+
+  @Override
+  public void interceptRequest(@Nonnull Request request,
+                               @Nullable ResourceMethod resourceMethod,
+                               @Nonnull Function<Request, MarshaledResponse> requestHandler,
+                               @Nonnull Consumer<MarshaledResponse> responseHandler) {
+    // Similar to a Servlet Filter, here you have the opportunity to:
+    //
+    // * Modify the request before downstream processing occurs
+    // * Modify the response before downstream processing occurs
+    // * Inject application-specific logic, e.g. authorizing a request or
+    //   wrapping downstream code in a database transaction
+    
+    // Let normal request processing finish
+    MarshaledResponse marshaledResponse = requestHandler.apply(request);
+
+    // Add a snazzy header to all responses before they are sent over the wire
+    marshaledResponse = marshaledResponse.copy().headers((mutableHeaders) -> {
+      mutableHeaders.put("X-Powered-By", Set.of("My Amazing App"));
+    }).finish();
+
+    // Let downstream processing finish
+    responseHandler.accept(marshaledResponse);
+  }	
+
+  @Override
+  public void didFinishRequestHandling(@Nonnull Request request,
+                                       @Nullable ResourceMethod resourceMethod,
+                                       @Nonnull MarshaledResponse marshaledResponse,
+                                       @Nonnull Duration processingDuration,
+                                       @Nonnull List<Throwable> throwables) {
+    // Totally done processing the request
+    System.out.printf("Finished processing %s\n", request);
+  }
+})    
+    
+//
+.responseMarshaler(new DefaultResponseMarshaler() {
+@Nonnull
+@Override
+public MarshaledResponse toDefaultMarshaledResponse(Request request,
+		Response response,
+		ResourceMethod resourceMethod) {
+		Object bodyObject = response.getBody().orElse(null);
+		byte[] body = bodyObject == null ? null : gson.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
+
+		Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
+		headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+
+		return new MarshaledResponse.Builder(response.getStatusCode())
+		.headers(headers)
+		.cookies(response.getCookies())
+		.body(body)
+		.build();
+		}
+		})
+		.corsAuthorizer(new AllOriginsCorsAuthorizer())
+		.instanceProvider(injector::getInstance)
+		.build();
+```
+
+### Server
+
+Soklet provides an embedded version of [Microhttp](https://github.com/ebarlas/microhttp) out-of-the-box in the form of [MicrohttpServer](https://www.soklet.com/javadoc/com/soklet/core/impl/MicrohttpServer.html).
 
 ```java
 Server server = new MicrohttpServer.Builder(8080 /* port */)
@@ -165,6 +262,7 @@ Server server = new MicrohttpServer.Builder(8080 /* port */)
   .requestHandlerExecutorServiceSupplier(() -> Executors.newVirtualThreadPerTaskExecutor())
   .build();
 
+// Use our custom server
 SokletConfiguration configuration = new SokletConfiguration.Builder(server).build();
 ```
 
