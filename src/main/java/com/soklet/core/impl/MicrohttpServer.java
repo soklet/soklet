@@ -64,15 +64,19 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
 @ThreadSafe
-public class MicroHttpServer implements Server {
+public class MicrohttpServer implements Server {
 	@Nonnull
 	private static final String DEFAULT_HOST;
+	@Nonnull
+	private static final Integer DEFAULT_CONCURRENCY;
 	@Nonnull
 	private static final Duration DEFAULT_REQUEST_TIMEOUT;
 	@Nonnull
 	private static final Duration DEFAULT_SOCKET_SELECT_TIMEOUT;
 	@Nonnull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
+	@Nonnull
+	private static final Integer DEFAULT_MAXIMUM_HEADER_SIZE_IN_BYTES;
 	@Nonnull
 	private static final Integer DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
 	@Nonnull
@@ -85,6 +89,8 @@ public class MicroHttpServer implements Server {
 	@Nonnull
 	private final String host;
 	@Nonnull
+	private final Integer concurrency;
+	@Nonnull
 	private final Duration requestTimeout;
 	@Nonnull
 	private final Duration socketSelectTimeout;
@@ -92,6 +98,8 @@ public class MicroHttpServer implements Server {
 	private final Duration shutdownTimeout;
 	@Nonnull
 	private final Integer maximumRequestSizeInBytes;
+	@Nonnull
+	private final Integer maximumHeaderSizeInBytes;
 	@Nonnull
 	private final Integer socketReadBufferSizeInBytes;
 	@Nonnull
@@ -115,22 +123,26 @@ public class MicroHttpServer implements Server {
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
+		DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors();
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
+		DEFAULT_MAXIMUM_HEADER_SIZE_IN_BYTES = 1_024 * 8;
 		DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 	}
 
-	protected MicroHttpServer(@Nonnull Builder builder) {
+	protected MicrohttpServer(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
 		this.lock = new ReentrantLock();
 
 		this.port = builder.port;
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
+		this.concurrency = builder.concurrency != null ? builder.concurrency : DEFAULT_CONCURRENCY;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
+		this.maximumHeaderSizeInBytes = builder.maximumHeaderSizeInBytes != null ? builder.maximumHeaderSizeInBytes : DEFAULT_MAXIMUM_HEADER_SIZE_IN_BYTES;
 		this.socketReadBufferSizeInBytes = builder.socketReadBufferSizeInBytes != null ? builder.socketReadBufferSizeInBytes : DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
@@ -160,10 +172,12 @@ public class MicroHttpServer implements Server {
 			Options options = new Options()
 					.withHost(getHost())
 					.withPort(getPort())
+					.withConcurrency(getConcurrency())
 					.withRequestTimeout(getRequestTimeout())
 					.withResolution(getSocketSelectTimeout())
-					.withReadBufferSize(getSocketReadBufferSizeInBytes())
+					.withBufferSize(getSocketReadBufferSizeInBytes())
 					.withMaxRequestSize(getMaximumRequestSizeInBytes())
+					.withMaxHeaderSize(getMaximumHeaderSizeInBytes())
 					.withAcceptLength(getSocketPendingConnectionLimit());
 
 			Logger logger = new Logger() {
@@ -184,7 +198,7 @@ public class MicroHttpServer implements Server {
 				}
 			};
 
-			Handler handler = ((microHttpRequest, microHttpCallback) -> {
+			Handler handler = ((connectionMetadata, microhttpRequest, microHttpCallback) -> {
 				ExecutorService requestHandlerExecutorServiceReference = this.requestHandlerExecutorService;
 
 				if (requestHandlerExecutorServiceReference == null)
@@ -199,45 +213,45 @@ public class MicroHttpServer implements Server {
 					AtomicBoolean shouldWriteFailsafeResponse = new AtomicBoolean(true);
 
 					try {
-						byte[] body = microHttpRequest.body();
+						byte[] body = microhttpRequest.body();
 
 						if (body != null && body.length == 0)
 							body = null;
 
-						Request request = new Request.Builder(HttpMethod.valueOf(microHttpRequest.method().toUpperCase(ENGLISH)), microHttpRequest.uri())
-								.headers(headersFromMicroHttpRequest(microHttpRequest))
-								.cookies(cookiesFromMicroHttpRequest(microHttpRequest))
+						Request request = new Request.Builder(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), microhttpRequest.uri())
+								.headers(headersFromMicrohttpRequest(microhttpRequest))
+								.cookies(cookiesFromMicrohttpRequest(microhttpRequest))
 								.body(body)
 								.build();
 
 						requestHandler.handleRequest(request, (marshaledResponse -> {
 							try {
-								com.soklet.microhttp.Response microHttpResponse = toMicroHttpResponse(marshaledResponse);
+								com.soklet.microhttp.Response microhttpResponse = toMicrohttpResponse(marshaledResponse);
 								shouldWriteFailsafeResponse.set(false);
 
 								try {
-									microHttpCallback.accept(microHttpResponse);
+									microHttpCallback.accept(microhttpResponse);
 								} catch (Throwable t) {
-									logHandler.logError("Unable to write MicroHttp response", t);
+									logHandler.logError("Unable to write Microhttp response", t);
 								}
 							} catch (Throwable t) {
-								logHandler.logError("An error occurred while marshaling to a MicroHttp response", t);
+								logHandler.logError("An error occurred while marshaling to a Microhttp response", t);
 
 								try {
-									microHttpCallback.accept(provideMicroHttpFailsafeResponse(microHttpRequest, t));
+									microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
 								} catch (Throwable t2) {
-									logHandler.logError("An error occurred while writing a failsafe MicroHttp response", t2);
+									logHandler.logError("An error occurred while writing a failsafe Microhttp response", t2);
 								}
 							}
 						}));
 					} catch (Throwable t) {
-						logHandler.logError("An unexpected error occurred during MicroHttp request handling", t);
+						logHandler.logError("An unexpected error occurred during Microhttp request handling", t);
 
 						if (shouldWriteFailsafeResponse.get()) {
 							try {
-								microHttpCallback.accept(provideMicroHttpFailsafeResponse(microHttpRequest, t));
+								microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
 							} catch (Throwable t2) {
-								logHandler.logError("An error occurred while writing a failsafe MicroHttp response", t2);
+								logHandler.logError("An error occurred while writing a failsafe Microhttp response", t2);
 							}
 						}
 					}
@@ -258,7 +272,7 @@ public class MicroHttpServer implements Server {
 	}
 
 	@Nonnull
-	protected com.soklet.microhttp.Response provideMicroHttpFailsafeResponse(@Nonnull com.soklet.microhttp.Request microHttpRequest,
+	protected com.soklet.microhttp.Response provideMicrohttpFailsafeResponse(@Nonnull com.soklet.microhttp.Request microHttpRequest,
 																																					 @Nonnull Throwable throwable) {
 		requireNonNull(microHttpRequest);
 		requireNonNull(throwable);
@@ -337,7 +351,7 @@ public class MicroHttpServer implements Server {
 	}
 
 	@Nonnull
-	protected Map<String, Set<String>> headersFromMicroHttpRequest(@Nonnull com.soklet.microhttp.Request microHttpRequest) {
+	protected Map<String, Set<String>> headersFromMicrohttpRequest(@Nonnull com.soklet.microhttp.Request microHttpRequest) {
 		requireNonNull(microHttpRequest);
 
 		Map<String, Set<String>> headers = new HashMap<>(microHttpRequest.headers().size());
@@ -360,7 +374,7 @@ public class MicroHttpServer implements Server {
 	}
 
 	@Nonnull
-	protected Set<HttpCookie> cookiesFromMicroHttpRequest(@Nonnull com.soklet.microhttp.Request microHttpRequest) {
+	protected Set<HttpCookie> cookiesFromMicrohttpRequest(@Nonnull com.soklet.microhttp.Request microHttpRequest) {
 		requireNonNull(microHttpRequest);
 
 		String cookieHeaderValue = trimToNull(microHttpRequest.header("Cookie"));
@@ -377,7 +391,7 @@ public class MicroHttpServer implements Server {
 	}
 
 	@Nonnull
-	protected com.soklet.microhttp.Response toMicroHttpResponse(@Nonnull MarshaledResponse marshaledResponse) {
+	protected com.soklet.microhttp.Response toMicrohttpResponse(@Nonnull MarshaledResponse marshaledResponse) {
 		requireNonNull(marshaledResponse);
 
 		List<Header> headers = new ArrayList<>();
@@ -409,6 +423,11 @@ public class MicroHttpServer implements Server {
 	}
 
 	@Nonnull
+	protected Integer getConcurrency() {
+		return this.concurrency;
+	}
+
+	@Nonnull
 	protected String getHost() {
 		return this.host;
 	}
@@ -431,6 +450,11 @@ public class MicroHttpServer implements Server {
 	@Nonnull
 	protected Integer getMaximumRequestSizeInBytes() {
 		return this.maximumRequestSizeInBytes;
+	}
+
+	@Nonnull
+	protected Integer getMaximumHeaderSizeInBytes() {
+		return this.maximumHeaderSizeInBytes;
 	}
 
 	@Nonnull
@@ -489,7 +513,7 @@ public class MicroHttpServer implements Server {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link MicroHttpServer}.
+	 * Builder used to construct instances of {@link MicrohttpServer}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -502,6 +526,8 @@ public class MicroHttpServer implements Server {
 		@Nullable
 		private String host;
 		@Nullable
+		private Integer concurrency;
+		@Nullable
 		private Duration requestTimeout;
 		@Nullable
 		private Duration socketSelectTimeout;
@@ -509,6 +535,8 @@ public class MicroHttpServer implements Server {
 		private Duration shutdownTimeout;
 		@Nullable
 		private Integer maximumRequestSizeInBytes;
+		@Nullable
+		private Integer maximumHeaderSizeInBytes;
 		@Nullable
 		private Integer socketReadBufferSizeInBytes;
 		@Nullable
@@ -529,6 +557,12 @@ public class MicroHttpServer implements Server {
 		@Nonnull
 		public Builder host(@Nullable String host) {
 			this.host = host;
+			return this;
+		}
+
+		@Nonnull
+		public Builder concurrency(@Nullable Integer concurrency) {
+			this.concurrency = concurrency;
 			return this;
 		}
 
@@ -563,6 +597,12 @@ public class MicroHttpServer implements Server {
 		}
 
 		@Nonnull
+		public Builder maximumHeaderSizeInBytes(@Nullable Integer maximumHeaderSizeInBytes) {
+			this.maximumHeaderSizeInBytes = maximumHeaderSizeInBytes;
+			return this;
+		}
+
+		@Nonnull
 		public Builder socketReadBufferSizeInBytes(@Nullable Integer socketReadBufferSizeInBytes) {
 			this.socketReadBufferSizeInBytes = socketReadBufferSizeInBytes;
 			return this;
@@ -587,8 +627,8 @@ public class MicroHttpServer implements Server {
 		}
 
 		@Nonnull
-		public MicroHttpServer build() {
-			return new MicroHttpServer(this);
+		public MicrohttpServer build() {
+			return new MicrohttpServer(this);
 		}
 	}
 }

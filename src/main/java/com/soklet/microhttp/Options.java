@@ -1,27 +1,3 @@
-/**
- * MIT License
- *
- * Copyright (c) 2022 Elliot Barlas
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-
 package com.soklet.microhttp;
 
 import java.time.Duration;
@@ -34,9 +10,11 @@ public class Options {
     private boolean reusePort = false;
     private Duration resolution = Duration.ofMillis(100);
     private Duration requestTimeout = Duration.ofSeconds(60);
-    private int readBufferSize = 1_024 * 64;
+    private int bufferSize = 1_024 * 64;
     private int acceptLength = 0;
     private int maxRequestSize = 1_024 * 1_024;
+    private int maxHeaderSize = 1_024 * 8;
+    private int concurrency = Runtime.getRuntime().availableProcessors();
 
     public String host() {
         return host;
@@ -62,8 +40,8 @@ public class Options {
         return requestTimeout;
     }
 
-    public int readBufferSize() {
-        return readBufferSize;
+    public int bufferSize() {
+        return bufferSize;
     }
 
     public int acceptLength() {
@@ -72,6 +50,14 @@ public class Options {
 
     public int maxRequestSize() {
         return maxRequestSize;
+    }
+
+    public int maxHeaderSize() {
+        return maxHeaderSize;
+    }
+
+    public int concurrency() {
+        return concurrency;
     }
 
     public Options withHost(String host) {
@@ -104,8 +90,8 @@ public class Options {
         return this;
     }
 
-    public Options withReadBufferSize(int readBufferSize) {
-        this.readBufferSize = readBufferSize;
+    public Options withBufferSize(int bufferSize) {
+        this.bufferSize = bufferSize;
         return this;
     }
 
@@ -116,6 +102,16 @@ public class Options {
 
     public Options withMaxRequestSize(int maxRequestSize) {
         this.maxRequestSize = maxRequestSize;
+        return this;
+    }
+
+    public Options withMaxHeaderSize(int maxHeaderSize) {
+        this.maxHeaderSize = maxHeaderSize;
+        return this;
+    }
+
+    public Options withConcurrency(int concurrency) {
+        this.concurrency = concurrency;
         return this;
     }
 }

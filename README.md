@@ -2,9 +2,11 @@
 
 ### What Is It?
 
-A minimal HTTP 1.1 server and routing library for Java, well-suited for building RESTful APIs.<br/>
+A minimal HTTP 1.1 server and route handler for Java, well-suited for building RESTful APIs.<br/>
 Zero dependencies.  Dependency Injection friendly.<br/>
 Powered by [JEP 425: Virtual Threads, aka Project Loom](https://openjdk.org/jeps/425).
+
+Soklet is a library, not a framework.
 
 ### Design Goals
 
@@ -12,7 +14,7 @@ Powered by [JEP 425: Virtual Threads, aka Project Loom](https://openjdk.org/jeps
 * Near-instant startup
 * No dependencies 
 * Small featureset; big impact
-* Provide control sufficient to support esoteric workflows
+* Full control over request and response processing
 * Minimize mutability
 * Keep codebase small enough to read and understand it all
 
@@ -30,7 +32,7 @@ Powered by [JEP 425: Virtual Threads, aka Project Loom](https://openjdk.org/jeps
 
 ### Do Zero-Dependency Libraries Interest You?
 
-Similarly-flavored commercial-friendly OSS libraries are available.
+Similarly-flavored commercially-friendly OSS libraries are available.
 
 * [Lokalized](https://www.lokalized.com) - natural-sounding translations (i18n) via expression language 
 * [Pyranid](https://www.pyranid.com) - makes working with JDBC pleasant
@@ -67,9 +69,9 @@ class App {
   public static void main(String[] args) throws Exception {
     int port = 8080;
 
-    // Bare-bones: use built-in MicroHttpServer and don't change the default configuration
+    // Bare-bones: use built-in MicrohttpServer and don't change the default configuration
     SokletConfiguration configuration = new SokletConfiguration.Builder(
-        new MicroHttpServer.Builder(port).build())
+        new MicrohttpServer.Builder(port).build())
       .build();
 
     try (Soklet soklet = new Soklet(configuration)) {
@@ -131,12 +133,14 @@ TBD: more info here?
 
 TBD
 
-### MicroHttpServer
+### MicrohttpServer
 
 ```java
-Server server = new MicroHttpServer.Builder(8080 /* port */)
+Server server = new MicrohttpServer.Builder(8080 /* port */)
   // Host on which we are listening
   .host("0.0.0.0")
+  // The number of connection-handling event loops to run concurrently 
+  .concurrency(Runtime.getRuntime().availableProcessors())
   // How long to permit a request to process before timing out
   .requestTimeout(Duration.ofSeconds(60))
   // How long to block waiting for the socket's channel to become ready - if zero, block indefinitely
@@ -145,6 +149,8 @@ Server server = new MicroHttpServer.Builder(8080 /* port */)
   .shutdownTimeout(Duration.ofSeconds(5))
   // The biggest request we permit clients to make  
   .maximumRequestSizeInBytes(1_024 * 1_024)
+  // The biggest request headers we permit clients to send  
+  .maximumHeaderSizeInBytes(1_024 * 8)    
   // Requests are read into a byte buffer of this size
   .socketReadBufferSizeInBytes(1_024 * 64)
   // The maximum number of pending connections on the socket (values < 1 use JVM platform default)
