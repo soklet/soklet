@@ -295,7 +295,7 @@ public class Request {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link Request}.
+	 * Builder used to copy instances of {@link Request}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *

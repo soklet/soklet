@@ -147,8 +147,9 @@ The "experts only" components are:
 * [Request Method Resolver](#request-method-resolver-experts-only) - determines how to map HTTP requests to Java Resource methods 
 * [Resource Method Parameter Provider](#resource-method-parameter-provider-experts-only) - determines how to inject appropriate parameter values when invoking Java Resource methods
 
-Here's an example 
+Here's an example that demonstrates a basic setup for an API that serves JSON responses.
 
+TODO: move the detailed stuff to individual sections.
 
 ```java
 int port = 8080;
@@ -183,10 +184,11 @@ SokletConfiguration sokletConfiguration = new SokletConfiguration.Builder(
     // Let normal request processing finish
     MarshaledResponse marshaledResponse = requestHandler.apply(request);
 
-    // Add a snazzy header to all responses before they are sent over the wire
-    marshaledResponse = marshaledResponse.copy().headers((mutableHeaders) -> {
-      mutableHeaders.put("X-Powered-By", Set.of("My Amazing App"));
-    }).finish();
+    // Add a snazzy header to all responses before they are sent over the wire.
+    marshaledResponse = marshaledResponse.copy()
+      .headers((mutableHeaders) -> {
+        mutableHeaders.put("X-Powered-By", Set.of("My Amazing API"));
+      }).finish();
 
     // Let downstream processing finish
     responseHandler.accept(marshaledResponse);
@@ -254,8 +256,8 @@ Server server = new MicrohttpServer.Builder(8080 /* port */)
   .socketPendingConnectionLimit(0)
   // Handle server logging statements
   .logHandler(new LogHandler() { ... })
-  // Vend an ExecutorService that is used to run the event loop (we only need one thread)
-  .eventLoopExecutorServiceSupplier(() -> Executors.newSingleThreadExecutor())
+  // Vend an ExecutorService that is used to run our event loops
+  .eventLoopExecutorServiceSupplier(() -> Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors()))
   // Vend an ExecutorService that is used to service HTTP requests.
   // For Loom/Virtual Threads - it makes sense to have 1 virtual thread per request.
   // For non-Loom operation - you will likely want a fixed-size pool of native threads.
@@ -290,7 +292,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 ```
 
 In practice, you will likely want to tie in to whatever Dependency Injection library your application uses and have
-the DI infrastructure vend your instances.<br/>
+the DI infrastructure vend your instances.<br/><br/>
 Here's how it might look if you use [Guice](https://github.com/google/guice):
 
 ```java
@@ -350,8 +352,42 @@ TBD
 
 ## Common Usage Patterns
 
-TBD 
+Every system is different, but there are frequently recurring patterns.
 
-### Request Context
+We present how implementations might look in Soklet applications.
 
-TBD 
+### Authentication and Authorization
+
+Request headers and cookies are common ways to pass authentication information - for example, as a [JWT](https://jwt.io).
+
+The appropriate place to handle this is with a custom [Lifecycle Interceptor](#lifecycle-interceptor).
+
+```java
+@Override
+public void interceptRequest(@Nonnull Request request,
+                             @Nullable ResourceMethod resourceMethod,
+                             @Nonnull Function<Request, MarshaledResponse> requestHandler,
+                             @Nonnull Consumer<MarshaledResponse> responseHandler) {
+  // Pull the value from MyExampleJWTCookies and use it to authenticate
+  request.getCookies().stream()
+    .filter(cookie -> cookie.getName().equals("MyExampleJWTCookie"))
+    .findAny()
+    .ifPresent(jwtCookie -> {
+      // Your authentication logic here
+    });
+
+  // Normal downstream processing
+  MarshaledResponse marshaledResponse = requestHandler.apply(request);
+  responseHandler.accept(marshaledResponse);
+}
+```
+
+### Relational Database Transaction Management
+
+TBD
+
+### Configuration (?)
+
+### Request Context (?)
+
+### Docker (?)

@@ -268,7 +268,7 @@ public class ResourcePath {
 	}
 
 	/**
-	 * Represents a {@code /}-delimited part of a {@code ResourcePath}.
+	 * Represents a {@code /}-delimited part of a {@link ResourcePath}.
 	 * <p>
 	 * For example, given the path <code>/languages/&#123;languageId&#125;</code>
 	 *

@@ -23,10 +23,8 @@
  */
 
 /**
- * This is a repackaging of Elliot Barlas' Microhttp library.
+ * A repackaging of Elliot Barlas' <a href="https://github.com/ebarlas/microhttp">Microhttp</a> library.
  * <p>
  * It is Copyright (c) 2022 Elliot Barlas and released under the terms of the MIT License.
- * <p>
- * See original repository at <a href="https://github.com/ebarlas/microhttp">https://github.com/ebarlas/microhttp</a>.
  */
 package com.soklet.microhttp;

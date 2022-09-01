@@ -100,6 +100,8 @@
                         <additionalOption>-Xdoclint:-html</additionalOption>
                     </additionalOptions>
                     <linksource>true</linksource>
+                    <show>public</show>
+                    <bottom><![CDATA[Copyright 2022 <a href="https://www.revetware.com" target="_blank">Revetware LLC<a>]]></bottom>
                     <source>19</source>
                 </configuration>
             </plugin>

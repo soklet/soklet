@@ -1,11 +1,11 @@
 /*
- * Copyright 2014 Atteo.
+ * Copyright 2022 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,8 @@
  */
 
 /**
- * A repackaging of the <a href="https://github.com/atteo/classindex">ClassIndex</a> library.
- * <p>
- * It is released under the terms of the Apache 2.0 License.
+ * Exceptions thrown during HTTP request processing.
+ *
+ * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
-package com.soklet.classindex;
+package com.soklet.exception;
