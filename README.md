@@ -2,17 +2,17 @@
 
 ### What Is It?
 
-A minimal HTTP 1.1 server and route handler for Java, well-suited for building RESTful APIs.<br/>
+A small HTTP 1.1 server and route handler for Java, well-suited for building RESTful APIs.<br/>
 Zero dependencies.  Dependency Injection friendly.<br/>
-Powered by [JEP 425: Virtual Threads, aka Project Loom](https://openjdk.org/jeps/425).
+Optionally powered by [JEP 425: Virtual Threads, aka Project Loom](https://openjdk.org/jeps/425).
 
 Soklet is a library, not a framework.
 
 ### Design Goals
 
-* Single focus: route HTTP requests to Java methods 
+* Main focus: route HTTP requests to Java methods 
 * Near-instant startup
-* No dependencies 
+* No dependencies
 * Small featureset; big impact
 * Full control over request and response processing
 * Minimize mutability
@@ -363,23 +363,26 @@ Request headers and cookies are common ways to pass authentication information -
 The appropriate place to handle this is with a custom [Lifecycle Interceptor](#lifecycle-interceptor).
 
 ```java
-@Override
-public void interceptRequest(@Nonnull Request request,
-                             @Nullable ResourceMethod resourceMethod,
-                             @Nonnull Function<Request, MarshaledResponse> requestHandler,
-                             @Nonnull Consumer<MarshaledResponse> responseHandler) {
-  // Pull the value from MyExampleJWTCookies and use it to authenticate
-  request.getCookies().stream()
-    .filter(cookie -> cookie.getName().equals("MyExampleJWTCookie"))
-    .findAny()
-    .ifPresent(jwtCookie -> {
-      // Your authentication logic here
-    });
+SokletConfiguration configuration = new SokletConfiguration.Builder(server)
+  .lifecycleInterceptor(new LifecycleInterceptor() {
+    @Override
+    public void interceptRequest(@Nonnull Request request,
+                                 @Nullable ResourceMethod resourceMethod,
+                                 @Nonnull Function<Request, MarshaledResponse> requestHandler,
+                                 @Nonnull Consumer<MarshaledResponse> responseHandler) {
+      // Pull the value from MyExampleJWTCookie and use it to authenticate
+      request.getCookies().stream()
+        .filter(cookie -> cookie.getName().equals("MyExampleJWTCookie"))
+        .findAny()
+        .ifPresent(jwtCookie -> {
+          // Your authentication logic here
+        });
 
-  // Normal downstream processing
-  MarshaledResponse marshaledResponse = requestHandler.apply(request);
-  responseHandler.accept(marshaledResponse);
-}
+      // Normal downstream processing
+      MarshaledResponse marshaledResponse = requestHandler.apply(request);
+      responseHandler.accept(marshaledResponse);
+    }		
+  }).build();
 ```
 
 ### Relational Database Transaction Management
