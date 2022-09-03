@@ -87,7 +87,7 @@ class App {
 
 ## Resources
 
-For Soklet to be useful, create one or more classes annotated with `@Resource` (hereafter _Resources_), which use annotation metadata
+For Soklet to be useful, one or more classes annotated with `@Resource` (hereafter _Resources_) are required, which use annotation metadata
 to declare how HTTP inputs (methods, URL paths, query parameters, cookies, etc.) map to Java methods. 
 
 Soklet detects Resources using a compile-time annotation processor and constructs a lookup table to avoid expensive classpath scans during startup.
@@ -122,7 +122,8 @@ class ExampleResource {
   // If multiple instances of the query parameter are permitted, use List<T>. 
   //
   // See the ValueConverter documentation for details on how Soklet marshals
-  // strings to "complex" types like LocalDate, and how you can customize this behavior.
+  // strings to "complex" types like java.time.LocalDate, and how you can 
+  // customize this behavior.
   // 
   // By default, parameter names are determined by reflection.
   // You may override this behavior by passing a name to the annotation,
@@ -187,7 +188,7 @@ The components you'll likely want to customize are:
 * [Instance Provider](#instance-provider) - creates class instances on your behalf
 * [Lifecycle Interceptor](#lifecycle-interceptor) - provides hooks to customize phases of request/response processing
 * [Value Converters](#value-converters) - convert input strings (e.g. query parameters) to Java types (e.g. [LocalDateTime](https://docs.oracle.com/en/java/javase/18/docs/api/java.base/java/time/LocalDateTime.html))
-* [CORS Authorizer](#cors-authorizer) - handles [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
+* [CORS Authorizer](#cors-authorizer) - determines whether to accept or reject [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) requests
 
 The "experts only" components are:
 
@@ -196,12 +197,10 @@ The "experts only" components are:
 
 Here's an example that demonstrates a basic setup for an API that serves JSON responses.
 
-TODO: move the detailed stuff to individual sections.
-
 ```java
 int port = 8080;
 
-SokletConfiguration sokletConfiguration = new SokletConfiguration.Builder(
+SokletConfiguration configuration = new SokletConfiguration.Builder(
   // Use the default Microhttp Server
   new MicrohttpServer.Builder(port).build()
 )
@@ -217,64 +216,55 @@ SokletConfiguration sokletConfiguration = new SokletConfiguration.Builder(
   }
 
   @Override
-  public void interceptRequest(@Nonnull Request request,
-                               @Nullable ResourceMethod resourceMethod,
-                               @Nonnull Function<Request, MarshaledResponse> requestHandler,
-                               @Nonnull Consumer<MarshaledResponse> responseHandler) {
-    // Similar to a Servlet Filter, here you have the opportunity to:
-    //
-    // * Modify the request before downstream processing occurs
-    // * Modify the response before downstream processing occurs
-    // * Inject application-specific logic, e.g. authorizing a request or
-    //   wrapping downstream code in a database transaction
-    
-    // Let normal request processing finish
-    MarshaledResponse marshaledResponse = requestHandler.apply(request);
-
-    // Add a snazzy header to all responses before they are sent over the wire.
-    marshaledResponse = marshaledResponse.copy()
-      .headers((mutableHeaders) -> {
-        mutableHeaders.put("X-Powered-By", Set.of("My Amazing API"));
-      }).finish();
-
-    // Let downstream processing finish
-    responseHandler.accept(marshaledResponse);
-  }	
-
-  @Override
   public void didFinishRequestHandling(@Nonnull Request request,
                                        @Nullable ResourceMethod resourceMethod,
                                        @Nonnull MarshaledResponse marshaledResponse,
                                        @Nonnull Duration processingDuration,
                                        @Nonnull List<Throwable> throwables) {
-    // Totally done processing the request
     System.out.printf("Finished processing %s\n", request);
   }
 })    
     
+// Your Response Marshaler provides the response body bytes, headers, and cookies 
+// that get sent back over the wire.  It's your opportunity to turn raw data into
+// JSON, XML, Protocol Buffers, etc.
 //
+// There are other overridable methods to customize marshaling for 404s, exceptions,
+// CORS, and OPTIONS handling.  The DefaultResponseMarshaler provides sensible defaults for those.
+// See the Response Marshaler section for more details.
 .responseMarshaler(new DefaultResponseMarshaler() {
-@Nonnull
-@Override
-public MarshaledResponse toDefaultMarshaledResponse(Request request,
-		Response response,
-		ResourceMethod resourceMethod) {
-		Object bodyObject = response.getBody().orElse(null);
-		byte[] body = bodyObject == null ? null : gson.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
+  @Nonnull
+  @Override
+  public MarshaledResponse toDefaultMarshaledResponse(@Nonnull Request request,
+                                                      @Nonnull Response response,
+                                                      @Nonnull ResourceMethod resourceMethod) {
+    Object bodyObject = response.getBody().orElse(null);
 
-		Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
-		headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+    // This example uses Gson to turn Java objects into JSON - https://github.com/google/gson
+    byte[] body = bodyObject == null ? null : gson.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
 
-		return new MarshaledResponse.Builder(response.getStatusCode())
-		.headers(headers)
-		.cookies(response.getCookies())
-		.body(body)
-		.build();
-		}
-		})
-		.corsAuthorizer(new AllOriginsCorsAuthorizer())
-		.instanceProvider(injector::getInstance)
-		.build();
+    // Tack on the appropriate Content-Type to the existing set of headers
+    Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
+    headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+
+    // This value is what is ultimately written to the HTTP response
+    return new MarshaledResponse.Builder(response.getStatusCode())
+      .headers(headers)
+      .cookies(response.getCookies()) // Pass through any cookies as-is
+      .body(body)
+    .build();
+  }
+})
+
+// "Wildcard" CORS authorization (don't use this in production!)
+.corsAuthorizer(new AllOriginsCorsAuthorizer())
+.build();
+
+// OK, start up
+try (Soklet soklet = new Soklet(configuration)) {
+  soklet.start();
+  System.in.read();
+}
 ```
 
 ### Server
@@ -371,7 +361,35 @@ class WidgetResource {
 
 ### Lifecycle Interceptor
 
-TBD
+TBD: update this code snippet
+
+```java
+  @Override
+  public void interceptRequest(@Nonnull Request request,
+                               @Nullable ResourceMethod resourceMethod,
+                               @Nonnull Function<Request, MarshaledResponse> requestHandler,
+                               @Nonnull Consumer<MarshaledResponse> responseHandler) {
+    // Similar to a Servlet Filter, here you have the opportunity to:
+    //
+    // * Modify the request before downstream processing occurs
+    // * Modify the response before downstream processing occurs
+    // * Inject application-specific logic, e.g. authorizing a request or
+    //   wrapping downstream code in a database transaction
+    
+    // Let normal request processing finish
+    MarshaledResponse marshaledResponse = requestHandler.apply(request);
+
+    // Add a snazzy header to all responses before they are sent over the wire.
+    marshaledResponse = marshaledResponse.copy()
+      .headers((mutableHeaders) -> {
+        mutableHeaders.put("X-Powered-By", Set.of("My Amazing API"));
+      }).finish();
+
+    // Let downstream processing finish
+    responseHandler.accept(marshaledResponse);
+  }	
+```
+
 
 ### Value Converters
 
