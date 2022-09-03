@@ -17,6 +17,7 @@ Soklet is a library, not a framework.
 * Deep control over request and response processing
 * Immutable where reasonable
 * Small, comprehensible codebase
+* Soklet apps should be amenable to automated testing
 
 ### Design Non-Goals
 
@@ -86,16 +87,19 @@ class App {
 
 ## Resources
 
-For Soklet to be useful, create one or more `@Resource`-annotated classes (hereafter _Resources_), which use annotation metadata
-to declare how HTTP inputs (methods, paths, query parameters, cookies, etc.) map to Java methods. 
+For Soklet to be useful, create one or more classes annotated with `@Resource` (hereafter _Resources_), which use annotation metadata
+to declare how HTTP inputs (methods, URL paths, query parameters, cookies, etc.) map to Java methods. 
 
 Soklet detects Resources using a compile-time annotation processor and constructs a lookup table to avoid expensive classpath scans during startup.
+
+When an HTTP request arrives, Soklet determines the appropriate Resource method to invoke based on HTTP method and URL path pattern matching.  Parameters are provided using the heuristics described below.
+
+Resource methods may return results of any type - your [Response Marshaler](#response-marshaler) runs downstream and is responsible for converting the returned objects to bytes over the wire.
 
 ```java
 @Resource
 class ExampleResource {
   // You can name your methods whatever you like and return whatever you like (or void).
-  // It's up to your ResponseMarshaler to take what you return and convert it into bytes.
   @GET("/")
   public String index() {
     return "Hello, world!";
@@ -146,6 +150,9 @@ class ExampleResource {
   // For any parameter type that Soklet does not recognize, it will ask the
   // configured InstanceProvider to vend an instance.  This is particularly
   // useful if your application is built using Dependency Injection.
+  //
+  // Here, MyExampleJsonParser and MyExampleBackend are hypothetical types
+  // in your application.
   @POST("/another/example/post")
   public Response formPost(Request request,
                            @RequestBody String requestBody, 
@@ -154,11 +161,11 @@ class ExampleResource {
                            MyExampleJsonParser jsonParser,
                            MyExampleBackend backend) {
     // Assemble some data to pass to our example backend
-    String analyticsCookie.getValue();
+    String analyticsId = analyticsCookie.getValue();
     Locale locale = request.getLocales().stream().findFirst().get();
     MyExampleType exampleType = jsonParser.parse(requestBody, MyExampleType.class);
     
-    backend.createRecord(exampleType, locale, analyticsCookie.getValue(), attribute.orElse(null));
+    backend.createRecord(analyticsId, locale, exampleType, attribute.orElse(null));
 
     // The response builder has a convenience shorthand for performing redirects.
     // You could alternatively do this "by hand" by setting HTTP status and headers appropriately.
@@ -168,8 +175,6 @@ class ExampleResource {
   }
 }
 ```
-
-TBD: more info here?
 
 ## Configuration
 
