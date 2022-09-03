@@ -13,10 +13,10 @@ Soklet is a library, not a framework.
 * Main focus: route HTTP requests to Java methods 
 * Near-instant startup
 * No dependencies
-* Small featureset; big impact
-* Full control over request and response processing
-* Minimize mutability
-* Keep codebase small enough to read and understand it all
+* Small but expressive API
+* Deep control over request and response processing
+* Be immutable where reasonable
+* Small and comprehensible codebase
 
 ### Design Non-Goals
 
@@ -89,7 +89,7 @@ class App {
 For Soklet to be useful, create one or more `@Resource`-annotated classes (hereafter _Resources_), which use annotation metadata
 to declare how HTTP inputs (methods, paths, query parameters, cookies, etc.) map to Java methods. 
 
-Soklet detects Resources using a compile-time annotation processor and constructs a lookup table to avoid expensive classpath scans during startup. 
+Soklet detects Resources using a compile-time annotation processor and constructs a lookup table to avoid expensive classpath scans during startup.
 
 ```java
 @Resource
@@ -101,25 +101,70 @@ class ExampleResource {
     return "Hello, world!";
   }
 	
-  // Curly-brace syntax is used to denote path placeholders.
-  // All placeholders in a path must have unique names and have corresponding 
-  // @Placeholder-annotated Java method parameters.
+  // Curly-brace syntax is used to denote path parameters.
+  // All parameters in a path must have unique names and have corresponding 
+  // @PathParameter-annotated Java method parameters.
+  // 
+  // This URL might look like /example/123
   @GET("/example/{placeholder}")
   public Response examplePlaceholder(@PathParameter Integer placeholder) {
-    // 
-    return new Response.Builder(200)
-      .body(String.format("Placeholder=%s", placeholder))
-      .headers(Map.of("Custom-Header", Set.of("123")))
-      .cookies(Set.of(new HttpCookie("redirected", "true")))
+    return new Response.Builder(204)
+      .headers(Map.of("X-Placeholder-Header", Set.of(String.valueOf(placeholder))))
       .build();
   }
+	
+  // You may accept query parameters by using the @QueryParameter annotation.
+  // Use Optional<T> if the query parameter is not required.
+  // If multiple instances of the query parameter are permitted, use List<T>. 
+  //
+  // See the ValueConverter documentation for details on how Soklet marshals
+  // strings to "complex" types like LocalDate, and how you can customize this
+  // behavior.
+  // 
+  // By default, parameter names are determined by reflection.
+  // You may override this behavior by passing a name to the annotation,
+  // e.g. @QueryParameter("value").
+  //
+  //
+  // This URL might look like /example/params?date=2022-09-21&value=ABC&value=123
+  @GET("/example/params")
+  public Response params(@QueryParameter LocalDate date) {
+                         @QueryParameter("value") Optional<List<String>> values) {
+    return new Response.Builder()
+      .body(String.format("date=%s, values=%s", date, values))
+      .build();
+  }	
 
+  // The @FormParameter annotation supports application/x-www-form-urlencoded
+  // values.
+  //
+  // @RequestCookie exposes java.net.HttpCookie representations of cookies.
+  //
+  // The @RequestBody annotation can be applied to any parameter of type
+  // String or byte[].
+  //
+  // If you specify a parameter of type com.soklet.core.Request, Soklet will
+  // provide the request so you can directly examine its contents.
+  //
+  // For any parameter type that Soklet does not recognize, it will ask the
+  // configured InstanceProvider to vend an instance.  This is particularly
+  // useful if your application is built using Dependency Injection.
   @POST("/another/example/post")
   public Response formPost(Request request,
                            @RequestBody String requestBody, 
-                           @FormParameter("attr") Optional<String> attribute) {
-	
-		
+                           @FormParameter("attr") Optional<String> attribute,
+                           @RequestCookie("gat") HttpCookie analyticsCookie,
+                           MyExampleJsonParser jsonParser,
+                           MyExampleBackend backend) {
+    // Assemble some data to pass to our example backend
+    String analyticsCookie.getValue();
+    Locale locale = request.getLocales().stream().findFirst().get();
+    MyExampleType exampleType = jsonParser.parse(requestBody, MyExampleType.class);
+    
+    backend.createRecord(exampleType, locale, analyticsCookie.getValue(), attribute.orElse(null));
+
+    // The response builder has a convenience shorthand for performing redirects.
+    // You could alternatively do this "by hand" by setting HTTP status and headers appropriately.
     return new Response.Builder(RedirectType.HTTP_307_TEMPORARY_REDIRECT, "/")
       .cookies(Set.of(new HttpCookie("post-attribute-value", attribute.orElse("none"))))
       .build();
@@ -354,7 +399,7 @@ TBD
 
 Every system is different, but there are frequently recurring patterns.
 
-We present how implementations might look in Soklet applications.
+We present how these pattern implementations might look in Soklet applications.
 
 ### Authentication and Authorization
 
@@ -388,6 +433,10 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 ### Relational Database Transaction Management
 
 TBD
+
+### Exception Handling
+
+### Testing
 
 ### Configuration (?)
 
