@@ -15,8 +15,8 @@ Soklet is a library, not a framework.
 * No dependencies
 * Small but expressive API
 * Deep control over request and response processing
-* Be immutable where reasonable
-* Small and comprehensible codebase
+* Immutable where reasonable
+* Small, comprehensible codebase
 
 ### Design Non-Goals
 
@@ -118,13 +118,11 @@ class ExampleResource {
   // If multiple instances of the query parameter are permitted, use List<T>. 
   //
   // See the ValueConverter documentation for details on how Soklet marshals
-  // strings to "complex" types like LocalDate, and how you can customize this
-  // behavior.
+  // strings to "complex" types like LocalDate, and how you can customize this behavior.
   // 
   // By default, parameter names are determined by reflection.
   // You may override this behavior by passing a name to the annotation,
   // e.g. @QueryParameter("value").
-  //
   //
   // This URL might look like /example/params?date=2022-09-21&value=ABC&value=123
   @GET("/example/params")
@@ -135,8 +133,7 @@ class ExampleResource {
       .build();
   }	
 
-  // The @FormParameter annotation supports application/x-www-form-urlencoded
-  // values.
+  // The @FormParameter annotation supports application/x-www-form-urlencoded values.
   //
   // @RequestCookie exposes java.net.HttpCookie representations of cookies.
   //
