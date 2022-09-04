@@ -192,13 +192,16 @@ The components you'll likely want to customize are:
 
 The "experts only" components are:
 
-* [Request Method Resolver](#request-method-resolver-experts-only) - determines how to map HTTP requests to Java Resource methods 
-* [Resource Method Parameter Provider](#resource-method-parameter-provider-experts-only) - determines how to inject appropriate parameter values when invoking Java Resource methods
+* [Request Method Resolver](#request-method-resolver-experts-only) - determines how to map HTTP requests to Resource methods 
+* [Resource Method Parameter Provider](#resource-method-parameter-provider-experts-only) - determines how to inject appropriate parameter values when invoking Resource methods
 
-Here's an example that demonstrates a basic setup for an API that serves JSON responses.
+Here's an example configuration for an API that serves JSON responses.
 
 ```java
 int port = 8080;
+
+// This example uses Gson to turn Java objects into JSON - https://github.com/google/gson
+Gson gson = new Gson();
 
 SokletConfiguration configuration = new SokletConfiguration.Builder(
   // Use the default Microhttp Server
@@ -238,9 +241,8 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(
   public MarshaledResponse toDefaultMarshaledResponse(@Nonnull Request request,
                                                       @Nonnull Response response,
                                                       @Nonnull ResourceMethod resourceMethod) {
-    Object bodyObject = response.getBody().orElse(null);
-
-    // This example uses Gson to turn Java objects into JSON - https://github.com/google/gson
+    // Ask Gson to turn the Java response body object into JSON bytes
+    Object bodyObject = response.getBody().orElse(null);    
     byte[] body = bodyObject == null ? null : gson.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
 
     // Tack on the appropriate Content-Type to the existing set of headers
@@ -309,9 +311,20 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server).buil
 
 TBD
 
+```java
+
+// Use our custom server
+SokletConfiguration configuration = new SokletConfiguration.Builder(
+    new MicrohttpServer.Builder(port).build()
+  )
+  .lifecycleInterceptor(lifecycleInterceptor)
+  .build();
+```
+
 ### Instance Provider
 
-Soklet creates instances of Resource classes so it can invoke methods on them on your behalf.<br/>
+Soklet creates instances of Resource classes so it can invoke methods on them on your behalf.
+<br/>
 Here's a naïve implementation that assumes the presence of a default constructor.
 
 ```java
