@@ -17,20 +17,20 @@
 package com.soklet.core.impl;
 
 import com.soklet.annotation.DELETE;
-import com.soklet.annotation.GET;
-import com.soklet.annotation.HEAD;
-import com.soklet.annotation.OPTIONS;
-import com.soklet.annotation.PATCH;
-import com.soklet.annotation.POST;
-import com.soklet.annotation.PUT;
-import com.soklet.annotation.Resource;
 import com.soklet.annotation.DELETEs;
+import com.soklet.annotation.GET;
 import com.soklet.annotation.GETs;
+import com.soklet.annotation.HEAD;
 import com.soklet.annotation.HEADs;
+import com.soklet.annotation.OPTIONS;
 import com.soklet.annotation.OPTIONSes;
+import com.soklet.annotation.PATCH;
 import com.soklet.annotation.PATCHes;
+import com.soklet.annotation.POST;
 import com.soklet.annotation.POSTs;
+import com.soklet.annotation.PUT;
 import com.soklet.annotation.PUTs;
+import com.soklet.annotation.Resource;
 import com.soklet.classindex.ClassIndex;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
@@ -71,13 +71,21 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	private final Map<Method, Set<HttpMethodResourcePath>> httpMethodResourcePathsByMethod;
 
 	public DefaultResourceMethodResolver() {
-		this(StreamSupport.stream(ClassIndex.getAnnotated(Resource.class).spliterator(), true).collect(Collectors.toSet()));
+		this(StreamSupport.stream(ClassIndex.getAnnotated(Resource.class).spliterator(), true)
+				.collect(Collectors.toSet()), null);
 	}
 
-	public DefaultResourceMethodResolver(@Nonnull Set<Class<?>> resourceClasses) {
-		requireNonNull(resourceClasses);
+	public DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,
+																			 @Nullable Set<Method> resourceMethods) {
+		Set<Method> allResouceMethods = new HashSet<>();
 
-		this.resourceMethods = Collections.unmodifiableSet(extractResourceMethods(resourceClasses));
+		if (resourceClasses != null)
+			allResouceMethods.addAll(extractResourceMethods(resourceClasses));
+
+		if (resourceMethods != null)
+			allResouceMethods.addAll(resourceMethods);
+
+		this.resourceMethods = Collections.unmodifiableSet(allResouceMethods);
 		this.resourceMethodsByHttpMethod =
 				Collections.unmodifiableMap(createResourceMethodsByHttpMethod(getResourceMethods()));
 		this.httpMethodResourcePathsByMethod =
