@@ -254,7 +254,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(
       .headers(headers)
       .cookies(response.getCookies()) // Pass through any cookies as-is
       .body(body)
-    .build();
+      .build();
   }
 })
 
@@ -309,15 +309,50 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server).buil
 
 ### Response Marshaler
 
-TBD
+Soklet's [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) specifies how a "logical" response (Java objects that represent response body, headers, cookies, etc.) is actually written to bytes over the wire.
+
+Hooks are provided for these scenarios:
+
+* "Happy path" processing
+    * [`toDefaultMarshaledResponse(Request, Response, ResourceMethod)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toDefaultMarshaledResponse(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.ResourceMethod))
+* No matching resource method (404)
+    * [`toNotFoundMarshaledResponse(Request)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toNotFoundMarshaledResponse(com.soklet.core.Request))
+* Uncaught exception
+    * [`toExceptionMarshaledResponse(Request request, Throwable throwable, ResourceMethod resourceMethod)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toExceptionMarshaledResponse(com.soklet.core.Request,java.lang.Throwable,com.soklet.core.ResourceMethod))
+* HTTP `OPTIONS`
+    * [`toOptionsMarshaledResponse(Request request, Set<HttpMethod> allowedHttpMethods)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toOptionsMarshaledResponse(com.soklet.core.Request,java.util.Set))
+* HTTP method not allowed (405)
+    * [`toMethodNotAllowedMarshaledResponse(Request request, Set<HttpMethod> allowedHttpMethods)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toMethodNotAllowedMarshaledResponse(com.soklet.core.Request,java.util.Set))
+* CORS 
+    * [`toCorsAllowedMarshaledResponse(Request request, CorsRequest corsRequest, CorsResponse corsResponse)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsAllowedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse))
+    * [`toCorsRejectedMarshaledResponse(Request request, CorsRequest corsRequest)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsRejectedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest))
+
+Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible default implementations for `OPTIONS` and CORS handling.
 
 ```java
+SokletConfiguration configuration = new SokletConfiguration.Builder(server)
+  .responseMarshaler(new DefaultResponseMarshaler() {
+    @Nonnull
+    @Override
+    public MarshaledResponse toDefaultMarshaledResponse(@Nonnull Request request,
+                                                        @Nonnull Response response,
+                                                        @Nonnull ResourceMethod resourceMethod) {
+      // Ask Gson to turn the Java response body object into JSON bytes
+      Object bodyObject = response.getBody().orElse(null);    
+      byte[] body = bodyObject == null ? null : gson.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
 
-// Use our custom server
-SokletConfiguration configuration = new SokletConfiguration.Builder(
-    new MicrohttpServer.Builder(port).build()
-  )
-  .lifecycleInterceptor(lifecycleInterceptor)
+      // Tack on the appropriate Content-Type to the existing set of headers
+      Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
+      headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+
+      // This value is what is ultimately written to the HTTP response
+      return new MarshaledResponse.Builder(response.getStatusCode())
+        .headers(headers)
+        .cookies(response.getCookies()) // Pass through any cookies as-is
+        .body(body)
+        .build();
+  }
+})
   .build();
 ```
 
