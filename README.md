@@ -313,23 +313,26 @@ Soklet's [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/Resp
 
 Hooks are provided for these scenarios:
 
-* "Happy path" processing
+* "Happy path"
     * [`toDefaultMarshaledResponse(Request, Response, ResourceMethod)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toDefaultMarshaledResponse(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.ResourceMethod))
-* No matching resource method (404)
-    * [`toNotFoundMarshaledResponse(Request)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toNotFoundMarshaledResponse(com.soklet.core.Request))
 * Uncaught exception
-    * [`toExceptionMarshaledResponse(Request request, Throwable throwable, ResourceMethod resourceMethod)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toExceptionMarshaledResponse(com.soklet.core.Request,java.lang.Throwable,com.soklet.core.ResourceMethod))
-* HTTP `OPTIONS`
+    * [`toExceptionMarshaledResponse(Request request, Throwable throwable, ResourceMethod resourceMethod)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toExceptionMarshaledResponse(com.soklet.core.Request,java.lang.Throwable,com.soklet.core.ResourceMethod))    
+* No matching resource method (HTTP 404)
+    * [`toNotFoundMarshaledResponse(Request)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toNotFoundMarshaledResponse(com.soklet.core.Request))
+* Method not allowed (HTTP 405)
+    * [`toMethodNotAllowedMarshaledResponse(Request request, Set<HttpMethod> allowedHttpMethods)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toMethodNotAllowedMarshaledResponse(com.soklet.core.Request,java.util.Set))    
+* HTTP OPTIONS
     * [`toOptionsMarshaledResponse(Request request, Set<HttpMethod> allowedHttpMethods)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toOptionsMarshaledResponse(com.soklet.core.Request,java.util.Set))
-* HTTP method not allowed (405)
-    * [`toMethodNotAllowedMarshaledResponse(Request request, Set<HttpMethod> allowedHttpMethods)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toMethodNotAllowedMarshaledResponse(com.soklet.core.Request,java.util.Set))
 * CORS 
     * [`toCorsAllowedMarshaledResponse(Request request, CorsRequest corsRequest, CorsResponse corsResponse)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsAllowedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse))
     * [`toCorsRejectedMarshaledResponse(Request request, CorsRequest corsRequest)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsRejectedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest))
 
-Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible default implementations for `OPTIONS` and CORS handling.
+Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible default implementations for things like CORS, OPTIONS, and 404s/405s.  This way you can stay focused on how your application handles happy path and exception handling.
 
 ```java
+// This example uses Gson to turn Java objects into JSON - https://github.com/google/gson
+Gson gson = new Gson();
+
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
   .responseMarshaler(new DefaultResponseMarshaler() {
     @Nonnull
@@ -351,8 +354,36 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
         .cookies(response.getCookies()) // Pass through any cookies as-is
         .body(body)
         .build();
-  }
-})
+    }
+
+    @Nonnull
+    @Override
+    public MarshaledResponse toExceptionMarshaledResponse(@Nonnull Request request,
+                                                          @Nonnull Throwable throwable,
+                                                          @Nullable ResourceMethod resourceMethod) {
+      int statusCode = 500;
+      String message = "Internal server error";
+
+      // Your application likely has exceptions that are designed to "bubble out", e.g.
+      // input validation errors.  This is where to trap and customize your response
+      if(throwable instanceof MyExampleValidationException e) {
+        statusCode = 422;
+        message = e.getExampleUserFriendlyErrorMessage();
+      }
+
+      // Construct an object to send as the response body
+      Map<String, Object> bodyObject = new HashMap<>();
+      bodyObject.put("message", message);
+
+      // Ask Gson to turn the Java response body object into JSON bytes    
+      byte[] body = gson.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
+
+      return new MarshaledResponse.Builder(statusCode)
+        .headers(Map.of("Content-Type", Set.of("application/json; charset=UTF-8")))
+        .body(body)
+        .build();
+    }  
+  })
   .build();
 ```
 
