@@ -309,7 +309,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server).buil
 
 ### Response Marshaler
 
-Soklet's [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) specifies how a "logical" response (Java objects that represent response body, headers, cookies, etc.) is actually written to bytes over the wire.
+Soklet's [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) specifies how a "logical" response (Java object) is written to bytes over the wire.
 
 Hooks are provided for these scenarios:
 
@@ -327,7 +327,7 @@ Hooks are provided for these scenarios:
     * [`toCorsAllowedMarshaledResponse(Request request, CorsRequest corsRequest, CorsResponse corsResponse)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsAllowedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse))
     * [`toCorsRejectedMarshaledResponse(Request request, CorsRequest corsRequest)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsRejectedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest))
 
-Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible default implementations for things like CORS, OPTIONS, and 404s/405s.  This way you can stay focused on how your application handles happy path and exception handling.
+Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible defaults for things like CORS, OPTIONS, and 404s/405s.  This way you can stay focused on how your application writes happy path and exception responses.
 
 ```java
 // This example uses Gson to turn Java objects into JSON - https://github.com/google/gson
@@ -389,16 +389,17 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 ### Instance Provider
 
-Soklet creates instances of Resource classes so it can invoke methods on them on your behalf.
+Soklet creates instances of Resource classes so it can invoke methods on them on your behalf.  To do this, it delegates to the configured [InstanceProvider](https://www.soklet.com/javadoc/com/soklet/core/InstanceProvider.html).
 <br/>
-Here's a naïve implementation that assumes the presence of a default constructor.
+Here's a naïve implementation using reflection that assumes the presence of a default constructor.
 
 ```java
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
   .instanceProvider(new InstanceProvider() {
     @Override
     public <T> T provide(@Nonnull Class<T> instanceClass) {
-      try {
+      // Use vanilla JDK reflection, and create a new instance every time
+      try {        
         return instanceClass.getDeclaredConstructor().newInstance();
       } catch (Exception e){
         throw new RuntimeException(e);
@@ -440,33 +441,82 @@ class WidgetResource {
 
 ### Lifecycle Interceptor
 
-TBD: update this code snippet
+The [LifecycleInterceptor](https://www.soklet.com/javadoc/com/soklet/core/LifecycleInterceptor.html) provides a set of well-defined hooks into request processing.
+<br/>
+Useful for things like:
+
+* Logging requests and responses
+* Performing authentication and authorization
+* Modifying requests/responses before downstream processing occurs
+* Wrapping downstream code in a database transaction 
+
+This is similar to the [Jakarta EE Servlet Filter](https://jakarta.ee/specifications/platform/9/apidocs/jakarta/servlet/filter) concept, but provides additional functionality beyond "wrap the whole request".
 
 ```java
-  @Override
-  public void interceptRequest(@Nonnull Request request,
-                               @Nullable ResourceMethod resourceMethod,
-                               @Nonnull Function<Request, MarshaledResponse> requestHandler,
-                               @Nonnull Consumer<MarshaledResponse> responseHandler) {
-    // Similar to a Servlet Filter, here you have the opportunity to:
-    //
-    // * Modify the request before downstream processing occurs
-    // * Modify the response before downstream processing occurs
-    // * Inject application-specific logic, e.g. authorizing a request or
-    //   wrapping downstream code in a database transaction
-    
-    // Let normal request processing finish
-    MarshaledResponse marshaledResponse = requestHandler.apply(request);
+SokletConfiguration configuration = new SokletConfiguration.Builder(server)
+  .lifecycleInterceptor(new LifecycleInterceptor() {
+    @Override
+    public void interceptRequest(@Nonnull Request request,
+                                 @Nullable ResourceMethod resourceMethod,
+                                 @Nonnull Function<Request, MarshaledResponse> requestHandler,
+                                 @Nonnull Consumer<MarshaledResponse> responseHandler) {
+      // Similar to a Servlet Filter...let normal request processing finish
+      MarshaledResponse marshaledResponse = requestHandler.apply(request);
 
-    // Add a snazzy header to all responses before they are sent over the wire.
-    marshaledResponse = marshaledResponse.copy()
-      .headers((mutableHeaders) -> {
-        mutableHeaders.put("X-Powered-By", Set.of("My Amazing API"));
-      }).finish();
+      // Add a snazzy header to all responses before they are sent over the wire.
+      // MarshaledResponse is immutable, so we use a copy-builder to mutate
+      marshaledResponse = marshaledResponse.copy()
+        .headers((mutableHeaders) -> {
+          mutableHeaders.put("X-Powered-By", Set.of("My Amazing API"));
+        }).finish();
 
-    // Let downstream processing finish
-    responseHandler.accept(marshaledResponse);
-  }	
+      // Let downstream processing finish using our modified marshaledResponse
+      responseHandler.accept(marshaledResponse);
+    }	
+
+    @Override
+    public void didStartRequestHandling(@Nonnull Request request,
+                                        @Nullable ResourceMethod resourceMethod) {
+      // Useful for tracking when a request comes in
+    }
+
+    @Override
+    public void didFinishRequestHandling(@Nonnull Request request,
+                                         @Nullable ResourceMethod resourceMethod,
+                                         @Nonnull MarshaledResponse marshaledResponse,
+                                         @Nonnull Duration processingDuration,
+                                         @Nonnull List<Throwable> throwables) {
+      // Useful for tracking when a request has fully finished processing.
+
+      // Why a list of throwables?
+      // For example, an exception might occur during the normal flow of execution,
+      // and then another might occur when attempting to write an error response
+    }    
+
+    @Override
+    public void willStartServer(@Nonnull Server server) {}
+
+    @Override
+    public void didStartServer(@Nonnull Server server) {}
+
+    @Override
+    public void willStopServer(@Nonnull Server server) {}
+
+    @Override
+    public void didStopServer(@Nonnull Server server) {}
+
+    @Override
+    public void willStartResponseWriting(@Nonnull Request request,
+                                         @Nullable ResourceMethod resourceMethod,
+                                         @Nonnull MarshaledResponse marshaledResponse) {}
+
+    @Override
+    public void didFinishResponseWriting(@Nonnull Request request,
+                                         @Nullable ResourceMethod resourceMethod,
+                                         @Nonnull MarshaledResponse marshaledResponse,
+                                         @Nonnull Duration responseWriteDuration,
+                                         @Nullable Throwable throwable) {}
+  }).build();
 ```
 
 
@@ -540,5 +590,8 @@ TBD
 ### Configuration (?)
 
 ### Request Context (?)
+
+We already have `RequestContext` instance available via threadlocal during request processing.
+TBD: should we also introduce a `Map<String, Object> userContext` (or whatever) on `Request` in which arbitrary metadata can be stuffed?
 
 ### Docker (?)
