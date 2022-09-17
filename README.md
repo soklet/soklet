@@ -390,8 +390,8 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 ### Instance Provider
 
 Soklet creates instances of Resource classes so it can invoke methods on them on your behalf.  To do this, it delegates to the configured [InstanceProvider](https://www.soklet.com/javadoc/com/soklet/core/InstanceProvider.html).
-<br/>
-Here's a naïve implementation using reflection that assumes the presence of a default constructor.
+<br/><br/>
+Here's a naïve implementation that assumes the presence of a default constructor.
 
 ```java
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
@@ -522,7 +522,73 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 ### Value Converters
 
-TBD
+A [ValueConverter](https://www.soklet.com/javadoc/com/soklet/converter/ValueConverter.html) is how Soklet marshals one type into another - for example, a query parameter is a `String` but it's useful to declare that your Resource method accepts a `LocalDate` instead of parsing it "by hand" every time.  For example:
+
+```java
+@Resource
+class WidgetResource {
+  // e.g. /widgets/123?date=2022-09-30&time=15:45
+  // ValueConverters take care of String->Long, String->LocalDate, String->LocalTime
+  // so you can focus on business logic.  Also simplifies testing...
+  @GET("/widgets/{widgetId}")
+  public Optional<Widget> widget(@PathParameter Long widgetId,
+                                 @QueryParameter LocalDate date,
+                                 @QueryParameter LocalTime time) {
+    return widgetService.findWidget(widgetId, date, time);
+  }
+}
+```
+
+The [ValueConverterRegistry](https://www.soklet.com/javadoc/com/soklet/converter/ValueConverterRegistry.html) construct is used to manage a set of these converters, and its default constructor provides a set of sensible defaults that is sufficient for most cases.
+<br/><br/>
+However, you might have special types that you'd like to have Soklet convert on your behalf.  Just create your own `ValueConverterRegistry` and supplement it with any `ValueConverter` instances you need and wire into your configuration.
+
+```java
+// A registry with useful default converters
+ValueConverterRegistry valueConverterRegistry = new ValueConverterRegistry();
+
+// Add a custom converter for a special type
+valueConverterRegistry.add(new ValueConverter<String, MyExampleType>() {
+  @Nullable
+  @Override
+  public MyExampleType convert(@Nullable String from) throws ValueConversionException {
+    if(from == null)
+      return null;
+				
+    // Whatever custom logic you need
+    return MyExampleType.fromString(from);
+  }
+
+  @Nonnull
+  @Override
+  public Type getFromType() {
+    return String.class;
+  }
+
+  @Nonnull
+  @Override
+  public Type getToType() {
+    return MyExampleType.class;
+  }
+});
+
+// Plug in your custom registry so Soklet can use it
+SokletConfiguration configuration = new SokletConfiguration.Builder(server)
+  .valueConverterRegistry(valueConverterRegistry)
+  .build();
+```
+
+Now, your Resource methods can enjoy custom marshaling for `MyExampleType`.
+
+```java
+@Resource
+class WidgetResource {
+  @GET("/widgets")
+  public List<Widget> widgets(@QueryParameter MyExampleType example) {
+    return widgetService.findWidgets(example);
+  }
+}
+```
 
 ### CORS Authorizer
 
@@ -588,6 +654,10 @@ TBD
 ### Testing
 
 ### Configuration (?)
+
+### Custom IDs
+
+e.g. using `ValueConverter` for seamless integration of https://github.com/Devskiller/friendly-id
 
 ### Request Context (?)
 
