@@ -539,9 +539,9 @@ class WidgetResource {
 }
 ```
 
-The [ValueConverterRegistry](https://www.soklet.com/javadoc/com/soklet/converter/ValueConverterRegistry.html) construct is used to manage a set of these converters, and its default constructor provides a set of sensible defaults that is sufficient for most cases.
+The [ValueConverterRegistry](https://www.soklet.com/javadoc/com/soklet/converter/ValueConverterRegistry.html) manages a set of these converters, and its default constructor provides a set of sensible defaults that is sufficient for most cases.
 <br/><br/>
-However, you might have special types that you'd like to have Soklet convert on your behalf.  Just create your own `ValueConverterRegistry` and supplement it with any `ValueConverter` instances you need and wire into your configuration.
+However, you might have special types that you'd like to have Soklet convert on your behalf.  Just supplement your `ValueConverterRegistry` with any `ValueConverter` instances you need.
 
 ```java
 // A registry with useful default converters
