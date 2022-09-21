@@ -599,7 +599,7 @@ Unless configured differently, Soklet will use [DefaultCorsAuthorizer](https://w
 
 #### All Origins (Testing Only!)
 
-This will "pass" all preflight requests regardless of origin.  Useful for local development or experimentation.
+This will allow all preflight requests regardless of origin.  Useful for local development and experimentation.
 
 ```java
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
@@ -610,7 +610,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 #### Whitelisted Origins
 
-This is usually what you want in a production system - a whitelisted set of origins from which to accept preflight requests.
+This is usually what you want in a production system - a whitelisted set of origins from which to allow preflight requests.
 
 ```java
 Set<String> allowedOrigins = Set.of("https://www.revetware.com");
@@ -648,13 +648,13 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
           .build());
 
       // Return an empty value if preflight is disallowed
-			return Optional.empty();
+      return Optional.empty();
     }
   })
   .build();
 ```
 
-If you need to customize further and control _exactly_ how the data goes back over the wire, provide your own  [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) and override the [`toCorsAllowedMarshaledResponse(Request request, CorsRequest corsRequest, CorsResponse corsResponse)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsAllowedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse)) and [`toCorsRejectedMarshaledResponse(Request request, CorsRequest corsRequest)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsRejectedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest)) methods to write preflight allowed/rejected responses.
+If you need to customize further and control _exactly_ how the data goes back over the wire, provide your own  [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) and override the [`toCorsAllowedMarshaledResponse(Request request, CorsRequest corsRequest, CorsResponse corsResponse)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsAllowedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse)) and [`toCorsRejectedMarshaledResponse(Request request, CorsRequest corsRequest)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsRejectedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest)) methods to write preflight allowed/rejected responses, respectively.
 
 ### Log Handler
 
