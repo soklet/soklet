@@ -314,20 +314,20 @@ Soklet's [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/Resp
 Hooks are provided for these scenarios:
 
 * "Happy path"
-    * [`toDefaultMarshaledResponse(Request, Response, ResourceMethod)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toDefaultMarshaledResponse(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.ResourceMethod))
+    * [`ResponseMarshaler::toDefaultMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toDefaultMarshaledResponse(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.ResourceMethod))
 * Uncaught exception
-    * [`toExceptionMarshaledResponse(Request request, Throwable throwable, ResourceMethod resourceMethod)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toExceptionMarshaledResponse(com.soklet.core.Request,java.lang.Throwable,com.soklet.core.ResourceMethod))    
+    * [`ResponseMarshaler::toExceptionMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toExceptionMarshaledResponse(com.soklet.core.Request,java.lang.Throwable,com.soklet.core.ResourceMethod))    
 * No matching resource method (HTTP 404)
-    * [`toNotFoundMarshaledResponse(Request)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toNotFoundMarshaledResponse(com.soklet.core.Request))
+    * [`ResponseMarshaler::toNotFoundMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toNotFoundMarshaledResponse(com.soklet.core.Request))
 * Method not allowed (HTTP 405)
-    * [`toMethodNotAllowedMarshaledResponse(Request request, Set<HttpMethod> allowedHttpMethods)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toMethodNotAllowedMarshaledResponse(com.soklet.core.Request,java.util.Set))    
+    * [`ResponseMarshaler::toMethodNotAllowedMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toMethodNotAllowedMarshaledResponse(com.soklet.core.Request,java.util.Set))    
 * HTTP OPTIONS
-    * [`toOptionsMarshaledResponse(Request request, Set<HttpMethod> allowedHttpMethods)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toOptionsMarshaledResponse(com.soklet.core.Request,java.util.Set))
+    * [`ResponseMarshaler::toOptionsMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toOptionsMarshaledResponse(com.soklet.core.Request,java.util.Set))
 * CORS 
-    * [`toCorsAllowedMarshaledResponse(Request request, CorsRequest corsRequest, CorsResponse corsResponse)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsAllowedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse))
-    * [`toCorsRejectedMarshaledResponse(Request request, CorsRequest corsRequest)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsRejectedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest))
+    * [`ResponseMarshaler::toCorsAllowedMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsAllowedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse))
+    * [`ResponseMarshaler::toCorsRejectedMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsRejectedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest))
 
-Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible defaults for things like CORS, OPTIONS, and 404s/405s.  This way you can stay focused on how your application writes happy path and exception responses.
+Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible defaults for things like CORS, OPTIONS, and 404s/405s.  This way you can stay focused on how your application writes happy path and exception responses.  For example:
 
 ```java
 // This example uses Gson to turn Java objects into JSON - https://github.com/google/gson
@@ -593,8 +593,8 @@ class WidgetResource {
 ### CORS Authorizer
 
 For [CORS Preflight](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) requests, Soklet will consult its configured [CorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/CorsAuthorizer.html) to determine how to respond.
-<br/><br/>
-Unless configured differently, Soklet will use [DefaultCorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/impl/DefaultCorsAuthorizer.html), which rejects all preflight requests.
+<br/>
+Unless configured differently, Soklet will use its [DefaultCorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/impl/DefaultCorsAuthorizer.html), which rejects all preflight requests.
 
 
 #### All Origins (Testing Only!)
@@ -654,7 +654,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
   .build();
 ```
 
-If you need to customize further and control _exactly_ how the data goes back over the wire, provide your own  [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) and override the [`toCorsAllowedMarshaledResponse(Request request, CorsRequest corsRequest, CorsResponse corsResponse)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsAllowedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse)) and [`toCorsRejectedMarshaledResponse(Request request, CorsRequest corsRequest)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsRejectedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest)) methods to write preflight allowed/rejected responses, respectively.
+If you need to customize further and control _exactly_ how the data goes back over the wire, provide your own  [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) and override the [`ResponseMarshaler::toCorsAllowedMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsAllowedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse)) and [`ResponseMarshaler::toCorsRejectedMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsRejectedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest)) methods to write preflight allowed/rejected responses, respectively.
 
 ### Log Handler
 
