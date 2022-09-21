@@ -88,13 +88,13 @@ class App {
 ## Resources
 
 For Soklet to be useful, one or more classes annotated with `@Resource` (hereafter _Resources_) are required, which use annotation metadata
-to declare how HTTP inputs (methods, URL paths, query parameters, cookies, etc.) map to Java methods. 
+to declare how HTTP inputs - methods, URL paths, query parameters, cookies, and so forth - map to Java methods (hereafter _Resource Methods_). 
 
 Soklet detects Resources using a compile-time annotation processor and constructs a lookup table to avoid expensive classpath scans during startup.
 
-When an HTTP request arrives, Soklet determines the appropriate Resource method to invoke based on HTTP method and URL path pattern matching.  Parameters are provided using the heuristics described below.
+When an HTTP request arrives, Soklet determines the appropriate Resource Method to invoke based on HTTP method and URL path pattern matching.  Parameters are provided using the heuristics described below.
 
-Resource methods may return results of any type - your [Response Marshaler](#response-marshaler) runs downstream and is responsible for converting the returned objects to bytes over the wire.
+Resource Methods may return results of any type - your [Response Marshaler](#response-marshaler) runs downstream and is responsible for converting the returned objects to bytes over the wire.
 
 ```java
 @Resource
@@ -192,8 +192,8 @@ The components you'll likely want to customize are:
 
 The "experts only" components are:
 
-* [Request Method Resolver](#request-method-resolver-experts-only) - determines how to map HTTP requests to Resource methods 
-* [Resource Method Parameter Provider](#resource-method-parameter-provider-experts-only) - determines how to inject appropriate parameter values when invoking Resource methods
+* [Request Method Resolver](#request-method-resolver-experts-only) - determines how to map HTTP requests to Resource Methods 
+* [Resource Method Parameter Provider](#resource-method-parameter-provider-experts-only) - determines how to inject appropriate parameter values when invoking Resource Methods
 
 Here's an example configuration for an API that serves JSON responses.
 
@@ -317,7 +317,7 @@ Hooks are provided for these scenarios:
     * [`ResponseMarshaler::toDefaultMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toDefaultMarshaledResponse(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.ResourceMethod))
 * Uncaught exception
     * [`ResponseMarshaler::toExceptionMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toExceptionMarshaledResponse(com.soklet.core.Request,java.lang.Throwable,com.soklet.core.ResourceMethod))    
-* No matching resource method (HTTP 404)
+* No matching Resource Method (HTTP 404)
     * [`ResponseMarshaler::toNotFoundMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toNotFoundMarshaledResponse(com.soklet.core.Request))
 * Method not allowed (HTTP 405)
     * [`ResponseMarshaler::toMethodNotAllowedMarshaledResponse`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toMethodNotAllowedMarshaledResponse(com.soklet.core.Request,java.util.Set))    
@@ -522,7 +522,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 ### Value Converters
 
-A [ValueConverter](https://www.soklet.com/javadoc/com/soklet/converter/ValueConverter.html) is how Soklet marshals one type into another - for example, a query parameter is a `String` but it's useful to declare that your Resource method accepts a `LocalDate` instead of parsing it "by hand" every time.  For example:
+A [ValueConverter](https://www.soklet.com/javadoc/com/soklet/converter/ValueConverter.html) is how Soklet marshals one type into another - for example, a query parameter is a `String` but it's useful to declare that your Resource Method accepts a `LocalDate` instead of parsing it "by hand" every time.  For example:
 
 ```java
 @Resource
@@ -578,7 +578,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
   .build();
 ```
 
-Now, your Resource methods can enjoy custom marshaling for `MyExampleType`.
+Now, your Resource Methods can enjoy custom marshaling for `MyExampleType`.
 
 ```java
 @Resource
