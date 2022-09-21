@@ -25,6 +25,7 @@ import com.soklet.core.Request;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -42,7 +43,9 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	public WhitelistedOriginsCorsAuthorizer(@Nonnull Set<String> whitelistedOrigins) {
 		requireNonNull(whitelistedOrigins);
-		this.whitelistedOrigins = Collections.unmodifiableSet(new TreeSet<>(whitelistedOrigins));
+		this.whitelistedOrigins = Collections.unmodifiableSet(new TreeSet<>(whitelistedOrigins.stream()
+				.map(whitelistedOrigin -> normalizeOrigin(whitelistedOrigin))
+				.collect(Collectors.toSet())));
 	}
 
 	@Nonnull
@@ -50,13 +53,19 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	public Optional<CorsResponse> authorize(@Nonnull Request request,
 																					@Nonnull CorsRequest corsRequest,
 																					@Nonnull Set<HttpMethod> availableHttpMethods) {
-		if (getWhitelistedOrigins().contains(corsRequest.getOrigin()))
-			return Optional.of(new CorsResponse.Builder(whitelistedOrigins.stream().collect(Collectors.joining(", ")))
+		if (getWhitelistedOrigins().contains(normalizeOrigin(corsRequest.getOrigin())))
+			return Optional.of(new CorsResponse.Builder(corsRequest.getOrigin())
 					.accessControlAllowMethods(availableHttpMethods)
 					.accessControlAllowHeaders(Set.of("*"))
 					.build());
 
 		return Optional.empty();
+	}
+
+	@Nonnull
+	protected String normalizeOrigin(@Nonnull String origin) {
+		requireNonNull(origin);
+		return origin.trim().toLowerCase(Locale.ROOT);
 	}
 
 	@Nonnull

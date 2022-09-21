@@ -592,11 +592,69 @@ class WidgetResource {
 
 ### CORS Authorizer
 
-TBD
+For [CORS Preflight](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) requests, Soklet will consult its configured [CorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/CorsAuthorizer.html) to determine how to respond.
+<br/><br/>
+Unless configured differently, Soklet will use [DefaultCorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/impl/DefaultCorsAuthorizer.html), which rejects all preflight requests.
+
 
 #### All Origins (Testing Only!)
 
+This will "pass" all preflight requests regardless of origin.  Useful for local development or experimentation.
+
+```java
+SokletConfiguration configuration = new SokletConfiguration.Builder(server)
+  // "Wildcard" CORS authorization (don't use this in production!)
+  .corsAuthorizer(new AllOriginsCorsAuthorizer())
+  .build();
+```
+
 #### Whitelisted Origins
+
+This is usually what you want in a production system - a whitelisted set of origins from which to accept preflight requests.
+
+```java
+Set<String> allowedOrigins = Set.of("https://www.revetware.com");
+
+SokletConfiguration configuration = new SokletConfiguration.Builder(server)
+  .corsAuthorizer(new WhitelistedOriginsCorsAuthorizer(allowedOrigins))
+  .build();
+```
+
+#### Custom Handling
+
+If none of the out-of-the-box [CorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/CorsAuthorizer.html) implementations fit your use-case, it's straightforward to roll your own.
+
+```java
+SokletConfiguration configuration = new SokletConfiguration.Builder(server)
+  .corsAuthorizer(new CorsAuthorizer() {
+    @Nonnull
+    @Override
+    public Optional<CorsResponse> authorize(@Nonnull Request request,
+                                            @Nonnull CorsRequest corsRequest,
+                                            @Nonnull Set<HttpMethod> availableHttpMethods) {
+      // Arbitrary application-specific rule for whether to approve this preflight
+      boolean allowPreflight = request.getQueryParameters().containsKey("example");
+
+      // Echo back the request's origin and the set of HTTP methods Soklet determines
+      // your Resource Methods can support for this preflight.
+      // The configured ResponseMarshaler will take this info and write it back over the wire
+      if (allowPreflight)
+        return Optional.of(new CorsResponse.Builder(corsRequest.getOrigin())
+          .accessControlAllowMethods(availableHttpMethods)
+          .accessControlAllowHeaders(Set.of("*"))
+          .accessControlExposeHeaders(Set.of("*"))
+          .accessControlAllowCredentials(true)
+          .accessControlMaxAge(600 /* 10 minutes */)
+          .build());
+
+      // Return an empty value if preflight is disallowed
+			return Optional.empty();
+    }
+  })
+  .build();
+```
+
+If you need to customize further and control _exactly_ how the data goes back over the wire, provide your own  [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) and override the [`toCorsAllowedMarshaledResponse(Request request, CorsRequest corsRequest, CorsResponse corsResponse)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsAllowedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse)) and [`toCorsRejectedMarshaledResponse(Request request, CorsRequest corsRequest)`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#toCorsRejectedMarshaledResponse(com.soklet.core.Request,com.soklet.core.CorsRequest)) methods to write preflight allowed/rejected responses.
 
 ### Log Handler
 
