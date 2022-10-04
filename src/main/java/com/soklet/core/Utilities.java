@@ -19,6 +19,7 @@ package com.soklet.core;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -32,6 +33,8 @@ import java.util.Locale.LanguageRange;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
@@ -42,6 +45,8 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class Utilities {
+	@Nonnull
+	private static final boolean VIRTUAL_THREADS_AVAILABLE;
 	@Nonnull
 	private static final byte[] EMPTY_BYTE_ARRAY;
 	@Nonnull
@@ -59,10 +64,29 @@ public final class Utilities {
 		}
 
 		LOCALES_BY_LANGUAGE_RANGE_RANGE = Collections.unmodifiableMap(localesByLanguageRangeRange);
+
+		boolean virtualThreadsAvailable = false;
+
+		try {
+			// Hat tip to https://github.com/javalin/javalin for this technique
+			Method newVirtualThreadPerTaskExecutorMethod = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
+			try (ExecutorService executorService = (ExecutorService) newVirtualThreadPerTaskExecutorMethod.invoke(Executors.class)) {
+				virtualThreadsAvailable = true;
+			}
+		} catch (Exception ignored) {
+			// We don't care why this failed, but if we're here we know JVM does not support virtual threads
+		}
+
+		VIRTUAL_THREADS_AVAILABLE = virtualThreadsAvailable;
 	}
 
 	private Utilities() {
 		// Non-instantiable
+	}
+
+	@Nonnull
+	public static Boolean virtualThreadsAvailable() {
+		return VIRTUAL_THREADS_AVAILABLE;
 	}
 
 	@Nonnull

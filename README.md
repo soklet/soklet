@@ -410,7 +410,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 In practice, you will likely want to tie in to whatever Dependency Injection library your application uses and have
 the DI infrastructure vend your instances.<br/><br/>
-Here's how it might look if you use [Guice](https://github.com/google/guice):
+Here's how it might look if you use [Google Guice](https://github.com/google/guice):
 
 ```java
 Injector injector = Guice.createInjector(new MyExampleAppModule());

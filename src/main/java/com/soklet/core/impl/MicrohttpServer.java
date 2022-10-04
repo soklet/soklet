@@ -23,6 +23,7 @@ import com.soklet.core.Request;
 import com.soklet.core.RequestHandler;
 import com.soklet.core.Server;
 import com.soklet.core.StatusCode;
+import com.soklet.core.Utilities;
 import com.soklet.microhttp.EventLoop;
 import com.soklet.microhttp.Handler;
 import com.soklet.microhttp.Header;
@@ -48,8 +49,10 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -150,14 +153,25 @@ public class MicrohttpServer implements Server {
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.logHandler = builder.logHandler != null ? builder.logHandler : new DefaultLogHandler();
 		this.eventLoopExecutorServiceSupplier = builder.eventLoopExecutorServiceSupplier != null ? builder.eventLoopExecutorServiceSupplier : () -> {
-			return Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("http-server").uncaughtExceptionHandler((Thread thread, Throwable throwable) -> {
-				getLogHandler().logError("Unexpected exception occurred during server event-loop processing", throwable);
-			}).factory());
+			String threadNamePrefix = "event-loop";
+
+			if (Utilities.virtualThreadsAvailable())
+				return Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name(threadNamePrefix).uncaughtExceptionHandler((Thread thread, Throwable throwable) -> {
+					getLogHandler().logError("Unexpected exception occurred during server event-loop processing", throwable);
+				}).factory());
+
+
+			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
 		};
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
-			return Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("http-server").uncaughtExceptionHandler((Thread thread, Throwable throwable) -> {
-				getLogHandler().logError("Unexpected exception occurred during server HTTP request processing", throwable);
-			}).factory());
+			String threadNamePrefix = "request-handler";
+
+			if (Utilities.virtualThreadsAvailable())
+				return Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name(threadNamePrefix).uncaughtExceptionHandler((Thread thread, Throwable throwable) -> {
+					getLogHandler().logError("Unexpected exception occurred during server HTTP request processing", throwable);
+				}).factory());
+
+			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
 		};
 	}
 
@@ -510,6 +524,38 @@ public class MicrohttpServer implements Server {
 	@Nonnull
 	protected Optional<RequestHandler> getRequestHandler() {
 		return Optional.ofNullable(this.requestHandler);
+	}
+
+	@ThreadSafe
+	protected static class NonvirtualThreadFactory implements ThreadFactory {
+		@Nonnull
+		private final String namePrefix;
+		@Nonnull
+		private final AtomicInteger idGenerator;
+
+		public NonvirtualThreadFactory(@Nonnull String namePrefix) {
+			requireNonNull(namePrefix);
+
+			this.namePrefix = namePrefix;
+			this.idGenerator = new AtomicInteger(0);
+		}
+
+		@Override
+		@Nonnull
+		public Thread newThread(@Nonnull Runnable runnable) {
+			String name = format("%s-%s", getNamePrefix(), getIdGenerator().incrementAndGet());
+			return new Thread(runnable, name);
+		}
+
+		@Nonnull
+		protected String getNamePrefix() {
+			return this.namePrefix;
+		}
+
+		@Nonnull
+		protected AtomicInteger getIdGenerator() {
+			return this.idGenerator;
+		}
 	}
 
 	/**
