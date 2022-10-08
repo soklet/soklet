@@ -17,7 +17,7 @@ Soklet is a library, not a framework.
 * Deep control over request and response processing
 * Immutable where reasonable
 * Small, comprehensible codebase
-* Soklet apps should be amenable to automated testing
+* Amenable to automated testing
 
 ### Design Non-Goals
 
@@ -658,7 +658,33 @@ If you need to customize further and control _exactly_ how the data goes back ov
 
 ### Log Handler
 
-TBD
+In case you'd like to handle processing of any of Soklet's internal log messages, you can provide your own [LogHandler](https://www.soklet.com/javadoc/com/soklet/core/LogHandler.html) implementation.
+
+For example, your application might use [Logback](https://logback.qos.ch/) and/or [SLF4J](https://www.slf4j.org/), and you'd like to log messages using those.
+
+```java
+SokletConfiguration configuration = new SokletConfiguration.Builder(server)
+  // Basic LogHandler that writes to stdout/stderr
+  .logHandler(new LogHandler() {
+    @Override
+    public void logDebug(@Nonnull String message) {
+      System.out.println(message);
+    }
+
+    @Override
+    public void logError(@Nonnull String message) {
+      System.err.println(message);
+    }
+
+    @Override
+    public void logError(@Nonnull String message,
+                         @Nonnull Throwable throwable) {
+      System.err.println(message);
+      throwable.printStackTrace();
+    }
+  })
+  .build();
+```
 
 ### Request Method Resolver (experts only!)
 
