@@ -12,8 +12,8 @@ Soklet is a library, not a framework.
 
 The Java web ecosystem is missing a solution is light (in terms of dependencies) but offers compelling programmer-friendly functionality such as DI-awareness and annotation-based request handling.  Soklet aims to fill this void.
 
-[Spring](https://spring.io) is heavy and complex.
-[Quarkus](https://quarkus.io) is heavy and requires Reactive programming.
+[Spring](https://spring.io) is heavy and complex.<br/>
+[Quarkus](https://quarkus.io) is heavy and requires Reactive programming.<br/>
 [Javalin](https://javalin.io) is light but has key ideological differences.
 
 ### Design Goals
