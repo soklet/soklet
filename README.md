@@ -10,11 +10,7 @@ Soklet is a library, not a framework.
 
 ### Why?
 
-The Java web ecosystem is missing a solution is light (in terms of dependencies) but offers compelling programmer-friendly functionality such as DI-awareness and annotation-based request handling.  Soklet aims to fill this void.
-
-[Spring](https://spring.io) is heavy and complex.<br/>
-[Quarkus](https://quarkus.io) is heavy and requires Reactive programming.<br/>
-[Javalin](https://javalin.io) is light but has key ideological differences.
+The Java web ecosystem is missing a solution that is light (in terms of dependencies) but offers features like Loom support, DI-awareness, and annotation-based request handling.  Soklet aims to fill this void.
 
 ### Design Goals
 
@@ -95,8 +91,7 @@ class App {
 
 ## Resources
 
-For Soklet to be useful, one or more classes annotated with `@Resource` (hereafter _Resources_) are required, which use annotation metadata
-to declare how HTTP inputs - methods, URL paths, query parameters, cookies, and so forth - map to Java methods (hereafter _Resource Methods_). 
+For Soklet to be useful, one or more classes annotated with `@Resource` (hereafter _Resources_) are required, which use annotation metadata to declare how HTTP inputs - methods, URL paths, query parameters, cookies, and so forth - map to Java methods (hereafter _Resource Methods_). 
 
 Soklet detects Resources using a compile-time annotation processor and constructs a lookup table to avoid expensive classpath scans during startup.
 
@@ -192,16 +187,16 @@ All of Soklet's components are programmatically pluggable via the [SokletConfigu
 The components you'll likely want to customize are:
 
 * [Server](#server) - handles HTTP 1.1 requests and responses
-* [Response Marshaler](#response-marshaler) - turns Java objects into bytes to send over the wire
-* [Instance Provider](#instance-provider) - creates class instances on your behalf
-* [Lifecycle Interceptor](#lifecycle-interceptor) - provides hooks to customize phases of request/response processing
-* [Value Converters](#value-converters) - convert input strings (e.g. query parameters) to Java types (e.g. [LocalDateTime](https://docs.oracle.com/en/java/javase/18/docs/api/java.base/java/time/LocalDateTime.html))
-* [CORS Authorizer](#cors-authorizer) - determines whether to accept or reject [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) requests
+* [ResponseMarshaler](#response-marshaler) - turns Java objects into bytes to send over the wire
+* [InstanceProvider](#instance-provider) - creates class instances on your behalf
+* [LifecycleInterceptor](#lifecycle-interceptor) - provides hooks to customize phases of request/response processing
+* [ValueConverters](#value-converters) - convert input strings (e.g. query parameters) to Java types (e.g. [LocalDateTime](https://docs.oracle.com/en/java/javase/18/docs/api/java.base/java/time/LocalDateTime.html))
+* [CorsAuthorizer](#cors-authorizer) - determines whether to accept or reject [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) requests
 
 The "experts only" components are:
 
-* [Request Method Resolver](#request-method-resolver-experts-only) - determines how to map HTTP requests to Resource Methods 
-* [Resource Method Parameter Provider](#resource-method-parameter-provider-experts-only) - determines how to inject appropriate parameter values when invoking Resource Methods
+* [RequestMethodResolver](https://www.soklet.com/javadoc/com/soklet/core/RequestMethodResolver.html) - determines how to map HTTP requests to Resource Methods 
+* [ResourceMethodParameterProvider](https://www.soklet.com/javadoc/com/soklet/core/ResourceMethodParameterProvider.html) - determines how to inject appropriate parameter values when invoking Resource Methods
 
 Here's an example configuration for an API that serves JSON responses.
 
@@ -282,6 +277,7 @@ try (Soklet soklet = new Soklet(configuration)) {
 Soklet provides an embedded version of [Microhttp](https://github.com/ebarlas/microhttp) out-of-the-box in the form of [MicrohttpServer](https://www.soklet.com/javadoc/com/soklet/core/impl/MicrohttpServer.html).
 
 ```java
+// The only required configuration is port number
 Server server = new MicrohttpServer.Builder(8080 /* port */)
   // Host on which we are listening
   .host("0.0.0.0")
@@ -668,7 +664,7 @@ If you need to customize further and control _exactly_ how the data goes back ov
 
 In case you'd like to handle processing of any of Soklet's internal log messages, you can provide your own [LogHandler](https://www.soklet.com/javadoc/com/soklet/core/LogHandler.html) implementation.
 
-For example, your application might use [Logback](https://logback.qos.ch/) and/or [SLF4J](https://www.slf4j.org/), and you'd like to log messages using those.
+For example, if application uses [Logback](https://logback.qos.ch/) and/or [SLF4J](https://www.slf4j.org/), you will likely want to log messages using those.
 
 ```java
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
@@ -693,14 +689,6 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
   })
   .build();
 ```
-
-### Request Method Resolver (experts only!)
-
-TBD
-
-### Resource Method Parameter Provider (experts only!)
-
-TBD
 
 ## Common Usage Patterns
 
