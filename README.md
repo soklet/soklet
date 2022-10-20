@@ -25,7 +25,7 @@ The Java web ecosystem is missing a solution that is light (in terms of dependen
 
 ### Design Non-Goals
 
-* SSL/TLS (your load balancer should be providing TLS termination...)
+* SSL/TLS (your load balancer should provide TLS termination...)
 * HTTP streaming
 * WebSockets
 * Dictate which technologies to use (Guice vs. Dagger, Gson vs. Jackson, etc.)
@@ -46,7 +46,7 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-Soklet includes code from the following:
+Soklet includes code from the following OSS projects:
 
 * [ClassIndex](https://github.com/atteo/classindex) - Apache 2.0 License
 * [Microhttp](https://github.com/ebarlas/microhttp) - MIT License
@@ -662,13 +662,14 @@ If you need to customize further and control _exactly_ how the data goes back ov
 
 ### Log Handler
 
-In case you'd like to handle processing of any of Soklet's internal log messages, you can provide your own [LogHandler](https://www.soklet.com/javadoc/com/soklet/core/LogHandler.html) implementation.
+If you'd like to handle of any of Soklet's internal log events, you can provide your own [LogHandler](https://www.soklet.com/javadoc/com/soklet/core/LogHandler.html) implementation.
 
-For example, if application uses [Logback](https://logback.qos.ch/) and/or [SLF4J](https://www.slf4j.org/), you will likely want to log messages using those.
+For example, if your application uses [Logback](https://logback.qos.ch/) and/or [SLF4J](https://www.slf4j.org/), you will likely want to log messages using those.
+
+Below we present a basic implementation that writes to stdout/stderr.
 
 ```java
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
-  // Basic LogHandler that writes to stdout/stderr
   .logHandler(new LogHandler() {
     @Override
     public void logDebug(@Nonnull String message) {
@@ -702,6 +703,37 @@ Request headers and cookies are common ways to pass authentication information -
 
 The appropriate place to handle this is with a custom [Lifecycle Interceptor](#lifecycle-interceptor).
 
+It would also be nice for each Resource Method to be annotated with information that describes its security requirements - does the Method require authentication?  Are special roles/authorizations necessary?  And so on.
+
+First - let's define a Plain Old Java Annotation we can apply to our Resource Methods.
+
+```java
+// Roles we have in our app
+enum Role {
+  REGULAR_USER,
+  ADMINISTRATOR
+}
+
+// Annotation declaring "this method requires that Role"
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface RoleRequired {
+  Role value() default Role.REGULAR_USER;
+}
+
+// Resource Method with our new annotation
+@Resource
+class ExampleResource {
+  @GET("/top-secret")
+  @RoleRequired(Role.ADMINISTRATOR) // Use our new annotation
+  public String topSecret() {
+    return "Don't tell anyone!";
+  }
+}
+```
+
+With our annotation ready to go, we can build out authentication and authorization:
+
 ```java
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
   .lifecycleInterceptor(new LifecycleInterceptor() {
@@ -710,24 +742,51 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
                                  @Nullable ResourceMethod resourceMethod,
                                  @Nonnull Function<Request, MarshaledResponse> requestHandler,
                                  @Nonnull Consumer<MarshaledResponse> responseHandler) {
-      // Pull the value from MyExampleJWTCookie and use it to authenticate
-      request.getCookies().stream()
-        .filter(cookie -> cookie.getName().equals("MyExampleJWTCookie"))
-        .findAny()
-        .ifPresent(jwtCookie -> {
-          // Your authentication logic here
-        });
+      // Look up account using JWT from the request
+      ExampleAccount account = accountForRequest(request).orElse(null);
+
+      // No account?  Authentication failed
+      if(account == null)
+        throw new MyAuthenticationException();
+
+		  // Via ResourceMethod, you have access to the Java method configured 
+      // to handle the request (if no 404)...
+      Method method = resourceMethod.getMethod();
+
+      // ...which permits you to do things like examine its annotations
+      // to apply special behavior, e.g. check authorization
+      if (method != null && method.getAnnotation(RoleRequired.class) != null) {
+        Role role = method.getAnnotation(RoleRequired.class).value();
+
+        // Authenticated account doesn't have the proper role?
+        // Authorization failed
+        if (!account.hasRole(role))
+          throw new MyAuthorizationException();
+      }      
 
       // Normal downstream processing
       MarshaledResponse marshaledResponse = requestHandler.apply(request);
       responseHandler.accept(marshaledResponse);
-    }		
+    }
+
+    // Pull the value from MyExampleJWTCookie and use it to authenticate
+    Optional<ExampleAccount> accountForRequest(Request request) {
+      // For sake of example, we examine cookies.
+      // In practice, you might example request headers instead.     
+      request.getCookies().stream()
+        .filter(cookie -> cookie.getName().equals("MyExampleJWTCookie"))
+        .findAny()
+        .ifPresent(jwtCookie -> {
+          // Wire in your authentication logic/account loading here
+          return myAccountService.accountForJwt(jwtCookie.getValue());
+        });
+
+      return Optional.empty();
+    }
   }).build();
 ```
 
-### Relational Database Transaction Management
-
-TBD
+This approach can be extended to other scenarios where it's useful to apply custom behavior to specially-annotated Resource Methods.  For example, you can imagine annotations like `@Transactional`, `@WritableMaster`, and `@ReadReplica` that specify how a Resource Method should interacts with datasource[s].
 
 ### Exception Handling
 
