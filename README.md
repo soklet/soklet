@@ -63,7 +63,7 @@ Soklet includes code from the following OSS projects:
 
 ### Direct Download
 
-If you don't use Maven, you can drop [soklet-2.0.0-SNAPSHOT.jar](http://central.maven.org/maven2/com/soklet/soklet/2.0.0-SNAPSHOT/soklet-2.0.0-SNAPSHOT.jar) directly into your project.  That's all you need!
+If you don't use Maven, you can drop [soklet-2.0.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.0.0-SNAPSHOT/soklet-2.0.0-SNAPSHOT.jar) directly into your project.  That's all you need!
 
 ## App Startup
 
