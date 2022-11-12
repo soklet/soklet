@@ -75,7 +75,7 @@ class ConnectionEventLoop {
 
         timeoutQueue = new Scheduler();
         taskQueue = new ConcurrentLinkedQueue<>();
-        buffer = ByteBuffer.allocateDirect(options.bufferSize());
+        buffer = ByteBuffer.allocateDirect(options.readBufferSize());
         selector = Selector.open();
         thread = new Thread(this::run, "connection-event-loop");
     }
@@ -165,15 +165,7 @@ class ConnectionEventLoop {
                 }
                 onParseRequest();
             } else {
-                if (!requestParser.headerParsed() && byteTokenizer.size() > options.maxHeaderSize()) {
-                    if (logger.enabled()) {
-                        logger.log(
-                                new LogEntry("event", "exceed_header_max_close"),
-                                new LogEntry("id", id),
-                                new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
-                    }
-                    failSafeClose();
-                } else if (byteTokenizer.size() > options.maxRequestSize()) {
+                if (byteTokenizer.size() > options.maxRequestSize()) {
                     if (logger.enabled()) {
                         logger.log(
                                 new LogEntry("event", "exceed_request_max_close"),
@@ -256,17 +248,14 @@ class ConnectionEventLoop {
             }
         }
 
-        private void transferToDirectBufferForWrite() {
+        private int doWrite() throws IOException {
             buffer.clear(); // pos = 0, limit = capacity
             int amount = Math.min(buffer.remaining(), writeBuffer.remaining()); // determine transfer quantity
             buffer.put(writeBuffer.array(), writeBuffer.position(), amount); // do transfer
             buffer.flip();
-            writeBuffer.position(writeBuffer.position() + amount); // advance write buffer
-        }
-
-        private int doWrite() throws IOException {
-            transferToDirectBufferForWrite();
-            return socketChannel.write(buffer);
+            int written = socketChannel.write(buffer);
+            writeBuffer.position(writeBuffer.position() + written); // advance write buffer
+            return written;
         }
 
         private void doOnWritable() throws IOException {

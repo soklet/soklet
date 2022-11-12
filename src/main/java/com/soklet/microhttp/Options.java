@@ -10,10 +10,9 @@ public class Options {
     private boolean reusePort = false;
     private Duration resolution = Duration.ofMillis(100);
     private Duration requestTimeout = Duration.ofSeconds(60);
-    private int bufferSize = 1_024 * 64;
+    private int readBufferSize = 1_024 * 64;
     private int acceptLength = 0;
     private int maxRequestSize = 1_024 * 1_024;
-    private int maxHeaderSize = 1_024 * 8;
     private int concurrency = Runtime.getRuntime().availableProcessors();
 
     public String host() {
@@ -40,8 +39,8 @@ public class Options {
         return requestTimeout;
     }
 
-    public int bufferSize() {
-        return bufferSize;
+    public int readBufferSize() {
+        return readBufferSize;
     }
 
     public int acceptLength() {
@@ -50,10 +49,6 @@ public class Options {
 
     public int maxRequestSize() {
         return maxRequestSize;
-    }
-
-    public int maxHeaderSize() {
-        return maxHeaderSize;
     }
 
     public int concurrency() {
@@ -90,8 +85,8 @@ public class Options {
         return this;
     }
 
-    public Options withBufferSize(int bufferSize) {
-        this.bufferSize = bufferSize;
+    public Options withReadBufferSize(int readBufferSize) {
+        this.readBufferSize = readBufferSize;
         return this;
     }
 
@@ -102,11 +97,6 @@ public class Options {
 
     public Options withMaxRequestSize(int maxRequestSize) {
         this.maxRequestSize = maxRequestSize;
-        return this;
-    }
-
-    public Options withMaxHeaderSize(int maxHeaderSize) {
-        this.maxHeaderSize = maxHeaderSize;
         return this;
     }
 

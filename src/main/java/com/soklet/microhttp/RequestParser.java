@@ -54,10 +54,6 @@ class RequestParser {
         this.tokenizer = tokenizer;
     }
 
-    boolean headerParsed() {
-        return state.ordinal() > State.HEADER.ordinal();
-    }
-
     boolean parse() {
         while (state != State.DONE) {
             byte[] token = state.tokenSupplier.apply(this);
@@ -117,9 +113,6 @@ class RequestParser {
         int spaceIndex = colonIndex + 1;
         while (spaceIndex < line.length && line[spaceIndex] == ' ') { // advance beyond variable-length space prefix
             spaceIndex++;
-        }
-        if (spaceIndex == line.length) {
-            throw new IllegalStateException("malformed header line");
         }
         return new Header(
                 new String(line, 0, colonIndex),
