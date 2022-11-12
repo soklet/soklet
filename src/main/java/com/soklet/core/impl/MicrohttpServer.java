@@ -102,8 +102,6 @@ public class MicrohttpServer implements Server {
 	@Nonnull
 	private final Integer maximumRequestSizeInBytes;
 	@Nonnull
-	private final Integer maximumHeaderSizeInBytes;
-	@Nonnull
 	private final Integer socketReadBufferSizeInBytes;
 	@Nonnull
 	private final Integer socketPendingConnectionLimit;
@@ -145,7 +143,6 @@ public class MicrohttpServer implements Server {
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
 		this.concurrency = builder.concurrency != null ? builder.concurrency : DEFAULT_CONCURRENCY;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
-		this.maximumHeaderSizeInBytes = builder.maximumHeaderSizeInBytes != null ? builder.maximumHeaderSizeInBytes : DEFAULT_MAXIMUM_HEADER_SIZE_IN_BYTES;
 		this.socketReadBufferSizeInBytes = builder.socketReadBufferSizeInBytes != null ? builder.socketReadBufferSizeInBytes : DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
@@ -189,9 +186,8 @@ public class MicrohttpServer implements Server {
 					.withConcurrency(getConcurrency())
 					.withRequestTimeout(getRequestTimeout())
 					.withResolution(getSocketSelectTimeout())
-					.withBufferSize(getSocketReadBufferSizeInBytes())
+					.withReadBufferSize(getSocketReadBufferSizeInBytes())
 					.withMaxRequestSize(getMaximumRequestSizeInBytes())
-					.withMaxHeaderSize(getMaximumHeaderSizeInBytes())
 					.withAcceptLength(getSocketPendingConnectionLimit());
 
 			Logger logger = new Logger() {
@@ -467,11 +463,6 @@ public class MicrohttpServer implements Server {
 	}
 
 	@Nonnull
-	protected Integer getMaximumHeaderSizeInBytes() {
-		return this.maximumHeaderSizeInBytes;
-	}
-
-	@Nonnull
 	protected Integer getSocketReadBufferSizeInBytes() {
 		return this.socketReadBufferSizeInBytes;
 	}
@@ -582,8 +573,6 @@ public class MicrohttpServer implements Server {
 		@Nullable
 		private Integer maximumRequestSizeInBytes;
 		@Nullable
-		private Integer maximumHeaderSizeInBytes;
-		@Nullable
 		private Integer socketReadBufferSizeInBytes;
 		@Nullable
 		private Integer socketPendingConnectionLimit;
@@ -639,12 +628,6 @@ public class MicrohttpServer implements Server {
 		@Nonnull
 		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
 			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
-			return this;
-		}
-
-		@Nonnull
-		public Builder maximumHeaderSizeInBytes(@Nullable Integer maximumHeaderSizeInBytes) {
-			this.maximumHeaderSizeInBytes = maximumHeaderSizeInBytes;
 			return this;
 		}
 

@@ -291,8 +291,6 @@ Server server = new MicrohttpServer.Builder(8080 /* port */)
   .shutdownTimeout(Duration.ofSeconds(5))
   // The biggest request we permit clients to make  
   .maximumRequestSizeInBytes(1_024 * 1_024)
-  // The biggest request headers we permit clients to send  
-  .maximumHeaderSizeInBytes(1_024 * 8)    
   // Requests are read into a byte buffer of this size
   .socketReadBufferSizeInBytes(1_024 * 64)
   // The maximum number of pending connections on the socket (values < 1 use JVM platform default)
