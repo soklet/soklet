@@ -30,6 +30,7 @@ import com.soklet.microhttp.Header;
 import com.soklet.microhttp.LogEntry;
 import com.soklet.microhttp.Logger;
 import com.soklet.microhttp.Options;
+import com.soklet.microhttp.OptionsBuilder;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -180,7 +181,7 @@ public class MicrohttpServer implements Server {
 			if (isStarted())
 				return;
 
-			Options options = new Options()
+			Options options = OptionsBuilder.newBuilder()
 					.withHost(getHost())
 					.withPort(getPort())
 					.withConcurrency(getConcurrency())
@@ -188,7 +189,8 @@ public class MicrohttpServer implements Server {
 					.withResolution(getSocketSelectTimeout())
 					.withReadBufferSize(getSocketReadBufferSizeInBytes())
 					.withMaxRequestSize(getMaximumRequestSizeInBytes())
-					.withAcceptLength(getSocketPendingConnectionLimit());
+					.withAcceptLength(getSocketPendingConnectionLimit())
+					.build();
 
 			Logger logger = new Logger() {
 				@Override
@@ -208,7 +210,7 @@ public class MicrohttpServer implements Server {
 				}
 			};
 
-			Handler handler = ((connectionMetadata, microhttpRequest, microHttpCallback) -> {
+			Handler handler = ((microhttpRequest, microHttpCallback) -> {
 				ExecutorService requestHandlerExecutorServiceReference = this.requestHandlerExecutorService;
 
 				if (requestHandlerExecutorServiceReference == null)
