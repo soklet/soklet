@@ -154,10 +154,9 @@ public class MicrohttpServer implements Server {
 			String threadNamePrefix = "event-loop";
 
 			if (Utilities.virtualThreadsAvailable())
-				return Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name(threadNamePrefix).uncaughtExceptionHandler((Thread thread, Throwable throwable) -> {
+				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 					getLogHandler().logError("Unexpected exception occurred during server event-loop processing", throwable);
-				}).factory());
-
+				});
 
 			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
 		};
@@ -165,9 +164,9 @@ public class MicrohttpServer implements Server {
 			String threadNamePrefix = "request-handler";
 
 			if (Utilities.virtualThreadsAvailable())
-				return Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name(threadNamePrefix).uncaughtExceptionHandler((Thread thread, Throwable throwable) -> {
+				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 					getLogHandler().logError("Unexpected exception occurred during server HTTP request processing", throwable);
-				}).factory());
+				});
 
 			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
 		};
