@@ -2,7 +2,7 @@
 
 ### What Is It?
 
-A small HTTP 1.1 server and route handler for Java, well-suited for building RESTful APIs.<br/>
+A small HTTP 1.1 server and route handler for Java, well-suited for building RESTful APIs.<br/><br/>
 Zero dependencies.  Dependency Injection friendly.<br/>
 Optionally powered by [JEP 425: Virtual Threads, aka Project Loom](https://openjdk.org/jeps/425).
 
