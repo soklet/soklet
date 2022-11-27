@@ -144,7 +144,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 					// Unhappy path.  Try to use configuration's exception response marshaler...
 					try {
-						return responseMarshaler.toExceptionMarshaledResponse(requestHolder.get(), t, resourceMethodHolder.get());
+						return responseMarshaler.forException(requestHolder.get(), t, resourceMethodHolder.get());
 					} catch (Throwable t2) {
 						throwables.add(t2);
 						logHandler.logError(format("An exception occurred while trying to write an exception response for %s while processing %s", t, requestHolder.get()), t2);
@@ -241,12 +241,12 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 					// Allow or reject CORS depending on what the function said to do
 					if (corsResponse != null)
-						return responseMarshaler.toCorsAllowedMarshaledResponse(request, corsRequest, corsResponse);
+						return responseMarshaler.forCorsAllowed(request, corsRequest, corsResponse);
 					else
-						return responseMarshaler.toCorsRejectedMarshaledResponse(request, corsRequest);
+						return responseMarshaler.forCorsRejected(request, corsRequest);
 				} else {
 					// Just a normal OPTIONS response (non-CORS)
-					return responseMarshaler.toOptionsMarshaledResponse(request, allowedHttpMethods);
+					return responseMarshaler.forOptions(request, allowedHttpMethods);
 				}
 			} else {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
@@ -254,10 +254,10 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 				if (otherHttpMethods.size() > 0) {
 					// ...if some do, it's a 405
-					return responseMarshaler.toMethodNotAllowedMarshaledResponse(request, otherHttpMethods);
+					return responseMarshaler.forMethodNotAllowed(request, otherHttpMethods);
 				} else {
 					// no matching resource method found, it's a 404
-					return responseMarshaler.toNotFoundMarshaledResponse(request);
+					return responseMarshaler.forNotFound(request);
 				}
 			}
 		}
@@ -300,7 +300,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		else
 			response = new Response.Builder(200).body(responseObject).build();
 
-		return responseMarshaler.toDefaultMarshaledResponse(request, response, resourceMethod);
+		return responseMarshaler.forHappyPath(request, response, resourceMethod);
 	}
 
 	@Nonnull

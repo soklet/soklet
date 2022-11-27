@@ -33,6 +33,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -47,17 +48,21 @@ import static java.util.Objects.requireNonNull;
 public class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
 	@Override
-	public MarshaledResponse toDefaultMarshaledResponse(@Nonnull Request request,
-																											@Nonnull Response response,
-																											@Nonnull ResourceMethod resourceMethod) {
+	public MarshaledResponse forHappyPath(@Nonnull Request request,
+																				@Nonnull Response response,
+																				@Nonnull ResourceMethod resourceMethod) {
 		requireNonNull(request);
 		requireNonNull(response);
 		requireNonNull(resourceMethod);
 
 		Map<String, Set<String>> headers = response.getHeaders();
 
+		Set<String> normalizedHeaderKeys = headers.keySet().stream()
+				.map(key -> key.trim().toLowerCase(Locale.US))
+				.collect(Collectors.toSet());
+
 		// If no Content-Type specified, supply a default
-		if (!headers.containsKey("Content-Type")) {
+		if (!normalizedHeaderKeys.contains("content-type")) {
 			headers = new HashMap<>(headers); // Mutable copy
 			headers.put("Content-Type", Set.of("text/plain; charset=UTF-8"));
 		}
@@ -71,7 +76,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse toNotFoundMarshaledResponse(@Nonnull Request request) {
+	public MarshaledResponse forNotFound(@Nonnull Request request) {
 		requireNonNull(request);
 
 		Integer statusCode = 404;
@@ -84,8 +89,8 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse toMethodNotAllowedMarshaledResponse(@Nonnull Request request,
-																															 @Nonnull Set<HttpMethod> allowedHttpMethods) {
+	public MarshaledResponse forMethodNotAllowed(@Nonnull Request request,
+																							 @Nonnull Set<HttpMethod> allowedHttpMethods) {
 		requireNonNull(request);
 		requireNonNull(allowedHttpMethods);
 
@@ -105,8 +110,8 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse toOptionsMarshaledResponse(@Nonnull Request request,
-																											@Nonnull Set<HttpMethod> allowedHttpMethods) {
+	public MarshaledResponse forOptions(@Nonnull Request request,
+																			@Nonnull Set<HttpMethod> allowedHttpMethods) {
 		requireNonNull(request);
 		requireNonNull(allowedHttpMethods);
 
@@ -121,9 +126,9 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse toCorsAllowedMarshaledResponse(@Nonnull Request request,
-																													@Nonnull CorsRequest corsRequest,
-																													@Nonnull CorsResponse corsResponse) {
+	public MarshaledResponse forCorsAllowed(@Nonnull Request request,
+																					@Nonnull CorsRequest corsRequest,
+																					@Nonnull CorsResponse corsResponse) {
 		requireNonNull(request);
 		requireNonNull(corsRequest);
 		requireNonNull(corsResponse);
@@ -167,8 +172,8 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse toCorsRejectedMarshaledResponse(@Nonnull Request request,
-																													 @Nonnull CorsRequest corsRequest) {
+	public MarshaledResponse forCorsRejected(@Nonnull Request request,
+																					 @Nonnull CorsRequest corsRequest) {
 		requireNonNull(request);
 		requireNonNull(corsRequest);
 
@@ -183,9 +188,9 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse toExceptionMarshaledResponse(@Nonnull Request request,
-																												@Nonnull Throwable throwable,
-																												@Nullable ResourceMethod resourceMethod) {
+	public MarshaledResponse forException(@Nonnull Request request,
+																				@Nonnull Throwable throwable,
+																				@Nullable ResourceMethod resourceMethod) {
 		requireNonNull(request);
 		requireNonNull(throwable);
 

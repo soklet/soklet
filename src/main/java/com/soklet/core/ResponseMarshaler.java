@@ -25,32 +25,32 @@ import java.util.Set;
  */
 public interface ResponseMarshaler {
 	@Nonnull
-	MarshaledResponse toDefaultMarshaledResponse(@Nonnull Request request,
-																							 @Nonnull Response response,
-																							 @Nonnull ResourceMethod resourceMethod);
+	MarshaledResponse forHappyPath(@Nonnull Request request,
+																 @Nonnull Response response,
+																 @Nonnull ResourceMethod resourceMethod);
 
 	@Nonnull
-	MarshaledResponse toNotFoundMarshaledResponse(@Nonnull Request request);
+	MarshaledResponse forNotFound(@Nonnull Request request);
 
 	@Nonnull
-	MarshaledResponse toMethodNotAllowedMarshaledResponse(@Nonnull Request request,
-																												@Nonnull Set<HttpMethod> allowedHttpMethods);
+	MarshaledResponse forMethodNotAllowed(@Nonnull Request request,
+																				@Nonnull Set<HttpMethod> allowedHttpMethods);
 
 	@Nonnull
-	MarshaledResponse toOptionsMarshaledResponse(@Nonnull Request request,
-																							 @Nonnull Set<HttpMethod> allowedHttpMethods);
+	MarshaledResponse forOptions(@Nonnull Request request,
+															 @Nonnull Set<HttpMethod> allowedHttpMethods);
 
 	@Nonnull
-	MarshaledResponse toCorsAllowedMarshaledResponse(@Nonnull Request request,
-																									 @Nonnull CorsRequest corsRequest,
-																									 @Nonnull CorsResponse corsResponse);
+	MarshaledResponse forCorsAllowed(@Nonnull Request request,
+																	 @Nonnull CorsRequest corsRequest,
+																	 @Nonnull CorsResponse corsResponse);
 
 	@Nonnull
-	MarshaledResponse toCorsRejectedMarshaledResponse(@Nonnull Request request,
-																										@Nonnull CorsRequest corsRequest);
+	MarshaledResponse forCorsRejected(@Nonnull Request request,
+																		@Nonnull CorsRequest corsRequest);
 
 	@Nonnull
-	MarshaledResponse toExceptionMarshaledResponse(@Nonnull Request request,
-																								 @Nonnull Throwable throwable,
-																								 @Nullable ResourceMethod resourceMethod);
+	MarshaledResponse forException(@Nonnull Request request,
+																 @Nonnull Throwable throwable,
+																 @Nullable ResourceMethod resourceMethod);
 }
