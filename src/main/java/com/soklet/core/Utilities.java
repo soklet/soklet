@@ -24,7 +24,6 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
-import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -76,10 +75,8 @@ public final class Utilities {
 		try {
 			// Detect if Virtual Threads are usable by feature testing via reflection.
 			// Hat tip to https://github.com/javalin/javalin for this technique
-			Method newVirtualThreadPerTaskExecutorMethod = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
-			try (ExecutorService executorService = (ExecutorService) newVirtualThreadPerTaskExecutorMethod.invoke(Executors.class)) {
-				virtualThreadsAvailable = true;
-			}
+			Class.forName("java.lang.Thread$Builder$OfVirtual");
+			virtualThreadsAvailable = true;
 		} catch (Exception ignored) {
 			// We don't care why this failed, but if we're here we know JVM does not support virtual threads
 		}

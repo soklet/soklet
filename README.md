@@ -25,7 +25,8 @@ The Java web ecosystem is missing a solution that is light (in terms of dependen
 
 ### Design Non-Goals
 
-* SSL/TLS (your load balancer should provide TLS termination...)
+* Support for Java versions below 16
+* SSL/TLS (your load balancer should provide TLS termination)
 * HTTP streaming
 * WebSockets
 * Dictate which technologies to use (Guice vs. Dagger, Gson vs. Jackson, etc.)
@@ -184,7 +185,7 @@ class ExampleResource {
 
 All of Soklet's components are programmatically pluggable via the [SokletConfiguration](https://www.soklet.com/javadoc/com/soklet/SokletConfiguration.html) builder.
 
-The components you'll likely want to customize are:
+Components you'll likely want to customize are:
 
 * [Server](#server) - handles HTTP 1.1 requests and responses
 * [ResponseMarshaler](#response-marshaler) - turns Java objects into bytes to send over the wire
@@ -193,7 +194,7 @@ The components you'll likely want to customize are:
 * [ValueConverters](#value-converters) - convert input strings (e.g. query parameters) to Java types (e.g. [LocalDateTime](https://docs.oracle.com/en/java/javase/18/docs/api/java.base/java/time/LocalDateTime.html))
 * [CorsAuthorizer](#cors-authorizer) - determines whether to accept or reject [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) requests
 
-The "experts only" components are:
+"Experts only" components are:
 
 * [RequestMethodResolver](https://www.soklet.com/javadoc/com/soklet/core/RequestMethodResolver.html) - determines how to map HTTP requests to Resource Methods 
 * [ResourceMethodParameterProvider](https://www.soklet.com/javadoc/com/soklet/core/ResourceMethodParameterProvider.html) - determines how to inject appropriate parameter values when invoking Resource Methods
