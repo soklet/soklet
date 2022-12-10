@@ -34,7 +34,7 @@ The Java web ecosystem is missing a solution that is light (in terms of dependen
 
 ### Future Work
 
-* Servlet API compatibility layer to support legacy libraries
+* Servlet API compatibility layer (`javax.servlet`, `jakarta.servlet`)
 
 ### Do Zero-Dependency Libraries Interest You?
 
@@ -49,8 +49,8 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 Soklet includes code from the following OSS projects:
 
-* [ClassIndex](https://github.com/atteo/classindex) - Apache 2.0 License
-* [Microhttp](https://github.com/ebarlas/microhttp) - MIT License
+* [ClassIndex](https://github.com/atteo/classindex) by [Sławek Piotrowski](https://github.com/sentinelt) - Apache 2.0 License
+* [Microhttp](https://github.com/ebarlas/microhttp) by [Elliot Barlas](https://github.com/ebarlas) - MIT License
 
 ### Maven Installation
 
@@ -68,7 +68,7 @@ If you don't use Maven, you can drop [soklet-2.0.0-SNAPSHOT.jar](https://repo1.m
 
 ## App Startup
 
-Soklet applications are regular Java applications - no Servlet container required.
+Soklet applications are regular Java applications - there is no Servlet container.
 
 ```java
 class App {
@@ -704,7 +704,7 @@ The appropriate place to handle this is with a custom [Lifecycle Interceptor](#l
 
 It would also be nice for each Resource Method to be annotated with information that describes its security requirements - does the Method require authentication?  Are special roles/authorizations necessary?  And so on.
 
-First - let's define a Plain Old Java Annotation we can apply to our Resource Methods.
+First - let's define an annotation we can apply to our Resource Methods.
 
 ```java
 // Roles we have in our app
@@ -748,8 +748,8 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
       if(account == null)
         throw new MyAuthenticationException();
 
-		  // Via ResourceMethod, you have access to the Java method configured 
-      // to handle the request (if no 404)...
+      // Via ResourceMethod, you have access to the Java method configured 
+      // to handle the request...
       Method method = resourceMethod.getMethod();
 
       // ...which permits you to do things like examine its annotations
