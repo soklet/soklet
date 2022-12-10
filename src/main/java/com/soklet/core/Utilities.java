@@ -344,7 +344,7 @@ public final class Utilities {
 
 	@Nonnull
 	public static Boolean isBlank(@Nullable String string) {
-		return string == null ? true : trimToNull(string) == null;
+		return string == null || trimToNull(string) == null;
 	}
 
 	@Nonnull

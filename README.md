@@ -392,7 +392,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 ### Instance Provider
 
-Soklet creates instances of Resource classes so it can invoke methods on them on your behalf.  To do this, it delegates to the configured [InstanceProvider](https://www.soklet.com/javadoc/com/soklet/core/InstanceProvider.html).
+Soklet creates instances of Resource classes in order to invoke methods on them on your behalf.  To do this, it delegates to the configured [InstanceProvider](https://www.soklet.com/javadoc/com/soklet/core/InstanceProvider.html).
 <br/><br/>
 Here's a naïve implementation that assumes the presence of a default constructor.
 
@@ -661,7 +661,7 @@ If you need to customize further and control _exactly_ how the data goes back ov
 
 ### Log Handler
 
-If you'd like to handle of any of Soklet's internal log events, you can provide your own [LogHandler](https://www.soklet.com/javadoc/com/soklet/core/LogHandler.html) implementation.
+If you'd like to handle any of Soklet's internal log events, you can provide your own [LogHandler](https://www.soklet.com/javadoc/com/soklet/core/LogHandler.html) implementation.
 
 For example, if your application uses [Logback](https://logback.qos.ch/) and/or [SLF4J](https://www.slf4j.org/), you will likely want to log messages using those.
 
@@ -785,7 +785,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
   }).build();
 ```
 
-This approach can be extended to other scenarios where it's useful to apply custom behavior to specially-annotated Resource Methods.  For example, you can imagine annotations like `@Transactional`, `@WritableMaster`, and `@ReadReplica` that specify how a Resource Method should interacts with datasource[s].
+This approach can be extended to other scenarios where it's useful to apply custom behavior to specially-annotated Resource Methods.  For example, you can imagine annotations like `@Transactional`, `@WritableMaster`, and `@ReadReplica` that specify how a Resource Method should interact with datasource[s].
 
 ### Exception Handling
 
