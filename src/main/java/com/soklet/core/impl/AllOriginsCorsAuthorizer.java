@@ -17,7 +17,7 @@
 package com.soklet.core.impl;
 
 import com.soklet.core.CorsAuthorizer;
-import com.soklet.core.CorsResponse;
+import com.soklet.core.CorsPreflightResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
 
@@ -26,6 +26,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 import java.util.Set;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
@@ -33,9 +35,12 @@ import java.util.Set;
 public class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	@Override
-	public Optional<CorsResponse> authorize(@Nonnull Request request,
-																					@Nonnull Set<HttpMethod> availableHttpMethods) {
-		return Optional.of(new CorsResponse.Builder("*")
+	public Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
+																														@Nonnull Set<HttpMethod> availableHttpMethods) {
+		requireNonNull(request);
+		requireNonNull(availableHttpMethods);
+
+		return Optional.of(new CorsPreflightResponse.Builder("*")
 				.accessControlAllowMethods(availableHttpMethods)
 				.accessControlAllowHeaders(Set.of("*"))
 				.build());

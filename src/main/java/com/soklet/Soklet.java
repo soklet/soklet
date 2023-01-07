@@ -17,7 +17,7 @@
 package com.soklet;
 
 import com.soklet.core.CorsAuthorizer;
-import com.soklet.core.CorsResponse;
+import com.soklet.core.CorsPreflightResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.LifecycleInterceptor;
@@ -236,11 +236,11 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				// Special handling for CORS preflight requests, if needed
 				if (cors != null && cors.isPreflight()) {
 					// Let configuration function determine if we should authorize this request
-					CorsResponse corsResponse = corsAuthorizer.authorize(request, allowedHttpMethods).orElse(null);
+					CorsPreflightResponse corsPreflightResponse = corsAuthorizer.authorizePreflight(request, allowedHttpMethods).orElse(null);
 
 					// Allow or reject CORS depending on what the function said to do
-					if (corsResponse != null)
-						return responseMarshaler.forCorsPreflightAllowed(request, corsResponse);
+					if (corsPreflightResponse != null)
+						return responseMarshaler.forCorsPreflightAllowed(request, corsPreflightResponse);
 					else
 						return responseMarshaler.forCorsPreflightRejected(request);
 				} else {

@@ -16,7 +16,7 @@
 
 package com.soklet.core.impl;
 
-import com.soklet.core.CorsResponse;
+import com.soklet.core.CorsPreflightResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
@@ -127,38 +127,34 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
 	@Override
 	public MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,
-																									 @Nonnull CorsResponse corsResponse) {
+																									 @Nonnull CorsPreflightResponse corsPreflightResponse) {
 		requireNonNull(request);
-		requireNonNull(corsResponse);
+		requireNonNull(corsPreflightResponse);
 
 		Integer statusCode = 204;
 		Map<String, Set<String>> headers = new HashMap<>();
 
-		headers.put("Access-Control-Allow-Origin", Set.of(corsResponse.getAccessControlAllowOrigin()));
+		headers.put("Access-Control-Allow-Origin", Set.of(corsPreflightResponse.getAccessControlAllowOrigin()));
 
-		Boolean accessControlAllowCredentials = corsResponse.getAccessControlAllowCredentials().orElse(null);
+		Boolean accessControlAllowCredentials = corsPreflightResponse.getAccessControlAllowCredentials().orElse(null);
 
-		if (accessControlAllowCredentials != null)
-			headers.put("Access-Control-Allow-Credentials", Set.of(String.valueOf(accessControlAllowCredentials)));
+		// Either "true" or omit entirely
+		if (accessControlAllowCredentials != null && accessControlAllowCredentials)
+			headers.put("Access-Control-Allow-Credentials", Set.of("true"));
 
-		Set<String> accessControlAllowHeaders = corsResponse.getAccessControlAllowHeaders();
+		Set<String> accessControlAllowHeaders = corsPreflightResponse.getAccessControlAllowHeaders();
 
 		if (accessControlAllowHeaders.size() > 0)
 			headers.put("Access-Control-Allow-Headers", new HashSet<>(accessControlAllowHeaders));
 
-		Set<String> accessControlExposeHeaders = corsResponse.getAccessControlExposeHeaders();
-
-		if (accessControlExposeHeaders.size() > 0)
-			headers.put("Access-Control-Expose-Headers", new HashSet<>(accessControlExposeHeaders));
-
-		Set<String> accessControlAllowMethodAsStrings = corsResponse.getAccessControlAllowMethods().stream()
+		Set<String> accessControlAllowMethodAsStrings = corsPreflightResponse.getAccessControlAllowMethods().stream()
 				.map(accessControlAllowMethod -> accessControlAllowMethod.name())
 				.collect(Collectors.toSet());
 
 		if (accessControlAllowMethodAsStrings.size() > 0)
 			headers.put("Access-Control-Allow-Methods", accessControlAllowMethodAsStrings);
 
-		Duration accessControlMaxAge = corsResponse.getAccessControlMaxAge().orElse(null);
+		Duration accessControlMaxAge = corsPreflightResponse.getAccessControlMaxAge().orElse(null);
 
 		if (accessControlMaxAge != null)
 			headers.put("Access-Control-Max-Age", Set.of(String.valueOf(accessControlMaxAge.toSeconds())));

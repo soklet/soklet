@@ -42,7 +42,7 @@ public interface ResponseMarshaler {
 
 	@Nonnull
 	MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,
-																						@Nonnull CorsResponse corsResponse);
+																						@Nonnull CorsPreflightResponse corsPreflightResponse);
 
 	@Nonnull
 	MarshaledResponse forCorsPreflightRejected(@Nonnull Request request);

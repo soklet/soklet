@@ -26,6 +26,6 @@ import java.util.Set;
 @FunctionalInterface
 public interface CorsAuthorizer {
 	@Nonnull
-	Optional<CorsResponse> authorize(@Nonnull Request request,
-																	 @Nonnull Set<HttpMethod> availableHttpMethods);
+	Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
+																										 @Nonnull Set<HttpMethod> availableHttpMethods);
 }

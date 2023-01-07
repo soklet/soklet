@@ -20,7 +20,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.time.Duration;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
@@ -41,12 +40,6 @@ public class CorsResponse {
 	private final Boolean accessControlAllowCredentials;
 	@Nonnull
 	private final Set<String> accessControlExposeHeaders;
-	@Nullable
-	private final Duration accessControlMaxAge;
-	@Nonnull
-	private final Set<HttpMethod> accessControlAllowMethods;
-	@Nonnull
-	private final Set<String> accessControlAllowHeaders;
 
 	protected CorsResponse(@Nonnull Builder builder) {
 		requireNonNull(builder);
@@ -55,19 +48,13 @@ public class CorsResponse {
 		this.accessControlAllowCredentials = builder.accessControlAllowCredentials;
 		this.accessControlExposeHeaders = builder.accessControlExposeHeaders == null ?
 				Set.of() : Collections.unmodifiableSet(new HashSet<>(builder.accessControlExposeHeaders));
-		this.accessControlMaxAge = builder.accessControlMaxAge;
-		this.accessControlAllowMethods = builder.accessControlAllowMethods == null ?
-				Set.of() : Collections.unmodifiableSet(new HashSet<>(builder.accessControlAllowMethods));
-		this.accessControlAllowHeaders = builder.accessControlAllowHeaders == null ?
-				Set.of() : Collections.unmodifiableSet(new HashSet<>(builder.accessControlAllowHeaders));
 	}
 
 	@Override
 	public String toString() {
-		return format("%s{accessControlAllowOrigin=%s, accessControlAllowCredentials=%s, accessControlExposeHeaders=%, " +
-						"accessControlMaxAge=%s, accessControlAllowMethods=%s, accessControlAllowHeaders=%s}", getClass().getSimpleName(),
-				getAccessControlAllowOrigin(), getAccessControlAllowCredentials(), getAccessControlExposeHeaders(),
-				getAccessControlMaxAge(), getAccessControlAllowMethods(), getAccessControlAllowHeaders());
+		return format("%s{accessControlAllowOrigin=%s, accessControlAllowCredentials=%s, accessControlExposeHeaders=%s}",
+				getClass().getSimpleName(), getAccessControlAllowOrigin(), getAccessControlAllowCredentials(),
+				getAccessControlExposeHeaders());
 	}
 
 	@Override
@@ -82,16 +69,13 @@ public class CorsResponse {
 
 		return Objects.equals(getAccessControlAllowOrigin(), corsResponse.getAccessControlAllowOrigin())
 				&& Objects.equals(getAccessControlAllowCredentials(), corsResponse.getAccessControlAllowCredentials())
-				&& Objects.equals(getAccessControlExposeHeaders(), corsResponse.getAccessControlExposeHeaders())
-				&& Objects.equals(getAccessControlMaxAge(), corsResponse.getAccessControlMaxAge())
-				&& Objects.equals(getAccessControlAllowMethods(), corsResponse.getAccessControlAllowMethods())
-				&& Objects.equals(getAccessControlAllowHeaders(), corsResponse.getAccessControlAllowHeaders());
+				&& Objects.equals(getAccessControlExposeHeaders(), corsResponse.getAccessControlExposeHeaders());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getAccessControlAllowOrigin(), getAccessControlAllowCredentials(), getAccessControlExposeHeaders(),
-				getAccessControlMaxAge(), getAccessControlAllowMethods(), getAccessControlAllowHeaders());
+		return Objects.hash(getAccessControlAllowOrigin(), getAccessControlAllowCredentials(),
+				getAccessControlExposeHeaders());
 	}
 
 	@Nonnull
@@ -109,21 +93,6 @@ public class CorsResponse {
 		return this.accessControlExposeHeaders;
 	}
 
-	@Nonnull
-	public Optional<Duration> getAccessControlMaxAge() {
-		return Optional.ofNullable(this.accessControlMaxAge);
-	}
-
-	@Nonnull
-	public Set<HttpMethod> getAccessControlAllowMethods() {
-		return this.accessControlAllowMethods;
-	}
-
-	@Nonnull
-	public Set<String> getAccessControlAllowHeaders() {
-		return this.accessControlAllowHeaders;
-	}
-
 	/**
 	 * Builder used to construct instances of {@link CorsResponse}.
 	 * <p>
@@ -139,12 +108,6 @@ public class CorsResponse {
 		private Boolean accessControlAllowCredentials;
 		@Nullable
 		private Set<String> accessControlExposeHeaders;
-		@Nullable
-		private Duration accessControlMaxAge;
-		@Nullable
-		private Set<HttpMethod> accessControlAllowMethods;
-		@Nullable
-		private Set<String> accessControlAllowHeaders;
 
 		public Builder(@Nonnull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
@@ -152,32 +115,14 @@ public class CorsResponse {
 		}
 
 		@Nonnull
-		public Builder accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
+		public Builder accessControlAllowMethods(@Nullable Boolean accessControlAllowCredentials) {
 			this.accessControlAllowCredentials = accessControlAllowCredentials;
 			return this;
 		}
 
 		@Nonnull
-		public Builder accessControlExposeHeaders(@Nullable Set<String> accessControlExposeHeaders) {
+		public Builder accessControlAllowHeaders(@Nullable Set<String> accessControlExposeHeaders) {
 			this.accessControlExposeHeaders = accessControlExposeHeaders;
-			return this;
-		}
-
-		@Nonnull
-		public Builder accessControlMaxAge(@Nullable Duration accessControlMaxAge) {
-			this.accessControlMaxAge = accessControlMaxAge;
-			return this;
-		}
-
-		@Nonnull
-		public Builder accessControlAllowMethods(@Nullable Set<HttpMethod> accessControlAllowMethods) {
-			this.accessControlAllowMethods = accessControlAllowMethods;
-			return this;
-		}
-
-		@Nonnull
-		public Builder accessControlAllowHeaders(@Nullable Set<String> accessControlAllowHeaders) {
-			this.accessControlAllowHeaders = accessControlAllowHeaders;
 			return this;
 		}
 
