@@ -18,6 +18,7 @@ package com.soklet.core.impl;
 
 import com.soklet.core.CorsAuthorizer;
 import com.soklet.core.CorsPreflightResponse;
+import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
 import com.soklet.core.Request.Cors;
@@ -46,6 +47,24 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 		this.whitelistedOrigins = Collections.unmodifiableSet(new TreeSet<>(whitelistedOrigins.stream()
 				.map(whitelistedOrigin -> normalizeOrigin(whitelistedOrigin))
 				.collect(Collectors.toSet())));
+	}
+
+	@Nonnull
+	@Override
+	public Optional<CorsResponse> authorize(@Nonnull Request request) {
+		requireNonNull(request);
+
+		Cors cors = request.getCors().orElse(null);
+
+		if (cors == null)
+			return Optional.empty();
+
+		if (getWhitelistedOrigins().contains(normalizeOrigin(cors.getOrigin())))
+			return Optional.of(new CorsResponse.Builder(cors.getOrigin())
+					.accessControlExposeHeaders(Set.of("*"))
+					.build());
+
+		return Optional.empty();
 	}
 
 	@Nonnull

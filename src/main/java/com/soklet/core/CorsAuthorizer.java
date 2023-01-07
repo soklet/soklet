@@ -23,8 +23,10 @@ import java.util.Set;
 /**
  * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
-@FunctionalInterface
 public interface CorsAuthorizer {
+	@Nonnull
+	Optional<CorsResponse> authorize(@Nonnull Request request);
+
 	@Nonnull
 	Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
 																										 @Nonnull Set<HttpMethod> availableHttpMethods);

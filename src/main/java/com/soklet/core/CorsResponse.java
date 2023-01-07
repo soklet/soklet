@@ -115,13 +115,13 @@ public class CorsResponse {
 		}
 
 		@Nonnull
-		public Builder accessControlAllowMethods(@Nullable Boolean accessControlAllowCredentials) {
+		public Builder accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
 			this.accessControlAllowCredentials = accessControlAllowCredentials;
 			return this;
 		}
 
 		@Nonnull
-		public Builder accessControlAllowHeaders(@Nullable Set<String> accessControlExposeHeaders) {
+		public Builder accessControlExposeHeaders(@Nullable Set<String> accessControlExposeHeaders) {
 			this.accessControlExposeHeaders = accessControlExposeHeaders;
 			return this;
 		}
