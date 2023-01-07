@@ -17,7 +17,6 @@
 package com.soklet.core.impl;
 
 import com.soklet.core.CorsAuthorizer;
-import com.soklet.core.CorsRequest;
 import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
@@ -35,7 +34,6 @@ public class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	@Override
 	public Optional<CorsResponse> authorize(@Nonnull Request request,
-																					@Nonnull CorsRequest corsRequest,
 																					@Nonnull Set<HttpMethod> availableHttpMethods) {
 		return Optional.of(new CorsResponse.Builder("*")
 				.accessControlAllowMethods(availableHttpMethods)

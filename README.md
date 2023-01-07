@@ -595,14 +595,13 @@ class WidgetResource {
 
 ### CORS Authorizer
 
-For [CORS Preflight](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) requests, Soklet will consult its configured [CorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/CorsAuthorizer.html) to determine how to respond.
+For [CORS requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS), Soklet will consult its configured [CorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/CorsAuthorizer.html) to determine how to respond.
 <br/>
-Unless configured differently, Soklet will use its [DefaultCorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/impl/DefaultCorsAuthorizer.html), which rejects all preflight requests.
-
+Unless configured differently, Soklet will use its [DefaultCorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/impl/DefaultCorsAuthorizer.html), which does not respond to CORS requests.
 
 #### All Origins (Testing Only!)
 
-This will allow all preflight requests regardless of origin.  Useful for local development and experimentation.
+This will allow all CORS requests regardless of origin.  Useful for local development and experimentation.
 
 ```java
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
@@ -635,13 +634,13 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
     public Optional<CorsResponse> authorize(@Nonnull Request request,
                                             @Nonnull CorsRequest corsRequest,
                                             @Nonnull Set<HttpMethod> availableHttpMethods) {
-      // Arbitrary application-specific rule for whether to approve this preflight
-      boolean allowPreflight = request.getQueryParameters().containsKey("example");
+      // Arbitrary application-specific rule for whether to approve this CORS request
+      boolean allowCors = request.getQueryParameters().containsKey("example");
 
       // Echo back the request's origin and the set of HTTP methods Soklet determines
-      // your Resource Methods can support for this preflight.
+      // your Resource Methods can support for this CORS request.
       // The configured ResponseMarshaler will take this info and write it back over the wire
-      if (allowPreflight)
+      if (allowCors)
         return Optional.of(new CorsResponse.Builder(corsRequest.getOrigin())
           .accessControlAllowMethods(availableHttpMethods)
           .accessControlAllowHeaders(Set.of("*"))

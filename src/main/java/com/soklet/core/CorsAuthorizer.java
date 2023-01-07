@@ -27,6 +27,5 @@ import java.util.Set;
 public interface CorsAuthorizer {
 	@Nonnull
 	Optional<CorsResponse> authorize(@Nonnull Request request,
-																	 @Nonnull CorsRequest corsRequest,
 																	 @Nonnull Set<HttpMethod> availableHttpMethods);
 }

@@ -37,7 +37,9 @@ import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
+import static com.soklet.core.Utilities.trimToEmpty;
 import static java.lang.String.format;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
@@ -64,6 +66,8 @@ public class Request {
 	private final Map<String, Set<String>> queryParameters;
 	@Nonnull
 	private final Map<String, Set<String>> headers;
+	@Nullable
+	private final Cors cors;
 	@Nullable
 	private final byte[] body;
 	@Nullable
@@ -97,14 +101,15 @@ public class Request {
 			caseInsensitiveHeaders.putAll(builder.headers);
 
 		this.headers = Collections.unmodifiableMap(caseInsensitiveHeaders);
+		this.cors = Cors.fromHeaders(this.httpMethod, this.headers).orElse(null);
 		this.body = builder.body;
 	}
 
 	@Override
 	public String toString() {
-		return format("%s{id=%s, httpMethod=%s, uri=%s, path=%s, cookies=%s, queryParameters=%s, headers=%s, body=%s}", getClass().getSimpleName(),
-				getId(), getHttpMethod(), getUri(), getPath(), getCookies(), getQueryParameters(), getHeaders(),
-				format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
+		return format("%s{id=%s, httpMethod=%s, uri=%s, path=%s, cookies=%s, queryParameters=%s, headers=%s, body=%s}",
+				getClass().getSimpleName(), getId(), getHttpMethod(), getUri(), getPath(), getCookies(), getQueryParameters(),
+				getHeaders(), format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
 	}
 
 	@Override
@@ -191,6 +196,11 @@ public class Request {
 		}
 
 		return Optional.ofNullable(this.bodyAsString);
+	}
+
+	@Nonnull
+	public Optional<Cors> getCors() {
+		return Optional.ofNullable(this.cors);
 	}
 
 	@Nonnull
@@ -377,6 +387,126 @@ public class Request {
 		@Nonnull
 		public Request finish() {
 			return this.builder.build();
+		}
+	}
+
+	@NotThreadSafe
+	public static class Cors {
+		@Nonnull
+		private final String origin;
+		@Nullable
+		private final HttpMethod accessControlRequestMethod;
+		@Nonnull
+		private final Set<String> accessControlRequestHeaders;
+		@Nonnull
+		private final Boolean preflight;
+
+		public Cors(@Nonnull HttpMethod httpMethod,
+								@Nonnull String origin) {
+			this(httpMethod, origin, null, null);
+		}
+
+		public Cors(@Nonnull HttpMethod httpMethod,
+								@Nonnull String origin,
+								@Nullable HttpMethod accessControlRequestMethod,
+								@Nullable Set<String> accessControlRequestHeaders) {
+			requireNonNull(httpMethod);
+			requireNonNull(origin);
+
+			this.origin = origin;
+			this.accessControlRequestMethod = accessControlRequestMethod;
+			this.accessControlRequestHeaders = accessControlRequestHeaders == null ?
+					Set.of() : Collections.unmodifiableSet(new HashSet<>(accessControlRequestHeaders));
+			this.preflight = httpMethod == HttpMethod.OPTIONS && accessControlRequestMethod != null;
+		}
+
+		@Nonnull
+		public static Optional<Cors> fromHeaders(@Nonnull HttpMethod httpMethod,
+																						 @Nonnull Map<String, Set<String>> headers) {
+			requireNonNull(httpMethod);
+			requireNonNull(headers);
+
+			Set<String> originHeaderValue = headers.get("Origin");
+
+			if (originHeaderValue == null || originHeaderValue.size() == 0)
+				return Optional.empty();
+
+			Set<String> accessControlRequestMethodHeaderValues = headers.get("Access-Control-Request-Method");
+
+			if (accessControlRequestMethodHeaderValues == null)
+				return Optional.empty();
+
+			List<HttpMethod> accessControlRequestMethods = accessControlRequestMethodHeaderValues.stream()
+					.filter(headerValue -> {
+						headerValue = trimToEmpty(headerValue);
+
+						try {
+							HttpMethod.valueOf(headerValue);
+							return true;
+						} catch (Exception ignored) {
+							return false;
+						}
+					})
+					.map((headerValue -> HttpMethod.valueOf(headerValue.trim())))
+					.collect(Collectors.toList());
+
+			if (accessControlRequestMethods.size() == 0)
+				return Optional.empty();
+
+			Set<String> accessControlRequestHeaderValues = headers.get("Access-Control-Request-Header");
+
+			if (accessControlRequestHeaderValues == null)
+				accessControlRequestHeaderValues = Set.of();
+
+			return Optional.of(new Cors(httpMethod, originHeaderValue.stream().findFirst().get(),
+					accessControlRequestMethods.get(0), accessControlRequestHeaderValues));
+		}
+
+		@Override
+		@Nonnull
+		public String toString() {
+			return format("%s{origin=%s, accessControlRequestMethod=%s, accessControlRequestHeaders=%}",
+					getClass().getSimpleName(), getOrigin(), getAccessControlRequestMethod(), getAccessControlRequestHeaders());
+		}
+
+		@Override
+		public boolean equals(@Nullable Object object) {
+			if (this == object)
+				return true;
+
+			if (!(object instanceof Cors))
+				return false;
+
+			Cors cors = (Cors) object;
+
+			return Objects.equals(getOrigin(), cors.getOrigin())
+					&& Objects.equals(getAccessControlRequestMethod(), cors.getAccessControlRequestMethod())
+					&& Objects.equals(getAccessControlRequestHeaders(), cors.getAccessControlRequestHeaders());
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(getOrigin(), getAccessControlRequestMethod(), getAccessControlRequestHeaders());
+		}
+
+		@Nonnull
+		public String getOrigin() {
+			return this.origin;
+		}
+
+		@Nonnull
+		public Boolean isPreflight() {
+			return this.preflight;
+		}
+
+		@Nonnull
+		public Optional<HttpMethod> getAccessControlRequestMethod() {
+			return Optional.ofNullable(this.accessControlRequestMethod);
+		}
+
+		@Nonnull
+		public Set<String> getAccessControlRequestHeaders() {
+			return this.accessControlRequestHeaders;
 		}
 	}
 }

@@ -20,6 +20,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
@@ -41,7 +42,7 @@ public class CorsResponse {
 	@Nonnull
 	private final Set<String> accessControlExposeHeaders;
 	@Nullable
-	private final Integer accessControlMaxAge;
+	private final Duration accessControlMaxAge;
 	@Nonnull
 	private final Set<HttpMethod> accessControlAllowMethods;
 	@Nonnull
@@ -109,7 +110,7 @@ public class CorsResponse {
 	}
 
 	@Nonnull
-	public Optional<Integer> getAccessControlMaxAge() {
+	public Optional<Duration> getAccessControlMaxAge() {
 		return Optional.ofNullable(this.accessControlMaxAge);
 	}
 
@@ -139,7 +140,7 @@ public class CorsResponse {
 		@Nullable
 		private Set<String> accessControlExposeHeaders;
 		@Nullable
-		private Integer accessControlMaxAge;
+		private Duration accessControlMaxAge;
 		@Nullable
 		private Set<HttpMethod> accessControlAllowMethods;
 		@Nullable
@@ -163,7 +164,7 @@ public class CorsResponse {
 		}
 
 		@Nonnull
-		public Builder accessControlMaxAge(@Nullable Integer accessControlMaxAge) {
+		public Builder accessControlMaxAge(@Nullable Duration accessControlMaxAge) {
 			this.accessControlMaxAge = accessControlMaxAge;
 			return this;
 		}

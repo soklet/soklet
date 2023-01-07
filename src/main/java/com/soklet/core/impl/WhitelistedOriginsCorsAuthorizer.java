@@ -17,10 +17,10 @@
 package com.soklet.core.impl;
 
 import com.soklet.core.CorsAuthorizer;
-import com.soklet.core.CorsRequest;
 import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
+import com.soklet.core.Request.Cors;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
@@ -51,10 +51,14 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	@Override
 	public Optional<CorsResponse> authorize(@Nonnull Request request,
-																					@Nonnull CorsRequest corsRequest,
 																					@Nonnull Set<HttpMethod> availableHttpMethods) {
-		if (getWhitelistedOrigins().contains(normalizeOrigin(corsRequest.getOrigin())))
-			return Optional.of(new CorsResponse.Builder(corsRequest.getOrigin())
+		Cors cors = request.getCors().orElse(null);
+
+		if (cors == null)
+			return Optional.empty();
+
+		if (getWhitelistedOrigins().contains(normalizeOrigin(cors.getOrigin())))
+			return Optional.of(new CorsResponse.Builder(cors.getOrigin())
 					.accessControlAllowMethods(availableHttpMethods)
 					.accessControlAllowHeaders(Set.of("*"))
 					.build());

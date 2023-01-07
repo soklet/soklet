@@ -16,7 +16,6 @@
 
 package com.soklet.core.impl;
 
-import com.soklet.core.CorsRequest;
 import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.MarshaledResponse;
@@ -31,6 +30,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
@@ -126,11 +126,9 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse forCorsAllowed(@Nonnull Request request,
-																					@Nonnull CorsRequest corsRequest,
-																					@Nonnull CorsResponse corsResponse) {
+	public MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,
+																									 @Nonnull CorsResponse corsResponse) {
 		requireNonNull(request);
-		requireNonNull(corsRequest);
 		requireNonNull(corsResponse);
 
 		Integer statusCode = 204;
@@ -160,10 +158,10 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		if (accessControlAllowMethodAsStrings.size() > 0)
 			headers.put("Access-Control-Allow-Methods", accessControlAllowMethodAsStrings);
 
-		Integer accessControlMaxAge = corsResponse.getAccessControlMaxAge().orElse(null);
+		Duration accessControlMaxAge = corsResponse.getAccessControlMaxAge().orElse(null);
 
 		if (accessControlMaxAge != null)
-			headers.put("Access-Control-Max-Age", Set.of(String.valueOf(accessControlMaxAge)));
+			headers.put("Access-Control-Max-Age", Set.of(String.valueOf(accessControlMaxAge.toSeconds())));
 
 		return new MarshaledResponse.Builder(statusCode)
 				.headers(headers)
@@ -172,16 +170,14 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse forCorsRejected(@Nonnull Request request,
-																					 @Nonnull CorsRequest corsRequest) {
+	public MarshaledResponse forCorsPreflightRejected(@Nonnull Request request) {
 		requireNonNull(request);
-		requireNonNull(corsRequest);
 
 		Integer statusCode = 403;
 
 		return new MarshaledResponse.Builder(statusCode)
 				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-				.body(format("HTTP %d: %s (CORS Rejected)", statusCode,
+				.body(format("HTTP %d: %s (CORS preflight rejected)", statusCode,
 						StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8))
 				.build();
 	}

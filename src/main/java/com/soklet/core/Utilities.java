@@ -265,51 +265,6 @@ public final class Utilities {
 	}
 
 	@Nonnull
-	public static Boolean isCorsRequest(@Nonnull Request request) {
-		requireNonNull(request);
-		return extractCorsRequest(request).isPresent();
-	}
-
-	@Nonnull
-	public static Optional<CorsRequest> extractCorsRequest(@Nonnull Request request) {
-		requireNonNull(request);
-
-		Set<String> originHeaderValue = request.getHeaders().get("Origin");
-
-		if (originHeaderValue == null || originHeaderValue.size() == 0)
-			return Optional.empty();
-
-		Set<String> accessControlRequestMethodHeaderValues = request.getHeaders().get("Access-Control-Request-Method");
-
-		if (accessControlRequestMethodHeaderValues == null)
-			return Optional.empty();
-
-		List<HttpMethod> accessControlRequestMethods = accessControlRequestMethodHeaderValues.stream()
-				.filter(headerValue -> {
-					headerValue = trimToEmpty(headerValue);
-
-					try {
-						HttpMethod.valueOf(headerValue);
-						return true;
-					} catch (Exception ignored) {
-						return false;
-					}
-				})
-				.map((headerValue -> HttpMethod.valueOf(headerValue.trim())))
-				.collect(Collectors.toList());
-
-		if (accessControlRequestMethods.size() == 0)
-			return Optional.empty();
-
-		Set<String> accessControlRequestHeaderValues = request.getHeaders().get("Access-Control-Request-Header");
-
-		if (accessControlRequestHeaderValues == null)
-			accessControlRequestHeaderValues = Set.of();
-
-		return Optional.of(new CorsRequest(originHeaderValue.stream().findFirst().get(), accessControlRequestMethods.get(0), accessControlRequestHeaderValues));
-	}
-
-	@Nonnull
 	public static List<Locale> localesFromAcceptLanguageHeaderValue(@Nonnull String acceptLanguageHeaderValue) {
 		requireNonNull(acceptLanguageHeaderValue);
 

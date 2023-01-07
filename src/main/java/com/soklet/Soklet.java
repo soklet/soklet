@@ -17,7 +17,6 @@
 package com.soklet;
 
 import com.soklet.core.CorsAuthorizer;
-import com.soklet.core.CorsRequest;
 import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.InstanceProvider;
@@ -25,6 +24,7 @@ import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogHandler;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
+import com.soklet.core.Request.Cors;
 import com.soklet.core.RequestContext;
 import com.soklet.core.RequestHandler;
 import com.soklet.core.ResourceMethod;
@@ -34,7 +34,6 @@ import com.soklet.core.Response;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
 import com.soklet.core.StatusCode;
-import com.soklet.core.Utilities;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -232,20 +231,20 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				Set<HttpMethod> allowedHttpMethods = new HashSet<>(otherHttpMethods);
 				allowedHttpMethods.add(HttpMethod.OPTIONS);
 
-				// Special handling for CORS, if needed
-				CorsRequest corsRequest = Utilities.extractCorsRequest(request).orElse(null);
+				Cors cors = request.getCors().orElse(null);
 
-				if (corsRequest != null) {
+				// Special handling for CORS preflight requests, if needed
+				if (cors != null && cors.isPreflight()) {
 					// Let configuration function determine if we should authorize this request
-					CorsResponse corsResponse = corsAuthorizer.authorize(request, corsRequest, allowedHttpMethods).orElse(null);
+					CorsResponse corsResponse = corsAuthorizer.authorize(request, allowedHttpMethods).orElse(null);
 
 					// Allow or reject CORS depending on what the function said to do
 					if (corsResponse != null)
-						return responseMarshaler.forCorsAllowed(request, corsRequest, corsResponse);
+						return responseMarshaler.forCorsPreflightAllowed(request, corsResponse);
 					else
-						return responseMarshaler.forCorsRejected(request, corsRequest);
+						return responseMarshaler.forCorsPreflightRejected(request);
 				} else {
-					// Just a normal OPTIONS response (non-CORS)
+					// Just a normal OPTIONS response (non-CORS-preflight)
 					return responseMarshaler.forOptions(request, allowedHttpMethods);
 				}
 			} else {
