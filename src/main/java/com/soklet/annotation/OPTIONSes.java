@@ -16,8 +16,6 @@
 
 package com.soklet.annotation;
 
-import com.soklet.annotation.OPTIONS;
-
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;

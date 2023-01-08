@@ -37,7 +37,6 @@ import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static com.soklet.core.Utilities.trimToEmpty;
 import static com.soklet.core.Utilities.trimToNull;
