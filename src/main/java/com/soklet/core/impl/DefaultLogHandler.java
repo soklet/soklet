@@ -24,7 +24,6 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**

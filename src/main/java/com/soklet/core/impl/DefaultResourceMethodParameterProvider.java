@@ -418,8 +418,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			List<Object> results = new ArrayList<>(values.size());
 
 			if (returnMetadataInsteadOfValues) {
-				for (Object valuesMetadatum : valuesMetadata)
-					results.add(valuesMetadatum);
+				results.addAll(valuesMetadata);
 			} else {
 				for (int i = 0; i < values.size(); ++i) {
 					String value = values.get(i);
@@ -443,7 +442,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		}
 
 		// Non-list support
-		Object result = null;
+		Object result;
 
 		if (returnMetadataInsteadOfValues) {
 			result = valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null;
@@ -526,7 +525,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 
 			Type normalizedType = parameter.getParameterizedType();
 			Type listElementType = null;
-			Boolean optional = false;
+			boolean optional = false;
 
 			if (parameter.getType().isAssignableFrom(Optional.class)) {
 				normalizedType = ((ParameterizedType) parameter.getParameterizedType()).getActualTypeArguments()[0];

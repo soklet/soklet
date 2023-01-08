@@ -51,15 +51,15 @@ public class Response {
 	protected Response(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
-		this.statusCode = builder.statusCode == null ? 200 : builder.statusCode;
-		this.cookies = builder.cookies == null ? Collections.emptySet() : Collections.unmodifiableSet(new HashSet<>(builder.cookies));
-		this.headers = builder.headers == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(builder.headers));
+		this.statusCode = builder.statusCode;
+		this.cookies = builder.cookies == null ? Collections.emptySet() : Set.copyOf(builder.cookies);
+		this.headers = builder.headers == null ? Collections.emptyMap() : Map.copyOf(builder.headers);
 		this.body = builder.body;
 	}
 
 	@Override
 	public String toString() {
-		return format("%s{request=%s, statusCode=%s, cookies=%s, headers=%s, body=%s}",
+		return format("%s{statusCode=%s, cookies=%s, headers=%s, body=%s}",
 				getClass().getSimpleName(), getStatusCode(), getCookies(), getHeaders(), getBody());
 	}
 
@@ -193,8 +193,8 @@ public class Response {
 			requireNonNull(statusCodeFunction);
 
 			this.builder = new Builder(statusCodeFunction.apply(builder.statusCode))
-					.headers(new HashMap<>(builder.headers))
-					.cookies(new HashSet<>(builder.cookies))
+					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
+					.cookies(builder.cookies == null ? null : new HashSet<>(builder.cookies))
 					.body(builder.body);
 
 			return this;

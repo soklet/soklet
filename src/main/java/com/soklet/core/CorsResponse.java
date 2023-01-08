@@ -47,7 +47,7 @@ public class CorsResponse {
 		this.accessControlAllowOrigin = builder.accessControlAllowOrigin;
 		this.accessControlAllowCredentials = builder.accessControlAllowCredentials;
 		this.accessControlExposeHeaders = builder.accessControlExposeHeaders == null ?
-				Set.of() : Collections.unmodifiableSet(new HashSet<>(builder.accessControlExposeHeaders));
+				Set.of() : Set.copyOf(builder.accessControlExposeHeaders);
 	}
 
 	@Override

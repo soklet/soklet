@@ -368,12 +368,7 @@ public class MicrohttpServer implements Server {
 		Map<String, Set<String>> headers = new HashMap<>(microHttpRequest.headers().size());
 
 		for (Header header : microHttpRequest.headers()) {
-			Set<String> values = headers.get(header.name());
-
-			if (values == null) {
-				values = new HashSet<>();
-				headers.put(header.name(), values);
-			}
+			Set<String> values = headers.computeIfAbsent(header.name(), k -> new HashSet<>());
 
 			String value = trimToNull(header.value());
 
@@ -411,13 +406,13 @@ public class MicrohttpServer implements Server {
 		for (Map.Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 			String name = entry.getKey();
 			Set<String> values = new TreeSet<>(entry.getValue()); // TreeSet to force natural ordering for consistent output
-			headers.add(new Header(name, values.stream().collect(Collectors.joining(", "))));
+			headers.add(new Header(name, String.join(", ", values)));
 		}
 
 		// Cookie headers are split into multiple instances of Set-Cookie.
 		// Force natural ordering for consistent output.
 		List<HttpCookie> sortedCookies = new ArrayList<>(marshaledResponse.getCookies());
-		Collections.sort(sortedCookies, (cookie1, cookie2) -> cookie1.getName().compareTo(cookie2.getName()));
+		sortedCookies.sort((cookie1, cookie2) -> cookie1.getName().compareTo(cookie2.getName()));
 
 		for (HttpCookie httpCookie : sortedCookies)
 			headers.add(new Header("Set-Cookie", httpCookie.toString()));

@@ -53,9 +53,9 @@ public class CorsPreflightResponse {
 		this.accessControlAllowCredentials = builder.accessControlAllowCredentials;
 		this.accessControlMaxAge = builder.accessControlMaxAge;
 		this.accessControlAllowMethods = builder.accessControlAllowMethods == null ?
-				Set.of() : Collections.unmodifiableSet(new HashSet<>(builder.accessControlAllowMethods));
+				Set.of() : Set.copyOf(builder.accessControlAllowMethods);
 		this.accessControlAllowHeaders = builder.accessControlAllowHeaders == null ?
-				Set.of() : Collections.unmodifiableSet(new HashSet<>(builder.accessControlAllowHeaders));
+				Set.of() : Set.copyOf(builder.accessControlAllowHeaders);
 	}
 
 	@Override

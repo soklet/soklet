@@ -105,7 +105,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 				.headers(Map.of("Allow", allowedHttpMethodsAsStrings, "Content-Type", Set.of("text/plain; charset=UTF-8")))
 				.body(format("HTTP %d: %s. Requested: %s, Allowed: %s",
 						statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase(), request.getHttpMethod().name(),
-						allowedHttpMethodsAsStrings.stream().collect(Collectors.joining(", "))).getBytes(StandardCharsets.UTF_8))
+						String.join(", ", allowedHttpMethodsAsStrings)).getBytes(StandardCharsets.UTF_8))
 				.build();
 	}
 

@@ -35,7 +35,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Locale.LanguageRange;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -216,12 +215,7 @@ public final class Utilities {
 			if (value == null)
 				continue;
 
-			Set<String> values = queryParameters.get(name);
-
-			if (values == null) {
-				values = new HashSet<>();
-				queryParameters.put(name, values);
-			}
+			Set<String> values = queryParameters.computeIfAbsent(name, k -> new HashSet<>());
 
 			values.add(value);
 		}
@@ -289,7 +283,7 @@ public final class Utilities {
 		return string.length() == 0 ? null : string;
 	}
 
-	@Nullable
+	@Nonnull
 	public static String trimToEmpty(@Nullable String string) {
 		if (string == null)
 			return "";

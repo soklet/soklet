@@ -71,7 +71,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	private final Map<Method, Set<HttpMethodResourcePath>> httpMethodResourcePathsByMethod;
 
 	public DefaultResourceMethodResolver() {
-		this(StreamSupport.stream(ClassIndex.getAnnotated(Resource.class).spliterator(), true)
+		this(ClassIndex.getAnnotated(Resource.class).parallelStream()
 				.collect(Collectors.toSet()), null);
 	}
 
@@ -199,12 +199,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				}
 
 				Set<HttpMethodResourcePath> httpMethodResourcePaths =
-						httpMethodResourcePathsByResourceMethod.get(resourceMethod);
-
-				if (httpMethodResourcePaths == null) {
-					httpMethodResourcePaths = new HashSet<>();
-					httpMethodResourcePathsByResourceMethod.put(resourceMethod, httpMethodResourcePaths);
-				}
+						httpMethodResourcePathsByResourceMethod.computeIfAbsent(resourceMethod, k -> new HashSet<>());
 
 				httpMethodResourcePaths.addAll(matchedHttpMethodResourcePaths);
 			}
@@ -222,7 +217,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		SortedMap<Long, Set<ResourceMethod>> resourceMethodsByPlaceholderComponentCount = new TreeMap<>();
 
 		for (ResourceMethod resourceMethod : resourceMethods) {
-			Set<HttpMethodResourcePath> httpMethodResourcePaths = getHttpMethodResourcePathsByMethod().get(resourceMethod);
+			Set<HttpMethodResourcePath> httpMethodResourcePaths = getHttpMethodResourcePathsByMethod().get(resourceMethod.getMethod());
 
 			if (httpMethodResourcePaths == null || httpMethodResourcePaths.size() == 0)
 				continue;
@@ -232,12 +227,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 					continue;
 
 				long literalComponentCount = httpMethodResourcePath.getResourcePath().getComponents().stream().filter(component -> component.getType() == ResourcePath.ComponentType.PLACEHOLDER).count();
-				Set<ResourceMethod> resourceMethodsWithEquivalentComponentCount = resourceMethodsByPlaceholderComponentCount.get(literalComponentCount);
-
-				if (resourceMethodsWithEquivalentComponentCount == null) {
-					resourceMethodsWithEquivalentComponentCount = new HashSet<>();
-					resourceMethodsByPlaceholderComponentCount.put(literalComponentCount, resourceMethodsWithEquivalentComponentCount);
-				}
+				Set<ResourceMethod> resourceMethodsWithEquivalentComponentCount = resourceMethodsByPlaceholderComponentCount.computeIfAbsent(literalComponentCount, k -> new HashSet<>());
 
 				resourceMethodsWithEquivalentComponentCount.add(resourceMethod);
 			}
@@ -275,12 +265,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				if (httpMethod == null)
 					continue;
 
-				Set<Method> httpMethodResourceMethods = resourceMethodsByHttpMethod.get(httpMethod);
-
-				if (httpMethodResourceMethods == null) {
-					httpMethodResourceMethods = new HashSet<>();
-					resourceMethodsByHttpMethod.put(httpMethod, httpMethodResourceMethods);
-				}
+				Set<Method> httpMethodResourceMethods = resourceMethodsByHttpMethod.computeIfAbsent(httpMethod, k -> new HashSet<>());
 
 				httpMethodResourceMethods.add(resourceMethod);
 			}

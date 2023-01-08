@@ -193,7 +193,7 @@ public class ResourcePath {
 			if (checkForPlaceholder) {
 				ComponentType type = ComponentType.LITERAL;
 
-				if (checkForPlaceholder && COMPONENT_PLACEHOLDER_PATTERN.matcher(value).matches()) {
+				if (COMPONENT_PLACEHOLDER_PATTERN.matcher(value).matches()) {
 					type = ComponentType.PLACEHOLDER;
 					value = value.substring(1, value.length() - 1);
 				}

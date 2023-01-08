@@ -21,7 +21,6 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.HttpCookie;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -56,14 +55,14 @@ public class MarshaledResponse {
 
 		this.statusCode = builder.statusCode;
 		this.reasonPhrase = typedStatusCode == null ? "Unknown" : typedStatusCode.getReasonPhrase();
-		this.headers = builder.headers == null ? Map.of() : Collections.unmodifiableMap(new HashMap<>(builder.headers));
-		this.cookies = builder.cookies == null ? Set.of() : Collections.unmodifiableSet(new HashSet<>(builder.cookies));
+		this.headers = builder.headers == null ? Map.of() : Map.copyOf(builder.headers);
+		this.cookies = builder.cookies == null ? Set.of() : Set.copyOf(builder.cookies);
 		this.body = builder.body;
 	}
 
 	@Override
 	public String toString() {
-		return format("%s.%s{statusCode=%s, reasonPhrase=%s, headers=%s, cookies=%s, body=%s}", getClass().getSimpleName(),
+		return format("%s{statusCode=%s, reasonPhrase=%s, headers=%s, cookies=%s, body=%s}", getClass().getSimpleName(),
 				getStatusCode(), getReasonPhrase(), getHeaders(), getCookies(), getBody());
 	}
 
@@ -170,8 +169,8 @@ public class MarshaledResponse {
 			requireNonNull(statusCodeFunction);
 
 			this.builder = new MarshaledResponse.Builder(statusCodeFunction.apply(builder.statusCode))
-					.headers(new HashMap<>(builder.headers))
-					.cookies(new HashSet<>(builder.cookies))
+					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
+					.cookies(builder.cookies == null ? null : new HashSet<>(builder.cookies))
 					.body(builder.body);
 
 			return this;

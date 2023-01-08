@@ -40,6 +40,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.soklet.core.Utilities.trimToEmpty;
+import static com.soklet.core.Utilities.trimToNull;
 import static java.lang.String.format;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
@@ -91,7 +92,7 @@ public class Request {
 		this.httpMethod = builder.httpMethod;
 		this.uri = builder.uri;
 		this.path = Utilities.normalizedPathForUrl(builder.uri);
-		this.cookies = builder.cookies == null ? Set.of() : Collections.unmodifiableSet(new HashSet<>(builder.cookies));
+		this.cookies = builder.cookies == null ? Set.of() : Set.copyOf(builder.cookies);
 		this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(builder.uri));
 
 		// Header names are case-insensitive.  Enforce that here with a special map
@@ -214,6 +215,8 @@ public class Request {
 						this.locales = unmodifiableList(Utilities.localesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue.stream().findFirst().get()));
 					else
 						this.locales = List.of();
+				} else {
+					this.locales = List.of();
 				}
 			} finally {
 				getLock().unlock();
@@ -330,8 +333,8 @@ public class Request {
 
 			this.builder = new Builder(httpMethodFunction.apply(builder.httpMethod), builder.uri)
 					.id(builder.id)
-					.headers(new HashMap<>(builder.headers))
-					.cookies(new HashSet<>(builder.cookies))
+					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
+					.cookies(builder.cookies == null ? null : new HashSet<>(builder.cookies))
 					.body(builder.body);
 
 			return this;
@@ -343,8 +346,8 @@ public class Request {
 
 			this.builder = new Builder(builder.httpMethod, uriFunction.apply(builder.uri))
 					.id(builder.id)
-					.headers(new HashMap<>(builder.headers))
-					.cookies(new HashSet<>(builder.cookies))
+					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
+					.cookies(builder.cookies == null ? null : new HashSet<>(builder.cookies))
 					.body(builder.body);
 
 			return this;
@@ -414,7 +417,7 @@ public class Request {
 			this.origin = origin;
 			this.accessControlRequestMethod = accessControlRequestMethod;
 			this.accessControlRequestHeaders = accessControlRequestHeaders == null ?
-					Set.of() : Collections.unmodifiableSet(new HashSet<>(accessControlRequestHeaders));
+					Set.of() : Set.copyOf(accessControlRequestHeaders);
 			this.preflight = httpMethod == HttpMethod.OPTIONS && accessControlRequestMethod != null;
 		}
 
@@ -424,9 +427,14 @@ public class Request {
 			requireNonNull(httpMethod);
 			requireNonNull(headers);
 
-			Set<String> originHeaderValue = headers.get("Origin");
+			Set<String> originHeaderValues = headers.get("Origin");
 
-			if (originHeaderValue == null || originHeaderValue.size() == 0)
+			if (originHeaderValues == null || originHeaderValues.size() == 0)
+				return Optional.empty();
+
+			String originHeaderValue = trimToNull(originHeaderValues.stream().findFirst().orElse(null));
+
+			if (originHeaderValue == null)
 				return Optional.empty();
 
 			Set<String> accessControlRequestMethodHeaderValues = headers.get("Access-Control-Request-Method");
@@ -446,14 +454,14 @@ public class Request {
 						}
 					})
 					.map((headerValue -> HttpMethod.valueOf(headerValue.trim())))
-					.collect(Collectors.toList());
+					.toList();
 
 			Set<String> accessControlRequestHeaderValues = headers.get("Access-Control-Request-Header");
 
 			if (accessControlRequestHeaderValues == null)
 				accessControlRequestHeaderValues = Set.of();
 
-			return Optional.of(new Cors(httpMethod, originHeaderValue.stream().findFirst().get(),
+			return Optional.of(new Cors(httpMethod, originHeaderValue,
 					accessControlRequestMethods.size() > 0 ? accessControlRequestMethods.get(0) : null,
 					accessControlRequestHeaderValues));
 		}
