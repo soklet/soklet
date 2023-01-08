@@ -434,7 +434,7 @@ public class Request {
 			Set<String> accessControlRequestMethodHeaderValues = headers.get("Access-Control-Request-Method");
 
 			if (accessControlRequestMethodHeaderValues == null)
-				return Optional.empty();
+				accessControlRequestMethodHeaderValues = Set.of();
 
 			List<HttpMethod> accessControlRequestMethods = accessControlRequestMethodHeaderValues.stream()
 					.filter(headerValue -> {
@@ -450,22 +450,20 @@ public class Request {
 					.map((headerValue -> HttpMethod.valueOf(headerValue.trim())))
 					.collect(Collectors.toList());
 
-			if (accessControlRequestMethods.size() == 0)
-				return Optional.empty();
-
 			Set<String> accessControlRequestHeaderValues = headers.get("Access-Control-Request-Header");
 
 			if (accessControlRequestHeaderValues == null)
 				accessControlRequestHeaderValues = Set.of();
 
 			return Optional.of(new Cors(httpMethod, originHeaderValue.stream().findFirst().get(),
-					accessControlRequestMethods.get(0), accessControlRequestHeaderValues));
+					accessControlRequestMethods.size() > 0 ? accessControlRequestMethods.get(0) : null,
+					accessControlRequestHeaderValues));
 		}
 
 		@Override
 		@Nonnull
 		public String toString() {
-			return format("%s{origin=%s, accessControlRequestMethod=%s, accessControlRequestHeaders=%}",
+			return format("%s{origin=%s, accessControlRequestMethod=%s, accessControlRequestHeaders=%s}",
 					getClass().getSimpleName(), getOrigin(), getAccessControlRequestMethod(), getAccessControlRequestHeaders());
 		}
 
