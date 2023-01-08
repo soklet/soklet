@@ -35,7 +35,7 @@ public class DefaultLogHandler implements LogHandler {
 	@Override
 	public void logDebug(@Nonnull String message) {
 		requireNonNull(message);
-		System.out.println(format("DEBUG: %s", message));
+		System.out.printf("DEBUG: %s%n", message);
 	}
 
 	@Override
@@ -49,7 +49,7 @@ public class DefaultLogHandler implements LogHandler {
 		requireNonNull(message);
 
 		if (throwable == null) {
-			System.err.println(format("ERROR: %s", message));
+			System.err.printf("ERROR: %s%n", message);
 		} else {
 			StringWriter stringWriter = new StringWriter();
 			PrintWriter printWriter = new PrintWriter(stringWriter);
@@ -57,7 +57,7 @@ public class DefaultLogHandler implements LogHandler {
 
 			String throwableWithStackTrace = stringWriter.toString().trim();
 
-			System.err.println(format("ERROR: %s\n%s", message, throwableWithStackTrace));
+			System.err.printf("ERROR: %s\n%s%n", message, throwableWithStackTrace);
 		}
 	}
 }

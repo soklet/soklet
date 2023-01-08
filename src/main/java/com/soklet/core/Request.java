@@ -117,10 +117,8 @@ public class Request {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof Request))
+		if (!(object instanceof Request request))
 			return false;
-
-		Request request = (Request) object;
 
 		return Objects.equals(getId(), request.getId())
 				&& Objects.equals(getHttpMethod(), request.getHttpMethod())
@@ -472,10 +470,8 @@ public class Request {
 			if (this == object)
 				return true;
 
-			if (!(object instanceof Cors))
+			if (!(object instanceof Cors cors))
 				return false;
-
-			Cors cors = (Cors) object;
 
 			return Objects.equals(getOrigin(), cors.getOrigin())
 					&& Objects.equals(getAccessControlRequestMethod(), cors.getAccessControlRequestMethod())

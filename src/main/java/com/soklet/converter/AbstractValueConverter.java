@@ -21,6 +21,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static java.lang.String.format;
@@ -45,7 +46,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 
 		// If not direct use of interface, try superclass (no error handling done yet)
 		if (genericInterfaces.size() == 0)
-			genericInterfaces = Arrays.asList(getClass().getGenericSuperclass());
+			genericInterfaces = Collections.singletonList(getClass().getGenericSuperclass());
 
 		// Figure out what the two type arguments are for ValueConverter
 		for (Type genericInterface : genericInterfaces) {

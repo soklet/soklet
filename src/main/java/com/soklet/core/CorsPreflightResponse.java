@@ -71,10 +71,8 @@ public class CorsPreflightResponse {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof CorsPreflightResponse))
+		if (!(object instanceof CorsPreflightResponse corsPreflightResponse))
 			return false;
-
-		CorsPreflightResponse corsPreflightResponse = (CorsPreflightResponse) object;
 
 		return Objects.equals(getAccessControlAllowOrigin(), corsPreflightResponse.getAccessControlAllowOrigin())
 				&& Objects.equals(getAccessControlAllowCredentials(), corsPreflightResponse.getAccessControlAllowCredentials())

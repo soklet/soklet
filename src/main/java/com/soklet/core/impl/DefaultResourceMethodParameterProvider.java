@@ -195,7 +195,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 					return Optional.ofNullable(requestBodyAsString);
 
 				if (requestBodyAsString == null)
-					throw new MissingRequestBodyException(format("A request body is required for this resource."));
+					throw new MissingRequestBodyException("A request body is required for this resource.");
 
 				return requestBodyAsString;
 			} else if (requestBodyExpectsByteArray) {
@@ -205,7 +205,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 					return Optional.ofNullable(requestBodyAsByteArray);
 
 				if (requestBodyAsByteArray == null)
-					throw new MissingRequestBodyException(format("A request body is required for this resource."));
+					throw new MissingRequestBodyException("A request body is required for this resource.");
 
 				return requestBodyAsByteArray;
 			} else {

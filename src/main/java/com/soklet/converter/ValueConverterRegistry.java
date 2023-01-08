@@ -113,9 +113,7 @@ public class ValueConverterRegistry {
 
 		// Special case for enums.
 		// If no converter was registered for converting a String to an Enum<?>, create a simple converter and cache it off
-		if (valueConverter == null && String.class.equals(fromType) && toType instanceof Class) {
-			@SuppressWarnings("rawtypes")
-			Class toClass = (Class) toType;
+		if (valueConverter == null && String.class.equals(fromType) && toType instanceof @SuppressWarnings("rawtypes")Class toClass) {
 
 			if (toClass.isEnum()) {
 				valueConverter = new ValueConverter<>() {
@@ -212,10 +210,8 @@ public class ValueConverterRegistry {
 		public boolean equals(@Nullable Object object) {
 			if (this == object)
 				return true;
-			if (!(object instanceof CacheKey))
+			if (!(object instanceof CacheKey cacheKey))
 				return false;
-
-			CacheKey cacheKey = (CacheKey) object;
 
 			return Objects.equals(getFromType(), cacheKey.getFromType()) && Objects.equals(getToType(), cacheKey.getToType());
 		}

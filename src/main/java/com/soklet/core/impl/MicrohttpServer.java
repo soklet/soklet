@@ -111,9 +111,9 @@ public class MicrohttpServer implements Server {
 	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
-	private Supplier<ExecutorService> eventLoopExecutorServiceSupplier;
+	private final Supplier<ExecutorService> eventLoopExecutorServiceSupplier;
 	@Nonnull
-	private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 	@Nullable
 	private volatile ExecutorService eventLoopExecutorService;
 	@Nullable

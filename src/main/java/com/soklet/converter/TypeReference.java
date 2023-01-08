@@ -66,10 +66,8 @@ public abstract class TypeReference<T> {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof TypeReference))
+		if (!(object instanceof TypeReference<?> typeReference))
 			return false;
-
-		TypeReference<?> typeReference = (TypeReference<?>) object;
 
 		return Objects.equals(getType(), typeReference.getType());
 	}

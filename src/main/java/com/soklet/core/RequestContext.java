@@ -61,10 +61,8 @@ public class RequestContext {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof RequestContext))
+		if (!(object instanceof RequestContext requestContext))
 			return false;
-
-		RequestContext requestContext = (RequestContext) object;
 
 		return Objects.equals(getRequest(), requestContext.getRequest())
 				&& Objects.equals(getResourceMethod(), requestContext.getResourceMethod());

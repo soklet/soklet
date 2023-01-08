@@ -62,10 +62,8 @@ public class CorsResponse {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof CorsResponse))
+		if (!(object instanceof CorsResponse corsResponse))
 			return false;
-
-		CorsResponse corsResponse = (CorsResponse) object;
 
 		return Objects.equals(getAccessControlAllowOrigin(), corsResponse.getAccessControlAllowOrigin())
 				&& Objects.equals(getAccessControlAllowCredentials(), corsResponse.getAccessControlAllowCredentials())

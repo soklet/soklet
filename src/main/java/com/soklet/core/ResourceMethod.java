@@ -60,10 +60,8 @@ public class ResourceMethod {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof ResourceMethod))
+		if (!(object instanceof ResourceMethod resourceMethod))
 			return false;
-
-		ResourceMethod resourceMethod = (ResourceMethod) object;
 
 		return Objects.equals(getHttpMethod(), resourceMethod.getHttpMethod())
 				&& Objects.equals(getResourcePath(), resourceMethod.getResourcePath())

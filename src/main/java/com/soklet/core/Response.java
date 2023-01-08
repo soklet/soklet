@@ -68,10 +68,8 @@ public class Response {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof Response))
+		if (!(object instanceof Response response))
 			return false;
-
-		Response response = (Response) object;
 
 		return Objects.equals(getStatusCode(), response.getStatusCode())
 				&& Objects.equals(getCookies(), response.getCookies())

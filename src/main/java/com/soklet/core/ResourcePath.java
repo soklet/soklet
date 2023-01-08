@@ -215,10 +215,8 @@ public class ResourcePath {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof ResourcePath))
+		if (!(object instanceof ResourcePath resourcePath))
 			return false;
-
-		ResourcePath resourcePath = (ResourcePath) object;
 
 		return Objects.equals(getPath(), resourcePath.getPath()) && Objects.equals(getComponents(), resourcePath.getComponents());
 	}
@@ -306,10 +304,8 @@ public class ResourcePath {
 			if (this == object)
 				return true;
 
-			if (!(object instanceof Component))
+			if (!(object instanceof Component component))
 				return false;
-
-			Component component = (Component) object;
 
 			return Objects.equals(getValue(), component.getValue()) && Objects.equals(getType(), component.getType());
 		}

@@ -359,10 +359,8 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			if (this == object)
 				return true;
 
-			if (!(object instanceof HttpMethodResourcePath))
+			if (!(object instanceof HttpMethodResourcePath httpMethodResourcePath))
 				return false;
-
-			HttpMethodResourcePath httpMethodResourcePath = (HttpMethodResourcePath) object;
 
 			return Objects.equals(getHttpMethod(), httpMethodResourcePath.getHttpMethod())
 					&& Objects.equals(getResourcePath(), httpMethodResourcePath.getResourcePath());
