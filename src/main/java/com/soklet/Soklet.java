@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.core.CorsAuthorizer;
 import com.soklet.core.CorsPreflightResponse;
+import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.LifecycleInterceptor;
@@ -136,7 +137,8 @@ public class Soklet implements AutoCloseable, RequestHandler {
 					if (resourceMethodResolutionExceptionHolder.get() != null)
 						throw resourceMethodResolutionExceptionHolder.get();
 
-					return toMarshaledResponse(requestHolder.get(), resourceMethodHolder.get());
+					MarshaledResponse marshaledResponse = toMarshaledResponse(requestHolder.get(), resourceMethodHolder.get());
+					return applyCorsResponseIfApplicable(request, marshaledResponse);
 				} catch (Throwable t) {
 					throwables.add(t);
 					logHandler.logError(format("An exception occurred while processing %s", request), t);
@@ -220,6 +222,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		CorsAuthorizer corsAuthorizer = getSokletConfiguration().getCorsAuthorizer();
 		ResourceMethodResolver resourceMethodResolver = getSokletConfiguration().getResourceMethodResolver();
 		ResponseMarshaler responseMarshaler = getSokletConfiguration().getResponseMarshaler();
+		Cors cors = request.getCors().orElse(null);
 
 		// No resource method was found for this HTTP method and path.
 		if (resourceMethod == null) {
@@ -230,8 +233,6 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				Set<HttpMethod> otherHttpMethods = resolveOtherMatchingHttpMethods(request, resourceMethodResolver);
 				Set<HttpMethod> allowedHttpMethods = new HashSet<>(otherHttpMethods);
 				allowedHttpMethods.add(HttpMethod.OPTIONS);
-
-				Cors cors = request.getCors().orElse(null);
 
 				// Special handling for CORS preflight requests, if needed
 				if (cors != null && cors.isPreflight()) {
@@ -300,6 +301,31 @@ public class Soklet implements AutoCloseable, RequestHandler {
 			response = new Response.Builder(200).body(responseObject).build();
 
 		return responseMarshaler.forHappyPath(request, response, resourceMethod);
+	}
+
+	@Nonnull
+	protected MarshaledResponse applyCorsResponseIfApplicable(@Nonnull Request request,
+																														@Nonnull MarshaledResponse marshaledResponse) {
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+
+		Cors cors = request.getCors().orElse(null);
+
+		// If non-CORS request or preflight CORS, nothing further to do (preflight was handled earlier)
+		if (cors == null || cors.isPreflight())
+			return marshaledResponse;
+
+		CorsAuthorizer corsAuthorizer = getSokletConfiguration().getCorsAuthorizer();
+
+		// Does the authorizer say we are authorized?
+		CorsResponse corsResponse = corsAuthorizer.authorize(request).orElse(null);
+
+		// Not authorized - don't apply CORS headers to the response
+		if (corsResponse == null)
+			return marshaledResponse;
+
+		// Authorized - OK, let's apply the headers to the response
+		return getSokletConfiguration().getResponseMarshaler().forCorsAllowed(request, corsResponse, marshaledResponse);
 	}
 
 	@Nonnull

@@ -41,6 +41,11 @@ public interface ResponseMarshaler {
 															 @Nonnull Set<HttpMethod> allowedHttpMethods);
 
 	@Nonnull
+	MarshaledResponse forException(@Nonnull Request request,
+																 @Nonnull Throwable throwable,
+																 @Nullable ResourceMethod resourceMethod);
+
+	@Nonnull
 	MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,
 																						@Nonnull CorsPreflightResponse corsPreflightResponse);
 
@@ -48,7 +53,7 @@ public interface ResponseMarshaler {
 	MarshaledResponse forCorsPreflightRejected(@Nonnull Request request);
 
 	@Nonnull
-	MarshaledResponse forException(@Nonnull Request request,
-																 @Nonnull Throwable throwable,
-																 @Nullable ResourceMethod resourceMethod);
+	MarshaledResponse forCorsAllowed(@Nonnull Request request,
+																	 @Nonnull CorsResponse corsResponse,
+																	 @Nonnull MarshaledResponse marshaledResponse);
 }

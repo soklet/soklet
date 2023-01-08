@@ -17,6 +17,7 @@
 package com.soklet.core.impl;
 
 import com.soklet.core.CorsPreflightResponse;
+import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
@@ -126,6 +127,22 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
+	public MarshaledResponse forException(@Nonnull Request request,
+																				@Nonnull Throwable throwable,
+																				@Nullable ResourceMethod resourceMethod) {
+		requireNonNull(request);
+		requireNonNull(throwable);
+
+		Integer statusCode = throwable instanceof BadRequestException ? 400 : 500;
+
+		return new MarshaledResponse.Builder(statusCode)
+				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8))
+				.build();
+	}
+
+	@Nonnull
+	@Override
 	public MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,
 																									 @Nonnull CorsPreflightResponse corsPreflightResponse) {
 		requireNonNull(request);
@@ -180,17 +197,27 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse forException(@Nonnull Request request,
-																				@Nonnull Throwable throwable,
-																				@Nullable ResourceMethod resourceMethod) {
+	public MarshaledResponse forCorsAllowed(@Nonnull Request request,
+																					@Nonnull CorsResponse corsResponse,
+																					@Nonnull MarshaledResponse marshaledResponse) {
 		requireNonNull(request);
-		requireNonNull(throwable);
+		requireNonNull(corsResponse);
+		requireNonNull(marshaledResponse);
 
-		Integer statusCode = throwable instanceof BadRequestException ? 400 : 500;
+		return marshaledResponse.copy()
+				.headers((mutableHeaders) -> {
+					mutableHeaders.put("Access-Control-Allow-Origin", Set.of(corsResponse.getAccessControlAllowOrigin()));
 
-		return new MarshaledResponse.Builder(statusCode)
-				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8))
-				.build();
+					Boolean accessControlAllowCredentials = corsResponse.getAccessControlAllowCredentials().orElse(null);
+
+					// Either "true" or omit entirely
+					if (accessControlAllowCredentials != null && accessControlAllowCredentials)
+						mutableHeaders.put("Access-Control-Allow-Credentials", Set.of("true"));
+
+					Set<String> accessControlExposeHeaders = corsResponse.getAccessControlExposeHeaders();
+
+					if (accessControlExposeHeaders.size() > 0)
+						mutableHeaders.put("Access-Control-Expose-Headers", new HashSet<>(accessControlExposeHeaders));
+				}).finish();
 	}
 }
