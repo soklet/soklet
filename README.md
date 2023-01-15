@@ -1,4 +1,4 @@
-![Soklet Logo](https://soklet.s3.amazonaws.com/soklet-logo-white-rect.png)
+![Soklet Logo](https://soklet.s3.amazonaws.com/soklet-logo-github.png)
 
 ### What Is It?
 
