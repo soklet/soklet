@@ -10,7 +10,7 @@ Soklet is a library, not a framework.
 
 ### Why?
 
-The Java web ecosystem is missing a solution that is light (in terms of dependencies) but offers features like Loom support, DI-awareness, and annotation-based request handling.  Soklet aims to fill this void.
+The Java web ecosystem is missing a solution that is dependency-free but offers features like Loom support, DI-awareness, and annotation-based request handling.  Soklet aims to fill this void.
 
 ### Design Goals
 
@@ -96,9 +96,9 @@ For Soklet to be useful, one or more classes annotated with `@Resource` (hereaft
 
 Soklet detects Resources using a compile-time annotation processor and constructs a lookup table to avoid expensive classpath scans during startup.
 
-When an HTTP request arrives, Soklet determines the appropriate Resource Method to invoke based on HTTP method and URL path pattern matching.  Parameters are provided using the heuristics described below.
+When an HTTP request arrives, Soklet determines the appropriate Resource Method to invoke based on HTTP method and URL path pattern matching.  Parameter values are injected using the heuristics described below.
 
-Resource Methods may return results of any type - your [Response Marshaler](#response-marshaler) runs downstream and is responsible for converting the returned objects to bytes over the wire.
+Resource Methods may return results of any type - your [ResponseMarshaler](#response-marshaler) runs downstream and is responsible for converting the returned objects to bytes over the wire.
 
 ```java
 @Resource
@@ -140,7 +140,7 @@ class ExampleResource {
     return new Response.Builder()
       .body(String.format("date=%s, values=%s", date, values))
       .build();
-  }	
+  }
 
   // The @FormParameter annotation supports application/x-www-form-urlencoded values.
   //
@@ -667,8 +667,6 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
   })
   .build();
 ```
-
-If you need to customize further and control _exactly_ how the data goes back over the wire, provide your own [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) and override the [`ResponseMarshaler::forCorsAllowed`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsAllowed(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse)) and [`ResponseMarshaler::forCorsRejected`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsRejected(com.soklet.core.Request,com.soklet.core.CorsRequest)) methods to write preflight allowed/rejected responses, respectively.
 
 ### Log Handler
 
