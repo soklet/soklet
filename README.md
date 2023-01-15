@@ -1,4 +1,4 @@
-## Soklet
+![Soklet Logo](https://soklet.s3.amazonaws.com/soklet-logo-white-rect.png)
 
 ### What Is It?
 
