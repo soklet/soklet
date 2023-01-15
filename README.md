@@ -298,7 +298,7 @@ Server server = new MicrohttpServer.Builder(8080 /* port */)
   .socketPendingConnectionLimit(0)
   // Handle server logging statements
   .logHandler(new LogHandler() { ... })
-  // Vend an ExecutorService that is used to run our event loops
+  // Vend an ExecutorService that is used to run our Soklet event loops
   .eventLoopExecutorServiceSupplier(() -> Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors()))
   // Vend an ExecutorService that is used to service HTTP requests.
   // For Loom/Virtual Threads - it makes sense to have 1 virtual thread per request.
@@ -327,8 +327,9 @@ Hooks are provided for these scenarios:
 * HTTP OPTIONS
     * [`ResponseMarshaler::forOptions`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forOptions(com.soklet.core.Request,java.util.Set))
 * CORS 
-    * [`ResponseMarshaler::forCorsAllowed`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsAllowed(com.soklet.core.Request,com.soklet.core.CorsRequest,com.soklet.core.CorsResponse))
-    * [`ResponseMarshaler::forCorsRejected`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsRejected(com.soklet.core.Request,com.soklet.core.CorsRequest))
+    * [`ResponseMarshaler::forCorsPreflightAllowed`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsAllowed(com.soklet.core.Request,com.soklet.core.CorsPreflightResponse))
+    * [`ResponseMarshaler::forCorsPreflightRejected`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsRejected(com.soklet.core.Request))
+    * [`ResponseMarshaler::forCorsAllowed`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsAllowed(com.soklet.core.Request,com.soklet.core.CorsResponse,com.soklet.core.MarshaledResponse))
 
 Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible defaults for things like CORS, OPTIONS, and 404s/405s.  This way you can stay focused on how your application writes happy path and exception responses.  For example:
 
@@ -392,7 +393,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 ### Instance Provider
 
-Soklet creates instances of Resource classes in order to invoke methods on them on your behalf.  To do this, it delegates to the configured [InstanceProvider](https://www.soklet.com/javadoc/com/soklet/core/InstanceProvider.html).
+Soklet creates instances of Resource classes and other types in order to invoke methods on them on your behalf.  To do this, it delegates to the configured [InstanceProvider](https://www.soklet.com/javadoc/com/soklet/core/InstanceProvider.html).
 <br/><br/>
 Here's a naïve implementation that assumes the presence of a default constructor.
 
@@ -612,7 +613,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 #### Whitelisted Origins
 
-This is usually what you want in a production system - a whitelisted set of origins from which to allow preflight requests.
+This is usually what you want in a production system - a whitelisted set of origins from which to allow requests.
 
 ```java
 Set<String> allowedOrigins = Set.of("https://www.revetware.com");
@@ -629,27 +630,38 @@ If none of the out-of-the-box [CorsAuthorizer](https://www.soklet.com/javadoc/co
 ```java
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
   .corsAuthorizer(new CorsAuthorizer() {
-    @Nonnull
+    // Any subdomain under myexampledomain.com is permitted
+    boolean originMatchesMyCustomSubdomains(Cors cors) {
+      return cors.getOrigin().matches("https://(.*)\\.myexampledomain\\.com");
+    }
+				
     @Override
-    public Optional<CorsResponse> authorize(@Nonnull Request request,
-                                            @Nonnull CorsRequest corsRequest,
-                                            @Nonnull Set<HttpMethod> availableHttpMethods) {
-      // Arbitrary application-specific rule for whether to approve this CORS request
-      boolean allowCors = request.getQueryParameters().containsKey("example");
+    public Optional<CorsResponse> authorize(@Nonnull Request request) {
+      Cors cors = request.getCors().get();
 
-      // Echo back the request's origin and the set of HTTP methods Soklet determines
-      // your Resource Methods can support for this CORS request.
-      // The configured ResponseMarshaler will take this info and write it back over the wire
-      if (allowCors)
-        return Optional.of(new CorsResponse.Builder(corsRequest.getOrigin())
-          .accessControlAllowMethods(availableHttpMethods)
-          .accessControlAllowHeaders(Set.of("*"))
+      // Only permit according to special rules
+      if (originMatchesMyCustomSubdomain(cors))
+        return Optional.of(new CorsResponse.Builder(cors.getOrigin())
           .accessControlExposeHeaders(Set.of("*"))
-          .accessControlAllowCredentials(true)
-          .accessControlMaxAge(600 /* 10 minutes */)
           .build());
 
-      // Return an empty value if preflight is disallowed
+      return Optional.empty();
+    }
+		
+    @Override
+    public Optional<CorsPreflightResponse> authorizePreflight(Request request,
+                                                              Set<HttpMethod> availableHttpMethods) {
+      Cors cors = request.getCors().get();
+
+      // Only permit according to special rules
+      if (originMatchesMyCustomSubdomains(cors))
+        return Optional.of(new CorsPreflightResponse.Builder(cors.getOrigin())
+          .accessControlAllowMethods(availableHttpMethods)
+          .accessControlAllowHeaders(Set.of("*"))
+          .accessControlAllowCredentials(true)
+          .accessControlMaxAge(Duration.ofMinutes(10))        
+          .build());
+
       return Optional.empty();
     }
   })

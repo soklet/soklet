@@ -226,6 +226,24 @@ public class Request {
 	}
 
 	@Nonnull
+	public Optional<String> getQueryParameterValue(@Nonnull String name) {
+		requireNonNull(name);
+		return singleValueForName(name, getQueryParameters());
+	}
+
+	@Nonnull
+	public Optional<String> getHeaderValue(@Nonnull String name) {
+		requireNonNull(name);
+		return singleValueForName(name, getHeaders());
+	}
+
+	@Nonnull
+	public Optional<HttpCookie> getCookieValue(@Nonnull String name) {
+		requireNonNull(name);
+		return getCookies().stream().findFirst();
+	}
+
+	@Nonnull
 	protected IdGenerator getDefaultIdGenerator() {
 		return DEFAULT_ID_GENERATOR;
 	}
@@ -233,6 +251,23 @@ public class Request {
 	@Nonnull
 	protected ReentrantLock getLock() {
 		return this.lock;
+	}
+
+	@Nonnull
+	protected Optional<String> singleValueForName(@Nonnull String name,
+																								@Nullable Map<String, Set<String>> valuesByName) {
+		if (valuesByName == null)
+			return Optional.empty();
+
+		Set<String> values = valuesByName.get(name);
+
+		if (values == null)
+			return Optional.empty();
+
+		if (values.size() > 1)
+			throw new IllegalArgumentException(format("Expected single value but found multiple values for %s: %s", name, values));
+
+		return values.stream().findFirst();
 	}
 
 	/**

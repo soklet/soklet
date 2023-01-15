@@ -47,6 +47,7 @@ public class DefaultCorsAuthorizer implements CorsAuthorizer {
 																														@Nonnull Set<HttpMethod> availableHttpMethods) {
 		requireNonNull(request);
 		requireNonNull(availableHttpMethods);
+
 		return Optional.empty();
 	}
 }
