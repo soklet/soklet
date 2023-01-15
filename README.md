@@ -640,7 +640,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
       Cors cors = request.getCors().get();
 
       // Only permit according to special rules
-      if (originMatchesMyCustomSubdomain(cors))
+      if (originMatchesMyCustomSubdomains(cors))
         return Optional.of(new CorsResponse.Builder(cors.getOrigin())
           .accessControlExposeHeaders(Set.of("*"))
           .build());
