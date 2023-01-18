@@ -1,4 +1,4 @@
-![Soklet Logo](https://soklet.s3.amazonaws.com/soklet-logo-github.png)
+<img src="https://soklet.s3.amazonaws.com/soklet-gh-logo.png" style="max-width: 300px;"/>
 
 ### What Is It?
 
@@ -811,6 +811,5 @@ e.g. using `ValueConverter` for seamless integration of https://github.com/Devsk
 * Remove `throws Exception` from `Server` and `Soklet`?  Perhaps also from `RequestHandler`?
 * Rename `RequestHandler`?
 * Rethink `Server`->`Soklet` integration?
-* 
 
 
