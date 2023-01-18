@@ -21,6 +21,7 @@ import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
+import com.soklet.core.impl.MockServer;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -132,7 +133,6 @@ public class SokletTests {
 				.build();
 
 		try (Soklet soklet = new Soklet(configuration)) {
-			soklet.start();
 			mockServerConsumer.useMockServer(mockServer);
 		} catch (RuntimeException e) {
 			throw e;

@@ -1,4 +1,9 @@
-package com.soklet.core;
+package com.soklet.core.impl;
+
+import com.soklet.core.MarshaledResponse;
+import com.soklet.core.Request;
+import com.soklet.core.RequestHandler;
+import com.soklet.core.Server;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;

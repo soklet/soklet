@@ -80,7 +80,6 @@ class App {
       .build();
 
     try (Soklet soklet = new Soklet(configuration)) {
-      soklet.start();
       System.out.printf("Soklet started at http://localhost:%d\n", port);
       System.out.printf("Press [enter] to exit\n");
       System.in.read();
@@ -267,7 +266,6 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(
 
 // OK, start up
 try (Soklet soklet = new Soklet(configuration)) {
-  soklet.start();
   System.in.read();
 }
 ```
@@ -805,8 +803,14 @@ This approach can be extended to other scenarios where it's useful to apply cust
 
 e.g. using `ValueConverter` for seamless integration of https://github.com/Devskiller/friendly-id
 
-### Request Context (?)
-
-TBD: should we introduce a `Map<String, Object> userContext` (or whatever) on `Request` in which arbitrary metadata can be stuffed?
-
 ### Docker (?)
+
+### Other Things
+
+* Introduce a `Map<String, Object> userContext` (or whatever) on `Request` in which arbitrary metadata can be stuffed?
+* Remove `throws Exception` from `Server` and `Soklet`?  Perhaps also from `RequestHandler`?
+* Rename `RequestHandler`?
+* Rethink `Server`->`Soklet` integration?
+* 
+
+

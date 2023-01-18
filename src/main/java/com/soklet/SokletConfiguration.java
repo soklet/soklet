@@ -63,6 +63,8 @@ public class SokletConfiguration {
 	private final Server server;
 	@Nonnull
 	private final LogHandler logHandler;
+	@Nonnull
+	private final Boolean startImmediately;
 
 	public SokletConfiguration(@Nonnull Builder builder) {
 		requireNonNull(builder);
@@ -76,6 +78,7 @@ public class SokletConfiguration {
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : new DefaultResponseMarshaler();
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : new DefaultLifecycleInterceptor();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : new DefaultCorsAuthorizer();
+		this.startImmediately = builder.startImmediately != null ? builder.startImmediately : true;
 	}
 
 	@Nonnull
@@ -123,6 +126,11 @@ public class SokletConfiguration {
 		return this.logHandler;
 	}
 
+	@Nonnull
+	public Boolean getStartImmediately() {
+		return this.startImmediately;
+	}
+
 	/**
 	 * Builder used to construct instances of {@link SokletConfiguration}.
 	 * <p>
@@ -150,6 +158,8 @@ public class SokletConfiguration {
 		private CorsAuthorizer corsAuthorizer;
 		@Nullable
 		private LogHandler logHandler;
+		@Nullable
+		private Boolean startImmediately;
 
 		@Nonnull
 		public Builder(@Nonnull Server server) {
@@ -202,6 +212,12 @@ public class SokletConfiguration {
 		@Nonnull
 		public Builder logHandler(@Nullable LogHandler logHandler) {
 			this.logHandler = logHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder startImmediately(@Nullable Boolean startImmediately) {
+			this.startImmediately = startImmediately;
 			return this;
 		}
 

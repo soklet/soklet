@@ -72,6 +72,16 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		this.lock = new ReentrantLock();
 
 		sokletConfiguration.getServer().registerRequestHandler(this);
+
+		if (getSokletConfiguration().getStartImmediately()) {
+			try {
+				start();
+			} catch (RuntimeException e) {
+				throw e;
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
 	}
 
 	public void start() throws Exception {
