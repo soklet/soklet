@@ -10,7 +10,7 @@ Soklet is a library, not a framework.
 
 ### Why?
 
-The Java web ecosystem is missing a solution that is dependency-free but offers features like Loom support, DI-awareness, and annotation-based request handling.  Soklet aims to fill this void.
+The Java web ecosystem is missing a solution that is dependency-free but offers features like support for virtual threads, DI-awareness, and annotation-based request handling.  Soklet aims to fill this void.
 
 ### Design Goals
 
@@ -811,5 +811,6 @@ e.g. using `ValueConverter` for seamless integration of https://github.com/Devsk
 * Remove `throws Exception` from `Server` and `Soklet`?  Perhaps also from `RequestHandler`?
 * Rename `RequestHandler`?
 * Rethink `Server`->`Soklet` integration?
+* Remove `startImmediately` from SokletConfig due to try-with-resources needing `ignored` local var name in most cases?
 
 
