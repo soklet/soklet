@@ -63,7 +63,8 @@ public class MarshaledResponse {
 	@Override
 	public String toString() {
 		return format("%s{statusCode=%s, reasonPhrase=%s, headers=%s, cookies=%s, body=%s}", getClass().getSimpleName(),
-				getStatusCode(), getReasonPhrase(), getHeaders(), getCookies(), getBody());
+				getStatusCode(), getReasonPhrase(), getHeaders(), getCookies(),
+				format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
 	}
 
 	@Nonnull

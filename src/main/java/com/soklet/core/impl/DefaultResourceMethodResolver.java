@@ -74,6 +74,10 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				.collect(Collectors.toSet()), null);
 	}
 
+	public DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses) {
+		this(resourceClasses, null);
+	}
+
 	public DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,
 																			 @Nullable Set<Method> resourceMethods) {
 		Set<Method> allResouceMethods = new HashSet<>();

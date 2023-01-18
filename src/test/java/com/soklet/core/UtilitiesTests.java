@@ -19,6 +19,7 @@ package com.soklet.core;
 import org.junit.Assert;
 import org.junit.Test;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 /**
  * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
+@ThreadSafe
 public class UtilitiesTests {
 	@Test
 	public void normalizedPathForUrl() {

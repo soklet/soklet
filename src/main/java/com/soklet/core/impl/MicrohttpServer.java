@@ -355,7 +355,7 @@ public class MicrohttpServer implements Server {
 	}
 
 	@Override
-	public void setRequestHandler(@Nullable RequestHandler requestHandler) {
+	public void registerRequestHandler(@Nullable RequestHandler requestHandler) {
 		this.requestHandler = requestHandler;
 	}
 

@@ -293,7 +293,7 @@ public final class Utilities {
 
 	@Nonnull
 	public static Boolean isBlank(@Nullable String string) {
-		return string == null || trimToNull(string) == null;
+		return string == null || string.trim() == null;
 	}
 
 	@Nonnull

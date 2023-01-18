@@ -2,7 +2,7 @@
 
 ### What Is It?
 
-A small HTTP 1.1 server and route handler for Java, well-suited for building RESTful APIs.<br/><br/>
+A small [HTTP 1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs.<br/><br/>
 Zero dependencies.  Dependency Injection friendly.<br/>
 Optionally powered by [JEP 425: Virtual Threads, aka Project Loom](https://openjdk.org/jeps/425).
 
@@ -17,9 +17,8 @@ The Java web ecosystem is missing a solution that is dependency-free but offers 
 * Main focus: route HTTP requests to Java methods 
 * Near-instant startup
 * No dependencies
-* Small but expressive API
-* Deep control over request and response processing
-* Immutable where reasonable
+* Plenty of hooks for customization
+* Favor immutability
 * Small, comprehensible codebase
 * Amenable to automated testing
 

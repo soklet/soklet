@@ -28,5 +28,5 @@ public interface Server extends AutoCloseable {
 	@Nonnull
 	Boolean isStarted();
 
-	void setRequestHandler(@Nullable RequestHandler requestHandler);
+	void registerRequestHandler(@Nullable RequestHandler requestHandler);
 }
