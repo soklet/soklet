@@ -807,7 +807,6 @@ e.g. using `ValueConverter` for seamless integration of https://github.com/Devsk
 
 ### Request Context (?)
 
-We already have `RequestContext` instance available via threadlocal during request processing.
-TBD: should we also introduce a `Map<String, Object> userContext` (or whatever) on `Request` in which arbitrary metadata can be stuffed?
+TBD: should we introduce a `Map<String, Object> userContext` (or whatever) on `Request` in which arbitrary metadata can be stuffed?
 
 ### Docker (?)

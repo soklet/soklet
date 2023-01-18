@@ -27,7 +27,6 @@ import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.Request;
-import com.soklet.core.RequestContext;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourcePath;
@@ -117,9 +116,6 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 
 		if (parameter.getType().isAssignableFrom(Request.class))
 			return request;
-
-		if (parameter.getType().isAssignableFrom(RequestContext.class))
-			return RequestContext.getCurrent().get();
 
 		ParameterType parameterType = new ParameterType(parameter);
 		PathParameter pathParameter = parameter.getAnnotation(PathParameter.class);

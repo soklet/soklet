@@ -26,7 +26,6 @@ import com.soklet.core.LogHandler;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
 import com.soklet.core.Request.Cors;
-import com.soklet.core.RequestContext;
 import com.soklet.core.RequestHandler;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
@@ -124,12 +123,8 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		}
 
 		try {
-			RequestContext.setCurrent(new RequestContext(request, resourceMethodHolder.get()));
-
 			lifecycleInterceptor.interceptRequest(request, resourceMethodHolder.get(), (interceptorRequest) -> {
 				requestHolder.set(interceptorRequest);
-
-				RequestContext.setCurrent(new RequestContext(requestHolder.get(), resourceMethodHolder.get()));
 
 				lifecycleInterceptor.didStartRequestHandling(requestHolder.get(), resourceMethodHolder.get());
 
@@ -207,8 +202,6 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				} catch (Throwable t) {
 					logHandler.logError(format("An exception occurred while invoking %s.didFinishRequestProcessing() when processing %s",
 							LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
-				} finally {
-					RequestContext.setCurrent(null);
 				}
 			}
 		}
