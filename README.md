@@ -278,6 +278,8 @@ try (Soklet soklet = new Soklet(configuration)) {
 
 Soklet provides an embedded version of [Microhttp](https://github.com/ebarlas/microhttp) out-of-the-box in the form of [MicrohttpServer](https://www.soklet.com/javadoc/com/soklet/core/impl/MicrohttpServer.html).
 
+The default configuration will transparently use [JEP 425 Virtual Threads](https://openjdk.org/jeps/425) if available at runtime (JDK 19+ with the `--enable-preview` flag) and fall back to native threads if not.
+
 ```java
 // The only required configuration is port number
 Server server = new MicrohttpServer.Builder(8080 /* port */)
