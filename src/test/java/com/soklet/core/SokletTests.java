@@ -19,6 +19,7 @@ package com.soklet.core;
 import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
+import com.soklet.annotation.POST;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.MockServer;
@@ -27,10 +28,13 @@ import org.junit.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
@@ -40,7 +44,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class SokletTests {
 	@Test
-	public void requestHandlingBasics() throws Exception {
+	public void requestHandlingBasics() {
 		// Use a mock server that we can send simulated requests to
 		mockServerForResourceClasses(Set.of(RequestHandlingBasicsResource.class), (mockServer -> {
 			// Response body should be "hello world" as bytes
@@ -64,6 +68,8 @@ public class SokletTests {
 							.build());
 
 			Assert.assertEquals(204L, (long) marshaledResponse.getStatusCode());
+			Assert.assertNull("Received a response body but didn't expect one",
+					marshaledResponse.getBody().orElse(null));
 
 			// Have the custom-named query param?  It's a 200 and echoes back the param as a string
 			marshaledResponse = mockServer.simulateRequest(
@@ -73,6 +79,25 @@ public class SokletTests {
 			Assert.assertEquals(200L, (long) marshaledResponse.getStatusCode());
 			Assert.assertArrayEquals("Response body doesn't match",
 					"2023-09-30".getBytes(StandardCharsets.UTF_8),
+					marshaledResponse.getBody().get());
+
+			// Optional query param, no param provided
+			marshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.POST, "/optional-query-param")
+							.build());
+
+			Assert.assertEquals(204L, (long) marshaledResponse.getStatusCode());
+			Assert.assertNull("Received a response body but didn't expect one",
+					marshaledResponse.getBody().orElse(null));
+
+			// Optional query param, param provided
+			marshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.POST, "/optional-query-param?optionalQueryParam=123.456789")
+							.build());
+
+			Assert.assertEquals(200L, (long) marshaledResponse.getStatusCode());
+			Assert.assertArrayEquals("Response body doesn't match",
+					"123.456789".getBytes(StandardCharsets.UTF_8),
 					marshaledResponse.getBody().get());
 		}));
 	}
@@ -85,25 +110,34 @@ public class SokletTests {
 		}
 
 		@GET("/integer-query-param")
-		public Response integerQueryParam(@QueryParameter Integer intQueryParam) {
+		public Response integerQueryParam(@Nonnull @QueryParameter Integer intQueryParam) {
+			requireNonNull(intQueryParam);
 			return new Response.Builder(204).build();
 		}
 
 		@GET("/query-param-custom-name")
-		public Response queryParamCustomName(@QueryParameter("local_date") LocalDate localDate) {
+		public Response queryParamCustomName(@Nonnull @QueryParameter("local_date") LocalDate localDate) {
+			requireNonNull(localDate);
 			// Echoes back date in ISO yyyy-MM-dd format
 			return new Response.Builder(200).body(DateTimeFormatter.ISO_DATE.format(localDate)).build();
 		}
-	}
 
-	@FunctionalInterface
-	public interface MockServerConsumer {
-		void useMockServer(@Nonnull MockServer mockServer) throws Exception;
+		@POST("/optional-query-param")
+		public Response optionalQueryParam(@Nonnull @QueryParameter Optional<BigDecimal> optionalQueryParam) {
+			requireNonNull(optionalQueryParam);
+
+			if (optionalQueryParam.isPresent())
+				return new Response.Builder(200)
+						.body(optionalQueryParam.get())
+						.build();
+
+			return new Response.Builder(204).build();
+		}
 	}
 
 	@Nonnull
 	protected void mockServerForResourceClasses(@Nonnull Set<Class<?>> resourceClasses,
-																							@Nonnull MockServerConsumer mockServerConsumer) {
+																							@Nonnull Consumer<MockServer> mockServerConsumer) {
 		requireNonNull(resourceClasses);
 		requireNonNull(mockServerConsumer);
 
@@ -133,7 +167,8 @@ public class SokletTests {
 				.build();
 
 		try (Soklet soklet = new Soklet(configuration)) {
-			mockServerConsumer.useMockServer(mockServer);
+			soklet.start();
+			mockServerConsumer.accept(mockServer);
 		} catch (RuntimeException e) {
 			throw e;
 		} catch (Exception e) {

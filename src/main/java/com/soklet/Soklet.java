@@ -72,19 +72,9 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		this.lock = new ReentrantLock();
 
 		sokletConfiguration.getServer().registerRequestHandler(this);
-
-		if (getSokletConfiguration().getStartImmediately()) {
-			try {
-				start();
-			} catch (RuntimeException e) {
-				throw e;
-			} catch (Exception e) {
-				throw new RuntimeException(e);
-			}
-		}
 	}
 
-	public void start() throws Exception {
+	public void start() {
 		getLock().lock();
 
 		try {
@@ -103,9 +93,28 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		}
 	}
 
+	public void stop() {
+		getLock().lock();
+
+		try {
+			if (!isStarted())
+				return;
+
+			SokletConfiguration sokletConfiguration = getSokletConfiguration();
+			LifecycleInterceptor lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
+			Server server = sokletConfiguration.getServer();
+
+			lifecycleInterceptor.willStopServer(server);
+			server.stop();
+			lifecycleInterceptor.didStopServer(server);
+		} finally {
+			getLock().unlock();
+		}
+	}
+
 	@Override
 	public void handleRequest(@Nonnull Request request,
-														@Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer) throws Exception {
+														@Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer) {
 		Instant processingStarted = Instant.now();
 
 		SokletConfiguration sokletConfiguration = getSokletConfiguration();
@@ -363,23 +372,8 @@ public class Soklet implements AutoCloseable, RequestHandler {
 	}
 
 	@Override
-	public void close() throws Exception {
-		getLock().lock();
-
-		try {
-			if (!isStarted())
-				return;
-
-			SokletConfiguration sokletConfiguration = getSokletConfiguration();
-			LifecycleInterceptor lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
-			Server server = sokletConfiguration.getServer();
-
-			lifecycleInterceptor.willStopServer(server);
-			server.close();
-			lifecycleInterceptor.didStopServer(server);
-		} finally {
-			getLock().unlock();
-		}
+	public void close() {
+		stop();
 	}
 
 	@Nonnull

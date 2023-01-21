@@ -36,6 +36,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.HttpCookie;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -171,7 +173,7 @@ public class MicrohttpServer implements Server {
 	}
 
 	@Override
-	public void start() throws Exception {
+	public void start() {
 		getLock().lock();
 
 		try {
@@ -269,7 +271,12 @@ public class MicrohttpServer implements Server {
 
 			this.eventLoopExecutorService = getEventLoopExecutorServiceSupplier().get();
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
-			this.eventLoop = new EventLoop(options, logger, handler);
+
+			try {
+				this.eventLoop = new EventLoop(options, logger, handler);
+			} catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
 
 			this.eventLoopExecutorService.submit(() -> {
 				if (this.eventLoop != null)
@@ -280,34 +287,8 @@ public class MicrohttpServer implements Server {
 		}
 	}
 
-	@Nonnull
-	protected com.soklet.microhttp.Response provideMicrohttpFailsafeResponse(@Nonnull com.soklet.microhttp.Request microHttpRequest,
-																																					 @Nonnull Throwable throwable) {
-		requireNonNull(microHttpRequest);
-		requireNonNull(throwable);
-
-		Integer statusCode = 500;
-		String reasonPhrase = StatusCode.fromStatusCode(statusCode).get().getReasonPhrase();
-		List<Header> headers = List.of(new Header("Content-Type", "text/plain"));
-		byte[] body = format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8);
-
-		return new com.soklet.microhttp.Response(statusCode, reasonPhrase, headers, body);
-	}
-
-	@Nonnull
 	@Override
-	public Boolean isStarted() {
-		getLock().lock();
-
-		try {
-			return getEventLoop().isPresent();
-		} finally {
-			getLock().unlock();
-		}
-	}
-
-	@Override
-	public void close() throws Exception {
+	public void stop() {
 		getLock().lock();
 
 		try {
@@ -352,6 +333,37 @@ public class MicrohttpServer implements Server {
 
 			getLock().unlock();
 		}
+	}
+
+	@Nonnull
+	protected com.soklet.microhttp.Response provideMicrohttpFailsafeResponse(@Nonnull com.soklet.microhttp.Request microHttpRequest,
+																																					 @Nonnull Throwable throwable) {
+		requireNonNull(microHttpRequest);
+		requireNonNull(throwable);
+
+		Integer statusCode = 500;
+		String reasonPhrase = StatusCode.fromStatusCode(statusCode).get().getReasonPhrase();
+		List<Header> headers = List.of(new Header("Content-Type", "text/plain"));
+		byte[] body = format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8);
+
+		return new com.soklet.microhttp.Response(statusCode, reasonPhrase, headers, body);
+	}
+
+	@Nonnull
+	@Override
+	public Boolean isStarted() {
+		getLock().lock();
+
+		try {
+			return getEventLoop().isPresent();
+		} finally {
+			getLock().unlock();
+		}
+	}
+
+	@Override
+	public void close() {
+		stop();
 	}
 
 	@Override

@@ -80,9 +80,10 @@ class App {
       .build();
 
     try (Soklet soklet = new Soklet(configuration)) {
+      soklet.start();
       System.out.printf("Soklet started at http://localhost:%d\n", port);
-      System.out.printf("Press [enter] to exit\n");
-      System.in.read();
+      System.out.printf("Press any key to exit\n");
+      System.in.read(); // or Thread.currentThread().join() in containers
     }
   }
 }
@@ -266,6 +267,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(
 
 // OK, start up
 try (Soklet soklet = new Soklet(configuration)) {
+  soklet.start();
   System.in.read();
 }
 ```
@@ -808,9 +810,7 @@ e.g. using `ValueConverter` for seamless integration of https://github.com/Devsk
 ### Other Things
 
 * Introduce a `Map<String, Object> userContext` (or whatever) on `Request` in which arbitrary metadata can be stuffed?
-* Remove `throws Exception` from `Server` and `Soklet`?  Perhaps also from `RequestHandler`?
 * Rename `RequestHandler`?
 * Rethink `Server`->`Soklet` integration?
-* Remove `startImmediately` from SokletConfig due to try-with-resources needing `ignored` local var name in most cases?
 
 

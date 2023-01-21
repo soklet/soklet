@@ -25,5 +25,5 @@ import java.util.function.Consumer;
 @FunctionalInterface
 public interface RequestHandler {
 	void handleRequest(@Nonnull Request request,
-										 @Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer) throws Exception;
+										 @Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer);
 }

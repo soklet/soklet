@@ -23,7 +23,9 @@ import javax.annotation.Nullable;
  * @author <a href="https://www.revetware.com">Mark Allen</a>
  */
 public interface Server extends AutoCloseable {
-	void start() throws Exception;
+	void start();
+
+	void stop();
 
 	@Nonnull
 	Boolean isStarted();
