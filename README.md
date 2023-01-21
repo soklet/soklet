@@ -137,6 +137,8 @@ class ExampleResource {
   public Response params(@QueryParameter LocalDate date) {
                          @QueryParameter("value") Optional<List<String>> values) {
     return new Response.Builder()
+      // Response body can be any Java type. It's up to your ResponseMarshaler
+      // to convert it downstream (e.g. turn it into JSON bytes)
       .body(String.format("date=%s, values=%s", date, values))
       .build();
   }
