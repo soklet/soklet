@@ -816,5 +816,5 @@ e.g. using `ValueConverter` for seamless integration of https://github.com/Devsk
 * Introduce a `Map<String, Object> userContext` (or whatever) on `Request` in which arbitrary metadata can be stuffed?
 * Rename `RequestHandler`?
 * Rethink `Server`->`Soklet` integration?
-
+* Intelligent support for HTTP `HEAD`
 

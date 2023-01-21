@@ -127,6 +127,22 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
+	public MarshaledResponse forHead(@Nonnull Request request,
+																	 @Nonnull ResourceMethod resourceMethod) {
+		requireNonNull(request);
+		requireNonNull(resourceMethod);
+		throw new UnsupportedOperationException();
+	}
+
+	@Nonnull
+	@Override
+	public MarshaledResponse forHeadNotFound(@Nonnull Request request) {
+		requireNonNull(request);
+		throw new UnsupportedOperationException();
+	}
+
+	@Nonnull
+	@Override
 	public MarshaledResponse forException(@Nonnull Request request,
 																				@Nonnull Throwable throwable,
 																				@Nullable ResourceMethod resourceMethod) {

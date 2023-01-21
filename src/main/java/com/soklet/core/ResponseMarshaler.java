@@ -84,6 +84,13 @@ public interface ResponseMarshaler {
 																 @Nullable ResourceMethod resourceMethod);
 
 	@Nonnull
+	MarshaledResponse forHead(@Nonnull Request request,
+														@Nonnull ResourceMethod resourceMethod);
+
+	@Nonnull
+	MarshaledResponse forHeadNotFound(@Nonnull Request request);
+
+	@Nonnull
 	MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,
 																						@Nonnull CorsPreflightResponse corsPreflightResponse);
 

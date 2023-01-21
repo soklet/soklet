@@ -102,6 +102,29 @@ public class SokletTests {
 		}));
 	}
 
+	@Test
+	public void httpHead() {
+		// Use a mock server that we can send simulated requests to
+		mockServerForResourceClasses(Set.of(RequestHandlingBasicsResource.class), (mockServer -> {
+			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
+			MarshaledResponse getMarshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.GET, "/hello-world").build());
+
+			Assert.assertArrayEquals("Response body doesn't match",
+					"hello world".getBytes(StandardCharsets.UTF_8),
+					getMarshaledResponse.getBody().get());
+
+			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
+			MarshaledResponse headMarshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.HEAD, "/hello-world").build());
+
+			// TODO: check other response fields, specifically headers
+			Assert.assertEquals(204L, (long) headMarshaledResponse.getStatusCode());
+			Assert.assertNull("Received a response body but didn't expect one",
+					headMarshaledResponse.getBody().orElse(null));
+		}));
+	}
+
 	@ThreadSafe
 	public static class RequestHandlingBasicsResource {
 		@GET("/hello-world")
@@ -156,12 +179,14 @@ public class SokletTests {
 
 					@Override
 					public void logError(@Nonnull String message) {
-						// Quiet
+						System.err.println(message);
 					}
 
 					@Override
-					public void logError(@Nonnull String message, @Nonnull Throwable throwable) {
-						// Quiet
+					public void logError(@Nonnull String message,
+															 @Nonnull Throwable throwable) {
+						System.err.println(message);
+						throwable.printStackTrace();
 					}
 				})
 				.build();

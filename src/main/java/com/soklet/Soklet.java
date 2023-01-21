@@ -260,6 +260,17 @@ public class Soklet implements AutoCloseable, RequestHandler {
 					// Just a normal OPTIONS response (non-CORS-preflight)
 					return responseMarshaler.forOptions(request, allowedHttpMethods);
 				}
+			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
+				// See what non-HEAD methods are available to us for this request's path
+				Set<HttpMethod> otherHttpMethods = resolveOtherMatchingHttpMethods(request, resourceMethodResolver);
+
+				if (otherHttpMethods.contains(HttpMethod.GET)) {
+					// Invoke as if it were a GET and pass marshaled response to new ResponseMarshaler forHead
+				} else {
+					// Invoke new ResponseMarshaler forHeadNotFound
+				}
+
+				throw new UnsupportedOperationException("Need to implement HEAD");
 			} else {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
 				Set<HttpMethod> otherHttpMethods = resolveOtherMatchingHttpMethods(request, resourceMethodResolver);
