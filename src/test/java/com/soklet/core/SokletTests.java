@@ -19,6 +19,7 @@ package com.soklet.core;
 import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
+import com.soklet.annotation.HEAD;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
@@ -36,6 +37,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
+import static com.soklet.core.Utilities.emptyByteArray;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -68,8 +70,9 @@ public class SokletTests {
 							.build());
 
 			Assert.assertEquals(204L, (long) marshaledResponse.getStatusCode());
-			Assert.assertNull("Received a response body but didn't expect one",
-					marshaledResponse.getBody().orElse(null));
+			Assert.assertArrayEquals("Received a response body but didn't expect one",
+					emptyByteArray(),
+					marshaledResponse.getBody().orElse(emptyByteArray()));
 
 			// Have the custom-named query param?  It's a 200 and echoes back the param as a string
 			marshaledResponse = mockServer.simulateRequest(
@@ -87,8 +90,9 @@ public class SokletTests {
 							.build());
 
 			Assert.assertEquals(204L, (long) marshaledResponse.getStatusCode());
-			Assert.assertNull("Received a response body but didn't expect one",
-					marshaledResponse.getBody().orElse(null));
+			Assert.assertArrayEquals("Received a response body but didn't expect one",
+					emptyByteArray(),
+					marshaledResponse.getBody().orElse(emptyByteArray()));
 
 			// Optional query param, param provided
 			marshaledResponse = mockServer.simulateRequest(
@@ -102,28 +106,6 @@ public class SokletTests {
 		}));
 	}
 
-	@Test
-	public void httpHead() {
-		// Use a mock server that we can send simulated requests to
-		mockServerForResourceClasses(Set.of(RequestHandlingBasicsResource.class), (mockServer -> {
-			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
-			MarshaledResponse getMarshaledResponse = mockServer.simulateRequest(
-					new Request.Builder(HttpMethod.GET, "/hello-world").build());
-
-			Assert.assertArrayEquals("Response body doesn't match",
-					"hello world".getBytes(StandardCharsets.UTF_8),
-					getMarshaledResponse.getBody().get());
-
-			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
-			MarshaledResponse headMarshaledResponse = mockServer.simulateRequest(
-					new Request.Builder(HttpMethod.HEAD, "/hello-world").build());
-
-			// TODO: check other response fields, specifically headers
-			Assert.assertEquals(204L, (long) headMarshaledResponse.getStatusCode());
-			Assert.assertNull("Received a response body but didn't expect one",
-					headMarshaledResponse.getBody().orElse(null));
-		}));
-	}
 
 	@ThreadSafe
 	public static class RequestHandlingBasicsResource {
@@ -155,6 +137,53 @@ public class SokletTests {
 						.build();
 
 			return new Response.Builder(204).build();
+		}
+	}
+
+	@Test
+	public void httpHead() {
+		// Use a mock server that we can send simulated requests to
+		mockServerForResourceClasses(Set.of(HttpHeadResource.class), (mockServer -> {
+			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
+			MarshaledResponse getMarshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.GET, "/hello-world").build());
+
+			Assert.assertArrayEquals("Response body doesn't match",
+					"hello world".getBytes(StandardCharsets.UTF_8),
+					getMarshaledResponse.getBody().get());
+
+			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
+			MarshaledResponse headMarshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.HEAD, "/hello-world").build());
+
+			Assert.assertEquals(200, (long) headMarshaledResponse.getStatusCode());
+			Assert.assertEquals("GET and HEAD headers don't match",
+					getMarshaledResponse.getHeaders(), headMarshaledResponse.getHeaders());
+			Assert.assertArrayEquals("Received a response body but didn't expect one",
+					emptyByteArray(),
+					headMarshaledResponse.getBody().orElse(emptyByteArray()));
+
+			// If you want to handle your own HEAD requests...you can do whatever you want,
+			// including sending a body
+			MarshaledResponse explicitHeadMarshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.HEAD, "/explicit-head-handling").build());
+
+			Assert.assertArrayEquals("If you want to handle HEAD requests explicitly, we don't stop you",
+					"violating spec and returning a HEAD response body because i can".getBytes(StandardCharsets.UTF_8),
+					explicitHeadMarshaledResponse.getBody().get());
+		}));
+	}
+
+	@ThreadSafe
+	public static class HttpHeadResource {
+		@GET("/hello-world")
+		public String helloWorld() {
+			return "hello world";
+		}
+
+		@HEAD("/explicit-head-handling")
+		public Object explicitHeadHandling() {
+			return "violating spec and returning a HEAD response body because i can";
 		}
 	}
 

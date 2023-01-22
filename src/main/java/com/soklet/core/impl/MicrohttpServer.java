@@ -80,8 +80,6 @@ public class MicrohttpServer implements Server {
 	@Nonnull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 	@Nonnull
-	private static final Integer DEFAULT_MAXIMUM_HEADER_SIZE_IN_BYTES;
-	@Nonnull
 	private static final Integer DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
 	@Nonnull
 	private static final Integer DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
@@ -129,7 +127,6 @@ public class MicrohttpServer implements Server {
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
-		DEFAULT_MAXIMUM_HEADER_SIZE_IN_BYTES = 1_024 * 8;
 		DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);

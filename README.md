@@ -329,12 +329,14 @@ Hooks are provided for these scenarios:
     * [`ResponseMarshaler::forMethodNotAllowed`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forMethodNotAllowed(com.soklet.core.Request,java.util.Set))    
 * HTTP OPTIONS
     * [`ResponseMarshaler::forOptions`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forOptions(com.soklet.core.Request,java.util.Set))
+* HTTP HEAD
+    * [`ResponseMarshaler::forHead`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forHead(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.MarshaledResponse))
 * CORS 
     * [`ResponseMarshaler::forCorsPreflightAllowed`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsAllowed(com.soklet.core.Request,com.soklet.core.CorsPreflightResponse))
     * [`ResponseMarshaler::forCorsPreflightRejected`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsRejected(com.soklet.core.Request))
     * [`ResponseMarshaler::forCorsAllowed`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsAllowed(com.soklet.core.Request,com.soklet.core.CorsResponse,com.soklet.core.MarshaledResponse))
 
-Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible defaults for things like CORS, OPTIONS, and 404s/405s.  This way you can stay focused on how your application writes happy path and exception responses.  For example:
+Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible defaults for things like CORS, OPTIONS, HEAD, and 404s/405s.  This way you can stay focused on how your application writes happy path and exception responses.  For example:
 
 ```java
 // This example uses Gson to turn Java objects into JSON - https://github.com/google/gson
@@ -816,5 +818,4 @@ e.g. using `ValueConverter` for seamless integration of https://github.com/Devsk
 * Introduce a `Map<String, Object> userContext` (or whatever) on `Request` in which arbitrary metadata can be stuffed?
 * Rename `RequestHandler`?
 * Rethink `Server`->`Soklet` integration?
-* Intelligent support for HTTP `HEAD`
 

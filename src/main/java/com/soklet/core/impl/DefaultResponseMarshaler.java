@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.soklet.core.Utilities.emptyByteArray;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -128,17 +129,18 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
 	@Override
 	public MarshaledResponse forHead(@Nonnull Request request,
-																	 @Nonnull ResourceMethod resourceMethod) {
+																	 @Nonnull MarshaledResponse getMarshaledResponse) {
 		requireNonNull(request);
-		requireNonNull(resourceMethod);
-		throw new UnsupportedOperationException();
-	}
+		requireNonNull(getMarshaledResponse);
 
-	@Nonnull
-	@Override
-	public MarshaledResponse forHeadNotFound(@Nonnull Request request) {
-		requireNonNull(request);
-		throw new UnsupportedOperationException();
+		// A HEAD can never write a response body, but we explicitly set its Content-Length header
+		// so the client knows how long the response would have been.
+		return getMarshaledResponse.copy()
+				.body(oldBody -> null)
+				.headers((mutableHeaders) -> {
+					byte[] responseBytes = getMarshaledResponse.getBody().orElse(emptyByteArray());
+					mutableHeaders.put("Content-Length", Set.of(String.valueOf(responseBytes.length)));
+				}).finish();
 	}
 
 	@Nonnull

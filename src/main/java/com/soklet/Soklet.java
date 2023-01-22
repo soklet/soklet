@@ -46,12 +46,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
+import static com.soklet.core.Utilities.emptyByteArray;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -152,7 +155,20 @@ public class Soklet implements AutoCloseable, RequestHandler {
 						throw resourceMethodResolutionExceptionHolder.get();
 
 					MarshaledResponse marshaledResponse = toMarshaledResponse(requestHolder.get(), resourceMethodHolder.get());
-					return applyCorsResponseIfApplicable(request, marshaledResponse);
+
+					// A few special cases that are "global" in that they can affect all requests and
+					// need to happen after marshaling the response...
+
+					// 1. Customize response for HEAD (e.g. remove body, set Content-Length header)
+					marshaledResponse = applyHeadResponseIfApplicable(request, marshaledResponse);
+
+					// 2. Write any CORS-related headers
+					marshaledResponse = applyCorsResponseIfApplicable(request, marshaledResponse);
+
+					// 3. If there is no Content-Length header already applied, apply it
+					marshaledResponse = applyContentLengthIfApplicable(request, marshaledResponse);
+
+					return marshaledResponse;
 				} catch (Throwable t) {
 					throwables.add(t);
 					logHandler.logError(format("An exception occurred while processing %s", request), t);
@@ -261,16 +277,14 @@ public class Soklet implements AutoCloseable, RequestHandler {
 					return responseMarshaler.forOptions(request, allowedHttpMethods);
 				}
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
-				// See what non-HEAD methods are available to us for this request's path
-				Set<HttpMethod> otherHttpMethods = resolveOtherMatchingHttpMethods(request, resourceMethodResolver);
+				// If there's a matching GET resource method for this HEAD request, then invoke it
+				Request headGetRequest = new Request.Builder(HttpMethod.GET, request.getUri()).build();
+				ResourceMethod headGetResourceMethod = resourceMethodResolver.resourceMethodForRequest(headGetRequest).orElse(null);
 
-				if (otherHttpMethods.contains(HttpMethod.GET)) {
-					// Invoke as if it were a GET and pass marshaled response to new ResponseMarshaler forHead
-				} else {
-					// Invoke new ResponseMarshaler forHeadNotFound
-				}
-
-				throw new UnsupportedOperationException("Need to implement HEAD");
+				if (headGetResourceMethod != null)
+					resourceMethod = headGetResourceMethod;
+				else
+					return responseMarshaler.forNotFound(request);
 			} else {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
 				Set<HttpMethod> otherHttpMethods = resolveOtherMatchingHttpMethods(request, resourceMethodResolver);
@@ -324,6 +338,37 @@ public class Soklet implements AutoCloseable, RequestHandler {
 			response = new Response.Builder(200).body(responseObject).build();
 
 		return responseMarshaler.forHappyPath(request, response, resourceMethod);
+	}
+
+	@Nonnull
+	protected MarshaledResponse applyHeadResponseIfApplicable(@Nonnull Request request,
+																														@Nonnull MarshaledResponse marshaledResponse) {
+		if (request.getHttpMethod() != HttpMethod.HEAD)
+			return marshaledResponse;
+		
+		return getSokletConfiguration().getResponseMarshaler().forHead(request, marshaledResponse);
+	}
+
+	@Nonnull
+	protected MarshaledResponse applyContentLengthIfApplicable(@Nonnull Request request,
+																														 @Nonnull MarshaledResponse marshaledResponse) {
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+
+		Set<String> normalizedHeaderNames = marshaledResponse.getHeaders().keySet().stream()
+				.map(headerName -> headerName.toLowerCase(Locale.US))
+				.collect(Collectors.toSet());
+
+		// If Content-Length is already specified, don't do anything
+		if (normalizedHeaderNames.contains("content-length"))
+			return marshaledResponse;
+
+		// If Content-Length is not specified, specify as the number of bytes in the body
+		return marshaledResponse.copy()
+				.headers((mutableHeaders) -> {
+					String contentLengthHeaderValue = String.valueOf(marshaledResponse.getBody().orElse(emptyByteArray()).length);
+					mutableHeaders.put("Content-Length", Set.of(contentLengthHeaderValue));
+				}).finish();
 	}
 
 	@Nonnull
