@@ -14,13 +14,13 @@ The Java web ecosystem is missing a solution that is dependency-free but offers 
 
 ### Design Goals
 
-* Main focus: route HTTP requests to Java methods 
-* Near-instant startup
-* No dependencies
-* Plenty of hooks for customization
-* Favor immutability
-* Small, comprehensible codebase
-* Amenable to automated testing
+* Focus on routing HTTP requests to Java methods 
+* Deliver near-instant startup
+* Have no dependencies
+* Provide deep customization hooks
+* Prefer immutability
+* Keep codebase small and comprehensible
+* Encourage automated testing
 
 ### Design Non-Goals
 
@@ -46,7 +46,7 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-Soklet includes code from the following OSS projects:
+Soklet embeds code from the following OSS projects:
 
 * [ClassIndex](https://github.com/atteo/classindex) by [Sławek Piotrowski](https://github.com/sentinelt) - Apache 2.0 License
 * [Microhttp](https://github.com/ebarlas/microhttp) by [Elliot Barlas](https://github.com/ebarlas) - MIT License
