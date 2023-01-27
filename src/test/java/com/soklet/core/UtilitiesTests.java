@@ -22,7 +22,6 @@ import org.junit.Test;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Locale;
-import java.util.stream.Collectors;
 
 /**
  * @author <a href="https://www.revetware.com">Mark Allen</a>
@@ -43,8 +42,21 @@ public class UtilitiesTests {
 	@Test
 	public void acceptLanguages() {
 		String acceptLanguageHeaderValue = "fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5";
-		System.out.println("Accept-Language: " + acceptLanguageHeaderValue);
 		List<Locale> locales = Utilities.localesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue);
-		System.out.println("Locales: " + locales.stream().map(locale -> locale.toLanguageTag()).collect(Collectors.joining(", ")));
+
+		Assert.assertEquals("Locales don't match", List.of(
+				Locale.forLanguageTag("fr-CH"),
+				Locale.forLanguageTag("fr"),
+				Locale.forLanguageTag("en"),
+				Locale.forLanguageTag("de")
+		), locales);
+
+		locales = Utilities.localesFromAcceptLanguageHeaderValue("");
+
+		Assert.assertEquals("Blank locale string mishandled", List.of(), locales);
+
+		locales = Utilities.localesFromAcceptLanguageHeaderValue("xxxx");
+
+		Assert.assertEquals("Junk locale string mishandled", List.of(), locales);
 	}
 }

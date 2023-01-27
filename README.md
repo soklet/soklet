@@ -24,7 +24,7 @@ The Java web ecosystem is missing a solution that is dependency-free but offers 
 
 ### Design Non-Goals
 
-* Support for Java versions below 16
+* Support Java versions below 16
 * SSL/TLS (your load balancer should provide TLS termination)
 * HTTP streaming
 * WebSockets
