@@ -16,7 +16,7 @@ The Java web ecosystem is missing a solution that is dependency-free but offers 
 
 * Focus on routing HTTP requests to Java methods 
 * Deliver near-instant startup
-* Have no dependencies
+* Require zero dependencies
 * Provide deep customization hooks
 * Prefer immutability
 * Keep codebase small and comprehensible
@@ -34,7 +34,7 @@ The Java web ecosystem is missing a solution that is dependency-free but offers 
 ### Future Work
 
 * Servlet API compatibility layer (`javax.servlet`, `jakarta.servlet`)
-
+  
 ### Do Zero-Dependency Libraries Interest You?
 
 Similarly-flavored commercially-friendly OSS libraries are available.
@@ -679,7 +679,7 @@ If you'd like to handle any of Soklet's internal log events, you can provide you
 
 For example, if your application uses [Logback](https://logback.qos.ch/) and/or [SLF4J](https://www.slf4j.org/), you will likely want to log messages using those.
 
-Below we present a basic implementation that writes to stdout/stderr.
+Below, we present a basic implementation that writes to stdout/stderr:
 
 ```java
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
@@ -706,7 +706,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 ## Common Usage Patterns
 
-Every system is different, but there are frequently recurring patterns.
+While every system is different, some common patterns emerge.
 
 We present how these pattern implementations might look in Soklet applications.
 
@@ -714,7 +714,7 @@ We present how these pattern implementations might look in Soklet applications.
 
 Request headers and cookies are common ways to pass authentication information - for example, as a [JWT](https://jwt.io).
 
-The appropriate place to handle this is with a custom [Lifecycle Interceptor](#lifecycle-interceptor).
+An appropriate place to handle this is within a custom [Lifecycle Interceptor](#lifecycle-interceptor).
 
 It would also be nice for each Resource Method to be annotated with information that describes its security requirements - does the Method require authentication?  Are special roles/authorizations necessary?  And so on.
 
@@ -768,12 +768,12 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
       // ...which permits you to do things like examine its annotations
       // to apply special behavior, e.g. check authorization
-      if (method != null && method.getAnnotation(RoleRequired.class) != null) {
+      if (method != null) {
         Role role = method.getAnnotation(RoleRequired.class).value();
 
         // Authenticated account doesn't have the proper role?
         // Authorization failed
-        if (!account.hasRole(role))
+        if (role != null && !account.hasRole(role))
           throw new MyAuthorizationException();
       }      
 
@@ -785,7 +785,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
     // Pull the value from MyExampleJWTCookie and use it to authenticate
     Optional<ExampleAccount> accountForRequest(Request request) {
       // For sake of example, we examine cookies.
-      // In practice, you might example request headers instead.     
+      // In practice, you might examine request headers instead.     
       request.getCookies().stream()
         .filter(cookie -> cookie.getName().equals("MyExampleJWTCookie"))
         .findAny()
