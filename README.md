@@ -206,7 +206,7 @@ Here's an example configuration for an API that serves JSON responses.
 int port = 8080;
 
 // This example uses Gson to turn Java objects into JSON - https://github.com/google/gson
-Gson gson = new GsonBuilder().setPrettyPrinting();
+Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
 SokletConfiguration configuration = new SokletConfiguration.Builder(
   // Use the default Microhttp Server
@@ -294,7 +294,10 @@ Test the happy path:
 % curl "http://localhost:8080/echo?input=123"
 {
   "input": 123,
-  "timestamp": "2023-05-18T14:49:08.427548Z"
+  "timestamp": {
+    "seconds": 1685288454,
+    "nanos": 955788000
+  }
 }
 ```
 
