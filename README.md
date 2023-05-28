@@ -278,13 +278,13 @@ Then set up a Resource:
 
 ```java
 @Resource
-class EchoResource {
+public class EchoResource {
   @GET("/echo")
   public EchoResponse echo(@QueryParameter Integer input) {
     return new EchoResponse(input, Instant.now());
   }
 
-  record EchoResponse(Integer input, Instant timestamp) {}
+  public record EchoResponse(Integer input, Instant timestamp) {}
 }
 ```
 
