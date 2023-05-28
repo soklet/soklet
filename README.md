@@ -14,12 +14,12 @@ The Java web ecosystem is missing a solution that is dependency-free but offers 
 
 ### Design Goals
 
-* Focus on routing HTTP requests to Java methods 
-* Deliver near-instant startup
-* Require zero dependencies
-* Provide deep customization hooks
+* Main focus: routing HTTP requests to Java methods 
+* Near-instant startup
+* Zero dependencies
+* Emphasis on "pluggability"
 * Prefer immutability
-* Keep codebase small and comprehensible
+* Small, comprehensible codebase
 * Encourage automated testing
 
 ### Design Non-Goals
@@ -206,7 +206,7 @@ Here's an example configuration for an API that serves JSON responses.
 int port = 8080;
 
 // This example uses Gson to turn Java objects into JSON - https://github.com/google/gson
-Gson gson = new Gson();
+Gson gson = new GsonBuilder().setPrettyPrinting();
 
 SokletConfiguration configuration = new SokletConfiguration.Builder(
   // Use the default Microhttp Server
@@ -272,6 +272,57 @@ try (Soklet soklet = new Soklet(configuration)) {
   soklet.start();
   System.in.read();
 }
+```
+
+Then set up a Resource:
+
+```java
+@Resource
+class EchoResource {
+  @GET("/echo")
+  public EchoResponse echo(@QueryParameter Integer input) {
+    return new EchoResponse(input, Instant.now());
+  }
+
+  record EchoResponse(Integer input, Instant timestamp) {}
+}
+```
+
+Test the happy path:
+
+```shell
+% curl "http://localhost:8080/echo?input=123"
+{
+  "input": 123,
+  "timestamp": "2023-05-18T14:49:08.427548Z"
+}
+```
+
+Test an unhappy path:
+
+```shell
+% curl --verbose "http://localhost:8080/echo?input=abc"
+*   Trying 127.0.0.1:8080...
+* Connected to localhost (127.0.0.1) port 8080 (#0)
+> GET /echo?input=abc HTTP/1.1
+> Host: localhost:8080
+> User-Agent: curl/7.82.0
+> Accept: */*
+> 
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 400 Bad Request
+< Content-Length: 21
+< Content-Type: text/plain; charset=UTF-8
+< 
+* Connection #0 to host localhost left intact
+HTTP 400: Bad Request
+```
+
+Behind the scenes, Soklet provides specific exception types with developer-friendly messages.
+It's up to you to handle them and surface to your API clients however you like in your [`ResponseMarshaler::forException`](#response-marshaler) implementation.
+
+```text
+com.soklet.exception.IllegalQueryParameterException: Illegal value 'abc' was specified for query parameter 'input' (was expecting a value convertible to class java.lang.Integer)
 ```
 
 ### Server
@@ -344,27 +395,9 @@ Gson gson = new Gson();
 
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
   .responseMarshaler(new DefaultResponseMarshaler() {
-    @Nonnull
-    @Override
-    public MarshaledResponse forHappyPath(@Nonnull Request request,
-                                          @Nonnull Response response,
-                                          @Nonnull ResourceMethod resourceMethod) {
-      // Ask Gson to turn the Java response body object into JSON bytes
-      Object bodyObject = response.getBody().orElse(null);    
-      byte[] body = bodyObject == null ? null : gson.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
 
-      // Tack on the appropriate Content-Type to the existing set of headers
-      Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
-      headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
-
-      // This value is what is ultimately written to the HTTP response
-      return new MarshaledResponse.Builder(response.getStatusCode())
-        .headers(headers)
-        .cookies(response.getCookies()) // Pass through any cookies as-is
-        .body(body)
-        .build();
-    }
-
+    // We already showed ResponseMarshaler::forHappyPath() above.
+    // Here, we focus on exception marshaling.
     @Nonnull
     @Override
     public MarshaledResponse forException(@Nonnull Request request,
@@ -639,7 +672,8 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
     boolean originMatchesMyCustomSubdomains(Cors cors) {
       return cors.getOrigin().matches("https://(.*)\\.myexampledomain\\.com");
     }
-				
+
+    @Nonnull
     @Override
     public Optional<CorsResponse> authorize(@Nonnull Request request) {
       Cors cors = request.getCors().get();
@@ -652,10 +686,11 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
       return Optional.empty();
     }
-		
+
+    @Nonnull
     @Override
-    public Optional<CorsPreflightResponse> authorizePreflight(Request request,
-                                                              Set<HttpMethod> availableHttpMethods) {
+    public Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
+                                                              @Nonnull Set<HttpMethod> availableHttpMethods) {
       Cors cors = request.getCors().get();
 
       // Only permit according to special rules
