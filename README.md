@@ -290,7 +290,7 @@ class EchoResource {
 
 Test the happy path:
 
-```shell
+```console
 % curl "http://localhost:8080/echo?input=123"
 {
   "input": 123,
@@ -300,7 +300,7 @@ Test the happy path:
 
 Test an unhappy path:
 
-```shell
+```console
 % curl --verbose "http://localhost:8080/echo?input=abc"
 *   Trying 127.0.0.1:8080...
 * Connected to localhost (127.0.0.1) port 8080 (#0)
