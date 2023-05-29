@@ -101,7 +101,7 @@ Resource Methods may return results of any type - your [ResponseMarshaler](#resp
 
 ```java
 @Resource
-class ExampleResource {
+public class ExampleResource {
   // You can name your methods whatever you like and return whatever you like (or void).
   @GET("/")
   public String index() {
@@ -469,7 +469,7 @@ Now, your Resources are dependency-injected just like the rest of your applicati
 
 ```java
 @Resource
-class WidgetResource {
+public class WidgetResource {
   private WidgetService widgetService;
 
   @Inject
@@ -571,7 +571,7 @@ A [ValueConverter](https://www.soklet.com/javadoc/com/soklet/converter/ValueConv
 
 ```java
 @Resource
-class WidgetResource {
+public class WidgetResource {
   // e.g. /widgets/123?date=2022-09-30&time=15:45
   // ValueConverters take care of String->Long, String->LocalDate, String->LocalTime
   // so you can focus on business logic.  Also simplifies testing...
@@ -627,7 +627,7 @@ Now, your Resource Methods can enjoy custom marshaling for `MyExampleType`.
 
 ```java
 @Resource
-class WidgetResource {
+public class WidgetResource {
   @GET("/widgets")
   public List<Widget> widgets(@QueryParameter MyExampleType example) {
     return widgetService.findWidgets(example);
