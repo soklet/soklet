@@ -38,6 +38,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static com.soklet.core.Utilities.trim;
 import static com.soklet.core.Utilities.trimToEmpty;
 import static com.soklet.core.Utilities.trimToNull;
 import static java.lang.String.format;
@@ -487,7 +488,7 @@ public class Request {
 							return false;
 						}
 					})
-					.map((headerValue -> HttpMethod.valueOf(headerValue.trim())))
+					.map((headerValue -> HttpMethod.valueOf(trim(headerValue))))
 					.toList();
 
 			Set<String> accessControlRequestHeaderValues = headers.get("Access-Control-Request-Header");

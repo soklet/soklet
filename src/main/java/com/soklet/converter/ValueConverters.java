@@ -34,6 +34,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.UUID;
 
+import static com.soklet.core.Utilities.trim;
 import static java.lang.String.format;
 
 /**
@@ -114,10 +115,20 @@ public final class ValueConverters {
 		}
 	}
 
+	@ThreadSafe
+	private static abstract class BasicStringValueConverter<T, F> extends BasicValueConverter<String, F> {
+		@Override
+		@Nullable
+		public F convert(@Nullable String from) throws ValueConversionException {
+			from = trim(from); // Aggressively trim off everything, including nonprintable whitespace
+			return super.convert(from);
+		}
+	}
+
 	// Primitives
 
 	@ThreadSafe
-	private static final class StringToIntegerValueConverter extends BasicValueConverter<String, Integer> {
+	private static final class StringToIntegerValueConverter extends BasicStringValueConverter<String, Integer> {
 		@Override
 		@Nullable
 		protected Integer performConversion(@Nullable String from) throws Exception {
@@ -126,7 +137,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToLongValueConverter extends BasicValueConverter<String, Long> {
+	private static final class StringToLongValueConverter extends BasicStringValueConverter<String, Long> {
 		@Override
 		@Nullable
 		protected Long performConversion(@Nullable String from) throws Exception {
@@ -135,7 +146,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToDoubleValueConverter extends BasicValueConverter<String, Double> {
+	private static final class StringToDoubleValueConverter extends BasicStringValueConverter<String, Double> {
 		@Override
 		@Nullable
 		protected Double performConversion(@Nullable String from) throws Exception {
@@ -144,7 +155,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToFloatValueConverter extends BasicValueConverter<String, Float> {
+	private static final class StringToFloatValueConverter extends BasicStringValueConverter<String, Float> {
 		@Override
 		@Nullable
 		protected Float performConversion(@Nullable String from) throws Exception {
@@ -153,7 +164,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToByteValueConverter extends BasicValueConverter<String, Byte> {
+	private static final class StringToByteValueConverter extends BasicStringValueConverter<String, Byte> {
 		@Override
 		@Nullable
 		protected Byte performConversion(@Nullable String from) throws Exception {
@@ -162,7 +173,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToShortValueConverter extends BasicValueConverter<String, Short> {
+	private static final class StringToShortValueConverter extends BasicStringValueConverter<String, Short> {
 		@Override
 		@Nullable
 		protected Short performConversion(@Nullable String from) throws Exception {
@@ -171,12 +182,10 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToCharacterValueConverter extends BasicValueConverter<String, Character> {
+	private static final class StringToCharacterValueConverter extends BasicStringValueConverter<String, Character> {
 		@Override
 		@Nullable
 		protected Character performConversion(@Nullable String from) throws Exception {
-			from = from.trim();
-
 			if (from.length() != 1)
 				throw new ValueConversionException(format(
 						"Unable to convert %s value '%s' to %s. Reason: '%s' is not a single-character String.", getFromType(), from,
@@ -187,7 +196,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToBooleanValueConverter extends BasicValueConverter<String, Boolean> {
+	private static final class StringToBooleanValueConverter extends BasicStringValueConverter<String, Boolean> {
 		@Override
 		@Nullable
 		protected Boolean performConversion(@Nullable String from) throws Exception {
@@ -198,7 +207,7 @@ public final class ValueConverters {
 	// Nonprimitives
 
 	@ThreadSafe
-	private static final class StringToBigIntegerValueConverter extends BasicValueConverter<String, BigInteger> {
+	private static final class StringToBigIntegerValueConverter extends BasicStringValueConverter<String, BigInteger> {
 		@Override
 		@Nullable
 		protected BigInteger performConversion(@Nullable String from) throws Exception {
@@ -207,7 +216,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToBigDecimalValueConverter extends BasicValueConverter<String, BigDecimal> {
+	private static final class StringToBigDecimalValueConverter extends BasicStringValueConverter<String, BigDecimal> {
 		@Override
 		@Nullable
 		protected BigDecimal performConversion(@Nullable String from) throws Exception {
@@ -216,7 +225,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToNumberValueConverter extends BasicValueConverter<String, Number> {
+	private static final class StringToNumberValueConverter extends BasicStringValueConverter<String, Number> {
 		@Override
 		@Nullable
 		protected BigDecimal performConversion(@Nullable String from) throws Exception {
@@ -225,7 +234,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToUuidValueConverter extends BasicValueConverter<String, UUID> {
+	private static final class StringToUuidValueConverter extends BasicStringValueConverter<String, UUID> {
 		@Override
 		@Nullable
 		protected UUID performConversion(@Nullable String from) throws Exception {
@@ -234,7 +243,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToDateValueConverter extends BasicValueConverter<String, Date> {
+	private static final class StringToDateValueConverter extends BasicStringValueConverter<String, Date> {
 		@Override
 		@Nullable
 		protected Date performConversion(@Nullable String from) throws Exception {
@@ -243,7 +252,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToInstantValueConverter extends BasicValueConverter<String, Instant> {
+	private static final class StringToInstantValueConverter extends BasicStringValueConverter<String, Instant> {
 		@Override
 		@Nullable
 		protected Instant performConversion(@Nullable String from) throws Exception {
@@ -253,7 +262,7 @@ public final class ValueConverters {
 
 	@ThreadSafe
 	@Nullable
-	private static final class StringToLocalDateValueConverter extends BasicValueConverter<String, LocalDate> {
+	private static final class StringToLocalDateValueConverter extends BasicStringValueConverter<String, LocalDate> {
 		@Override
 		protected LocalDate performConversion(@Nullable String from) throws Exception {
 			return LocalDate.parse(from);
@@ -262,7 +271,7 @@ public final class ValueConverters {
 
 	@ThreadSafe
 	@Nullable
-	private static final class StringToLocalTimeValueConverter extends BasicValueConverter<String, LocalTime> {
+	private static final class StringToLocalTimeValueConverter extends BasicStringValueConverter<String, LocalTime> {
 		@Override
 		protected LocalTime performConversion(@Nullable String from) throws Exception {
 			return LocalTime.parse(from);
@@ -271,7 +280,7 @@ public final class ValueConverters {
 
 	@ThreadSafe
 	@Nullable
-	private static final class StringToLocalDateTimeValueConverter extends BasicValueConverter<String, LocalDateTime> {
+	private static final class StringToLocalDateTimeValueConverter extends BasicStringValueConverter<String, LocalDateTime> {
 		@Override
 		protected LocalDateTime performConversion(@Nullable String from) throws Exception {
 			return LocalDateTime.parse(from);
@@ -279,7 +288,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToZoneIdValueConverter extends BasicValueConverter<String, ZoneId> {
+	private static final class StringToZoneIdValueConverter extends BasicStringValueConverter<String, ZoneId> {
 		@Override
 		@Nullable
 		protected ZoneId performConversion(@Nullable String from) throws Exception {
@@ -288,7 +297,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToTimeZoneValueConverter extends BasicValueConverter<String, TimeZone> {
+	private static final class StringToTimeZoneValueConverter extends BasicStringValueConverter<String, TimeZone> {
 		@Override
 		@Nullable
 		protected TimeZone performConversion(@Nullable String from) throws Exception {
@@ -299,7 +308,7 @@ public final class ValueConverters {
 	}
 
 	@ThreadSafe
-	private static final class StringToLocaleValueConverter extends BasicValueConverter<String, Locale> {
+	private static final class StringToLocaleValueConverter extends BasicStringValueConverter<String, Locale> {
 		@Override
 		@Nullable
 		protected Locale performConversion(@Nullable String from) throws Exception {

@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+import static com.soklet.core.Utilities.trim;
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
@@ -147,7 +148,7 @@ public class ResourcePath {
 	protected String normalizePath(@Nonnull String path) {
 		requireNonNull(path);
 
-		path = path.trim();
+		path = trim(path);
 
 		if (path.length() == 0)
 			return "/";

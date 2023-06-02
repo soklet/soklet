@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
+import static com.soklet.core.Utilities.trim;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -91,7 +92,7 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	protected String normalizeOrigin(@Nonnull String origin) {
 		requireNonNull(origin);
-		return origin.trim().toLowerCase(Locale.ROOT);
+		return trim(origin).toLowerCase(Locale.ROOT);
 	}
 
 	@Nonnull

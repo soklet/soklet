@@ -57,6 +57,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.soklet.core.Utilities.trim;
 import static com.soklet.core.Utilities.trimToNull;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -419,7 +420,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				for (int i = 0; i < values.size(); ++i) {
 					String value = values.get(i);
 
-					if (value != null && value.trim().length() > 0)
+					if (value != null && trim(value).length() > 0)
 						try {
 							results.add(valueConverter.convert(value));
 						} catch (ValueConversionException e) {
@@ -448,7 +449,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		} else {
 			String value = values.size() > 0 ? values.get(0) : null;
 
-			if (value != null && value.trim().length() == 0) value = null;
+			if (value != null && trim(value).length() == 0) value = null;
 
 			if (!parameterType.isOptional() && value == null)
 				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);

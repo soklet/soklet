@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
@@ -55,6 +56,10 @@ public final class Utilities {
 	private static final byte[] EMPTY_BYTE_ARRAY;
 	@Nonnull
 	private static final Map<String, Locale> LOCALES_BY_LANGUAGE_RANGE_RANGE;
+	@Nonnull
+	private static final Pattern HEAD_WHITESPACE_PATTERN;
+	@Nonnull
+	private static final Pattern TAIL_WHITESPACE_PATTERN;
 
 	static {
 		EMPTY_BYTE_ARRAY = new byte[0];
@@ -81,6 +86,15 @@ public final class Utilities {
 		}
 
 		VIRTUAL_THREADS_AVAILABLE = virtualThreadsAvailable;
+
+		// See https://www.regular-expressions.info/unicode.html
+		// \p{Z} or \p{Separator}: any kind of whitespace or invisible separator.
+		//
+		// First pattern matches all whitespace at the head of a string, second matches the same for tail.
+		// Useful for a "stronger" trim() function, which is almost always what we want in a web context
+		// with user-supplied input.
+		HEAD_WHITESPACE_PATTERN = Pattern.compile("^(\\p{Z})+");
+		TAIL_WHITESPACE_PATTERN = Pattern.compile("(\\p{Z})+$");
 	}
 
 	private Utilities() {
@@ -227,7 +241,7 @@ public final class Utilities {
 	public static String normalizedPathForUrl(@Nonnull String url) {
 		requireNonNull(url);
 
-		url = url.trim();
+		url = trim(url);
 
 		if (url.length() == 0)
 			return "/";
@@ -266,7 +280,7 @@ public final class Utilities {
 			List<LanguageRange> languageRanges = LanguageRange.parse(acceptLanguageHeaderValue);
 
 			return languageRanges.stream()
-					.map(languageRange -> getLocalesByLanguageRangeRange().get(languageRange.getRange()))
+					.map(languageRange -> LOCALES_BY_LANGUAGE_RANGE_RANGE.get(languageRange.getRange()))
 					.filter(locale -> locale != null)
 					.collect(Collectors.toList());
 		} catch (Exception ignored) {
@@ -274,12 +288,39 @@ public final class Utilities {
 		}
 	}
 
+	/**
+	 * A "stronger" version of {@link String#trim()} which discards any kind of whitespace or invisible separator.
+	 * <p>
+	 * In a web environment with user-supplied inputs, this is the behavior we want the vast majority of the time.
+	 * For example, users copy-paste URLs from Word or Outlook and it's easy to accidentally include a U+202F
+	 * "Narrow No-Break Space (NNBSP)" character at the end, which might break parsing.
+	 * <p>
+	 * See <a href="https://www.compart.com/en/unicode/U+202F">https://www.compart.com/en/unicode/U+202F</a> for details.
+	 *
+	 * @param string (nullable) the string to trim
+	 * @return (nullable) the trimmed string
+	 */
+	@Nullable
+	public static String trim(@Nullable String string) {
+		if (string == null)
+			return null;
+
+		string = HEAD_WHITESPACE_PATTERN.matcher(string).replaceAll("");
+
+		if (string.length() == 0)
+			return string;
+
+		string = TAIL_WHITESPACE_PATTERN.matcher(string).replaceAll("");
+
+		return string;
+	}
+
 	@Nullable
 	public static String trimToNull(@Nullable String string) {
 		if (string == null)
 			return null;
 
-		string = string.trim();
+		string = trim(string);
 		return string.length() == 0 ? null : string;
 	}
 
@@ -288,16 +329,6 @@ public final class Utilities {
 		if (string == null)
 			return "";
 
-		return string.trim();
-	}
-
-	@Nonnull
-	public static Boolean isBlank(@Nullable String string) {
-		return string == null || string.trim() == null;
-	}
-
-	@Nonnull
-	private static Map<String, Locale> getLocalesByLanguageRangeRange() {
-		return LOCALES_BY_LANGUAGE_RANGE_RANGE;
+		return trim(string);
 	}
 }
