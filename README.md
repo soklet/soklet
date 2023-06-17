@@ -1,4 +1,4 @@
-<img src="https://soklet.s3.amazonaws.com/soklet-gh-logo.png" width="300"/>
+<a href="https://www.soklet.com"><img src="https://soklet.s3.amazonaws.com/soklet-gh-logo.png" width="300"/></a>
 
 ### What Is It?
 
