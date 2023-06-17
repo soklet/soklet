@@ -59,7 +59,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 import static com.soklet.core.Utilities.emptyByteArray;
-import static com.soklet.core.Utilities.trimToNull;
+import static com.soklet.core.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
@@ -377,7 +377,7 @@ public class MicrohttpServer implements Server {
 		for (Header header : microHttpRequest.headers()) {
 			Set<String> values = headers.computeIfAbsent(header.name(), k -> new HashSet<>());
 
-			String value = trimToNull(header.value());
+			String value = trimAggressivelyToNull(header.value());
 
 			if (value != null)
 				values.add(value);
@@ -390,7 +390,7 @@ public class MicrohttpServer implements Server {
 	protected Set<HttpCookie> cookiesFromMicrohttpRequest(@Nonnull com.soklet.microhttp.Request microHttpRequest) {
 		requireNonNull(microHttpRequest);
 
-		String cookieHeaderValue = trimToNull(microHttpRequest.header("Cookie"));
+		String cookieHeaderValue = trimAggressivelyToNull(microHttpRequest.header("Cookie"));
 
 		if (cookieHeaderValue != null) {
 			try {

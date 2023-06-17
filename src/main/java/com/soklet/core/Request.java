@@ -38,9 +38,9 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static com.soklet.core.Utilities.trim;
-import static com.soklet.core.Utilities.trimToEmpty;
-import static com.soklet.core.Utilities.trimToNull;
+import static com.soklet.core.Utilities.trimAggressively;
+import static com.soklet.core.Utilities.trimAggressivelyToEmpty;
+import static com.soklet.core.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
@@ -467,7 +467,7 @@ public class Request {
 			if (originHeaderValues == null || originHeaderValues.size() == 0)
 				return Optional.empty();
 
-			String originHeaderValue = trimToNull(originHeaderValues.stream().findFirst().orElse(null));
+			String originHeaderValue = trimAggressivelyToNull(originHeaderValues.stream().findFirst().orElse(null));
 
 			if (originHeaderValue == null)
 				return Optional.empty();
@@ -479,7 +479,7 @@ public class Request {
 
 			List<HttpMethod> accessControlRequestMethods = accessControlRequestMethodHeaderValues.stream()
 					.filter(headerValue -> {
-						headerValue = trimToEmpty(headerValue);
+						headerValue = trimAggressivelyToEmpty(headerValue);
 
 						try {
 							HttpMethod.valueOf(headerValue);
@@ -488,7 +488,7 @@ public class Request {
 							return false;
 						}
 					})
-					.map((headerValue -> HttpMethod.valueOf(trim(headerValue))))
+					.map((headerValue -> HttpMethod.valueOf(trimAggressively(headerValue))))
 					.toList();
 
 			Set<String> accessControlRequestHeaderValues = headers.get("Access-Control-Request-Header");

@@ -110,7 +110,7 @@ public final class Utilities {
 	 * Method handle-based invocation to provide a Java 19+ virtual-thread-per-task executor service.
 	 * <p>
 	 * In order to support Soklet users who are not yet ready to enable virtual threads (Java 19+ w/preview features),
-	 * we compile Soklet with a source level < 19 and avoid any hard references to virtual threads by dynamically creating
+	 * we compile Soklet with a source level &lt; 19 and avoid any hard references to virtual threads by dynamically creating
 	 * our executor service via method handles.
 	 * <p>
 	 * You should not call this method if {@link Utilities#virtualThreadsAvailable()} is {@code false}.
@@ -209,7 +209,7 @@ public final class Utilities {
 			return Map.of();
 		}
 
-		String query = trimToNull(uri.getQuery());
+		String query = trimAggressivelyToNull(uri.getQuery());
 
 		if (query == null)
 			return Map.of();
@@ -219,12 +219,12 @@ public final class Utilities {
 
 		for (String queryParameterComponent : queryParameterComponents) {
 			String[] queryParameterNameAndValue = queryParameterComponent.split("=");
-			String name = queryParameterNameAndValue.length > 0 ? trimToNull(queryParameterNameAndValue[0]) : null;
+			String name = queryParameterNameAndValue.length > 0 ? trimAggressivelyToNull(queryParameterNameAndValue[0]) : null;
 
 			if (name == null)
 				continue;
 
-			String value = queryParameterNameAndValue.length > 1 ? trimToNull(queryParameterNameAndValue[1]) : null;
+			String value = queryParameterNameAndValue.length > 1 ? trimAggressivelyToNull(queryParameterNameAndValue[1]) : null;
 
 			if (value == null)
 				continue;
@@ -241,7 +241,7 @@ public final class Utilities {
 	public static String normalizedPathForUrl(@Nonnull String url) {
 		requireNonNull(url);
 
-		url = trim(url);
+		url = trimAggressively(url);
 
 		if (url.length() == 0)
 			return "/";
@@ -301,7 +301,7 @@ public final class Utilities {
 	 * @return (nullable) the trimmed string
 	 */
 	@Nullable
-	public static String trim(@Nullable String string) {
+	public static String trimAggressively(@Nullable String string) {
 		if (string == null)
 			return null;
 
@@ -316,19 +316,19 @@ public final class Utilities {
 	}
 
 	@Nullable
-	public static String trimToNull(@Nullable String string) {
+	public static String trimAggressivelyToNull(@Nullable String string) {
 		if (string == null)
 			return null;
 
-		string = trim(string);
+		string = trimAggressively(string);
 		return string.length() == 0 ? null : string;
 	}
 
 	@Nonnull
-	public static String trimToEmpty(@Nullable String string) {
+	public static String trimAggressivelyToEmpty(@Nullable String string) {
 		if (string == null)
 			return "";
 
-		return trim(string);
+		return trimAggressively(string);
 	}
 }

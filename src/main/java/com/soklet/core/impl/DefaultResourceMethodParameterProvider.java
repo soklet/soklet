@@ -57,8 +57,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.soklet.core.Utilities.trim;
-import static com.soklet.core.Utilities.trimToNull;
+import static com.soklet.core.Utilities.trimAggressively;
+import static com.soklet.core.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -227,7 +227,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(annotation);
 		requireNonNull(annotationValue);
 
-		String parameterName = trimToNull(annotationValue);
+		String parameterName = trimAggressivelyToNull(annotationValue);
 
 		if (parameterName == null && parameter.isNamePresent())
 			parameterName = parameter.getName();
@@ -420,7 +420,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				for (int i = 0; i < values.size(); ++i) {
 					String value = values.get(i);
 
-					if (value != null && trim(value).length() > 0)
+					if (value != null && trimAggressively(value).length() > 0)
 						try {
 							results.add(valueConverter.convert(value));
 						} catch (ValueConversionException e) {
@@ -449,7 +449,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		} else {
 			String value = values.size() > 0 ? values.get(0) : null;
 
-			if (value != null && trim(value).length() == 0) value = null;
+			if (value != null && trimAggressively(value).length() == 0) value = null;
 
 			if (!parameterType.isOptional() && value == null)
 				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);

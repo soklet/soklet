@@ -34,7 +34,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.UUID;
 
-import static com.soklet.core.Utilities.trim;
+import static com.soklet.core.Utilities.trimAggressively;
 import static java.lang.String.format;
 
 /**
@@ -120,7 +120,7 @@ public final class ValueConverters {
 		@Override
 		@Nullable
 		public F convert(@Nullable String from) throws ValueConversionException {
-			from = trim(from); // Aggressively trim off everything, including nonprintable whitespace
+			from = trimAggressively(from); // Aggressively trim off everything, including nonprintable whitespace
 			return super.convert(from);
 		}
 	}

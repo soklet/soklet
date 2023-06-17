@@ -24,7 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
-import static com.soklet.core.Utilities.trim;
+import static com.soklet.core.Utilities.trimAggressively;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -55,7 +55,7 @@ public class DefaultLogHandler implements LogHandler {
 			PrintWriter printWriter = new PrintWriter(stringWriter);
 			throwable.printStackTrace(printWriter);
 
-			String throwableWithStackTrace = trim(stringWriter.toString());
+			String throwableWithStackTrace = trimAggressively(stringWriter.toString());
 
 			System.err.printf("ERROR: %s\n%s%n", message, throwableWithStackTrace);
 		}

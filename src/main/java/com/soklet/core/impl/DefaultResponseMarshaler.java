@@ -40,7 +40,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.soklet.core.Utilities.emptyByteArray;
-import static com.soklet.core.Utilities.trim;
+import static com.soklet.core.Utilities.trimAggressively;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -61,7 +61,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		Map<String, Set<String>> headers = response.getHeaders();
 
 		Set<String> normalizedHeaderKeys = headers.keySet().stream()
-				.map(key -> trim(key).toLowerCase(Locale.US))
+				.map(key -> trimAggressively(key).toLowerCase(Locale.US))
 				.collect(Collectors.toSet());
 
 		// If no Content-Type specified, supply a default
