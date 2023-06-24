@@ -1,4 +1,9 @@
-<a href="https://www.soklet.com"><img src="https://soklet.s3.amazonaws.com/soklet-gh-logo.png" width="300"/></a>
+<a href="https://www.soklet.com">
+    <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="https://soklet.s3.amazonaws.com/soklet-gh-logo-dark.png">
+        <img alt="Soklet" src="https://soklet.s3.amazonaws.com/soklet-gh-logo.png" width="300">
+    </picture>
+</a>
 
 ### What Is It?
 
