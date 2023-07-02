@@ -22,7 +22,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum HttpMethod {
 	GET,

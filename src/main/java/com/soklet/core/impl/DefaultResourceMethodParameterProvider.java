@@ -63,7 +63,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public class DefaultResourceMethodParameterProvider implements ResourceMethodParameterProvider {

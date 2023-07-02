@@ -26,7 +26,7 @@ import java.util.Set;
  * The {@link MarshaledResponse} value returned from these methods is what is ultimately sent back to
  * clients as bytes over the wire.
  *
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public interface ResponseMarshaler {
 	/**

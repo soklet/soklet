@@ -33,7 +33,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public class MarshaledResponse {
@@ -102,7 +102,7 @@ public class MarshaledResponse {
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
-	 * @author <a href="https://www.revetware.com">Mark Allen</a>
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
 	public static class Builder {
@@ -149,7 +149,7 @@ public class MarshaledResponse {
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
-	 * @author <a href="https://www.revetware.com">Mark Allen</a>
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
 	public static class Copier {

@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
 /**
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public class ResourcePath {
@@ -238,7 +238,7 @@ public class ResourcePath {
 	 * <li>{@code ComponentType} 1 would be {@code PLACEHOLDER}
 	 * </ul>
 	 *
-	 * @author <a href="https://www.revetware.com">Mark Allen</a>
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 * @see ResourcePath
 	 */
 	public enum ComponentType {
@@ -252,7 +252,7 @@ public class ResourcePath {
 	 * We parse path declarations (which might include placeholders) differently from the path a user might type in a web
 	 * browser.
 	 *
-	 * @author <a href="https://www.revetware.com">Mark Allen</a>
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 * @see ResourcePath
 	 */
 	private enum ComponentParsingStrategy {
@@ -276,7 +276,7 @@ public class ResourcePath {
 	 * <li>{@code Component} 1 would have type {@code PLACEHOLDER} and value {@code languageId}
 	 * </ul>
 	 *
-	 * @author <a href="https://www.revetware.com">Mark Allen</a>
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 * @see ResourcePath
 	 */
 	@Immutable

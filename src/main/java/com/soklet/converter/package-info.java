@@ -17,6 +17,6 @@
 /**
  * Utilities which handle converting objects from one type to another.
  *
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 package com.soklet.converter;

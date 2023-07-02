@@ -20,7 +20,7 @@ import javax.annotation.Nonnull;
 import java.util.List;
 
 /**
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public interface ResourceMethodParameterProvider {
 	@Nonnull

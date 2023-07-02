@@ -21,7 +21,7 @@ import com.soklet.core.LifecycleInterceptor;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public class DefaultLifecycleInterceptor implements LifecycleInterceptor {

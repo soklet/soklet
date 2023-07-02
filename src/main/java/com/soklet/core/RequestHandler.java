@@ -20,7 +20,7 @@ import javax.annotation.Nonnull;
 import java.util.function.Consumer;
 
 /**
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
 public interface RequestHandler {

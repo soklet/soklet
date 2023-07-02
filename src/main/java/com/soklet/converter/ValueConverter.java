@@ -24,7 +24,7 @@ import java.lang.reflect.Type;
  * Contract for converting objects from one type to another. For example, you might have a
  * {@code ValueConverter<String, List<Integer>>} which converts text like {@code "1,2,3"} to a list of numbers.
  *
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public interface ValueConverter<F, T> {
 	/**

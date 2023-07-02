@@ -39,7 +39,7 @@ import static java.lang.String.format;
  *
  * @author Neal Gafter
  * @author Bob Lee
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public abstract class TypeReference<T> {

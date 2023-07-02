@@ -21,7 +21,7 @@ import javax.annotation.Nonnull;
 import static java.util.Objects.requireNonNull;
 
 /**
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum RedirectType {
 	HTTP_301_MOVED_PERMANENTLY(StatusCode.HTTP_301),

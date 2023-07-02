@@ -27,7 +27,7 @@ import java.util.List;
 import static java.lang.String.format;
 
 /**
- * @author <a href="https://www.revetware.com">Mark Allen</a>
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, T> {
