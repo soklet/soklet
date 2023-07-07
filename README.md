@@ -9,7 +9,7 @@
 
 A small [HTTP 1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs.<br/><br/>
 Zero dependencies.  Dependency Injection friendly.<br/>
-Optionally powered by [JEP 425: Virtual Threads, aka Project Loom](https://openjdk.org/jeps/425).
+Optionally powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
 
 Soklet is a library, not a framework.
 
@@ -337,7 +337,7 @@ com.soklet.exception.IllegalQueryParameterException: Illegal value 'abc' was spe
 
 Soklet provides an embedded version of [Microhttp](https://github.com/ebarlas/microhttp) out-of-the-box in the form of [MicrohttpServer](https://www.soklet.com/javadoc/com/soklet/core/impl/MicrohttpServer.html).
 
-The default configuration will transparently use [JEP 425 Virtual Threads](https://openjdk.org/jeps/425) if available at runtime (JDK 19+ with the `--enable-preview` flag) and fall back to native threads if not.
+The default configuration will transparently use [JEP 444 Virtual Threads](https://openjdk.org/jeps/444) if available at runtime (JDK 19+ with the `--enable-preview` flag or JDK 21+ stock configuration) and fall back to native threads if not.
 
 ```java
 // The only required configuration is port number
