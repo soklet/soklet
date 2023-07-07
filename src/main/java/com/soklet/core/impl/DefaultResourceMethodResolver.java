@@ -88,6 +88,9 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		if (resourceMethods != null)
 			allResouceMethods.addAll(resourceMethods);
 
+		if (allResouceMethods.size() == 0)
+			throw new IllegalArgumentException(format("No classes annotated with @%s were found.", Resource.class.getSimpleName()));
+
 		this.resourceMethods = Collections.unmodifiableSet(allResouceMethods);
 		this.resourceMethodsByHttpMethod =
 				Collections.unmodifiableMap(createResourceMethodsByHttpMethod(getResourceMethods()));
@@ -306,18 +309,18 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	protected Set<Method> getResourceMethods() {
-		return resourceMethods;
+	public Set<Method> getResourceMethods() {
+		return this.resourceMethods;
+	}
+
+	@Nonnull
+	public Map<Method, Set<HttpMethodResourcePath>> getHttpMethodResourcePathsByMethod() {
+		return this.httpMethodResourcePathsByMethod;
 	}
 
 	@Nonnull
 	protected Map<HttpMethod, Set<Method>> getResourceMethodsByHttpMethod() {
-		return resourceMethodsByHttpMethod;
-	}
-
-	@Nonnull
-	protected Map<Method, Set<HttpMethodResourcePath>> getHttpMethodResourcePathsByMethod() {
-		return httpMethodResourcePathsByMethod;
+		return this.resourceMethodsByHttpMethod;
 	}
 
 	@ThreadSafe
