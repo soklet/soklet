@@ -21,6 +21,7 @@ import javax.annotation.Nonnull;
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@FunctionalInterface
 public interface InstanceProvider {
 	@Nonnull
 	<T> T provide(@Nonnull Class<T> instanceClass);
