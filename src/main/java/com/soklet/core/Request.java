@@ -54,7 +54,7 @@ public class Request {
 	private static final IdGenerator DEFAULT_ID_GENERATOR;
 
 	@Nonnull
-	private final Long id;
+	private final Object id;
 	@Nonnull
 	private final HttpMethod httpMethod;
 	@Nonnull
@@ -142,7 +142,7 @@ public class Request {
 	}
 
 	@Nonnull
-	public Long getId() {
+	public Object getId() {
 		return this.id;
 	}
 
@@ -285,7 +285,7 @@ public class Request {
 		@Nonnull
 		private final String uri;
 		@Nullable
-		private Long id;
+		private Object id;
 		@Nullable
 		private IdGenerator idGenerator;
 		@Nullable
@@ -305,7 +305,7 @@ public class Request {
 		}
 
 		@Nonnull
-		public Builder id(@Nullable Long id) {
+		public Builder id(@Nullable Object id) {
 			this.id = id;
 			return this;
 		}
@@ -389,7 +389,7 @@ public class Request {
 		}
 
 		@Nonnull
-		public Copier id(@Nonnull Function<Long, Long> idFunction) {
+		public Copier id(@Nonnull Function<Object, Object> idFunction) {
 			requireNonNull(idFunction);
 
 			builder.id = idFunction.apply(builder.id);

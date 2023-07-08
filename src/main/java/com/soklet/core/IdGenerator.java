@@ -24,5 +24,5 @@ import javax.annotation.Nonnull;
 @FunctionalInterface
 public interface IdGenerator {
 	@Nonnull
-	Long generateId();
+	Object generateId();
 }

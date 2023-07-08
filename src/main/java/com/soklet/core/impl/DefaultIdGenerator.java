@@ -20,6 +20,7 @@ import com.soklet.core.IdGenerator;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.InetAddress;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.String.format;
@@ -31,6 +32,29 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class DefaultIdGenerator implements IdGenerator {
 	@Nonnull
+	private static final String ID_PREFIX;
+
+	static {
+		String idPrefix = "";
+
+		// IDs ultimately look like "192.168.4.75-10004" (or just "10004" if we can't detect host address)
+		try {
+			String hostAddress = InetAddress.getLocalHost().getHostAddress();
+
+			if (hostAddress != null) {
+				hostAddress = hostAddress.trim();
+
+				if (hostAddress.length() > 0)
+					idPrefix = format("%s-", hostAddress);
+			}
+		} catch (Exception e) {
+			// Ignored
+		}
+
+		ID_PREFIX = idPrefix;
+	}
+
+	@Nonnull
 	private final Long minimumId;
 	@Nonnull
 	private final Long maximumId;
@@ -38,7 +62,7 @@ public class DefaultIdGenerator implements IdGenerator {
 	private final AtomicLong idGenerator;
 
 	public DefaultIdGenerator() {
-		this(10_000_000L, 99_999_999L);
+		this(10_000L, 99_999_999L);
 	}
 
 	public DefaultIdGenerator(@Nonnull Long minimumId,
@@ -62,9 +86,9 @@ public class DefaultIdGenerator implements IdGenerator {
 
 	@Nonnull
 	@Override
-	public Long generateId() {
-		return getIdGenerator().getAndAccumulate(getMaximumId(),
-				(currentId, ignored) -> currentId < getMaximumId() ? ++currentId : getMinimumId());
+	public Object generateId() {
+		return format("%s%s", getIdPrefix(), getIdGenerator().getAndAccumulate(getMaximumId(),
+				(currentId, ignored) -> currentId < getMaximumId() ? ++currentId : getMinimumId()));
 	}
 
 	@Nonnull
@@ -80,5 +104,10 @@ public class DefaultIdGenerator implements IdGenerator {
 	@Nonnull
 	protected Long getMaximumId() {
 		return this.maximumId;
+	}
+
+	@Nonnull
+	protected String getIdPrefix() {
+		return ID_PREFIX;
 	}
 }
