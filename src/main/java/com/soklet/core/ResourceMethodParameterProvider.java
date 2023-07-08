@@ -22,6 +22,7 @@ import java.util.List;
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@FunctionalInterface
 public interface ResourceMethodParameterProvider {
 	@Nonnull
 	List<Object> parameterValuesForResourceMethod(@Nonnull Request request,

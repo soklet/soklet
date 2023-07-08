@@ -22,6 +22,7 @@ import java.util.Optional;
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@FunctionalInterface
 public interface ResourceMethodResolver {
 	@Nonnull
 	Optional<ResourceMethod> resourceMethodForRequest(@Nonnull Request request);
