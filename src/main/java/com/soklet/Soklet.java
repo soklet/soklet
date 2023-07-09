@@ -345,7 +345,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 																														@Nonnull MarshaledResponse marshaledResponse) {
 		if (request.getHttpMethod() != HttpMethod.HEAD)
 			return marshaledResponse;
-		
+
 		return getSokletConfiguration().getResponseMarshaler().forHead(request, marshaledResponse);
 	}
 

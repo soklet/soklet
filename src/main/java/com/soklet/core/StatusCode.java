@@ -77,11 +77,6 @@ public enum StatusCode {
 	@Nonnull
 	private static final Map<Integer, StatusCode> STATUS_CODES_BY_NUMBER;
 
-	@Nonnull
-	private final Integer statusCode;
-	@Nonnull
-	private final String reasonPhrase;
-
 	static {
 		Map<Integer, StatusCode> statusCodesByNumber = new HashMap<>();
 
@@ -90,6 +85,11 @@ public enum StatusCode {
 
 		STATUS_CODES_BY_NUMBER = Collections.unmodifiableMap(statusCodesByNumber);
 	}
+
+	@Nonnull
+	private final Integer statusCode;
+	@Nonnull
+	private final String reasonPhrase;
 
 	StatusCode(@Nonnull Integer statusCode,
 						 @Nonnull String reasonPhrase) {
@@ -100,14 +100,14 @@ public enum StatusCode {
 		this.reasonPhrase = reasonPhrase;
 	}
 
-	@Override
-	public String toString() {
-		return format("%s.%s{statusCode=%s, reasonPhrase=%s}", getClass().getSimpleName(), name(), getStatusCode(), getReasonPhrase());
-	}
-
 	@Nonnull
 	public static Optional<StatusCode> fromStatusCode(@Nonnull Integer statusCode) {
 		return Optional.ofNullable(STATUS_CODES_BY_NUMBER.get(statusCode));
+	}
+
+	@Override
+	public String toString() {
+		return format("%s.%s{statusCode=%s, reasonPhrase=%s}", getClass().getSimpleName(), name(), getStatusCode(), getReasonPhrase());
 	}
 
 	@Nonnull

@@ -53,6 +53,10 @@ public class Request {
 	@Nonnull
 	private static final IdGenerator DEFAULT_ID_GENERATOR;
 
+	static {
+		DEFAULT_ID_GENERATOR = new DefaultIdGenerator();
+	}
+
 	@Nonnull
 	private final Object id;
 	@Nonnull
@@ -71,16 +75,12 @@ public class Request {
 	private final Cors cors;
 	@Nullable
 	private final byte[] body;
+	@Nonnull
+	private final ReentrantLock lock;
 	@Nullable
 	private volatile String bodyAsString = null;
 	@Nullable
 	private volatile List<Locale> locales = null;
-	@Nonnull
-	private final ReentrantLock lock;
-
-	static {
-		DEFAULT_ID_GENERATOR = new DefaultIdGenerator();
-	}
 
 	protected Request(@Nonnull Builder builder) {
 		requireNonNull(builder);

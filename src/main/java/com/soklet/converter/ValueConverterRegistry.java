@@ -40,12 +40,12 @@ public class ValueConverterRegistry {
 	@Nonnull
 	private static final ValueConverter<?, ?> REFLEXIVE_VALUE_CONVERTER;
 
-	@Nonnull
-	private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConverterCache;
-
 	static {
 		REFLEXIVE_VALUE_CONVERTER = new ReflexiveValueConverter<>();
 	}
+
+	@Nonnull
+	private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConverterCache;
 
 	public ValueConverterRegistry() {
 		this.valueConverterCache = new ConcurrentHashMap<>();

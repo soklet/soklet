@@ -51,14 +51,14 @@ public class ResourcePath {
 	@Nonnull
 	private static final Pattern COMPONENT_PLACEHOLDER_PATTERN;
 
+	static {
+		COMPONENT_PLACEHOLDER_PATTERN = Pattern.compile("^\\{.+\\}$");
+	}
+
 	@Nonnull
 	private final String path;
 	@Nonnull
 	private final List<Component> components;
-
-	static {
-		COMPONENT_PLACEHOLDER_PATTERN = Pattern.compile("^\\{.+\\}$");
-	}
 
 	protected ResourcePath(@Nonnull String path,
 												 @Nonnull ComponentParsingStrategy strategy) {

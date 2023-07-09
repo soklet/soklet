@@ -86,6 +86,17 @@ public class MicrohttpServer implements Server {
 	@Nonnull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 
+	static {
+		DEFAULT_HOST = "0.0.0.0";
+		DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors();
+		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
+		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
+		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
+		DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
+		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
+		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
+	}
+
 	@Nonnull
 	private final Integer port;
 	@Nonnull
@@ -120,17 +131,6 @@ public class MicrohttpServer implements Server {
 	private volatile RequestHandler requestHandler;
 	@Nullable
 	private volatile EventLoop eventLoop;
-
-	static {
-		DEFAULT_HOST = "0.0.0.0";
-		DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors();
-		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
-		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
-		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
-		DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
-		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
-		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
-	}
 
 	protected MicrohttpServer(@Nonnull Builder builder) {
 		requireNonNull(builder);
