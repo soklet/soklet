@@ -129,7 +129,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		// Holders to permit mutable effectively-final variables
 		AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
 		AtomicReference<Throwable> resourceMethodResolutionExceptionHolder = new AtomicReference<>();
-		AtomicReference<Request> requestHolder = new AtomicReference<>();
+		AtomicReference<Request> requestHolder = new AtomicReference<>(request);
 		AtomicReference<ResourceMethod> resourceMethodHolder = new AtomicReference<>();
 
 		List<Throwable> throwables = new ArrayList<>(8);
