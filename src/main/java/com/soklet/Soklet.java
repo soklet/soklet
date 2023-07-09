@@ -192,8 +192,11 @@ public class Soklet implements AutoCloseable, RequestHandler {
 			try {
 				// In the event that an error occurs during processing of a LifecycleInterceptor method, for example
 				logHandler.logError(format("An exception occurred while processing %s", requestHolder.get()), t);
-			} finally {
-				marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), t));
+				marshaledResponseHolder.set(responseMarshaler.forException(requestHolder.get(), t, resourceMethodHolder.get()));
+			} catch (Throwable t2) {
+				throwables.add(t2);
+				logHandler.logError(format("An exception occurred when writing a response while processing %s", requestHolder.get()), t2);
+				marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), t2));
 			}
 		} finally {
 			try {
