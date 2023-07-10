@@ -374,7 +374,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server).buil
 
 ### Response Marshaler
 
-Soklet's [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) specifies how a "logical" response (Java object) is written to bytes over the wire.
+Soklet's [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) specifies how a "logical" response (an arbitrary Java object) is written to bytes over the wire.
 
 Hooks are provided for these scenarios:
 
@@ -416,17 +416,14 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
       // Your application likely has exceptions that are designed to "bubble out", e.g.
       // input validation errors.  This is where to trap and customize your response
-      if(throwable instanceof MyExampleValidationException e) {
+      if(throwable instanceof MyUserFacingException e) {
         statusCode = 422;
-        message = e.getExampleUserFriendlyErrorMessage();
+        message = e.getExampleFriendlyErrorMessage();
       }
 
       // Construct an object to send as the response body
-      Map<String, Object> bodyObject = new HashMap<>();
-      bodyObject.put("message", message);
-
-      // Ask Gson to turn the Java response body object into JSON bytes    
-      byte[] body = gson.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
+      // by asking Gson to turn a Java object into JSON bytes    
+      byte[] body = gson.toJson(Map.of("message", message)).getBytes(StandardCharsets.UTF_8);
 
       return new MarshaledResponse.Builder(statusCode)
         .headers(Map.of("Content-Type", Set.of("application/json; charset=UTF-8")))
