@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -132,114 +133,196 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		AtomicReference<Request> requestHolder = new AtomicReference<>(request);
 		AtomicReference<ResourceMethod> resourceMethodHolder = new AtomicReference<>();
 
-		List<Throwable> throwables = new ArrayList<>(8);
+		// Holders to permit mutable effectively-final state tracking
+		AtomicBoolean willStartResponseWritingCompleted = new AtomicBoolean(false);
+		AtomicBoolean didFinishResponseWritingCompleted = new AtomicBoolean(false);
+		AtomicBoolean didFinishRequestHandlingCompleted = new AtomicBoolean(false);
+
+		List<Throwable> throwables = new ArrayList<>(10);
+
+		requestHolder.set(request);
 
 		try {
 			// Do we have an exact match for this resource method?
-			resourceMethodHolder.set(resourceMethodResolver.resourceMethodForRequest(request).orElse(null));
+			resourceMethodHolder.set(resourceMethodResolver.resourceMethodForRequest(requestHolder.get()).orElse(null));
 		} catch (Throwable t) {
-			// If an exception occurs here, keep track of it - we will rethrow below after letting LifecycleInterceptor
+			// If an exception occurs here, keep track of it - we will surface them after letting LifecycleInterceptor
 			// see that a request has come in.
 			throwables.add(t);
 			resourceMethodResolutionExceptionHolder.set(t);
 		}
 
 		try {
-			lifecycleInterceptor.interceptRequest(request, resourceMethodHolder.get(), (interceptorRequest) -> {
-				requestHolder.set(interceptorRequest);
-
-				lifecycleInterceptor.didStartRequestHandling(requestHolder.get(), resourceMethodHolder.get());
-
+			lifecycleInterceptor.wrapRequest(request, resourceMethodHolder.get(), () -> {
 				try {
-					if (resourceMethodResolutionExceptionHolder.get() != null)
-						throw resourceMethodResolutionExceptionHolder.get();
+					lifecycleInterceptor.interceptRequest(request, resourceMethodHolder.get(), (interceptorRequest) -> {
+						requestHolder.set(interceptorRequest);
 
-					MarshaledResponse marshaledResponse = toMarshaledResponse(requestHolder.get(), resourceMethodHolder.get());
+						lifecycleInterceptor.didStartRequestHandling(requestHolder.get(), resourceMethodHolder.get());
 
-					// A few special cases that are "global" in that they can affect all requests and
-					// need to happen after marshaling the response...
+						try {
+							if (resourceMethodResolutionExceptionHolder.get() != null)
+								throw resourceMethodResolutionExceptionHolder.get();
 
-					// 1. Customize response for HEAD (e.g. remove body, set Content-Length header)
-					marshaledResponse = applyHeadResponseIfApplicable(request, marshaledResponse);
+							MarshaledResponse marshaledResponse = toMarshaledResponse(requestHolder.get(), resourceMethodHolder.get());
 
-					// 2. Write any CORS-related headers
-					marshaledResponse = applyCorsResponseIfApplicable(request, marshaledResponse);
+							// A few special cases that are "global" in that they can affect all requests and
+							// need to happen after marshaling the response...
 
-					// 3. If there is no Content-Length header already applied, apply it
-					marshaledResponse = applyContentLengthIfApplicable(request, marshaledResponse);
+							// 1. Customize response for HEAD (e.g. remove body, set Content-Length header)
+							marshaledResponse = applyHeadResponseIfApplicable(request, marshaledResponse);
 
-					return marshaledResponse;
+							// 2. Write any CORS-related headers
+							marshaledResponse = applyCorsResponseIfApplicable(request, marshaledResponse);
+
+							// 3. If there is no Content-Length header already applied, apply it
+							marshaledResponse = applyContentLengthIfApplicable(request, marshaledResponse);
+
+							return marshaledResponse;
+						} catch (Throwable t) {
+							throwables.add(t);
+							logHandler.logError(format("An exception occurred while processing %s", request), t);
+
+							// Unhappy path.  Try to use configuration's exception response marshaler...
+							try {
+								return responseMarshaler.forException(requestHolder.get(), t, resourceMethodHolder.get());
+							} catch (Throwable t2) {
+								throwables.add(t2);
+								logHandler.logError(format("An exception occurred while trying to write an exception response for %s while processing %s", t, requestHolder.get()), t2);
+								// The configuration's exception response marshaler failed - provide a failsafe response to recover
+								return provideFailsafeMarshaledResponse(requestHolder.get(), t2);
+							}
+						}
+					}, (interceptorMarshaledResponse) -> {
+						marshaledResponseHolder.set(interceptorMarshaledResponse);
+					});
 				} catch (Throwable t) {
 					throwables.add(t);
-					logHandler.logError(format("An exception occurred while processing %s", request), t);
 
-					// Unhappy path.  Try to use configuration's exception response marshaler...
 					try {
-						return responseMarshaler.forException(requestHolder.get(), t, resourceMethodHolder.get());
+						// In the event that an error occurs during processing of a LifecycleInterceptor method, for example
+						logHandler.logError(format("An exception occurred while processing %s", requestHolder.get()), t);
+						marshaledResponseHolder.set(responseMarshaler.forException(requestHolder.get(), t, resourceMethodHolder.get()));
 					} catch (Throwable t2) {
 						throwables.add(t2);
-						logHandler.logError(format("An exception occurred while trying to write an exception response for %s while processing %s", t, requestHolder.get()), t2);
-						// The configuration's exception response marshaler failed - provide a failsafe response to recover
-						return provideFailsafeMarshaledResponse(requestHolder.get(), t2);
+						logHandler.logError(format("An exception occurred when writing a response while processing %s", requestHolder.get()), t2);
+						marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), t2));
+					}
+				} finally {
+					try {
+						try {
+							lifecycleInterceptor.willStartResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
+						} finally {
+							willStartResponseWritingCompleted.set(true);
+						}
+
+						Instant responseWriteStarted = Instant.now();
+
+						try {
+							marshaledResponseConsumer.accept(marshaledResponseHolder.get());
+
+							Instant responseWriteFinished = Instant.now();
+							Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
+
+							try {
+								lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, null);
+							} catch (Throwable t) {
+								throwables.add(t);
+								logHandler.logError(format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
+										LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
+							} finally {
+								didFinishResponseWritingCompleted.set(true);
+							}
+						} catch (Throwable t) {
+							throwables.add(t);
+
+							Instant responseWriteFinished = Instant.now();
+							Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
+
+							try {
+								lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
+							} catch (Throwable t2) {
+								throwables.add(t2);
+								logHandler.logError(format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
+										LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t2);
+							}
+						}
+					} finally {
+						try {
+							Instant processingFinished = Instant.now();
+							Duration processingDuration = Duration.between(processingStarted, processingFinished);
+
+							lifecycleInterceptor.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
+						} catch (Throwable t) {
+							logHandler.logError(format("An exception occurred while invoking %s.didFinishRequestProcessing() when processing %s",
+									LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
+						} finally {
+							didFinishRequestHandlingCompleted.set(true);
+						}
 					}
 				}
-			}, (interceptorMarshaledResponse) -> {
-				marshaledResponseHolder.set(interceptorMarshaledResponse);
 			});
 		} catch (Throwable t) {
-			throwables.add(t);
+			// If an error occurred during request wrapping, it's possible a response was never written/communicated back to LifecycleInterceptor.
+			// Detect that here and inform LifecycleInterceptor accordingly.
+			logHandler.logError(format("An exception occurred during request wrapping while processing %s", requestHolder.get()), t);
 
-			try {
-				// In the event that an error occurs during processing of a LifecycleInterceptor method, for example
-				logHandler.logError(format("An exception occurred while processing %s", requestHolder.get()), t);
-				marshaledResponseHolder.set(responseMarshaler.forException(requestHolder.get(), t, resourceMethodHolder.get()));
-			} catch (Throwable t2) {
-				throwables.add(t2);
-				logHandler.logError(format("An exception occurred when writing a response while processing %s", requestHolder.get()), t2);
-				marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), t2));
+			// If we don't even have a response, create a failsafe
+			if (marshaledResponseHolder.get() == null)
+				marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), t));
+
+			if (!willStartResponseWritingCompleted.get()) {
+				try {
+					lifecycleInterceptor.willStartResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
+				} catch (Throwable t2) {
+					logHandler.logError(format("An exception occurred while invoking %s.willStartResponseWriting() when processing %s",
+							LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
+				}
 			}
-		} finally {
-			try {
-				lifecycleInterceptor.willStartResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
 
+			try {
 				Instant responseWriteStarted = Instant.now();
 
-				try {
-					marshaledResponseConsumer.accept(marshaledResponseHolder.get());
-
-					Instant responseWriteFinished = Instant.now();
-					Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
-
+				if (!didFinishResponseWritingCompleted.get()) {
 					try {
-						lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, null);
-					} catch (Throwable t) {
-						throwables.add(t);
-						logHandler.logError(format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
-								LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
-					}
-				} catch (Throwable t) {
-					throwables.add(t);
+						marshaledResponseConsumer.accept(marshaledResponseHolder.get());
 
-					Instant responseWriteFinished = Instant.now();
-					Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
+						Instant responseWriteFinished = Instant.now();
+						Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
 
-					try {
-						lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
+						try {
+							lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, null);
+						} catch (Throwable t2) {
+							throwables.add(t2);
+							logHandler.logError(format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
+									LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t2);
+						}
 					} catch (Throwable t2) {
 						throwables.add(t2);
-						logHandler.logError(format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
-								LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t2);
+
+						Instant responseWriteFinished = Instant.now();
+						Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
+
+						try {
+							lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
+						} catch (Throwable t3) {
+							throwables.add(t3);
+							logHandler.logError(format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
+									LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t2);
+						}
 					}
 				}
 			} finally {
-				try {
-					Instant processingFinished = Instant.now();
-					Duration processingDuration = Duration.between(processingStarted, processingFinished);
+				if (!didFinishRequestHandlingCompleted.get()) {
+					try {
+						Instant processingFinished = Instant.now();
+						Duration processingDuration = Duration.between(processingStarted, processingFinished);
 
-					lifecycleInterceptor.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
-				} catch (Throwable t) {
-					logHandler.logError(format("An exception occurred while invoking %s.didFinishRequestProcessing() when processing %s",
-							LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
+						lifecycleInterceptor.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
+					} catch (Throwable t2) {
+						logHandler.logError(format("An exception occurred while invoking %s.didFinishRequestProcessing() when processing %s",
+								LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t2);
+					}
 				}
 			}
 		}

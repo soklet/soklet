@@ -74,13 +74,22 @@ public interface LifecycleInterceptor {
 
 	default void interceptRequest(@Nonnull Request request,
 																@Nullable ResourceMethod resourceMethod,
-																@Nonnull Function<Request, MarshaledResponse> requestHandler,
-																@Nonnull Consumer<MarshaledResponse> responseHandler) {
+																@Nonnull Function<Request, MarshaledResponse> responseGenerator,
+																@Nonnull Consumer<MarshaledResponse> responseWriter) {
 		requireNonNull(request);
-		requireNonNull(requestHandler);
-		requireNonNull(responseHandler);
+		requireNonNull(responseGenerator);
+		requireNonNull(responseWriter);
 
-		MarshaledResponse marshaledResponse = requestHandler.apply(request);
-		responseHandler.accept(marshaledResponse);
+		MarshaledResponse marshaledResponse = responseGenerator.apply(request);
+		responseWriter.accept(marshaledResponse);
+	}
+
+	default void wrapRequest(@Nonnull Request request,
+													 @Nullable ResourceMethod resourceMethod,
+													 @Nonnull Runnable requestProcessor) {
+		requireNonNull(request);
+		requireNonNull(requestProcessor);
+
+		requestProcessor.run();
 	}
 }

@@ -508,10 +508,10 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
     @Override
     public void interceptRequest(@Nonnull Request request,
                                  @Nullable ResourceMethod resourceMethod,
-                                 @Nonnull Function<Request, MarshaledResponse> requestHandler,
-                                 @Nonnull Consumer<MarshaledResponse> responseHandler) {
+                                 @Nonnull Function<Request, MarshaledResponse> requestGenerator,
+                                 @Nonnull Consumer<MarshaledResponse> responseWriter) {
       // Similar to a Servlet Filter...let normal request processing finish
-      MarshaledResponse marshaledResponse = requestHandler.apply(request);
+      MarshaledResponse marshaledResponse = responseGenerator.apply(request);
 
       // Add a snazzy header to all responses before they are sent over the wire.
       // MarshaledResponse is immutable, so we use a copy-builder to mutate
@@ -521,7 +521,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
         }).finish();
 
       // Let downstream processing finish using our modified marshaledResponse
-      responseHandler.accept(marshaledResponse);
+      responseWriter.accept(marshaledResponse);
     }	
 
     @Override
@@ -796,8 +796,8 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
     @Override
     public void interceptRequest(@Nonnull Request request,
                                  @Nullable ResourceMethod resourceMethod,
-                                 @Nonnull Function<Request, MarshaledResponse> requestHandler,
-                                 @Nonnull Consumer<MarshaledResponse> responseHandler) {
+                                 @Nonnull Function<Request, MarshaledResponse> responseGenerator,
+                                 @Nonnull Consumer<MarshaledResponse> responseWriter) {
       // Look up account using JWT from the request
       ExampleAccount account = accountForRequest(request).orElse(null);
 
@@ -821,8 +821,8 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
       }      
 
       // Normal downstream processing
-      MarshaledResponse marshaledResponse = requestHandler.apply(request);
-      responseHandler.accept(marshaledResponse);
+      MarshaledResponse marshaledResponse = responseGenerator.apply(request);
+      responseWriter.accept(marshaledResponse);
     }
 
     // Pull the value from MyExampleJWTCookie and use it to authenticate
