@@ -37,7 +37,7 @@ public class DefaultIdGenerator implements IdGenerator {
 	static {
 		String idPrefix = "";
 
-		// IDs ultimately look like "192.168.4.75-10004" (or just "10004" if we can't detect host address)
+		// IDs ultimately look like "192.168.4.75-1234" (or just "1234" if we can't detect host address)
 		try {
 			String hostAddress = InetAddress.getLocalHost().getHostAddress();
 
@@ -62,7 +62,7 @@ public class DefaultIdGenerator implements IdGenerator {
 	private final AtomicLong idGenerator;
 
 	public DefaultIdGenerator() {
-		this(10_000L, 99_999_999L);
+		this(1L, 9_999_999L);
 	}
 
 	public DefaultIdGenerator(@Nonnull Long minimumId,
