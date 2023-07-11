@@ -363,8 +363,8 @@ Server server = new MicrohttpServer.Builder(8080 /* port */)
   // Vend an ExecutorService that is used to run our Soklet event loops
   .eventLoopExecutorServiceSupplier(() -> Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors()))
   // Vend an ExecutorService that is used to service HTTP requests.
-  // For Loom/Virtual Threads - it makes sense to have 1 virtual thread per request.
-  // For non-Loom operation - you will likely want a fixed-size pool of native threads.
+  // For Virtual Threads - it makes sense to have 1 virtual thread per request.
+  // For Native Threads - you will likely want a fixed-size pool.
   .requestHandlerExecutorServiceSupplier(() -> Executors.newVirtualThreadPerTaskExecutor())
   .build();
 
