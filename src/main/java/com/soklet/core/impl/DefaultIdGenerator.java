@@ -19,6 +19,7 @@ package com.soklet.core.impl;
 import com.soklet.core.IdGenerator;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.InetAddress;
 import java.util.concurrent.atomic.AtomicLong;
@@ -32,7 +33,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class DefaultIdGenerator implements IdGenerator {
 	@Nonnull
-	private static final String ID_PREFIX;
+	private static final String DEFAULT_ID_PREFIX;
 
 	static {
 		String idPrefix = "";
@@ -51,7 +52,7 @@ public class DefaultIdGenerator implements IdGenerator {
 			// Ignored
 		}
 
-		ID_PREFIX = idPrefix;
+		DEFAULT_ID_PREFIX = idPrefix;
 	}
 
 	@Nonnull
@@ -60,6 +61,8 @@ public class DefaultIdGenerator implements IdGenerator {
 	private final Long maximumId;
 	@Nonnull
 	private final AtomicLong idGenerator;
+	@Nonnull
+	private final String idPrefix;
 
 	public DefaultIdGenerator() {
 		this(1L, 9_999_999L);
@@ -67,6 +70,12 @@ public class DefaultIdGenerator implements IdGenerator {
 
 	public DefaultIdGenerator(@Nonnull Long minimumId,
 														@Nonnull Long maximumId) {
+		this(minimumId, maximumId, null);
+	}
+
+	public DefaultIdGenerator(@Nonnull Long minimumId,
+														@Nonnull Long maximumId,
+														@Nullable String idPrefix) {
 		requireNonNull(minimumId);
 		requireNonNull(maximumId);
 
@@ -79,8 +88,12 @@ public class DefaultIdGenerator implements IdGenerator {
 		if (minimumId >= maximumId)
 			throw new IllegalArgumentException(format("Minimum ID (%s) must be less than maximum ID (%s)", minimumId, maximumId));
 
+		if (idPrefix == null)
+			idPrefix = getDefaultIdPrefix();
+
 		this.minimumId = minimumId;
 		this.maximumId = maximumId;
+		this.idPrefix = idPrefix;
 		this.idGenerator = new AtomicLong(getMinimumId());
 	}
 
@@ -89,6 +102,11 @@ public class DefaultIdGenerator implements IdGenerator {
 	public Object generateId() {
 		return format("%s%s", getIdPrefix(), getIdGenerator().getAndAccumulate(getMaximumId(),
 				(currentId, ignored) -> currentId < getMaximumId() ? ++currentId : getMinimumId()));
+	}
+
+	@Nonnull
+	protected String getDefaultIdPrefix() {
+		return DEFAULT_ID_PREFIX;
 	}
 
 	@Nonnull
@@ -108,6 +126,6 @@ public class DefaultIdGenerator implements IdGenerator {
 
 	@Nonnull
 	protected String getIdPrefix() {
-		return ID_PREFIX;
+		return this.idPrefix;
 	}
 }

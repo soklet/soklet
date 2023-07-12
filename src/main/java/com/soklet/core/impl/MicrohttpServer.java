@@ -158,7 +158,7 @@ public class MicrohttpServer implements Server {
 			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
 		};
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
-			String threadNamePrefix = "request-handler";
+			String threadNamePrefix = "request-handler-";
 
 			if (Utilities.virtualThreadsAvailable())
 				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
