@@ -153,15 +153,15 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		}
 
 		try {
-			lifecycleInterceptor.didStartRequestHandling(requestHolder.get(), resourceMethodHolder.get());
-		} catch (Throwable t) {
-			logHandler.logError(format("An exception occurred while invoking %s#didStartRequestHandling when processing %s",
-					LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
-			throwables.add(t);
-		}
-
-		try {
 			lifecycleInterceptor.wrapRequest(request, resourceMethodHolder.get(), () -> {
+				try {
+					lifecycleInterceptor.didStartRequestHandling(requestHolder.get(), resourceMethodHolder.get());
+				} catch (Throwable t) {
+					logHandler.logError(format("An exception occurred while invoking %s#didStartRequestHandling when processing %s",
+							LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
+					throwables.add(t);
+				}
+
 				try {
 					lifecycleInterceptor.interceptRequest(request, resourceMethodHolder.get(), (interceptorRequest) -> {
 						requestHolder.set(interceptorRequest);
