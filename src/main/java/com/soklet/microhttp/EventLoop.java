@@ -1,5 +1,7 @@
 package com.soklet.microhttp;
 
+import static com.soklet.microhttp.CloseUtils.closeQuietly;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.StandardSocketOptions;
@@ -30,7 +32,7 @@ public class EventLoop {
     private final Thread thread;
 
     public EventLoop(Handler handler) throws IOException {
-        this(OptionsBuilder.newBuilder().build(), handler);
+        this(Options.builder().build(), handler);
     }
 
     public EventLoop(Options options, Handler handler) throws IOException {
@@ -85,6 +87,9 @@ public class EventLoop {
                 logger.log(e, new LogEntry("event", "event_loop_terminate"));
             }
             stop.set(true); // stop the world on critical error
+        } finally {
+            closeQuietly(selector);
+            closeQuietly(serverSocketChannel);
         }
     }
 

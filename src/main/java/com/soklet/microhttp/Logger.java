@@ -2,6 +2,8 @@ package com.soklet.microhttp;
 
 /**
  * Simple logging abstraction that operates on {@link LogEntry} instances.
+ *
+ * @see NoopLogger for using a logger that is not enabled
  */
 public interface Logger {
 
