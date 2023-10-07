@@ -23,7 +23,7 @@ The Java web ecosystem is missing a solution that is dependency-free but offers 
 * Near-instant startup
 * Zero dependencies
 * Emphasis on "pluggability"
-* Prefer immutability
+* Immutability/thread-safety
 * Small, comprehensible codebase
 * Encourage automated testing
 
