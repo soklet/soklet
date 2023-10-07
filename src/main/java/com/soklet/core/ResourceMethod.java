@@ -49,6 +49,25 @@ public class ResourceMethod {
 		this.method = method;
 	}
 
+	/**
+	 * Convenience constructor for pairing a request with a method.
+	 * <p>
+	 * Useful if you already have a request available to you at runtime and want to express
+	 * "this is the method I'd like to associate it with".
+	 *
+	 * @param request the request from which to extract HTTP method and path information
+	 * @param method  the method to pair with the request
+	 */
+	public ResourceMethod(@Nonnull Request request,
+												@Nonnull Method method) {
+		requireNonNull(request);
+		requireNonNull(method);
+
+		this.httpMethod = request.getHttpMethod();
+		this.resourcePath = ResourcePath.fromPathInstance(request.getPath());
+		this.method = method;
+	}
+
 	@Override
 	public String toString() {
 		return format("%s{httpMethod=%s, resourcePath=%s, method=%s}", getClass().getSimpleName(),
