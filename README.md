@@ -25,7 +25,7 @@ The Java web ecosystem is missing a solution that is dependency-free but offers 
 * Emphasis on "pluggability"
 * Immutability/thread-safety
 * Small, comprehensible codebase
-* Encourage automated testing
+* Amenable to automated testing
 
 ### Design Non-Goals
 

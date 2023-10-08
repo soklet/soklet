@@ -27,6 +27,7 @@ import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.Request;
+import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourcePath;
@@ -35,6 +36,7 @@ import com.soklet.exception.BadRequestException;
 import com.soklet.exception.IllegalFormParameterException;
 import com.soklet.exception.IllegalPathParameterException;
 import com.soklet.exception.IllegalQueryParameterException;
+import com.soklet.exception.IllegalRequestBodyException;
 import com.soklet.exception.IllegalRequestCookieException;
 import com.soklet.exception.IllegalRequestHeaderException;
 import com.soklet.exception.MissingFormParameterException;
@@ -71,14 +73,19 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	private final InstanceProvider instanceProvider;
 	@Nonnull
 	private final ValueConverterRegistry valueConverterRegistry;
+	@Nonnull
+	private final RequestBodyMarshaler requestBodyMarshaler;
 
 	public DefaultResourceMethodParameterProvider(@Nonnull InstanceProvider instanceProvider,
-																								@Nonnull ValueConverterRegistry valueConverterRegistry) {
+																								@Nonnull ValueConverterRegistry valueConverterRegistry,
+																								@Nonnull RequestBodyMarshaler requestBodyMarshaler) {
 		requireNonNull(instanceProvider);
 		requireNonNull(valueConverterRegistry);
+		requireNonNull(requestBodyMarshaler);
 
 		this.instanceProvider = instanceProvider;
 		this.valueConverterRegistry = valueConverterRegistry;
+		this.requestBodyMarshaler = requestBodyMarshaler;
 	}
 
 	@Nonnull
@@ -179,12 +186,6 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			boolean requestBodyExpectsString = String.class.equals(parameterType.getNormalizedType());
 			boolean requestBodyExpectsByteArray = byte[].class.equals(parameterType.getNormalizedType());
 
-			if (!requestBodyExpectsString && !requestBodyExpectsByteArray)
-				throw new IllegalStateException(format("@%s-annotated parameters can only be of the following types: %s, %s<%s>, %s[], %s<%s[]>",
-						RequestBody.class.getSimpleName(), String.class.getSimpleName(), Optional.class.getSimpleName(),
-						String.class.getSimpleName(), byte.class.getSimpleName(), Optional.class.getSimpleName(),
-						byte.class.getSimpleName()));
-
 			if (requestBodyExpectsString) {
 				String requestBodyAsString = request.getBodyAsString().orElse(null);
 
@@ -206,7 +207,25 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 
 				return requestBodyAsByteArray;
 			} else {
-				throw new IllegalStateException();
+				// Let the request body marshaler try to handle it
+				Object requestBodyObject;
+				Type requestBodyType = parameterType.getNormalizedType();
+
+				try {
+					requestBodyObject = getRequestBodyMarshaler().marshalRequestBody(request, requestBodyType);
+				} catch (IllegalRequestBodyException e) {
+					throw e;
+				} catch (Exception e) {
+					throw new IllegalRequestBodyException(format("Unable to marshal request body to %s", requestBodyType), e);
+				}
+
+				if (parameterType.isOptional())
+					return Optional.ofNullable(requestBodyObject);
+
+				if (requestBodyObject == null)
+					throw new MissingRequestBodyException("A request body is required for this resource.");
+
+				return requestBodyObject;
 			}
 		}
 
@@ -489,6 +508,11 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	@Nonnull
 	protected ValueConverterRegistry getValueConverterRegistry() {
 		return this.valueConverterRegistry;
+	}
+
+	@Nonnull
+	protected RequestBodyMarshaler getRequestBodyMarshaler() {
+		return this.requestBodyMarshaler;
 	}
 
 	@FunctionalInterface

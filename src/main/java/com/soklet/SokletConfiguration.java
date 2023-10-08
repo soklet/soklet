@@ -21,6 +21,7 @@ import com.soklet.core.CorsAuthorizer;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogHandler;
+import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.ResponseMarshaler;
@@ -29,6 +30,7 @@ import com.soklet.core.impl.DefaultCorsAuthorizer;
 import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultLifecycleInterceptor;
 import com.soklet.core.impl.DefaultLogHandler;
+import com.soklet.core.impl.DefaultRequestBodyMarshaler;
 import com.soklet.core.impl.DefaultResourceMethodParameterProvider;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.DefaultResponseMarshaler;
@@ -49,6 +51,8 @@ public class SokletConfiguration {
 	private final InstanceProvider instanceProvider;
 	@Nonnull
 	private final ValueConverterRegistry valueConverterRegistry;
+	@Nonnull
+	private final RequestBodyMarshaler requestBodyMarshaler;
 	@Nonnull
 	private final ResourceMethodResolver resourceMethodResolver;
 	@Nonnull
@@ -71,8 +75,9 @@ public class SokletConfiguration {
 		this.logHandler = builder.logHandler != null ? builder.logHandler : new DefaultLogHandler();
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : new DefaultInstanceProvider();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : new ValueConverterRegistry();
+		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : new DefaultRequestBodyMarshaler(getValueConverterRegistry());
 		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : new DefaultResourceMethodResolver();
-		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(getInstanceProvider(), getValueConverterRegistry());
+		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(getInstanceProvider(), getValueConverterRegistry(), getRequestBodyMarshaler());
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : new DefaultResponseMarshaler();
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : new DefaultLifecycleInterceptor();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : new DefaultCorsAuthorizer();
@@ -86,6 +91,11 @@ public class SokletConfiguration {
 	@Nonnull
 	public ValueConverterRegistry getValueConverterRegistry() {
 		return this.valueConverterRegistry;
+	}
+
+	@Nonnull
+	public RequestBodyMarshaler getRequestBodyMarshaler() {
+		return this.requestBodyMarshaler;
 	}
 
 	@Nonnull
@@ -139,6 +149,8 @@ public class SokletConfiguration {
 		@Nullable
 		private ValueConverterRegistry valueConverterRegistry;
 		@Nullable
+		private RequestBodyMarshaler requestBodyMarshaler;
+		@Nullable
 		private ResourceMethodResolver resourceMethodResolver;
 		@Nullable
 		private ResourceMethodParameterProvider resourceMethodParameterProvider;
@@ -166,6 +178,12 @@ public class SokletConfiguration {
 		@Nonnull
 		public Builder valueConverterRegistry(@Nullable ValueConverterRegistry valueConverterRegistry) {
 			this.valueConverterRegistry = valueConverterRegistry;
+			return this;
+		}
+
+		@Nonnull
+		public Builder requestBodyMarshaler(@Nullable RequestBodyMarshaler requestBodyMarshaler) {
+			this.requestBodyMarshaler = requestBodyMarshaler;
 			return this;
 		}
 
