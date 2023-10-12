@@ -25,6 +25,7 @@ import com.soklet.annotation.RequestHeader;
 import com.soklet.converter.ValueConversionException;
 import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
+import com.soklet.core.Cookie;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.Request;
 import com.soklet.core.RequestBodyMarshaler;
@@ -52,7 +53,6 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.net.HttpCookie;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -361,17 +361,17 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		String name = extractParameterName(resourceMethod, parameter, requestCookie, requestCookie.value());
 
 		List<String> values = new ArrayList<>();
-		List<HttpCookie> valuesMetadata = new ArrayList<>();
+		List<Cookie> valuesMetadata = new ArrayList<>();
 
-		for (HttpCookie cookie : request.getCookies()) {
+		for (Cookie cookie : request.getCookies()) {
 			if (name.equals(cookie.getName())) {
-				values.add(cookie.getValue());
+				values.add(cookie.getValue().orElse(null));
 				valuesMetadata.add(cookie);
 			}
 		}
 
-		// Special hack to return HttpCookie instances directly if the parameter wants an HttpCookie
-		String cookieTypeName = HttpCookie.class.getTypeName();
+		// Special hack to return Cookie instances directly if the parameter wants a Cookie
+		String cookieTypeName = Cookie.class.getTypeName();
 		boolean isCookieScalarType = cookieTypeName.equals(parameterType.getNormalizedType().getTypeName());
 		boolean isCookieListType = parameterType.getListElementType().isPresent()
 				&& cookieTypeName.equals(parameterType.getListElementType().get().getTypeName());
@@ -382,7 +382,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				returnWholeCookies, "request cookie", (message, ignored) -> {
 					return new MissingRequestCookieException(message, name);
 				}, (message, cause, ignored, value, valueMetadatum) -> {
-					return new IllegalRequestCookieException(message, cause, (HttpCookie) valueMetadatum);
+					return new IllegalRequestCookieException(message, cause, (Cookie) valueMetadatum);
 				});
 	}
 

@@ -16,6 +16,7 @@
 
 package com.soklet.core.impl;
 
+import com.soklet.core.Cookie;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.LogHandler;
 import com.soklet.core.MarshaledResponse;
@@ -38,10 +39,10 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.HttpCookie;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -387,20 +388,27 @@ public class MicrohttpServer implements Server {
 	}
 
 	@Nonnull
-	protected Set<HttpCookie> cookiesFromMicrohttpRequest(@Nonnull com.soklet.microhttp.Request microHttpRequest) {
+	protected Set<Cookie> cookiesFromMicrohttpRequest(@Nonnull com.soklet.microhttp.Request microHttpRequest) {
 		requireNonNull(microHttpRequest);
 
-		String cookieHeaderValue = trimAggressivelyToNull(microHttpRequest.header("Cookie"));
+		Set<Cookie> cookies = new HashSet<>();
 
-		if (cookieHeaderValue != null) {
-			try {
-				return new HashSet<>(HttpCookie.parse(cookieHeaderValue));
-			} catch (Exception ignored) {
-				// Bad cookies - ignore them
+		// Can be multiple cookies in the same `Cookie` header
+		for (Header header : microHttpRequest.headers()) {
+			if (header.name().equalsIgnoreCase("Cookie")) {
+				String cookieHeaderValue = trimAggressivelyToNull(header.value());
+
+				if (cookieHeaderValue != null) {
+					try {
+						cookies.addAll(Cookie.fromSetCookieHeaderRepresentation(cookieHeaderValue));
+					} catch (Exception ignored) {
+						// Bad cookies - ignore them
+					}
+				}
 			}
 		}
 
-		return Set.of();
+		return Collections.unmodifiableSet(cookies);
 	}
 
 	@Nonnull
@@ -418,11 +426,11 @@ public class MicrohttpServer implements Server {
 
 		// Cookie headers are split into multiple instances of Set-Cookie.
 		// Force natural ordering for consistent output.
-		List<HttpCookie> sortedCookies = new ArrayList<>(marshaledResponse.getCookies());
+		List<Cookie> sortedCookies = new ArrayList<>(marshaledResponse.getCookies());
 		sortedCookies.sort((cookie1, cookie2) -> cookie1.getName().compareTo(cookie2.getName()));
 
-		for (HttpCookie httpCookie : sortedCookies)
-			headers.add(new Header("Set-Cookie", httpCookie.toString()));
+		for (Cookie cookie : sortedCookies)
+			headers.add(new Header("Set-Cookie", cookie.toSetCookieHeaderRepresentation()));
 
 		return new com.soklet.microhttp.Response(marshaledResponse.getStatusCode(),
 				marshaledResponse.getReasonPhrase(),

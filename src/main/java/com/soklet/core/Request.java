@@ -22,7 +22,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.net.HttpCookie;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
@@ -66,7 +65,7 @@ public class Request {
 	@Nonnull
 	private final String path;
 	@Nonnull
-	private final Set<HttpCookie> cookies;
+	private final Set<Cookie> cookies;
 	@Nonnull
 	private final Map<String, Set<String>> queryParameters;
 	@Nonnull
@@ -162,7 +161,7 @@ public class Request {
 	}
 
 	@Nonnull
-	public Set<HttpCookie> getCookies() {
+	public Set<Cookie> getCookies() {
 		return this.cookies;
 	}
 
@@ -239,9 +238,11 @@ public class Request {
 	}
 
 	@Nonnull
-	public Optional<HttpCookie> getCookieValue(@Nonnull String name) {
+	public Optional<Cookie> getCookie(@Nonnull String name) {
 		requireNonNull(name);
-		return getCookies().stream().findFirst();
+		return getCookies().stream()
+				.filter(cookie -> cookie.getName().equals(name))
+				.findFirst();
 	}
 
 	@Nonnull
@@ -289,7 +290,7 @@ public class Request {
 		@Nullable
 		private IdGenerator idGenerator;
 		@Nullable
-		private Set<HttpCookie> cookies;
+		private Set<Cookie> cookies;
 		@Nullable
 		private Map<String, Set<String>> headers;
 		@Nullable
@@ -317,7 +318,7 @@ public class Request {
 		}
 
 		@Nonnull
-		public Builder cookies(@Nullable Set<HttpCookie> cookies) {
+		public Builder cookies(@Nullable Set<Cookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
@@ -405,7 +406,7 @@ public class Request {
 		}
 
 		@Nonnull
-		public Copier cookies(@Nonnull Consumer<Set<HttpCookie>> cookiesConsumer) {
+		public Copier cookies(@Nonnull Consumer<Set<Cookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
 			cookiesConsumer.accept(builder.cookies);

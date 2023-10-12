@@ -20,7 +20,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.net.HttpCookie;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -44,7 +43,7 @@ public class MarshaledResponse {
 	@Nonnull
 	private final Map<String, Set<String>> headers;
 	@Nonnull
-	private final Set<HttpCookie> cookies;
+	private final Set<Cookie> cookies;
 	@Nullable
 	private final byte[] body;
 
@@ -74,27 +73,27 @@ public class MarshaledResponse {
 
 	@Nonnull
 	public Integer getStatusCode() {
-		return statusCode;
+		return this.statusCode;
 	}
 
 	@Nonnull
 	public String getReasonPhrase() {
-		return reasonPhrase;
+		return this.reasonPhrase;
 	}
 
 	@Nonnull
 	public Map<String, Set<String>> getHeaders() {
-		return headers;
+		return this.headers;
 	}
 
 	@Nonnull
-	public Set<HttpCookie> getCookies() {
-		return cookies;
+	public Set<Cookie> getCookies() {
+		return this.cookies;
 	}
 
 	@Nonnull
 	public Optional<byte[]> getBody() {
-		return Optional.ofNullable(body);
+		return Optional.ofNullable(this.body);
 	}
 
 	/**
@@ -109,7 +108,7 @@ public class MarshaledResponse {
 		@Nonnull
 		private final Integer statusCode;
 		@Nullable
-		private Set<HttpCookie> cookies;
+		private Set<Cookie> cookies;
 		@Nullable
 		private Map<String, Set<String>> headers;
 		@Nullable
@@ -121,7 +120,7 @@ public class MarshaledResponse {
 		}
 
 		@Nonnull
-		public Builder cookies(@Nullable Set<HttpCookie> cookies) {
+		public Builder cookies(@Nullable Set<Cookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
@@ -186,7 +185,7 @@ public class MarshaledResponse {
 		}
 
 		@Nonnull
-		public Copier cookies(@Nonnull Consumer<Set<HttpCookie>> cookiesConsumer) {
+		public Copier cookies(@Nonnull Consumer<Set<Cookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
 			cookiesConsumer.accept(builder.cookies);

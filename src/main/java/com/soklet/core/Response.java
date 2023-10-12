@@ -20,7 +20,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.net.HttpCookie;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -42,7 +41,7 @@ public class Response {
 	@Nonnull
 	private final Integer statusCode;
 	@Nonnull
-	private final Set<HttpCookie> cookies;
+	private final Set<Cookie> cookies;
 	@Nonnull
 	private final Map<String, Set<String>> headers;
 	@Nullable
@@ -93,7 +92,7 @@ public class Response {
 	}
 
 	@Nonnull
-	public Set<HttpCookie> getCookies() {
+	public Set<Cookie> getCookies() {
 		return this.cookies;
 	}
 
@@ -119,7 +118,7 @@ public class Response {
 		@Nonnull
 		private final Integer statusCode;
 		@Nullable
-		private Set<HttpCookie> cookies;
+		private Set<Cookie> cookies;
 		@Nullable
 		private Map<String, Set<String>> headers;
 		@Nullable
@@ -144,7 +143,7 @@ public class Response {
 		}
 
 		@Nonnull
-		public Builder cookies(@Nullable Set<HttpCookie> cookies) {
+		public Builder cookies(@Nullable Set<Cookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
@@ -209,7 +208,7 @@ public class Response {
 		}
 
 		@Nonnull
-		public Copier cookies(@Nonnull Consumer<Set<HttpCookie>> cookiesConsumer) {
+		public Copier cookies(@Nonnull Consumer<Set<Cookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
 			cookiesConsumer.accept(builder.cookies);

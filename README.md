@@ -150,7 +150,7 @@ public class ExampleResource {
 
   // The @FormParameter annotation supports application/x-www-form-urlencoded values.
   //
-  // @RequestCookie exposes java.net.HttpCookie representations of cookies.
+  // @RequestCookie exposes entire cookies.
   //
   // The @RequestBody annotation can be applied to any parameter of type
   // String or byte[].
@@ -168,7 +168,7 @@ public class ExampleResource {
   public Response formPost(Request request,
                            @RequestBody String requestBody, 
                            @FormParameter("attr") Optional<String> attribute,
-                           @RequestCookie("gat") HttpCookie analyticsCookie,
+                           @RequestCookie("gat") Cookie analyticsCookie,
                            MyExampleJsonParser jsonParser,
                            MyExampleBackend backend) {
     // Assemble some data to pass to our example backend
@@ -181,7 +181,9 @@ public class ExampleResource {
     // The response builder has a convenience shorthand for performing redirects.
     // You could alternatively do this "by hand" by setting HTTP status and headers appropriately.
     return new Response.Builder(RedirectType.HTTP_307_TEMPORARY_REDIRECT, "/")
-      .cookies(Set.of(new HttpCookie("post-attribute-value", attribute.orElse("none"))))
+      .cookies(Set.of(
+        new Cookie.Builder("post-attribute-value", attribute.orElse("none")).build()
+      ))
       .build();
   }
 }
