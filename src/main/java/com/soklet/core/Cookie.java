@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Revetware LLC.
+ * Copyright 2022-2023 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -173,6 +173,78 @@ public class Cookie {
 		return toSetCookieHeaderRepresentation();
 	}
 
+	@Nonnull
+	public String getName() {
+		return this.name;
+	}
+
+	@Nonnull
+	public Optional<String> getValue() {
+		return Optional.ofNullable(this.value);
+	}
+
+	@Nonnull
+	public Optional<Duration> getMaxAge() {
+		return Optional.ofNullable(this.maxAge);
+	}
+
+	@Nonnull
+	public Optional<String> getDomain() {
+		return Optional.ofNullable(this.domain);
+	}
+
+	@Nonnull
+	public Optional<String> getPath() {
+		return Optional.ofNullable(this.path);
+	}
+
+	@Nonnull
+	public Boolean getSecure() {
+		return this.secure;
+	}
+
+	@Nonnull
+	public Boolean getHttpOnly() {
+		return this.httpOnly;
+	}
+
+	@Nonnull
+	public Optional<SameSite> getSameSite() {
+		return Optional.ofNullable(this.sameSite);
+	}
+
+	public enum SameSite {
+		STRICT("Strict"),
+		LAX("Lax"),
+		NONE("None");
+
+		@Nonnull
+		private final String headerRepresentation;
+
+		SameSite(@Nonnull String headerRepresentation) {
+			requireNonNull(headerRepresentation);
+			this.headerRepresentation = headerRepresentation;
+		}
+
+		@Nonnull
+		public static Optional<SameSite> fromHeaderRepresentation(@Nonnull String headerRepresentation) {
+			requireNonNull(headerRepresentation);
+
+			headerRepresentation = headerRepresentation.trim();
+
+			for (SameSite sameSite : values())
+				if (headerRepresentation.equalsIgnoreCase(sameSite.getHeaderRepresentation()))
+					return Optional.of(sameSite);
+
+			return Optional.empty();
+		}
+
+		@Nonnull
+		public String getHeaderRepresentation() {
+			return this.headerRepresentation;
+		}
+	}
+
 	/**
 	 * Builder used to construct instances of {@link Cookie}.
 	 * <p>
@@ -245,38 +317,6 @@ public class Cookie {
 		@Nonnull
 		public Cookie build() {
 			return new Cookie(this);
-		}
-	}
-
-	public enum SameSite {
-		STRICT("Strict"),
-		LAX("Lax"),
-		NONE("None");
-
-		@Nonnull
-		private final String headerRepresentation;
-
-		SameSite(@Nonnull String headerRepresentation) {
-			requireNonNull(headerRepresentation);
-			this.headerRepresentation = headerRepresentation;
-		}
-
-		@Nonnull
-		public static Optional<SameSite> fromHeaderRepresentation(@Nonnull String headerRepresentation) {
-			requireNonNull(headerRepresentation);
-
-			headerRepresentation = headerRepresentation.trim();
-
-			for (SameSite sameSite : values())
-				if (headerRepresentation.equalsIgnoreCase(sameSite.getHeaderRepresentation()))
-					return Optional.of(sameSite);
-
-			return Optional.empty();
-		}
-
-		@Nonnull
-		public String getHeaderRepresentation() {
-			return this.headerRepresentation;
 		}
 	}
 
@@ -385,45 +425,5 @@ public class Cookie {
 				}
 			}
 		}
-	}
-
-	@Nonnull
-	public String getName() {
-		return this.name;
-	}
-
-	@Nonnull
-	public Optional<String> getValue() {
-		return Optional.ofNullable(this.value);
-	}
-
-	@Nonnull
-	public Optional<Duration> getMaxAge() {
-		return Optional.ofNullable(this.maxAge);
-	}
-
-	@Nonnull
-	public Optional<String> getDomain() {
-		return Optional.ofNullable(this.domain);
-	}
-
-	@Nonnull
-	public Optional<String> getPath() {
-		return Optional.ofNullable(this.path);
-	}
-
-	@Nonnull
-	public Boolean getSecure() {
-		return this.secure;
-	}
-
-	@Nonnull
-	public Boolean getHttpOnly() {
-		return this.httpOnly;
-	}
-
-	@Nonnull
-	public Optional<SameSite> getSameSite() {
-		return Optional.ofNullable(this.sameSite);
 	}
 }
