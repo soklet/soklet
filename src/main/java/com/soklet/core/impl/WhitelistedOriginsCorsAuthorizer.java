@@ -16,12 +16,12 @@
 
 package com.soklet.core.impl;
 
+import com.soklet.core.Cors;
 import com.soklet.core.CorsAuthorizer;
 import com.soklet.core.CorsPreflightResponse;
 import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
-import com.soklet.core.Request.Cors;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;

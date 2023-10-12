@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.core.Cors;
 import com.soklet.core.CorsAuthorizer;
 import com.soklet.core.CorsPreflightResponse;
 import com.soklet.core.CorsResponse;
@@ -25,7 +26,6 @@ import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogHandler;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
-import com.soklet.core.Request.Cors;
 import com.soklet.core.RequestHandler;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
