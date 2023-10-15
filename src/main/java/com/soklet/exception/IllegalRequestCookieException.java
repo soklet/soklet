@@ -16,11 +16,10 @@
 
 package com.soklet.exception;
 
-import com.soklet.core.Cookie;
-
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -30,23 +29,34 @@ import static java.util.Objects.requireNonNull;
 @NotThreadSafe
 public class IllegalRequestCookieException extends BadRequestException {
 	@Nonnull
-	private final Cookie cookie;
+	private final String name;
+	@Nullable
+	private final String value;
 
 	public IllegalRequestCookieException(@Nullable String message,
-																			 @Nonnull Cookie cookie) {
+																			 @Nonnull String name,
+																			 @Nullable String value) {
 		super(message);
-		this.cookie = requireNonNull(cookie);
+		this.name = requireNonNull(name);
+		this.value = value;
 	}
 
 	public IllegalRequestCookieException(@Nullable String message,
 																			 @Nullable Throwable cause,
-																			 @Nonnull Cookie cookie) {
+																			 @Nonnull String name,
+																			 @Nullable String value) {
 		super(message, cause);
-		this.cookie = requireNonNull(cookie);
+		this.name = requireNonNull(name);
+		this.value = value;
 	}
 
 	@Nonnull
-	public Cookie getCookie() {
-		return this.cookie;
+	public String getName() {
+		return this.name;
+	}
+
+	@Nonnull
+	public Optional<String> getValue() {
+		return Optional.ofNullable(this.value);
 	}
 }

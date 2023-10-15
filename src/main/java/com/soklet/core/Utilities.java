@@ -24,6 +24,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
+import java.net.HttpCookie;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -235,6 +236,39 @@ public final class Utilities {
 		}
 
 		return queryParameters;
+	}
+
+	@Nonnull
+	public static Map<String, Set<String>> extractCookiesFromHeaders(@Nonnull Map<String, Set<String>> headers) {
+		requireNonNull(headers);
+
+		// Cookie names are case-sensitive *in practice*, do not need case-insensitive map
+		Map<String, Set<String>> cookies = new HashMap<>();
+
+		for (Map.Entry<String, Set<String>> entry : headers.entrySet()) {
+			if (entry.getKey().equals("Cookie")) {
+				Set<String> values = entry.getValue();
+
+				for (String value : values) {
+					// Note: while this parser handles Set-Cookie (response) headers,
+					// because Cookie (request) header is a subset of those, it will work for our purposes.
+					List<HttpCookie> httpCookies = HttpCookie.parse(value);
+
+					for (HttpCookie httpCookie : httpCookies) {
+						Set<String> cookieValues = cookies.get(httpCookie.getName());
+
+						if (cookieValues == null) {
+							cookieValues = new HashSet<>();
+							cookies.put(httpCookie.getName(), cookieValues);
+						}
+
+						cookieValues.add(httpCookie.getValue());
+					}
+				}
+			}
+		}
+
+		return cookies;
 	}
 
 	@Nonnull

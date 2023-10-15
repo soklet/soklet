@@ -25,7 +25,6 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -62,7 +61,7 @@ public class Request {
 	@Nonnull
 	private final String path;
 	@Nonnull
-	private final Set<Cookie> cookies;
+	private final Map<String, Set<String>> cookies;
 	@Nonnull
 	private final Map<String, Set<String>> queryParameters;
 	@Nonnull
@@ -88,7 +87,6 @@ public class Request {
 		this.httpMethod = builder.httpMethod;
 		this.uri = builder.uri;
 		this.path = Utilities.normalizedPathForUrl(builder.uri);
-		this.cookies = builder.cookies == null ? Set.of() : Set.copyOf(builder.cookies);
 		this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(builder.uri));
 
 		// Header names are case-insensitive.  Enforce that here with a special map
@@ -98,6 +96,7 @@ public class Request {
 			caseInsensitiveHeaders.putAll(builder.headers);
 
 		this.headers = Collections.unmodifiableMap(caseInsensitiveHeaders);
+		this.cookies = Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(this.headers));
 		this.cors = Cors.fromHeaders(this.httpMethod, this.headers).orElse(null);
 		this.body = builder.body;
 	}
@@ -158,7 +157,7 @@ public class Request {
 	}
 
 	@Nonnull
-	public Set<Cookie> getCookies() {
+	public Map<String, Set<String>> getCookies() {
 		return this.cookies;
 	}
 
@@ -235,11 +234,9 @@ public class Request {
 	}
 
 	@Nonnull
-	public Optional<Cookie> getCookie(@Nonnull String name) {
+	public Optional<String> getCookie(@Nonnull String name) {
 		requireNonNull(name);
-		return getCookies().stream()
-				.filter(cookie -> cookie.getName().equals(name))
-				.findFirst();
+		return singleValueForName(name, getCookies());
 	}
 
 	@Nonnull
@@ -287,8 +284,6 @@ public class Request {
 		@Nullable
 		private IdGenerator idGenerator;
 		@Nullable
-		private Set<Cookie> cookies;
-		@Nullable
 		private Map<String, Set<String>> headers;
 		@Nullable
 		private byte[] body;
@@ -311,12 +306,6 @@ public class Request {
 		@Nonnull
 		public Builder idGenerator(@Nullable IdGenerator idGenerator) {
 			this.idGenerator = idGenerator;
-			return this;
-		}
-
-		@Nonnull
-		public Builder cookies(@Nullable Set<Cookie> cookies) {
-			this.cookies = cookies;
 			return this;
 		}
 
@@ -356,7 +345,6 @@ public class Request {
 			this.builder = new Builder(request.getHttpMethod(), request.getUri())
 					.id(request.getId())
 					.headers(new HashMap<>(request.getHeaders()))
-					.cookies(new HashSet<>(request.getCookies()))
 					.body(request.getBody().orElse(null));
 		}
 
@@ -367,7 +355,6 @@ public class Request {
 			this.builder = new Builder(httpMethodFunction.apply(builder.httpMethod), builder.uri)
 					.id(builder.id)
 					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
-					.cookies(builder.cookies == null ? null : new HashSet<>(builder.cookies))
 					.body(builder.body);
 
 			return this;
@@ -380,7 +367,6 @@ public class Request {
 			this.builder = new Builder(builder.httpMethod, uriFunction.apply(builder.uri))
 					.id(builder.id)
 					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
-					.cookies(builder.cookies == null ? null : new HashSet<>(builder.cookies))
 					.body(builder.body);
 
 			return this;
@@ -399,14 +385,6 @@ public class Request {
 			requireNonNull(headersConsumer);
 
 			headersConsumer.accept(builder.headers);
-			return this;
-		}
-
-		@Nonnull
-		public Copier cookies(@Nonnull Consumer<Set<Cookie>> cookiesConsumer) {
-			requireNonNull(cookiesConsumer);
-
-			cookiesConsumer.accept(builder.cookies);
 			return this;
 		}
 

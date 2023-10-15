@@ -25,7 +25,6 @@ import com.soklet.annotation.RequestHeader;
 import com.soklet.converter.ValueConversionException;
 import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
-import com.soklet.core.Cookie;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.Request;
 import com.soklet.core.RequestBodyMarshaler;
@@ -359,31 +358,17 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(parameterType);
 
 		String name = extractParameterName(resourceMethod, parameter, requestCookie, requestCookie.value());
+		Set<String> values = request.getCookies().get(name);
 
-		List<String> values = new ArrayList<>();
-		List<Cookie> valuesMetadata = new ArrayList<>();
+		if (values == null)
+			values = Set.of();
 
-		for (Cookie cookie : request.getCookies()) {
-			if (name.equals(cookie.getName())) {
-				values.add(cookie.getValue().orElse(null));
-				valuesMetadata.add(cookie);
-			}
-		}
-
-		// Special hack to return Cookie instances directly if the parameter wants a Cookie
-		String cookieTypeName = Cookie.class.getTypeName();
-		boolean isCookieScalarType = cookieTypeName.equals(parameterType.getNormalizedType().getTypeName());
-		boolean isCookieListType = parameterType.getListElementType().isPresent()
-				&& cookieTypeName.equals(parameterType.getListElementType().get().getTypeName());
-
-		boolean returnWholeCookies = isCookieScalarType || isCookieListType;
-
-		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, values, valuesMetadata,
-				returnWholeCookies, "request cookie", (message, ignored) -> {
-					return new MissingRequestCookieException(message, name);
-				}, (message, cause, ignored, value, valueMetadatum) -> {
-					return new IllegalRequestCookieException(message, cause, (Cookie) valueMetadatum);
-				});
+		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, new ArrayList<>(values), "request cookie", (
+				message, ignored) -> {
+			return new MissingRequestCookieException(message, name);
+		}, (message, cause, ignored, value, valueMetadatum) -> {
+			return new IllegalRequestCookieException(message, cause, name, value);
+		});
 	}
 
 	@Nonnull

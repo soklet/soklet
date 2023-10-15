@@ -42,7 +42,6 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -229,7 +228,6 @@ public class MicrohttpServer implements Server {
 
 						Request request = new Request.Builder(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), microhttpRequest.uri())
 								.headers(headersFromMicrohttpRequest(microhttpRequest))
-								.cookies(cookiesFromMicrohttpRequest(microhttpRequest))
 								.body(body)
 								.build();
 
@@ -385,30 +383,6 @@ public class MicrohttpServer implements Server {
 		}
 
 		return headers;
-	}
-
-	@Nonnull
-	protected Set<Cookie> cookiesFromMicrohttpRequest(@Nonnull com.soklet.microhttp.Request microHttpRequest) {
-		requireNonNull(microHttpRequest);
-
-		Set<Cookie> cookies = new HashSet<>();
-
-		// Can be multiple cookies in the same `Cookie` header
-		for (Header header : microHttpRequest.headers()) {
-			if (header.name().equalsIgnoreCase("Cookie")) {
-				String cookieHeaderValue = trimAggressivelyToNull(header.value());
-
-				if (cookieHeaderValue != null) {
-					try {
-						cookies.addAll(Cookie.fromSetCookieHeaderRepresentation(cookieHeaderValue));
-					} catch (Exception ignored) {
-						// Bad cookies - ignore them
-					}
-				}
-			}
-		}
-
-		return Collections.unmodifiableSet(cookies);
 	}
 
 	@Nonnull
