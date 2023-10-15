@@ -41,7 +41,7 @@ public class Response {
 	@Nonnull
 	private final Integer statusCode;
 	@Nonnull
-	private final Set<Cookie> cookies;
+	private final Set<ResponseCookie> cookies;
 	@Nonnull
 	private final Map<String, Set<String>> headers;
 	@Nullable
@@ -92,7 +92,7 @@ public class Response {
 	}
 
 	@Nonnull
-	public Set<Cookie> getCookies() {
+	public Set<ResponseCookie> getCookies() {
 		return this.cookies;
 	}
 
@@ -118,7 +118,7 @@ public class Response {
 		@Nonnull
 		private final Integer statusCode;
 		@Nullable
-		private Set<Cookie> cookies;
+		private Set<ResponseCookie> cookies;
 		@Nullable
 		private Map<String, Set<String>> headers;
 		@Nullable
@@ -143,7 +143,7 @@ public class Response {
 		}
 
 		@Nonnull
-		public Builder cookies(@Nullable Set<Cookie> cookies) {
+		public Builder cookies(@Nullable Set<ResponseCookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
@@ -208,7 +208,7 @@ public class Response {
 		}
 
 		@Nonnull
-		public Copier cookies(@Nonnull Consumer<Set<Cookie>> cookiesConsumer) {
+		public Copier cookies(@Nonnull Consumer<Set<ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
 			cookiesConsumer.accept(builder.cookies);

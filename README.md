@@ -96,7 +96,7 @@ class App {
 
 ## Resources
 
-For Soklet to be useful, one or more classes annotated with `@Resource` (hereafter _Resources_) are required, which use annotation metadata to declare how HTTP inputs - methods, URL paths, query parameters, cookies, and so forth - map to Java methods (hereafter _Resource Methods_). 
+For Soklet to be useful, one or more classes annotated with `@Resource` (hereafter _Resources_) are required, which use annotation metadata to declare how HTTP inputs - methods, URL paths, query parameters, responseCookies, and so forth - map to Java methods (hereafter _Resource Methods_). 
 
 Soklet detects Resources using a compile-time annotation processor and constructs a lookup table to avoid expensive classpath scans during startup.
 
@@ -150,7 +150,7 @@ public class ExampleResource {
 
   // The @FormParameter annotation supports application/x-www-form-urlencoded values.
   //
-  // @RequestCookie exposes entire cookies.
+  // @RequestCookie exposes entire responseCookies.
   //
   // The @RequestBody annotation can be applied to any parameter of type
   // String or byte[].
@@ -168,11 +168,10 @@ public class ExampleResource {
   public Response formPost(Request request,
                            @RequestBody String requestBody, 
                            @FormParameter("attr") Optional<String> attribute,
-                           @RequestCookie("gat") Cookie analyticsCookie,
+                           @RequestCookie("gat") Double analyticsId,
                            MyExampleJsonParser jsonParser,
                            MyExampleBackend backend) {
     // Assemble some data to pass to our example backend
-    String analyticsId = analyticsCookie.getValue();
     Locale locale = request.getLocales().stream().findFirst().get();
     MyExampleType exampleType = jsonParser.parse(requestBody, MyExampleType.class);
     
@@ -182,7 +181,7 @@ public class ExampleResource {
     // You could alternatively do this "by hand" by setting HTTP status and headers appropriately.
     return new Response.Builder(RedirectType.HTTP_307_TEMPORARY_REDIRECT, "/")
       .cookies(Set.of(
-        new Cookie.Builder("post-attribute-value", attribute.orElse("none")).build()
+        new ResponseCookie.Builder("post-attribute-value", attribute.orElse("none")).build()
       ))
       .build();
   }
@@ -240,7 +239,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(
   }
 })    
     
-// Your Response Marshaler provides the response body bytes, headers, and cookies 
+// Your Response Marshaler provides the response body bytes, headers, and responseCookies 
 // that get sent back over the wire.  It's your opportunity to turn raw data into
 // JSON, XML, Protocol Buffers, etc.
 //
@@ -264,7 +263,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(
     // This value is what is ultimately written to the HTTP response
     return new MarshaledResponse.Builder(response.getStatusCode())
       .headers(headers)
-      .cookies(response.getCookies()) // Pass through any cookies as-is
+      .responseCookies(response.getCookies()) // Pass through any responseCookies as-is
       .body(body)
       .build();
   }
@@ -754,7 +753,7 @@ We present how these pattern implementations might look in Soklet applications.
 
 ### Authentication and Authorization
 
-Request headers and cookies are common ways to pass authentication information - for example, as a [JWT](https://jwt.io).
+Request headers and responseCookies are common ways to pass authentication information - for example, as a [JWT](https://jwt.io).
 
 An appropriate place to handle this is within a custom [Lifecycle Interceptor](#lifecycle-interceptor).
 
@@ -826,10 +825,10 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
     // Pull the value from MyExampleJWTCookie and use it to authenticate
     Optional<ExampleAccount> accountForRequest(Request request) {
-      // For sake of example, we examine cookies.
+      // For sake of example, we examine responseCookies.
       // In practice, you might examine request headers instead.     
       request.getCookies().stream()
-        .filter(cookie -> cookie.getName().equals("MyExampleJWTCookie"))
+        .filter(responseCookie -> responseCookie.getName().equals("MyExampleJWTCookie"))
         .findAny()
         .ifPresent(jwtCookie -> {
           // Wire in your authentication logic/account loading here

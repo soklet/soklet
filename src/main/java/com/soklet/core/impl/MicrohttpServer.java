@@ -16,12 +16,12 @@
 
 package com.soklet.core.impl;
 
-import com.soklet.core.Cookie;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.LogHandler;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
 import com.soklet.core.RequestHandler;
+import com.soklet.core.ResponseCookie;
 import com.soklet.core.Server;
 import com.soklet.core.StatusCode;
 import com.soklet.core.Utilities;
@@ -398,12 +398,12 @@ public class MicrohttpServer implements Server {
 			headers.add(new Header(name, String.join(", ", values)));
 		}
 
-		// Cookie headers are split into multiple instances of Set-Cookie.
+		// ResponseCookie headers are split into multiple instances of Set-Cookie.
 		// Force natural ordering for consistent output.
-		List<Cookie> sortedCookies = new ArrayList<>(marshaledResponse.getCookies());
+		List<ResponseCookie> sortedCookies = new ArrayList<>(marshaledResponse.getCookies());
 		sortedCookies.sort((cookie1, cookie2) -> cookie1.getName().compareTo(cookie2.getName()));
 
-		for (Cookie cookie : sortedCookies)
+		for (ResponseCookie cookie : sortedCookies)
 			headers.add(new Header("Set-Cookie", cookie.toSetCookieHeaderRepresentation()));
 
 		return new com.soklet.microhttp.Response(marshaledResponse.getStatusCode(),

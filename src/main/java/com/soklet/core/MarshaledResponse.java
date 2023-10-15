@@ -43,7 +43,7 @@ public class MarshaledResponse {
 	@Nonnull
 	private final Map<String, Set<String>> headers;
 	@Nonnull
-	private final Set<Cookie> cookies;
+	private final Set<ResponseCookie> cookies;
 	@Nullable
 	private final byte[] body;
 
@@ -55,13 +55,13 @@ public class MarshaledResponse {
 		this.statusCode = builder.statusCode;
 		this.reasonPhrase = typedStatusCode == null ? "Unknown" : typedStatusCode.getReasonPhrase();
 		this.headers = builder.headers == null ? Map.of() : Map.copyOf(builder.headers);
-		this.cookies = builder.cookies == null ? Set.of() : Set.copyOf(builder.cookies);
+		this.cookies = builder.responseCookies == null ? Set.of() : Set.copyOf(builder.responseCookies);
 		this.body = builder.body;
 	}
 
 	@Override
 	public String toString() {
-		return format("%s{statusCode=%s, reasonPhrase=%s, headers=%s, cookies=%s, body=%s}", getClass().getSimpleName(),
+		return format("%s{statusCode=%s, reasonPhrase=%s, headers=%s, responseCookies=%s, body=%s}", getClass().getSimpleName(),
 				getStatusCode(), getReasonPhrase(), getHeaders(), getCookies(),
 				format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
 	}
@@ -87,7 +87,7 @@ public class MarshaledResponse {
 	}
 
 	@Nonnull
-	public Set<Cookie> getCookies() {
+	public Set<ResponseCookie> getCookies() {
 		return this.cookies;
 	}
 
@@ -108,7 +108,7 @@ public class MarshaledResponse {
 		@Nonnull
 		private final Integer statusCode;
 		@Nullable
-		private Set<Cookie> cookies;
+		private Set<ResponseCookie> responseCookies;
 		@Nullable
 		private Map<String, Set<String>> headers;
 		@Nullable
@@ -120,8 +120,8 @@ public class MarshaledResponse {
 		}
 
 		@Nonnull
-		public Builder cookies(@Nullable Set<Cookie> cookies) {
-			this.cookies = cookies;
+		public Builder cookies(@Nullable Set<ResponseCookie> responseCookies) {
+			this.responseCookies = responseCookies;
 			return this;
 		}
 
@@ -170,7 +170,7 @@ public class MarshaledResponse {
 
 			this.builder = new MarshaledResponse.Builder(statusCodeFunction.apply(builder.statusCode))
 					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
-					.cookies(builder.cookies == null ? null : new HashSet<>(builder.cookies))
+					.cookies(builder.responseCookies == null ? null : new HashSet<>(builder.responseCookies))
 					.body(builder.body);
 
 			return this;
@@ -185,10 +185,10 @@ public class MarshaledResponse {
 		}
 
 		@Nonnull
-		public Copier cookies(@Nonnull Consumer<Set<Cookie>> cookiesConsumer) {
+		public Copier cookies(@Nonnull Consumer<Set<ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
-			cookiesConsumer.accept(builder.cookies);
+			cookiesConsumer.accept(builder.responseCookies);
 			return this;
 		}
 

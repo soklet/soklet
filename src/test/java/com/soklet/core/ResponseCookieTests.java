@@ -16,7 +16,7 @@
 
 package com.soklet.core;
 
-import com.soklet.core.Cookie.SameSite;
+import com.soklet.core.ResponseCookie.SameSite;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -27,16 +27,16 @@ import java.time.Duration;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class CookieTests {
+public class ResponseCookieTests {
 	@Test
 	public void setCookieHeaderRepresentationTests() {
-		Cookie basicCookie = new Cookie.Builder("name", "value").build();
-		Assert.assertEquals("name=value", basicCookie.toSetCookieHeaderRepresentation());
+		ResponseCookie basicResponseCookie = new ResponseCookie.Builder("name", "value").build();
+		Assert.assertEquals("name=value", basicResponseCookie.toSetCookieHeaderRepresentation());
 
-		Cookie valuelessCookie = new Cookie.Builder("name", null).build();
-		Assert.assertEquals("name=", valuelessCookie.toSetCookieHeaderRepresentation());
+		ResponseCookie valuelessResponseCookie = new ResponseCookie.Builder("name", null).build();
+		Assert.assertEquals("name=", valuelessResponseCookie.toSetCookieHeaderRepresentation());
 
-		Cookie everythingCookie = new Cookie.Builder("name", "value")
+		ResponseCookie everythingResponseCookie = new ResponseCookie.Builder("name", "value")
 				.domain("www.soklet.com")
 				.path("/")
 				.httpOnly(true)
@@ -46,6 +46,6 @@ public class CookieTests {
 				.build();
 
 		Assert.assertEquals("name=value; Path=/; Domain=www.soklet.com; Max-Age=3600; Secure; HttpOnly; SameSite=Strict",
-				everythingCookie.toSetCookieHeaderRepresentation());
+				everythingResponseCookie.toSetCookieHeaderRepresentation());
 	}
 }

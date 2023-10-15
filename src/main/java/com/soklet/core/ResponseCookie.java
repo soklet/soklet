@@ -33,12 +33,12 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * HTTP Cookie representation which supports both request {@code Cookie} and response {@code Set-Cookie} header encoding.
+ * HTTP "response" Cookie representation which supports {@code Set-Cookie} header encoding.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class Cookie {
+public class ResponseCookie {
 	@Nonnull
 	private final String name;
 	@Nullable
@@ -56,7 +56,7 @@ public class Cookie {
 	@Nullable
 	private final SameSite sameSite;
 
-	private Cookie(@Nonnull Builder builder) {
+	private ResponseCookie(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
 		this.name = builder.name;
@@ -75,7 +75,7 @@ public class Cookie {
 	}
 
 	@Nonnull
-	public static Set<Cookie> fromSetCookieHeaderRepresentation(@Nullable String setCookieHeaderRepresentation) {
+	public static Set<ResponseCookie> fromSetCookieHeaderRepresentation(@Nullable String setCookieHeaderRepresentation) {
 		setCookieHeaderRepresentation = setCookieHeaderRepresentation == null ? null : setCookieHeaderRepresentation.trim();
 
 		if (setCookieHeaderRepresentation == null)
@@ -90,18 +90,6 @@ public class Cookie {
 						.path(httpCookie.getPath())
 						.build())
 				.collect(Collectors.toSet());
-	}
-
-	@Nonnull
-	public String toCookieHeaderRepresentation() {
-		HttpCookie httpCookie = new HttpCookie(getName(), getValue().orElse(null));
-		httpCookie.setMaxAge(getMaxAge().isPresent() ? getMaxAge().get().toSeconds() : null);
-		httpCookie.setDomain(getDomain().orElse(null));
-		httpCookie.setHttpOnly(getHttpOnly());
-		httpCookie.setSecure(getSecure());
-		httpCookie.setPath(getPath().orElse(null));
-
-		return httpCookie.toString();
 	}
 
 	@Nonnull
@@ -154,17 +142,17 @@ public class Cookie {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof Cookie cookie))
+		if (!(object instanceof ResponseCookie responseCookie))
 			return false;
 
-		return Objects.equals(getName(), cookie.getName())
-				&& Objects.equals(getValue(), cookie.getValue())
-				&& Objects.equals(getMaxAge(), cookie.getMaxAge())
-				&& Objects.equals(getDomain(), cookie.getDomain())
-				&& Objects.equals(getPath(), cookie.getPath())
-				&& Objects.equals(getSecure(), cookie.getSecure())
-				&& Objects.equals(getHttpOnly(), cookie.getHttpOnly())
-				&& Objects.equals(getSameSite(), cookie.getSameSite());
+		return Objects.equals(getName(), responseCookie.getName())
+				&& Objects.equals(getValue(), responseCookie.getValue())
+				&& Objects.equals(getMaxAge(), responseCookie.getMaxAge())
+				&& Objects.equals(getDomain(), responseCookie.getDomain())
+				&& Objects.equals(getPath(), responseCookie.getPath())
+				&& Objects.equals(getSecure(), responseCookie.getSecure())
+				&& Objects.equals(getHttpOnly(), responseCookie.getHttpOnly())
+				&& Objects.equals(getSameSite(), responseCookie.getSameSite());
 	}
 
 	@Override
@@ -246,7 +234,7 @@ public class Cookie {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link Cookie}.
+	 * Builder used to construct instances of {@link ResponseCookie}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -315,8 +303,8 @@ public class Cookie {
 		}
 
 		@Nonnull
-		public Cookie build() {
-			return new Cookie(this);
+		public ResponseCookie build() {
+			return new ResponseCookie(this);
 		}
 	}
 

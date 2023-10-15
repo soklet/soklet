@@ -242,16 +242,16 @@ public final class Utilities {
 	public static Map<String, Set<String>> extractCookiesFromHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 
-		// Cookie names are case-sensitive *in practice*, do not need case-insensitive map
+		// ResponseCookie names are case-sensitive *in practice*, do not need case-insensitive map
 		Map<String, Set<String>> cookies = new HashMap<>();
 
 		for (Map.Entry<String, Set<String>> entry : headers.entrySet()) {
-			if (entry.getKey().equals("Cookie")) {
+			if (entry.getKey().equals("ResponseCookie")) {
 				Set<String> values = entry.getValue();
 
 				for (String value : values) {
-					// Note: while this parser handles Set-Cookie (response) headers,
-					// because Cookie (request) header is a subset of those, it will work for our purposes.
+					// Note: while this parser handles Set-ResponseCookie (response) headers,
+					// because ResponseCookie (request) header is a subset of those, it will work for our purposes.
 					List<HttpCookie> httpCookies = HttpCookie.parse(value);
 
 					for (HttpCookie httpCookie : httpCookies) {
