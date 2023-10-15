@@ -24,7 +24,6 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
-import java.net.HttpCookie;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -246,23 +245,43 @@ public final class Utilities {
 		Map<String, Set<String>> cookies = new HashMap<>();
 
 		for (Map.Entry<String, Set<String>> entry : headers.entrySet()) {
-			if (entry.getKey().equals("ResponseCookie")) {
+			if (entry.getKey().equals("Cookie")) {
 				Set<String> values = entry.getValue();
 
 				for (String value : values) {
-					// Note: while this parser handles Set-Cookie (response) headers,
-					// because Cookie (request) header is a subset of those, it will work for our purposes.
-					List<HttpCookie> httpCookies = HttpCookie.parse(value);
+					value = Utilities.trimAggressivelyToNull(value);
 
-					for (HttpCookie httpCookie : httpCookies) {
-						Set<String> cookieValues = cookies.get(httpCookie.getName());
+					if (value == null)
+						continue;
+
+					String[] cookieComponents = value.split(";");
+
+					for (String cookieComponent : cookieComponents) {
+						cookieComponent = Utilities.trimAggressivelyToNull(cookieComponent);
+
+						if (cookieComponent == null)
+							continue;
+
+						String[] cookiePair = cookieComponent.split("=");
+
+						if (cookiePair.length != 1 && cookiePair.length != 2)
+							continue;
+
+						String cookieName = Utilities.trimAggressivelyToNull(cookiePair[0]);
+						String cookieValue = cookiePair.length == 1 ? null : Utilities.trimAggressivelyToNull(cookiePair[1]);
+
+						if (cookieName == null)
+							continue;
+
+						Set<String> cookieValues = cookies.get(cookieName);
 
 						if (cookieValues == null) {
 							cookieValues = new HashSet<>();
-							cookies.put(httpCookie.getName(), cookieValues);
+							cookies.put(cookieName, cookieValues);
 						}
 
-						cookieValues.add(httpCookie.getValue());
+						if (cookieValue != null)
+							cookieValues.add(cookieValue);
 					}
 				}
 			}

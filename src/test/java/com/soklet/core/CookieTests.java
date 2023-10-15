@@ -22,12 +22,42 @@ import org.junit.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class ResponseCookieTests {
+public class CookieTests {
+	@Test
+	public void cookieHeaderTests() {
+		Map<String, Set<String>> happyPath = Utilities.extractCookiesFromHeaders(Map.of(
+				"Cookie", Set.of("a=1")
+		));
+
+		Assert.assertEquals(Set.of("1"), happyPath.get("a"));
+
+		Map<String, Set<String>> multipleValues = Utilities.extractCookiesFromHeaders(Map.of(
+				"Cookie", Set.of("a=1; b=2; a=2;")
+		));
+
+		Assert.assertEquals(Set.of("1", "2"), multipleValues.get("a"));
+		Assert.assertEquals(Set.of("2"), multipleValues.get("b"));
+
+		Map<String, Set<String>> blank = Utilities.extractCookiesFromHeaders(Map.of(
+				"Cookie", Set.of()
+		));
+
+		Assert.assertEquals(Set.of(), blank.keySet());
+
+		Map<String, Set<String>> missingValue = Utilities.extractCookiesFromHeaders(Map.of(
+				"Cookie", Set.of("a=")
+		));
+
+		Assert.assertEquals(Set.of(), missingValue.get("a"));
+	}
+
 	@Test
 	public void setCookieHeaderRepresentationTests() {
 		ResponseCookie basicResponseCookie = new ResponseCookie.Builder("name", "value").build();
