@@ -250,8 +250,8 @@ public final class Utilities {
 				Set<String> values = entry.getValue();
 
 				for (String value : values) {
-					// Note: while this parser handles Set-ResponseCookie (response) headers,
-					// because ResponseCookie (request) header is a subset of those, it will work for our purposes.
+					// Note: while this parser handles Set-Cookie (response) headers,
+					// because Cookie (request) header is a subset of those, it will work for our purposes.
 					List<HttpCookie> httpCookies = HttpCookie.parse(value);
 
 					for (HttpCookie httpCookie : httpCookies) {
