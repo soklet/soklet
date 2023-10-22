@@ -17,6 +17,7 @@
 package com.soklet.core;
 
 import com.soklet.core.impl.DefaultIdGenerator;
+import com.soklet.core.impl.DefaultMultipartParser;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -47,9 +48,12 @@ import static java.util.Objects.requireNonNull;
 public class Request {
 	@Nonnull
 	private static final IdGenerator DEFAULT_ID_GENERATOR;
+	@Nonnull
+	private static final MultipartParser DEFAULT_MULTIPART_PARSER;
 
 	static {
 		DEFAULT_ID_GENERATOR = new DefaultIdGenerator();
+		DEFAULT_MULTIPART_PARSER = new DefaultMultipartParser();
 	}
 
 	@Nonnull
@@ -70,6 +74,10 @@ public class Request {
 	private final Cors cors;
 	@Nullable
 	private final byte[] body;
+	@Nonnull
+	private final Boolean multipart;
+	@Nonnull
+	private final Map<String, Set<MultipartField>> multipartFields;
 	@Nonnull
 	private final ReentrantLock lock;
 	@Nullable
@@ -99,6 +107,23 @@ public class Request {
 		this.cookies = Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(this.headers));
 		this.cors = Cors.fromHeaders(this.httpMethod, this.headers).orElse(null);
 		this.body = builder.body;
+
+		// Multipart handling
+		// TODO: optimize copy/modify scenarios - we don't want to be copying big already-parsed multipart byte arrays
+		// TODO: should we use InstanceProvider to vend IdGenerator and MultipartParser types instead of explicitly specifying?
+		String contentType = getHeader("Content-Type").orElse(null);
+		boolean multipart = false;
+		Map<String, Set<MultipartField>> multipartFields = Map.of();
+
+		if (contentType != null && contentType.toLowerCase(Locale.ENGLISH).startsWith("multipart/")) {
+			multipart = true;
+
+			MultipartParser multipartParser = builder.multipartParser == null ? getDefaultMultipartParser() : builder.multipartParser;
+			multipartFields = Collections.unmodifiableMap(multipartParser.extractMultipartFields(this));
+		}
+
+		this.multipart = multipart;
+		this.multipartFields = multipartFields;
 	}
 
 	@Override
@@ -172,6 +197,16 @@ public class Request {
 	}
 
 	@Nonnull
+	public Boolean isMultipart() {
+		return this.multipart;
+	}
+
+	@Nonnull
+	public Map<String, Set<MultipartField>> getMultipartFields() {
+		return this.multipartFields;
+	}
+
+	@Nonnull
 	public Optional<byte[]> getBody() {
 		return Optional.ofNullable(this.body);
 	}
@@ -222,13 +257,13 @@ public class Request {
 	}
 
 	@Nonnull
-	public Optional<String> getQueryParameterValue(@Nonnull String name) {
+	public Optional<String> getQueryParameter(@Nonnull String name) {
 		requireNonNull(name);
 		return singleValueForName(name, getQueryParameters());
 	}
 
 	@Nonnull
-	public Optional<String> getHeaderValue(@Nonnull String name) {
+	public Optional<String> getHeader(@Nonnull String name) {
 		requireNonNull(name);
 		return singleValueForName(name, getHeaders());
 	}
@@ -240,8 +275,19 @@ public class Request {
 	}
 
 	@Nonnull
+	public Optional<MultipartField> getMultipartField(@Nonnull String name) {
+		requireNonNull(name);
+		return singleValueForName(name, getMultipartFields());
+	}
+
+	@Nonnull
 	protected IdGenerator getDefaultIdGenerator() {
 		return DEFAULT_ID_GENERATOR;
+	}
+
+	@Nonnull
+	protected MultipartParser getDefaultMultipartParser() {
+		return DEFAULT_MULTIPART_PARSER;
 	}
 
 	@Nonnull
@@ -250,12 +296,12 @@ public class Request {
 	}
 
 	@Nonnull
-	protected Optional<String> singleValueForName(@Nonnull String name,
-																								@Nullable Map<String, Set<String>> valuesByName) {
+	protected <T> Optional<T> singleValueForName(@Nonnull String name,
+																							 @Nullable Map<String, Set<T>> valuesByName) {
 		if (valuesByName == null)
 			return Optional.empty();
 
-		Set<String> values = valuesByName.get(name);
+		Set<T> values = valuesByName.get(name);
 
 		if (values == null)
 			return Optional.empty();
@@ -284,6 +330,8 @@ public class Request {
 		@Nullable
 		private IdGenerator idGenerator;
 		@Nullable
+		private MultipartParser multipartParser;
+		@Nullable
 		private Map<String, Set<String>> headers;
 		@Nullable
 		private byte[] body;
@@ -306,6 +354,12 @@ public class Request {
 		@Nonnull
 		public Builder idGenerator(@Nullable IdGenerator idGenerator) {
 			this.idGenerator = idGenerator;
+			return this;
+		}
+
+		@Nonnull
+		public Builder multipartParser(@Nullable MultipartParser multipartParser) {
+			this.multipartParser = multipartParser;
 			return this;
 		}
 

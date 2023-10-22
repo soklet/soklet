@@ -17,6 +17,7 @@
 package com.soklet.core.impl;
 
 import com.soklet.annotation.FormParameter;
+import com.soklet.annotation.Multipart;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
@@ -26,6 +27,7 @@ import com.soklet.converter.ValueConversionException;
 import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.core.InstanceProvider;
+import com.soklet.core.MultipartField;
 import com.soklet.core.Request;
 import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethod;
@@ -34,12 +36,14 @@ import com.soklet.core.ResourcePath;
 import com.soklet.core.Utilities;
 import com.soklet.exception.BadRequestException;
 import com.soklet.exception.IllegalFormParameterException;
+import com.soklet.exception.IllegalMultipartFieldException;
 import com.soklet.exception.IllegalPathParameterException;
 import com.soklet.exception.IllegalQueryParameterException;
 import com.soklet.exception.IllegalRequestBodyException;
 import com.soklet.exception.IllegalRequestCookieException;
 import com.soklet.exception.IllegalRequestHeaderException;
 import com.soklet.exception.MissingFormParameterException;
+import com.soklet.exception.MissingMultipartFieldException;
 import com.soklet.exception.MissingQueryParameterException;
 import com.soklet.exception.MissingRequestBodyException;
 import com.soklet.exception.MissingRequestCookieException;
@@ -179,6 +183,17 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		if (requestCookie != null)
 			return extractRequestCookieValue(request, resourceMethod, parameter, requestCookie, parameterType);
 
+		Multipart multipart = parameter.getAnnotation(Multipart.class);
+
+		String multipartFieldTypeName = MultipartField.class.getTypeName();
+		boolean isMultipartScalarType = multipartFieldTypeName.equals(parameterType.getNormalizedType().getTypeName());
+		boolean isMultipartListType = parameterType.getListElementType().isPresent()
+				&& multipartFieldTypeName.equals(parameterType.getListElementType().get().getTypeName());
+
+		// Multipart is either indicated by @Multipart annotation or the parameter is of type MultipartField
+		if (multipart != null || (isMultipartScalarType || isMultipartListType))
+			return extractRequestMultipartValue(request, resourceMethod, parameter, multipart, parameterType);
+
 		RequestBody requestBody = parameter.getAnnotation(RequestBody.class);
 
 		if (requestBody != null) {
@@ -238,12 +253,10 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	@Nonnull
 	protected String extractParameterName(@Nonnull ResourceMethod resourceMethod,
 																				@Nonnull Parameter parameter,
-																				@Nonnull Annotation annotation,
-																				@Nonnull String annotationValue) {
+																				@Nullable Annotation annotation,
+																				@Nullable String annotationValue) {
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
-		requireNonNull(annotation);
-		requireNonNull(annotationValue);
 
 		String parameterName = trimAggressivelyToNull(annotationValue);
 
@@ -369,6 +382,53 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		}, (message, cause, ignored, value, valueMetadatum) -> {
 			return new IllegalRequestCookieException(message, cause, name, value);
 		});
+	}
+
+	@Nonnull
+	protected Object extractRequestMultipartValue(@Nonnull Request request,
+																								@Nonnull ResourceMethod resourceMethod,
+																								@Nonnull Parameter parameter,
+																								@Nullable Multipart multipart,
+																								@Nonnull ParameterType parameterType) {
+		requireNonNull(request);
+		requireNonNull(resourceMethod);
+		requireNonNull(parameter);
+		requireNonNull(parameterType);
+
+		String name = extractParameterName(resourceMethod, parameter, multipart, multipart == null ? null : multipart.value());
+
+		List<String> values = new ArrayList<>();
+		List<MultipartField> valuesMetadata = new ArrayList<>();
+
+		for (Map.Entry<String, Set<MultipartField>> entry : request.getMultipartFields().entrySet()) {
+			String multipartName = entry.getKey();
+
+			if (name.equals(multipartName)) {
+				Set<MultipartField> multipartFields = entry.getValue();
+
+				for (MultipartField matchingMultipartField : multipartFields) {
+					values.add(matchingMultipartField.getDataAsString().orElse(null));
+					valuesMetadata.add(matchingMultipartField);
+				}
+			}
+		}
+
+		// Special hack to return MultipartField instances directly if the parameter wants a MultipartField
+		String multipartFieldTypeName = MultipartField.class.getTypeName();
+		boolean isMultipartScalarType = multipartFieldTypeName.equals(parameterType.getNormalizedType().getTypeName());
+		boolean isMultipartListType = parameterType.getListElementType().isPresent()
+				&& multipartFieldTypeName.equals(parameterType.getListElementType().get().getTypeName());
+
+		boolean returnWholeMultipartFields = isMultipartScalarType || isMultipartListType;
+
+		// TODO: handle byte[] case
+
+		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, values, valuesMetadata,
+				returnWholeMultipartFields, "multipart field", (message, ignored) -> {
+					return new MissingMultipartFieldException(message, name);
+				}, (message, cause, ignored, value, valueMetadatum) -> {
+					return new IllegalMultipartFieldException(message, cause, ((Optional<MultipartField>) valueMetadatum).orElse(null));
+				});
 	}
 
 	@Nonnull

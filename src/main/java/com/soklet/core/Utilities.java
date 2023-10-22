@@ -249,7 +249,7 @@ public final class Utilities {
 				Set<String> values = entry.getValue();
 
 				for (String value : values) {
-					value = Utilities.trimAggressivelyToNull(value);
+					value = trimAggressivelyToNull(value);
 
 					if (value == null)
 						continue;
@@ -257,7 +257,7 @@ public final class Utilities {
 					String[] cookieComponents = value.split(";");
 
 					for (String cookieComponent : cookieComponents) {
-						cookieComponent = Utilities.trimAggressivelyToNull(cookieComponent);
+						cookieComponent = trimAggressivelyToNull(cookieComponent);
 
 						if (cookieComponent == null)
 							continue;
@@ -267,8 +267,8 @@ public final class Utilities {
 						if (cookiePair.length != 1 && cookiePair.length != 2)
 							continue;
 
-						String cookieName = Utilities.trimAggressivelyToNull(cookiePair[0]);
-						String cookieValue = cookiePair.length == 1 ? null : Utilities.trimAggressivelyToNull(cookiePair[1]);
+						String cookieName = trimAggressivelyToNull(cookiePair[0]);
+						String cookieValue = cookiePair.length == 1 ? null : trimAggressivelyToNull(cookiePair[1]);
 
 						if (cookieName == null)
 							continue;
