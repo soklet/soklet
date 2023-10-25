@@ -23,6 +23,7 @@ import java.lang.reflect.Type;
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@FunctionalInterface
 public interface RequestBodyMarshaler {
 	@Nullable
 	<T> T marshalRequestBody(@Nonnull Request request,
