@@ -120,7 +120,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	@Nullable
 	protected Object extractParameterValueToPassToResourceMethod(@Nonnull Request request,
 																															 @Nonnull ResourceMethod resourceMethod,
-																															 @Nonnull Parameter parameter) throws Exception {
+																															 @Nonnull Parameter parameter) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -155,7 +155,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 
 			try {
 				result = valueConverter.convert(pathParameterValue);
-			} catch (ValueConversionException e) {
+			} catch (Exception e) {
 				throw new IllegalPathParameterException(format("Illegal value '%s' was specified for path parameter '%s' (was expecting a value convertible to %s)",
 						pathParameterValue, pathParameterName, valueConverter.getToType()), e, pathParameterName, pathParameterValue);
 			}
@@ -263,13 +263,23 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		if (parameterName == null && parameter.isNamePresent())
 			parameterName = parameter.getName();
 
-		if (parameterName == null)
-			throw new IllegalArgumentException(
-					format(
-							"Unable to automatically detect resource method parameter name. "
-									+ "You must either explicitly specify a @%s value for parameter %s - for example, @%s(\"name-goes-here\") - "
-									+ "or compile with javac flag \"-parameters\" to preserve parameter names for reflection. Offending resource method was %s",
-							annotation.annotationType().getSimpleName(), parameter, annotation.annotationType().getSimpleName(), resourceMethod));
+		if (parameterName == null) {
+			String message;
+
+			if (annotation == null)
+				message = format(
+						"Unable to automatically detect resource method parameter name. "
+								+ "You must compile with javac flag \"-parameters\" to preserve parameter names for reflection. Offending resource method was %s",
+						resourceMethod);
+			else
+				message = format(
+						"Unable to automatically detect resource method parameter name. "
+								+ "You must either explicitly specify a @%s value for parameter %s - for example, @%s(\"name-goes-here\") - "
+								+ "or compile with javac flag \"-parameters\" to preserve parameter names for reflection. Offending resource method was %s",
+						annotation.annotationType().getSimpleName(), parameter, annotation.annotationType().getSimpleName(), resourceMethod);
+
+			throw new IllegalArgumentException(message);
+		}
 
 		return parameterName;
 	}

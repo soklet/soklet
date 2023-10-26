@@ -62,6 +62,7 @@
                     <release>16</release>
                     <compilerArgs>
                         <arg>-parameters</arg>
+                        <arg>-Xlint:unchecked</arg>
                     </compilerArgs>
                     <!-- Maven compiler plugin discovers Soklet's internal annotation processor
                         and tries to apply it to itself...prevent that here -->

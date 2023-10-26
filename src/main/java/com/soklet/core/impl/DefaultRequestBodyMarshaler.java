@@ -45,6 +45,7 @@ public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 
 	@Nullable
 	@Override
+	@SuppressWarnings("unchecked")
 	public <T> T marshalRequestBody(@Nonnull Request request,
 																	@Nonnull Type requestBodyType) {
 		requireNonNull(request);
