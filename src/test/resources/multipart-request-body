@@ -1,0 +1,21 @@
+------WebKitFormBoundary59MIY6fOE42AL48U
+Content-Disposition: form-data; name="MAX_FILE_SIZE"
+
+100000
+------WebKitFormBoundary59MIY6fOE42AL48U
+Content-Disposition: form-data; name="one"
+
+1
+------WebKitFormBoundary59MIY6fOE42AL48U
+Content-Disposition: form-data; name="one"
+
+2
+------WebKitFormBoundary59MIY6fOE42AL48U
+Content-Disposition: form-data; name="another"
+
+3
+------WebKitFormBoundary59MIY6fOE42AL48U
+Content-Disposition: form-data; name="not-really-int"
+
+3x
+------WebKitFormBoundary59MIY6fOE42AL48U--

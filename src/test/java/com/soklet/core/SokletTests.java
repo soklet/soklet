@@ -20,6 +20,7 @@ import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
+import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
@@ -29,10 +30,16 @@ import org.junit.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -106,6 +113,44 @@ public class SokletTests {
 		}));
 	}
 
+	@Test
+	public void testMultipart() {
+		// Use a mock server that we can send simulated requests to
+		mockServerForResourceClasses(Set.of(MultipartResource.class), (mockServer -> {
+			byte[] requestBody;
+
+			try {
+				requestBody = Files.readAllBytes(Path.of("src/test/resources/multipart-request-body"));
+			} catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
+
+			MarshaledResponse marshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.POST, "/multipart-upload?upload_progress_id=12344")
+							.headers(Map.of(
+									"Content-Type", Set.of("multipart/form-data; boundary=----WebKitFormBoundary59MIY6fOE42AL48U"),
+									"Content-Length", Set.of(String.valueOf(requestBody.length))
+							))
+							.body(requestBody)
+							.build());
+
+			Assert.assertEquals(204L, (long) marshaledResponse.getStatusCode());
+		}));
+	}
+
+	@ThreadSafe
+	public static class MultipartResource {
+		@POST("/multipart-upload")
+		public void multipartUpload(Request request,
+																@Multipart("not-really-int") String notReallyAnInt,
+																@Multipart("not-really-int") Optional<String> optionalNotReallyAnInt,
+																List<MultipartField> one,
+																MultipartField another,
+																@Multipart("another") String anotherAsString,
+																@Multipart("another") byte[] anotherAsBytes) {
+			// TODO: some work here
+		}
+	}
 
 	@ThreadSafe
 	public static class RequestHandlingBasicsResource {
