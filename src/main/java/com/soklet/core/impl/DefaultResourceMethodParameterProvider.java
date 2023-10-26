@@ -395,6 +395,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	}
 
 	@Nonnull
+	@SuppressWarnings("unchecked")
 	protected Object extractRequestMultipartValue(@Nonnull Request request,
 																								@Nonnull ResourceMethod resourceMethod,
 																								@Nonnull Parameter parameter,

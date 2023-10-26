@@ -34,6 +34,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -87,23 +90,28 @@ public class DefaultMultipartParser implements MultipartParser {
 			boolean hasNext = multipartStream.skipPreamble();
 
 			while (hasNext) {
+				// Example headers:
+				//
+				// Content-Disposition: form-data; name="doc"; filename="test.pdf"
+				// Content-Type: application/pdf
 				Map<String, String> allHeaders = splitHeaders(multipartStream.readHeaders());
-				Map<String, String> contentDispositionFields = extractFields(allHeaders.get("Content-Disposition"));
+
+				String contentDisposition = trimAggressivelyToNull(allHeaders.get("Content-Disposition"));
+				Map<String, String> contentDispositionFields = Map.of();
+
+				if (contentDisposition != null)
+					contentDispositionFields = new ParameterParser().parse(contentDisposition, ';');
+
 				String name = trimAggressivelyToNull(contentDispositionFields.get("name"));
 
 				if (name == null)
 					continue;
 
-				// Field names are generally wrapped in double-quotes.  Detect and remove those
-				// TODO: pull this out and apply to other fields/do more cleanly
-				if (name.startsWith("\"") && name.endsWith("\"") && name.length() > 2)
-					name = name.replaceFirst("\"", "").substring(0, name.length() - 2);
-
 				ByteArrayOutputStream data = new ByteArrayOutputStream();
 				multipartStream.readBodyData(data);
 
 				String filename = trimAggressivelyToNull(contentDispositionFields.get("filename"));
-				String contentType = trimAggressivelyToNull(contentDispositionFields.get("content-type"));
+				String contentType = trimAggressivelyToNull(allHeaders.get("Content-Type"));
 
 				MultipartField multipartField = new MultipartField.Builder(name, data.toByteArray())
 						.filename(filename)
@@ -128,8 +136,30 @@ public class DefaultMultipartParser implements MultipartParser {
 		return multipartFieldsByName;
 	}
 
-	// TODO: this was a reference implementation, clean it up and fix bugs
-	private Map<String, String> splitHeaders(String readHeaders) {
+	// The code below is sourced from Selenium.
+	// It is licensed under the terms of the Apache License, Version 2.0.
+	// The license text for all of the below code is as follows:
+
+	/*
+		Copyright 2012 Selenium committers
+		Copyright 2012 Software Freedom Conservancy
+
+		Licensed under the Apache License, Version 2.0 (the "License");
+		you may not use this file except in compliance with the License.
+		You may obtain a copy of the License at
+
+		 http://www.apache.org/licenses/LICENSE-2.0
+
+		Unless required by applicable law or agreed to in writing, software
+		distributed under the License is distributed on an "AS IS" BASIS,
+		WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+		See the License for the specific language governing permissions and
+		limitations under the License.
+	*/
+
+	// *** START Selenium UploadFileHandler source ***
+
+	protected Map<String, String> splitHeaders(String readHeaders) {
 		Map<String, String> headersBuilder = new HashMap<>();
 		String[] headers = readHeaders.split("\r\n");
 		for (String headerLine : headers) {
@@ -144,8 +174,7 @@ public class DefaultMultipartParser implements MultipartParser {
 		return headersBuilder;
 	}
 
-	// TODO: this was a reference implementation, clean it up and fix bugs
-	private Map<String, String> extractFields(String contentTypeHeader) {
+	protected Map<String, String> extractFields(String contentTypeHeader) {
 		Map<String, String> fieldsBuilder = new HashMap<>();
 		String[] contentTypeHeaderParts = contentTypeHeader.split("[;,]");
 		for (String contentTypeHeaderPart : contentTypeHeaderParts) {
@@ -156,6 +185,8 @@ public class DefaultMultipartParser implements MultipartParser {
 		}
 		return fieldsBuilder;
 	}
+
+	// *** END Selenium UploadFileHandler source ***
 
 	// The code below is sourced from the Apache Tomcat fork of Apache commons-fileupload.
 	// See https://github.com/apache/tomcat for the original.
@@ -1564,6 +1595,741 @@ public class DefaultMultipartParser implements MultipartParser {
 
 		}
 	}
+
+	/**
+	 * A simple parser intended to parse sequences of name/value pairs.
+	 * <p>
+	 * Parameter values are expected to be enclosed in quotes if they contain unsafe characters, such as '=' characters or separators. Parameter values are optional
+	 * and can be omitted.
+	 * </p>
+	 * <p>
+	 * {@code param1 = value; param2 = "anything goes; really"; param3}
+	 * </p>
+	 */
+	protected class ParameterParser {
+
+		/**
+		 * String to be parsed.
+		 */
+		private char[] chars = null;
+
+		/**
+		 * Current position in the string.
+		 */
+		private int pos = 0;
+
+		/**
+		 * Maximum position in the string.
+		 */
+		private int len = 0;
+
+		/**
+		 * Start of a token.
+		 */
+		private int i1 = 0;
+
+		/**
+		 * End of a token.
+		 */
+		private int i2 = 0;
+
+		/**
+		 * Whether names stored in the map should be converted to lower case.
+		 */
+		private boolean lowerCaseNames = false;
+
+		/**
+		 * Default ParameterParser constructor.
+		 */
+		public ParameterParser() {
+		}
+
+		/**
+		 * A helper method to process the parsed token. This method removes leading and trailing blanks as well as enclosing quotation marks, when necessary.
+		 *
+		 * @param quoted {@code true} if quotation marks are expected, {@code false} otherwise.
+		 * @return the token
+		 */
+		private String getToken(final boolean quoted) {
+			// Trim leading white spaces
+			while (i1 < i2 && Character.isWhitespace(chars[i1])) {
+				i1++;
+			}
+			// Trim trailing white spaces
+			while (i2 > i1 && Character.isWhitespace(chars[i2 - 1])) {
+				i2--;
+			}
+			// Strip away quotation marks if necessary
+			if (quoted && i2 - i1 >= 2 && chars[i1] == '"' && chars[i2 - 1] == '"') {
+				i1++;
+				i2--;
+			}
+			String result = null;
+			if (i2 > i1) {
+				result = new String(chars, i1, i2 - i1);
+			}
+			return result;
+		}
+
+		/**
+		 * Tests if there any characters left to parse.
+		 *
+		 * @return {@code true} if there are unparsed characters, {@code false} otherwise.
+		 */
+		private boolean hasChar() {
+			return this.pos < this.len;
+		}
+
+		/**
+		 * Tests {@code true} if parameter names are to be converted to lower case when name/value pairs are parsed.
+		 *
+		 * @return {@code true} if parameter names are to be converted to lower case when name/value pairs are parsed. Otherwise returns {@code false}
+		 */
+		public boolean isLowerCaseNames() {
+			return this.lowerCaseNames;
+		}
+
+		/**
+		 * Tests if the given character is present in the array of characters.
+		 *
+		 * @param ch      the character to test for presence in the array of characters
+		 * @param charray the array of characters to test against
+		 * @return {@code true} if the character is present in the array of characters, {@code false} otherwise.
+		 */
+		private boolean isOneOf(final char ch, final char[] charray) {
+			var result = false;
+			for (final char element : charray) {
+				if (ch == element) {
+					result = true;
+					break;
+				}
+			}
+			return result;
+		}
+
+		/**
+		 * Parses a map of name/value pairs from the given array of characters. Names are expected to be unique.
+		 *
+		 * @param charArray the array of characters that contains a sequence of name/value pairs
+		 * @param separator the name/value pairs separator
+		 * @return a map of name/value pairs
+		 */
+		public Map<String, String> parse(final char[] charArray, final char separator) {
+			if (charArray == null) {
+				return new HashMap<>();
+			}
+			return parse(charArray, 0, charArray.length, separator);
+		}
+
+		/**
+		 * Parses a map of name/value pairs from the given array of characters. Names are expected to be unique.
+		 *
+		 * @param charArray the array of characters that contains a sequence of name/value pairs
+		 * @param offset    - the initial offset.
+		 * @param length    - the length.
+		 * @param separator the name/value pairs separator
+		 * @return a map of name/value pairs
+		 */
+		public Map<String, String> parse(final char[] charArray, final int offset, final int length, final char separator) {
+
+			if (charArray == null) {
+				return new HashMap<>();
+			}
+			final var params = new HashMap<String, String>();
+			this.chars = charArray.clone();
+			this.pos = offset;
+			this.len = length;
+
+			String paramName;
+			String paramValue;
+			while (hasChar()) {
+				paramName = parseToken(new char[]{'=', separator});
+				paramValue = null;
+				if (hasChar() && charArray[pos] == '=') {
+					pos++; // skip '='
+					paramValue = parseQuotedToken(new char[]{separator});
+
+					if (paramValue != null) {
+						try {
+							paramValue = RFC2231Utils.hasEncodedValue(paramName) ? RFC2231Utils.decodeText(paramValue) : MimeUtils.decodeText(paramValue);
+						} catch (final UnsupportedEncodingException ignored) {
+							// let's keep the original value in this case
+						}
+					}
+				}
+				if (hasChar() && charArray[pos] == separator) {
+					pos++; // skip separator
+				}
+				if (paramName != null && !paramName.isEmpty()) {
+					paramName = RFC2231Utils.stripDelimiter(paramName);
+					if (this.lowerCaseNames) {
+						paramName = paramName.toLowerCase(Locale.ENGLISH);
+					}
+					params.put(paramName, paramValue);
+				}
+			}
+			return params;
+		}
+
+		/**
+		 * Parses a map of name/value pairs from the given string. Names are expected to be unique.
+		 *
+		 * @param str       the string that contains a sequence of name/value pairs
+		 * @param separator the name/value pairs separator
+		 * @return a map of name/value pairs
+		 */
+		public Map<String, String> parse(final String str, final char separator) {
+			if (str == null) {
+				return new HashMap<>();
+			}
+			return parse(str.toCharArray(), separator);
+		}
+
+		/**
+		 * Parses a map of name/value pairs from the given string. Names are expected to be unique. Multiple separators may be specified and the earliest found in
+		 * the input string is used.
+		 *
+		 * @param str        the string that contains a sequence of name/value pairs
+		 * @param separators the name/value pairs separators
+		 * @return a map of name/value pairs
+		 */
+		public Map<String, String> parse(final String str, final char[] separators) {
+			if (separators == null || separators.length == 0) {
+				return new HashMap<>();
+			}
+			var separator = separators[0];
+			if (str != null) {
+				var idx = str.length();
+				for (final char separator2 : separators) {
+					final var tmp = str.indexOf(separator2);
+					if (tmp != -1 && tmp < idx) {
+						idx = tmp;
+						separator = separator2;
+					}
+				}
+			}
+			return parse(str, separator);
+		}
+
+		/**
+		 * Parses out a token until any of the given terminators is encountered outside the quotation marks.
+		 *
+		 * @param terminators the array of terminating characters. Any of these characters when encountered outside the quotation marks signify the end of the token
+		 * @return the token
+		 */
+		private String parseQuotedToken(final char[] terminators) {
+			char ch;
+			i1 = pos;
+			i2 = pos;
+			var quoted = false;
+			var charEscaped = false;
+			while (hasChar()) {
+				ch = chars[pos];
+				if (!quoted && isOneOf(ch, terminators)) {
+					break;
+				}
+				if (!charEscaped && ch == '"') {
+					quoted = !quoted;
+				}
+				charEscaped = !charEscaped && ch == '\\';
+				i2++;
+				pos++;
+
+			}
+			return getToken(true);
+		}
+
+		/**
+		 * Parses out a token until any of the given terminators is encountered.
+		 *
+		 * @param terminators the array of terminating characters. Any of these characters when encountered signify the end of the token
+		 * @return the token
+		 */
+		private String parseToken(final char[] terminators) {
+			char ch;
+			i1 = pos;
+			i2 = pos;
+			while (hasChar()) {
+				ch = chars[pos];
+				if (isOneOf(ch, terminators)) {
+					break;
+				}
+				i2++;
+				pos++;
+			}
+			return getToken(false);
+		}
+
+		/**
+		 * Sets the flag if parameter names are to be converted to lower case when name/value pairs are parsed.
+		 *
+		 * @param lowerCaseNames {@code true} if parameter names are to be converted to lower case when name/value pairs are parsed. {@code false} otherwise.
+		 */
+		public void setLowerCaseNames(final boolean lowerCaseNames) {
+			this.lowerCaseNames = lowerCaseNames;
+		}
+
+	}
+
+	/**
+	 * Utility class to decode/encode character set on HTTP Header fields based on RFC 2231. This implementation adheres to RFC 5987 in particular, which was
+	 * defined for HTTP headers
+	 * <p>
+	 * RFC 5987 builds on RFC 2231, but has lesser scope like <a href="https://tools.ietf.org/html/rfc5987#section-3.2">mandatory charset definition</a> and
+	 * <a href="https://tools.ietf.org/html/rfc5987#section-4">no parameter continuation</a>
+	 * </p>
+	 *
+	 * @see <a href="https://tools.ietf.org/html/rfc2231">RFC 2231</a>
+	 * @see <a href="https://tools.ietf.org/html/rfc5987">RFC 5987</a>
+	 */
+	protected final class RFC2231Utils {
+
+		/**
+		 * The Hexadecimal values char array.
+		 */
+		private static final char[] HEX_DIGITS = "0123456789ABCDEF".toCharArray();
+		/**
+		 * The Hexadecimal representation of 127.
+		 */
+		private static final byte MASK = 0x7f;
+		/**
+		 * The Hexadecimal representation of 128.
+		 */
+		private static final int MASK_128 = 0x80;
+		/**
+		 * The Hexadecimal decode value.
+		 */
+		private static final byte[] HEX_DECODE = new byte[MASK_128];
+
+		// create a ASCII decoded array of Hexadecimal values
+		static {
+			for (var i = 0; i < HEX_DIGITS.length; i++) {
+				HEX_DECODE[HEX_DIGITS[i]] = (byte) i;
+				HEX_DECODE[Character.toLowerCase(HEX_DIGITS[i])] = (byte) i;
+			}
+		}
+
+		/**
+		 * Decodes a string of text obtained from a HTTP header as per RFC 2231
+		 *
+		 * <b>Eg 1.</b> {@code us-ascii'en-us'This%20is%20%2A%2A%2Afun%2A%2A%2A} will be decoded to {@code This is ***fun***}
+		 *
+		 * <b>Eg 2.</b> {@code iso-8859-1'en'%A3%20rate} will be decoded to {@code £ rate}.
+		 *
+		 * <b>Eg 3.</b> {@code UTF-8''%c2%a3%20and%20%e2%82%ac%20rates} will be decoded to {@code £ and € rates}.
+		 *
+		 * @param encodedText - Text to be decoded has a format of {@code <charset>'<language>'<encoded_value>} and ASCII only
+		 * @return Decoded text based on charset encoding
+		 * @throws UnsupportedEncodingException The requested character set wasn't found.
+		 */
+		static String decodeText(final String encodedText) throws UnsupportedEncodingException {
+			final var langDelimitStart = encodedText.indexOf('\'');
+			if (langDelimitStart == -1) {
+				// missing charset
+				return encodedText;
+			}
+			final var mimeCharset = encodedText.substring(0, langDelimitStart);
+			final var langDelimitEnd = encodedText.indexOf('\'', langDelimitStart + 1);
+			if (langDelimitEnd == -1) {
+				// missing language
+				return encodedText;
+			}
+			final var bytes = fromHex(encodedText.substring(langDelimitEnd + 1));
+			return new String(bytes, getJavaCharset(mimeCharset));
+		}
+
+		/**
+		 * Converts {@code text} to their corresponding Hex value.
+		 *
+		 * @param text - ASCII text input
+		 * @return Byte array of characters decoded from ASCII table
+		 */
+		private static byte[] fromHex(final String text) {
+			final var shift = 4;
+			final var out = new ByteArrayOutputStream(text.length());
+			for (var i = 0; i < text.length(); ) {
+				final var c = text.charAt(i++);
+				if (c == '%') {
+					if (i > text.length() - 2) {
+						break; // unterminated sequence
+					}
+					final var b1 = HEX_DECODE[text.charAt(i++) & MASK];
+					final var b2 = HEX_DECODE[text.charAt(i++) & MASK];
+					out.write(b1 << shift | b2);
+				} else {
+					out.write((byte) c);
+				}
+			}
+			return out.toByteArray();
+		}
+
+		private static String getJavaCharset(final String mimeCharset) {
+			// good enough for standard values
+			return mimeCharset;
+		}
+
+		/**
+		 * Tests if asterisk (*) at the end of parameter name to indicate, if it has charset and language information to decode the value.
+		 *
+		 * @param paramName The parameter, which is being checked.
+		 * @return {@code true}, if encoded as per RFC 2231, {@code false} otherwise
+		 */
+		static boolean hasEncodedValue(final String paramName) {
+			if (paramName != null) {
+				return paramName.lastIndexOf('*') == paramName.length() - 1;
+			}
+			return false;
+		}
+
+		/**
+		 * If {@code paramName} has Asterisk (*) at the end, it will be stripped off, else the passed value will be returned.
+		 *
+		 * @param paramName The parameter, which is being inspected.
+		 * @return stripped {@code paramName} of Asterisk (*), if RFC2231 encoded
+		 */
+		static String stripDelimiter(final String paramName) {
+			if (hasEncodedValue(paramName)) {
+				final var paramBuilder = new StringBuilder(paramName);
+				paramBuilder.deleteCharAt(paramName.lastIndexOf('*'));
+				return paramBuilder.toString();
+			}
+			return paramName;
+		}
+
+		/**
+		 * Private constructor so that no instances can be created. This class contains only static utility methods.
+		 */
+		private RFC2231Utils() {
+		}
+	}
+
+	/**
+	 * Utility class to decode MIME texts.
+	 */
+	protected final class MimeUtils {
+
+		/**
+		 * The marker to indicate text is encoded with BASE64 algorithm.
+		 */
+		private static final String BASE64_ENCODING_MARKER = "B";
+
+		/**
+		 * The marker to indicate text is encoded with QuotedPrintable algorithm.
+		 */
+		private static final String QUOTEDPRINTABLE_ENCODING_MARKER = "Q";
+
+		/**
+		 * If the text contains any encoded tokens, those tokens will be marked with "=?".
+		 */
+		private static final String ENCODED_TOKEN_MARKER = "=?";
+
+		/**
+		 * If the text contains any encoded tokens, those tokens will terminate with "=?".
+		 */
+		private static final String ENCODED_TOKEN_FINISHER = "?=";
+
+		/**
+		 * The linear whitespace chars sequence.
+		 */
+		private static final String LINEAR_WHITESPACE = " \t\r\n";
+
+		/**
+		 * Mappings between MIME and Java charset.
+		 */
+		private static final Map<String, String> MIME2JAVA = new HashMap<>();
+
+		static {
+			MIME2JAVA.put("iso-2022-cn", "ISO2022CN");
+			MIME2JAVA.put("iso-2022-kr", "ISO2022KR");
+			MIME2JAVA.put("utf-8", "UTF8");
+			MIME2JAVA.put("utf8", "UTF8");
+			MIME2JAVA.put("ja_jp.iso2022-7", "ISO2022JP");
+			MIME2JAVA.put("ja_jp.eucjp", "EUCJIS");
+			MIME2JAVA.put("euc-kr", "KSC5601");
+			MIME2JAVA.put("euckr", "KSC5601");
+			MIME2JAVA.put("us-ascii", "ISO-8859-1");
+			MIME2JAVA.put("x-us-ascii", "ISO-8859-1");
+		}
+
+		/**
+		 * Decodes a string of text obtained from a mail header into its proper form. The text generally will consist of a string of tokens, some of which may be
+		 * encoded using base64 encoding.
+		 *
+		 * @param text The text to decode.
+		 * @return The decoded text string.
+		 * @throws UnsupportedEncodingException if the detected encoding in the input text is not supported.
+		 */
+		static String decodeText(final String text) throws UnsupportedEncodingException {
+			// if the text contains any encoded tokens, those tokens will be marked with "=?". If the
+			// source string doesn't contain that sequent, no decoding is required.
+			if (!text.contains(ENCODED_TOKEN_MARKER)) {
+				return text;
+			}
+
+			var offset = 0;
+			final var endOffset = text.length();
+
+			var startWhiteSpace = -1;
+			var endWhiteSpace = -1;
+
+			final var decodedText = new StringBuilder(text.length());
+
+			var previousTokenEncoded = false;
+
+			while (offset < endOffset) {
+				var ch = text.charAt(offset);
+
+				// is this a whitespace character?
+				if (LINEAR_WHITESPACE.indexOf(ch) != -1) { // whitespace found
+					startWhiteSpace = offset;
+					while (offset < endOffset) {
+						// step over the white space characters.
+						ch = text.charAt(offset);
+						if (LINEAR_WHITESPACE.indexOf(ch) == -1) {
+							// record the location of the first non lwsp and drop down to process the
+							// token characters.
+							endWhiteSpace = offset;
+							break;
+						}
+						offset++;
+					}
+				} else {
+					// we have a word token. We need to scan over the word and then try to parse it.
+					final var wordStart = offset;
+
+					while (offset < endOffset) {
+						// step over the non white space characters.
+						ch = text.charAt(offset);
+						if (LINEAR_WHITESPACE.indexOf(ch) != -1) {
+							break;
+						}
+						offset++;
+
+						// NB: Trailing whitespace on these header strings will just be discarded.
+					}
+					// pull out the word token.
+					final var word = text.substring(wordStart, offset);
+					// is the token encoded? decode the word
+					if (word.startsWith(ENCODED_TOKEN_MARKER)) {
+						try {
+							// if this gives a parsing failure, treat it like a non-encoded word.
+							final var decodedWord = decodeWord(word);
+
+							// are any whitespace characters significant? Append 'em if we've got 'em.
+							if (!previousTokenEncoded && startWhiteSpace != -1) {
+								decodedText.append(text, startWhiteSpace, endWhiteSpace);
+								startWhiteSpace = -1;
+							}
+							// this is definitely a decoded token.
+							previousTokenEncoded = true;
+							// and add this to the text.
+							decodedText.append(decodedWord);
+							// we continue parsing from here...we allow parsing errors to fall through
+							// and get handled as normal text.
+							continue;
+
+						} catch (final ParseException ignored) {
+							// just ignore it, skip to next word
+						}
+					}
+					// this is a normal token, so it doesn't matter what the previous token was. Add the white space
+					// if we have it.
+					if (startWhiteSpace != -1) {
+						decodedText.append(text, startWhiteSpace, endWhiteSpace);
+						startWhiteSpace = -1;
+					}
+					// this is not a decoded token.
+					previousTokenEncoded = false;
+					decodedText.append(word);
+				}
+			}
+
+			return decodedText.toString();
+		}
+
+		/**
+		 * Decodes a string using the RFC 2047 rules for an "encoded-word" type. This encoding has the syntax:
+		 * <p>
+		 * encoded-word = "=?" charset "?" encoding "?" encoded-text "?="
+		 *
+		 * @param word The possibly encoded word value.
+		 * @return The decoded word.
+		 * @throws ParseException               in case of a parse error of the RFC 2047.
+		 * @throws UnsupportedEncodingException Thrown when Invalid RFC 2047 encoding was found.
+		 */
+		private static String decodeWord(final String word) throws ParseException, UnsupportedEncodingException {
+			// encoded words start with the characters "=?". If this not an encoded word, we throw a
+			// ParseException for the caller.
+
+			final var etmPos = word.indexOf(ENCODED_TOKEN_MARKER);
+			if (etmPos != 0) {
+				throw new ParseException("Invalid RFC 2047 encoded-word: " + word, etmPos);
+			}
+
+			final var charsetPos = word.indexOf('?', 2);
+			if (charsetPos == -1) {
+				throw new ParseException("Missing charset in RFC 2047 encoded-word: " + word, charsetPos);
+			}
+
+			// pull out the character set information (this is the MIME name at this point).
+			final var charset = word.substring(2, charsetPos).toLowerCase(Locale.ENGLISH);
+
+			// now pull out the encoding token the same way.
+			final var encodingPos = word.indexOf('?', charsetPos + 1);
+			if (encodingPos == -1) {
+				throw new ParseException("Missing encoding in RFC 2047 encoded-word: " + word, encodingPos);
+			}
+
+			final var encoding = word.substring(charsetPos + 1, encodingPos);
+
+			// and finally the encoded text.
+			final var encodedTextPos = word.indexOf(ENCODED_TOKEN_FINISHER, encodingPos + 1);
+			if (encodedTextPos == -1) {
+				throw new ParseException("Missing encoded text in RFC 2047 encoded-word: " + word, encodedTextPos);
+			}
+
+			final var encodedText = word.substring(encodingPos + 1, encodedTextPos);
+
+			// seems a bit silly to encode a null string, but easy to deal with.
+			if (encodedText.isEmpty()) {
+				return "";
+			}
+
+			try {
+				// the decoder writes directly to an output stream.
+				final var out = new ByteArrayOutputStream(encodedText.length());
+
+				final var encodedData = encodedText.getBytes(StandardCharsets.US_ASCII);
+
+				// Base64 encoded?
+				if (encoding.equals(BASE64_ENCODING_MARKER)) {
+					out.write(Base64.getMimeDecoder().decode(encodedData));
+				} else if (encoding.equals(QUOTEDPRINTABLE_ENCODING_MARKER)) { // maybe quoted printable.
+					QuotedPrintableDecoder.decode(encodedData, out);
+				} else {
+					throw new UnsupportedEncodingException("Unknown RFC 2047 encoding: " + encoding);
+				}
+				// get the decoded byte data and convert into a string.
+				final var decodedData = out.toByteArray();
+				return new String(decodedData, javaCharset(charset));
+			} catch (final IOException e) {
+				throw new UnsupportedEncodingException("Invalid RFC 2047 encoding");
+			}
+		}
+
+		/**
+		 * Translate a MIME standard character set name into the Java equivalent.
+		 *
+		 * @param charset The MIME standard name.
+		 * @return The Java equivalent for this name.
+		 */
+		private static String javaCharset(final String charset) {
+			// nothing in, nothing out.
+			if (charset == null) {
+				return null;
+			}
+			final var mappedCharset = MIME2JAVA.get(charset.toLowerCase(Locale.ENGLISH));
+			// if there is no mapping, then the original name is used. Many of the MIME character set
+			// names map directly back into Java. The reverse isn't necessarily true.
+			return mappedCharset == null ? charset : mappedCharset;
+		}
+
+		/**
+		 * Hidden constructor, this class must not be instantiated.
+		 */
+		private MimeUtils() {
+			// do nothing
+		}
+
+	}
+
+	protected final class QuotedPrintableDecoder {
+
+		/**
+		 * The shift value required to create the upper nibble from the first of 2 byte values converted from ASCII hex.
+		 */
+		private static final int UPPER_NIBBLE_SHIFT = Byte.SIZE / 2;
+
+		/**
+		 * Decodes the encoded byte data writing it to the given output stream.
+		 *
+		 * @param data The array of byte data to decode.
+		 * @param out  The output stream used to return the decoded data.
+		 * @return the number of bytes produced.
+		 * @throws IOException if an IO error occurs
+		 */
+		public static int decode(final byte[] data, final OutputStream out) throws IOException {
+			var off = 0;
+			final var length = data.length;
+			final var endOffset = off + length;
+			var bytesWritten = 0;
+
+			while (off < endOffset) {
+				final var ch = data[off++];
+
+				// space characters were translated to '_' on encode, so we need to translate them back.
+				if (ch == '_') {
+					out.write(' ');
+				} else if (ch == '=') {
+					// we found an encoded character. Reduce the 3 char sequence to one.
+					// but first, make sure we have two characters to work with.
+					if (off + 1 >= endOffset) {
+						throw new IOException("Invalid quoted printable encoding; truncated escape sequence");
+					}
+
+					final var b1 = data[off++];
+					final var b2 = data[off++];
+
+					// we've found an encoded carriage return. The next char needs to be a newline
+					if (b1 == '\r') {
+						if (b2 != '\n') {
+							throw new IOException("Invalid quoted printable encoding; CR must be followed by LF");
+						}
+						// this was a soft linebreak inserted by the encoding. We just toss this away
+						// on decode.
+					} else {
+						// this is a hex pair we need to convert back to a single byte.
+						final var c1 = hexToBinary(b1);
+						final var c2 = hexToBinary(b2);
+						out.write(c1 << UPPER_NIBBLE_SHIFT | c2);
+						// 3 bytes in, one byte out
+						bytesWritten++;
+					}
+				} else {
+					// simple character, just write it out.
+					out.write(ch);
+					bytesWritten++;
+				}
+			}
+
+			return bytesWritten;
+		}
+
+		/**
+		 * Converts a hexadecimal digit to the binary value it represents.
+		 *
+		 * @param b the ASCII hexadecimal byte to convert (0-0, A-F, a-f)
+		 * @return the int value of the hexadecimal byte, 0-15
+		 * @throws IOException if the byte is not a valid hexadecimal digit.
+		 */
+		private static int hexToBinary(final byte b) throws IOException {
+			// CHECKSTYLE IGNORE MagicNumber FOR NEXT 1 LINE
+			final var i = Character.digit((char) b, 16);
+			if (i == -1) {
+				throw new IOException("Invalid quoted printable encoding: not a valid hex digit: " + b);
+			}
+			return i;
+		}
+
+		/**
+		 * Hidden constructor, this class must not be instantiated.
+		 */
+		private QuotedPrintableDecoder() {
+			// do nothing
+		}
+
+	}
+
 
 	// *** END commons-fileupload source ***
 }
