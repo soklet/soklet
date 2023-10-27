@@ -81,4 +81,10 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	public Type getToType() {
 		return this.toType;
 	}
+
+	@Override
+	@Nonnull
+	public String toString() {
+		return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), getFromType(), getToType());
+	}
 }

@@ -424,18 +424,20 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			}
 		}
 
-		// Special hack to return MultipartField instances directly if the parameter wants a MultipartField
-		String multipartFieldTypeName = MultipartField.class.getTypeName();
-		boolean isMultipartScalarType = multipartFieldTypeName.equals(parameterType.getNormalizedType().getTypeName());
-		boolean isMultipartListType = parameterType.getListElementType().isPresent()
-				&& multipartFieldTypeName.equals(parameterType.getListElementType().get().getTypeName());
+		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, values, valuesMetadata, MultipartField.class, "multipart field",
+				(MultipartField multipartField, Type toType, ValueConverter<Object, Object> valueConverter) -> {
+					if (toType.equals(MultipartField.class))
+						return multipartField;
 
-		boolean returnWholeMultipartFields = isMultipartScalarType || isMultipartListType;
+					if (toType.equals(String.class))
+						return multipartField.getDataAsString().orElse(null);
 
-		// TODO: handle byte[] case
+					if (toType.equals(byte[].class))
+						return multipartField.getData().orElse(null);
 
-		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, values, valuesMetadata,
-				returnWholeMultipartFields, "multipart field", (message, ignored) -> {
+					return valueConverter.convert(multipartField.getDataAsString().orElse(null));
+				},
+				(message, ignored) -> {
 					return new MissingMultipartFieldException(message, name);
 				}, (message, cause, ignored, value, valueMetadatum) -> {
 					return new IllegalMultipartFieldException(message, cause, ((Optional<MultipartField>) valueMetadatum).orElse(null));
@@ -452,22 +454,23 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 																			 @Nonnull String description,
 																			 @Nonnull MissingExceptionProvider missingExceptionProvider,
 																			 @Nonnull IllegalExceptionProvider illegalExceptionProvider) {
-		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, values, List.of(), false,
-				description, missingExceptionProvider, illegalExceptionProvider);
+		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, values, List.of(), null,
+				description, null, missingExceptionProvider, illegalExceptionProvider);
 	}
 
 	@Nonnull
-	protected Object extractRequestValue(@Nonnull Request request,
-																			 @Nonnull ResourceMethod resourceMethod,
-																			 @Nonnull Parameter parameter,
-																			 @Nonnull ParameterType parameterType,
-																			 @Nonnull String name,
-																			 @Nonnull List<String> values,
-																			 @Nonnull List<?> valuesMetadata,
-																			 @Nonnull Boolean returnMetadataInsteadOfValues,
-																			 @Nonnull String description,
-																			 @Nonnull MissingExceptionProvider missingExceptionProvider,
-																			 @Nonnull IllegalExceptionProvider illegalExceptionProvider) {
+	protected <F> Object extractRequestValue(@Nonnull Request request,
+																					 @Nonnull ResourceMethod resourceMethod,
+																					 @Nonnull Parameter parameter,
+																					 @Nonnull ParameterType parameterType,
+																					 @Nonnull String name,
+																					 @Nonnull List<String> values,
+																					 @Nonnull List<F> valuesMetadata,
+																					 @Nullable Class<F> valuesMetadataType,
+																					 @Nonnull String description,
+																					 @Nullable ValueMetadatumConverter<F> valueMetadatumConverter,
+																					 @Nonnull MissingExceptionProvider missingExceptionProvider,
+																					 @Nonnull IllegalExceptionProvider illegalExceptionProvider) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -479,7 +482,9 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(missingExceptionProvider);
 		requireNonNull(illegalExceptionProvider);
 
+		boolean returnMetadataInsteadOfValues = valueMetadatumConverter != null;
 		Type toType = parameterType.isList() ? parameterType.getListElementType().get() : parameterType.getNormalizedType();
+
 		ValueConverter<Object, Object> valueConverter = getValueConverterRegistry().get(String.class, toType).orElse(null);
 
 		if (valueConverter == null && !returnMetadataInsteadOfValues)
@@ -490,7 +495,20 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			List<Object> results = new ArrayList<>(values.size());
 
 			if (returnMetadataInsteadOfValues) {
-				results.addAll(valuesMetadata);
+				for (int i = 0; i < valuesMetadata.size(); ++i) {
+					Object valueMetadatum = valuesMetadata.get(i);
+
+					if (valueMetadatum != null)
+						try {
+							valueMetadatum = valueMetadatumConverter.convert((F) valueMetadatum, toType, valueConverter);
+							results.add(valueMetadatum);
+						} catch (ValueConversionException e) {
+							throw illegalExceptionProvider.provide(
+									format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", valueMetadatum,
+											description, name, valueConverter.getToType()), e, name, null, Optional
+											.ofNullable(valuesMetadata.size() > i ? valuesMetadata.get(i) : null));
+						}
+				}
 			} else {
 				for (int i = 0; i < values.size(); ++i) {
 					String value = values.get(i);
@@ -518,6 +536,17 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 
 		if (returnMetadataInsteadOfValues) {
 			result = valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null;
+
+			if (result != null) {
+				try {
+					result = valueMetadatumConverter.convert((F) result, toType, valueConverter);
+				} catch (ValueConversionException e) {
+					throw illegalExceptionProvider.provide(
+							format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", result,
+									description, name, valueConverter.getToType()), e, name, null, Optional
+									.ofNullable(valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null));
+				}
+			}
 
 			if (!parameterType.isOptional() && result == null)
 				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
@@ -579,13 +608,21 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	}
 
 	@FunctionalInterface
-	protected interface IllegalExceptionProvider {
+	protected interface IllegalExceptionProvider<T> {
 		@Nonnull
 		RuntimeException provide(@Nonnull String message,
 														 @Nonnull Exception cause,
 														 @Nonnull String name,
 														 @Nullable String value,
-														 @Nullable Object valueMetadatum);
+														 @Nullable T valueMetadatum);
+	}
+
+	@FunctionalInterface
+	protected interface ValueMetadatumConverter<F> {
+		@Nonnull
+		Object convert(@Nonnull F valueMetadatum,
+									 @Nonnull Type toType,
+									 @Nonnull ValueConverter<Object, Object> valueConverter) throws ValueConversionException;
 	}
 
 	@ThreadSafe

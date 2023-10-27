@@ -144,11 +144,26 @@ public class SokletTests {
 		public void multipartUpload(Request request,
 																@Multipart("not-really-int") String notReallyAnInt,
 																@Multipart("not-really-int") Optional<String> optionalNotReallyAnInt,
-																List<MultipartField> one,
+																@Multipart("one") List<MultipartField> oneAsList,
 																MultipartField another,
+																@Multipart("another") Optional<List<byte[]>> anotherAsOptionalListOfBytes,
+																@Multipart("another") Optional<List<Integer>> anotherAsOptionalListOfInteger,
 																@Multipart("another") String anotherAsString,
-																@Multipart("another") byte[] anotherAsBytes) {
-			// TODO: some work here
+																@Multipart("another") byte[] anotherAsBytes,
+																@Multipart("another") Optional<Double> anotherAsOptionalDouble,
+																@Multipart("another") Optional<byte[]> anotherAsOptionalBytes) {
+			Assert.assertEquals("3x", notReallyAnInt);
+			Assert.assertEquals(Optional.of("3x"), optionalNotReallyAnInt);
+			Assert.assertEquals(2, oneAsList.size());
+			Assert.assertEquals("1", oneAsList.get(0).getDataAsString().get());
+			Assert.assertEquals("2", oneAsList.get(1).getDataAsString().get());
+			Assert.assertEquals("3", another.getDataAsString().get());
+			Assert.assertEquals("3", anotherAsString);
+			Assert.assertEquals("3", new String(anotherAsBytes, StandardCharsets.UTF_8));
+			Assert.assertEquals("3", new String(anotherAsOptionalListOfBytes.get().get(0), StandardCharsets.UTF_8));
+			Assert.assertEquals(3, anotherAsOptionalListOfInteger.get().get(0), 0);
+			Assert.assertEquals("3", new String(anotherAsOptionalBytes.get(), StandardCharsets.UTF_8));
+			Assert.assertEquals(3D, anotherAsOptionalDouble.get(), 0);
 		}
 	}
 
