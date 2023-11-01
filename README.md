@@ -55,6 +55,8 @@ Soklet embeds code from the following OSS projects:
 
 * [ClassIndex](https://github.com/atteo/classindex) by [Sławek Piotrowski](https://github.com/sentinelt) - Apache 2.0 License
 * [Microhttp](https://github.com/ebarlas/microhttp) by [Elliot Barlas](https://github.com/ebarlas) - MIT License
+* [Selenium](https://github.com/SeleniumHQ/selenium) - Apache 2.0 License
+* [Apache Commons FileUpload](https://commons.apache.org/proper/commons-fileupload/) - Apache 2.0 License
 
 ### Maven Installation
 
