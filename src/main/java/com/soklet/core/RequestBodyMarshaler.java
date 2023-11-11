@@ -27,8 +27,8 @@ import java.lang.reflect.Type;
 @FunctionalInterface
 public interface RequestBodyMarshaler {
 	@Nullable
-	<T> T marshalRequestBody(@Nonnull Request request,
-													 @Nonnull ResourceMethod resourceMethod,
-													 @Nonnull Parameter parameter,
-													 @Nonnull Type requestBodyType);
+	Object marshalRequestBody(@Nonnull Request request,
+														@Nonnull ResourceMethod resourceMethod,
+														@Nonnull Parameter parameter,
+														@Nonnull Type requestBodyType);
 }

@@ -47,11 +47,10 @@ public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 
 	@Nullable
 	@Override
-	@SuppressWarnings("unchecked")
-	public <T> T marshalRequestBody(@Nonnull Request request,
-																	@Nonnull ResourceMethod resourceMethod,
-																	@Nonnull Parameter parameter,
-																	@Nonnull Type requestBodyType) {
+	public Object marshalRequestBody(@Nonnull Request request,
+																	 @Nonnull ResourceMethod resourceMethod,
+																	 @Nonnull Parameter parameter,
+																	 @Nonnull Type requestBodyType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -67,7 +66,7 @@ public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 		String requestBodyAsString = request.getBodyAsString().orElse(null);
 
 		try {
-			return requestBodyAsString == null ? null : (T) valueConverter.convert(requestBodyAsString);
+			return requestBodyAsString == null ? null : valueConverter.convert(requestBodyAsString);
 		} catch (ValueConversionException e) {
 			throw new IllegalRequestBodyException(format("Unable to marshal request body to %s", requestBodyType), e);
 		}
