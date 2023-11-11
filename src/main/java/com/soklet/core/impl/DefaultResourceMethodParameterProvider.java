@@ -221,6 +221,14 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 
 				return requestBodyAsByteArray;
 			} else {
+				// Short circuit: optional and no request body
+				if (parameterType.isOptional() && request.getBody().isEmpty())
+					return Optional.empty();
+
+				// Short circuit: not optional and no request body
+				if (!parameterType.isOptional() && request.getBody().isEmpty())
+					throw new MissingRequestBodyException("A request body is required for this resource.");
+
 				// Let the request body marshaler try to handle it
 				Object requestBodyObject;
 				Type requestBodyType = parameterType.getNormalizedType();
@@ -237,7 +245,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 					return Optional.ofNullable(requestBodyObject);
 
 				if (requestBodyObject == null)
-					throw new MissingRequestBodyException("A request body is required for this resource.");
+					throw new MissingRequestBodyException("Request body is required for this resource, but it was marshaled to null");
 
 				return requestBodyObject;
 			}
