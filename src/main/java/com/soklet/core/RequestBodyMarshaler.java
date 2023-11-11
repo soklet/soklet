@@ -18,6 +18,7 @@ package com.soklet.core;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 
 /**
@@ -27,5 +28,7 @@ import java.lang.reflect.Type;
 public interface RequestBodyMarshaler {
 	@Nullable
 	<T> T marshalRequestBody(@Nonnull Request request,
+													 @Nonnull ResourceMethod resourceMethod,
+													 @Nonnull Parameter parameter,
 													 @Nonnull Type requestBodyType);
 }

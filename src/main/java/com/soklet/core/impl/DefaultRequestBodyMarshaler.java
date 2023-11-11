@@ -22,10 +22,12 @@ import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.core.Request;
 import com.soklet.core.RequestBodyMarshaler;
+import com.soklet.core.ResourceMethod;
 import com.soklet.exception.IllegalRequestBodyException;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 
 import static java.lang.String.format;
@@ -47,8 +49,12 @@ public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 	@Override
 	@SuppressWarnings("unchecked")
 	public <T> T marshalRequestBody(@Nonnull Request request,
+																	@Nonnull ResourceMethod resourceMethod,
+																	@Nonnull Parameter parameter,
 																	@Nonnull Type requestBodyType) {
 		requireNonNull(request);
+		requireNonNull(resourceMethod);
+		requireNonNull(parameter);
 		requireNonNull(requestBodyType);
 
 		ValueConverter<Object, Object> valueConverter = getValueConverterRegistry().get(String.class, requestBodyType).orElse(null);
