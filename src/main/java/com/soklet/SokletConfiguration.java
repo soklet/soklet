@@ -21,7 +21,6 @@ import com.soklet.core.CorsAuthorizer;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogHandler;
-import com.soklet.core.MultipartParser;
 import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
@@ -31,7 +30,6 @@ import com.soklet.core.impl.DefaultCorsAuthorizer;
 import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultLifecycleInterceptor;
 import com.soklet.core.impl.DefaultLogHandler;
-import com.soklet.core.impl.DefaultMultipartParser;
 import com.soklet.core.impl.DefaultRequestBodyMarshaler;
 import com.soklet.core.impl.DefaultResourceMethodParameterProvider;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
@@ -68,8 +66,6 @@ public class SokletConfiguration {
 	@Nonnull
 	private final LogHandler logHandler;
 	@Nonnull
-	private final MultipartParser multipartParser;
-	@Nonnull
 	private final Server server;
 
 	public SokletConfiguration(@Nonnull Builder builder) {
@@ -77,7 +73,6 @@ public class SokletConfiguration {
 
 		this.server = builder.server;
 		this.logHandler = builder.logHandler != null ? builder.logHandler : new DefaultLogHandler();
-		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : new DefaultMultipartParser();
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : new DefaultInstanceProvider();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : new ValueConverterRegistry();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : new DefaultRequestBodyMarshaler(getValueConverterRegistry());
@@ -129,11 +124,6 @@ public class SokletConfiguration {
 	}
 
 	@Nonnull
-	public MultipartParser getMultipartParser() {
-		return this.multipartParser;
-	}
-
-	@Nonnull
 	public Server getServer() {
 		return this.server;
 	}
@@ -170,8 +160,6 @@ public class SokletConfiguration {
 		private LifecycleInterceptor lifecycleInterceptor;
 		@Nullable
 		private CorsAuthorizer corsAuthorizer;
-		@Nullable
-		private MultipartParser multipartParser;
 		@Nullable
 		private LogHandler logHandler;
 
@@ -226,12 +214,6 @@ public class SokletConfiguration {
 		@Nonnull
 		public Builder corsAuthorizer(@Nullable CorsAuthorizer corsAuthorizer) {
 			this.corsAuthorizer = corsAuthorizer;
-			return this;
-		}
-
-		@Nonnull
-		public Builder multipartParser(@Nullable MultipartParser multipartParser) {
-			this.multipartParser = multipartParser;
 			return this;
 		}
 

@@ -19,6 +19,7 @@ package com.soklet.core.impl;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.LogHandler;
 import com.soklet.core.MarshaledResponse;
+import com.soklet.core.MultipartParser;
 import com.soklet.core.Request;
 import com.soklet.core.RequestHandler;
 import com.soklet.core.ResponseCookie;
@@ -118,6 +119,8 @@ public class MicrohttpServer implements Server {
 	@Nonnull
 	private final LogHandler logHandler;
 	@Nonnull
+	private final MultipartParser multipartParser;
+	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
 	private final Supplier<ExecutorService> eventLoopExecutorServiceSupplier;
@@ -147,6 +150,7 @@ public class MicrohttpServer implements Server {
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.logHandler = builder.logHandler != null ? builder.logHandler : new DefaultLogHandler();
+		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : new DefaultMultipartParser();
 		this.eventLoopExecutorServiceSupplier = builder.eventLoopExecutorServiceSupplier != null ? builder.eventLoopExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "event-loop";
 
@@ -227,6 +231,7 @@ public class MicrohttpServer implements Server {
 							body = null;
 
 						Request request = new Request.Builder(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), microhttpRequest.uri())
+								.multipartParser(getMultipartParser())
 								.headers(headersFromMicrohttpRequest(microhttpRequest))
 								.body(body)
 								.build();
@@ -463,6 +468,11 @@ public class MicrohttpServer implements Server {
 	}
 
 	@Nonnull
+	protected MultipartParser getMultipartParser() {
+		return this.multipartParser;
+	}
+
+	@Nonnull
 	protected Optional<ExecutorService> getEventLoopExecutorService() {
 		return Optional.ofNullable(this.eventLoopExecutorService);
 	}
@@ -564,6 +574,8 @@ public class MicrohttpServer implements Server {
 		@Nullable
 		private LogHandler logHandler;
 		@Nullable
+		private MultipartParser multipartParser;
+		@Nullable
 		private Supplier<ExecutorService> eventLoopExecutorServiceSupplier;
 		@Nullable
 		private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
@@ -625,6 +637,12 @@ public class MicrohttpServer implements Server {
 		@Nonnull
 		public Builder logHandler(@Nullable LogHandler logHandler) {
 			this.logHandler = logHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder multipartParser(@Nullable MultipartParser multipartParser) {
+			this.multipartParser = multipartParser;
 			return this;
 		}
 
