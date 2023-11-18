@@ -21,16 +21,14 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Type;
-import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.StreamSupport;
 
-import static com.soklet.converter.ValueConverters.defaultValueConverters;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
-import static java.util.stream.Collectors.toList;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -38,56 +36,50 @@ import static java.util.stream.Collectors.toList;
 @ThreadSafe
 public class ValueConverterRegistry {
 	@Nonnull
+	private static final ValueConverterRegistry DEFAULT_REGISTRY;
+	@Nonnull
 	private static final ValueConverter<?, ?> REFLEXIVE_VALUE_CONVERTER;
 
 	static {
 		REFLEXIVE_VALUE_CONVERTER = new ReflexiveValueConverter<>();
+		DEFAULT_REGISTRY = new ValueConverterRegistry();
 	}
 
+	// This is explicitly typed as a ConcurrentHashMap because we may silently accumulate additional converters over time
+	// and this serves as a reminder that the Map instance must be threadsafe to accommodate.
+	//
+	// Use case: as new enum types are encountered, ValueConverter instances are generated and cached off.
+	// From a user's perspective, it would be burdensome to register converters for these ahead of time -
+	// it's preferable to have enum conversion "just work" for string names, which is almost always what's desired.
 	@Nonnull
-	private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConverterCache;
+	private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey;
+
+	@Nonnull
+	public static ValueConverterRegistry defaultRegistry() {
+		return DEFAULT_REGISTRY;
+	}
 
 	public ValueConverterRegistry() {
-		this.valueConverterCache = new ConcurrentHashMap<>();
-		initializeDefaultValueConverters();
+		this(Set.of());
 	}
 
-	@Nonnull
-	public Boolean add(@Nonnull ValueConverter<?, ?> valueConverter) {
-		requireNonNull(valueConverter);
-		return getValueConverterCache().put(extractCacheKeyFromValueConverter(valueConverter), valueConverter) != null;
-	}
-
-	@Nonnull
-	public List<Boolean> addAll(@Nonnull Iterable<ValueConverter<?, ?>> valueConverters) {
+	public ValueConverterRegistry(@Nonnull Set<ValueConverter<?, ?>> valueConverters) {
 		requireNonNull(valueConverters);
-		return StreamSupport.stream(valueConverters.spliterator(), false)
-				.map(valueConverter -> add(valueConverter))
-				.collect(toList());
-	}
 
-	@Nonnull
-	public Boolean remove(@Nonnull ValueConverter<?, ?> valueConverter) {
-		requireNonNull(valueConverter);
-		return getValueConverterCache().remove(extractCacheKeyFromValueConverter(valueConverter)) != null;
-	}
+		ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey = new ConcurrentHashMap<>(valueConverters.size());
 
-	@Nonnull
-	public Boolean remove(@Nonnull TypeReference<?> fromTypeReference,
-												@Nonnull TypeReference<?> toTypeReference) {
-		requireNonNull(fromTypeReference);
-		requireNonNull(toTypeReference);
+		// By default, we include out-of-the-box converters
+		for (ValueConverter<?, ?> defaultValueConverter : ValueConverters.defaultValueConverters())
+			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(defaultValueConverter), defaultValueConverter);
 
-		return remove(fromTypeReference.getType(), toTypeReference.getType());
-	}
+		// We also include a "reflexive" converter which knows how to convert a type to itself
+		valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(REFLEXIVE_VALUE_CONVERTER), REFLEXIVE_VALUE_CONVERTER);
 
-	@Nonnull
-	public Boolean remove(@Nonnull Type fromType,
-												@Nonnull Type toType) {
-		requireNonNull(fromType);
-		requireNonNull(toType);
+		// Finally, register any additional converters that were provided
+		for (ValueConverter<?, ?> valueConverter : valueConverters)
+			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(valueConverter), valueConverter);
 
-		return getValueConverterCache().remove(new CacheKey(fromType, toType)) != null;
+		this.valueConvertersByCacheKey = valueConvertersByCacheKey;
 	}
 
 	@Nonnull
@@ -106,15 +98,16 @@ public class ValueConverterRegistry {
 		requireNonNull(fromType);
 		requireNonNull(toType);
 
+		// Reflexive case: from == to
 		if (fromType.equals(toType))
 			return Optional.of((ValueConverter<F, T>) REFLEXIVE_VALUE_CONVERTER);
 
-		ValueConverter<F, T> valueConverter = (ValueConverter<F, T>) getValueConverterCache().get(new CacheKey(fromType, toType));
+		CacheKey cacheKey = new CacheKey(fromType, toType);
+		ValueConverter<F, T> valueConverter = (ValueConverter<F, T>) getValueConvertersByCacheKey().get(cacheKey);
 
 		// Special case for enums.
 		// If no converter was registered for converting a String to an Enum<?>, create a simple converter and cache it off
 		if (valueConverter == null && String.class.equals(fromType) && toType instanceof @SuppressWarnings("rawtypes")Class toClass) {
-
 			if (toClass.isEnum()) {
 				valueConverter = new ValueConverter<>() {
 					@Override
@@ -150,7 +143,7 @@ public class ValueConverterRegistry {
 					}
 				};
 
-				getValueConverterCache().putIfAbsent(new CacheKey(fromType, toType), valueConverter);
+				getValueConvertersByCacheKey().putIfAbsent(new CacheKey(fromType, toType), valueConverter);
 			}
 		}
 
@@ -163,16 +156,9 @@ public class ValueConverterRegistry {
 		return new CacheKey(valueConverter.getFromType(), valueConverter.getToType());
 	}
 
-	/**
-	 * Hook for subclasses to provide different default converters.
-	 */
-	protected void initializeDefaultValueConverters() {
-		addAll(defaultValueConverters());
-	}
-
 	@Nonnull
-	protected ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> getValueConverterCache() {
-		return valueConverterCache;
+	protected Map<CacheKey, ValueConverter<?, ?>> getValueConvertersByCacheKey() {
+		return this.valueConvertersByCacheKey;
 	}
 
 	@Nonnull

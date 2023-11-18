@@ -594,33 +594,33 @@ The [ValueConverterRegistry](https://www.soklet.com/javadoc/com/soklet/converter
 However, you might have special types that you'd like to have Soklet convert on your behalf.  Just supplement your `ValueConverterRegistry` with any `ValueConverter` instances you need.
 
 ```java
-// A registry with useful default converters
-ValueConverterRegistry valueConverterRegistry = new ValueConverterRegistry();
+// A registry comes with useful default converters which can be supplemented/replaced
+ValueConverterRegistry valueConverterRegistry = new ValueConverterRegistry(Set.of(
+  // Add a custom converter for a special type
+  new ValueConverter<String, MyExampleType>() {
+    @Nullable
+    @Override
+    public MyExampleType convert(@Nullable String from) throws ValueConversionException {
+      if(from == null)
+        return null;
 
-// Add a custom converter for a special type
-valueConverterRegistry.add(new ValueConverter<String, MyExampleType>() {
-  @Nullable
-  @Override
-  public MyExampleType convert(@Nullable String from) throws ValueConversionException {
-    if(from == null)
-      return null;
-				
-    // Whatever custom logic you need
-    return MyExampleType.fromString(from);
-  }
+      // Whatever custom logic you need
+      return MyExampleType.fromString(from);
+    }
 
-  @Nonnull
-  @Override
-  public Type getFromType() {
-    return String.class;
-  }
+    @Nonnull
+    @Override
+    public Type getFromType() {
+      return String.class;
+    }
 
-  @Nonnull
-  @Override
-  public Type getToType() {
-    return MyExampleType.class;
-  }
-});
+    @Nonnull
+    @Override
+    public Type getToType() {
+      return MyExampleType.class;
+    }
+  }	
+));
 
 // Plug in your custom registry so Soklet can use it
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)

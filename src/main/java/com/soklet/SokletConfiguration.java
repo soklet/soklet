@@ -74,7 +74,7 @@ public class SokletConfiguration {
 		this.server = builder.server;
 		this.logHandler = builder.logHandler != null ? builder.logHandler : new DefaultLogHandler();
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : new DefaultInstanceProvider();
-		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : new ValueConverterRegistry();
+		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.defaultRegistry();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : new DefaultRequestBodyMarshaler(getValueConverterRegistry());
 		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : new DefaultResourceMethodResolver();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(getInstanceProvider(), getValueConverterRegistry(), getRequestBodyMarshaler());
