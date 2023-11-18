@@ -149,8 +149,8 @@ public class MicrohttpServer implements Server {
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
-		this.logHandler = builder.logHandler != null ? builder.logHandler : new DefaultLogHandler();
-		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : new DefaultMultipartParser();
+		this.logHandler = builder.logHandler != null ? builder.logHandler : DefaultLogHandler.sharedInstance();
+		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.sharedInstance();
 		this.eventLoopExecutorServiceSupplier = builder.eventLoopExecutorServiceSupplier != null ? builder.eventLoopExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "event-loop";
 

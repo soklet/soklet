@@ -31,6 +31,18 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class DefaultInstanceProvider implements InstanceProvider {
 	@Nonnull
+	private static final DefaultInstanceProvider SHARED_INSTANCE;
+
+	static {
+		SHARED_INSTANCE = new DefaultInstanceProvider();
+	}
+
+	@Nonnull
+	public static DefaultInstanceProvider sharedInstance() {
+		return SHARED_INSTANCE;
+	}
+
+	@Nonnull
 	@Override
 	public <T> T provide(@Nonnull Class<T> instanceClass) {
 		requireNonNull(instanceClass);

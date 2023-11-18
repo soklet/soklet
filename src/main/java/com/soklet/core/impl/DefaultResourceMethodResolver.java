@@ -63,11 +63,23 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	@Nonnull
+	private static final DefaultResourceMethodResolver SHARED_INSTANCE;
+
+	static {
+		SHARED_INSTANCE = new DefaultResourceMethodResolver();
+	}
+
+	@Nonnull
 	private final Set<Method> resourceMethods;
 	@Nonnull
 	private final Map<HttpMethod, Set<Method>> resourceMethodsByHttpMethod;
 	@Nonnull
 	private final Map<Method, Set<HttpMethodResourcePath>> httpMethodResourcePathsByMethod;
+
+	@Nonnull
+	public static DefaultResourceMethodResolver sharedInstance() {
+		return SHARED_INSTANCE;
+	}
 
 	public DefaultResourceMethodResolver() {
 		this(ClassIndex.getAnnotated(Resource.class).parallelStream()

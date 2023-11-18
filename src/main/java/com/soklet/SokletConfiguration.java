@@ -72,15 +72,15 @@ public class SokletConfiguration {
 		requireNonNull(builder);
 
 		this.server = builder.server;
-		this.logHandler = builder.logHandler != null ? builder.logHandler : new DefaultLogHandler();
-		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : new DefaultInstanceProvider();
-		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.defaultRegistry();
+		this.logHandler = builder.logHandler != null ? builder.logHandler : DefaultLogHandler.sharedInstance();
+		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : DefaultInstanceProvider.sharedInstance();
+		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.sharedInstance();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : new DefaultRequestBodyMarshaler(getValueConverterRegistry());
-		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : new DefaultResourceMethodResolver();
+		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : DefaultResourceMethodResolver.sharedInstance();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(getInstanceProvider(), getValueConverterRegistry(), getRequestBodyMarshaler());
-		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : new DefaultResponseMarshaler();
-		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : new DefaultLifecycleInterceptor();
-		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : new DefaultCorsAuthorizer();
+		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : DefaultResponseMarshaler.sharedInstance();
+		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
+		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : DefaultCorsAuthorizer.sharedInstance();
 	}
 
 	@Nonnull

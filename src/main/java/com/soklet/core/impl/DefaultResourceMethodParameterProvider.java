@@ -79,6 +79,12 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	@Nonnull
 	private final RequestBodyMarshaler requestBodyMarshaler;
 
+	public DefaultResourceMethodParameterProvider() {
+		this(DefaultInstanceProvider.sharedInstance(),
+				ValueConverterRegistry.sharedInstance(),
+				DefaultRequestBodyMarshaler.sharedInstance());
+	}
+
 	public DefaultResourceMethodParameterProvider(@Nonnull InstanceProvider instanceProvider,
 																								@Nonnull ValueConverterRegistry valueConverterRegistry,
 																								@Nonnull RequestBodyMarshaler requestBodyMarshaler) {

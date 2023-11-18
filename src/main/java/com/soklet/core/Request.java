@@ -48,12 +48,9 @@ import static java.util.Objects.requireNonNull;
 public class Request {
 	@Nonnull
 	private static final IdGenerator DEFAULT_ID_GENERATOR;
-	@Nonnull
-	private static final MultipartParser DEFAULT_MULTIPART_PARSER;
 
 	static {
 		DEFAULT_ID_GENERATOR = new DefaultIdGenerator();
-		DEFAULT_MULTIPART_PARSER = new DefaultMultipartParser();
 	}
 
 	@Nonnull
@@ -118,7 +115,7 @@ public class Request {
 		if (contentType != null && contentType.toLowerCase(Locale.ENGLISH).startsWith("multipart/")) {
 			multipart = true;
 
-			MultipartParser multipartParser = builder.multipartParser == null ? getDefaultMultipartParser() : builder.multipartParser;
+			MultipartParser multipartParser = builder.multipartParser == null ? DefaultMultipartParser.sharedInstance() : builder.multipartParser;
 			multipartFields = Collections.unmodifiableMap(multipartParser.extractMultipartFields(this));
 		}
 
@@ -283,11 +280,6 @@ public class Request {
 	@Nonnull
 	protected IdGenerator getDefaultIdGenerator() {
 		return DEFAULT_ID_GENERATOR;
-	}
-
-	@Nonnull
-	protected MultipartParser getDefaultMultipartParser() {
-		return DEFAULT_MULTIPART_PARSER;
 	}
 
 	@Nonnull

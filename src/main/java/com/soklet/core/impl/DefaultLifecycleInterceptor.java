@@ -18,6 +18,7 @@ package com.soklet.core.impl;
 
 import com.soklet.core.LifecycleInterceptor;
 
+import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -25,5 +26,17 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public class DefaultLifecycleInterceptor implements LifecycleInterceptor {
+	@Nonnull
+	private static final DefaultLifecycleInterceptor SHARED_INSTANCE;
+
+	static {
+		SHARED_INSTANCE = new DefaultLifecycleInterceptor();
+	}
+
+	@Nonnull
+	public static DefaultLifecycleInterceptor sharedInstance() {
+		return SHARED_INSTANCE;
+	}
+	
 	// No method overrides
 }

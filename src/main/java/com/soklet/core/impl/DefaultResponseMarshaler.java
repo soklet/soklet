@@ -50,6 +50,18 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
+	private static final DefaultResponseMarshaler SHARED_INSTANCE;
+
+	static {
+		SHARED_INSTANCE = new DefaultResponseMarshaler();
+	}
+
+	@Nonnull
+	public static DefaultResponseMarshaler sharedInstance() {
+		return SHARED_INSTANCE;
+	}
+
+	@Nonnull
 	@Override
 	public MarshaledResponse forHappyPath(@Nonnull Request request,
 																				@Nonnull Response response,

@@ -38,7 +38,23 @@ import static java.util.Objects.requireNonNull;
  */
 public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 	@Nonnull
+	private static final DefaultRequestBodyMarshaler SHARED_INSTANCE;
+
+	static {
+		SHARED_INSTANCE = new DefaultRequestBodyMarshaler();
+	}
+
+	@Nonnull
 	private final ValueConverterRegistry valueConverterRegistry;
+
+	@Nonnull
+	public static DefaultRequestBodyMarshaler sharedInstance() {
+		return SHARED_INSTANCE;
+	}
+
+	public DefaultRequestBodyMarshaler() {
+		this(ValueConverterRegistry.sharedInstance());
+	}
 
 	public DefaultRequestBodyMarshaler(@Nonnull ValueConverterRegistry valueConverterRegistry) {
 		requireNonNull(valueConverterRegistry);

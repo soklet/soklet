@@ -35,6 +35,18 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class DefaultCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
+	private static final DefaultCorsAuthorizer SHARED_INSTANCE;
+
+	static {
+		SHARED_INSTANCE = new DefaultCorsAuthorizer();
+	}
+
+	@Nonnull
+	public static DefaultCorsAuthorizer sharedInstance() {
+		return SHARED_INSTANCE;
+	}
+
+	@Nonnull
 	@Override
 	public Optional<CorsResponse> authorize(@Nonnull Request request) {
 		requireNonNull(request);

@@ -51,6 +51,18 @@ import static com.soklet.core.Utilities.trimAggressivelyToNull;
  */
 @ThreadSafe
 public class DefaultMultipartParser implements MultipartParser {
+	@Nonnull
+	private static final DefaultMultipartParser SHARED_INSTANCE;
+
+	static {
+		SHARED_INSTANCE = new DefaultMultipartParser();
+	}
+
+	@Nonnull
+	public static DefaultMultipartParser sharedInstance() {
+		return SHARED_INSTANCE;
+	}
+
 	@Override
 	@Nonnull
 	public Map<String, Set<MultipartField>> extractMultipartFields(@Nonnull Request request) {

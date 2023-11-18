@@ -36,13 +36,13 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class ValueConverterRegistry {
 	@Nonnull
-	private static final ValueConverterRegistry DEFAULT_REGISTRY;
+	private static final ValueConverterRegistry SHARED_INSTANCE;
 	@Nonnull
 	private static final ValueConverter<?, ?> REFLEXIVE_VALUE_CONVERTER;
 
 	static {
 		REFLEXIVE_VALUE_CONVERTER = new ReflexiveValueConverter<>();
-		DEFAULT_REGISTRY = new ValueConverterRegistry();
+		SHARED_INSTANCE = new ValueConverterRegistry();
 	}
 
 	// This is explicitly typed as a ConcurrentHashMap because we may silently accumulate additional converters over time
@@ -55,8 +55,8 @@ public class ValueConverterRegistry {
 	private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey;
 
 	@Nonnull
-	public static ValueConverterRegistry defaultRegistry() {
-		return DEFAULT_REGISTRY;
+	public static ValueConverterRegistry sharedInstance() {
+		return SHARED_INSTANCE;
 	}
 
 	public ValueConverterRegistry() {

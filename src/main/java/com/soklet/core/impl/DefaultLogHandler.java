@@ -32,6 +32,18 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public class DefaultLogHandler implements LogHandler {
+	@Nonnull
+	private static final DefaultLogHandler SHARED_INSTANCE;
+
+	static {
+		SHARED_INSTANCE = new DefaultLogHandler();
+	}
+
+	@Nonnull
+	public static DefaultLogHandler sharedInstance() {
+		return SHARED_INSTANCE;
+	}
+
 	@Override
 	public void logDebug(@Nonnull String message) {
 		requireNonNull(message);
