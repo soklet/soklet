@@ -467,6 +467,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	}
 
 	@Nonnull
+	@SuppressWarnings("unchecked")
 	protected <F> Object extractRequestValue(@Nonnull Request request,
 																					 @Nonnull ResourceMethod resourceMethod,
 																					 @Nonnull Parameter parameter,
