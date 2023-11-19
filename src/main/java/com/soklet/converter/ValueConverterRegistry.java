@@ -16,6 +16,8 @@
 
 package com.soklet.converter;
 
+import com.soklet.core.TypeReference;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;

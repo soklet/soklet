@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.converter;
+package com.soklet.core;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
