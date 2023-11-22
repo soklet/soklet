@@ -81,10 +81,10 @@ class App {
   public static void main(String[] args) throws Exception {
     int port = 8080;
 
-    // Bare-bones: use built-in MicrohttpServer and don't change the default configuration
+    // Bare-bones: use built-in DefaultServer and don't change the default configuration
     SokletConfiguration configuration = new SokletConfiguration.Builder(
-        new MicrohttpServer.Builder(port).build())
-      .build();
+      new DefaultServer.Builder(port).build()
+    ).build();
 
     try (Soklet soklet = new Soklet(configuration)) {
       soklet.start();
@@ -217,8 +217,7 @@ int port = 8080;
 Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
 SokletConfiguration configuration = new SokletConfiguration.Builder(
-  // Use the default Microhttp Server
-  new MicrohttpServer.Builder(port).build()
+  new DefaultServer.Builder(port).build()
 )
 
 // Hook into lifecycle events to log/customize behavior
@@ -338,13 +337,13 @@ com.soklet.exception.IllegalQueryParameterException: Illegal value 'abc' was spe
 
 ### Server
 
-Soklet provides an embedded version of [Microhttp](https://github.com/ebarlas/microhttp) out-of-the-box in the form of [MicrohttpServer](https://www.soklet.com/javadoc/com/soklet/core/impl/MicrohttpServer.html).
+Soklet provides an embedded version of [Microhttp](https://github.com/ebarlas/microhttp) out-of-the-box in the form of [DefaultServer](https://www.soklet.com/javadoc/com/soklet/core/impl/DefaultServer.html).
 
 The default configuration will transparently use [JEP 444 Virtual Threads](https://openjdk.org/jeps/444) if available at runtime (JDK 19+ with the `--enable-preview` flag or JDK 21+ stock configuration) and fall back to native threads if not.
 
 ```java
 // The only required configuration is port number
-Server server = new MicrohttpServer.Builder(8080 /* port */)
+Server server = new DefaultServer.Builder(8080 /* port */)
   // Host on which we are listening
   .host("0.0.0.0")
   // The number of connection-handling event loops to run concurrently 

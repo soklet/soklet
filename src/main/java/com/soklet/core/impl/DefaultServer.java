@@ -69,7 +69,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class MicrohttpServer implements Server {
+public class DefaultServer implements Server {
 	@Nonnull
 	private static final String DEFAULT_HOST;
 	@Nonnull
@@ -135,7 +135,7 @@ public class MicrohttpServer implements Server {
 	@Nullable
 	private volatile EventLoop eventLoop;
 
-	protected MicrohttpServer(@Nonnull Builder builder) {
+	protected DefaultServer(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
 		this.lock = new ReentrantLock();
@@ -152,7 +152,7 @@ public class MicrohttpServer implements Server {
 		this.logHandler = builder.logHandler != null ? builder.logHandler : DefaultLogHandler.sharedInstance();
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.sharedInstance();
 		this.eventLoopExecutorServiceSupplier = builder.eventLoopExecutorServiceSupplier != null ? builder.eventLoopExecutorServiceSupplier : () -> {
-			String threadNamePrefix = "event-loop";
+			String threadNamePrefix = "event-loop-";
 
 			if (Utilities.virtualThreadsAvailable())
 				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
@@ -545,7 +545,7 @@ public class MicrohttpServer implements Server {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link MicrohttpServer}.
+	 * Builder used to construct instances of {@link DefaultServer}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -659,8 +659,8 @@ public class MicrohttpServer implements Server {
 		}
 
 		@Nonnull
-		public MicrohttpServer build() {
-			return new MicrohttpServer(this);
+		public DefaultServer build() {
+			return new DefaultServer(this);
 		}
 	}
 }
