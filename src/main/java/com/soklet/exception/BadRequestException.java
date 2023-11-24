@@ -23,7 +23,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-public class BadRequestException extends RuntimeException {
+public abstract class BadRequestException extends RuntimeException {
 	public BadRequestException(@Nullable String message) {
 		super(message);
 	}
