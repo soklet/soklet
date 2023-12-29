@@ -23,6 +23,7 @@ package com.soklet.core.impl;
 import com.soklet.core.MultipartField;
 import com.soklet.core.MultipartParser;
 import com.soklet.core.Request;
+import com.soklet.exception.MissingRequestHeaderException;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
@@ -89,7 +90,11 @@ public class DefaultMultipartParser implements MultipartParser {
 			}
 		};
 
-		String contentTypeHeader = request.getHeader("Content-Type").get();
+		String contentTypeHeader = request.getHeader("Content-Type").orElse(null);
+
+		if (contentTypeHeader == null)
+			throw new MissingRequestHeaderException("The 'Content-Type' header must be specified for multipart requests.", "Content-Type");
+
 		Map<String, String> contentTypeHeaderFields = extractFields(contentTypeHeader);
 
 		ByteArrayInputStream input = new ByteArrayInputStream(requestBody);
