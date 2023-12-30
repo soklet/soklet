@@ -192,7 +192,7 @@ public class ExampleResource {
 
 ## Configuration
 
-All of Soklet's components are programmatically pluggable via the [SokletConfiguration](https://www.soklet.com/javadoc/com/soklet/SokletConfiguration.html) builder.
+All of Soklet's components are programmatically pluggable via the [SokletConfiguration](https://javadoc.soklet.com/com/soklet/SokletConfiguration.html) builder.
 
 Components you'll likely want to customize are:
 
@@ -205,8 +205,8 @@ Components you'll likely want to customize are:
 
 "Experts only" components are:
 
-* [RequestMethodResolver](https://www.soklet.com/javadoc/com/soklet/core/RequestMethodResolver.html) - determines how to map HTTP requests to Resource Methods 
-* [ResourceMethodParameterProvider](https://www.soklet.com/javadoc/com/soklet/core/ResourceMethodParameterProvider.html) - determines how to inject appropriate parameter values when invoking Resource Methods
+* [RequestMethodResolver](https://javadoc.soklet.com/com/soklet/core/RequestMethodResolver.html) - determines how to map HTTP requests to Resource Methods 
+* [ResourceMethodParameterProvider](https://javadoc.soklet.com/com/soklet/core/ResourceMethodParameterProvider.html) - determines how to inject appropriate parameter values when invoking Resource Methods
 
 Here's an example configuration for an API that serves JSON responses.
 
@@ -337,7 +337,7 @@ com.soklet.exception.IllegalQueryParameterException: Illegal value 'abc' was spe
 
 ### Server
 
-Soklet provides an embedded version of [Microhttp](https://github.com/ebarlas/microhttp) out-of-the-box in the form of [DefaultServer](https://www.soklet.com/javadoc/com/soklet/core/impl/DefaultServer.html).
+Soklet provides an embedded version of [Microhttp](https://github.com/ebarlas/microhttp) out-of-the-box in the form of [DefaultServer](https://javadoc.soklet.com/com/soklet/core/impl/DefaultServer.html).
 
 The default configuration will transparently use [JEP 444 Virtual Threads](https://openjdk.org/jeps/444) if available at runtime (JDK 19+ with the `--enable-preview` flag or JDK 21+ stock configuration) and fall back to native threads if not.
 
@@ -376,26 +376,26 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server).buil
 
 ### Response Marshaler
 
-Soklet's [ResponseMarshaler](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html) specifies how a "logical" response (an arbitrary Java object) is written to bytes over the wire.
+Soklet's [ResponseMarshaler](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html) specifies how a "logical" response (an arbitrary Java object) is written to bytes over the wire.
 
 Hooks are provided for these scenarios:
 
 * "Happy path" - a non-exceptional, non-OPTIONS, non-CORS request
-    * [`ResponseMarshaler::forHappyPath`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forHappyPath(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.ResourceMethod))
+    * [`ResponseMarshaler::forHappyPath`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forHappyPath(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.ResourceMethod))
 * Uncaught exception
-    * [`ResponseMarshaler::forException`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forException(com.soklet.core.Request,java.lang.Throwable,com.soklet.core.ResourceMethod))    
+    * [`ResponseMarshaler::forException`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forException(com.soklet.core.Request,java.lang.Throwable,com.soklet.core.ResourceMethod))    
 * No matching Resource Method (HTTP 404)
-    * [`ResponseMarshaler::forNotFound`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forNotFound(com.soklet.core.Request))
+    * [`ResponseMarshaler::forNotFound`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forNotFound(com.soklet.core.Request))
 * Method not allowed (HTTP 405)
-    * [`ResponseMarshaler::forMethodNotAllowed`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forMethodNotAllowed(com.soklet.core.Request,java.util.Set))    
+    * [`ResponseMarshaler::forMethodNotAllowed`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forMethodNotAllowed(com.soklet.core.Request,java.util.Set))    
 * HTTP OPTIONS
-    * [`ResponseMarshaler::forOptions`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forOptions(com.soklet.core.Request,java.util.Set))
+    * [`ResponseMarshaler::forOptions`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forOptions(com.soklet.core.Request,java.util.Set))
 * HTTP HEAD
-    * [`ResponseMarshaler::forHead`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forHead(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.MarshaledResponse))
+    * [`ResponseMarshaler::forHead`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forHead(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.MarshaledResponse))
 * CORS 
-    * [`ResponseMarshaler::forCorsPreflightAllowed`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsAllowed(com.soklet.core.Request,com.soklet.core.CorsPreflightResponse))
-    * [`ResponseMarshaler::forCorsPreflightRejected`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsRejected(com.soklet.core.Request))
-    * [`ResponseMarshaler::forCorsAllowed`](https://www.soklet.com/javadoc/com/soklet/core/ResponseMarshaler.html#forCorsAllowed(com.soklet.core.Request,com.soklet.core.CorsResponse,com.soklet.core.MarshaledResponse))
+    * [`ResponseMarshaler::forCorsPreflightAllowed`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forCorsAllowed(com.soklet.core.Request,com.soklet.core.CorsPreflightResponse))
+    * [`ResponseMarshaler::forCorsPreflightRejected`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forCorsRejected(com.soklet.core.Request))
+    * [`ResponseMarshaler::forCorsAllowed`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forCorsAllowed(com.soklet.core.Request,com.soklet.core.CorsResponse,com.soklet.core.MarshaledResponse))
 
 Normally, you'll want to extend [DefaultResponseMarshaler](src/main/java/com/soklet/core/impl/DefaultResponseMarshaler.java) because it provides sensible defaults for things like CORS, OPTIONS, HEAD, and 404s/405s.  This way you can stay focused on how your application writes happy path and exception responses.  For example:
 
@@ -438,7 +438,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 ### Instance Provider
 
-Soklet creates instances of Resource classes and other types in order to invoke methods on them on your behalf.  To do this, it delegates to the configured [InstanceProvider](https://www.soklet.com/javadoc/com/soklet/core/InstanceProvider.html).
+Soklet creates instances of Resource classes and other types in order to invoke methods on them on your behalf.  To do this, it delegates to the configured [InstanceProvider](https://javadoc.soklet.com/com/soklet/core/InstanceProvider.html).
 <br/><br/>
 Here's a naïve implementation that assumes the presence of a default constructor.
 
@@ -490,7 +490,7 @@ public class WidgetResource {
 
 ### Lifecycle Interceptor
 
-The [LifecycleInterceptor](https://www.soklet.com/javadoc/com/soklet/core/LifecycleInterceptor.html) provides a set of well-defined hooks into request processing.
+The [LifecycleInterceptor](https://javadoc.soklet.com/com/soklet/core/LifecycleInterceptor.html) provides a set of well-defined hooks into request processing.
 <br/>
 Useful for things like:
 
@@ -571,7 +571,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 ### Value Converters
 
-A [ValueConverter](https://www.soklet.com/javadoc/com/soklet/converter/ValueConverter.html) is how Soklet marshals one type into another - for example, a query parameter is a `String` but it's useful to declare that your Resource Method accepts a `LocalDate` instead of parsing it "by hand" every time.  For example:
+A [ValueConverter](https://javadoc.soklet.com/com/soklet/converter/ValueConverter.html) is how Soklet marshals one type into another - for example, a query parameter is a `String` but it's useful to declare that your Resource Method accepts a `LocalDate` instead of parsing it "by hand" every time.  For example:
 
 ```java
 @Resource
@@ -588,7 +588,7 @@ public class WidgetResource {
 }
 ```
 
-The [ValueConverterRegistry](https://www.soklet.com/javadoc/com/soklet/converter/ValueConverterRegistry.html) manages a set of these converters, and its default constructor provides a set of sensible defaults that is sufficient for most cases.
+The [ValueConverterRegistry](https://javadoc.soklet.com/com/soklet/converter/ValueConverterRegistry.html) manages a set of these converters, and its default constructor provides a set of sensible defaults that is sufficient for most cases.
 <br/><br/>
 However, you might have special types that you'd like to have Soklet convert on your behalf.  Just supplement your `ValueConverterRegistry` with any `ValueConverter` instances you need.
 
@@ -641,9 +641,9 @@ public class WidgetResource {
 
 ### CORS Authorizer
 
-For [CORS requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS), Soklet will consult its configured [CorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/CorsAuthorizer.html) to determine how to respond.
+For [CORS requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS), Soklet will consult its configured [CorsAuthorizer](https://javadoc.soklet.com/com/soklet/core/CorsAuthorizer.html) to determine how to respond.
 <br/>
-Unless configured differently, Soklet will use its [DefaultCorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/impl/DefaultCorsAuthorizer.html), which does not respond to CORS requests.
+Unless configured differently, Soklet will use its [DefaultCorsAuthorizer](https://javadoc.soklet.com/com/soklet/core/impl/DefaultCorsAuthorizer.html), which does not respond to CORS requests.
 
 #### All Origins (Testing Only!)
 
@@ -670,7 +670,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 #### Custom Handling
 
-If none of the out-of-the-box [CorsAuthorizer](https://www.soklet.com/javadoc/com/soklet/core/CorsAuthorizer.html) implementations fit your use-case, it's straightforward to roll your own.
+If none of the out-of-the-box [CorsAuthorizer](https://javadoc.soklet.com/com/soklet/core/CorsAuthorizer.html) implementations fit your use-case, it's straightforward to roll your own.
 
 ```java
 SokletConfiguration configuration = new SokletConfiguration.Builder(server)
@@ -717,7 +717,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
 ### Log Handler
 
-If you'd like to handle any of Soklet's internal log events, you can provide your own [LogHandler](https://www.soklet.com/javadoc/com/soklet/core/LogHandler.html) implementation.
+If you'd like to handle any of Soklet's internal log events, you can provide your own [LogHandler](https://javadoc.soklet.com/com/soklet/core/LogHandler.html) implementation.
 
 For example, if your application uses [Logback](https://logback.qos.ch/) and/or [SLF4J](https://www.slf4j.org/), you will likely want to log messages using those.
 
