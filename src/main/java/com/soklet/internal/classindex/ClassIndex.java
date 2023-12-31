@@ -11,7 +11,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.soklet.classindex;
+package com.soklet.internal.classindex;
+
+import com.soklet.internal.classindex.processor.ClassIndexProcessor;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -92,7 +94,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The class must be annotated with {@link IndexSubclasses} for it's subclasses to be indexed
-	 * at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param superClass class to find subclasses for
@@ -107,7 +109,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The class must be annotated with {@link IndexSubclasses} for it's subclasses to be indexed
-	 * at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param superClass class to find subclasses for
@@ -131,7 +133,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The class must be annotated with {@link IndexSubclasses} for it's subclasses to be indexed
-	 * at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param superClass class to find subclasses for
@@ -146,7 +148,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The class must be annotated with {@link IndexSubclasses} for it's subclasses to be indexed
-	 * at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param superClass class to find subclasses for
@@ -162,7 +164,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The package must be annotated with {@link IndexSubclasses} for the classes inside
-	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param packageName name of the package to search classes for
@@ -177,7 +179,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The package must be annotated with {@link IndexSubclasses} for the classes inside
-	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param packageName name of the package to search classes for
@@ -201,7 +203,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The package must be annotated with {@link IndexSubclasses} for the classes inside
-	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param packageName name of the package to search classes for
@@ -216,7 +218,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The package must be annotated with {@link IndexSubclasses} for the classes inside
-	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param packageName name of the package to search classes for
@@ -236,7 +238,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The annotation must be annotated with {@link IndexAnnotated} for annotated classes
-	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param annotation annotation to search class for
@@ -251,7 +253,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The annotation must be annotated with {@link IndexAnnotated} for annotated classes
-	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 *
 	 * @param annotation annotation to search class for
@@ -270,7 +272,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The annotation must be annotated with {@link IndexAnnotated} for annotated classes
-	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 * <p>
 	 * Please note there is no verification if the class really exists. It can be missing when incremental
@@ -288,7 +290,7 @@ public class ClassIndex {
 	 * <p/>
 	 * <p>
 	 * The annotation must be annotated with {@link IndexAnnotated} for annotated classes
-	 * to be indexed at compile-time by {@link com.soklet.classindex.processor.ClassIndexProcessor}.
+	 * to be indexed at compile-time by {@link ClassIndexProcessor}.
 	 * </p>
 	 * <p>
 	 * Please note there is no verification if the class really exists. It can be missing when incremental

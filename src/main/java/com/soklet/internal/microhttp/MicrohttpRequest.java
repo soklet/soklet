@@ -1,4 +1,4 @@
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;
 
 import java.util.List;
 
@@ -6,7 +6,7 @@ import java.util.List;
  * Request objects represent discrete HTTP requests with request line, headers, and body.
  * Request objects have no hidden references to the network protocol layer that produced them.
  */
-public record Request(
+public record MicrohttpRequest(
         String method,
         String uri,
         String version,

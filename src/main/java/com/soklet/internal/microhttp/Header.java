@@ -1,4 +1,4 @@
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;
 
 public record Header(String name, String value) {
 }

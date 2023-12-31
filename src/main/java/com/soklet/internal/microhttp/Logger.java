@@ -1,4 +1,4 @@
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;
 
 /**
  * Simple logging abstraction that operates on {@link LogEntry} instances.

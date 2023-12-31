@@ -420,8 +420,8 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		Response response;
 
 		// If null/void return, it's a 204
-		// If it's a Response object, re-use as is.
-		// If it's a non-Response type of object, assume it's the response body
+		// If it's a MicrohttpResponse object, re-use as is.
+		// If it's a non-MicrohttpResponse type of object, assume it's the response body
 		if (responseObject == null)
 			response = new Response.Builder(204).build();
 		else if (responseObject instanceof Response)

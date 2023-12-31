@@ -31,7 +31,7 @@ import com.soklet.annotation.POSTs;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.PUTs;
 import com.soklet.annotation.Resource;
-import com.soklet.classindex.ClassIndex;
+import com.soklet.internal.classindex.ClassIndex;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
 import com.soklet.core.ResourceMethod;

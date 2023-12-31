@@ -1,4 +1,4 @@
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;
 
 import java.util.ArrayList;
 import java.util.List;

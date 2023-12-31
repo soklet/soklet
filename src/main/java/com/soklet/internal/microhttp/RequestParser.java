@@ -1,4 +1,4 @@
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -66,8 +66,8 @@ class RequestParser {
         return true;
     }
 
-    Request request() {
-        return new Request(method, uri, version, headers, body);
+    MicrohttpRequest request() {
+        return new MicrohttpRequest(method, uri, version, headers, body);
     }
 
     private void parseMethod(byte[] token) {

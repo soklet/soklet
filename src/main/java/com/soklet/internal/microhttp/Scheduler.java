@@ -1,4 +1,4 @@
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;
 
 import java.time.Duration;
 import java.util.ArrayList;

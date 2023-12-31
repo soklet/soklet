@@ -1,6 +1,4 @@
-package com.soklet.microhttp;
-
-import static com.soklet.microhttp.CloseUtils.closeQuietly;
+package com.soklet.internal.microhttp;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -181,7 +179,7 @@ class ConnectionEventLoop {
                 requestTimeoutTask.cancel();
                 requestTimeoutTask = null;
             }
-            Request request = requestParser.request();
+            MicrohttpRequest request = requestParser.request();
             httpOneDotZero = request.version().equalsIgnoreCase(HTTP_1_0);
             keepAlive = request.hasHeader(HEADER_CONNECTION, KEEP_ALIVE);
             byteTokenizer.compact();
@@ -189,13 +187,13 @@ class ConnectionEventLoop {
             handler.handle(request, this::onResponse);
         }
 
-        private void onResponse(Response response) {
+        private void onResponse(MicrohttpResponse microhttpResponse) {
             // enqueuing the callback invocation and waking the selector
-            // ensures that the response callback works properly when
+            // ensures that the microhttpResponse callback works properly when
             // invoked inline from the event loop thread or a separate background thread
             taskQueue.add(() -> {
                 try {
-                    prepareToWriteResponse(response);
+                    prepareToWriteResponse(microhttpResponse);
                 } catch (IOException e) {
                     if (logger.enabled()) {
                         logger.log(e,
@@ -212,16 +210,16 @@ class ConnectionEventLoop {
             }
         }
 
-        private void prepareToWriteResponse(Response response) throws IOException {
+        private void prepareToWriteResponse(MicrohttpResponse microhttpResponse) throws IOException {
             String version = httpOneDotZero ? HTTP_1_0 : HTTP_1_1;
             List<Header> headers = new ArrayList<>();
             if (httpOneDotZero && keepAlive) {
                 headers.add(new Header(HEADER_CONNECTION, KEEP_ALIVE));
             }
-            if (!response.hasHeader(HEADER_CONTENT_LENGTH)) {
-                headers.add(new Header(HEADER_CONTENT_LENGTH, Integer.toString(response.body().length)));
+            if (!microhttpResponse.hasHeader(HEADER_CONTENT_LENGTH)) {
+                headers.add(new Header(HEADER_CONTENT_LENGTH, Integer.toString(microhttpResponse.body().length)));
             }
-            writeBuffer = ByteBuffer.wrap(response.serialize(version, headers));
+            writeBuffer = ByteBuffer.wrap(microhttpResponse.serialize(version, headers));
             if (logger.enabled()) {
                 logger.log(
                         new LogEntry("event", "response_ready"),
@@ -303,7 +301,7 @@ class ConnectionEventLoop {
                 requestTimeoutTask.cancel();
             }
             selectionKey.cancel();
-            closeQuietly(socketChannel);
+            CloseUtils.closeQuietly(socketChannel);
         }
     }
 
@@ -334,7 +332,7 @@ class ConnectionEventLoop {
                     connection.failSafeClose();
                 }
             }
-            closeQuietly(selector);
+            CloseUtils.closeQuietly(selector);
         }
     }
 
@@ -366,7 +364,7 @@ class ConnectionEventLoop {
                 doRegister(socketChannel);
             } catch (IOException e) {
                 logger.log(e, new LogEntry("event", "register_error"));
-                closeQuietly(socketChannel);
+                CloseUtils.closeQuietly(socketChannel);
             }
         });
         selector.wakeup(); // wakeup event loop thread to process task immediately

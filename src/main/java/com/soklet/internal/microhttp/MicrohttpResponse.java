@@ -1,8 +1,8 @@
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;
 
 import java.util.List;
 
-public record Response(
+public record MicrohttpResponse(
         int status,
         String reason,
         List<Header> headers,

@@ -56,11 +56,11 @@ public class SokletTests {
 	public void requestHandlingBasics() {
 		// Use a mock server that we can send simulated requests to
 		mockServerForResourceClasses(Set.of(RequestHandlingBasicsResource.class), (mockServer -> {
-			// Response body should be "hello world" as bytes
+			// MicrohttpResponse body should be "hello world" as bytes
 			MarshaledResponse marshaledResponse = mockServer.simulateRequest(
 					new Request.Builder(HttpMethod.GET, "/hello-world").build());
 
-			Assert.assertArrayEquals("Response body doesn't match",
+			Assert.assertArrayEquals("MicrohttpResponse body doesn't match",
 					"hello world".getBytes(StandardCharsets.UTF_8),
 					marshaledResponse.getBody().get());
 
@@ -87,7 +87,7 @@ public class SokletTests {
 							.build());
 
 			Assert.assertEquals(200L, (long) marshaledResponse.getStatusCode());
-			Assert.assertArrayEquals("Response body doesn't match",
+			Assert.assertArrayEquals("MicrohttpResponse body doesn't match",
 					"2023-09-30".getBytes(StandardCharsets.UTF_8),
 					marshaledResponse.getBody().get());
 
@@ -107,7 +107,7 @@ public class SokletTests {
 							.build());
 
 			Assert.assertEquals(200L, (long) marshaledResponse.getStatusCode());
-			Assert.assertArrayEquals("Response body doesn't match",
+			Assert.assertArrayEquals("MicrohttpResponse body doesn't match",
 					"123.456789".getBytes(StandardCharsets.UTF_8),
 					marshaledResponse.getBody().get());
 		}));
@@ -204,15 +204,15 @@ public class SokletTests {
 	public void httpHead() {
 		// Use a mock server that we can send simulated requests to
 		mockServerForResourceClasses(Set.of(HttpHeadResource.class), (mockServer -> {
-			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
+			// MicrohttpResponse headers should be the same as the GET equivalent, but HTTP 204 and no response body
 			MarshaledResponse getMarshaledResponse = mockServer.simulateRequest(
 					new Request.Builder(HttpMethod.GET, "/hello-world").build());
 
-			Assert.assertArrayEquals("Response body doesn't match",
+			Assert.assertArrayEquals("MicrohttpResponse body doesn't match",
 					"hello world".getBytes(StandardCharsets.UTF_8),
 					getMarshaledResponse.getBody().get());
 
-			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
+			// MicrohttpResponse headers should be the same as the GET equivalent, but HTTP 204 and no response body
 			MarshaledResponse headMarshaledResponse = mockServer.simulateRequest(
 					new Request.Builder(HttpMethod.HEAD, "/hello-world").build());
 

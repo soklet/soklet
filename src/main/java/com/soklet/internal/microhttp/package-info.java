@@ -27,4 +27,4 @@
  * <p>
  * It is Copyright (c) 2022 Elliot Barlas and released under the terms of the MIT License.
  */
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;

@@ -19,4 +19,4 @@
  * <p>
  * It is released under the terms of the Apache 2.0 License.
  */
-package com.soklet.classindex.processor;
+package com.soklet.internal.classindex.processor;

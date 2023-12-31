@@ -16,7 +16,7 @@
 
 package com.soklet.annotation;
 
-import com.soklet.classindex.IndexAnnotated;
+import com.soklet.internal.classindex.IndexAnnotated;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

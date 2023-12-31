@@ -1,6 +1,4 @@
-package com.soklet.microhttp;
-
-import static com.soklet.microhttp.CloseUtils.closeQuietly;
+package com.soklet.internal.microhttp;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -88,8 +86,8 @@ public class EventLoop {
             }
             stop.set(true); // stop the world on critical error
         } finally {
-            closeQuietly(selector);
-            closeQuietly(serverSocketChannel);
+            CloseUtils.closeQuietly(selector);
+            CloseUtils.closeQuietly(serverSocketChannel);
         }
     }
 

@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.soklet.classindex;
+package com.soklet.internal.classindex;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -20,31 +20,24 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.ServiceLoader;
 
-import com.soklet.classindex.processor.ClassIndexProcessor;
+import com.soklet.internal.classindex.processor.ClassIndexProcessor;
 
 /**
- * Index all subclasses of the annotated class or package.
+ * Index all classes annotated by annotation annotated by this meta-annotation.
  *
  * <p>
- * During compilation {@link ClassIndexProcessor} creates a resource files listing all classes
- * extending annotated class or located inside annotated package.
+ * During compilation {@link ClassIndexProcessor} creates a resource file listing all classes
+ * annotated by annotation annotated by this meta-annotation.
  * </p>
  * <p>
- * You can retrieve the list at runtime using either {@link ClassIndex#getSubclasses(Class)}
- * or {@link ClassIndex#getPackageClasses(String)}.
- * </p>
- * <p>
- * For subclasses of the annotated class the resource file name is compatible with
- * what {@link ServiceLoader} expects. So if all the subclasses have a zero-argument constructor
- * you can use {@link ServiceLoader}. For subclasses of given package index file is named
- * "jaxb.index", it is located inside the package folder and it's format is compatible with
- * what {@link javax.xml.bind.JAXBContext#newInstance(String) } expects.
+ * You can retrieve the list at runtime using {@link ClassIndex#getAnnotated(Class)}.
+ * If the classes also have a zero-argument constructor you can use {@link ServiceLoader} facility.
  * </p>
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE, ElementType.PACKAGE})
-public @interface IndexSubclasses {
+@Target(ElementType.ANNOTATION_TYPE)
+public @interface IndexAnnotated {
 	/**
 	 * Specifies whether to store Javadoc for runtime retrieval.
 	 *

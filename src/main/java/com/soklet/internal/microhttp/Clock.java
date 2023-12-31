@@ -1,4 +1,4 @@
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;
 
 /**
  * Simple clock abstraction that produces clock times suitable for calculating time deltas.

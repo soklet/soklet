@@ -104,7 +104,7 @@ Soklet detects Resources using a compile-time annotation processor and construct
 
 When an HTTP request arrives, Soklet determines the appropriate Resource Method to invoke based on HTTP method and URL path pattern matching.  Parameter values are injected using the heuristics described below.
 
-Resource Methods may return results of any type - your [ResponseMarshaler](#response-marshaler) runs downstream and is responsible for converting the returned objects to bytes over the wire.
+Resource Methods may return results of any type - your [ResponseMarshaler](#microhttpResponse-marshaler) runs downstream and is responsible for converting the returned objects to bytes over the wire.
 
 ```java
 @Resource
@@ -144,7 +144,7 @@ public class ExampleResource {
   public Response params(@QueryParameter LocalDate date) {
                          @QueryParameter("value") Optional<List<String>> values) {
     return new Response.Builder()
-      // Response body can be any Java type. It's up to your ResponseMarshaler
+      // MicrohttpResponse body can be any Java type. It's up to your ResponseMarshaler
       // to convert it downstream (e.g. turn it into JSON bytes)
       .body(String.format("date=%s, values=%s", date, values))
       .build();
@@ -179,7 +179,7 @@ public class ExampleResource {
     
     backend.createRecord(analyticsId, locale, exampleType, attribute.orElse(null));
 
-    // The response builder has a convenience shorthand for performing redirects.
+    // The microhttpResponse builder has a convenience shorthand for performing redirects.
     // You could alternatively do this "by hand" by setting HTTP status and headers appropriately.
     return new Response.Builder(RedirectType.HTTP_307_TEMPORARY_REDIRECT, "/")
       .cookies(Set.of(
@@ -197,9 +197,9 @@ All of Soklet's components are programmatically pluggable via the [SokletConfigu
 Components you'll likely want to customize are:
 
 * [Server](#server) - handles HTTP 1.1 requests and responses
-* [ResponseMarshaler](#response-marshaler) - turns Java objects into bytes to send over the wire
+* [ResponseMarshaler](#microhttpResponse-marshaler) - turns Java objects into bytes to send over the wire
 * [InstanceProvider](#instance-provider) - creates class instances on your behalf
-* [LifecycleInterceptor](#lifecycle-interceptor) - provides hooks to customize phases of request/response processing
+* [LifecycleInterceptor](#lifecycle-interceptor) - provides hooks to customize phases of request/microhttpResponse processing
 * [ValueConverters](#value-converters) - convert input strings (e.g. query parameters) to Java types (e.g. [LocalDateTime](https://docs.oracle.com/en/java/javase/18/docs/api/java.base/java/time/LocalDateTime.html))
 * [CorsAuthorizer](#cors-authorizer) - determines whether to accept or reject [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) requests
 
@@ -240,31 +240,31 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(
   }
 })    
     
-// Your Response Marshaler provides the response body bytes, headers, and responseCookies 
+// Your MicrohttpResponse Marshaler provides the microhttpResponse body bytes, headers, and responseCookies 
 // that get sent back over the wire.  It's your opportunity to turn raw data into
 // JSON, XML, Protocol Buffers, etc.
 //
 // There are other overridable methods to customize marshaling for 404s, exceptions,
 // CORS, and OPTIONS handling.  The DefaultResponseMarshaler provides sensible defaults for those.
-// See the Response Marshaler section for more details.
+// See the MicrohttpResponse Marshaler section for more details.
 .responseMarshaler(new DefaultResponseMarshaler() {
   @Nonnull
   @Override
   public MarshaledResponse forHappyPath(@Nonnull Request request,
-                                        @Nonnull Response response,
+                                        @Nonnull Response microhttpResponse,
                                         @Nonnull ResourceMethod resourceMethod) {
-    // Ask Gson to turn the Java response body object into JSON bytes
-    Object bodyObject = response.getBody().orElse(null);    
+    // Ask Gson to turn the Java microhttpResponse body object into JSON bytes
+    Object bodyObject = microhttpResponse.getBody().orElse(null);    
     byte[] body = bodyObject == null ? null : gson.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
 
     // Tack on the appropriate Content-Type to the existing set of headers
-    Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
+    Map<String, Set<String>> headers = new HashMap<>(microhttpResponse.getHeaders());
     headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
 
-    // This value is what is ultimately written to the HTTP response
-    return new MarshaledResponse.Builder(response.getStatusCode())
+    // This value is what is ultimately written to the HTTP microhttpResponse
+    return new MarshaledResponse.Builder(microhttpResponse.getStatusCode())
       .headers(headers)
-      .responseCookies(response.getCookies()) // Pass through any responseCookies as-is
+      .responseCookies(microhttpResponse.getCookies()) // Pass through any responseCookies as-is
       .body(body)
       .build();
   }
@@ -329,7 +329,7 @@ HTTP 400: Bad Request
 ```
 
 Behind the scenes, Soklet provides specific exception types with developer-friendly messages.
-It's up to you to handle them and surface to your API clients however you like in your [`ResponseMarshaler::forException`](#response-marshaler) implementation.
+It's up to you to handle them and surface to your API clients however you like in your [`ResponseMarshaler::forException`](#microhttpResponse-marshaler) implementation.
 
 ```text
 com.soklet.exception.IllegalQueryParameterException: Illegal value 'abc' was specified for query parameter 'input' (was expecting a value convertible to class java.lang.Integer)
@@ -376,7 +376,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server).buil
 
 ### Response Marshaler
 
-Soklet's [ResponseMarshaler](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html) specifies how a "logical" response (an arbitrary Java object) is written to bytes over the wire.
+Soklet's [ResponseMarshaler](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html) specifies how a "logical" microhttpResponse (an arbitrary Java object) is written to bytes over the wire.
 
 Hooks are provided for these scenarios:
 
@@ -417,13 +417,13 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
       String message = "Internal server error";
 
       // Your application likely has exceptions that are designed to "bubble out", e.g.
-      // input validation errors.  This is where to trap and customize your response
+      // input validation errors.  This is where to trap and customize your microhttpResponse
       if(throwable instanceof MyUserFacingException e) {
         statusCode = 422;
         message = e.getExampleFriendlyErrorMessage();
       }
 
-      // Construct an object to send as the response body
+      // Construct an object to send as the microhttpResponse body
       // by asking Gson to turn a Java object into JSON bytes    
       byte[] body = gson.toJson(Map.of("message", message)).getBytes(StandardCharsets.UTF_8);
 
@@ -539,7 +539,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
 
       // Why a list of throwables?
       // For example, an exception might occur during the normal flow of execution,
-      // and then another might occur when attempting to write an error response
+      // and then another might occur when attempting to write an error microhttpResponse
     }    
 
     @Override

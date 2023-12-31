@@ -1,4 +1,4 @@
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;
 
 import java.util.function.Consumer;
 
@@ -16,6 +16,6 @@ public interface Handler {
      * The provided callback object has a reference to internal connection state.
      * Avoid retaining the callback for an extended period.
      */
-    void handle(Request request, Consumer<Response> callback);
+    void handle(MicrohttpRequest request, Consumer<MicrohttpResponse> callback);
 
 }

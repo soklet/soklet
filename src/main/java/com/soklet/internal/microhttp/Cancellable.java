@@ -1,4 +1,4 @@
-package com.soklet.microhttp;
+package com.soklet.internal.microhttp;
 
 /**
  * Task handle returned by {@link Scheduler} that facilitates task cancellation.

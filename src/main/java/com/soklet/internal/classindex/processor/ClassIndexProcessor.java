@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.soklet.classindex.processor;
+package com.soklet.internal.classindex.processor;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -52,9 +52,9 @@ import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 
-import com.soklet.classindex.ClassIndex;
-import com.soklet.classindex.IndexAnnotated;
-import com.soklet.classindex.IndexSubclasses;
+import com.soklet.internal.classindex.ClassIndex;
+import com.soklet.internal.classindex.IndexAnnotated;
+import com.soklet.internal.classindex.IndexSubclasses;
 
 /**
  * Generates index files for {@link ClassIndex}.

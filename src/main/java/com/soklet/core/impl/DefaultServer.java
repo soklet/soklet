@@ -26,13 +26,15 @@ import com.soklet.core.ResponseCookie;
 import com.soklet.core.Server;
 import com.soklet.core.StatusCode;
 import com.soklet.core.Utilities;
-import com.soklet.microhttp.EventLoop;
-import com.soklet.microhttp.Handler;
-import com.soklet.microhttp.Header;
-import com.soklet.microhttp.LogEntry;
-import com.soklet.microhttp.Logger;
-import com.soklet.microhttp.Options;
-import com.soklet.microhttp.OptionsBuilder;
+import com.soklet.internal.microhttp.EventLoop;
+import com.soklet.internal.microhttp.Handler;
+import com.soklet.internal.microhttp.Header;
+import com.soklet.internal.microhttp.LogEntry;
+import com.soklet.internal.microhttp.Logger;
+import com.soklet.internal.microhttp.MicrohttpRequest;
+import com.soklet.internal.microhttp.MicrohttpResponse;
+import com.soklet.internal.microhttp.Options;
+import com.soklet.internal.microhttp.OptionsBuilder;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -238,7 +240,7 @@ public class DefaultServer implements Server {
 
 						requestHandler.handleRequest(request, (marshaledResponse -> {
 							try {
-								com.soklet.microhttp.Response microhttpResponse = toMicrohttpResponse(marshaledResponse);
+								MicrohttpResponse microhttpResponse = toMicrohttpResponse(marshaledResponse);
 								shouldWriteFailsafeResponse.set(false);
 
 								try {
@@ -337,9 +339,9 @@ public class DefaultServer implements Server {
 	}
 
 	@Nonnull
-	protected com.soklet.microhttp.Response provideMicrohttpFailsafeResponse(@Nonnull com.soklet.microhttp.Request microHttpRequest,
-																																					 @Nonnull Throwable throwable) {
-		requireNonNull(microHttpRequest);
+	protected MicrohttpResponse provideMicrohttpFailsafeResponse(@Nonnull MicrohttpRequest microhttpRequest,
+																															 @Nonnull Throwable throwable) {
+		requireNonNull(microhttpRequest);
 		requireNonNull(throwable);
 
 		Integer statusCode = 500;
@@ -347,7 +349,7 @@ public class DefaultServer implements Server {
 		List<Header> headers = List.of(new Header("Content-Type", "text/plain"));
 		byte[] body = format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8);
 
-		return new com.soklet.microhttp.Response(statusCode, reasonPhrase, headers, body);
+		return new MicrohttpResponse(statusCode, reasonPhrase, headers, body);
 	}
 
 	@Nonnull
@@ -373,12 +375,12 @@ public class DefaultServer implements Server {
 	}
 
 	@Nonnull
-	protected Map<String, Set<String>> headersFromMicrohttpRequest(@Nonnull com.soklet.microhttp.Request microHttpRequest) {
-		requireNonNull(microHttpRequest);
+	protected Map<String, Set<String>> headersFromMicrohttpRequest(@Nonnull MicrohttpRequest microhttpRequest) {
+		requireNonNull(microhttpRequest);
 
-		Map<String, Set<String>> headers = new HashMap<>(microHttpRequest.headers().size());
+		Map<String, Set<String>> headers = new HashMap<>(microhttpRequest.headers().size());
 
-		for (Header header : microHttpRequest.headers()) {
+		for (Header header : microhttpRequest.headers()) {
 			Set<String> values = headers.computeIfAbsent(header.name(), k -> new HashSet<>());
 
 			String value = trimAggressivelyToNull(header.value());
@@ -391,7 +393,7 @@ public class DefaultServer implements Server {
 	}
 
 	@Nonnull
-	protected com.soklet.microhttp.Response toMicrohttpResponse(@Nonnull MarshaledResponse marshaledResponse) {
+	protected MicrohttpResponse toMicrohttpResponse(@Nonnull MarshaledResponse marshaledResponse) {
 		requireNonNull(marshaledResponse);
 
 		List<Header> headers = new ArrayList<>();
@@ -411,7 +413,7 @@ public class DefaultServer implements Server {
 		for (ResponseCookie cookie : sortedCookies)
 			headers.add(new Header("Set-Cookie", cookie.toSetCookieHeaderRepresentation()));
 
-		return new com.soklet.microhttp.Response(marshaledResponse.getStatusCode(),
+		return new MicrohttpResponse(marshaledResponse.getStatusCode(),
 				marshaledResponse.getReasonPhrase(),
 				headers,
 				marshaledResponse.getBody().orElse(emptyByteArray()));
