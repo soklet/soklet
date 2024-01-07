@@ -413,10 +413,18 @@ public class DefaultServer implements Server {
 		for (ResponseCookie cookie : sortedCookies)
 			headers.add(new Header("Set-Cookie", cookie.toSetCookieHeaderRepresentation()));
 
-		return new MicrohttpResponse(marshaledResponse.getStatusCode(),
-				marshaledResponse.getReasonPhrase(),
-				headers,
-				marshaledResponse.getBody().orElse(emptyByteArray()));
+		String reasonPhrase = reasonPhraseForStatusCode(marshaledResponse.getStatusCode());
+		byte[] body = marshaledResponse.getBody().orElse(emptyByteArray());
+
+		return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, body);
+	}
+
+	@Nonnull
+	protected String reasonPhraseForStatusCode(@Nonnull Integer statusCode) {
+		requireNonNull(statusCode);
+		
+		StatusCode formalStatusCode = StatusCode.fromStatusCode(statusCode).orElse(null);
+		return formalStatusCode == null ? "Unknown" : formalStatusCode.getReasonPhrase();
 	}
 
 	@Nonnull

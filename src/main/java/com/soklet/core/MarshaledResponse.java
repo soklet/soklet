@@ -39,8 +39,6 @@ public class MarshaledResponse {
 	@Nonnull
 	private final Integer statusCode;
 	@Nonnull
-	private final String reasonPhrase;
-	@Nonnull
 	private final Map<String, Set<String>> headers;
 	@Nonnull
 	private final Set<ResponseCookie> cookies;
@@ -50,10 +48,7 @@ public class MarshaledResponse {
 	protected MarshaledResponse(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
-		StatusCode typedStatusCode = StatusCode.fromStatusCode(builder.statusCode).orElse(null);
-
 		this.statusCode = builder.statusCode;
-		this.reasonPhrase = typedStatusCode == null ? "Unknown" : typedStatusCode.getReasonPhrase();
 		this.headers = builder.headers == null ? Map.of() : Map.copyOf(builder.headers);
 		this.cookies = builder.responseCookies == null ? Set.of() : Set.copyOf(builder.responseCookies);
 		this.body = builder.body;
@@ -61,8 +56,8 @@ public class MarshaledResponse {
 
 	@Override
 	public String toString() {
-		return format("%s{statusCode=%s, reasonPhrase=%s, headers=%s, responseCookies=%s, body=%s}", getClass().getSimpleName(),
-				getStatusCode(), getReasonPhrase(), getHeaders(), getCookies(),
+		return format("%s{statusCode=%s, headers=%s, responseCookies=%s, body=%s}", getClass().getSimpleName(),
+				getStatusCode(), getHeaders(), getCookies(),
 				format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
 	}
 
@@ -74,11 +69,6 @@ public class MarshaledResponse {
 	@Nonnull
 	public Integer getStatusCode() {
 		return this.statusCode;
-	}
-
-	@Nonnull
-	public String getReasonPhrase() {
-		return this.reasonPhrase;
 	}
 
 	@Nonnull
