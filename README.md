@@ -510,7 +510,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
                                  @Nonnull Function<Request, MarshaledResponse> requestGenerator,
                                  @Nonnull Consumer<MarshaledResponse> responseWriter) {
       // Similar to a Servlet Filter...let normal request processing finish
-      MarshaledResponse marshaledResponse = responseGenerator.apply(request);
+      MarshaledResponse marshaledResponse = responseProducer.apply(request);
 
       // Add a snazzy header to all responses before they are sent over the wire.
       // MarshaledResponse is immutable, so we use a copy-builder to mutate
@@ -795,7 +795,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
     @Override
     public void interceptRequest(@Nonnull Request request,
                                  @Nullable ResourceMethod resourceMethod,
-                                 @Nonnull Function<Request, MarshaledResponse> responseGenerator,
+                                 @Nonnull Function<Request, MarshaledResponse> responseProducer,
                                  @Nonnull Consumer<MarshaledResponse> responseWriter) {
       // Look up account using JWT from the request
       ExampleAccount account = accountForRequest(request).orElse(null);
@@ -820,7 +820,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
       }      
 
       // Normal downstream processing
-      MarshaledResponse marshaledResponse = responseGenerator.apply(request);
+      MarshaledResponse marshaledResponse = responseProducer.apply(request);
       responseWriter.accept(marshaledResponse);
     }
 
