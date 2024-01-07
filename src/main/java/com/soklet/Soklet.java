@@ -281,7 +281,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				} catch (Throwable t2) {
 					throwables.add(t2);
 
-					logHandler.logError(format("An exception occurred while invoking %s#forException when processing %s",
+					logHandler.logError(format("An exception occurred during request wrapping while invoking %s#forException when processing %s",
 							ResponseMarshaler.class.getSimpleName(), requestHolder.get()), t2);
 
 					marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), t));
