@@ -86,10 +86,10 @@ public interface LifecycleInterceptor {
 
 	default void wrapRequest(@Nonnull Request request,
 													 @Nullable ResourceMethod resourceMethod,
-													 @Nonnull Runnable requestProcessor) {
+													 @Nonnull Consumer<Request> requestProcessor) {
 		requireNonNull(request);
 		requireNonNull(requestProcessor);
 
-		requestProcessor.run();
+		requestProcessor.accept(request);
 	}
 }

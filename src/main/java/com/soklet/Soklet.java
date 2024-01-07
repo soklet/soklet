@@ -153,7 +153,9 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		}
 
 		try {
-			lifecycleInterceptor.wrapRequest(request, resourceMethodHolder.get(), () -> {
+			lifecycleInterceptor.wrapRequest(request, resourceMethodHolder.get(), (wrappedRequest) -> {
+				requestHolder.set(wrappedRequest);
+
 				try {
 					lifecycleInterceptor.didStartRequestHandling(requestHolder.get(), resourceMethodHolder.get());
 				} catch (Throwable t) {
