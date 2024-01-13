@@ -45,12 +45,15 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -401,14 +404,22 @@ public class DefaultServer implements Server {
 		// Non-cookies headers get their values comma-separated
 		for (Map.Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 			String name = entry.getKey();
-			Set<String> values = new TreeSet<>(entry.getValue()); // TreeSet to force natural ordering for consistent output
+			Set<String> values = entry.getValue();
+
+			// Force natural ordering for consistent output if the set is not already sorted.
+			if (!isAlreadySorted(values))
+				values = new TreeSet<>(entry.getValue());
+
 			headers.add(new Header(name, String.join(", ", values)));
 		}
 
 		// ResponseCookie headers are split into multiple instances of Set-Cookie.
-		// Force natural ordering for consistent output.
-		List<ResponseCookie> sortedCookies = new ArrayList<>(marshaledResponse.getCookies());
-		sortedCookies.sort((cookie1, cookie2) -> cookie1.getName().compareTo(cookie2.getName()));
+		// Force natural ordering for consistent output if the set is not already sorted.
+		Set<ResponseCookie> cookies = marshaledResponse.getCookies();
+		List<ResponseCookie> sortedCookies = new ArrayList<>(cookies);
+
+		if (!isAlreadySorted(cookies))
+			sortedCookies.sort(Comparator.comparing(ResponseCookie::getName));
 
 		for (ResponseCookie cookie : sortedCookies)
 			headers.add(new Header("Set-Cookie", cookie.toSetCookieHeaderRepresentation()));
@@ -422,9 +433,15 @@ public class DefaultServer implements Server {
 	@Nonnull
 	protected String reasonPhraseForStatusCode(@Nonnull Integer statusCode) {
 		requireNonNull(statusCode);
-		
+
 		StatusCode formalStatusCode = StatusCode.fromStatusCode(statusCode).orElse(null);
 		return formalStatusCode == null ? "Unknown" : formalStatusCode.getReasonPhrase();
+	}
+
+	@Nonnull
+	protected Boolean isAlreadySorted(@Nonnull Set<?> set) {
+		requireNonNull(set);
+		return set instanceof SortedSet || set instanceof LinkedHashSet;
 	}
 
 	@Nonnull
