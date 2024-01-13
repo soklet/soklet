@@ -424,6 +424,9 @@ public class DefaultServer implements Server {
 		for (ResponseCookie cookie : sortedCookies)
 			headers.add(new Header("Set-Cookie", cookie.toSetCookieHeaderRepresentation()));
 
+		// Force natural order for consistent output
+		headers.sort(Comparator.comparing(Header::name));
+
 		String reasonPhrase = reasonPhraseForStatusCode(marshaledResponse.getStatusCode());
 		byte[] body = marshaledResponse.getBody().orElse(emptyByteArray());
 
