@@ -71,13 +71,13 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	private final Set<Method> resourceMethods;
+	private final Set<Method> methods;
 	@Nonnull
-	private final Map<HttpMethod, Set<Method>> resourceMethodsByHttpMethod;
+	private final Map<HttpMethod, Set<Method>> methodsByHttpMethod;
 	@Nonnull
 	private final Map<Method, Set<HttpMethodResourcePath>> httpMethodResourcePathsByMethod;
 	@Nonnull
-	private final Set<ResourceMethod> availableResourceMethods;
+	private final Set<ResourceMethod> resourceMethods;
 
 	@Nonnull
 	public static DefaultResourceMethodResolver sharedInstance() {
@@ -85,8 +85,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	public DefaultResourceMethodResolver() {
-		this(ClassIndex.getAnnotated(Resource.class).parallelStream()
-				.collect(Collectors.toSet()), null);
+		this(ClassIndex.getAnnotated(Resource.class).parallelStream().collect(Collectors.toSet()), null);
 	}
 
 	public DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses) {
@@ -94,35 +93,33 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	public DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,
-																			 @Nullable Set<Method> resourceMethods) {
-		Set<Method> allResourceMethods = new HashSet<>();
+																			 @Nullable Set<Method> methods) {
+		Set<Method> allMethods = new HashSet<>();
 
 		if (resourceClasses != null)
-			allResourceMethods.addAll(extractResourceMethods(resourceClasses));
+			allMethods.addAll(extractResourceMethods(resourceClasses));
 
-		if (resourceMethods != null)
-			allResourceMethods.addAll(resourceMethods);
+		if (methods != null)
+			allMethods.addAll(methods);
 
-		if (allResourceMethods.size() == 0)
+		if (allMethods.size() == 0)
 			throw new IllegalArgumentException(format("No classes annotated with @%s were found.", Resource.class.getSimpleName()));
 
-		this.resourceMethods = Collections.unmodifiableSet(allResourceMethods);
-		this.resourceMethodsByHttpMethod =
-				Collections.unmodifiableMap(createResourceMethodsByHttpMethod(getResourceMethods()));
-		this.httpMethodResourcePathsByMethod =
-				Collections.unmodifiableMap(createHttpMethodResourcePathsByMethod(getResourceMethods()));
+		this.methods = Collections.unmodifiableSet(allMethods);
+		this.methodsByHttpMethod = Collections.unmodifiableMap(createMethodsByHttpMethod(getMethods()));
+		this.httpMethodResourcePathsByMethod = Collections.unmodifiableMap(createHttpMethodResourcePathsByMethod(getMethods()));
 
 		// Collect up all resource methods into a single set for easy access
-		Set<ResourceMethod> availableResourceMethods = new HashSet<>();
+		Set<ResourceMethod> resourceMethods = new HashSet<>();
 
-		for (Entry<HttpMethod, Set<Method>> entry : this.resourceMethodsByHttpMethod.entrySet()) {
+		for (Entry<HttpMethod, Set<Method>> entry : this.methodsByHttpMethod.entrySet()) {
 			HttpMethod httpMethod = entry.getKey();
-			Set<Method> methods = entry.getValue();
+			Set<Method> currentMethods = entry.getValue();
 
-			if (methods == null)
+			if (currentMethods == null)
 				continue;
 
-			for (Method method : methods) {
+			for (Method method : currentMethods) {
 				Set<HttpMethodResourcePath> httpMethodResourcePaths = this.httpMethodResourcePathsByMethod.get(method);
 
 				if (httpMethodResourcePaths == null)
@@ -131,12 +128,12 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths) {
 					ResourcePath resourcePath = httpMethodResourcePath.getResourcePath();
 					ResourceMethod resourceMethod = new ResourceMethod(httpMethod, resourcePath, method);
-					availableResourceMethods.add(resourceMethod);
+					resourceMethods.add(resourceMethod);
 				}
 			}
 		}
 
-		this.availableResourceMethods = Collections.unmodifiableSet(availableResourceMethods);
+		this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
 	}
 
 	@Nonnull
@@ -144,9 +141,9 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	public Optional<ResourceMethod> resourceMethodForRequest(@Nonnull Request request) {
 		requireNonNull(request);
 
-		Set<Method> resourceMethods = getResourceMethodsByHttpMethod().get(request.getHttpMethod());
+		Set<Method> methods = getMethodsByHttpMethod().get(request.getHttpMethod());
 
-		if (resourceMethods == null)
+		if (methods == null)
 			return Optional.empty();
 
 		ResourcePath resourcePath = ResourcePath.fromPathInstance(request.getPath());
@@ -185,15 +182,15 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	protected Map<Method, Set<HttpMethodResourcePath>> createHttpMethodResourcePathsByMethod(@Nonnull Set<Method> resourceMethods) {
-		requireNonNull(resourceMethods);
+	protected Map<Method, Set<HttpMethodResourcePath>> createHttpMethodResourcePathsByMethod(@Nonnull Set<Method> methods) {
+		requireNonNull(methods);
 
-		Map<Method, Set<HttpMethodResourcePath>> httpMethodResourcePathsByResourceMethod = new HashMap<>();
+		Map<Method, Set<HttpMethodResourcePath>> httpMethodResourcePathsByMethod = new HashMap<>();
 
-		for (Method resourceMethod : resourceMethods) {
+		for (Method method : methods) {
 			Set<HttpMethodResourcePath> matchedHttpMethodResourcePaths = new HashSet<>();
 
-			for (Annotation annotation : resourceMethod.getAnnotations()) {
+			for (Annotation annotation : method.getAnnotations()) {
 				if (annotation instanceof GET) {
 					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath
 							.fromPathDeclaration(((GET) annotation).value())));
@@ -246,13 +243,12 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				}
 
 				Set<HttpMethodResourcePath> httpMethodResourcePaths =
-						httpMethodResourcePathsByResourceMethod.computeIfAbsent(resourceMethod, k -> new HashSet<>());
-
+						httpMethodResourcePathsByMethod.computeIfAbsent(method, k -> new HashSet<>());
 				httpMethodResourcePaths.addAll(matchedHttpMethodResourcePaths);
 			}
 		}
 
-		return httpMethodResourcePathsByResourceMethod;
+		return httpMethodResourcePathsByMethod;
 	}
 
 	@Nonnull
@@ -285,13 +281,13 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	protected Map<HttpMethod, Set<Method>> createResourceMethodsByHttpMethod(@Nonnull Set<Method> resourceMethods) {
-		requireNonNull(resourceMethods);
+	protected Map<HttpMethod, Set<Method>> createMethodsByHttpMethod(@Nonnull Set<Method> methods) {
+		requireNonNull(methods);
 
-		Map<HttpMethod, Set<Method>> resourceMethodsByHttpMethod = new HashMap<>();
+		Map<HttpMethod, Set<Method>> methodsByMethod = new HashMap<>();
 
-		for (Method resourceMethod : resourceMethods) {
-			for (Annotation annotation : resourceMethod.getAnnotations()) {
+		for (Method method : methods) {
+			for (Annotation annotation : method.getAnnotations()) {
 				HttpMethod httpMethod = null;
 
 				if (annotation instanceof GET || annotation instanceof GETs)
@@ -312,13 +308,12 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				if (httpMethod == null)
 					continue;
 
-				Set<Method> httpMethodResourceMethods = resourceMethodsByHttpMethod.computeIfAbsent(httpMethod, k -> new HashSet<>());
-
-				httpMethodResourceMethods.add(resourceMethod);
+				Set<Method> httpMethodMethods = methodsByMethod.computeIfAbsent(httpMethod, k -> new HashSet<>());
+				httpMethodMethods.add(method);
 			}
 		}
 
-		return resourceMethodsByHttpMethod;
+		return methodsByMethod;
 	}
 
 	@Nonnull
@@ -351,13 +346,13 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	@Nonnull
 	@Override
-	public Set<ResourceMethod> getAvailableResourceMethods() {
-		return this.availableResourceMethods;
+	public Set<ResourceMethod> getResourceMethods() {
+		return this.resourceMethods;
 	}
 
 	@Nonnull
-	public Set<Method> getResourceMethods() {
-		return this.resourceMethods;
+	public Set<Method> getMethods() {
+		return this.methods;
 	}
 
 	@Nonnull
@@ -366,8 +361,8 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	protected Map<HttpMethod, Set<Method>> getResourceMethodsByHttpMethod() {
-		return this.resourceMethodsByHttpMethod;
+	protected Map<HttpMethod, Set<Method>> getMethodsByHttpMethod() {
+		return this.methodsByHttpMethod;
 	}
 
 	@ThreadSafe

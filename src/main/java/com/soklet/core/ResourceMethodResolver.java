@@ -28,5 +28,5 @@ public interface ResourceMethodResolver {
 	Optional<ResourceMethod> resourceMethodForRequest(@Nonnull Request request);
 
 	@Nonnull
-	Set<ResourceMethod> getAvailableResourceMethods();
+	Set<ResourceMethod> getResourceMethods();
 }
