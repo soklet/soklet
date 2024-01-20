@@ -97,7 +97,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		Set<Method> allMethods = new HashSet<>();
 
 		if (resourceClasses != null)
-			allMethods.addAll(extractResourceMethods(resourceClasses));
+			allMethods.addAll(extractMethods(resourceClasses));
 
 		if (methods != null)
 			allMethods.addAll(methods);
@@ -317,7 +317,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	protected Set<Method> extractResourceMethods(@Nonnull Set<Class<?>> resourceClasses) {
+	protected Set<Method> extractMethods(@Nonnull Set<Class<?>> resourceClasses) {
 		requireNonNull(resourceClasses);
 
 		Set<Method> methods = new HashSet<>();
