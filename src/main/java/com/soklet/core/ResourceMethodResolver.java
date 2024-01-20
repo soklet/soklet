@@ -18,12 +18,15 @@ package com.soklet.core;
 
 import javax.annotation.Nonnull;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@FunctionalInterface
 public interface ResourceMethodResolver {
 	@Nonnull
 	Optional<ResourceMethod> resourceMethodForRequest(@Nonnull Request request);
+
+	@Nonnull
+	Set<ResourceMethod> getAvailableResourceMethods();
 }

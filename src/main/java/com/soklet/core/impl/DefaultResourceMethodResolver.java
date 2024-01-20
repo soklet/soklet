@@ -31,12 +31,12 @@ import com.soklet.annotation.POSTs;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.PUTs;
 import com.soklet.annotation.Resource;
-import com.soklet.internal.classindex.ClassIndex;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.ResourcePath;
+import com.soklet.internal.classindex.ClassIndex;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -47,6 +47,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -75,6 +76,8 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	private final Map<HttpMethod, Set<Method>> resourceMethodsByHttpMethod;
 	@Nonnull
 	private final Map<Method, Set<HttpMethodResourcePath>> httpMethodResourcePathsByMethod;
+	@Nonnull
+	private final Set<ResourceMethod> availableResourceMethods;
 
 	@Nonnull
 	public static DefaultResourceMethodResolver sharedInstance() {
@@ -92,22 +95,48 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	public DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,
 																			 @Nullable Set<Method> resourceMethods) {
-		Set<Method> allResouceMethods = new HashSet<>();
+		Set<Method> allResourceMethods = new HashSet<>();
 
 		if (resourceClasses != null)
-			allResouceMethods.addAll(extractResourceMethods(resourceClasses));
+			allResourceMethods.addAll(extractResourceMethods(resourceClasses));
 
 		if (resourceMethods != null)
-			allResouceMethods.addAll(resourceMethods);
+			allResourceMethods.addAll(resourceMethods);
 
-		if (allResouceMethods.size() == 0)
+		if (allResourceMethods.size() == 0)
 			throw new IllegalArgumentException(format("No classes annotated with @%s were found.", Resource.class.getSimpleName()));
 
-		this.resourceMethods = Collections.unmodifiableSet(allResouceMethods);
+		this.resourceMethods = Collections.unmodifiableSet(allResourceMethods);
 		this.resourceMethodsByHttpMethod =
 				Collections.unmodifiableMap(createResourceMethodsByHttpMethod(getResourceMethods()));
 		this.httpMethodResourcePathsByMethod =
 				Collections.unmodifiableMap(createHttpMethodResourcePathsByMethod(getResourceMethods()));
+
+		// Collect up all resource methods into a single set for easy access
+		Set<ResourceMethod> availableResourceMethods = new HashSet<>();
+
+		for (Entry<HttpMethod, Set<Method>> entry : this.resourceMethodsByHttpMethod.entrySet()) {
+			HttpMethod httpMethod = entry.getKey();
+			Set<Method> methods = entry.getValue();
+
+			if (methods == null)
+				continue;
+
+			for (Method method : methods) {
+				Set<HttpMethodResourcePath> httpMethodResourcePaths = this.httpMethodResourcePathsByMethod.get(method);
+
+				if (httpMethodResourcePaths == null)
+					continue;
+
+				for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths) {
+					ResourcePath resourcePath = httpMethodResourcePath.getResourcePath();
+					ResourceMethod resourceMethod = new ResourceMethod(httpMethod, resourcePath, method);
+					availableResourceMethods.add(resourceMethod);
+				}
+			}
+		}
+
+		this.availableResourceMethods = Collections.unmodifiableSet(availableResourceMethods);
 	}
 
 	@Nonnull
@@ -124,7 +153,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		Set<ResourceMethod> matchingResourceMethods = new HashSet<>(4); // Normally there are few (if any) potential matches
 
 		// TODO: faster matching via path component tree structure instead of linear scan
-		for (Map.Entry<Method, Set<HttpMethodResourcePath>> entry : getHttpMethodResourcePathsByMethod().entrySet()) {
+		for (Entry<Method, Set<HttpMethodResourcePath>> entry : getHttpMethodResourcePathsByMethod().entrySet()) {
 			Method method = entry.getKey();
 			Set<HttpMethodResourcePath> httpMethodResourcePaths = entry.getValue();
 
@@ -318,6 +347,12 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 						methods.add(method);
 
 		return methods;
+	}
+
+	@Nonnull
+	@Override
+	public Set<ResourceMethod> getAvailableResourceMethods() {
+		return this.availableResourceMethods;
 	}
 
 	@Nonnull
