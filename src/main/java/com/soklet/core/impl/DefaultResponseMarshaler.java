@@ -70,6 +70,22 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(response);
 		requireNonNull(resourceMethod);
 
+		byte[] body = null;
+		Object bodyAsObject = response.getBody().orElse(null);
+		boolean binaryResponse = false;
+
+		// If response body is a byte array, pass through as-is.
+		// Otherwise, default representation is toString() output.
+		// Real systems would use a different representation, e.g. JSON
+		if (bodyAsObject != null) {
+			if (bodyAsObject instanceof byte[]) {
+				body = (byte[]) bodyAsObject;
+				binaryResponse = true;
+			} else {
+				body = bodyAsObject.toString().getBytes(StandardCharsets.UTF_8);
+			}
+		}
+
 		Map<String, Set<String>> headers = response.getHeaders();
 
 		Set<String> normalizedHeaderKeys = headers.keySet().stream()
@@ -79,13 +95,13 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		// If no Content-Type specified, supply a default
 		if (!normalizedHeaderKeys.contains("content-type")) {
 			headers = new HashMap<>(headers); // Mutable copy
-			headers.put("Content-Type", Set.of("text/plain; charset=UTF-8"));
+			headers.put("Content-Type", Set.of(binaryResponse ? "application/octet-stream" : "text/plain; charset=UTF-8"));
 		}
 
 		return new MarshaledResponse.Builder(response.getStatusCode())
 				.headers(headers)
 				.cookies(response.getCookies())
-				.body(response.getBody().isPresent() ? response.getBody().get().toString().getBytes(StandardCharsets.UTF_8) : null)
+				.body(body)
 				.build();
 	}
 
