@@ -16,12 +16,15 @@
 
 package com.soklet.core;
 
-import org.junit.Assert;
 import org.junit.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -30,13 +33,13 @@ import java.util.Locale;
 public class UtilitiesTests {
 	@Test
 	public void normalizedPathForUrl() {
-		Assert.assertEquals("/", Utilities.normalizedPathForUrl("https://www.google.com/"));
-		Assert.assertEquals("/", Utilities.normalizedPathForUrl("https://www.google.com"));
-		Assert.assertEquals("/", Utilities.normalizedPathForUrl(""));
-		Assert.assertEquals("/", Utilities.normalizedPathForUrl("/"));
-		Assert.assertEquals("/test", Utilities.normalizedPathForUrl("/test"));
-		Assert.assertEquals("/test", Utilities.normalizedPathForUrl("/test/"));
-		Assert.assertEquals("/test", Utilities.normalizedPathForUrl("/test//"));
+		assertEquals("/", Utilities.normalizedPathForUrl("https://www.google.com/"));
+		assertEquals("/", Utilities.normalizedPathForUrl("https://www.google.com"));
+		assertEquals("/", Utilities.normalizedPathForUrl(""));
+		assertEquals("/", Utilities.normalizedPathForUrl("/"));
+		assertEquals("/test", Utilities.normalizedPathForUrl("/test"));
+		assertEquals("/test", Utilities.normalizedPathForUrl("/test/"));
+		assertEquals("/test", Utilities.normalizedPathForUrl("/test//"));
 	}
 
 	@Test
@@ -44,7 +47,7 @@ public class UtilitiesTests {
 		String acceptLanguageHeaderValue = "fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5";
 		List<Locale> locales = Utilities.localesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue);
 
-		Assert.assertEquals("Locales don't match", List.of(
+		assertEquals("Locales don't match", List.of(
 				Locale.forLanguageTag("fr-CH"),
 				Locale.forLanguageTag("fr"),
 				Locale.forLanguageTag("en"),
@@ -53,10 +56,49 @@ public class UtilitiesTests {
 
 		locales = Utilities.localesFromAcceptLanguageHeaderValue("");
 
-		Assert.assertEquals("Blank locale string mishandled", List.of(), locales);
+		assertEquals("Blank locale string mishandled", List.of(), locales);
 
 		locales = Utilities.localesFromAcceptLanguageHeaderValue("xxxx");
 
-		Assert.assertEquals("Junk locale string mishandled", List.of(), locales);
+		assertEquals("Junk locale string mishandled", List.of(), locales);
+	}
+
+	@Test
+	public void clientUrlPrefixFromHeaders() {
+		String clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of()).orElse(null);
+		assertEquals("Client URL prefix erroneously detected from incomplete header data", null, clientUrlPrefix);
+
+		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+				"Host", Set.of("www.soklet.com")
+		)).orElse(null);
+		assertEquals("Client URL prefix erroneously detected from incomplete header data", null, clientUrlPrefix);
+
+		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+				"Host", Set.of("www.soklet.com:443")
+		)).orElse(null);
+		assertEquals("Client URL prefix erroneously detected from incomplete header data", null, clientUrlPrefix);
+
+		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+				"Forwarded", Set.of("for=12.34.56.78;host=example.com;proto=https, for=23.45.67.89")
+		)).orElse(null);
+		assertEquals("Client URL prefix was not correctly detected", "https://example.com", clientUrlPrefix);
+
+		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+				"Host", Set.of("www.soklet.com"),
+				"X-Forwarded-Proto", Set.of("https")
+		)).orElse(null);
+		assertEquals("Client URL prefix was not correctly detected", "https://www.soklet.com", clientUrlPrefix);
+
+		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+				"Host", Set.of("www.soklet.com"),
+				"X-Forwarded-Proto", Set.of("https")
+		)).orElse(null);
+		assertEquals("Client URL prefix was not correctly detected", "https://www.soklet.com", clientUrlPrefix);
+
+		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+				"X-Forwarded-Host", Set.of("www.soklet.com"),
+				"X-Forwarded-Protocol", Set.of("https")
+		)).orElse(null);
+		assertEquals("Client URL prefix was not correctly detected", "https://www.soklet.com", clientUrlPrefix);
 	}
 }

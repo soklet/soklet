@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Locale.LanguageRange;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -339,6 +340,252 @@ public final class Utilities {
 		} catch (Exception ignored) {
 			return List.of();
 		}
+	}
+
+	/**
+	 * Best-effort attempt to determine a client's URL prefix by examining request headers.
+	 * <p>
+	 * A URL prefix in this context is defined as {@code <scheme>://host<:optional port>}, but no path or query components.
+	 * <p>
+	 * Soklet is generally the "last hop" behind a load balancer/reverse proxy and does get accessed directly by clients.
+	 * <p>
+	 * Normally a load balancer/reverse proxy/other upstream proxies will provide information about the true source of the
+	 * request through headers like the following:
+	 * <ul>
+	 *   <li>{@code Host}</li>
+	 *   <li>{@code Forwarded}</li>
+	 *   <li>{@code Origin}</li>
+	 *   <li>{@code X-Forwarded-Proto}</li>
+	 *   <li>{@code X-Forwarded-Protocol}</li>
+	 *   <li>{@code X-Url-Scheme}</li>
+	 *   <li>{@code Front-End-Https}</li>
+	 *   <li>{@code X-Forwarded-Ssl}</li>
+	 *   <li>{@code X-Forwarded-Host}</li>
+	 *   <li>{@code X-Forwarded-Port}</li>
+	 * </ul>
+	 * This method may take these and other headers into account when determining URL prefix.
+	 * <p>
+	 * For example, the following would be legal URL prefixes returned from this method:
+	 * <ul>
+	 *   <li>{@code https://www.soklet.com}</li>
+	 *   <li>{@code http://www.fake.com:1234}</li>
+	 * </ul>
+	 * <p>
+	 * The following would NOT be legal URL prefixes:
+	 * <ul>
+	 *   <li>{@code www.soklet.com} (missing protocol) </li>
+	 *   <li>{@code https://www.soklet.com/} (trailing slash)</li>
+	 *   <li>{@code https://www.soklet.com/test} (trailing slash, path)</li>
+	 *   <li>{@code https://www.soklet.com/test?abc=1234} (trailing slash, path, query)</li>
+	 * </ul>
+	 *
+	 * @param headers HTTP request headers
+	 * @return the URL prefix, or the empty value if it could not be determined
+	 */
+	@Nonnull
+	public static Optional<String> extractClientUrlPrefixFromHeaders(@Nonnull Map<String, Set<String>> headers) {
+		requireNonNull(headers);
+
+		// Host                   developer.mozilla.org OR developer.mozilla.org:443
+		// Forwarded              by=<identifier>;for=<identifier>;host=<host>;proto=<http|https> (can be repeated if comma-separated, e.g. for=12.34.56.78;host=example.com;proto=https, for=23.45.67.89)
+		// Origin                 null OR <scheme>://<hostname> OR <scheme>://<hostname>:<port>
+		// X-Forwarded-Proto      https
+		// X-Forwarded-Protocol   https (Microsoft's alternate name)
+		// X-Url-Scheme           https (Microsoft's alternate name)
+		// Front-End-Https        on (Microsoft's alternate name)
+		// X-Forwarded-Ssl        on (Microsoft's alternate name)
+		// X-Forwarded-Host       id42.example-cdn.com
+		// X-Forwarded-Port       443
+
+		String protocol = null;
+		String host = null;
+		String portAsString = null;
+
+		// Host: developer.mozilla.org OR developer.mozilla.org:443
+		Set<String> hostHeaders = headers.get("Host");
+
+		if (hostHeaders != null && hostHeaders.size() > 0) {
+			String hostHeader = trimAggressivelyToNull(hostHeaders.stream().findFirst().get());
+
+			if (hostHeader != null) {
+				if (hostHeader.contains(":")) {
+					String[] hostHeaderComponents = hostHeader.split(":");
+					if (hostHeaderComponents.length == 2) {
+						host = trimAggressivelyToNull(hostHeaderComponents[0]);
+						portAsString = trimAggressivelyToNull(hostHeaderComponents[1]);
+					}
+				} else {
+					host = hostHeader;
+				}
+			}
+		}
+
+		// Forwarded: by=<identifier>;for=<identifier>;host=<host>;proto=<http|https> (can be repeated if comma-separated, e.g. for=12.34.56.78;host=example.com;proto=https, for=23.45.67.89)
+		Set<String> forwardedHeaders = headers.get("Forwarded");
+
+		if (forwardedHeaders != null && forwardedHeaders.size() > 0) {
+			String forwardedHeader = trimAggressivelyToNull(forwardedHeaders.stream().findFirst().get());
+
+			// If there are multiple comma-separated components, pick the first one
+			String[] forwardedHeaderComponents = forwardedHeader.split(",");
+			forwardedHeader = trimAggressivelyToNull(forwardedHeaderComponents[0]);
+
+			if (forwardedHeader != null) {
+				// Each field component might look like "by=<identifier>"
+				String[] forwardedHeaderFieldComponents = forwardedHeader.split(";");
+
+				for (String forwardedHeaderFieldComponent : forwardedHeaderFieldComponents) {
+					forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
+
+					if (forwardedHeaderFieldComponent == null)
+						continue;
+
+					// Break "by=<identifier>" into "by" and "<identifier>" pieces
+					String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("=" /* escape special Regex char */));
+					if (forwardedHeaderFieldNameAndValue.length != 2)
+						continue;
+
+					// e.g. "by"
+					String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
+					// e.g. "<identifier>"
+					String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
+
+					if (name == null || value == null)
+						continue;
+
+					// We only care about the "Host" and "Proto" components here.
+					if ("host".equalsIgnoreCase(name)) {
+						if (host == null)
+							host = value;
+					} else if ("proto".equalsIgnoreCase(name)) {
+						if (protocol == null)
+							protocol = value;
+					}
+				}
+			}
+		}
+
+		// Origin: null OR <scheme>://<hostname> OR <scheme>://<hostname>:<port>
+		if (protocol == null || host == null || portAsString == null) {
+			Set<String> originHeaders = headers.get("Origin");
+
+			if (originHeaders != null && originHeaders.size() > 0) {
+				String originHeader = trimAggressivelyToNull(originHeaders.stream().findFirst().get());
+				String[] originHeaderComponents = originHeader.split("://");
+
+				if (originHeaderComponents.length == 2) {
+					protocol = trimAggressivelyToNull(originHeaderComponents[0]);
+					String originHostAndMaybePort = trimAggressivelyToNull(originHeaderComponents[1]);
+
+					if (originHostAndMaybePort != null) {
+						if (originHostAndMaybePort.contains(":")) {
+							String[] originHostAndPortComponents = originHostAndMaybePort.split(":");
+
+							if (originHostAndPortComponents.length == 2) {
+								host = trimAggressivelyToNull(originHostAndPortComponents[0]);
+								portAsString = trimAggressivelyToNull(originHostAndPortComponents[1]);
+							}
+						} else {
+							host = originHostAndMaybePort;
+						}
+					}
+				}
+			}
+		}
+
+		// X-Forwarded-Proto: https
+		if (protocol == null) {
+			Set<String> xForwardedProtoHeaders = headers.get("X-Forwarded-Proto");
+			if (xForwardedProtoHeaders != null && xForwardedProtoHeaders.size() > 0) {
+				String xForwardedProtoHeader = trimAggressivelyToNull(xForwardedProtoHeaders.stream().findFirst().get());
+				protocol = xForwardedProtoHeader;
+			}
+		}
+
+		// X-Forwarded-Protocol: https (Microsoft's alternate name)
+		if (protocol == null) {
+			Set<String> xForwardedProtocolHeaders = headers.get("X-Forwarded-Protocol");
+			if (xForwardedProtocolHeaders != null && xForwardedProtocolHeaders.size() > 0) {
+				String xForwardedProtocolHeader = trimAggressivelyToNull(xForwardedProtocolHeaders.stream().findFirst().get());
+				protocol = xForwardedProtocolHeader;
+			}
+		}
+
+		// X-Url-Scheme: https (Microsoft's alternate name)
+		if (protocol == null) {
+			Set<String> xUrlSchemeHeaders = headers.get("X-Url-Scheme");
+			if (xUrlSchemeHeaders != null && xUrlSchemeHeaders.size() > 0) {
+				String xUrlSchemeHeader = trimAggressivelyToNull(xUrlSchemeHeaders.stream().findFirst().get());
+				protocol = xUrlSchemeHeader;
+			}
+		}
+
+		// Front-End-Https: on (Microsoft's alternate name)
+		if (protocol == null) {
+			Set<String> frontEndHttpsHeaders = headers.get("Front-End-Https");
+			if (frontEndHttpsHeaders != null && frontEndHttpsHeaders.size() > 0) {
+				String frontEndHttpsHeader = trimAggressivelyToNull(frontEndHttpsHeaders.stream().findFirst().get());
+
+				if (frontEndHttpsHeader != null)
+					protocol = "on".equalsIgnoreCase(frontEndHttpsHeader) ? "https" : "http";
+			}
+		}
+
+		// X-Forwarded-Ssl: on (Microsoft's alternate name)
+		if (protocol == null) {
+			Set<String> xForwardedSslHeaders = headers.get("X-Forwarded-Ssl");
+			if (xForwardedSslHeaders != null && xForwardedSslHeaders.size() > 0) {
+				String xForwardedSslHeader = trimAggressivelyToNull(xForwardedSslHeaders.stream().findFirst().get());
+
+				if (xForwardedSslHeader != null)
+					protocol = "on".equalsIgnoreCase(xForwardedSslHeader) ? "https" : "http";
+			}
+		}
+
+		// X-Forwarded-Host: id42.example-cdn.com
+		if (host == null) {
+			Set<String> xForwardedHostHeaders = headers.get("X-Forwarded-Host");
+			if (xForwardedHostHeaders != null && xForwardedHostHeaders.size() > 0) {
+				String xForwardedHostHeader = trimAggressivelyToNull(xForwardedHostHeaders.stream().findFirst().get());
+				host = xForwardedHostHeader;
+			}
+		}
+
+		// X-Forwarded-Port: 443
+		if (portAsString == null) {
+			Set<String> xForwardedPortHeaders = headers.get("X-Forwarded-Port");
+			if (xForwardedPortHeaders != null && xForwardedPortHeaders.size() > 0) {
+				String xForwardedPortHeader = trimAggressivelyToNull(xForwardedPortHeaders.stream().findFirst().get());
+				portAsString = xForwardedPortHeader;
+			}
+		}
+
+		Integer port = null;
+
+		if (portAsString != null) {
+			try {
+				port = Integer.parseInt(portAsString, 10);
+			} catch (Exception ignored) {
+				// Not an integer; ignore it
+			}
+		}
+
+		if (protocol != null && host != null && port == null)
+			return Optional.of(format("%s://%s", protocol, host));
+
+		if (protocol != null && host != null && port != null) {
+			boolean usingDefaultPort = ("http".equalsIgnoreCase(protocol) && port.equals(80))
+					|| ("https".equalsIgnoreCase(protocol) && port.equals(443));
+
+			// Only include the port number if it's nonstandard for the protocol
+			String clientUrlPrefix = usingDefaultPort
+					? format("%s://%s", protocol, host)
+					: format("%s://%s:%s", protocol, host, port);
+
+			return Optional.of(clientUrlPrefix);
+		}
+
+		return Optional.empty();
 	}
 
 	/**
