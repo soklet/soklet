@@ -19,6 +19,8 @@ package com.soklet.core;
 import org.junit.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -100,5 +102,65 @@ public class UtilitiesTests {
 				"X-Forwarded-Protocol", Set.of("https")
 		)).orElse(null);
 		assertEquals("Client URL prefix was not correctly detected", "https://www.soklet.com", clientUrlPrefix);
+	}
+
+	@Test
+	public void contentTypeFromHeaders() {
+		String contentType = Utilities.extractContentTypeFromHeaderValue("text/html").orElse(null);
+		assertEquals("Content type was not correctly detected", "text/html", contentType);
+
+		contentType = Utilities.extractContentTypeFromHeaderValue("").orElse(null);
+		assertEquals("Absence of content type was not correctly detected", null, contentType);
+
+		contentType = Utilities.extractContentTypeFromHeaderValue(null).orElse(null);
+		assertEquals("Absence of content type was not correctly detected", null, contentType);
+
+		contentType = Utilities.extractContentTypeFromHeaderValue("text/html; charset=utf-8").orElse(null);
+		assertEquals("Content type was not correctly detected", "text/html", contentType);
+
+		contentType = Utilities.extractContentTypeFromHeaderValue("text/html   ; charset=utf-8").orElse(null);
+		assertEquals("Content type was not correctly detected", "text/html", contentType);
+
+		contentType = Utilities.extractContentTypeFromHeaderValue("text/html;charset=utf-8").orElse(null);
+		assertEquals("Content type was not correctly detected", "text/html", contentType);
+	}
+
+	@Test
+	public void charsetFromHeaders() {
+		Charset charset = Utilities.extractCharsetFromHeaderValue("text/html; charset=utf-8").orElse(null);
+		assertEquals("Charset was not correctly detected", StandardCharsets.UTF_8, charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue("text/html").orElse(null);
+		assertEquals("Absence of charset was not correctly detected", null, charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue("text/html;").orElse(null);
+		assertEquals("Absence of charset was not correctly detected", null, charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue(";charset=utf-8;").orElse(null);
+		assertEquals("Charset was not correctly detected", StandardCharsets.UTF_8, charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue(";charset=utf-8   ;  ").orElse(null);
+		assertEquals("Charset was not correctly detected", StandardCharsets.UTF_8, charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue("multipart/form-data; boundary=something").orElse(null);
+		assertEquals("Absence of charset was not correctly detected", null, charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue("multipart/form-data; charset=utf-8; boundary=something").orElse(null);
+		assertEquals("Charset was not correctly detected", StandardCharsets.UTF_8, charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue("text/html; charset=ISO-8859-1").orElse(null);
+		assertEquals("Charset was not correctly detected", StandardCharsets.ISO_8859_1, charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue("text/html; charset=utf-16").orElse(null);
+		assertEquals("Charset was not correctly detected", StandardCharsets.UTF_16, charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue("text/html; charset=ascii").orElse(null);
+		assertEquals("Charset was not correctly detected", StandardCharsets.US_ASCII, charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue("text/html; charset=WINDOWS-1251").orElse(null);
+		assertEquals("Charset was not correctly detected", Charset.forName("windows-1251"), charset);
+
+		charset = Utilities.extractCharsetFromHeaderValue("text/html; charset=KOI8-R").orElse(null);
+		assertEquals("Charset was not correctly detected", Charset.forName("koi8-r"), charset);
 	}
 }

@@ -28,6 +28,9 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
+import java.nio.charset.UnsupportedCharsetException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -583,6 +586,122 @@ public final class Utilities {
 					: format("%s://%s:%s", protocol, host, port);
 
 			return Optional.of(clientUrlPrefix);
+		}
+
+		return Optional.empty();
+	}
+
+	@Nonnull
+	public static Optional<String> extractContentTypeFromHeaders(@Nonnull Map<String, Set<String>> headers) {
+		requireNonNull(headers);
+
+		Set<String> contentTypeHeaderValues = headers.get("Content-Type");
+
+		if (contentTypeHeaderValues == null || contentTypeHeaderValues.size() == 0)
+			return Optional.empty();
+
+		return extractContentTypeFromHeaderValue(contentTypeHeaderValues.stream().findFirst().get());
+	}
+
+	@Nonnull
+	public static Optional<String> extractContentTypeFromHeaderValue(@Nullable String contentTypeHeaderValue) {
+		contentTypeHeaderValue = trimAggressivelyToNull(contentTypeHeaderValue);
+
+		if (contentTypeHeaderValue == null)
+			return Optional.empty();
+
+		// Examples
+		// Content-Type: text/html; charset=utf-8
+		// Content-Type: multipart/form-data; boundary=something
+
+		int indexOfSemicolon = contentTypeHeaderValue.indexOf(";");
+
+		// Simple case, e.g. "text/html"
+		if (indexOfSemicolon == -1)
+			return Optional.ofNullable(trimAggressivelyToNull(contentTypeHeaderValue));
+
+		// More complex case, e.g. "text/html; charset=utf-8"
+		return Optional.ofNullable(trimAggressivelyToNull(contentTypeHeaderValue.substring(0, indexOfSemicolon)));
+	}
+
+	@Nonnull
+	public static Optional<Charset> extractCharsetFromHeaders(@Nonnull Map<String, Set<String>> headers) {
+		requireNonNull(headers);
+
+		Set<String> contentTypeHeaderValues = headers.get("Content-Type");
+
+		if (contentTypeHeaderValues == null || contentTypeHeaderValues.size() == 0)
+			return Optional.empty();
+
+		return extractCharsetFromHeaderValue(contentTypeHeaderValues.stream().findFirst().get());
+	}
+
+	@Nonnull
+	public static Optional<Charset> extractCharsetFromHeaderValue(@Nullable String contentTypeHeaderValue) {
+		contentTypeHeaderValue = trimAggressivelyToNull(contentTypeHeaderValue);
+
+		if (contentTypeHeaderValue == null)
+			return Optional.empty();
+
+		// Examples
+		// Content-Type: text/html; charset=utf-8
+		// Content-Type: multipart/form-data; boundary=something
+
+		int indexOfSemicolon = contentTypeHeaderValue.indexOf(";");
+
+		// Simple case, e.g. "text/html"
+		if (indexOfSemicolon == -1)
+			return Optional.empty();
+
+		// More complex case, e.g. "text/html; charset=utf-8" or "multipart/form-data; charset=utf-8; boundary=something"
+		boolean finishedContentType = false;
+		boolean finishedCharsetName = false;
+		StringBuilder buffer = new StringBuilder();
+		String charsetName = null;
+
+		for (int i = 0; i < contentTypeHeaderValue.length(); i++) {
+			char c = contentTypeHeaderValue.charAt(i);
+
+			if (Character.isWhitespace(c))
+				continue;
+
+			if (c == ';') {
+				// No content type yet?  This just be it...
+				if (!finishedContentType) {
+					finishedContentType = true;
+					buffer = new StringBuilder();
+				} else if (!finishedCharsetName) {
+					if (buffer.indexOf("charset=") == 0) {
+						charsetName = buffer.toString();
+						finishedCharsetName = true;
+						break;
+					}
+				}
+			} else {
+				buffer.append(Character.toLowerCase(c));
+			}
+		}
+
+		// Handle case where charset is the end of the string, e.g. "whatever;charset=utf-8"
+		if (!finishedCharsetName) {
+			String potentialCharset = trimAggressivelyToNull(buffer.toString());
+			if (potentialCharset != null && potentialCharset.startsWith("charset=")) {
+				finishedCharsetName = true;
+				charsetName = potentialCharset;
+			}
+		}
+
+		if (finishedCharsetName) {
+			// e.g. "charset=utf-8" -> "utf-8"
+			charsetName = trimAggressivelyToNull(charsetName.replace("charset=", ""));
+
+			if (charsetName != null) {
+				try {
+					return Optional.of(Charset.forName(charsetName));
+				} catch (IllegalCharsetNameException | UnsupportedCharsetException ignored) {
+					return Optional.empty();
+				}
+			}
 		}
 
 		return Optional.empty();
