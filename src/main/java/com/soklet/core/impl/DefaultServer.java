@@ -42,12 +42,12 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -348,9 +348,10 @@ public class DefaultServer implements Server {
 		requireNonNull(throwable);
 
 		Integer statusCode = 500;
+		Charset charset = StandardCharsets.UTF_8;
 		String reasonPhrase = StatusCode.fromStatusCode(statusCode).get().getReasonPhrase();
-		List<Header> headers = List.of(new Header("Content-Type", "text/plain"));
-		byte[] body = format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8);
+		List<Header> headers = List.of(new Header("Content-Type", format("text/plain; charset=%s", charset.name())));
+		byte[] body = format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(charset);
 
 		return new MicrohttpResponse(statusCode, reasonPhrase, headers, body);
 	}
@@ -381,10 +382,10 @@ public class DefaultServer implements Server {
 	protected Map<String, Set<String>> headersFromMicrohttpRequest(@Nonnull MicrohttpRequest microhttpRequest) {
 		requireNonNull(microhttpRequest);
 
-		Map<String, Set<String>> headers = new HashMap<>(microhttpRequest.headers().size());
+		Map<String, Set<String>> headers = new LinkedHashMap<>(microhttpRequest.headers().size());
 
 		for (Header header : microhttpRequest.headers()) {
-			Set<String> values = headers.computeIfAbsent(header.name(), k -> new HashSet<>());
+			Set<String> values = headers.computeIfAbsent(header.name(), k -> new LinkedHashSet<>());
 
 			String value = trimAggressivelyToNull(header.value());
 

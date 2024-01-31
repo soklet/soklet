@@ -30,10 +30,11 @@ import com.soklet.exception.BadRequestException;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -51,9 +52,23 @@ import static java.util.Objects.requireNonNull;
 public class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
 	private static final DefaultResponseMarshaler SHARED_INSTANCE;
+	@Nonnull
+	private static final Charset DEFAULT_CHARSET;
 
 	static {
 		SHARED_INSTANCE = new DefaultResponseMarshaler();
+		DEFAULT_CHARSET = StandardCharsets.UTF_8;
+	}
+
+	@Nonnull
+	private final Charset charset;
+
+	public DefaultResponseMarshaler() {
+		this(null);
+	}
+
+	public DefaultResponseMarshaler(@Nullable Charset charset) {
+		this.charset = charset == null ? DEFAULT_CHARSET : charset;
 	}
 
 	@Nonnull
@@ -82,7 +97,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 				body = (byte[]) bodyAsObject;
 				binaryResponse = true;
 			} else {
-				body = bodyAsObject.toString().getBytes(StandardCharsets.UTF_8);
+				body = bodyAsObject.toString().getBytes(getCharset());
 			}
 		}
 
@@ -94,8 +109,8 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 		// If no Content-Type specified, supply a default
 		if (!normalizedHeaderKeys.contains("content-type")) {
-			headers = new HashMap<>(headers); // Mutable copy
-			headers.put("Content-Type", Set.of(binaryResponse ? "application/octet-stream" : "text/plain; charset=UTF-8"));
+			headers = new LinkedHashMap<>(headers); // Mutable copy
+			headers.put("Content-Type", Set.of(binaryResponse ? "application/octet-stream" : format("text/plain; charset=%s", getCharset().name())));
 		}
 
 		return new MarshaledResponse.Builder(response.getStatusCode())
@@ -113,8 +128,8 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		Integer statusCode = 404;
 
 		return new MarshaledResponse.Builder(statusCode)
-				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8))
+				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
+				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 				.build();
 	}
 
@@ -132,10 +147,10 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		Integer statusCode = 405;
 
 		return new MarshaledResponse.Builder(statusCode)
-				.headers(Map.of("Allow", allowedHttpMethodsAsStrings, "Content-Type", Set.of("text/plain; charset=UTF-8")))
+				.headers(Map.of("Allow", allowedHttpMethodsAsStrings, "Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
 				.body(format("HTTP %d: %s. Requested: %s, Allowed: %s",
 						statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase(), request.getHttpMethod().name(),
-						String.join(", ", allowedHttpMethodsAsStrings)).getBytes(StandardCharsets.UTF_8))
+						String.join(", ", allowedHttpMethodsAsStrings)).getBytes(getCharset()))
 				.build();
 	}
 
@@ -183,8 +198,8 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		Integer statusCode = throwable instanceof BadRequestException ? 400 : 500;
 
 		return new MarshaledResponse.Builder(statusCode)
-				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8))
+				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
+				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 				.build();
 	}
 
@@ -196,7 +211,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(corsPreflightResponse);
 
 		Integer statusCode = 204;
-		Map<String, Set<String>> headers = new HashMap<>();
+		Map<String, Set<String>> headers = new LinkedHashMap<>();
 
 		headers.put("Access-Control-Allow-Origin", Set.of(corsPreflightResponse.getAccessControlAllowOrigin()));
 
@@ -209,7 +224,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		Set<String> accessControlAllowHeaders = corsPreflightResponse.getAccessControlAllowHeaders();
 
 		if (accessControlAllowHeaders.size() > 0)
-			headers.put("Access-Control-Allow-Headers", new HashSet<>(accessControlAllowHeaders));
+			headers.put("Access-Control-Allow-Headers", new LinkedHashSet<>(accessControlAllowHeaders));
 
 		Set<String> accessControlAllowMethodAsStrings = corsPreflightResponse.getAccessControlAllowMethods().stream()
 				.map(accessControlAllowMethod -> accessControlAllowMethod.name())
@@ -236,9 +251,9 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		Integer statusCode = 403;
 
 		return new MarshaledResponse.Builder(statusCode)
-				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
 				.body(format("HTTP %d: %s (CORS preflight rejected)", statusCode,
-						StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8))
+						StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 				.build();
 	}
 
@@ -264,7 +279,12 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 					Set<String> accessControlExposeHeaders = corsResponse.getAccessControlExposeHeaders();
 
 					if (accessControlExposeHeaders.size() > 0)
-						mutableHeaders.put("Access-Control-Expose-Headers", new HashSet<>(accessControlExposeHeaders));
+						mutableHeaders.put("Access-Control-Expose-Headers", new LinkedHashSet<>(accessControlExposeHeaders));
 				}).finish();
+	}
+
+	@Nonnull
+	protected Charset getCharset() {
+		return this.charset;
 	}
 }

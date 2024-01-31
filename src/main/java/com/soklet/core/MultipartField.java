@@ -20,6 +20,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
@@ -35,6 +36,13 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class MultipartField {
 	@Nonnull
+	private static final Charset DEFAULT_CHARSET;
+
+	static {
+		DEFAULT_CHARSET = StandardCharsets.UTF_8;
+	}
+
+	@Nonnull
 	private final String name;
 	@Nullable
 	private final byte[] data;
@@ -44,6 +52,8 @@ public class MultipartField {
 	private final String filename;
 	@Nullable
 	private final String contentType;
+	@Nullable
+	private final Charset charset;
 	@Nonnull
 	private final ReentrantLock lock;
 
@@ -61,6 +71,7 @@ public class MultipartField {
 		this.name = name;
 		this.filename = filename;
 		this.contentType = contentType;
+		this.charset = builder.charset;
 		this.data = data;
 		this.lock = new ReentrantLock();
 	}
@@ -87,12 +98,13 @@ public class MultipartField {
 		return Objects.equals(getName(), multipartField.getName())
 				&& Objects.equals(getFilename(), multipartField.getFilename())
 				&& Objects.equals(getContentType(), multipartField.getContentType())
+				&& Objects.equals(getCharset(), multipartField.getCharset())
 				&& Objects.equals(getData(), multipartField.getData());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getName(), getFilename(), getContentType(), getData());
+		return Objects.hash(getName(), getFilename(), getContentType(), getCharset(), getData());
 	}
 
 	/**
@@ -112,6 +124,8 @@ public class MultipartField {
 		private String filename;
 		@Nullable
 		private String contentType;
+		@Nullable
+		private Charset charset;
 
 		public Builder(@Nonnull String name) {
 			this(name, null);
@@ -139,6 +153,12 @@ public class MultipartField {
 		}
 
 		@Nonnull
+		public Builder charset(@Nullable Charset charset) {
+			this.charset = charset;
+			return this;
+		}
+
+		@Nonnull
 		public MultipartField build() {
 			return new MultipartField(this);
 		}
@@ -151,7 +171,7 @@ public class MultipartField {
 			getLock().lock();
 			try {
 				if (this.data != null && this.dataAsString == null)
-					this.dataAsString = new String(this.data, StandardCharsets.UTF_8);
+					this.dataAsString = new String(this.data, getCharset().orElse(DEFAULT_CHARSET));
 			} finally {
 				getLock().unlock();
 			}
@@ -173,6 +193,11 @@ public class MultipartField {
 	@Nonnull
 	public Optional<String> getContentType() {
 		return Optional.ofNullable(this.contentType);
+	}
+
+	@Nonnull
+	public Optional<Charset> getCharset() {
+		return Optional.ofNullable(this.charset);
 	}
 
 	@Nonnull

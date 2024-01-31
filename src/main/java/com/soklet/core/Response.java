@@ -21,8 +21,8 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -182,8 +182,8 @@ public class Response {
 			requireNonNull(response);
 
 			this.builder = new Builder(response.getStatusCode())
-					.headers(new HashMap<>(response.getHeaders()))
-					.cookies(new HashSet<>(response.getCookies()))
+					.headers(new LinkedHashMap<>(response.getHeaders()))
+					.cookies(new LinkedHashSet<>(response.getCookies()))
 					.body(response.getBody().orElse(null));
 		}
 
@@ -192,8 +192,8 @@ public class Response {
 			requireNonNull(statusCodeFunction);
 
 			this.builder = new Builder(statusCodeFunction.apply(builder.statusCode))
-					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
-					.cookies(builder.cookies == null ? null : new HashSet<>(builder.cookies))
+					.headers(builder.headers == null ? null : new LinkedHashMap<>(builder.headers))
+					.cookies(builder.cookies == null ? null : new LinkedHashSet<>(builder.cookies))
 					.body(builder.body);
 
 			return this;

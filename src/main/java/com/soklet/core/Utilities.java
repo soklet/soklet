@@ -16,6 +16,8 @@
 
 package com.soklet.core;
 
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -32,8 +34,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.UnsupportedCharsetException;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Locale.LanguageRange;
@@ -69,7 +71,7 @@ public final class Utilities {
 		EMPTY_BYTE_ARRAY = new byte[0];
 
 		Locale[] locales = Locale.getAvailableLocales();
-		Map<String, Locale> localesByLanguageRangeRange = new HashMap<>(locales.length);
+		Map<String, Locale> localesByLanguageRangeRange = new LinkedHashMap<>(locales.length);
 
 		for (Locale locale : locales) {
 			LanguageRange languageRange = new LanguageRange(locale.toLanguageTag());
@@ -219,7 +221,7 @@ public final class Utilities {
 			return Map.of();
 
 		String[] queryParameterComponents = query.split("&");
-		Map<String, Set<String>> queryParameters = new HashMap<>();
+		Map<String, Set<String>> queryParameters = new LinkedHashMap<>();
 
 		for (String queryParameterComponent : queryParameterComponents) {
 			String[] queryParameterNameAndValue = queryParameterComponent.split("=");
@@ -233,7 +235,7 @@ public final class Utilities {
 			if (value == null)
 				continue;
 
-			Set<String> values = queryParameters.computeIfAbsent(name, k -> new HashSet<>());
+			Set<String> values = queryParameters.computeIfAbsent(name, k -> new LinkedHashSet<>());
 
 			values.add(value);
 		}
@@ -245,8 +247,7 @@ public final class Utilities {
 	public static Map<String, Set<String>> extractCookiesFromHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 
-		// ResponseCookie names are case-sensitive *in practice*, do not need case-insensitive map
-		Map<String, Set<String>> cookies = new HashMap<>();
+		Map<String, Set<String>> cookies = new LinkedCaseInsensitiveMap<>();
 
 		for (Map.Entry<String, Set<String>> entry : headers.entrySet()) {
 			if (entry.getKey().equals("Cookie")) {
@@ -280,7 +281,7 @@ public final class Utilities {
 						Set<String> cookieValues = cookies.get(cookieName);
 
 						if (cookieValues == null) {
-							cookieValues = new HashSet<>();
+							cookieValues = new LinkedHashSet<>();
 							cookies.put(cookieName, cookieValues);
 						}
 

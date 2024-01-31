@@ -18,21 +18,22 @@ package com.soklet.core;
 
 import com.soklet.core.impl.DefaultIdGenerator;
 import com.soklet.core.impl.DefaultMultipartParser;
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -47,9 +48,12 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class Request {
 	@Nonnull
+	private static final Charset DEFAULT_CHARSET;
+	@Nonnull
 	private static final IdGenerator DEFAULT_ID_GENERATOR;
 
 	static {
+		DEFAULT_CHARSET = StandardCharsets.UTF_8;
 		DEFAULT_ID_GENERATOR = new DefaultIdGenerator();
 	}
 
@@ -65,6 +69,12 @@ public class Request {
 	private final Map<String, Set<String>> cookies;
 	@Nonnull
 	private final Map<String, Set<String>> queryParameters;
+	@Nonnull
+	private final Map<String, Set<String>> formParameters;
+	@Nullable
+	private final String contentType;
+	@Nullable
+	private final Charset charset;
 	@Nonnull
 	private final Map<String, Set<String>> headers;
 	@Nullable
@@ -85,6 +95,7 @@ public class Request {
 	protected Request(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
+		// TODO: should we use InstanceProvider to vend IdGenerator type instead of explicitly specifying?
 		IdGenerator idGenerator = builder.idGenerator == null ? getDefaultIdGenerator() : builder.idGenerator;
 
 		this.lock = new ReentrantLock();
@@ -95,7 +106,7 @@ public class Request {
 		this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(builder.uri));
 
 		// Header names are case-insensitive.  Enforce that here with a special map
-		Map<String, Set<String>> caseInsensitiveHeaders = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+		Map<String, Set<String>> caseInsensitiveHeaders = new LinkedCaseInsensitiveMap<>();
 
 		if (builder.headers != null)
 			caseInsensitiveHeaders.putAll(builder.headers);
@@ -104,17 +115,29 @@ public class Request {
 		this.cookies = Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(this.headers));
 		this.cors = Cors.fromHeaders(this.httpMethod, this.headers).orElse(null);
 		this.body = builder.body;
+		this.contentType = Utilities.extractContentTypeFromHeaders(this.headers).orElse(null);
+		this.charset = Utilities.extractCharsetFromHeaders(this.headers).orElse(null);
+
+		// Form parameters
+		// TODO: optimize copy/modify scenarios - we don't want to be re-processing body data
+		Map<String, Set<String>> formParameters = Map.of();
+
+		if (this.body != null && this.contentType != null && this.contentType.equalsIgnoreCase("application/x-www-form-urlencoded")) {
+			String bodyAsString = getBodyAsString().orElse(null);
+			formParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromQuery(bodyAsString));
+		}
+
+		this.formParameters = formParameters;
 
 		// Multipart handling
 		// TODO: optimize copy/modify scenarios - we don't want to be copying big already-parsed multipart byte arrays
-		// TODO: should we use InstanceProvider to vend IdGenerator and MultipartParser types instead of explicitly specifying?
-		String contentType = getHeader("Content-Type").orElse(null);
 		boolean multipart = false;
 		Map<String, Set<MultipartField>> multipartFields = Map.of();
 
-		if (contentType != null && contentType.toLowerCase(Locale.ENGLISH).startsWith("multipart/")) {
+		if (this.contentType != null && this.contentType.toLowerCase(Locale.ENGLISH).startsWith("multipart/")) {
 			multipart = true;
 
+			// TODO: should we use InstanceProvider to vend MultipartParser type instead of explicitly specifying?
 			MultipartParser multipartParser = builder.multipartParser == null ? DefaultMultipartParser.sharedInstance() : builder.multipartParser;
 			multipartFields = Collections.unmodifiableMap(multipartParser.extractMultipartFields(this));
 		}
@@ -141,8 +164,6 @@ public class Request {
 		return Objects.equals(getId(), request.getId())
 				&& Objects.equals(getHttpMethod(), request.getHttpMethod())
 				&& Objects.equals(getUri(), request.getUri())
-				&& Objects.equals(getPath(), request.getPath())
-				&& Objects.equals(getCookies(), request.getCookies())
 				&& Objects.equals(getQueryParameters(), request.getQueryParameters())
 				&& Objects.equals(getHeaders(), request.getHeaders())
 				&& Objects.equals(getBody(), request.getBody());
@@ -150,7 +171,7 @@ public class Request {
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getId(), getHttpMethod(), getUri(), getPath(), getCookies(), getQueryParameters(), getHeaders(), getBody());
+		return Objects.hash(getId(), getHttpMethod(), getUri(), getQueryParameters(), getHeaders(), getBody());
 	}
 
 	@Nonnull
@@ -189,8 +210,23 @@ public class Request {
 	}
 
 	@Nonnull
+	public Map<String, Set<String>> getFormParameters() {
+		return this.formParameters;
+	}
+
+	@Nonnull
 	public Map<String, Set<String>> getHeaders() {
 		return this.headers;
+	}
+
+	@Nonnull
+	public Optional<String> getContentType() {
+		return Optional.ofNullable(this.contentType);
+	}
+
+	@Nonnull
+	public Optional<Charset> getCharset() {
+		return Optional.ofNullable(this.charset);
 	}
 
 	@Nonnull
@@ -215,7 +251,7 @@ public class Request {
 			getLock().lock();
 			try {
 				if (this.body != null && this.bodyAsString == null)
-					this.bodyAsString = new String(this.body, StandardCharsets.UTF_8);
+					this.bodyAsString = new String(this.body, getCharset().orElse(DEFAULT_CHARSET));
 			} finally {
 				getLock().unlock();
 			}
@@ -257,6 +293,12 @@ public class Request {
 	public Optional<String> getQueryParameter(@Nonnull String name) {
 		requireNonNull(name);
 		return singleValueForName(name, getQueryParameters());
+	}
+
+	@Nonnull
+	public Optional<String> getFormParameter(@Nonnull String name) {
+		requireNonNull(name);
+		return singleValueForName(name, getFormParameters());
 	}
 
 	@Nonnull
@@ -390,7 +432,7 @@ public class Request {
 
 			this.builder = new Builder(request.getHttpMethod(), request.getUri())
 					.id(request.getId())
-					.headers(new HashMap<>(request.getHeaders()))
+					.headers(new LinkedHashMap<>(request.getHeaders()))
 					.body(request.getBody().orElse(null));
 		}
 
@@ -400,7 +442,7 @@ public class Request {
 
 			this.builder = new Builder(httpMethodFunction.apply(builder.httpMethod), builder.uri)
 					.id(builder.id)
-					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
+					.headers(builder.headers == null ? null : new LinkedHashMap<>(builder.headers))
 					.body(builder.body);
 
 			return this;
@@ -412,7 +454,7 @@ public class Request {
 
 			this.builder = new Builder(builder.httpMethod, uriFunction.apply(builder.uri))
 					.id(builder.id)
-					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
+					.headers(builder.headers == null ? null : new LinkedHashMap<>(builder.headers))
 					.body(builder.body);
 
 			return this;

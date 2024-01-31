@@ -20,8 +20,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -149,8 +149,8 @@ public class MarshaledResponse {
 			requireNonNull(marshaledResponse);
 
 			this.builder = new MarshaledResponse.Builder(marshaledResponse.getStatusCode())
-					.headers(new HashMap<>(marshaledResponse.getHeaders()))
-					.cookies(new HashSet<>(marshaledResponse.getCookies()))
+					.headers(new LinkedHashMap<>(marshaledResponse.getHeaders()))
+					.cookies(new LinkedHashSet<>(marshaledResponse.getCookies()))
 					.body(marshaledResponse.getBody().orElse(null));
 		}
 
@@ -159,8 +159,8 @@ public class MarshaledResponse {
 			requireNonNull(statusCodeFunction);
 
 			this.builder = new MarshaledResponse.Builder(statusCodeFunction.apply(builder.statusCode))
-					.headers(builder.headers == null ? null : new HashMap<>(builder.headers))
-					.cookies(builder.responseCookies == null ? null : new HashSet<>(builder.responseCookies))
+					.headers(builder.headers == null ? null : new LinkedHashMap<>(builder.headers))
+					.cookies(builder.responseCookies == null ? null : new LinkedHashSet<>(builder.responseCookies))
 					.body(builder.body);
 
 			return this;

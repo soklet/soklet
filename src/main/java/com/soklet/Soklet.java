@@ -39,12 +39,13 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -364,7 +365,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 			if (request.getHttpMethod() == HttpMethod.OPTIONS) {
 				// See what non-OPTIONS methods are available to us for this request's path
 				Set<HttpMethod> otherHttpMethods = resolveOtherMatchingHttpMethods(request, resourceMethodResolver);
-				Set<HttpMethod> allowedHttpMethods = new HashSet<>(otherHttpMethods);
+				Set<HttpMethod> allowedHttpMethods = new LinkedHashSet<>(otherHttpMethods);
 				allowedHttpMethods.add(HttpMethod.OPTIONS);
 
 				// Special handling for CORS preflight requests, if needed
@@ -507,7 +508,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		requireNonNull(request);
 		requireNonNull(resourceMethodResolver);
 
-		Set<HttpMethod> otherHttpMethods = new HashSet<>(HttpMethod.values().length);
+		Set<HttpMethod> otherHttpMethods = new LinkedHashSet<>(HttpMethod.values().length);
 
 		for (HttpMethod otherHttpMethod : HttpMethod.values()) {
 			Request otherRequest = new Request.Builder(otherHttpMethod, request.getUri()).build();
@@ -525,10 +526,11 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		requireNonNull(throwable);
 
 		Integer statusCode = 500;
+		Charset charset = StandardCharsets.UTF_8;
 
 		return new MarshaledResponse.Builder(statusCode)
-				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(StandardCharsets.UTF_8))
+				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", charset.name()))))
+				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(charset))
 				.build();
 	}
 

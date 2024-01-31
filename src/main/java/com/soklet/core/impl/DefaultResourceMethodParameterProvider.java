@@ -33,7 +33,6 @@ import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourcePath;
-import com.soklet.core.Utilities;
 import com.soklet.exception.BadRequestException;
 import com.soklet.exception.IllegalFormParameterException;
 import com.soklet.exception.IllegalMultipartFieldException;
@@ -337,13 +336,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(parameterType);
 
 		String name = extractParameterName(resourceMethod, parameter, formParameter, formParameter.value());
-		Set<String> values = null;
-		String requestBodyAsString = request.getBodyAsString().orElse(null);
-
-		if (requestBodyAsString != null) {
-			Map<String, Set<String>> formParameters = Utilities.extractQueryParametersFromQuery(requestBodyAsString);
-			values = formParameters.get(name);
-		}
+		Set<String> values = request.getFormParameters().get(name);
 
 		if (values == null)
 			values = Set.of();

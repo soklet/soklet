@@ -23,7 +23,9 @@ package com.soklet.core.impl;
 import com.soklet.core.MultipartField;
 import com.soklet.core.MultipartParser;
 import com.soklet.core.Request;
+import com.soklet.core.Utilities;
 import com.soklet.exception.MissingRequestHeaderException;
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
@@ -35,12 +37,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.Base64;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -101,7 +105,7 @@ public class DefaultMultipartParser implements MultipartParser {
 		MultipartStream multipartStream = new MultipartStream(input,
 				contentTypeHeaderFields.get("boundary").getBytes(), progressNotifier);
 
-		Map<String, Set<MultipartField>> multipartFieldsByName = new HashMap<>();
+		Map<String, Set<MultipartField>> multipartFieldsByName = new LinkedHashMap<>();
 
 		try {
 			boolean hasNext = multipartStream.skipPreamble();
@@ -111,9 +115,13 @@ public class DefaultMultipartParser implements MultipartParser {
 				//
 				// Content-Disposition: form-data; name="doc"; filename="test.pdf"
 				// Content-Type: application/pdf
-				Map<String, String> allHeaders = splitHeaders(multipartStream.readHeaders());
+				Map<String, String> caseSensitiveHeaders = splitHeaders(multipartStream.readHeaders());
 
-				String contentDisposition = trimAggressivelyToNull(allHeaders.get("Content-Disposition"));
+				// Use a case-insensitive map for simplified lookups
+				Map<String, String> caseInsensitiveHeaders = new LinkedCaseInsensitiveMap<>(caseSensitiveHeaders.size());
+				caseInsensitiveHeaders.putAll(caseSensitiveHeaders);
+
+				String contentDisposition = trimAggressivelyToNull(caseInsensitiveHeaders.get("Content-Disposition"));
 				Map<String, String> contentDispositionFields = Map.of();
 
 				if (contentDisposition != null)
@@ -136,17 +144,20 @@ public class DefaultMultipartParser implements MultipartParser {
 				if (filename != null)
 					filename = HTMLUtilities.unescapeHtml(filename);
 
-				String contentType = trimAggressivelyToNull(allHeaders.get("Content-Type"));
+				String contentTypeHeaderValue = trimAggressivelyToNull(caseInsensitiveHeaders.get("Content-Type"));
+				String contentType = Utilities.extractContentTypeFromHeaderValue(contentTypeHeaderValue).orElse(null);
+				Charset charset = Utilities.extractCharsetFromHeaderValue(contentTypeHeaderValue).orElse(null);
 
 				MultipartField multipartField = new MultipartField.Builder(name, data.toByteArray())
 						.filename(filename)
 						.contentType(contentType)
+						.charset(charset)
 						.build();
 
 				Set<MultipartField> multipartFields = multipartFieldsByName.get(name);
 
 				if (multipartFields == null) {
-					multipartFields = new HashSet<>();
+					multipartFields = new LinkedHashSet<>();
 					multipartFieldsByName.put(name, multipartFields);
 				}
 
@@ -185,7 +196,7 @@ public class DefaultMultipartParser implements MultipartParser {
 	// *** START Selenium UploadFileHandler source ***
 
 	protected Map<String, String> splitHeaders(String readHeaders) {
-		Map<String, String> headersBuilder = new HashMap<>();
+		Map<String, String> headersBuilder = new LinkedHashMap<>();
 		String[] headers = readHeaders.split("\r\n");
 		for (String headerLine : headers) {
 			int index = headerLine.indexOf(':');
@@ -200,7 +211,7 @@ public class DefaultMultipartParser implements MultipartParser {
 	}
 
 	protected Map<String, String> extractFields(String contentTypeHeader) {
-		Map<String, String> fieldsBuilder = new HashMap<>();
+		Map<String, String> fieldsBuilder = new LinkedHashMap<>();
 		String[] contentTypeHeaderParts = contentTypeHeader.split("[;,]");
 		for (String contentTypeHeaderPart : contentTypeHeaderParts) {
 			String[] kv = contentTypeHeaderPart.split("=");
@@ -1741,7 +1752,7 @@ public class DefaultMultipartParser implements MultipartParser {
 		 */
 		public Map<String, String> parse(final char[] charArray, final char separator) {
 			if (charArray == null) {
-				return new HashMap<>();
+				return new LinkedHashMap<>();
 			}
 			return parse(charArray, 0, charArray.length, separator);
 		}
@@ -1758,9 +1769,9 @@ public class DefaultMultipartParser implements MultipartParser {
 		public Map<String, String> parse(final char[] charArray, final int offset, final int length, final char separator) {
 
 			if (charArray == null) {
-				return new HashMap<>();
+				return new LinkedHashMap<>();
 			}
-			final var params = new HashMap<String, String>();
+			final var params = new LinkedHashMap<String, String>();
 			this.chars = charArray.clone();
 			this.pos = offset;
 			this.len = length;
@@ -1805,7 +1816,7 @@ public class DefaultMultipartParser implements MultipartParser {
 		 */
 		public Map<String, String> parse(final String str, final char separator) {
 			if (str == null) {
-				return new HashMap<>();
+				return new LinkedHashMap<>();
 			}
 			return parse(str.toCharArray(), separator);
 		}
@@ -1820,7 +1831,7 @@ public class DefaultMultipartParser implements MultipartParser {
 		 */
 		public Map<String, String> parse(final String str, final char[] separators) {
 			if (separators == null || separators.length == 0) {
-				return new HashMap<>();
+				return new LinkedHashMap<>();
 			}
 			var separator = separators[0];
 			if (str != null) {
