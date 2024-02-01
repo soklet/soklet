@@ -115,13 +115,9 @@ public class DefaultMultipartParser implements MultipartParser {
 				//
 				// Content-Disposition: form-data; name="doc"; filename="test.pdf"
 				// Content-Type: application/pdf
-				Map<String, String> caseSensitiveHeaders = splitHeaders(multipartStream.readHeaders());
-
 				// Use a case-insensitive map for simplified lookups
-				Map<String, String> caseInsensitiveHeaders = new LinkedCaseInsensitiveMap<>(caseSensitiveHeaders.size());
-				caseInsensitiveHeaders.putAll(caseSensitiveHeaders);
-
-				String contentDisposition = trimAggressivelyToNull(caseInsensitiveHeaders.get("Content-Disposition"));
+				Map<String, String> headers = splitHeaders(multipartStream.readHeaders());
+				String contentDisposition = trimAggressivelyToNull(headers.get("Content-Disposition"));
 				Map<String, String> contentDispositionFields = Map.of();
 
 				if (contentDisposition != null)
@@ -144,7 +140,7 @@ public class DefaultMultipartParser implements MultipartParser {
 				if (filename != null)
 					filename = HTMLUtilities.unescapeHtml(filename);
 
-				String contentTypeHeaderValue = trimAggressivelyToNull(caseInsensitiveHeaders.get("Content-Type"));
+				String contentTypeHeaderValue = trimAggressivelyToNull(headers.get("Content-Type"));
 				String contentType = Utilities.extractContentTypeFromHeaderValue(contentTypeHeaderValue).orElse(null);
 				Charset charset = Utilities.extractCharsetFromHeaderValue(contentTypeHeaderValue).orElse(null);
 
@@ -195,8 +191,8 @@ public class DefaultMultipartParser implements MultipartParser {
 
 	// *** START Selenium UploadFileHandler source ***
 
-	protected Map<String, String> splitHeaders(String readHeaders) {
-		Map<String, String> headersBuilder = new LinkedHashMap<>();
+	protected LinkedCaseInsensitiveMap<String> splitHeaders(String readHeaders) {
+		LinkedCaseInsensitiveMap<String> headersBuilder = new LinkedCaseInsensitiveMap<>();
 		String[] headers = readHeaders.split("\r\n");
 		for (String headerLine : headers) {
 			int index = headerLine.indexOf(':');
@@ -210,8 +206,8 @@ public class DefaultMultipartParser implements MultipartParser {
 		return headersBuilder;
 	}
 
-	protected Map<String, String> extractFields(String contentTypeHeader) {
-		Map<String, String> fieldsBuilder = new LinkedHashMap<>();
+	protected LinkedCaseInsensitiveMap<String> extractFields(String contentTypeHeader) {
+		LinkedCaseInsensitiveMap<String> fieldsBuilder = new LinkedCaseInsensitiveMap<>();
 		String[] contentTypeHeaderParts = contentTypeHeader.split("[;,]");
 		for (String contentTypeHeaderPart : contentTypeHeaderParts) {
 			String[] kv = contentTypeHeaderPart.split("=");

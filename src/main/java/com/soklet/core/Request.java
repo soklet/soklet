@@ -106,12 +106,7 @@ public class Request {
 		this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(builder.uri));
 
 		// Header names are case-insensitive.  Enforce that here with a special map
-		Map<String, Set<String>> caseInsensitiveHeaders = new LinkedCaseInsensitiveMap<>();
-
-		if (builder.headers != null)
-			caseInsensitiveHeaders.putAll(builder.headers);
-
-		this.headers = Collections.unmodifiableMap(caseInsensitiveHeaders);
+		this.headers = Collections.unmodifiableMap(new LinkedCaseInsensitiveMap<>(builder.headers));
 		this.cookies = Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(this.headers));
 		this.cors = Cors.fromHeaders(this.httpMethod, this.headers).orElse(null);
 		this.body = builder.body;

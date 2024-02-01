@@ -142,6 +142,18 @@ public class LinkedCaseInsensitiveMap<V> implements Map<String, V>, Serializable
 		this.locale = other.locale;
 	}
 
+	/**
+	 * Soklet-specific addition: create a new map with the contents of an existing one, respecting ordering.
+	 *
+	 * @param map The existing map to copy
+	 */
+	public LinkedCaseInsensitiveMap(@Nullable Map<String, V> map) {
+		this(map == null ? 12 : map.size(), null);
+
+		if (map != null)
+			for (Entry<String, V> entry : map.entrySet())
+				put(entry.getKey(), entry.getValue());
+	}
 
 	// Implementation of java.util.Map
 

@@ -16,6 +16,8 @@
 
 package com.soklet.core;
 
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -49,8 +51,8 @@ public class MarshaledResponse {
 		requireNonNull(builder);
 
 		this.statusCode = builder.statusCode;
-		this.headers = builder.headers == null ? Map.of() : Map.copyOf(builder.headers);
-		this.cookies = builder.responseCookies == null ? Set.of() : Set.copyOf(builder.responseCookies);
+		this.headers = builder.headers == null ? Map.of() : new LinkedCaseInsensitiveMap<>(builder.headers);
+		this.cookies = builder.responseCookies == null ? Set.of() : new LinkedHashSet<>(builder.responseCookies);
 		this.body = builder.body;
 	}
 

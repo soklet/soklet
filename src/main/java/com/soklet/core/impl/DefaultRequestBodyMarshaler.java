@@ -89,7 +89,7 @@ public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 	}
 
 	@Nonnull
-	public ValueConverterRegistry getValueConverterRegistry() {
+	protected ValueConverterRegistry getValueConverterRegistry() {
 		return this.valueConverterRegistry;
 	}
 }

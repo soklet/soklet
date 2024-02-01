@@ -35,6 +35,7 @@ import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.Options;
 import com.soklet.internal.microhttp.OptionsBuilder;
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -47,7 +48,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -382,7 +382,7 @@ public class DefaultServer implements Server {
 	protected Map<String, Set<String>> headersFromMicrohttpRequest(@Nonnull MicrohttpRequest microhttpRequest) {
 		requireNonNull(microhttpRequest);
 
-		Map<String, Set<String>> headers = new LinkedHashMap<>(microhttpRequest.headers().size());
+		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>(microhttpRequest.headers().size());
 
 		for (Header header : microhttpRequest.headers()) {
 			Set<String> values = headers.computeIfAbsent(header.name(), k -> new LinkedHashSet<>());

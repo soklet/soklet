@@ -26,6 +26,7 @@ import com.soklet.core.Response;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.StatusCode;
 import com.soklet.exception.BadRequestException;
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -35,13 +36,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.soklet.core.Utilities.emptyByteArray;
-import static com.soklet.core.Utilities.trimAggressively;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -101,17 +102,11 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 			}
 		}
 
-		Map<String, Set<String>> headers = response.getHeaders();
-
-		Set<String> normalizedHeaderKeys = headers.keySet().stream()
-				.map(key -> trimAggressively(key).toLowerCase(Locale.US))
-				.collect(Collectors.toSet());
+		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>(response.getHeaders());
 
 		// If no Content-Type specified, supply a default
-		if (!normalizedHeaderKeys.contains("content-type")) {
-			headers = new LinkedHashMap<>(headers); // Mutable copy
+		if (!headers.keySet().contains("Content-Type"))
 			headers.put("Content-Type", Set.of(binaryResponse ? "application/octet-stream" : format("text/plain; charset=%s", getCharset().name())));
-		}
 
 		return new MarshaledResponse.Builder(response.getStatusCode())
 				.headers(headers)
@@ -140,14 +135,18 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(request);
 		requireNonNull(allowedHttpMethods);
 
-		Set<String> allowedHttpMethodsAsStrings = allowedHttpMethods.stream()
+		SortedSet<String> allowedHttpMethodsAsStrings = new TreeSet<>(allowedHttpMethods.stream()
 				.map(httpMethod -> httpMethod.name())
-				.collect(Collectors.toSet());
+				.collect(Collectors.toSet()));
 
 		Integer statusCode = 405;
 
+		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		headers.put("Allow", allowedHttpMethodsAsStrings);
+		headers.put("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name())));
+
 		return new MarshaledResponse.Builder(statusCode)
-				.headers(Map.of("Allow", allowedHttpMethodsAsStrings, "Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
+				.headers(headers)
 				.body(format("HTTP %d: %s. Requested: %s, Allowed: %s",
 						statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase(), request.getHttpMethod().name(),
 						String.join(", ", allowedHttpMethodsAsStrings)).getBytes(getCharset()))
@@ -161,9 +160,9 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(request);
 		requireNonNull(allowedHttpMethods);
 
-		Set<String> allowedHttpMethodsAsStrings = allowedHttpMethods.stream()
+		SortedSet<String> allowedHttpMethodsAsStrings = new TreeSet<>(allowedHttpMethods.stream()
 				.map(httpMethod -> httpMethod.name())
-				.collect(Collectors.toSet());
+				.collect(Collectors.toSet()));
 
 		return new MarshaledResponse.Builder(204)
 				.headers(Map.of("Allow", allowedHttpMethodsAsStrings))
@@ -226,9 +225,10 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		if (accessControlAllowHeaders.size() > 0)
 			headers.put("Access-Control-Allow-Headers", new LinkedHashSet<>(accessControlAllowHeaders));
 
-		Set<String> accessControlAllowMethodAsStrings = corsPreflightResponse.getAccessControlAllowMethods().stream()
-				.map(accessControlAllowMethod -> accessControlAllowMethod.name())
-				.collect(Collectors.toSet());
+		Set<String> accessControlAllowMethodAsStrings = new LinkedHashSet<>();
+
+		for (HttpMethod httpMethod : corsPreflightResponse.getAccessControlAllowMethods())
+			accessControlAllowMethodAsStrings.add(httpMethod.name());
 
 		if (accessControlAllowMethodAsStrings.size() > 0)
 			headers.put("Access-Control-Allow-Methods", accessControlAllowMethodAsStrings);
