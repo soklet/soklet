@@ -230,15 +230,30 @@ public class DefaultServer implements Server {
 					AtomicBoolean shouldWriteFailsafeResponse = new AtomicBoolean(true);
 
 					try {
+						// Normalize body
 						byte[] body = microhttpRequest.body();
 
 						if (body != null && body.length == 0)
 							body = null;
 
+						// Special case: look for a poison-pill header that indicates "content too large",
+						// make a note of it, and then remove it from the request.
+						// This header is specially set for Soklet inside of Microhttp's connection event loop.
+						Map<String, Set<String>> headers = headersFromMicrohttpRequest(microhttpRequest);
+						boolean contentTooLarge = false;
+
+						for (Header header : microhttpRequest.headers()) {
+							if (header.name().equals("com.soklet.CONTENT_TOO_LARGE")) {
+								headers.remove("com.soklet.CONTENT_TOO_LARGE");
+								contentTooLarge = true;
+							}
+						}
+
 						Request request = new Request.Builder(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), microhttpRequest.uri())
 								.multipartParser(getMultipartParser())
-								.headers(headersFromMicrohttpRequest(microhttpRequest))
+								.headers(headers)
 								.body(body)
+								.contentTooLarge(contentTooLarge)
 								.build();
 
 						requestHandler.handleRequest(request, (marshaledResponse -> {

@@ -65,6 +65,18 @@ public interface ResponseMarshaler {
 																				@Nonnull Set<HttpMethod> allowedHttpMethods);
 
 	/**
+	 * Writes a response for a request that triggers an
+	 * <a href="https://httpwg.org/specs/rfc9110.html#status.413">HTTP 413 Content Too Large</a>.
+	 *
+	 * @param request        the HTTP request
+	 * @param resourceMethod the resource method that would have handled the request, if available
+	 * @return the response to send over the wire
+	 */
+	@Nonnull
+	MarshaledResponse forContentTooLarge(@Nonnull Request request,
+																			 @Nullable ResourceMethod resourceMethod);
+
+	/**
 	 * Writes a response for an HTTP {@code OPTIONS} request.
 	 * <p>
 	 * Note that CORS preflight responses are handled specially by {@link #forCorsPreflightAllowed(Request, CorsPreflightResponse)}

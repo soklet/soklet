@@ -166,7 +166,57 @@ class ConnectionEventLoop {
                                 new LogEntry("id", id),
                                 new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
                     }
-                    failSafeClose();
+
+                    // *** START SOKLET CHANGE ***
+
+                    // Previous behavior was to immediately discard the request and close the connection.
+                    //
+                    // However, this is not semantically aligned with Soklet's error handling: we want client application
+                    // code to be able to detect "request too large" and write whatever response it likes.
+                    //
+                    // Updated behavior is to truncate the request body and permit response processing.
+
+                    // Previously:
+                    // failSafeClose();
+
+                    // Updated:
+                    // Perform the actions of onParseRequest() but inject a "poison pill" header.
+                    // This lets Soklet code know the request was stopped for being too large.
+                    //
+                    // Alternative would be to, for example, modify MicrohttpRequest to include an additional field.
+                    // Current approach was chosen because it keeps surface area of Microhttp modifications small.
+
+                    if (selectionKey.interestOps() != 0) {
+                        selectionKey.interestOps(0);
+                    }
+
+                    if (requestTimeoutTask != null) {
+                        requestTimeoutTask.cancel();
+                        requestTimeoutTask = null;
+                    }
+
+                    MicrohttpRequest request = requestParser.request();
+
+                    if(request.method() == null || request.uri() == null || request.version() == null) {
+                        // We don't even have enough data to construct a meaningful Request; nothing we can do.
+                        // Fall back to stock Microhttp behavior.
+                        failSafeClose();
+                    } else {
+                        // OK, we at least have a method, URI, and HTTP version.
+                        // We make our own request with its own copy of headers - including our poison pill - and an empty body.
+                        List<Header> headers = request.headers() == null ? new ArrayList<>(1) : new ArrayList<>(request.headers());
+                        headers.add(new Header("com.soklet.CONTENT_TOO_LARGE", String.valueOf(options.maxRequestSize())));
+
+                        MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0]);
+
+                        httpOneDotZero = tooLargeRequest.version().equalsIgnoreCase(HTTP_1_0);
+                        keepAlive = tooLargeRequest.hasHeader(HEADER_CONNECTION, KEEP_ALIVE);
+                        byteTokenizer.compact();
+                        requestParser = new RequestParser(byteTokenizer);
+                        handler.handle(tooLargeRequest, this::onResponse);
+                    }
+
+                    // *** END SOKLET CHANGE ***
                 }
             }
         }

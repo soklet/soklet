@@ -86,6 +86,8 @@ public class Request {
 	@Nonnull
 	private final Map<String, Set<MultipartField>> multipartFields;
 	@Nonnull
+	private final Boolean contentTooLarge;
+	@Nonnull
 	private final ReentrantLock lock;
 	@Nullable
 	private volatile String bodyAsString = null;
@@ -139,6 +141,8 @@ public class Request {
 
 		this.multipart = multipart;
 		this.multipartFields = multipartFields;
+
+		this.contentTooLarge = builder.contentTooLarge == null ? false : builder.contentTooLarge;
 	}
 
 	@Override
@@ -161,12 +165,13 @@ public class Request {
 				&& Objects.equals(getUri(), request.getUri())
 				&& Objects.equals(getQueryParameters(), request.getQueryParameters())
 				&& Objects.equals(getHeaders(), request.getHeaders())
-				&& Objects.equals(getBody(), request.getBody());
+				&& Objects.equals(getBody(), request.getBody())
+				&& Objects.equals(getContentTooLarge(), request.getContentTooLarge());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getId(), getHttpMethod(), getUri(), getQueryParameters(), getHeaders(), getBody());
+		return Objects.hash(getId(), getHttpMethod(), getUri(), getQueryParameters(), getHeaders(), getBody(), getContentTooLarge());
 	}
 
 	@Nonnull
@@ -237,6 +242,11 @@ public class Request {
 	@Nonnull
 	public Optional<byte[]> getBody() {
 		return Optional.ofNullable(this.body);
+	}
+
+	@Nonnull
+	public Boolean getContentTooLarge() {
+		return this.contentTooLarge;
 	}
 
 	@Nonnull
@@ -364,6 +374,8 @@ public class Request {
 		private Map<String, Set<String>> headers;
 		@Nullable
 		private byte[] body;
+		@Nullable
+		private Boolean contentTooLarge;
 
 		public Builder(@Nonnull HttpMethod httpMethod,
 									 @Nonnull String uri) {
@@ -405,6 +417,12 @@ public class Request {
 		}
 
 		@Nonnull
+		public Builder contentTooLarge(@Nullable Boolean contentTooLarge) {
+			this.contentTooLarge = contentTooLarge;
+			return this;
+		}
+
+		@Nonnull
 		public Request build() {
 			return new Request(this);
 		}
@@ -428,7 +446,8 @@ public class Request {
 			this.builder = new Builder(request.getHttpMethod(), request.getUri())
 					.id(request.getId())
 					.headers(new LinkedHashMap<>(request.getHeaders()))
-					.body(request.getBody().orElse(null));
+					.body(request.getBody().orElse(null))
+					.contentTooLarge(request.getContentTooLarge());
 		}
 
 		@Nonnull
@@ -438,7 +457,8 @@ public class Request {
 			this.builder = new Builder(httpMethodFunction.apply(builder.httpMethod), builder.uri)
 					.id(builder.id)
 					.headers(builder.headers == null ? null : new LinkedHashMap<>(builder.headers))
-					.body(builder.body);
+					.body(builder.body)
+					.contentTooLarge(builder.contentTooLarge);
 
 			return this;
 		}
@@ -450,7 +470,8 @@ public class Request {
 			this.builder = new Builder(builder.httpMethod, uriFunction.apply(builder.uri))
 					.id(builder.id)
 					.headers(builder.headers == null ? null : new LinkedHashMap<>(builder.headers))
-					.body(builder.body);
+					.body(builder.body)
+					.contentTooLarge(builder.contentTooLarge);
 
 			return this;
 		}
@@ -476,6 +497,14 @@ public class Request {
 			requireNonNull(bodyFunction);
 
 			builder.body = bodyFunction.apply(builder.body);
+			return this;
+		}
+
+		@Nonnull
+		public Copier contentTooLarge(@Nonnull Function<Boolean, Boolean> contentTooLargeFunction) {
+			requireNonNull(contentTooLargeFunction);
+
+			builder.contentTooLarge = contentTooLargeFunction.apply(builder.contentTooLarge);
 			return this;
 		}
 

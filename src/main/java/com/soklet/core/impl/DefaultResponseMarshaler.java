@@ -155,6 +155,20 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
+	public MarshaledResponse forContentTooLarge(@Nonnull Request request,
+																							@Nullable ResourceMethod resourceMethod) {
+		requireNonNull(request);
+
+		Integer statusCode = 413;
+
+		return new MarshaledResponse.Builder(statusCode)
+				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
+				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
+				.build();
+	}
+
+	@Nonnull
+	@Override
 	public MarshaledResponse forOptions(@Nonnull Request request,
 																			@Nonnull Set<HttpMethod> allowedHttpMethods) {
 		requireNonNull(request);
