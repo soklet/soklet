@@ -27,7 +27,6 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -445,7 +444,7 @@ public class Request {
 
 			this.builder = new Builder(request.getHttpMethod(), request.getUri())
 					.id(request.getId())
-					.headers(new LinkedHashMap<>(request.getHeaders()))
+					.headers(new LinkedCaseInsensitiveMap<>(request.getHeaders()))
 					.body(request.getBody().orElse(null))
 					.contentTooLarge(request.getContentTooLarge());
 		}
@@ -456,7 +455,7 @@ public class Request {
 
 			this.builder = new Builder(httpMethodFunction.apply(builder.httpMethod), builder.uri)
 					.id(builder.id)
-					.headers(builder.headers == null ? null : new LinkedHashMap<>(builder.headers))
+					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
 					.body(builder.body)
 					.contentTooLarge(builder.contentTooLarge);
 
@@ -469,7 +468,7 @@ public class Request {
 
 			this.builder = new Builder(builder.httpMethod, uriFunction.apply(builder.uri))
 					.id(builder.id)
-					.headers(builder.headers == null ? null : new LinkedHashMap<>(builder.headers))
+					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
 					.body(builder.body)
 					.contentTooLarge(builder.contentTooLarge);
 

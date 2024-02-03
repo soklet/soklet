@@ -16,12 +16,13 @@
 
 package com.soklet.core;
 
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
@@ -50,9 +51,20 @@ public class Response {
 	protected Response(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
+		Map<String, Set<String>> headers = builder.headers == null
+				? new LinkedCaseInsensitiveMap<>()
+				: new LinkedCaseInsensitiveMap<>(builder.headers);
+
+		if (builder.location != null && !headers.containsKey("Location"))
+			headers.put("Location", Set.of(builder.location));
+
+		Set<ResponseCookie> cookies = builder.cookies == null
+				? Collections.emptySet()
+				: new LinkedHashSet<>(builder.cookies);
+
 		this.statusCode = builder.statusCode;
-		this.cookies = builder.cookies == null ? Collections.emptySet() : Set.copyOf(builder.cookies);
-		this.headers = builder.headers == null ? Collections.emptyMap() : Map.copyOf(builder.headers);
+		this.cookies = Collections.unmodifiableSet(cookies);
+		this.headers = Collections.unmodifiableMap(headers);
 		this.body = builder.body;
 	}
 
@@ -118,6 +130,8 @@ public class Response {
 		@Nonnull
 		private final Integer statusCode;
 		@Nullable
+		private final String location;
+		@Nullable
 		private Set<ResponseCookie> cookies;
 		@Nullable
 		private Map<String, Set<String>> headers;
@@ -130,7 +144,9 @@ public class Response {
 
 		public Builder(@Nonnull Integer statusCode) {
 			requireNonNull(statusCode);
+
 			this.statusCode = statusCode;
+			this.location = null;
 		}
 
 		public Builder(@Nonnull RedirectType redirectType,
@@ -139,7 +155,7 @@ public class Response {
 			requireNonNull(location);
 
 			this.statusCode = redirectType.getStatusCode().getStatusCode();
-			this.headers = Map.of("Location", Set.of(location));
+			this.location = location;
 		}
 
 		@Nonnull
@@ -182,7 +198,7 @@ public class Response {
 			requireNonNull(response);
 
 			this.builder = new Builder(response.getStatusCode())
-					.headers(new LinkedHashMap<>(response.getHeaders()))
+					.headers(new LinkedCaseInsensitiveMap<>(response.getHeaders()))
 					.cookies(new LinkedHashSet<>(response.getCookies()))
 					.body(response.getBody().orElse(null));
 		}
@@ -192,7 +208,7 @@ public class Response {
 			requireNonNull(statusCodeFunction);
 
 			this.builder = new Builder(statusCodeFunction.apply(builder.statusCode))
-					.headers(builder.headers == null ? null : new LinkedHashMap<>(builder.headers))
+					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
 					.cookies(builder.cookies == null ? null : new LinkedHashSet<>(builder.cookies))
 					.body(builder.body);
 
