@@ -165,12 +165,12 @@ public class Request {
 				&& Objects.equals(getQueryParameters(), request.getQueryParameters())
 				&& Objects.equals(getHeaders(), request.getHeaders())
 				&& Objects.equals(getBody(), request.getBody())
-				&& Objects.equals(getContentTooLarge(), request.getContentTooLarge());
+				&& Objects.equals(isContentTooLarge(), request.isContentTooLarge());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getId(), getHttpMethod(), getUri(), getQueryParameters(), getHeaders(), getBody(), getContentTooLarge());
+		return Objects.hash(getId(), getHttpMethod(), getUri(), getQueryParameters(), getHeaders(), getBody(), isContentTooLarge());
 	}
 
 	@Nonnull
@@ -244,7 +244,7 @@ public class Request {
 	}
 
 	@Nonnull
-	public Boolean getContentTooLarge() {
+	public Boolean isContentTooLarge() {
 		return this.contentTooLarge;
 	}
 
@@ -446,7 +446,7 @@ public class Request {
 					.id(request.getId())
 					.headers(new LinkedCaseInsensitiveMap<>(request.getHeaders()))
 					.body(request.getBody().orElse(null))
-					.contentTooLarge(request.getContentTooLarge());
+					.contentTooLarge(request.isContentTooLarge());
 		}
 
 		@Nonnull

@@ -359,7 +359,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		Cors cors = request.getCors().orElse(null);
 
 		// Special short-circuit for big requests
-		if (request.getContentTooLarge())
+		if (request.isContentTooLarge())
 			return responseMarshaler.forContentTooLarge(request, resourceMethodResolver.resourceMethodForRequest(request).orElse(null));
 
 		// No resource method was found for this HTTP method and path.
