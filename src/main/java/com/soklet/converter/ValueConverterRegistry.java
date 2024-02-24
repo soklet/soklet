@@ -168,7 +168,7 @@ public class ValueConverterRegistry {
 	private static final class ReflexiveValueConverter<T> extends AbstractValueConverter<T, T> {
 		@Nullable
 		@Override
-		public T performConversion(@Nullable T from) throws Exception {
+		public T performConversion(@Nonnull T from) throws Exception {
 			return from;
 		}
 	}

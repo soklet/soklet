@@ -92,7 +92,7 @@ public final class ValueConverters {
 	private static final class StringToIntegerValueConverter extends FromStringValueConverter<Integer> {
 		@Override
 		@Nullable
-		public Integer performConversion(@Nullable String from) throws Exception {
+		public Integer performConversion(@Nonnull String from) throws Exception {
 			return Integer.parseInt(from);
 		}
 	}
@@ -101,7 +101,7 @@ public final class ValueConverters {
 	private static final class StringToLongValueConverter extends FromStringValueConverter<Long> {
 		@Override
 		@Nullable
-		public Long performConversion(@Nullable String from) throws Exception {
+		public Long performConversion(@Nonnull String from) throws Exception {
 			return Long.parseLong(from);
 		}
 	}
@@ -110,7 +110,7 @@ public final class ValueConverters {
 	private static final class StringToDoubleValueConverter extends FromStringValueConverter<Double> {
 		@Override
 		@Nullable
-		public Double performConversion(@Nullable String from) throws Exception {
+		public Double performConversion(@Nonnull String from) throws Exception {
 			return Double.parseDouble(from);
 		}
 	}
@@ -119,7 +119,7 @@ public final class ValueConverters {
 	private static final class StringToFloatValueConverter extends FromStringValueConverter<Float> {
 		@Override
 		@Nullable
-		public Float performConversion(@Nullable String from) throws Exception {
+		public Float performConversion(@Nonnull String from) throws Exception {
 			return Float.parseFloat(from);
 		}
 	}
@@ -128,7 +128,7 @@ public final class ValueConverters {
 	private static final class StringToByteValueConverter extends FromStringValueConverter<Byte> {
 		@Override
 		@Nullable
-		public Byte performConversion(@Nullable String from) throws Exception {
+		public Byte performConversion(@Nonnull String from) throws Exception {
 			return Byte.parseByte(from);
 		}
 	}
@@ -137,7 +137,7 @@ public final class ValueConverters {
 	private static final class StringToShortValueConverter extends FromStringValueConverter<Short> {
 		@Override
 		@Nullable
-		public Short performConversion(@Nullable String from) throws Exception {
+		public Short performConversion(@Nonnull String from) throws Exception {
 			return Short.parseShort(from);
 		}
 	}
@@ -146,7 +146,7 @@ public final class ValueConverters {
 	private static final class StringToCharacterValueConverter extends FromStringValueConverter<Character> {
 		@Override
 		@Nullable
-		public Character performConversion(@Nullable String from) throws Exception {
+		public Character performConversion(@Nonnull String from) throws Exception {
 			if (from.length() != 1)
 				throw new ValueConversionException(format(
 						"Unable to convert %s value '%s' to %s. Reason: '%s' is not a single-character String.", getFromType(), from,
@@ -160,7 +160,7 @@ public final class ValueConverters {
 	private static final class StringToBooleanValueConverter extends FromStringValueConverter<Boolean> {
 		@Override
 		@Nullable
-		public Boolean performConversion(@Nullable String from) throws Exception {
+		public Boolean performConversion(@Nonnull String from) throws Exception {
 			return Boolean.parseBoolean(from);
 		}
 	}
@@ -171,7 +171,7 @@ public final class ValueConverters {
 	private static final class StringToBigIntegerValueConverter extends FromStringValueConverter<BigInteger> {
 		@Override
 		@Nullable
-		public BigInteger performConversion(@Nullable String from) throws Exception {
+		public BigInteger performConversion(@Nonnull String from) throws Exception {
 			return new BigInteger(from);
 		}
 	}
@@ -180,7 +180,7 @@ public final class ValueConverters {
 	private static final class StringToBigDecimalValueConverter extends FromStringValueConverter<BigDecimal> {
 		@Override
 		@Nullable
-		public BigDecimal performConversion(@Nullable String from) throws Exception {
+		public BigDecimal performConversion(@Nonnull String from) throws Exception {
 			return new BigDecimal(from);
 		}
 	}
@@ -189,7 +189,7 @@ public final class ValueConverters {
 	private static final class StringToNumberValueConverter extends FromStringValueConverter<Number> {
 		@Override
 		@Nullable
-		public BigDecimal performConversion(@Nullable String from) throws Exception {
+		public BigDecimal performConversion(@Nonnull String from) throws Exception {
 			return new BigDecimal(from);
 		}
 	}
@@ -198,7 +198,7 @@ public final class ValueConverters {
 	private static final class StringToUuidValueConverter extends FromStringValueConverter<UUID> {
 		@Override
 		@Nullable
-		public UUID performConversion(@Nullable String from) throws Exception {
+		public UUID performConversion(@Nonnull String from) throws Exception {
 			return UUID.fromString(from);
 		}
 	}
@@ -207,7 +207,7 @@ public final class ValueConverters {
 	private static final class StringToDateValueConverter extends FromStringValueConverter<Date> {
 		@Override
 		@Nullable
-		public Date performConversion(@Nullable String from) throws Exception {
+		public Date performConversion(@Nonnull String from) throws Exception {
 			return new Date(Long.parseLong(from));
 		}
 	}
@@ -216,7 +216,7 @@ public final class ValueConverters {
 	private static final class StringToInstantValueConverter extends FromStringValueConverter<Instant> {
 		@Override
 		@Nullable
-		public Instant performConversion(@Nullable String from) throws Exception {
+		public Instant performConversion(@Nonnull String from) throws Exception {
 			return Instant.ofEpochMilli(Long.parseLong(from));
 		}
 	}
@@ -226,7 +226,7 @@ public final class ValueConverters {
 	private static final class StringToLocalDateValueConverter extends FromStringValueConverter<LocalDate> {
 		@Override
 		@Nullable
-		public LocalDate performConversion(@Nullable String from) throws Exception {
+		public LocalDate performConversion(@Nonnull String from) throws Exception {
 			return LocalDate.parse(from);
 		}
 	}
@@ -236,7 +236,7 @@ public final class ValueConverters {
 	private static final class StringToLocalTimeValueConverter extends FromStringValueConverter<LocalTime> {
 		@Override
 		@Nullable
-		public LocalTime performConversion(@Nullable String from) throws Exception {
+		public LocalTime performConversion(@Nonnull String from) throws Exception {
 			return LocalTime.parse(from);
 		}
 	}
@@ -246,7 +246,7 @@ public final class ValueConverters {
 	private static final class StringToLocalDateTimeValueConverter extends FromStringValueConverter<LocalDateTime> {
 		@Override
 		@Nullable
-		public LocalDateTime performConversion(@Nullable String from) throws Exception {
+		public LocalDateTime performConversion(@Nonnull String from) throws Exception {
 			return LocalDateTime.parse(from);
 		}
 	}
@@ -255,7 +255,7 @@ public final class ValueConverters {
 	private static final class StringToZoneIdValueConverter extends FromStringValueConverter<ZoneId> {
 		@Override
 		@Nullable
-		public ZoneId performConversion(@Nullable String from) throws Exception {
+		public ZoneId performConversion(@Nonnull String from) throws Exception {
 			return ZoneId.of(from);
 		}
 	}
@@ -264,7 +264,7 @@ public final class ValueConverters {
 	private static final class StringToTimeZoneValueConverter extends FromStringValueConverter<TimeZone> {
 		@Override
 		@Nullable
-		public TimeZone performConversion(@Nullable String from) throws Exception {
+		public TimeZone performConversion(@Nonnull String from) throws Exception {
 			// Use ZoneId.of since it will throw an exception if the format is invalid.
 			// TimeZone.getTimeZone() returns GMT for invalid formats, which is not the behavior we want
 			return TimeZone.getTimeZone(ZoneId.of(from));
@@ -275,7 +275,7 @@ public final class ValueConverters {
 	private static final class StringToLocaleValueConverter extends FromStringValueConverter<Locale> {
 		@Override
 		@Nullable
-		public Locale performConversion(@Nullable String from) throws Exception {
+		public Locale performConversion(@Nonnull String from) throws Exception {
 			return new Locale.Builder().setLanguageTag(from).build();
 		}
 	}

@@ -103,7 +103,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	}
 
 	@Nullable
-	public abstract T performConversion(@Nullable F from) throws Exception;
+	public abstract T performConversion(@Nonnull F from) throws Exception;
 
 	@Override
 	@Nonnull
