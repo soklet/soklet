@@ -65,20 +65,26 @@ public class ValueConverterRegistry {
 		this(Set.of());
 	}
 
-	public ValueConverterRegistry(@Nonnull Set<ValueConverter<?, ?>> valueConverters) {
-		requireNonNull(valueConverters);
+	public ValueConverterRegistry(@Nonnull Set<ValueConverter<?, ?>> customValueConverters) {
+		requireNonNull(customValueConverters);
 
-		ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey = new ConcurrentHashMap<>(valueConverters.size());
+		Set<ValueConverter<?, ?>> defaultValueConverters = ValueConverters.defaultValueConverters();
+		ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey = new ConcurrentHashMap<>(
+				defaultValueConverters.size()
+						+ customValueConverters.size()
+						+ 1 // reflexive converter
+						+ 25 // leave a little headroom for enum types that might accumulate over time
+		);
 
 		// By default, we include out-of-the-box converters
-		for (ValueConverter<?, ?> defaultValueConverter : ValueConverters.defaultValueConverters())
+		for (ValueConverter<?, ?> defaultValueConverter : defaultValueConverters)
 			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(defaultValueConverter), defaultValueConverter);
 
 		// We also include a "reflexive" converter which knows how to convert a type to itself
 		valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(REFLEXIVE_VALUE_CONVERTER), REFLEXIVE_VALUE_CONVERTER);
 
 		// Finally, register any additional converters that were provided
-		for (ValueConverter<?, ?> valueConverter : valueConverters)
+		for (ValueConverter<?, ?> valueConverter : customValueConverters)
 			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(valueConverter), valueConverter);
 
 		this.valueConvertersByCacheKey = valueConvertersByCacheKey;
