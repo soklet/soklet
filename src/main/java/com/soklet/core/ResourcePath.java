@@ -20,6 +20,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -116,10 +118,16 @@ public class ResourcePath {
 			Component component1 = resourcePath.getComponents().get(i);
 			Component component2 = getComponents().get(i);
 
-			if (component1.getType() == ComponentType.PLACEHOLDER && component2.getType() == ComponentType.LITERAL)
+			if (component1.getType() == ComponentType.PLACEHOLDER && component2.getType() == ComponentType.LITERAL) {
 				placeholders.put(component1.getValue(), component2.getValue());
-			else if (component1.getType() == ComponentType.LITERAL && component2.getType() == ComponentType.PLACEHOLDER)
-				placeholders.put(component2.getValue(), component1.getValue());
+			} else if (component1.getType() == ComponentType.LITERAL && component2.getType() == ComponentType.PLACEHOLDER) {
+				String component1Value = component1.getValue();
+
+				if (component1Value != null)
+					component1Value = URLDecoder.decode(component1Value, StandardCharsets.UTF_8);
+
+				placeholders.put(component2.getValue(), component1Value);
+			}
 		}
 
 		return Collections.unmodifiableMap(placeholders);
