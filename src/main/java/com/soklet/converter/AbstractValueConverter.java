@@ -26,6 +26,7 @@ import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -77,19 +78,19 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 		this.toType = toType;
 	}
 
-	@Nullable
+	@Nonnull
 	@Override
 	@SuppressWarnings("unchecked")
-	public final T convert(@Nullable F from) throws ValueConversionException {
+	public final Optional<T> convert(@Nullable F from) throws ValueConversionException {
 		if (from == null)
-			return null;
+			return Optional.empty();
 
 		// Special handling for String types
 		if (from instanceof String) {
 			from = (F) Utilities.trimAggressivelyToNull((String) from);
 
 			if (from == null)
-				return null;
+				return Optional.empty();
 		}
 
 		try {
@@ -102,8 +103,8 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 		}
 	}
 
-	@Nullable
-	public abstract T performConversion(@Nonnull F from) throws Exception;
+	@Nonnull
+	public abstract Optional<T> performConversion(@Nonnull F from) throws Exception;
 
 	@Override
 	@Nonnull

@@ -119,13 +119,13 @@ public class ValueConverterRegistry {
 			if (toClass.isEnum()) {
 				valueConverter = new ValueConverter<>() {
 					@Override
-					@Nullable
-					public T convert(@Nullable Object from) throws ValueConversionException {
+					@Nonnull
+					public Optional<T> convert(@Nullable Object from) throws ValueConversionException {
 						if (from == null)
 							return null;
 
 						try {
-							return (T) Enum.valueOf(toClass, from.toString());
+							return Optional.ofNullable((T) Enum.valueOf(toClass, from.toString()));
 						} catch (Exception e) {
 							throw new ValueConversionException(format("Unable to convert value '%s' of type %s to an instance of %s",
 									from, getFromType(), getToType()), e, getFromType(), getToType());
@@ -172,10 +172,10 @@ public class ValueConverterRegistry {
 	@Nonnull
 	@Immutable
 	private static final class ReflexiveValueConverter<T> extends AbstractValueConverter<T, T> {
-		@Nullable
+		@Nonnull
 		@Override
-		public T performConversion(@Nonnull T from) throws Exception {
-			return from;
+		public Optional<T> performConversion(@Nonnull T from) throws Exception {
+			return Optional.of(from);
 		}
 	}
 

@@ -29,6 +29,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
+import java.util.Optional;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -82,7 +83,11 @@ public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 		String requestBodyAsString = request.getBodyAsString().orElse(null);
 
 		try {
-			return requestBodyAsString == null ? null : valueConverter.convert(requestBodyAsString);
+			if (requestBodyAsString == null)
+				return null;
+
+			Optional<Object> valueConverterResult = valueConverter.convert(requestBodyAsString);
+			return valueConverterResult == null ? null : valueConverterResult.orElse(null);
 		} catch (ValueConversionException e) {
 			throw new IllegalRequestBodyException(format("Unable to marshal request body to %s", requestBodyType), e);
 		}

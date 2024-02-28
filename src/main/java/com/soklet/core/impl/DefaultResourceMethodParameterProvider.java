@@ -159,11 +159,16 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			Object result;
 
 			try {
-				result = valueConverter.convert(pathParameterValue);
+				Optional<Object> valueConverterResult = valueConverter.convert(pathParameterValue);
+				result = valueConverterResult == null ? null : valueConverterResult.orElse(null);
 			} catch (Exception e) {
 				throw new IllegalPathParameterException(format("Illegal value '%s' was specified for path parameter '%s' (was expecting a value convertible to %s)",
 						pathParameterValue, pathParameterName, valueConverter.getToType()), e, pathParameterName, pathParameterValue);
 			}
+
+			if (result == null)
+				throw new IllegalPathParameterException(format("No value was specified for path parameter '%s' (was expecting a value convertible to %s)",
+						pathParameterName, valueConverter.getToType()), pathParameterName, pathParameterValue);
 
 			return result;
 		}
@@ -442,7 +447,8 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 					if (toType.equals(byte[].class))
 						return multipartField.getData().orElse(null);
 
-					return valueConverter.convert(multipartField.getDataAsString().orElse(null));
+					Optional<Object> valueConverterResult = valueConverter.convert(multipartField.getDataAsString().orElse(null));
+					return valueConverterResult == null ? null : valueConverterResult.orElse(null);
 				},
 				(message, ignored) -> {
 					return new MissingMultipartFieldException(message, name);
@@ -523,7 +529,8 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 
 					if (value != null && trimAggressively(value).length() > 0)
 						try {
-							results.add(valueConverter.convert(value));
+							Optional<Object> valueConverterResult = valueConverter.convert(value);
+							results.add(valueConverterResult == null ? null : valueConverterResult.orElse(null));
 						} catch (ValueConversionException e) {
 							throw illegalExceptionProvider.provide(
 									format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
@@ -567,7 +574,8 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
 
 			try {
-				result = valueConverter.convert(value);
+				Optional<Object> valueConverterResult = valueConverter.convert(value);
+				result = valueConverterResult == null ? null : valueConverterResult.orElse(null);
 			} catch (ValueConversionException e) {
 				throw illegalExceptionProvider.provide(
 						format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,

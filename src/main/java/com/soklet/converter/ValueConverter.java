@@ -19,6 +19,7 @@ package com.soklet.converter;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.Type;
+import java.util.Optional;
 
 /**
  * Contract for converting objects from one type to another. For example, you might have a
@@ -34,8 +35,8 @@ public interface ValueConverter<F, T> {
 	 * @return The {@code T} representation of {@code from}.
 	 * @throws ValueConversionException If an error occurs during conversion.
 	 */
-	@Nullable
-	T convert(@Nullable F from) throws ValueConversionException;
+	@Nonnull
+	Optional<T> convert(@Nullable F from) throws ValueConversionException;
 
 	/**
 	 * @return The type represented by {@code F}.
