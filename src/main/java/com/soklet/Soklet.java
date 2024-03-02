@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.annotation.Resource;
 import com.soklet.core.Cors;
 import com.soklet.core.CorsAuthorizer;
 import com.soklet.core.CorsPreflightResponse;
@@ -75,6 +76,10 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 		this.sokletConfiguration = sokletConfiguration;
 		this.lock = new ReentrantLock();
+
+		// Fail fast in the event that Soklet appears misconfigured
+		if (sokletConfiguration.getResourceMethodResolver().getResourceMethods().size() == 0)
+			throw new IllegalArgumentException(format("No classes annotated with @%s were found.", Resource.class.getSimpleName()));
 
 		sokletConfiguration.getServer().registerRequestHandler(this);
 	}
