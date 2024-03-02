@@ -128,11 +128,7 @@ public class DefaultServer implements Server {
 	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
-	private final Supplier<ExecutorService> eventLoopExecutorServiceSupplier;
-	@Nonnull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
-	@Nullable
-	private volatile ExecutorService eventLoopExecutorService;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
@@ -156,16 +152,6 @@ public class DefaultServer implements Server {
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.logHandler = builder.logHandler != null ? builder.logHandler : DefaultLogHandler.sharedInstance();
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.sharedInstance();
-		this.eventLoopExecutorServiceSupplier = builder.eventLoopExecutorServiceSupplier != null ? builder.eventLoopExecutorServiceSupplier : () -> {
-			String threadNamePrefix = "event-loop-";
-
-			if (Utilities.virtualThreadsAvailable())
-				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
-					getLogHandler().logError("Unexpected exception occurred during server event-loop processing", throwable);
-				});
-
-			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
-		};
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "request-handler-";
 
@@ -290,19 +276,14 @@ public class DefaultServer implements Server {
 				});
 			});
 
-			this.eventLoopExecutorService = getEventLoopExecutorServiceSupplier().get();
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
 
 			try {
 				this.eventLoop = new EventLoop(options, logger, handler);
+				eventLoop.start();
 			} catch (IOException e) {
 				throw new UncheckedIOException(e);
 			}
-
-			this.eventLoopExecutorService.submit(() -> {
-				if (this.eventLoop != null)
-					eventLoop.start();
-			});
 		} finally {
 			getLock().unlock();
 		}
@@ -335,21 +316,8 @@ public class DefaultServer implements Server {
 				if (interrupted)
 					Thread.currentThread().interrupt();
 			}
-
-			try {
-				getEventLoopExecutorService().get().shutdown();
-				getEventLoopExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
-			} catch (InterruptedException e) {
-				interrupted = true;
-			} catch (Exception e) {
-				getLogHandler().logError("Unable to shut down event loop executor service", e);
-			} finally {
-				if (interrupted)
-					Thread.currentThread().interrupt();
-			}
 		} finally {
 			this.eventLoop = null;
-			this.eventLoopExecutorService = null;
 			this.requestHandlerExecutorService = null;
 
 			getLock().unlock();
@@ -519,11 +487,6 @@ public class DefaultServer implements Server {
 	}
 
 	@Nonnull
-	protected Optional<ExecutorService> getEventLoopExecutorService() {
-		return Optional.ofNullable(this.eventLoopExecutorService);
-	}
-
-	@Nonnull
 	protected Optional<ExecutorService> getRequestHandlerExecutorService() {
 		return Optional.ofNullable(this.requestHandlerExecutorService);
 	}
@@ -541,11 +504,6 @@ public class DefaultServer implements Server {
 	@Nonnull
 	protected Optional<EventLoop> getEventLoop() {
 		return Optional.ofNullable(this.eventLoop);
-	}
-
-	@Nonnull
-	protected Supplier<ExecutorService> getEventLoopExecutorServiceSupplier() {
-		return this.eventLoopExecutorServiceSupplier;
 	}
 
 	@Nonnull
@@ -622,8 +580,6 @@ public class DefaultServer implements Server {
 		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
-		private Supplier<ExecutorService> eventLoopExecutorServiceSupplier;
-		@Nullable
 		private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 
 		@Nonnull
@@ -689,12 +645,6 @@ public class DefaultServer implements Server {
 		@Nonnull
 		public Builder multipartParser(@Nullable MultipartParser multipartParser) {
 			this.multipartParser = multipartParser;
-			return this;
-		}
-
-		@Nonnull
-		public Builder eventLoopExecutorServiceSupplier(@Nullable Supplier<ExecutorService> eventLoopExecutorServiceSupplier) {
-			this.eventLoopExecutorServiceSupplier = eventLoopExecutorServiceSupplier;
 			return this;
 		}
 
