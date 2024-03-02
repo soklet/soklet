@@ -102,9 +102,6 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		if (methods != null)
 			allMethods.addAll(methods);
 
-		if (allMethods.size() == 0)
-			throw new IllegalArgumentException(format("No classes annotated with @%s were found.", Resource.class.getSimpleName()));
-
 		this.methods = Collections.unmodifiableSet(allMethods);
 		this.methodsByHttpMethod = Collections.unmodifiableMap(createMethodsByHttpMethod(getMethods()));
 		this.httpMethodResourcePathsByMethod = Collections.unmodifiableMap(createHttpMethodResourcePathsByMethod(getMethods()));

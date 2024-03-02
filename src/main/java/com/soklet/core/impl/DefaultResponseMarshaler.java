@@ -57,8 +57,8 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 	private static final Charset DEFAULT_CHARSET;
 
 	static {
-		SHARED_INSTANCE = new DefaultResponseMarshaler();
 		DEFAULT_CHARSET = StandardCharsets.UTF_8;
+		SHARED_INSTANCE = new DefaultResponseMarshaler();
 	}
 
 	@Nonnull

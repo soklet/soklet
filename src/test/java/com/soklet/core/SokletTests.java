@@ -223,14 +223,13 @@ public class SokletTests {
 					emptyByteArray(),
 					headMarshaledResponse.getBody().orElse(emptyByteArray()));
 
-			// If you want to handle your own HEAD requests...you can do whatever you want,
-			// including sending a body
+			// If you want to handle your own HEAD requests, we still prevent you from trying to send a response body
 			MarshaledResponse explicitHeadMarshaledResponse = mockServer.simulateRequest(
 					new Request.Builder(HttpMethod.HEAD, "/explicit-head-handling").build());
 
-			Assert.assertArrayEquals("If you want to handle HEAD requests explicitly, we don't stop you",
-					"violating spec and returning a HEAD response body because i can".getBytes(StandardCharsets.UTF_8),
-					explicitHeadMarshaledResponse.getBody().get());
+			Assert.assertArrayEquals("Received a response body but didn't expect one",
+					emptyByteArray(),
+					explicitHeadMarshaledResponse.getBody().orElse(emptyByteArray()));
 		}));
 	}
 
@@ -243,7 +242,7 @@ public class SokletTests {
 
 		@HEAD("/explicit-head-handling")
 		public Object explicitHeadHandling() {
-			return "violating spec and returning a HEAD response body because i can";
+			return "violating spec by trying to return a HEAD response body";
 		}
 	}
 
