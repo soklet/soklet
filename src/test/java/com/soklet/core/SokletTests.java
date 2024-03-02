@@ -262,11 +262,6 @@ public class SokletTests {
 				// Quiet logging to keep the console clean
 				.logHandler(new LogHandler() {
 					@Override
-					public void logDebug(@Nonnull String message) {
-						// Quiet
-					}
-
-					@Override
 					public void logError(@Nonnull String message) {
 						System.err.println(message);
 					}

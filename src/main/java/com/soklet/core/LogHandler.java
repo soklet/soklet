@@ -22,8 +22,6 @@ import javax.annotation.Nonnull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public interface LogHandler {
-	void logDebug(@Nonnull String message);
-
 	void logError(@Nonnull String message);
 
 	void logError(@Nonnull String message,

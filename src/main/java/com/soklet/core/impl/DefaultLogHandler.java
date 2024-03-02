@@ -42,13 +42,7 @@ public class DefaultLogHandler implements LogHandler {
 	public static DefaultLogHandler sharedInstance() {
 		return SHARED_INSTANCE;
 	}
-
-	@Override
-	public void logDebug(@Nonnull String message) {
-		requireNonNull(message);
-		System.out.printf("DEBUG: %s\n", message);
-	}
-
+	
 	@Override
 	public void logError(@Nonnull String message) {
 		logError(message, null);
