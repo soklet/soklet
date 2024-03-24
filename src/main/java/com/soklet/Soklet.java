@@ -443,10 +443,13 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		Response response;
 
 		// If null/void return, it's a 204
-		// If it's a MicrohttpResponse object, re-use as is.
-		// If it's a non-MicrohttpResponse type of object, assume it's the response body
+		// If it's a MarshaledResponse object, no marshaling + return it immediately - caller knows exactly what it wants to write.
+		// If it's a Response object, use as is.
+		// If it's a non-Response type of object, assume it's the response body and wrap in a Response.
 		if (responseObject == null)
 			response = new Response.Builder(204).build();
+		else if (responseObject instanceof MarshaledResponse)
+			return (MarshaledResponse) responseObject;
 		else if (responseObject instanceof Response)
 			response = (Response) responseObject;
 		else
