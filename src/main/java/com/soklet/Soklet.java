@@ -50,6 +50,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -439,6 +440,10 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 			throw e;
 		}
+
+		// Unwrap the Optional<T>, if one exists.  We do not recurse deeper than one level
+		if (responseObject instanceof Optional<?>)
+			responseObject = ((Optional<?>) responseObject).orElse(null);
 
 		Response response;
 
