@@ -29,5 +29,4 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @IndexAnnotated
-public @interface Resource {
-}
+public @interface Resource {}

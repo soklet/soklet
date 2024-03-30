@@ -16,6 +16,7 @@
 
 package com.soklet.annotation;
 
+import javax.annotation.Nonnull;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Repeatable;
 import java.lang.annotation.Retention;
@@ -29,5 +30,6 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Repeatable(value = POSTs.class)
 public @interface POST {
+	@Nonnull
 	String value();
 }
