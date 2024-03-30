@@ -23,12 +23,14 @@ import com.soklet.annotation.HEAD;
 import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.QueryParameter;
+import com.soklet.annotation.RequestBody;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.MockServer;
 import org.junit.Assert;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -109,6 +111,72 @@ public class SokletTests {
 			Assert.assertEquals(200L, (long) marshaledResponse.getStatusCode());
 			Assert.assertArrayEquals("Response body doesn't match",
 					"123.456789".getBytes(StandardCharsets.UTF_8),
+					marshaledResponse.getBody().get());
+
+			// Integer (nonprimitive) request body, integer is required but not provided
+			marshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.POST, "/echo-integer-request-body")
+							.build());
+
+			Assert.assertEquals(400L, (long) marshaledResponse.getStatusCode());
+
+			// Integer (nonprimitive) request body, integer is required and provided
+			marshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.POST, "/echo-integer-request-body")
+							.body("123".getBytes(StandardCharsets.UTF_8))
+							.build());
+
+			Assert.assertEquals(200L, (long) marshaledResponse.getStatusCode());
+			Assert.assertArrayEquals("Response body doesn't match",
+					"123".getBytes(StandardCharsets.UTF_8),
+					marshaledResponse.getBody().get());
+
+			// Integer (nonprimitive) request body, integer is not required and not provided.
+			// This exercises Optional<T> as opposed to @RequestBody(optional=true)
+			marshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.POST, "/echo-integer-optional-request-body-1")
+							.build());
+
+			Assert.assertEquals(204L, (long) marshaledResponse.getStatusCode());
+			Assert.assertArrayEquals("Response body doesn't match",
+					null, marshaledResponse.getBody().orElse(null));
+
+			// Integer (nonprimitive) request body, integer is not required and not provided.
+			// This exercises @RequestBody(optional=true) as opposed to Optional<T>
+			marshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.POST, "/echo-integer-optional-request-body-2")
+							.build());
+
+			Assert.assertEquals(204L, (long) marshaledResponse.getStatusCode());
+			Assert.assertArrayEquals("Response body doesn't match",
+					null, marshaledResponse.getBody().orElse(null));
+
+			// Integer (primitive) request body, integer is required and provided
+			marshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.POST, "/echo-int-request-body")
+							.body("123".getBytes(StandardCharsets.UTF_8))
+							.build());
+
+			Assert.assertEquals(200L, (long) marshaledResponse.getStatusCode());
+			Assert.assertArrayEquals("Response body doesn't match",
+					"123".getBytes(StandardCharsets.UTF_8),
+					marshaledResponse.getBody().get());
+
+			// Integer (primitive) request body, integer is required but not provided
+			marshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.POST, "/echo-int-request-body")
+							.build());
+
+			Assert.assertEquals(400L, (long) marshaledResponse.getStatusCode());
+
+			// Integer (primitive) request body, integer is not required and not provided
+			marshaledResponse = mockServer.simulateRequest(
+					new Request.Builder(HttpMethod.POST, "/echo-int-optional-request-body")
+							.build());
+
+			Assert.assertEquals(200L, (long) marshaledResponse.getStatusCode());
+			Assert.assertArrayEquals("Response body doesn't match",
+					"0".getBytes(StandardCharsets.UTF_8), // 0 is understood to be the default value for uninitialized int
 					marshaledResponse.getBody().get());
 		}));
 	}
@@ -197,6 +265,34 @@ public class SokletTests {
 						.build();
 
 			return new Response.Builder(204).build();
+		}
+
+		@POST("/echo-integer-request-body")
+		public Integer echoIntegerRequestBody(@Nonnull @RequestBody Integer requestBody) {
+			requireNonNull(requestBody);
+			return requestBody;
+		}
+
+		@POST("/echo-integer-optional-request-body-1")
+		public void echoIntegerOptionalRequestBody1(@Nonnull @RequestBody Optional<Integer> requestBody) {
+			requireNonNull(requestBody);
+		}
+
+		@POST("/echo-integer-optional-request-body-2")
+		public void echoIntegerOptionalRequestBody2(@Nullable @RequestBody(optional = true) Integer requestBody) {
+			if (requestBody != null)
+				throw new IllegalArgumentException("Request body should have been null");
+		}
+
+		@POST("/echo-int-request-body")
+		public Integer echoIntRequestBody(@RequestBody int requestBody) {
+			requireNonNull(requestBody);
+			return requestBody;
+		}
+
+		@POST("/echo-int-optional-request-body")
+		public int echoIntOptionalRequestBody(@RequestBody(optional = true) int requestBody) {
+			return requestBody;
 		}
 	}
 

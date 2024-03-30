@@ -72,11 +72,28 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class DefaultResourceMethodParameterProvider implements ResourceMethodParameterProvider {
 	@Nonnull
+	private static final Map<Type, Object> DEFAULT_VALUES_BY_PRIMITIVE_TYPE;
+
+	@Nonnull
 	private final InstanceProvider instanceProvider;
 	@Nonnull
 	private final ValueConverterRegistry valueConverterRegistry;
 	@Nonnull
 	private final RequestBodyMarshaler requestBodyMarshaler;
+
+	static {
+		// See https://docs.oracle.com/javase/tutorial/java/nutsandbolts/datatypes.html
+		DEFAULT_VALUES_BY_PRIMITIVE_TYPE = Map.of(
+				byte.class, (byte) 0,
+				short.class, (short) 0,
+				int.class, 0,
+				long.class, (long) 0,
+				float.class, (float) 0,
+				double.class, (double) 0,
+				char.class, '\u0000',
+				boolean.class, false
+		);
+	}
 
 	public DefaultResourceMethodParameterProvider() {
 		this(DefaultInstanceProvider.sharedInstance(),
@@ -205,6 +222,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			return extractRequestMultipartValue(request, resourceMethod, parameter, multipart, parameterType);
 
 		RequestBody requestBody = parameter.getAnnotation(RequestBody.class);
+		boolean requestBodyOptional = requestBody.optional() || parameterType.isOptional();
 
 		if (requestBody != null) {
 			boolean requestBodyExpectsString = String.class.equals(parameterType.getNormalizedType());
@@ -216,7 +234,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				if (parameterType.isOptional())
 					return Optional.ofNullable(requestBodyAsString);
 
-				if (requestBodyAsString == null)
+				if (!requestBodyOptional && requestBodyAsString == null)
 					throw new MissingRequestBodyException("A request body is required for this resource.");
 
 				return requestBodyAsString;
@@ -226,17 +244,21 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				if (parameterType.isOptional())
 					return Optional.ofNullable(requestBodyAsByteArray);
 
-				if (requestBodyAsByteArray == null)
+				if (!requestBodyOptional && requestBodyAsByteArray == null)
 					throw new MissingRequestBodyException("A request body is required for this resource.");
 
 				return requestBodyAsByteArray;
 			} else {
-				// Short circuit: optional and no request body
+				// Short circuit: optional type and no request body
 				if (parameterType.isOptional() && request.getBody().isEmpty())
 					return Optional.empty();
 
+				// Short circuit: marked optional and no request body
+				if (requestBodyOptional && request.getBody().isEmpty())
+					return defaultValueForType(parameterType.getNormalizedType()).orElse(null);
+
 				// Short circuit: not optional and no request body
-				if (!parameterType.isOptional() && request.getBody().isEmpty())
+				if (!requestBodyOptional && request.getBody().isEmpty())
 					throw new MissingRequestBodyException("A request body is required for this resource.");
 
 				// Let the request body marshaler try to handle it
@@ -254,7 +276,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				if (parameterType.isOptional())
 					return Optional.ofNullable(requestBodyObject);
 
-				if (requestBodyObject == null)
+				if (!requestBodyOptional && requestBodyObject == null)
 					throw new MissingRequestBodyException("Request body is required for this resource, but it was marshaled to null");
 
 				return requestBodyObject;
@@ -266,6 +288,24 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			return Optional.ofNullable(getInstanceProvider().provide(parameter.getType()));
 		else
 			return getInstanceProvider().provide(parameter.getType());
+	}
+
+	/**
+	 * What "default" value does the JDK use for an unassigned field of the given type?
+	 * <p>
+	 * For example, a primitive type like int defaults to 0 but a java.util.List would be null.
+	 * <p>
+	 * See https://docs.oracle.com/javase/tutorial/java/nutsandbolts/datatypes.html
+	 *
+	 * @param type the type whose default value we'd like to know
+	 * @return the default value for the type, or an empty optional if no default exists (i.e. is null)
+	 */
+	@Nonnull
+	protected Optional<Object> defaultValueForType(@Nullable Type type) {
+		if (type == null)
+			return Optional.empty();
+
+		return Optional.ofNullable(DEFAULT_VALUES_BY_PRIMITIVE_TYPE.get(type));
 	}
 
 	@Nonnull
@@ -302,7 +342,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		return parameterName;
 	}
 
-	@Nonnull
+	@Nullable
 	protected Object extractQueryParameterValue(@Nonnull Request request,
 																							@Nonnull ResourceMethod resourceMethod,
 																							@Nonnull Parameter parameter,
@@ -328,7 +368,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		});
 	}
 
-	@Nonnull
+	@Nullable
 	protected Object extractFormParameterValue(@Nonnull Request request,
 																						 @Nonnull ResourceMethod resourceMethod,
 																						 @Nonnull Parameter parameter,
@@ -354,7 +394,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		});
 	}
 
-	@Nonnull
+	@Nullable
 	protected Object extractRequestHeaderValue(@Nonnull Request request,
 																						 @Nonnull ResourceMethod resourceMethod,
 																						 @Nonnull Parameter parameter,
@@ -380,7 +420,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		});
 	}
 
-	@Nonnull
+	@Nullable
 	protected Object extractRequestCookieValue(@Nonnull Request request,
 																						 @Nonnull ResourceMethod resourceMethod,
 																						 @Nonnull Parameter parameter,

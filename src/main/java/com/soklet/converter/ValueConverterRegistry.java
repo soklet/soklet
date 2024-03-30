@@ -41,10 +41,24 @@ public class ValueConverterRegistry {
 	private static final ValueConverterRegistry SHARED_INSTANCE;
 	@Nonnull
 	private static final ValueConverter<?, ?> REFLEXIVE_VALUE_CONVERTER;
+	@Nonnull
+	private static final Map<Type, Type> PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS;
 
 	static {
 		REFLEXIVE_VALUE_CONVERTER = new ReflexiveValueConverter<>();
 		SHARED_INSTANCE = new ValueConverterRegistry();
+
+		// See https://docs.oracle.com/javase/tutorial/java/nutsandbolts/datatypes.html
+		PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS = Map.of(
+				int.class, Integer.class,
+				long.class, Long.class,
+				double.class, Double.class,
+				float.class, Float.class,
+				boolean.class, Boolean.class,
+				char.class, Character.class,
+				byte.class, Byte.class,
+				short.class, Short.class
+		);
 	}
 
 	// This is explicitly typed as a ConcurrentHashMap because we may silently accumulate additional converters over time
@@ -73,7 +87,7 @@ public class ValueConverterRegistry {
 				defaultValueConverters.size()
 						+ customValueConverters.size()
 						+ 1 // reflexive converter
-						+ 25 // leave a little headroom for enum types that might accumulate over time
+						+ 50 // leave a little headroom for enum types that might accumulate over time
 		);
 
 		// By default, we include out-of-the-box converters
@@ -106,16 +120,19 @@ public class ValueConverterRegistry {
 		requireNonNull(fromType);
 		requireNonNull(toType);
 
+		Type normalizedFromType = normalizePrimitiveTypeIfNecessary(fromType);
+		Type normalizedToType = normalizePrimitiveTypeIfNecessary(toType);
+
 		// Reflexive case: from == to
-		if (fromType.equals(toType))
+		if (normalizedFromType.equals(normalizedToType))
 			return Optional.of((ValueConverter<F, T>) REFLEXIVE_VALUE_CONVERTER);
 
-		CacheKey cacheKey = new CacheKey(fromType, toType);
+		CacheKey cacheKey = new CacheKey(normalizedFromType, normalizedToType);
 		ValueConverter<F, T> valueConverter = (ValueConverter<F, T>) getValueConvertersByCacheKey().get(cacheKey);
 
 		// Special case for enums.
 		// If no converter was registered for converting a String to an Enum<?>, create a simple converter and cache it off
-		if (valueConverter == null && String.class.equals(fromType) && toType instanceof @SuppressWarnings("rawtypes")Class toClass) {
+		if (valueConverter == null && String.class.equals(normalizedFromType) && toType instanceof @SuppressWarnings("rawtypes")Class toClass) {
 			if (toClass.isEnum()) {
 				valueConverter = new ValueConverter<>() {
 					@Override
@@ -135,13 +152,13 @@ public class ValueConverterRegistry {
 					@Override
 					@Nonnull
 					public Type getFromType() {
-						return fromType;
+						return normalizedFromType;
 					}
 
 					@Override
 					@Nonnull
 					public Type getToType() {
-						return toType;
+						return normalizedToType;
 					}
 
 					@Override
@@ -151,11 +168,19 @@ public class ValueConverterRegistry {
 					}
 				};
 
-				getValueConvertersByCacheKey().putIfAbsent(new CacheKey(fromType, toType), valueConverter);
+				getValueConvertersByCacheKey().putIfAbsent(new CacheKey(normalizedFromType, normalizedToType), valueConverter);
 			}
 		}
 
 		return Optional.ofNullable(valueConverter);
+	}
+
+	@Nonnull
+	protected Type normalizePrimitiveTypeIfNecessary(@Nonnull Type type) {
+		requireNonNull(type);
+
+		Type nonprimitiveEquivalent = PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS.get(type);
+		return nonprimitiveEquivalent == null ? type : nonprimitiveEquivalent;
 	}
 
 	@Nonnull
