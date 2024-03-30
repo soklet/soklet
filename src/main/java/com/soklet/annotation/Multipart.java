@@ -30,4 +30,6 @@ import java.lang.annotation.Target;
 public @interface Multipart {
 	@Nullable
 	String value() default "";
+
+	boolean optional() default false;
 }

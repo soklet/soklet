@@ -31,4 +31,5 @@ public @interface FormParameter {
 	@Nullable
 	String value() default "";
 
+	boolean optional() default false;
 }

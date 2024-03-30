@@ -30,4 +30,6 @@ import java.lang.annotation.Target;
 public @interface RequestCookie {
 	@Nullable
 	String value() default "";
+
+	boolean optional() default false;
 }
