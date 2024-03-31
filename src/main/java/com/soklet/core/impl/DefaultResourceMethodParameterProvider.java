@@ -154,7 +154,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		PathParameter pathParameter = parameter.getAnnotation(PathParameter.class);
 
 		if (pathParameter != null) {
-			if (parameterType.isOptional())
+			if (parameterType.isWrappedInOptional())
 				throw new IllegalStateException(format("@%s-annotated parameters cannot be marked %s",
 						PathParameter.class.getSimpleName(), Optional.class.getSimpleName()));
 
@@ -222,7 +222,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			return extractRequestMultipartValue(request, resourceMethod, parameter, multipart, parameterType);
 
 		RequestBody requestBody = parameter.getAnnotation(RequestBody.class);
-		boolean requestBodyOptional = requestBody.optional() || parameterType.isOptional();
+		boolean requestBodyOptional = requestBody.optional() || parameterType.isWrappedInOptional();
 
 		if (requestBody != null) {
 			boolean requestBodyExpectsString = String.class.equals(parameterType.getNormalizedType());
@@ -231,7 +231,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			if (requestBodyExpectsString) {
 				String requestBodyAsString = request.getBodyAsString().orElse(null);
 
-				if (parameterType.isOptional())
+				if (parameterType.isWrappedInOptional())
 					return Optional.ofNullable(requestBodyAsString);
 
 				if (!requestBodyOptional && requestBodyAsString == null)
@@ -241,7 +241,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			} else if (requestBodyExpectsByteArray) {
 				byte[] requestBodyAsByteArray = request.getBody().orElse(null);
 
-				if (parameterType.isOptional())
+				if (parameterType.isWrappedInOptional())
 					return Optional.ofNullable(requestBodyAsByteArray);
 
 				if (!requestBodyOptional && requestBodyAsByteArray == null)
@@ -250,7 +250,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				return requestBodyAsByteArray;
 			} else {
 				// Short circuit: optional type and no request body
-				if (parameterType.isOptional() && request.getBody().isEmpty())
+				if (parameterType.isWrappedInOptional() && request.getBody().isEmpty())
 					return Optional.empty();
 
 				// Short circuit: marked optional and no request body
@@ -273,7 +273,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 					throw new IllegalRequestBodyException(format("Unable to marshal request body to %s", requestBodyType), e);
 				}
 
-				if (parameterType.isOptional())
+				if (parameterType.isWrappedInOptional())
 					return Optional.ofNullable(requestBodyObject);
 
 				if (!requestBodyOptional && requestBodyObject == null)
@@ -284,7 +284,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		}
 
 		// Don't recognize what's being asked for? Have the InstanceProvider try to vend something
-		if (parameterType.isOptional())
+		if (parameterType.isWrappedInOptional())
 			return Optional.ofNullable(getInstanceProvider().provide(parameter.getType()));
 		else
 			return getInstanceProvider().provide(parameter.getType());
@@ -580,10 +580,10 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				}
 			}
 
-			if (!parameterType.isOptional() && results.size() == 0)
+			if (!parameterType.isWrappedInOptional() && results.size() == 0)
 				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
 
-			return parameterType.isOptional() ? (results.size() == 0 ? Optional.empty() : Optional.of(results)) : results;
+			return parameterType.isWrappedInOptional() ? (results.size() == 0 ? Optional.empty() : Optional.of(results)) : results;
 		}
 
 		// Non-list support
@@ -603,14 +603,14 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				}
 			}
 
-			if (!parameterType.isOptional() && result == null)
+			if (!parameterType.isWrappedInOptional() && result == null)
 				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
 		} else {
 			String value = values.size() > 0 ? values.get(0) : null;
 
 			if (value != null && trimAggressively(value).length() == 0) value = null;
 
-			if (!parameterType.isOptional() && value == null)
+			if (!parameterType.isWrappedInOptional() && value == null)
 				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
 
 			try {
@@ -624,7 +624,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			}
 		}
 
-		return parameterType.isOptional() ? Optional.ofNullable(result) : result;
+		return parameterType.isWrappedInOptional() ? Optional.ofNullable(result) : result;
 	}
 
 	protected void throwValueConverterMissingException(@Nonnull Parameter parameter,
@@ -688,18 +688,18 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		@Nullable
 		private final Type listElementType;
 		@Nonnull
-		private final Boolean optional;
+		private final Boolean wrappedInOptional;
 
 		public ParameterType(@Nonnull Parameter parameter) {
 			requireNonNull(parameter);
 
 			Type normalizedType = parameter.getParameterizedType();
 			Type listElementType = null;
-			boolean optional = false;
+			boolean wrappedInOptional = false;
 
 			if (parameter.getType().isAssignableFrom(Optional.class)) {
 				normalizedType = ((ParameterizedType) parameter.getParameterizedType()).getActualTypeArguments()[0];
-				optional = true;
+				wrappedInOptional = true;
 			}
 
 			// Gross hack to determine if this property is a generic List
@@ -709,7 +709,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 
 			this.normalizedType = normalizedType;
 			this.listElementType = listElementType;
-			this.optional = optional;
+			this.wrappedInOptional = wrappedInOptional;
 		}
 
 		@Nonnull
@@ -728,8 +728,8 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		}
 
 		@Nonnull
-		public Boolean isOptional() {
-			return this.optional;
+		public Boolean isWrappedInOptional() {
+			return this.wrappedInOptional;
 		}
 	}
 }
