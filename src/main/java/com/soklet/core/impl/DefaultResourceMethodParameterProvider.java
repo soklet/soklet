@@ -50,6 +50,7 @@ import com.soklet.exception.MissingRequestHeaderException;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
@@ -354,18 +355,21 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(queryParameter);
 		requireNonNull(parameterType);
 
-		String name = extractParameterName(resourceMethod, parameter, queryParameter, queryParameter.value());
-		Set<String> values = request.getQueryParameters().get(name);
+		String parameterDescription = "query parameter";
+		String parameterName = extractParameterName(resourceMethod, parameter, queryParameter, queryParameter.value());
+		Set<String> values = request.getQueryParameters().get(parameterName);
 
 		if (values == null)
 			values = Set.of();
 
-		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, new ArrayList<>(values), "query parameter", (
-				message, ignored) -> {
-			return new MissingQueryParameterException(message, name);
-		}, (message, cause, ignored, value, valueMetadatum) -> {
-			return new IllegalQueryParameterException(message, cause, name, value);
-		});
+		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
+				.optional(queryParameter.optional())
+				.values(new ArrayList<>(values))
+				.missingExceptionProvider((message, name) -> new MissingQueryParameterException(message, parameterName))
+				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalQueryParameterException(message, cause, parameterName, value))
+				.build();
+
+		return extractRequestValue(requestValueExtractionConfig);
 	}
 
 	@Nullable
@@ -380,18 +384,21 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(formParameter);
 		requireNonNull(parameterType);
 
-		String name = extractParameterName(resourceMethod, parameter, formParameter, formParameter.value());
-		Set<String> values = request.getFormParameters().get(name);
+		String parameterDescription = "form parameter";
+		String parameterName = extractParameterName(resourceMethod, parameter, formParameter, formParameter.value());
+		Set<String> values = request.getFormParameters().get(parameterName);
 
 		if (values == null)
 			values = Set.of();
 
-		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, new ArrayList<>(values), "form parameter", (
-				message, ignored) -> {
-			return new MissingFormParameterException(message, name);
-		}, (message, cause, ignored, value, valueMetadatum) -> {
-			return new IllegalFormParameterException(message, cause, name, value);
-		});
+		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
+				.optional(formParameter.optional())
+				.values(new ArrayList<>(values))
+				.missingExceptionProvider((message, name) -> new MissingFormParameterException(message, parameterName))
+				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalFormParameterException(message, cause, parameterName, value))
+				.build();
+
+		return extractRequestValue(requestValueExtractionConfig);
 	}
 
 	@Nullable
@@ -406,18 +413,21 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(requestHeader);
 		requireNonNull(parameterType);
 
-		String name = extractParameterName(resourceMethod, parameter, requestHeader, requestHeader.value());
-		Set<String> values = request.getHeaders().get(name);
+		String parameterDescription = "request header";
+		String parameterName = extractParameterName(resourceMethod, parameter, requestHeader, requestHeader.value());
+		Set<String> values = request.getHeaders().get(parameterName);
 
 		if (values == null)
 			values = Set.of();
 
-		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, new ArrayList<>(values), "request header", (
-				message, ignored) -> {
-			return new MissingRequestHeaderException(message, name);
-		}, (message, cause, ignored, value, valueMetadatum) -> {
-			return new IllegalRequestHeaderException(message, cause, name, value);
-		});
+		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
+				.optional(requestHeader.optional())
+				.values(new ArrayList<>(values))
+				.missingExceptionProvider((message, name) -> new MissingRequestHeaderException(message, parameterName))
+				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalRequestHeaderException(message, cause, parameterName, value))
+				.build();
+
+		return extractRequestValue(requestValueExtractionConfig);
 	}
 
 	@Nullable
@@ -432,18 +442,21 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(requestCookie);
 		requireNonNull(parameterType);
 
-		String name = extractParameterName(resourceMethod, parameter, requestCookie, requestCookie.value());
-		Set<String> values = request.getCookies().get(name);
+		String parameterDescription = "request cookie";
+		String parameterName = extractParameterName(resourceMethod, parameter, requestCookie, requestCookie.value());
+		Set<String> values = request.getCookies().get(parameterName);
 
 		if (values == null)
 			values = Set.of();
 
-		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, new ArrayList<>(values), "request cookie", (
-				message, ignored) -> {
-			return new MissingRequestCookieException(message, name);
-		}, (message, cause, ignored, value, valueMetadatum) -> {
-			return new IllegalRequestCookieException(message, cause, name, value);
-		});
+		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
+				.optional(requestCookie.optional())
+				.values(new ArrayList<>(values))
+				.missingExceptionProvider((message, name) -> new MissingRequestCookieException(message, parameterName))
+				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalRequestCookieException(message, cause, parameterName, value))
+				.build();
+
+		return extractRequestValue(requestValueExtractionConfig);
 	}
 
 	@Nonnull
@@ -458,7 +471,8 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(parameter);
 		requireNonNull(parameterType);
 
-		String name = extractParameterName(resourceMethod, parameter, multipart, multipart == null ? null : multipart.value());
+		String parameterDescription = "multipart field";
+		String parameterName = extractParameterName(resourceMethod, parameter, multipart, multipart == null ? null : multipart.value());
 
 		List<String> values = new ArrayList<>();
 		List<MultipartField> valuesMetadata = new ArrayList<>();
@@ -466,7 +480,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		for (Map.Entry<String, Set<MultipartField>> entry : request.getMultipartFields().entrySet()) {
 			String multipartName = entry.getKey();
 
-			if (name.equals(multipartName)) {
+			if (parameterName.equals(multipartName)) {
 				Set<MultipartField> multipartFields = entry.getValue();
 
 				for (MultipartField matchingMultipartField : multipartFields) {
@@ -476,65 +490,48 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			}
 		}
 
-		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, values, valuesMetadata, MultipartField.class, "multipart field",
-				(MultipartField multipartField, Type toType, ValueConverter<Object, Object> valueConverter) -> {
-					if (toType.equals(MultipartField.class))
-						return multipartField;
+		ValueMetadatumConverter<MultipartField> valueMetadatumConverter = (MultipartField multipartField, Type toType, ValueConverter<Object, Object> valueConverter) -> {
+			if (toType.equals(MultipartField.class))
+				return multipartField;
 
-					if (toType.equals(String.class))
-						return multipartField.getDataAsString().orElse(null);
+			if (toType.equals(String.class))
+				return multipartField.getDataAsString().orElse(null);
 
-					if (toType.equals(byte[].class))
-						return multipartField.getData().orElse(null);
+			if (toType.equals(byte[].class))
+				return multipartField.getData().orElse(null);
 
-					Optional<Object> valueConverterResult = valueConverter.convert(multipartField.getDataAsString().orElse(null));
-					return valueConverterResult == null ? null : valueConverterResult.orElse(null);
-				},
-				(message, ignored) -> {
-					return new MissingMultipartFieldException(message, name);
-				}, (message, cause, ignored, value, valueMetadatum) -> {
-					return new IllegalMultipartFieldException(message, cause, ((Optional<MultipartField>) valueMetadatum).orElse(null));
-				});
-	}
+			Optional<Object> valueConverterResult = valueConverter.convert(multipartField.getDataAsString().orElse(null));
+			return valueConverterResult == null ? null : valueConverterResult.orElse(null);
+		};
 
-	@Nonnull
-	protected Object extractRequestValue(@Nonnull Request request,
-																			 @Nonnull ResourceMethod resourceMethod,
-																			 @Nonnull Parameter parameter,
-																			 @Nonnull ParameterType parameterType,
-																			 @Nonnull String name,
-																			 @Nonnull List<String> values,
-																			 @Nonnull String description,
-																			 @Nonnull MissingExceptionProvider missingExceptionProvider,
-																			 @Nonnull IllegalExceptionProvider illegalExceptionProvider) {
-		return extractRequestValue(request, resourceMethod, parameter, parameterType, name, values, List.of(), null,
-				description, null, missingExceptionProvider, illegalExceptionProvider);
+		RequestValueExtractionConfig<MultipartField> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
+				.optional(multipart.optional())
+				.values(new ArrayList<>(values))
+				.valuesMetadata(valuesMetadata)
+				.valueMetadatumConverter(valueMetadatumConverter)
+				.missingExceptionProvider((message, name) -> new MissingMultipartFieldException(message, parameterName))
+				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalMultipartFieldException(message, cause, ((Optional<MultipartField>) valueMetadatum).orElse(null)))
+				.build();
+
+		return extractRequestValue(requestValueExtractionConfig);
 	}
 
 	@Nonnull
 	@SuppressWarnings("unchecked")
-	protected <F> Object extractRequestValue(@Nonnull Request request,
-																					 @Nonnull ResourceMethod resourceMethod,
-																					 @Nonnull Parameter parameter,
-																					 @Nonnull ParameterType parameterType,
-																					 @Nonnull String name,
-																					 @Nonnull List<String> values,
-																					 @Nonnull List<F> valuesMetadata,
-																					 @Nullable Class<F> valuesMetadataType,
-																					 @Nonnull String description,
-																					 @Nullable ValueMetadatumConverter<F> valueMetadatumConverter,
-																					 @Nonnull MissingExceptionProvider missingExceptionProvider,
-																					 @Nonnull IllegalExceptionProvider illegalExceptionProvider) {
-		requireNonNull(request);
-		requireNonNull(resourceMethod);
-		requireNonNull(parameter);
-		requireNonNull(parameterType);
-		requireNonNull(name);
-		requireNonNull(values);
-		requireNonNull(valuesMetadata);
-		requireNonNull(description);
-		requireNonNull(missingExceptionProvider);
-		requireNonNull(illegalExceptionProvider);
+	protected <T> Object extractRequestValue(@Nonnull RequestValueExtractionConfig<T> requestValueExtractionConfig) {
+		requireNonNull(requestValueExtractionConfig);
+
+		ResourceMethod resourceMethod = requestValueExtractionConfig.getResourceMethod();
+		Parameter parameter = requestValueExtractionConfig.getParameter();
+		ParameterType parameterType = requestValueExtractionConfig.getParameterType();
+		String parameterName = requestValueExtractionConfig.getParameterName();
+		String parameterDescription = requestValueExtractionConfig.getParameterDescription();
+		boolean optional = requestValueExtractionConfig.getOptional();
+		List<String> values = requestValueExtractionConfig.getValues();
+		List<T> valuesMetadata = requestValueExtractionConfig.getValuesMetadata();
+		ValueMetadatumConverter<T> valueMetadatumConverter = requestValueExtractionConfig.getValueMetadatumConverter().orElse(null);
+		MissingExceptionProvider missingExceptionProvider = requestValueExtractionConfig.getMissingExceptionProvider();
+		IllegalExceptionProvider illegalExceptionProvider = requestValueExtractionConfig.getIllegalExceptionProvider();
 
 		boolean returnMetadataInsteadOfValues = valueMetadatumConverter != null;
 		Type toType = parameterType.isList() ? parameterType.getListElementType().get() : parameterType.getNormalizedType();
@@ -554,12 +551,12 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 
 					if (valueMetadatum != null)
 						try {
-							valueMetadatum = valueMetadatumConverter.convert((F) valueMetadatum, toType, valueConverter);
+							valueMetadatum = valueMetadatumConverter.convert((T) valueMetadatum, toType, valueConverter);
 							results.add(valueMetadatum);
 						} catch (ValueConversionException e) {
 							throw illegalExceptionProvider.provide(
 									format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", valueMetadatum,
-											description, name, valueConverter.getToType()), e, name, null, Optional
+											parameterDescription, parameterName, valueConverter.getToType()), e, parameterName, null, Optional
 											.ofNullable(valuesMetadata.size() > i ? valuesMetadata.get(i) : null));
 						}
 				}
@@ -574,14 +571,16 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 						} catch (ValueConversionException e) {
 							throw illegalExceptionProvider.provide(
 									format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
-											description, name, valueConverter.getToType()), e, name, value, Optional
+											parameterDescription, parameterName, valueConverter.getToType()), e, parameterName, value, Optional
 											.ofNullable(valuesMetadata.size() > i ? valuesMetadata.get(i) : null));
 						}
 				}
 			}
 
-			if (!parameterType.isWrappedInOptional() && results.size() == 0)
-				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
+			boolean required = !parameterType.isWrappedInOptional() && !optional;
+
+			if (required && results.size() == 0)
+				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", parameterDescription, parameterName), parameterName);
 
 			return parameterType.isWrappedInOptional() ? (results.size() == 0 ? Optional.empty() : Optional.of(results)) : results;
 		}
@@ -594,24 +593,28 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 
 			if (result != null) {
 				try {
-					result = valueMetadatumConverter.convert((F) result, toType, valueConverter);
+					result = valueMetadatumConverter.convert((T) result, toType, valueConverter);
 				} catch (ValueConversionException e) {
 					throw illegalExceptionProvider.provide(
 							format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", result,
-									description, name, valueConverter.getToType()), e, name, null, Optional
+									parameterDescription, parameterName, valueConverter.getToType()), e, parameterName, null, Optional
 									.ofNullable(valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null));
 				}
 			}
 
-			if (!parameterType.isWrappedInOptional() && result == null)
-				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
+			boolean required = !parameterType.isWrappedInOptional() && !optional;
+
+			if (required && result == null)
+				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", parameterDescription, parameterName), parameterName);
 		} else {
 			String value = values.size() > 0 ? values.get(0) : null;
 
 			if (value != null && trimAggressively(value).length() == 0) value = null;
 
-			if (!parameterType.isWrappedInOptional() && value == null)
-				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", description, name), name);
+			boolean required = !parameterType.isWrappedInOptional() && !optional;
+
+			if (required && value == null)
+				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", parameterDescription, parameterName), parameterName);
 
 			try {
 				Optional<Object> valueConverterResult = valueConverter.convert(value);
@@ -619,7 +622,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			} catch (ValueConversionException e) {
 				throw illegalExceptionProvider.provide(
 						format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
-								description, name, valueConverter.getToType()), e, name, value, Optional
+								parameterDescription, parameterName, valueConverter.getToType()), e, parameterName, value, Optional
 								.ofNullable(valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null));
 			}
 		}
@@ -674,11 +677,193 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	}
 
 	@FunctionalInterface
-	protected interface ValueMetadatumConverter<F> {
+	protected interface ValueMetadatumConverter<T> {
 		@Nonnull
-		Object convert(@Nonnull F valueMetadatum,
+		Object convert(@Nonnull T valueMetadatum,
 									 @Nonnull Type toType,
 									 @Nonnull ValueConverter<Object, Object> valueConverter) throws ValueConversionException;
+	}
+
+	@NotThreadSafe
+	protected static class RequestValueExtractionConfig<T> {
+		@Nonnull
+		private final ResourceMethod resourceMethod;
+		@Nonnull
+		private final Parameter parameter;
+		@Nonnull
+		private final ParameterType parameterType;
+		@Nonnull
+		private final String parameterName;
+		@Nonnull
+		private final String parameterDescription;
+		@Nonnull
+		private final Boolean optional;
+		@Nonnull
+		private final List<String> values;
+		@Nonnull
+		private final List<T> valuesMetadata;
+		@Nullable
+		private ValueMetadatumConverter<T> valueMetadatumConverter;
+		@Nonnull
+		private final MissingExceptionProvider missingExceptionProvider;
+		@Nonnull
+		private final IllegalExceptionProvider illegalExceptionProvider;
+
+		protected RequestValueExtractionConfig(@Nonnull Builder builder) {
+			requireNonNull(builder);
+
+			this.resourceMethod = requireNonNull(builder.resourceMethod);
+			this.parameter = requireNonNull(builder.parameter);
+			this.parameterType = requireNonNull(builder.parameterType);
+			this.parameterName = requireNonNull(builder.parameterName);
+			this.parameterDescription = requireNonNull(builder.parameterDescription);
+			this.optional = builder.optional == null ? false : builder.optional;
+			this.values = builder.values == null ? List.of() : new ArrayList<>(builder.values);
+			this.valuesMetadata = builder.valuesMetadata == null ? List.of() : new ArrayList<>(builder.valuesMetadata);
+			this.valueMetadatumConverter = builder.valueMetadatumConverter;
+			this.missingExceptionProvider = requireNonNull(builder.missingExceptionProvider);
+			this.illegalExceptionProvider = requireNonNull(builder.illegalExceptionProvider);
+		}
+
+		@NotThreadSafe
+		protected static class Builder<T> {
+			@Nonnull
+			private final ResourceMethod resourceMethod;
+			@Nonnull
+			private final Parameter parameter;
+			@Nonnull
+			private final ParameterType parameterType;
+			@Nonnull
+			private final String parameterName;
+			@Nonnull
+			private String parameterDescription;
+			@Nullable
+			private Boolean optional;
+			@Nullable
+			private List<String> values;
+			@Nullable
+			private List<T> valuesMetadata;
+			@Nullable
+			private ValueMetadatumConverter<T> valueMetadatumConverter;
+			@Nullable
+			private MissingExceptionProvider missingExceptionProvider;
+			@Nullable
+			private IllegalExceptionProvider illegalExceptionProvider;
+
+			public Builder(@Nonnull ResourceMethod resourceMethod,
+										 @Nonnull Parameter parameter,
+										 @Nonnull ParameterType parameterType,
+										 @Nonnull String parameterName,
+										 @Nonnull String parameterDescription) {
+				requireNonNull(resourceMethod);
+				requireNonNull(parameter);
+				requireNonNull(parameterType);
+				requireNonNull(parameterName);
+				requireNonNull(parameterDescription);
+
+				this.resourceMethod = resourceMethod;
+				this.parameter = parameter;
+				this.parameterType = parameterType;
+				this.parameterName = parameterName;
+				this.parameterDescription = parameterDescription;
+			}
+
+			@Nonnull
+			public Builder optional(@Nullable Boolean optional) {
+				this.optional = optional;
+				return this;
+			}
+
+			@Nonnull
+			public Builder values(@Nullable List<String> values) {
+				this.values = values;
+				return this;
+			}
+
+			@Nonnull
+			public Builder valuesMetadata(@Nullable List<T> valuesMetadata) {
+				this.valuesMetadata = valuesMetadata;
+				return this;
+			}
+
+			@Nonnull
+			public Builder valueMetadatumConverter(@Nullable ValueMetadatumConverter<T> valueMetadatumConverter) {
+				this.valueMetadatumConverter = valueMetadatumConverter;
+				return this;
+			}
+
+			@Nonnull
+			public Builder missingExceptionProvider(@Nullable MissingExceptionProvider missingExceptionProvider) {
+				this.missingExceptionProvider = missingExceptionProvider;
+				return this;
+			}
+
+			@Nonnull
+			public Builder illegalExceptionProvider(@Nullable IllegalExceptionProvider illegalExceptionProvider) {
+				this.illegalExceptionProvider = illegalExceptionProvider;
+				return this;
+			}
+
+			@Nonnull
+			public RequestValueExtractionConfig build() {
+				return new RequestValueExtractionConfig(this);
+			}
+		}
+
+		@Nonnull
+		public ResourceMethod getResourceMethod() {
+			return this.resourceMethod;
+		}
+
+		@Nonnull
+		public Parameter getParameter() {
+			return this.parameter;
+		}
+
+		@Nonnull
+		public ParameterType getParameterType() {
+			return this.parameterType;
+		}
+
+		@Nonnull
+		public String getParameterName() {
+			return this.parameterName;
+		}
+
+		@Nonnull
+		public String getParameterDescription() {
+			return this.parameterDescription;
+		}
+
+		@Nonnull
+		public Boolean getOptional() {
+			return this.optional;
+		}
+
+		@Nonnull
+		public List<String> getValues() {
+			return this.values;
+		}
+
+		@Nonnull
+		public List<T> getValuesMetadata() {
+			return this.valuesMetadata;
+		}
+
+		@Nonnull
+		public Optional<ValueMetadatumConverter<T>> getValueMetadatumConverter() {
+			return Optional.ofNullable(this.valueMetadatumConverter);
+		}
+
+		@Nonnull
+		public MissingExceptionProvider getMissingExceptionProvider() {
+			return this.missingExceptionProvider;
+		}
+
+		@Nonnull
+		public IllegalExceptionProvider getIllegalExceptionProvider() {
+			return this.illegalExceptionProvider;
+		}
 	}
 
 	@ThreadSafe
