@@ -29,5 +29,5 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface PathParameter {
 	@Nullable
-	String value() default "";
+	String name() default "";
 }

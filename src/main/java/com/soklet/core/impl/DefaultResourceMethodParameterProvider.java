@@ -159,7 +159,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				throw new IllegalStateException(format("@%s-annotated parameters cannot be marked %s",
 						PathParameter.class.getSimpleName(), Optional.class.getSimpleName()));
 
-			String pathParameterName = extractParameterName(resourceMethod, parameter, pathParameter, pathParameter.value());
+			String pathParameterName = extractParameterName(resourceMethod, parameter, pathParameter, pathParameter.name());
 			ResourcePath requestResourcePath = ResourcePath.fromPathInstance(request.getPath());
 
 			Map<String, String> valuesByPathParameter = resourceMethod.getResourcePath().placeholders(requestResourcePath);
@@ -356,7 +356,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(parameterType);
 
 		String parameterDescription = "query parameter";
-		String parameterName = extractParameterName(resourceMethod, parameter, queryParameter, queryParameter.value());
+		String parameterName = extractParameterName(resourceMethod, parameter, queryParameter, queryParameter.name());
 		Set<String> values = request.getQueryParameters().get(parameterName);
 
 		if (values == null)
@@ -385,7 +385,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(parameterType);
 
 		String parameterDescription = "form parameter";
-		String parameterName = extractParameterName(resourceMethod, parameter, formParameter, formParameter.value());
+		String parameterName = extractParameterName(resourceMethod, parameter, formParameter, formParameter.name());
 		Set<String> values = request.getFormParameters().get(parameterName);
 
 		if (values == null)
@@ -414,7 +414,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(parameterType);
 
 		String parameterDescription = "request header";
-		String parameterName = extractParameterName(resourceMethod, parameter, requestHeader, requestHeader.value());
+		String parameterName = extractParameterName(resourceMethod, parameter, requestHeader, requestHeader.name());
 		Set<String> values = request.getHeaders().get(parameterName);
 
 		if (values == null)
@@ -443,7 +443,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(parameterType);
 
 		String parameterDescription = "request cookie";
-		String parameterName = extractParameterName(resourceMethod, parameter, requestCookie, requestCookie.value());
+		String parameterName = extractParameterName(resourceMethod, parameter, requestCookie, requestCookie.name());
 		Set<String> values = request.getCookies().get(parameterName);
 
 		if (values == null)
@@ -472,7 +472,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		requireNonNull(parameterType);
 
 		String parameterDescription = "multipart field";
-		String parameterName = extractParameterName(resourceMethod, parameter, multipart, multipart == null ? null : multipart.value());
+		String parameterName = extractParameterName(resourceMethod, parameter, multipart, multipart == null ? null : multipart.name());
 
 		List<String> values = new ArrayList<>();
 		List<MultipartField> valuesMetadata = new ArrayList<>();
@@ -505,7 +505,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		};
 
 		RequestValueExtractionConfig<MultipartField> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
-				.optional(multipart.optional())
+				.optional(multipart == null ? false : multipart.optional())
 				.values(new ArrayList<>(values))
 				.valuesMetadata(valuesMetadata)
 				.valueMetadatumConverter(valueMetadatumConverter)

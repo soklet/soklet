@@ -29,7 +29,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Multipart {
 	@Nullable
-	String value() default "";
+	String name() default "";
 
 	boolean optional() default false;
 }
