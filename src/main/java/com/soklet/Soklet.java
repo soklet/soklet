@@ -46,10 +46,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -373,15 +374,18 @@ public class Soklet implements AutoCloseable, RequestHandler {
 			// If this was an OPTIONS request, do special processing.
 			// If not, figure out if we should return a 404 or 405.
 			if (request.getHttpMethod() == HttpMethod.OPTIONS) {
-				// See what non-OPTIONS methods are available to us for this request's path
-				Set<HttpMethod> otherHttpMethods = resolveOtherMatchingHttpMethods(request, resourceMethodResolver);
-				Set<HttpMethod> allowedHttpMethods = new LinkedHashSet<>(otherHttpMethods);
-				allowedHttpMethods.add(HttpMethod.OPTIONS);
+				// See what methods are available to us for this request's path
+				Map<HttpMethod, ResourceMethod> matchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver);
 
 				// Special handling for CORS preflight requests, if needed
 				if (cors != null && cors.isPreflight()) {
-					// Let configuration function determine if we should authorize this request
-					CorsPreflightResponse corsPreflightResponse = corsAuthorizer.authorizePreflight(request, allowedHttpMethods).orElse(null);
+					// Let configuration function determine if we should authorize this request.
+					// Discard any OPTIONS references - see https://stackoverflow.com/a/68529748
+					Map<HttpMethod, ResourceMethod> nonOptionsMatchingResourceMethodsByHttpMethod = matchingResourceMethodsByHttpMethod.entrySet().stream()
+							.filter(entry -> entry.getKey() != HttpMethod.OPTIONS)
+							.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+
+					CorsPreflightResponse corsPreflightResponse = corsAuthorizer.authorizePreflight(request, nonOptionsMatchingResourceMethodsByHttpMethod).orElse(null);
 
 					// Allow or reject CORS depending on what the function said to do
 					if (corsPreflightResponse != null)
@@ -389,8 +393,19 @@ public class Soklet implements AutoCloseable, RequestHandler {
 					else
 						return responseMarshaler.forCorsPreflightRejected(request);
 				} else {
-					// Just a normal OPTIONS response (non-CORS-preflight)
-					return responseMarshaler.forOptions(request, allowedHttpMethods);
+					// Just a normal OPTIONS response (non-CORS-preflight).
+					// If there's a matching OPTIONS resource method for this OPTIONS request, then invoke it.
+					ResourceMethod optionsResourceMethod = matchingResourceMethodsByHttpMethod.get(HttpMethod.OPTIONS);
+
+					if (optionsResourceMethod != null) {
+						resourceMethod = optionsResourceMethod;
+					} else {
+						// Ensure OPTIONS is always present in the map, even if there is no explicit matching resource method for it
+						if (!matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.OPTIONS))
+							matchingResourceMethodsByHttpMethod.put(HttpMethod.OPTIONS, null);
+
+						return responseMarshaler.forOptions(request, matchingResourceMethodsByHttpMethod.keySet());
+					}
 				}
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
 				// If there's a matching GET resource method for this HEAD request, then invoke it
@@ -403,11 +418,19 @@ public class Soklet implements AutoCloseable, RequestHandler {
 					return responseMarshaler.forNotFound(request);
 			} else {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
-				Set<HttpMethod> otherHttpMethods = resolveOtherMatchingHttpMethods(request, resourceMethodResolver);
+				Map<HttpMethod, ResourceMethod> otherMatchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver);
 
-				if (otherHttpMethods.size() > 0) {
+				Set<HttpMethod> matchingNonOptionsHttpMethods = otherMatchingResourceMethodsByHttpMethod.keySet().stream()
+						.filter(httpMethod -> httpMethod != HttpMethod.OPTIONS)
+						.collect(Collectors.toSet());
+
+				// Ensure OPTIONS is always present in the map, even if there is no explicit matching resource method for it
+				if (!otherMatchingResourceMethodsByHttpMethod.containsKey(HttpMethod.OPTIONS))
+					otherMatchingResourceMethodsByHttpMethod.put(HttpMethod.OPTIONS, null);
+
+				if (matchingNonOptionsHttpMethods.size() > 0) {
 					// ...if some do, it's a 405
-					return responseMarshaler.forMethodNotAllowed(request, otherHttpMethods);
+					return responseMarshaler.forMethodNotAllowed(request, otherMatchingResourceMethodsByHttpMethod.keySet());
 				} else {
 					// no matching resource method found, it's a 404
 					return responseMarshaler.forNotFound(request);
@@ -520,20 +543,22 @@ public class Soklet implements AutoCloseable, RequestHandler {
 	}
 
 	@Nonnull
-	protected Set<HttpMethod> resolveOtherMatchingHttpMethods(@Nonnull Request request,
-																														@Nonnull ResourceMethodResolver resourceMethodResolver) {
+	protected Map<HttpMethod, ResourceMethod> resolveMatchingResourceMethodsByHttpMethod(@Nonnull Request request,
+																																											 @Nonnull ResourceMethodResolver resourceMethodResolver) {
 		requireNonNull(request);
 		requireNonNull(resourceMethodResolver);
 
-		Set<HttpMethod> otherHttpMethods = new LinkedHashSet<>(HttpMethod.values().length);
+		Map<HttpMethod, ResourceMethod> matchingResourceMethodsByHttpMethod = new LinkedHashMap<>(HttpMethod.values().length);
 
-		for (HttpMethod otherHttpMethod : HttpMethod.values()) {
-			Request otherRequest = new Request.Builder(otherHttpMethod, request.getUri()).build();
-			if (request.getHttpMethod() != otherHttpMethod && resourceMethodResolver.resourceMethodForRequest(otherRequest).isPresent())
-				otherHttpMethods.add(otherHttpMethod);
+		for (HttpMethod httpMethod : HttpMethod.values()) {
+			Request otherRequest = new Request.Builder(httpMethod, request.getUri()).build();
+			ResourceMethod resourceMethod = resourceMethodResolver.resourceMethodForRequest(otherRequest).orElse(null);
+
+			if (resourceMethod != null)
+				matchingResourceMethodsByHttpMethod.put(httpMethod, resourceMethod);
 		}
 
-		return otherHttpMethods;
+		return matchingResourceMethodsByHttpMethod;
 	}
 
 	@Nonnull

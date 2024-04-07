@@ -210,16 +210,16 @@ public class SokletTests {
 	public static class MultipartResource {
 		@POST("/multipart-upload")
 		public void multipartUpload(Request request,
-																@Multipart(name="not-really-int") String notReallyAnInt,
-																@Multipart(name="not-really-int") Optional<String> optionalNotReallyAnInt,
-																@Multipart(name="one") List<MultipartField> oneAsList,
+																@Multipart(name = "not-really-int") String notReallyAnInt,
+																@Multipart(name = "not-really-int") Optional<String> optionalNotReallyAnInt,
+																@Multipart(name = "one") List<MultipartField> oneAsList,
 																MultipartField another,
-																@Multipart(name="another") Optional<List<byte[]>> anotherAsOptionalListOfBytes,
-																@Multipart(name="another") Optional<List<Integer>> anotherAsOptionalListOfInteger,
-																@Multipart(name="another") String anotherAsString,
-																@Multipart(name="another") byte[] anotherAsBytes,
-																@Multipart(name="another") Optional<Double> anotherAsOptionalDouble,
-																@Multipart(name="another") Optional<byte[]> anotherAsOptionalBytes) {
+																@Multipart(name = "another") Optional<List<byte[]>> anotherAsOptionalListOfBytes,
+																@Multipart(name = "another") Optional<List<Integer>> anotherAsOptionalListOfInteger,
+																@Multipart(name = "another") String anotherAsString,
+																@Multipart(name = "another") byte[] anotherAsBytes,
+																@Multipart(name = "another") Optional<Double> anotherAsOptionalDouble,
+																@Multipart(name = "another") Optional<byte[]> anotherAsOptionalBytes) {
 			Assert.assertEquals("3x", notReallyAnInt);
 			Assert.assertEquals(Optional.of("3x"), optionalNotReallyAnInt);
 			Assert.assertEquals(2, oneAsList.size());
@@ -249,7 +249,7 @@ public class SokletTests {
 		}
 
 		@GET("/query-param-custom-name")
-		public Response queryParamCustomName(@Nonnull @QueryParameter(name="local_date") LocalDate localDate) {
+		public Response queryParamCustomName(@Nonnull @QueryParameter(name = "local_date") LocalDate localDate) {
 			requireNonNull(localDate);
 			// Echoes back date in ISO yyyy-MM-dd format
 			return new Response.Builder(200).body(DateTimeFormatter.ISO_DATE.format(localDate)).build();
@@ -301,12 +301,12 @@ public class SokletTests {
 		// Use a mock server that we can send simulated requests to
 		mockServerForResourceClasses(Set.of(HttpHeadResource.class), (mockServer -> {
 			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
-			MarshaledResponse getMarshaledResponse = mockServer.simulateRequest(
+			MarshaledResponse getMethodMarshaledResponse = mockServer.simulateRequest(
 					new Request.Builder(HttpMethod.GET, "/hello-world").build());
 
 			Assert.assertArrayEquals("Response body doesn't match",
 					"hello world".getBytes(StandardCharsets.UTF_8),
-					getMarshaledResponse.getBody().get());
+					getMethodMarshaledResponse.getBody().get());
 
 			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
 			MarshaledResponse headMarshaledResponse = mockServer.simulateRequest(
@@ -314,7 +314,7 @@ public class SokletTests {
 
 			Assert.assertEquals(200, (long) headMarshaledResponse.getStatusCode());
 			Assert.assertEquals("GET and HEAD headers don't match",
-					getMarshaledResponse.getHeaders(), headMarshaledResponse.getHeaders());
+					getMethodMarshaledResponse.getHeaders(), headMarshaledResponse.getHeaders());
 			Assert.assertArrayEquals("Received a response body but didn't expect one",
 					emptyByteArray(),
 					headMarshaledResponse.getBody().orElse(emptyByteArray()));

@@ -17,8 +17,8 @@
 package com.soklet.core;
 
 import javax.annotation.Nonnull;
+import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -29,5 +29,5 @@ public interface CorsAuthorizer {
 
 	@Nonnull
 	Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
-																										 @Nonnull Set<HttpMethod> availableHttpMethods);
+																										 @Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod);
 }

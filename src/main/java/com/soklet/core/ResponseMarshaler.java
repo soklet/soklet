@@ -82,8 +82,8 @@ public interface ResponseMarshaler {
 	 * Note that CORS preflight responses are handled specially by {@link #forCorsPreflightAllowed(Request, CorsPreflightResponse)}
 	 * and {@link #forCorsPreflightRejected(Request)} - not this method.
 	 *
-	 * @param request            the HTTP request
-	 * @param allowedHttpMethods appropriate HTTP methods to write to the {@code Allow} response header
+	 * @param request                            the HTTP request
+	 * @param allowedResourceMethodsByHttpMethod appropriate HTTP methods to write to the {@code Allow} response header
 	 * @return the response to send over the wire
 	 */
 	@Nonnull
@@ -97,7 +97,7 @@ public interface ResponseMarshaler {
 
 	@Nonnull
 	MarshaledResponse forHead(@Nonnull Request request,
-														@Nonnull MarshaledResponse getMarshaledResponse);
+														@Nonnull MarshaledResponse getMethodMarshaledResponse);
 
 	@Nonnull
 	MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,

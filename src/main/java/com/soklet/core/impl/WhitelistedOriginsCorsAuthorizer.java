@@ -22,11 +22,13 @@ import com.soklet.core.CorsPreflightResponse;
 import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
+import com.soklet.core.ResourceMethod;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -71,9 +73,9 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	@Override
 	public Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
-																														@Nonnull Set<HttpMethod> availableHttpMethods) {
+																														@Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);
-		requireNonNull(availableHttpMethods);
+		requireNonNull(availableResourceMethodsByHttpMethod);
 
 		Cors cors = request.getCors().orElse(null);
 
@@ -82,7 +84,7 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 
 		if (getWhitelistedOrigins().contains(normalizeOrigin(cors.getOrigin())))
 			return Optional.of(new CorsPreflightResponse.Builder(cors.getOrigin())
-					.accessControlAllowMethods(availableHttpMethods)
+					.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
 					.accessControlAllowHeaders(Set.of("*"))
 					.build());
 

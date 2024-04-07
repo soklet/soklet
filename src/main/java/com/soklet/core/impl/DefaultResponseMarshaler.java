@@ -186,16 +186,16 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
 	@Override
 	public MarshaledResponse forHead(@Nonnull Request request,
-																	 @Nonnull MarshaledResponse getMarshaledResponse) {
+																	 @Nonnull MarshaledResponse getMethodMarshaledResponse) {
 		requireNonNull(request);
-		requireNonNull(getMarshaledResponse);
+		requireNonNull(getMethodMarshaledResponse);
 
 		// A HEAD can never write a response body, but we explicitly set its Content-Length header
 		// so the client knows how long the response would have been.
-		return getMarshaledResponse.copy()
+		return getMethodMarshaledResponse.copy()
 				.body(oldBody -> null)
 				.headers((mutableHeaders) -> {
-					byte[] responseBytes = getMarshaledResponse.getBody().orElse(emptyByteArray());
+					byte[] responseBytes = getMethodMarshaledResponse.getBody().orElse(emptyByteArray());
 					mutableHeaders.put("Content-Length", Set.of(String.valueOf(responseBytes.length)));
 				}).finish();
 	}
