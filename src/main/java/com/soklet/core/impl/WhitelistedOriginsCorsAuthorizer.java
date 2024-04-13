@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.soklet.core.Utilities.trimAggressively;
@@ -43,13 +44,21 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
-	private final Set<String> whitelistedOrigins;
+	private final Function<String, Boolean> authorizer;
 
 	public WhitelistedOriginsCorsAuthorizer(@Nonnull Set<String> whitelistedOrigins) {
 		requireNonNull(whitelistedOrigins);
-		this.whitelistedOrigins = Collections.unmodifiableSet(new TreeSet<>(whitelistedOrigins.stream()
+
+		Set<String> normalizedWhitelistedOrigins = Collections.unmodifiableSet(new TreeSet<>(whitelistedOrigins.stream()
 				.map(whitelistedOrigin -> normalizeOrigin(whitelistedOrigin))
 				.collect(Collectors.toSet())));
+
+		this.authorizer = (origin -> normalizedWhitelistedOrigins.contains(origin));
+	}
+
+	public WhitelistedOriginsCorsAuthorizer(@Nonnull Function<String, Boolean> authorizer) {
+		requireNonNull(authorizer);
+		this.authorizer = authorizer;
 	}
 
 	@Nonnull
@@ -62,7 +71,7 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 		if (cors == null)
 			return Optional.empty();
 
-		if (getWhitelistedOrigins().contains(normalizeOrigin(cors.getOrigin())))
+		if (getAuthorizer().apply(normalizeOrigin(cors.getOrigin())))
 			return Optional.of(new CorsResponse.Builder(cors.getOrigin())
 					.accessControlExposeHeaders(Set.of("*"))
 					.build());
@@ -82,7 +91,7 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 		if (cors == null)
 			return Optional.empty();
 
-		if (getWhitelistedOrigins().contains(normalizeOrigin(cors.getOrigin())))
+		if (getAuthorizer().apply(normalizeOrigin(cors.getOrigin())))
 			return Optional.of(new CorsPreflightResponse.Builder(cors.getOrigin())
 					.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
 					.accessControlAllowHeaders(Set.of("*"))
@@ -98,7 +107,7 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	}
 
 	@Nonnull
-	protected Set<String> getWhitelistedOrigins() {
-		return this.whitelistedOrigins;
+	protected Function<String, Boolean> getAuthorizer() {
+		return this.authorizer;
 	}
 }
