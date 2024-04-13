@@ -26,7 +26,7 @@ import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
-import com.soklet.core.impl.DefaultCorsAuthorizer;
+import com.soklet.core.impl.NoOriginsCorsAuthorizer;
 import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultLifecycleInterceptor;
 import com.soklet.core.impl.DefaultLogHandler;
@@ -80,7 +80,7 @@ public class SokletConfiguration {
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(getInstanceProvider(), getValueConverterRegistry(), getRequestBodyMarshaler());
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : DefaultResponseMarshaler.sharedInstance();
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
-		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : DefaultCorsAuthorizer.sharedInstance();
+		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : NoOriginsCorsAuthorizer.sharedInstance();
 	}
 
 	@Nonnull

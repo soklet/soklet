@@ -34,16 +34,16 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultCorsAuthorizer implements CorsAuthorizer {
+public class NoOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
-	private static final DefaultCorsAuthorizer SHARED_INSTANCE;
+	private static final NoOriginsCorsAuthorizer SHARED_INSTANCE;
 
 	static {
-		SHARED_INSTANCE = new DefaultCorsAuthorizer();
+		SHARED_INSTANCE = new NoOriginsCorsAuthorizer();
 	}
 
 	@Nonnull
-	public static DefaultCorsAuthorizer sharedInstance() {
+	public static NoOriginsCorsAuthorizer sharedInstance() {
 		return SHARED_INSTANCE;
 	}
 
@@ -60,7 +60,6 @@ public class DefaultCorsAuthorizer implements CorsAuthorizer {
 																														@Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);
 		requireNonNull(availableResourceMethodsByHttpMethod);
-
 		return Optional.empty();
 	}
 }
