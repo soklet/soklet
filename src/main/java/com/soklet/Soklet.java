@@ -201,7 +201,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 							// Unhappy path.  Try to use configuration's exception response marshaler...
 							try {
-								return responseMarshaler.forException(requestHolder.get(), t, resourceMethodHolder.get());
+								return responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
 							} catch (Throwable t2) {
 								throwables.add(t2);
 								logHandler.logError(format("An exception occurred while trying to write an exception response for %s while processing %s", t, requestHolder.get()), t2);
@@ -218,7 +218,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 					try {
 						// In the event that an error occurs during processing of a LifecycleInterceptor method, for example
 						logHandler.logError(format("An exception occurred while processing %s", requestHolder.get()), t);
-						marshaledResponseHolder.set(responseMarshaler.forException(requestHolder.get(), t, resourceMethodHolder.get()));
+						marshaledResponseHolder.set(responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get()));
 					} catch (Throwable t2) {
 						throwables.add(t2);
 						logHandler.logError(format("An exception occurred when writing a response while processing %s", requestHolder.get()), t2);
@@ -287,11 +287,11 @@ public class Soklet implements AutoCloseable, RequestHandler {
 			// If that fails, use the failsafe.
 			if (marshaledResponseHolder.get() == null) {
 				try {
-					marshaledResponseHolder.set(responseMarshaler.forException(requestHolder.get(), t, resourceMethodHolder.get()));
+					marshaledResponseHolder.set(responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get()));
 				} catch (Throwable t2) {
 					throwables.add(t2);
 
-					logHandler.logError(format("An exception occurred during request wrapping while invoking %s#forException when processing %s",
+					logHandler.logError(format("An exception occurred during request wrapping while invoking %s#forThrowable when processing %s",
 							ResponseMarshaler.class.getSimpleName(), requestHolder.get()), t2);
 
 					marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), t));

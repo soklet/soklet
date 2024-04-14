@@ -91,7 +91,7 @@ public interface ResponseMarshaler {
 															 @Nonnull Set<HttpMethod> allowedHttpMethods);
 
 	@Nonnull
-	MarshaledResponse forException(@Nonnull Request request,
+	MarshaledResponse forThrowable(@Nonnull Request request,
 																 @Nonnull Throwable throwable,
 																 @Nullable ResourceMethod resourceMethod);
 

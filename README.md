@@ -329,7 +329,7 @@ HTTP 400: Bad Request
 ```
 
 Behind the scenes, Soklet provides specific exception types with developer-friendly messages.
-It's up to you to handle them and surface to your API clients however you like in your [`ResponseMarshaler::forException`](#microhttpResponse-marshaler) implementation.
+It's up to you to handle them and surface to your API clients however you like in your [`ResponseMarshaler::forThrowable`](#microhttpResponse-marshaler) implementation.
 
 ```text
 com.soklet.exception.IllegalQueryParameterException: Illegal value 'abc' was specified for query parameter 'input' (was expecting a value convertible to class java.lang.Integer)
@@ -383,7 +383,7 @@ Hooks are provided for these scenarios:
 * "Happy path" - a non-exceptional, non-OPTIONS, non-CORS request
     * [`ResponseMarshaler::forHappyPath`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forHappyPath(com.soklet.core.Request,com.soklet.core.Response,com.soklet.core.ResourceMethod))
 * Uncaught exception
-    * [`ResponseMarshaler::forException`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forException(com.soklet.core.Request,java.lang.Throwable,com.soklet.core.ResourceMethod))    
+    * [`ResponseMarshaler::forThrowable`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forThrowable(com.soklet.core.Request,java.lang.Throwable,com.soklet.core.ResourceMethod))    
 * No matching Resource Method (HTTP 404)
     * [`ResponseMarshaler::forNotFound`](https://javadoc.soklet.com/com/soklet/core/ResponseMarshaler.html#forNotFound(com.soklet.core.Request))
 * Method not allowed (HTTP 405)
@@ -410,7 +410,7 @@ SokletConfiguration configuration = new SokletConfiguration.Builder(server)
     // Here, we focus on exception marshaling.
     @Nonnull
     @Override
-    public MarshaledResponse forException(@Nonnull Request request,
+    public MarshaledResponse forThrowable(@Nonnull Request request,
                                           @Nonnull Throwable throwable,
                                           @Nullable ResourceMethod resourceMethod) {
       int statusCode = 500;

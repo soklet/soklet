@@ -202,7 +202,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse forException(@Nonnull Request request,
+	public MarshaledResponse forThrowable(@Nonnull Request request,
 																				@Nonnull Throwable throwable,
 																				@Nullable ResourceMethod resourceMethod) {
 		requireNonNull(request);
