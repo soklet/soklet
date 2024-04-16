@@ -16,6 +16,8 @@
 
 package com.soklet.core.impl;
 
+import com.soklet.Soklet;
+import com.soklet.SokletConfiguration;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
 import com.soklet.core.RequestHandler;
@@ -27,6 +29,9 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Mock server that doesn't touch the network at all, useful for testing.
@@ -41,6 +46,27 @@ public class MockServer implements Server {
 	private RequestHandler requestHandler;
 	@Nonnull
 	private Boolean started;
+
+	public static void run(@Nonnull SokletConfiguration sokletConfiguration,
+												 @Nonnull Consumer<MockServer> mockServerConsumer) {
+		requireNonNull(sokletConfiguration);
+		requireNonNull(mockServerConsumer);
+
+		MockServer mockServer = new MockServer();
+
+		SokletConfiguration mockConfiguration = sokletConfiguration.copy()
+				.server(mockServer)
+				.finish();
+
+		try (Soklet soklet = new Soklet(mockConfiguration)) {
+			soklet.start();
+			mockServerConsumer.accept(mockServer);
+		} catch (RuntimeException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
 
 	public MockServer() {
 		this.lock = new ReentrantLock();
