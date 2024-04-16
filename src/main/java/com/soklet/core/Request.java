@@ -520,8 +520,8 @@ public class Request {
 
 			this.builder = new Builder(httpMethodFunction.apply(builder.httpMethod), builder.uri)
 					.id(builder.id)
-					.queryParameters(builder.queryParameters)
-					.headers(builder.headers)
+					.queryParameters(builder.queryParameters == null ? null : new LinkedHashMap<>(builder.queryParameters))
+					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
 					.body(builder.body)
 					.contentTooLarge(builder.contentTooLarge);
 
@@ -534,8 +534,8 @@ public class Request {
 
 			this.builder = new Builder(builder.httpMethod, uriFunction.apply(builder.uri))
 					.id(builder.id)
-					.queryParameters(builder.queryParameters)
-					.headers(builder.headers)
+					.queryParameters(builder.queryParameters == null ? null : new LinkedHashMap<>(builder.queryParameters))
+					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
 					.body(builder.body)
 					.contentTooLarge(builder.contentTooLarge);
 
@@ -554,7 +554,7 @@ public class Request {
 		public Copier queryParameters(@Nonnull Consumer<Map<String, Set<String>>> queryParametersConsumer) {
 			requireNonNull(queryParametersConsumer);
 
-			queryParametersConsumer.accept(builder.queryParameters);
+			queryParametersConsumer.accept(builder.queryParameters == null ? new LinkedHashMap<>() : builder.queryParameters);
 			return this;
 		}
 
@@ -562,7 +562,7 @@ public class Request {
 		public Copier headers(@Nonnull Consumer<Map<String, Set<String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
-			headersConsumer.accept(builder.headers);
+			headersConsumer.accept(builder.headers == null ? new LinkedCaseInsensitiveMap<>() : builder.headers);
 			return this;
 		}
 
