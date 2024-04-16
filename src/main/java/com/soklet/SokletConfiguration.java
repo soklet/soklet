@@ -26,7 +26,6 @@ import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
-import com.soklet.core.impl.NoOriginsCorsAuthorizer;
 import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultLifecycleInterceptor;
 import com.soklet.core.impl.DefaultLogHandler;
@@ -34,6 +33,7 @@ import com.soklet.core.impl.DefaultRequestBodyMarshaler;
 import com.soklet.core.impl.DefaultResourceMethodParameterProvider;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.DefaultResponseMarshaler;
+import com.soklet.core.impl.NoOriginsCorsAuthorizer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -81,6 +81,11 @@ public class SokletConfiguration {
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : DefaultResponseMarshaler.sharedInstance();
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : NoOriginsCorsAuthorizer.sharedInstance();
+	}
+
+	@Nonnull
+	public Copier copy() {
+		return new Copier(this);
 	}
 
 	@Nonnull
@@ -143,7 +148,7 @@ public class SokletConfiguration {
 	@NotThreadSafe
 	public static class Builder {
 		@Nonnull
-		private final Server server;
+		private Server server;
 		@Nullable
 		private InstanceProvider instanceProvider;
 		@Nullable
@@ -167,6 +172,13 @@ public class SokletConfiguration {
 		public Builder(@Nonnull Server server) {
 			requireNonNull(server);
 			this.server = server;
+		}
+
+		@Nonnull
+		public Builder server(@Nonnull Server server) {
+			requireNonNull(server);
+			this.server = server;
+			return this;
 		}
 
 		@Nonnull
@@ -226,6 +238,100 @@ public class SokletConfiguration {
 		@Nonnull
 		public SokletConfiguration build() {
 			return new SokletConfiguration(this);
+		}
+	}
+
+	/**
+	 * Builder used to copy instances of {@link SokletConfiguration}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	public static class Copier {
+		@Nonnull
+		private SokletConfiguration.Builder builder;
+
+		Copier(@Nonnull SokletConfiguration sokletConfiguration) {
+			requireNonNull(sokletConfiguration);
+
+			this.builder = new SokletConfiguration.Builder(sokletConfiguration.getServer());
+			this.builder.instanceProvider = sokletConfiguration.getInstanceProvider();
+			this.builder.valueConverterRegistry = sokletConfiguration.valueConverterRegistry;
+			this.builder.requestBodyMarshaler = sokletConfiguration.requestBodyMarshaler;
+			this.builder.resourceMethodResolver = sokletConfiguration.resourceMethodResolver;
+			this.builder.resourceMethodParameterProvider = sokletConfiguration.resourceMethodParameterProvider;
+			this.builder.responseMarshaler = sokletConfiguration.responseMarshaler;
+			this.builder.lifecycleInterceptor = sokletConfiguration.lifecycleInterceptor;
+			this.builder.corsAuthorizer = sokletConfiguration.corsAuthorizer;
+			this.builder.logHandler = sokletConfiguration.logHandler;
+		}
+
+		@Nonnull
+		public Copier server(@Nonnull Server server) {
+			requireNonNull(server);
+			this.builder.server = server;
+			return this;
+		}
+
+		@Nonnull
+		public Copier instanceProvider(@Nullable InstanceProvider instanceProvider) {
+			this.builder.instanceProvider = instanceProvider;
+			return this;
+		}
+
+		@Nonnull
+		public Copier valueConverterRegistry(@Nullable ValueConverterRegistry valueConverterRegistry) {
+			this.builder.valueConverterRegistry = valueConverterRegistry;
+			return this;
+		}
+
+		@Nonnull
+		public Copier requestBodyMarshaler(@Nullable RequestBodyMarshaler requestBodyMarshaler) {
+			this.builder.requestBodyMarshaler = requestBodyMarshaler;
+			return this;
+		}
+
+		@Nonnull
+		public Copier resourceMethodResolver(@Nullable ResourceMethodResolver resourceMethodResolver) {
+			this.builder.resourceMethodResolver = resourceMethodResolver;
+			return this;
+		}
+
+		@Nonnull
+		public Copier resourceMethodParameterProvider(@Nullable ResourceMethodParameterProvider resourceMethodParameterProvider) {
+			this.builder.resourceMethodParameterProvider = resourceMethodParameterProvider;
+			return this;
+		}
+
+		@Nonnull
+		public Copier responseMarshaler(@Nullable ResponseMarshaler responseMarshaler) {
+			this.builder.responseMarshaler = responseMarshaler;
+			return this;
+		}
+
+		@Nonnull
+		public Copier lifecycleInterceptor(@Nullable LifecycleInterceptor lifecycleInterceptor) {
+			this.builder.lifecycleInterceptor = lifecycleInterceptor;
+			return this;
+		}
+
+		@Nonnull
+		public Copier corsAuthorizer(@Nullable CorsAuthorizer corsAuthorizer) {
+			this.builder.corsAuthorizer = corsAuthorizer;
+			return this;
+		}
+
+		@Nonnull
+		public Copier logHandler(@Nullable LogHandler logHandler) {
+			this.builder.logHandler = logHandler;
+			return this;
+		}
+
+		@Nonnull
+		public SokletConfiguration finish() {
+			return this.builder.build();
 		}
 	}
 }
