@@ -24,9 +24,13 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -36,7 +40,9 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
+import static com.soklet.core.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
@@ -102,9 +108,6 @@ public class Request {
 		this.lock = new ReentrantLock();
 		this.id = builder.id == null ? idGenerator.generateId() : builder.id;
 		this.httpMethod = builder.httpMethod;
-		this.uri = builder.uri;
-		this.path = Utilities.normalizedPathForUrl(builder.uri);
-		this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(builder.uri));
 
 		// Header names are case-insensitive.  Enforce that here with a special map
 		this.headers = Collections.unmodifiableMap(new LinkedCaseInsensitiveMap<>(builder.headers));
@@ -113,6 +116,59 @@ public class Request {
 		this.body = builder.body;
 		this.contentType = Utilities.extractContentTypeFromHeaders(this.headers).orElse(null);
 		this.charset = Utilities.extractCharsetFromHeaders(this.headers).orElse(null);
+
+		String uri = trimAggressivelyToNull(builder.uri);
+
+		if (uri == null)
+			throw new IllegalArgumentException("URI cannot be blank.");
+
+		if (!uri.startsWith("/"))
+			throw new IllegalArgumentException(format("URI must start with a '/' character. Illegal URI was '%s'", uri));
+
+		// If the URI contains a query string, parse query parameters (if present) from it
+		if (uri.contains("?")) {
+			this.uri = uri;
+			this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(uri));
+
+			// Cannot have 2 different ways of specifying query parameters
+			if (builder.queryParameters != null && builder.queryParameters.size() > 0)
+				throw new IllegalArgumentException("You cannot specify both query parameters and a URI with a query string.");
+		} else {
+			// If the URI does not contain a query string, then use query parameters provided by the builder, if present
+			this.queryParameters = builder.queryParameters == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(builder.queryParameters));
+
+			if (this.queryParameters.size() == 0) {
+				this.uri = uri;
+			} else {
+				Charset queryParameterCharset = getCharset().orElse(DEFAULT_CHARSET);
+				String queryString = this.queryParameters.entrySet().stream()
+						.map((entry) -> {
+							String name = entry.getKey();
+							Set<String> values = entry.getValue();
+
+							if (name == null)
+								return List.<String>of();
+
+							if (values == null || values.size() == 0)
+								return List.of(format("%s=", URLEncoder.encode(name, queryParameterCharset)));
+
+							List<String> nameValuePairs = new ArrayList<>();
+
+							for (String value : values)
+								nameValuePairs.add(format("%s=%s", URLEncoder.encode(name, queryParameterCharset),
+										value == null ? "" : URLEncoder.encode(value, queryParameterCharset)));
+
+							return nameValuePairs;
+						})
+						.filter(nameValuePairs -> nameValuePairs.size() > 0)
+						.flatMap(Collection::stream)
+						.collect(Collectors.joining("&"));
+
+				this.uri = format("%s?%s", uri, queryString);
+			}
+		}
+
+		this.path = Utilities.normalizedPathForUrl(uri);
 
 		// Form parameters
 		// TODO: optimize copy/modify scenarios - we don't want to be re-processing body data
@@ -370,6 +426,8 @@ public class Request {
 		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
+		private Map<String, Set<String>> queryParameters;
+		@Nullable
 		private Map<String, Set<String>> headers;
 		@Nullable
 		private byte[] body;
@@ -400,6 +458,12 @@ public class Request {
 		@Nonnull
 		public Builder multipartParser(@Nullable MultipartParser multipartParser) {
 			this.multipartParser = multipartParser;
+			return this;
+		}
+
+		@Nonnull
+		public Builder queryParameters(@Nullable Map<String, Set<String>> queryParameters) {
+			this.queryParameters = queryParameters;
 			return this;
 		}
 
@@ -444,6 +508,7 @@ public class Request {
 
 			this.builder = new Builder(request.getHttpMethod(), request.getUri())
 					.id(request.getId())
+					.queryParameters(new LinkedHashMap<>(request.getQueryParameters()))
 					.headers(new LinkedCaseInsensitiveMap<>(request.getHeaders()))
 					.body(request.getBody().orElse(null))
 					.contentTooLarge(request.isContentTooLarge());
@@ -455,7 +520,8 @@ public class Request {
 
 			this.builder = new Builder(httpMethodFunction.apply(builder.httpMethod), builder.uri)
 					.id(builder.id)
-					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
+					.queryParameters(builder.queryParameters)
+					.headers(builder.headers)
 					.body(builder.body)
 					.contentTooLarge(builder.contentTooLarge);
 
@@ -468,7 +534,8 @@ public class Request {
 
 			this.builder = new Builder(builder.httpMethod, uriFunction.apply(builder.uri))
 					.id(builder.id)
-					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
+					.queryParameters(builder.queryParameters)
+					.headers(builder.headers)
 					.body(builder.body)
 					.contentTooLarge(builder.contentTooLarge);
 
@@ -480,6 +547,14 @@ public class Request {
 			requireNonNull(idFunction);
 
 			builder.id = idFunction.apply(builder.id);
+			return this;
+		}
+
+		@Nonnull
+		public Copier queryParameters(@Nonnull Consumer<Map<String, Set<String>>> queryParametersConsumer) {
+			requireNonNull(queryParametersConsumer);
+
+			queryParametersConsumer.accept(builder.queryParameters);
 			return this;
 		}
 
