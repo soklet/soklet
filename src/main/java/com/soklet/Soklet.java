@@ -34,6 +34,7 @@ import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.Response;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
+import com.soklet.core.Simulator;
 import com.soklet.core.StatusCode;
 
 import javax.annotation.Nonnull;
@@ -592,6 +593,27 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		}
 	}
 
+	public static void runSimulator(@Nonnull SokletConfiguration sokletConfiguration,
+																	@Nonnull Consumer<Simulator> simulatorConsumer) {
+		requireNonNull(sokletConfiguration);
+		requireNonNull(simulatorConsumer);
+
+		MockServer mockServer = new MockServer();
+
+		SokletConfiguration mockConfiguration = sokletConfiguration.copy()
+				.server(mockServer)
+				.finish();
+
+		try (Soklet soklet = new Soklet(mockConfiguration)) {
+			soklet.start();
+			simulatorConsumer.accept(mockServer);
+		} catch (RuntimeException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
 	@Nonnull
 	protected SokletConfiguration getSokletConfiguration() {
 		return this.sokletConfiguration;
@@ -600,5 +622,101 @@ public class Soklet implements AutoCloseable, RequestHandler {
 	@Nonnull
 	protected ReentrantLock getLock() {
 		return this.lock;
+	}
+
+	/**
+	 * Mock server that doesn't touch the network at all, useful for testing.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	static class MockServer implements Server, Simulator {
+		@Nonnull
+		private final ReentrantLock lock;
+		@Nullable
+		private RequestHandler requestHandler;
+		@Nonnull
+		private Boolean started;
+
+		public MockServer() {
+			this.lock = new ReentrantLock();
+			this.started = false;
+		}
+
+		@Override
+		public void start() {
+			getLock().lock();
+
+			try {
+				if (isStarted())
+					return;
+
+				this.started = true;
+			} finally {
+				getLock().unlock();
+			}
+		}
+
+		@Override
+		public void stop() {
+			getLock().lock();
+
+			try {
+				if (!isStarted())
+					return;
+
+				this.started = false;
+			} finally {
+				getLock().unlock();
+			}
+		}
+
+		@Nonnull
+		@Override
+		public Boolean isStarted() {
+			getLock().lock();
+
+			try {
+				return this.started;
+			} finally {
+				getLock().unlock();
+			}
+		}
+
+		@Override
+		public void close() {
+			stop();
+		}
+
+		@Nonnull
+		@Override
+		public MarshaledResponse simulateRequest(@Nonnull Request request) {
+			AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
+			RequestHandler requestHandler = getRequestHandler().orElse(null);
+
+			if (requestHandler == null)
+				throw new IllegalStateException("You must register a request handler prior to simulating requests");
+
+			requestHandler.handleRequest(request, (marshaledResponse -> {
+				marshaledResponseHolder.set(marshaledResponse);
+			}));
+
+			return marshaledResponseHolder.get();
+		}
+
+		@Override
+		public void registerRequestHandler(@Nullable RequestHandler requestHandler) {
+			this.requestHandler = requestHandler;
+		}
+
+		@Nonnull
+		protected ReentrantLock getLock() {
+			return this.lock;
+		}
+
+		@Nullable
+		protected Optional<RequestHandler> getRequestHandler() {
+			return Optional.ofNullable(this.requestHandler);
+		}
 	}
 }
