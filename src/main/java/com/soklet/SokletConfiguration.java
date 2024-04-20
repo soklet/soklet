@@ -68,6 +68,17 @@ public class SokletConfiguration {
 	@Nonnull
 	private final Server server;
 
+	@Nonnull
+	public static Builder withServer(@Nonnull Server server) {
+		requireNonNull(server);
+		return new Builder(server);
+	}
+
+	@Nonnull
+	public static Builder withMockServer() {
+		return new Builder(new Soklet.MockServer());
+	}
+
 	public SokletConfiguration(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -169,7 +180,7 @@ public class SokletConfiguration {
 		private LogHandler logHandler;
 
 		@Nonnull
-		public Builder(@Nonnull Server server) {
+		protected Builder(@Nonnull Server server) {
 			requireNonNull(server);
 			this.server = server;
 		}

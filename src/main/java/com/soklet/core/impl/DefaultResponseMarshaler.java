@@ -108,7 +108,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		if (!headers.keySet().contains("Content-Type"))
 			headers.put("Content-Type", Set.of(binaryResponse ? "application/octet-stream" : format("text/plain; charset=%s", getCharset().name())));
 
-		return new MarshaledResponse.Builder(response.getStatusCode())
+		return MarshaledResponse.withStatusCode(response.getStatusCode())
 				.headers(headers)
 				.cookies(response.getCookies())
 				.body(body)
@@ -122,7 +122,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 		Integer statusCode = 404;
 
-		return new MarshaledResponse.Builder(statusCode)
+		return MarshaledResponse.withStatusCode(statusCode)
 				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
 				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 				.build();
@@ -145,7 +145,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		headers.put("Allow", allowedHttpMethodsAsStrings);
 		headers.put("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name())));
 
-		return new MarshaledResponse.Builder(statusCode)
+		return MarshaledResponse.withStatusCode(statusCode)
 				.headers(headers)
 				.body(format("HTTP %d: %s. Requested: %s, Allowed: %s",
 						statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase(), request.getHttpMethod().name(),
@@ -161,7 +161,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 		Integer statusCode = 413;
 
-		return new MarshaledResponse.Builder(statusCode)
+		return MarshaledResponse.withStatusCode(statusCode)
 				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
 				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 				.build();
@@ -178,7 +178,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 				.map(httpMethod -> httpMethod.name())
 				.collect(Collectors.toSet()));
 
-		return new MarshaledResponse.Builder(204)
+		return MarshaledResponse.withStatusCode(204)
 				.headers(Map.of("Allow", allowedHttpMethodsAsStrings))
 				.build();
 	}
@@ -210,7 +210,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 		Integer statusCode = throwable instanceof BadRequestException ? 400 : 500;
 
-		return new MarshaledResponse.Builder(statusCode)
+		return MarshaledResponse.withStatusCode(statusCode)
 				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
 				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 				.build();
@@ -252,7 +252,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		if (accessControlMaxAge != null)
 			headers.put("Access-Control-Max-Age", Set.of(String.valueOf(accessControlMaxAge.toSeconds())));
 
-		return new MarshaledResponse.Builder(statusCode)
+		return MarshaledResponse.withStatusCode(statusCode)
 				.headers(headers)
 				.build();
 	}
@@ -264,7 +264,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 		Integer statusCode = 403;
 
-		return new MarshaledResponse.Builder(statusCode)
+		return MarshaledResponse.withStatusCode(statusCode)
 				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
 				.body(format("HTTP %d: %s (CORS preflight rejected)", statusCode,
 						StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))

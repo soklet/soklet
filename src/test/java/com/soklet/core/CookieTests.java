@@ -60,13 +60,13 @@ public class CookieTests {
 
 	@Test
 	public void setCookieHeaderRepresentationTests() {
-		ResponseCookie basicResponseCookie = new ResponseCookie.Builder("name", "value").build();
+		ResponseCookie basicResponseCookie = ResponseCookie.with("name", "value").build();
 		Assert.assertEquals("name=value", basicResponseCookie.toSetCookieHeaderRepresentation());
 
-		ResponseCookie valuelessResponseCookie = new ResponseCookie.Builder("name", null).build();
+		ResponseCookie valuelessResponseCookie = ResponseCookie.withName("name").build();
 		Assert.assertEquals("name=", valuelessResponseCookie.toSetCookieHeaderRepresentation());
 
-		ResponseCookie everythingResponseCookie = new ResponseCookie.Builder("name", "value")
+		ResponseCookie everythingResponseCookie = ResponseCookie.with("name", "value")
 				.domain("www.soklet.com")
 				.path("/")
 				.httpOnly(true)

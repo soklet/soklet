@@ -34,6 +34,7 @@ import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.Response;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
+import com.soklet.core.Simulator;
 import com.soklet.core.StatusCode;
 
 import javax.annotation.Nonnull;
@@ -409,7 +410,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				}
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
 				// If there's a matching GET resource method for this HEAD request, then invoke it
-				Request headGetRequest = new Request.Builder(HttpMethod.GET, request.getUri()).build();
+				Request headGetRequest = Request.with(HttpMethod.GET, request.getUri()).build();
 				ResourceMethod headGetResourceMethod = resourceMethodResolver.resourceMethodForRequest(headGetRequest).orElse(null);
 
 				if (headGetResourceMethod != null)
@@ -475,13 +476,13 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		// If it's a Response object, use as is.
 		// If it's a non-Response type of object, assume it's the response body and wrap in a Response.
 		if (responseObject == null)
-			response = new Response.Builder(204).build();
+			response = Response.withStatusCode(204).build();
 		else if (responseObject instanceof MarshaledResponse)
 			return (MarshaledResponse) responseObject;
 		else if (responseObject instanceof Response)
 			response = (Response) responseObject;
 		else
-			response = new Response.Builder(200).body(responseObject).build();
+			response = Response.withStatusCode(200).body(responseObject).build();
 
 		return responseMarshaler.forHappyPath(request, response, resourceMethod);
 	}
@@ -551,7 +552,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		Map<HttpMethod, ResourceMethod> matchingResourceMethodsByHttpMethod = new LinkedHashMap<>(HttpMethod.values().length);
 
 		for (HttpMethod httpMethod : HttpMethod.values()) {
-			Request otherRequest = new Request.Builder(httpMethod, request.getUri()).build();
+			Request otherRequest = Request.with(httpMethod, request.getUri()).build();
 			ResourceMethod resourceMethod = resourceMethodResolver.resourceMethodForRequest(otherRequest).orElse(null);
 
 			if (resourceMethod != null)
@@ -570,7 +571,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		Integer statusCode = 500;
 		Charset charset = StandardCharsets.UTF_8;
 
-		return new MarshaledResponse.Builder(statusCode)
+		return MarshaledResponse.withStatusCode(statusCode)
 				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", charset.name()))))
 				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(charset))
 				.build();
@@ -592,6 +593,27 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		}
 	}
 
+	public static void runSimulator(@Nonnull SokletConfiguration sokletConfiguration,
+																	@Nonnull Consumer<Simulator> simulatorConsumer) {
+		requireNonNull(sokletConfiguration);
+		requireNonNull(simulatorConsumer);
+
+		MockServer mockServer = new MockServer();
+
+		SokletConfiguration mockConfiguration = sokletConfiguration.copy()
+				.server(mockServer)
+				.finish();
+
+		try (Soklet soklet = new Soklet(mockConfiguration)) {
+			soklet.start();
+			simulatorConsumer.accept(mockServer);
+		} catch (RuntimeException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
 	@Nonnull
 	protected SokletConfiguration getSokletConfiguration() {
 		return this.sokletConfiguration;
@@ -600,5 +622,58 @@ public class Soklet implements AutoCloseable, RequestHandler {
 	@Nonnull
 	protected ReentrantLock getLock() {
 		return this.lock;
+	}
+
+	/**
+	 * Mock server that doesn't touch the network at all, useful for testing.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	static class MockServer implements Server, Simulator {
+		@Nullable
+		private RequestHandler requestHandler;
+
+		@Override
+		public void start() {
+			// No-op
+		}
+
+		@Override
+		public void stop() {
+			// No-op
+		}
+
+		@Nonnull
+		@Override
+		public Boolean isStarted() {
+			return true;
+		}
+
+		@Nonnull
+		@Override
+		public MarshaledResponse performRequest(@Nonnull Request request) {
+			AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
+			RequestHandler requestHandler = getRequestHandler().orElse(null);
+
+			if (requestHandler == null)
+				throw new IllegalStateException("You must register a request handler prior to simulating requests");
+
+			requestHandler.handleRequest(request, (marshaledResponse -> {
+				marshaledResponseHolder.set(marshaledResponse);
+			}));
+
+			return marshaledResponseHolder.get();
+		}
+
+		@Override
+		public void registerRequestHandler(@Nullable RequestHandler requestHandler) {
+			this.requestHandler = requestHandler;
+		}
+
+		@Nullable
+		protected Optional<RequestHandler> getRequestHandler() {
+			return Optional.ofNullable(this.requestHandler);
+		}
 	}
 }

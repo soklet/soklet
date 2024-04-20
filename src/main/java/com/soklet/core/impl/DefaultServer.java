@@ -136,6 +136,12 @@ public class DefaultServer implements Server {
 	@Nullable
 	private volatile EventLoop eventLoop;
 
+	@Nonnull
+	public static Builder withPort(@Nonnull Integer port) {
+		requireNonNull(port);
+		return new Builder(port);
+	}
+
 	protected DefaultServer(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -235,7 +241,7 @@ public class DefaultServer implements Server {
 							}
 						}
 
-						Request request = new Request.Builder(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), microhttpRequest.uri())
+						Request request = Request.with(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), microhttpRequest.uri())
 								.multipartParser(getMultipartParser())
 								.headers(headers)
 								.body(body)
@@ -349,11 +355,6 @@ public class DefaultServer implements Server {
 		} finally {
 			getLock().unlock();
 		}
-	}
-
-	@Override
-	public void close() {
-		stop();
 	}
 
 	@Override
@@ -558,7 +559,7 @@ public class DefaultServer implements Server {
 	@NotThreadSafe
 	public static class Builder {
 		@Nonnull
-		private final Integer port;
+		private Integer port;
 		@Nullable
 		private String host;
 		@Nullable
@@ -583,9 +584,16 @@ public class DefaultServer implements Server {
 		private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 
 		@Nonnull
-		public Builder(@Nonnull Integer port) {
+		protected Builder(@Nonnull Integer port) {
 			requireNonNull(port);
 			this.port = port;
+		}
+
+		@Nonnull
+		public Builder port(@Nonnull Integer port) {
+			requireNonNull(port);
+			this.port = port;
+			return this;
 		}
 
 		@Nonnull

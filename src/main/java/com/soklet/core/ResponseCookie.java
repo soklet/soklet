@@ -56,22 +56,17 @@ public class ResponseCookie {
 	@Nullable
 	private final SameSite sameSite;
 
-	private ResponseCookie(@Nonnull Builder builder) {
-		requireNonNull(builder);
+	@Nonnull
+	public static Builder with(@Nonnull String name,
+														 @Nullable String value) {
+		requireNonNull(name);
+		return new Builder(name, value);
+	}
 
-		this.name = builder.name;
-		this.value = builder.value;
-		this.maxAge = builder.maxAge;
-		this.domain = builder.domain;
-		this.path = builder.path;
-		this.secure = builder.secure == null ? false : builder.secure;
-		this.httpOnly = builder.httpOnly == null ? false : builder.httpOnly;
-		this.sameSite = builder.sameSite;
-
-		Rfc6265Utils.validateCookieName(getName());
-		Rfc6265Utils.validateCookieValue(getValue().orElse(null));
-		Rfc6265Utils.validateDomain(getDomain().orElse(null));
-		Rfc6265Utils.validatePath(getPath().orElse(null));
+	@Nonnull
+	public static Builder withName(@Nonnull String name) {
+		requireNonNull(name);
+		return new Builder(name);
 	}
 
 	@Nonnull
@@ -90,6 +85,24 @@ public class ResponseCookie {
 						.path(httpCookie.getPath())
 						.build())
 				.collect(Collectors.toSet());
+	}
+
+	protected ResponseCookie(@Nonnull Builder builder) {
+		requireNonNull(builder);
+
+		this.name = builder.name;
+		this.value = builder.value;
+		this.maxAge = builder.maxAge;
+		this.domain = builder.domain;
+		this.path = builder.path;
+		this.secure = builder.secure == null ? false : builder.secure;
+		this.httpOnly = builder.httpOnly == null ? false : builder.httpOnly;
+		this.sameSite = builder.sameSite;
+
+		Rfc6265Utils.validateCookieName(getName());
+		Rfc6265Utils.validateCookieValue(getValue().orElse(null));
+		Rfc6265Utils.validateDomain(getDomain().orElse(null));
+		Rfc6265Utils.validatePath(getPath().orElse(null));
 	}
 
 	@Nonnull
@@ -243,9 +256,9 @@ public class ResponseCookie {
 	@NotThreadSafe
 	public static class Builder {
 		@Nonnull
-		private final String name;
+		private String name;
 		@Nullable
-		private final String value;
+		private String value;
 		@Nullable
 		private Duration maxAge;
 		@Nullable
@@ -259,11 +272,29 @@ public class ResponseCookie {
 		@Nullable
 		private SameSite sameSite;
 
-		public Builder(@Nonnull String name,
-									 @Nullable String value) {
+		protected Builder(@Nonnull String name) {
+			requireNonNull(name);
+			this.name = name;
+		}
+
+		protected Builder(@Nonnull String name,
+											@Nullable String value) {
 			requireNonNull(name);
 			this.name = name;
 			this.value = value;
+		}
+
+		@Nonnull
+		public Builder name(@Nonnull String name) {
+			requireNonNull(name);
+			this.name = name;
+			return this;
+		}
+
+		@Nonnull
+		public Builder value(@Nullable String value) {
+			this.value = value;
+			return this;
 		}
 
 		@Nonnull

@@ -17,22 +17,14 @@
 package com.soklet.core;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 /**
+ * Simulates server behavior, e.g. performing a request and receiving a response.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface Server extends AutoCloseable {
-	void start();
-
-	void stop();
-
+@FunctionalInterface
+public interface Simulator {
 	@Nonnull
-	Boolean isStarted();
-
-	void registerRequestHandler(@Nullable RequestHandler requestHandler);
-
-	default void close() throws Exception {
-		stop();
-	}
+	MarshaledResponse performRequest(@Nonnull Request request);
 }

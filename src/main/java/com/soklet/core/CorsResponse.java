@@ -39,6 +39,12 @@ public class CorsResponse {
 	@Nonnull
 	private final Set<String> accessControlExposeHeaders;
 
+	@Nonnull
+	public static Builder withAccessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+		requireNonNull(accessControlAllowOrigin);
+		return new Builder(accessControlAllowOrigin);
+	}
+
 	protected CorsResponse(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -99,15 +105,22 @@ public class CorsResponse {
 	@NotThreadSafe
 	public static class Builder {
 		@Nonnull
-		private final String accessControlAllowOrigin;
+		private String accessControlAllowOrigin;
 		@Nullable
 		private Boolean accessControlAllowCredentials;
 		@Nullable
 		private Set<String> accessControlExposeHeaders;
 
-		public Builder(@Nonnull String accessControlAllowOrigin) {
+		protected Builder(@Nonnull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
 			this.accessControlAllowOrigin = accessControlAllowOrigin;
+		}
+
+		@Nonnull
+		public Builder accessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+			requireNonNull(accessControlAllowOrigin);
+			this.accessControlAllowOrigin = accessControlAllowOrigin;
+			return this;
 		}
 
 		@Nonnull

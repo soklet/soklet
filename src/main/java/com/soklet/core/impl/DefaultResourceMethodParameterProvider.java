@@ -866,6 +866,14 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		}
 	}
 
+	/**
+	 * Given a parameter, make its "real" type a little more accessible.
+	 * That means:
+	 * <p>
+	 * 1. If wrapped in an optional, the real type is the wrapped value
+	 * 2. If it's a List type, the real type is the list element's type
+	 * 3. If neither 1 nor 2 then no transformations performed
+	 */
 	@ThreadSafe
 	protected static class ParameterType {
 		@Nonnull
@@ -887,10 +895,13 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				wrappedInOptional = true;
 			}
 
-			// Gross hack to determine if this property is a generic List
-			if (ParameterizedType.class.isAssignableFrom(normalizedType.getClass())
-					&& normalizedType.getTypeName().startsWith(List.class.getName() + "<"))
-				listElementType = ((ParameterizedType) normalizedType).getActualTypeArguments()[0];
+			// Special handling: determine if this property is a generic List
+			if (ParameterizedType.class.isAssignableFrom(normalizedType.getClass())) {
+				ParameterizedType parameterizedNormalizedType = (ParameterizedType) normalizedType;
+
+				if (parameterizedNormalizedType.getRawType().equals(List.class))
+					listElementType = parameterizedNormalizedType.getActualTypeArguments()[0];
+			}
 
 			this.normalizedType = normalizedType;
 			this.listElementType = listElementType;

@@ -48,6 +48,20 @@ public class Response {
 	@Nullable
 	private final Object body;
 
+	@Nonnull
+	public static Builder withStatusCode(@Nonnull Integer statusCode) {
+		requireNonNull(statusCode);
+		return new Builder(statusCode);
+	}
+
+	@Nonnull
+	public static Builder withRedirect(@Nonnull RedirectType redirectType,
+																		 @Nonnull String location) {
+		requireNonNull(redirectType);
+		requireNonNull(location);
+		return new Builder(redirectType, location);
+	}
+
 	protected Response(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -128,9 +142,9 @@ public class Response {
 	@NotThreadSafe
 	public static class Builder {
 		@Nonnull
-		private final Integer statusCode;
+		private Integer statusCode;
 		@Nullable
-		private final String location;
+		private String location;
 		@Nullable
 		private Set<ResponseCookie> cookies;
 		@Nullable
@@ -138,24 +152,40 @@ public class Response {
 		@Nullable
 		private Object body;
 
-		public Builder() {
-			this(200);
-		}
-
-		public Builder(@Nonnull Integer statusCode) {
+		protected Builder(@Nonnull Integer statusCode) {
 			requireNonNull(statusCode);
 
 			this.statusCode = statusCode;
 			this.location = null;
 		}
 
-		public Builder(@Nonnull RedirectType redirectType,
-									 @Nonnull String location) {
+		protected Builder(@Nonnull RedirectType redirectType,
+											@Nonnull String location) {
 			requireNonNull(redirectType);
 			requireNonNull(location);
 
 			this.statusCode = redirectType.getStatusCode().getStatusCode();
 			this.location = location;
+		}
+
+		@Nonnull
+		public Builder statusCode(@Nonnull Integer statusCode) {
+			requireNonNull(statusCode);
+
+			this.statusCode = statusCode;
+			this.location = null;
+			return this;
+		}
+
+		@Nonnull
+		public Builder redirect(@Nonnull RedirectType redirectType,
+														@Nonnull String location) {
+			requireNonNull(redirectType);
+			requireNonNull(location);
+
+			this.statusCode = redirectType.getStatusCode().getStatusCode();
+			this.location = location;
+			return this;
 		}
 
 		@Nonnull
