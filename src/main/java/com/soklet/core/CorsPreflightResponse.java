@@ -44,6 +44,12 @@ public class CorsPreflightResponse {
 	@Nonnull
 	private final Set<String> accessControlAllowHeaders;
 
+	@Nonnull
+	public static Builder withAccessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+		requireNonNull(accessControlAllowOrigin);
+		return new Builder(accessControlAllowOrigin);
+	}
+
 	protected CorsPreflightResponse(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -120,7 +126,7 @@ public class CorsPreflightResponse {
 	@NotThreadSafe
 	public static class Builder {
 		@Nonnull
-		private final String accessControlAllowOrigin;
+		private String accessControlAllowOrigin;
 		@Nullable
 		private Boolean accessControlAllowCredentials;
 		@Nullable
@@ -130,9 +136,16 @@ public class CorsPreflightResponse {
 		@Nullable
 		private Set<String> accessControlAllowHeaders;
 
-		public Builder(@Nonnull String accessControlAllowOrigin) {
+		protected Builder(@Nonnull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
 			this.accessControlAllowOrigin = accessControlAllowOrigin;
+		}
+
+		@Nonnull
+		public Builder accessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+			requireNonNull(accessControlAllowOrigin);
+			this.accessControlAllowOrigin = accessControlAllowOrigin;
+			return this;
 		}
 
 		@Nonnull

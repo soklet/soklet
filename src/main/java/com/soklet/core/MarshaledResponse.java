@@ -46,6 +46,12 @@ public class MarshaledResponse {
 	@Nullable
 	private final byte[] body;
 
+	@Nonnull
+	public static Builder withStatusCode(@Nonnull Integer statusCode) {
+		requireNonNull(statusCode);
+		return new Builder(statusCode);
+	}
+
 	protected MarshaledResponse(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -97,7 +103,7 @@ public class MarshaledResponse {
 	@NotThreadSafe
 	public static class Builder {
 		@Nonnull
-		private final Integer statusCode;
+		private Integer statusCode;
 		@Nullable
 		private Set<ResponseCookie> responseCookies;
 		@Nullable
@@ -105,9 +111,16 @@ public class MarshaledResponse {
 		@Nullable
 		private byte[] body;
 
-		public Builder(@Nonnull Integer statusCode) {
+		protected Builder(@Nonnull Integer statusCode) {
 			requireNonNull(statusCode);
 			this.statusCode = statusCode;
+		}
+
+		@Nonnull
+		public Builder statusCode(@Nonnull Integer statusCode) {
+			requireNonNull(statusCode);
+			this.statusCode = statusCode;
+			return this;
 		}
 
 		@Nonnull

@@ -144,7 +144,7 @@ public class DefaultMultipartParser implements MultipartParser {
 				String contentType = Utilities.extractContentTypeFromHeaderValue(contentTypeHeaderValue).orElse(null);
 				Charset charset = Utilities.extractCharsetFromHeaderValue(contentTypeHeaderValue).orElse(null);
 
-				MultipartField multipartField = new MultipartField.Builder(name, data.toByteArray())
+				MultipartField multipartField = MultipartField.with(name, data.toByteArray())
 						.filename(filename)
 						.contentType(contentType)
 						.charset(charset)

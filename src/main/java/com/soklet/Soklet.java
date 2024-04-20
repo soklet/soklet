@@ -410,7 +410,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				}
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
 				// If there's a matching GET resource method for this HEAD request, then invoke it
-				Request headGetRequest = new Request.Builder(HttpMethod.GET, request.getUri()).build();
+				Request headGetRequest = Request.with(HttpMethod.GET, request.getUri()).build();
 				ResourceMethod headGetResourceMethod = resourceMethodResolver.resourceMethodForRequest(headGetRequest).orElse(null);
 
 				if (headGetResourceMethod != null)
@@ -476,13 +476,13 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		// If it's a Response object, use as is.
 		// If it's a non-Response type of object, assume it's the response body and wrap in a Response.
 		if (responseObject == null)
-			response = new Response.Builder(204).build();
+			response = Response.withStatusCode(204).build();
 		else if (responseObject instanceof MarshaledResponse)
 			return (MarshaledResponse) responseObject;
 		else if (responseObject instanceof Response)
 			response = (Response) responseObject;
 		else
-			response = new Response.Builder(200).body(responseObject).build();
+			response = Response.withStatusCode(200).body(responseObject).build();
 
 		return responseMarshaler.forHappyPath(request, response, resourceMethod);
 	}
@@ -552,7 +552,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		Map<HttpMethod, ResourceMethod> matchingResourceMethodsByHttpMethod = new LinkedHashMap<>(HttpMethod.values().length);
 
 		for (HttpMethod httpMethod : HttpMethod.values()) {
-			Request otherRequest = new Request.Builder(httpMethod, request.getUri()).build();
+			Request otherRequest = Request.with(httpMethod, request.getUri()).build();
 			ResourceMethod resourceMethod = resourceMethodResolver.resourceMethodForRequest(otherRequest).orElse(null);
 
 			if (resourceMethod != null)
@@ -571,7 +571,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		Integer statusCode = 500;
 		Charset charset = StandardCharsets.UTF_8;
 
-		return new MarshaledResponse.Builder(statusCode)
+		return MarshaledResponse.withStatusCode(statusCode)
 				.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", charset.name()))))
 				.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(charset))
 				.build();
@@ -631,66 +631,28 @@ public class Soklet implements AutoCloseable, RequestHandler {
 	 */
 	@ThreadSafe
 	static class MockServer implements Server, Simulator {
-		@Nonnull
-		private final ReentrantLock lock;
 		@Nullable
 		private RequestHandler requestHandler;
-		@Nonnull
-		private Boolean started;
-
-		public MockServer() {
-			this.lock = new ReentrantLock();
-			this.started = false;
-		}
 
 		@Override
 		public void start() {
-			getLock().lock();
-
-			try {
-				if (isStarted())
-					return;
-
-				this.started = true;
-			} finally {
-				getLock().unlock();
-			}
+			// No-op
 		}
 
 		@Override
 		public void stop() {
-			getLock().lock();
-
-			try {
-				if (!isStarted())
-					return;
-
-				this.started = false;
-			} finally {
-				getLock().unlock();
-			}
+			// No-op
 		}
 
 		@Nonnull
 		@Override
 		public Boolean isStarted() {
-			getLock().lock();
-
-			try {
-				return this.started;
-			} finally {
-				getLock().unlock();
-			}
-		}
-
-		@Override
-		public void close() {
-			stop();
+			return true;
 		}
 
 		@Nonnull
 		@Override
-		public MarshaledResponse simulateRequest(@Nonnull Request request) {
+		public MarshaledResponse performRequest(@Nonnull Request request) {
 			AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
 			RequestHandler requestHandler = getRequestHandler().orElse(null);
 
@@ -707,11 +669,6 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		@Override
 		public void registerRequestHandler(@Nullable RequestHandler requestHandler) {
 			this.requestHandler = requestHandler;
-		}
-
-		@Nonnull
-		protected ReentrantLock getLock() {
-			return this.lock;
 		}
 
 		@Nullable

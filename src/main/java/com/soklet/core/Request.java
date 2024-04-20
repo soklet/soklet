@@ -99,6 +99,15 @@ public class Request {
 	@Nullable
 	private volatile List<Locale> locales = null;
 
+	@Nonnull
+	public static Builder with(@Nonnull HttpMethod httpMethod,
+														 @Nonnull String uri) {
+		requireNonNull(httpMethod);
+		requireNonNull(uri);
+
+		return new Builder(httpMethod, uri);
+	}
+
 	protected Request(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -416,9 +425,9 @@ public class Request {
 	@NotThreadSafe
 	public static class Builder {
 		@Nonnull
-		private final HttpMethod httpMethod;
+		private HttpMethod httpMethod;
 		@Nonnull
-		private final String uri;
+		private String uri;
 		@Nullable
 		private Object id;
 		@Nullable
@@ -434,13 +443,27 @@ public class Request {
 		@Nullable
 		private Boolean contentTooLarge;
 
-		public Builder(@Nonnull HttpMethod httpMethod,
-									 @Nonnull String uri) {
+		protected Builder(@Nonnull HttpMethod httpMethod,
+											@Nonnull String uri) {
 			requireNonNull(httpMethod);
 			requireNonNull(uri);
 
 			this.httpMethod = httpMethod;
 			this.uri = uri;
+		}
+
+		@Nonnull
+		public Builder httpMethod(@Nonnull HttpMethod httpMethod) {
+			requireNonNull(httpMethod);
+			this.httpMethod = httpMethod;
+			return this;
+		}
+
+		@Nonnull
+		public Builder uri(@Nonnull String uri) {
+			requireNonNull(uri);
+			this.uri = uri;
+			return this;
 		}
 
 		@Nonnull

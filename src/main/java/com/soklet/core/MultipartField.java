@@ -57,6 +57,19 @@ public class MultipartField {
 	@Nonnull
 	private final ReentrantLock lock;
 
+	@Nonnull
+	public static Builder with(@Nonnull String name,
+														 @Nullable byte[] value) {
+		requireNonNull(name);
+		return new Builder(name, value);
+	}
+
+	@Nonnull
+	public static Builder withName(@Nonnull String name) {
+		requireNonNull(name);
+		return new Builder(name);
+	}
+
 	protected MultipartField(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -117,9 +130,9 @@ public class MultipartField {
 	@NotThreadSafe
 	public static class Builder {
 		@Nonnull
-		private final String name;
+		private String name;
 		@Nullable
-		private final byte[] data;
+		private byte[] data;
 		@Nullable
 		private String filename;
 		@Nullable
@@ -127,17 +140,30 @@ public class MultipartField {
 		@Nullable
 		private Charset charset;
 
-		public Builder(@Nonnull String name) {
+		protected Builder(@Nonnull String name) {
 			this(name, null);
 		}
 
-		public Builder(@Nonnull String name,
-									 @Nullable byte[] data) {
+		protected Builder(@Nonnull String name,
+											@Nullable byte[] data) {
 			requireNonNull(name);
 			requireNonNull(data);
 
 			this.name = name;
 			this.data = data;
+		}
+
+		@Nonnull
+		public Builder name(@Nonnull String name) {
+			requireNonNull(name);
+			this.name = name;
+			return this;
+		}
+
+		@Nonnull
+		public Builder data(@Nullable byte[] data) {
+			this.data = data;
+			return this;
 		}
 
 		@Nonnull

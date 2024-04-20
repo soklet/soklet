@@ -19,9 +19,12 @@ package com.soklet.core;
 import javax.annotation.Nonnull;
 
 /**
+ * Simulates server behavior, e.g. performing a request and receiving a response.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@FunctionalInterface
 public interface Simulator {
 	@Nonnull
-	MarshaledResponse simulateRequest(@Nonnull Request request);
+	MarshaledResponse performRequest(@Nonnull Request request);
 }

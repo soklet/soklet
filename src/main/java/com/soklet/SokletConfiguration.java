@@ -68,6 +68,17 @@ public class SokletConfiguration {
 	@Nonnull
 	private final Server server;
 
+	@Nonnull
+	public static Builder withServer(@Nonnull Server server) {
+		requireNonNull(server);
+		return new Builder(server);
+	}
+
+	@Nonnull
+	public static Builder withMockServer() {
+		return new Builder(new Soklet.MockServer());
+	}
+
 	public SokletConfiguration(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -81,17 +92,6 @@ public class SokletConfiguration {
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : DefaultResponseMarshaler.sharedInstance();
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : NoOriginsCorsAuthorizer.sharedInstance();
-	}
-
-	@Nonnull
-	public static Builder withServer(@Nonnull Server server) {
-		requireNonNull(server);
-		return new Builder(server);
-	}
-
-	@Nonnull
-	public static Builder withMockServer() {
-		return new Builder(new Soklet.MockServer());
 	}
 
 	@Nonnull
@@ -180,7 +180,7 @@ public class SokletConfiguration {
 		private LogHandler logHandler;
 
 		@Nonnull
-		Builder(@Nonnull Server server) {
+		protected Builder(@Nonnull Server server) {
 			requireNonNull(server);
 			this.server = server;
 		}

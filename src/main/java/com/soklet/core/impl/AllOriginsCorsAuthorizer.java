@@ -41,7 +41,7 @@ public class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 	public Optional<CorsResponse> authorize(@Nonnull Request request) {
 		requireNonNull(request);
 
-		return Optional.of(new CorsResponse.Builder("*")
+		return Optional.of(CorsResponse.withAccessControlAllowOrigin("*")
 				.accessControlExposeHeaders(Set.of("*"))
 				.accessControlAllowCredentials(true)
 				.build());
@@ -54,7 +54,7 @@ public class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 		requireNonNull(request);
 		requireNonNull(availableResourceMethodsByHttpMethod);
 
-		return Optional.of(new CorsPreflightResponse.Builder("*")
+		return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin("*")
 				.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
 				.accessControlAllowHeaders(Set.of("*"))
 				.accessControlAllowCredentials(true)

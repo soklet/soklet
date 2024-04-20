@@ -57,7 +57,7 @@ public class SokletTests {
 		SokletConfiguration configuration = configurationForResourceClasses(Set.of(RequestHandlingBasicsResource.class));
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Response body should be "hello world" as bytes
-			MarshaledResponse marshaledResponse = simulator.simulateRequest(
+			MarshaledResponse marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/hello-world").build());
 
 			Assert.assertArrayEquals("Response body doesn't match",
@@ -65,14 +65,14 @@ public class SokletTests {
 					marshaledResponse.getBody().get());
 
 			// Missing query param?  It should be a 400
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/integer-query-param")
 							.build());
 
 			Assert.assertEquals(400L, (long) marshaledResponse.getStatusCode());
 
 			// Have the query param?  It's a 204
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/integer-query-param?intQueryParam=123")
 							.build());
 
@@ -82,7 +82,7 @@ public class SokletTests {
 					marshaledResponse.getBody().orElse(emptyByteArray()));
 
 			// Have the custom-named query param?  It's a 200 and echoes back the param as a string
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/query-param-custom-name?local_date=2023-09-30")
 							.build());
 
@@ -92,7 +92,7 @@ public class SokletTests {
 					marshaledResponse.getBody().get());
 
 			// Optional query param, no param provided
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/optional-query-param")
 							.build());
 
@@ -102,7 +102,7 @@ public class SokletTests {
 					marshaledResponse.getBody().orElse(emptyByteArray()));
 
 			// Optional query param, param provided
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/optional-query-param?optionalQueryParam=123.456789")
 							.build());
 
@@ -112,14 +112,14 @@ public class SokletTests {
 					marshaledResponse.getBody().get());
 
 			// Integer (nonprimitive) request body, integer is required but not provided
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/echo-integer-request-body")
 							.build());
 
 			Assert.assertEquals(400L, (long) marshaledResponse.getStatusCode());
 
 			// Integer (nonprimitive) request body, integer is required and provided
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/echo-integer-request-body")
 							.body("123".getBytes(StandardCharsets.UTF_8))
 							.build());
@@ -131,7 +131,7 @@ public class SokletTests {
 
 			// Integer (nonprimitive) request body, integer is not required and not provided.
 			// This exercises Optional<T> as opposed to @RequestBody(optional=true)
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/echo-integer-optional-request-body-1")
 							.build());
 
@@ -141,7 +141,7 @@ public class SokletTests {
 
 			// Integer (nonprimitive) request body, integer is not required and not provided.
 			// This exercises @RequestBody(optional=true) as opposed to Optional<T>
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/echo-integer-optional-request-body-2")
 							.build());
 
@@ -150,7 +150,7 @@ public class SokletTests {
 					null, marshaledResponse.getBody().orElse(null));
 
 			// Integer (primitive) request body, integer is required and provided
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/echo-int-request-body")
 							.body("123".getBytes(StandardCharsets.UTF_8))
 							.build());
@@ -161,14 +161,14 @@ public class SokletTests {
 					marshaledResponse.getBody().get());
 
 			// Integer (primitive) request body, integer is required but not provided
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/echo-int-request-body")
 							.build());
 
 			Assert.assertEquals(400L, (long) marshaledResponse.getStatusCode());
 
 			// Integer (primitive) request body, integer is not required and not provided
-			marshaledResponse = simulator.simulateRequest(
+			marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/echo-int-optional-request-body")
 							.build());
 
@@ -191,7 +191,7 @@ public class SokletTests {
 				throw new UncheckedIOException(e);
 			}
 
-			MarshaledResponse marshaledResponse = simulator.simulateRequest(
+			MarshaledResponse marshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/multipart-upload?upload_progress_id=12344")
 							.headers(Map.of(
 									"Content-Type", Set.of("multipart/form-data; boundary=----WebKitFormBoundary59MIY6fOE42AL48U"),
@@ -299,7 +299,7 @@ public class SokletTests {
 		SokletConfiguration configuration = configurationForResourceClasses(Set.of(HttpHeadResource.class));
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
-			MarshaledResponse getMethodMarshaledResponse = simulator.simulateRequest(
+			MarshaledResponse getMethodMarshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/hello-world").build());
 
 			Assert.assertArrayEquals("Response body doesn't match",
@@ -307,7 +307,7 @@ public class SokletTests {
 					getMethodMarshaledResponse.getBody().get());
 
 			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
-			MarshaledResponse headMarshaledResponse = simulator.simulateRequest(
+			MarshaledResponse headMarshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.HEAD, "/hello-world").build());
 
 			Assert.assertEquals(200, (long) headMarshaledResponse.getStatusCode());
@@ -318,7 +318,7 @@ public class SokletTests {
 					headMarshaledResponse.getBody().orElse(emptyByteArray()));
 
 			// If you want to handle your own HEAD requests, we still prevent you from trying to send a response body
-			MarshaledResponse explicitHeadMarshaledResponse = simulator.simulateRequest(
+			MarshaledResponse explicitHeadMarshaledResponse = simulator.performRequest(
 					new Request.Builder(HttpMethod.HEAD, "/explicit-head-handling").build());
 
 			Assert.assertArrayEquals("Received a response body but didn't expect one",

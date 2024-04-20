@@ -31,4 +31,8 @@ public interface Server extends AutoCloseable {
 	Boolean isStarted();
 
 	void registerRequestHandler(@Nullable RequestHandler requestHandler);
+
+	default void close() throws Exception {
+		stop();
+	}
 }
