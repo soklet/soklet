@@ -32,6 +32,8 @@ public enum StatusCode {
 	// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
 	HTTP_100(100, "Continue"),
 	HTTP_101(101, "Switching Protocols"),
+	HTTP_102(102, "Processing"),
+	HTTP_103(103, "Early Hints"),
 	HTTP_200(200, "OK"),
 	HTTP_201(201, "Created"),
 	HTTP_202(202, "Accepted"),
@@ -39,12 +41,18 @@ public enum StatusCode {
 	HTTP_204(204, "No Content"),
 	HTTP_205(205, "Reset Content"),
 	HTTP_206(206, "Partial Content"),
+	HTTP_207(207, "Multi-Status"),
+	HTTP_208(208, "Already Reported"),
+	HTTP_226(226, "IM Used"),
 	HTTP_300(300, "Multiple Choices"),
 	HTTP_301(301, "Moved Permanently"),
 	HTTP_302(302, "Found"),
 	HTTP_303(303, "See Other"),
 	HTTP_304(304, "Not Modified"),
+	@Deprecated // per spec
 	HTTP_305(305, "Use Proxy"),
+	@Deprecated // per spec
+	HTTP_306(306, "Unused"),
 	HTTP_307(307, "Temporary Redirect"),
 	HTTP_308(308, "Permanent Redirect"),
 	HTTP_400(400, "Bad Request"),
@@ -65,15 +73,28 @@ public enum StatusCode {
 	HTTP_415(415, "Unsupported Media Type"),
 	HTTP_416(416, "Range Not Satisfiable"),
 	HTTP_417(417, "Expectation Failed"),
+	HTTP_418(418, "I'm a Teapot"),
 	HTTP_421(421, "Misdirected Request"),
 	HTTP_422(422, "Unprocessable Content"),
+	HTTP_423(423, "Locked"),
+	HTTP_424(424, "Failed Dependency"),
+	HTTP_425(425, "Too Early"),
 	HTTP_426(426, "Upgrade Required"),
+	HTTP_428(428, "Precondition Required"),
+	HTTP_429(429, "Too Many Requests"),
+	HTTP_431(431, "Request Header Fields Too Large"),
+	HTTP_451(451, "Unavailable For Legal Reasons"),
 	HTTP_500(500, "Internal Server Error"),
 	HTTP_501(501, "Not Implemented"),
 	HTTP_502(502, "Bad Gateway"),
 	HTTP_503(503, "Service Unavailable"),
 	HTTP_504(504, "Gateway Timeout"),
-	HTTP_505(505, "HTTP Version not supported");
+	HTTP_505(505, "HTTP Version Not supported"),
+	HTTP_506(506, "Variant Also Negotiates"),
+	HTTP_507(507, "Insufficient Storage"),
+	HTTP_508(508, "Loop Detected"),
+	HTTP_510(510, "Not Extended"),
+	HTTP_511(511, "Network Authentication Required");
 
 	@Nonnull
 	private static final Map<Integer, StatusCode> STATUS_CODES_BY_NUMBER;
