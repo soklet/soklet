@@ -26,7 +26,7 @@ import com.soklet.core.ResourceMethod;
 import com.soklet.exception.IllegalRequestBodyException;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.Optional;
@@ -37,6 +37,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 	@Nonnull
 	private static final DefaultRequestBodyMarshaler SHARED_INSTANCE;
@@ -62,12 +63,12 @@ public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 		this.valueConverterRegistry = valueConverterRegistry;
 	}
 
-	@Nullable
+	@Nonnull
 	@Override
-	public Object marshalRequestBody(@Nonnull Request request,
-																	 @Nonnull ResourceMethod resourceMethod,
-																	 @Nonnull Parameter parameter,
-																	 @Nonnull Type requestBodyType) {
+	public Optional<Object> marshalRequestBody(@Nonnull Request request,
+																						 @Nonnull ResourceMethod resourceMethod,
+																						 @Nonnull Parameter parameter,
+																						 @Nonnull Type requestBodyType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -87,7 +88,7 @@ public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 				return null;
 
 			Optional<Object> valueConverterResult = valueConverter.convert(requestBodyAsString);
-			return valueConverterResult == null ? null : valueConverterResult.orElse(null);
+			return valueConverterResult == null ? Optional.empty() : valueConverterResult;
 		} catch (ValueConversionException e) {
 			throw new IllegalRequestBodyException(format("Unable to marshal request body to %s", requestBodyType), e);
 		}

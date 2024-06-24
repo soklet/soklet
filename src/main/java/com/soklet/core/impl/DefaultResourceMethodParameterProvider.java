@@ -267,7 +267,8 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 				Type requestBodyType = parameterType.getNormalizedType();
 
 				try {
-					requestBodyObject = getRequestBodyMarshaler().marshalRequestBody(request, resourceMethod, parameter, requestBodyType);
+					Optional<Object> marshaledRequestBody = getRequestBodyMarshaler().marshalRequestBody(request, resourceMethod, parameter, requestBodyType);
+					requestBodyObject = marshaledRequestBody == null ? null : marshaledRequestBody.orElse(null);
 				} catch (IllegalRequestBodyException e) {
 					throw e;
 				} catch (Exception e) {

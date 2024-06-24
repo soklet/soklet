@@ -17,18 +17,18 @@
 package com.soklet.core;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
+import java.util.Optional;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
 public interface RequestBodyMarshaler {
-	@Nullable
-	Object marshalRequestBody(@Nonnull Request request,
-														@Nonnull ResourceMethod resourceMethod,
-														@Nonnull Parameter parameter,
-														@Nonnull Type requestBodyType);
+	@Nonnull
+	Optional<Object> marshalRequestBody(@Nonnull Request request,
+																			@Nonnull ResourceMethod resourceMethod,
+																			@Nonnull Parameter parameter,
+																			@Nonnull Type requestBodyType);
 }
