@@ -85,7 +85,7 @@ public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 
 		try {
 			if (requestBodyAsString == null)
-				return null;
+				return Optional.empty();
 
 			Optional<Object> valueConverterResult = valueConverter.convert(requestBodyAsString);
 			return valueConverterResult == null ? Optional.empty() : valueConverterResult;
