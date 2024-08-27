@@ -13,6 +13,8 @@ Optionally powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
 
 Soklet is a library, not a framework.
 
+Please refer to [https://www.soklet.com](https://www.soklet.com) for detailed documentation.
+
 ### Why?
 
 The Java web ecosystem is missing a server solution that is dependency-free but offers support for [Virtual Threads](https://openjdk.org/jeps/444), hooks for dependency injection, and annotation-based request handling. Soklet aims to fill this void.
