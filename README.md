@@ -13,11 +13,11 @@ Optionally powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
 
 Soklet is a library, not a framework.
 
-Please refer to [https://www.soklet.com](https://www.soklet.com) for detailed documentation.
+**Note: this README provides a high-level overview of Soklet. For details, please refer to the official documentation at [https://www.soklet.com](https://www.soklet.com).**
 
 ### Why?
 
-The Java web ecosystem is missing a server solution that is dependency-free but offers support for [Virtual Threads](https://openjdk.org/jeps/444), hooks for dependency injection, and annotation-based request handling. Soklet aims to fill this void.
+The Java web ecosystem is missing a server solution that is dependency-free but offers support for virtual threads, hooks for dependency injection, and annotation-based request handling. Soklet aims to fill this void.
 
 Soklet provides the basic plumbing to build "transactional" REST APIs that exchange small amounts of data with clients.
 It does not make technology choices on your behalf (but [an example of how to build a full-featured API is available](https://github.com/soklet/toystore-app)). It does not natively support [Reactive Programming](https://en.wikipedia.org/wiki/Reactive_programming) or similar methodologies.  It _does_ give you the foundation to build your system, your way.
@@ -85,12 +85,15 @@ dependencies {
 
 If you don't use Maven, you can drop [soklet-2.0.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.0.0-SNAPSHOT/soklet-2.0.0-SNAPSHOT.jar) directly into your project.  That's all you need!
 
-### Example App
+### Code Sample
 
-Soklet applications are regular Java applications - there is no Servlet container.
+Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-2.0.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.0.0/soklet-2.0.0.jar) and the JDK.  There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process, no special setup required.
+
+While a real production system will have more moving parts, this demonstrates that you _can_ build server software without ceremony or dependencies.
 
 ```java
-class App {
+// See https://www.soklet.com to learn how to build a real app
+public class App {
   @Resource
   public static class ExampleResource {
     @GET("/")
@@ -100,7 +103,7 @@ class App {
 
     @GET("/test-input")
     public Response testInput(@QueryParameter Integer input) {
-      return new Response.Builder()
+      return Response.withStatusCode(200)
         .headers(Map.of("Content-Type", Set.of("application/json; charset=UTF-8")))
         // A real application would not construct JSON in this manner
         .body(String.format("{\"input\": %d}", input))
@@ -109,26 +112,22 @@ class App {
   }
 
   public static void main(String[] args) throws Exception {
-    int port = 8080;
-
-    // Bare-bones: use built-in DefaultServer and don't change the default configuration
-    SokletConfiguration configuration = new SokletConfiguration.Builder(
-      new DefaultServer.Builder(port).build()
+    SokletConfiguration config = SokletConfiguration.withServer(
+      DefaultServer.withPort(8080).build()
     ).build();
 
-    try (Soklet soklet = new Soklet(configuration)) {
+    try (Soklet soklet = new Soklet(config)) {
       soklet.start();
-      System.out.printf("Soklet started at http://localhost:%d\n", port);
-      System.out.printf("Press any key to exit\n");
+      System.out.println("Soklet started. Press enter key to exit");
       System.in.read(); // or Thread.currentThread().join() in containers
     }
   }
 }
 ```
 
-You can use `javac` to build and `java` to run.  Soklet systems can be structurally as simple as a "hello world" app.
+Here, we use raw `javac` to build and `java` to run.  Soklet systems can be structurally as simple as a "hello world" app.
 
-Requires JDK 16+ to be installed on your machine.  If you need one, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
+This example requires JDK 16+ to be installed on your machine ([or use Docker](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)).  If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
 
 #### Build
 
@@ -139,10 +138,10 @@ javac -parameters -cp soklet-2.0.0-SNAPSHOT.jar -d build src/com/soklet/example/
 #### Run
 
 ```shell
-java --enable-preview -cp soklet-2.0.0-SNAPSHOT.jar:build com/soklet/example/App
+java -cp soklet-2.0.0-SNAPSHOT.jar:build com/soklet/example/App
 ```
 
-#### **Test**
+#### Test
 
 ```shell
 # Hello, world
@@ -153,6 +152,55 @@ Content-Type: text/plain; charset=UTF-8
 
 Hello, world!
 ```
+
+```shell
+# Query parameter
+% curl -i 'http://localhost:8080/test-input?input=123'
+HTTP/1.1 200 OK
+Content-Length: 14
+Content-Type: application/json; charset=UTF-8
+
+{"input": 123}
+```
+
+```shell
+# Bad input
+% curl -i 'http://localhost:8080/test-input?input=abc'
+HTTP/1.1 400 Bad Request
+Content-Length: 21
+Content-Type: text/plain; charset=UTF-8
+
+HTTP 400: Bad Request
+```
+
+### Building Real-World Apps
+
+Of course, real-world apps have more moving parts than a "hello world" example.
+
+[The Toy Store App](https://www.soklet.com/docs/toy-store-app) showcases how you might build a robust production system with Soklet.
+
+Feature highlights include:
+
+* Authentication/role-based authorization
+* Basic CRUD operations
+* Dependency injection via [Google Guice](https://github.com/google/guice)
+* Relational database integration via [Pyranid](https://www.pyranid.com)
+* Context-awareness via [ScopedValue (JEP 481)](https://openjdk.org/jeps/481)
+* Text localization via [Lokalized](https://www.lokalized.com)
+* JSON requests/responses via [Gson](https://github.com/google/gson)
+* Logging via [SLF4J](https://slf4j.org/) / [Logback](https://logback.qos.ch/)
+* Automated unit and integration tests via [JUnit](https://junit.org)
+* Ability to run in [Docker](https://www.docker.com/)
+
+### Servlet Integration
+
+Optional support is available for both legacy [`javax.servlet`](https://github.com/soklet/soklet-servlet-javax) and current [`jakarta.servlet`](https://github.com/soklet/soklet-servlet-jakarta) specifications.  Just add the appropriate JAR to your project and you're good to go.
+
+The Soklet website has in-depth [Servlet integration documentation](https://www.soklet.com/docs/servlet-integration).
+
+### Learning More
+
+Please refer to the official Soklet website [https://www.soklet.com](https://www.soklet.com) for detailed documentation.
 
 ### Credits
 
