@@ -93,7 +93,7 @@ Here we demonstrate building and running a single-file Soklet application with n
 While a real production system will have more moving parts, this demonstrates that you _can_ build server software without ceremony or dependencies.
 
 ```java
-// See https://www.soklet.com to learn how to build a real app
+// Visit https://www.soklet.com to learn how to build a real app
 public class App {
   @Resource
   public static class ExampleResource {
@@ -113,6 +113,7 @@ public class App {
   }
 
   public static void main(String[] args) throws Exception {
+    // Use default configuration
     SokletConfiguration config = SokletConfiguration.withServer(
       DefaultServer.withPort(8080).build()
     ).build();
