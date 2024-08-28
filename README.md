@@ -13,7 +13,8 @@ Optionally powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
 
 Soklet is a library, not a framework.
 
-**Note: this README provides a high-level overview of Soklet. For details, please refer to the official documentation at [https://www.soklet.com](https://www.soklet.com).**
+**Note: this README provides a high-level overview of Soklet.**<br/>
+**For details, please refer to the official documentation at [https://www.soklet.com](https://www.soklet.com).**
 
 ### Why?
 
