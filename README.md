@@ -82,13 +82,15 @@ dependencies {
 }
 ```
 
-### Direct Download
+#### Direct Download
 
-If you don't use Maven, you can drop [soklet-2.0.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.0.0-SNAPSHOT/soklet-2.0.0-SNAPSHOT.jar) directly into your project.  That's all you need!
+If you don't use Maven or Gradle, you can drop [soklet-2.0.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.0.0/soklet-2.0.0.jar) directly into your project.  No other dependencies are required.
 
 ### Code Sample
 
 Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-2.0.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.0.0/soklet-2.0.0.jar) and the JDK.  There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
+
+Soklet systems can be structurally as simple as a "hello world" app.
 
 While a real production system will have more moving parts, this demonstrates that you _can_ build server software without ceremony or dependencies.
 
@@ -127,7 +129,7 @@ public class App {
 }
 ```
 
-Here, we use raw `javac` to build and `java` to run.  Soklet systems can be structurally as simple as a "hello world" app.
+Here, we use raw `javac` to build and `java` to run.
 
 This example requires JDK 16+ to be installed on your machine ([or use Docker](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)).  If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
 
@@ -183,12 +185,12 @@ Of course, real-world apps have more moving parts than a "hello world" example.
 
 Feature highlights include:
 
-* Authentication/role-based authorization
+* Authentication and role-based authorization
 * Basic CRUD operations
 * Dependency injection via [Google Guice](https://github.com/google/guice)
 * Relational database integration via [Pyranid](https://www.pyranid.com)
 * Context-awareness via [ScopedValue (JEP 481)](https://openjdk.org/jeps/481)
-* Text localization via [Lokalized](https://www.lokalized.com)
+* Internationalization via the JDK and [Lokalized](https://www.lokalized.com)
 * JSON requests/responses via [Gson](https://github.com/google/gson)
 * Logging via [SLF4J](https://slf4j.org/) / [Logback](https://logback.qos.ch/)
 * Automated unit and integration tests via [JUnit](https://junit.org)
