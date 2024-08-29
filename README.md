@@ -122,7 +122,7 @@ public class App {
 
     try (Soklet soklet = new Soklet(config)) {
       soklet.start();
-      System.out.println("Soklet started. Press enter key to exit");
+      System.out.println("Soklet started. Press [enter] to exit");
       System.in.read(); // or Thread.currentThread().join() in containers
     }
   }
