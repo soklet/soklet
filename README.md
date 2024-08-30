@@ -152,9 +152,9 @@ public class App {
 }
 ```
 
-Here, we use raw `javac` to build and `java` to run.
+Here we use raw `javac` to build and `java` to run.
 
-This example requires JDK 16+ to be installed on your machine ([or use Docker](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)).  If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
+This example requires JDK 16+ to be installed on your machine ([or see this example of using Docker for Soklet apps](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)).  If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
 
 #### Build
 
@@ -233,7 +233,7 @@ Feature highlights include:
 
 ### What Else Does It Do?
 
-#### Request Data Access
+#### Access To Request Data
 
 ```java
 @GET("/example")
@@ -284,7 +284,7 @@ public void example(Request request /* param name is arbitrary */) {
 ```
 #### Request Body Parsing
 
-First, configure however you like:
+Configure however you like - here we accept JSON:
 
 ```java
 SokletConfiguration config = SokletConfiguration.withServer(
@@ -333,7 +333,7 @@ public void createEmployee(@RequestBody Employee employee) {
 
 #### Response Writing
 
-"Happy Path": a non-exceptional, non-OPTIONS, non-CORS, non-404 request: the appropriate Resource Method was invoked and everything worked as expected.
+"Happy Path": a non-exceptional, non-OPTIONS, non-404 request.
 
 ```java
 SokletConfiguration config = SokletConfiguration.withServer(
@@ -592,6 +592,47 @@ public Response multipart(
   return Response.withRedirect(
     RedirectType.HTTP_307_TEMPORARY_REDIRECT, "/thanks"
   ).build();  
+}
+```
+
+#### Dependency Injection
+
+In practice, you will likely want to tie in to whatever Dependency Injection library your application uses and have the DI infrastructure vend your instances.
+
+Here's how it might look if you use [Google Guice](https://github.com/google/guice):
+
+```java
+// Standard Guice setup
+Injector injector = Guice.createInjector(new MyExampleAppModule());
+
+SokletConfiguration config = new SokletConfiguration.Builder(
+  new DefaultServer.Builder(8080).build()
+).instanceProvider(new InstanceProvider() {
+  @Nonnull
+  @Override  
+  public <T> T provide(@Nonnull Class<T> instanceClass) {
+    // Have Soklet ask the Guice Injector for the instance
+    return injector.getInstance(instanceClass);     
+  }
+}).build();
+```
+
+Now, your Resources are dependency-injected just like the rest of your application is:
+
+```java
+@Resource
+public class WidgetResource {
+  private WidgetService widgetService;
+
+  @Inject
+  public WidgetResource(WidgetService widgetService) {
+    this.widgetService = widgetService;
+  }
+
+  @GET("/widgets")
+  public List<Widget> widgets() {
+    return widgetService.findWidgets();
+  }
 }
 ```
 
