@@ -96,33 +96,56 @@ While a real production system will have more moving parts, this demonstrates th
 
 ```java
 // Visit https://www.soklet.com to learn how to build a real app
+package com.soklet.example;
+
 public class App {
+  // Handle HTTP requests
   @Resource
   public static class ExampleResource {
+    // Canonical example
     @GET("/")
     public String index() {
       return "Hello, world!";
     }
+    
+    // Echoes back the path parameter, which must be a LocalDate
+    @GET("/echo/{date}")
+    public LocalDate echo(@PathParameter LocalDate date) {
+      return date;
+    }
 
-    @GET("/test-input")
-    public Response testInput(@QueryParameter Integer input) {
+    // Formats request body locale for display and customizes the response.
+    // Example: fr-CA ⇒ francês (Canadá)
+    @POST("/language")
+    public Response languageFor(@RequestBody Locale locale) {
+      Locale systemLocale = Locale.forLanguageTag("pt-BR");
+      String contentLanguage = systemLocale.toLanguageTag();
+
       return Response.withStatusCode(200)
-        .headers(Map.of("Content-Type", Set.of("application/json; charset=UTF-8")))
-        // A real application would not construct JSON in this manner
-        .body(String.format("{\"input\": %d}", input))
+        .body(locale.getDisplayName(systemLocale))
+        .headers(Map.of("Content-Language", Set.of(contentLanguage)))
+        .cookies(Set.of(
+          ResponseCookie.with("lastRequest", Instant.now().toString())
+            .httpOnly(true)
+            .secure(true)
+            .maxAge(Duration.ofMinutes(5))
+            .sameSite(SameSite.LAX)
+            .build()
+        ))        
         .build();
     }
   }
 
-  public static void main(String[] args) throws Exception {
-    // Use default configuration
+  // Start the server and listen on :8080
+  public static void main(String[] args) throws IOException {
+    // Use out-of-the-box defaults
     SokletConfiguration config = SokletConfiguration.withServer(
       DefaultServer.withPort(8080).build()
     ).build();
 
     try (Soklet soklet = new Soklet(config)) {
       soklet.start();
-      System.out.println("Soklet started. Press [enter] to exit");
+      System.out.println("Soklet started, press [enter] to exit");
       System.in.read(); // or Thread.currentThread().join() in containers
     }
   }
@@ -158,23 +181,35 @@ Hello, world!
 ```
 
 ```shell
-# Query parameter
-% curl -i 'http://localhost:8080/test-input?input=123'
+# Acceptable path parameter
+% curl -i 'http://localhost:8080/echo/2024-12-31' 
 HTTP/1.1 200 OK
-Content-Length: 14
-Content-Type: application/json; charset=UTF-8
+Content-Length: 10
+Content-Type: text/plain; charset=UTF-8
 
-{"input": 123}
+2024-12-31
 ```
 
 ```shell
-# Bad input
-% curl -i 'http://localhost:8080/test-input?input=abc'
+# Illegal path parameter
+% curl -i 'http://localhost:8080/echo/abc'
 HTTP/1.1 400 Bad Request
 Content-Length: 21
 Content-Type: text/plain; charset=UTF-8
 
 HTTP 400: Bad Request
+```
+
+```shell
+# Language request body
+% curl -i -X POST 'http://localhost:8080/language' -d 'fr-CA'
+HTTP/1.1 200 OK
+Content-Language: pt-BR
+Content-Length: 18
+Content-Type: text/plain; charset=UTF-8
+Set-Cookie: lastRequest=2024-04-20T16:19:02.115336Z; Max-Age=300; Secure; HttpOnly; SameSite=Lax
+
+francês (Canadá)
 ```
 
 ### Building Real-World Apps
@@ -196,7 +231,793 @@ Feature highlights include:
 * Automated unit and integration tests via [JUnit](https://junit.org)
 * Ability to run in [Docker](https://www.docker.com/)
 
-### Servlet Integration
+### What Else Does It Do?
+
+#### Request Data Access
+
+```java
+@GET("/example")
+public void example(Request request /* param name is arbitrary */) {
+  // Here, it would be HttpMethod.GET
+  HttpMethod httpMethod = request.getHttpMethod();
+  // Just the path, e.g. "/example"
+  String path = request.getPath(); 
+  // The path and query parameters, e.g. "/example?test=123"
+  String uri = request.getUri();
+  // Request body as bytes, if available
+  Optional<byte[]> body = request.getBody();
+  // Request body marshaled to a string, if available.
+  // Charset defined in "Content-Type" header is used to marshal.
+  // If not specified, UTF-8 is assumed
+  Optional<String> bodyAsString = request.getBodyAsString();
+  // Query parameter values by name
+  Map<String, Set<String>> queryParameters = request.getQueryParameters();
+  // Shorthand for plucking the first query param value by name
+  Optional<String> queryParameter = request.getQueryParameter("test");
+  // Header values by name (names are case-insensitive)
+  Map<String, Set<String>> headers = request.getHeaders();
+  // Shorthand for plucking the first header value by name (case-insensitive)
+  Optional<String> header = request.getHeader("Accept-Language");
+  // Request cookies by name (names are case-insensitive)
+  Map<String, Set<String>> cookies = request.getCookies();
+  // Shorthand for plucking the first cookie value by name (case-insensitive)
+  Optional<String> cookie = request.getCookie("cookie-name");
+  // Form parameters by name (application/x-www-form-urlencoded)
+  Map<String, Set<String>> fps = request.getFormParameters();
+  // Shorthand for plucking the first form parameter value by name
+  Optional<String> fp = request.getFormParameter("fp-name");  
+  // Is this a multipart request?
+  boolean multipart = request.isMultipart();
+  // Multipart fields by name
+  Map<String, Set<MultipartField>> mpfs = request.getMultipartFields();
+  // Shorthand for plucking the first multipart field by name
+  Optional<MultipartField> mpf = request.getMultipartField("file-input");  
+  // CORS information, if available
+  Optional<Cors> cors = request.getCors();
+  // Ordered locales via Accept-Language parsing
+  List<Locale> locales = request.getLocales();
+  // Charset as specified by "Content-Type" header, if available
+  Optional<Charset> charset = request.getCharset();
+  // Content type component of "Content-Type" header, if available
+  Optional<String> contentType = request.getContentType();
+}
+```
+#### Request Body Parsing
+
+First, configure however you like:
+
+```java
+SokletConfiguration config = SokletConfiguration.withServer(
+  DefaultServer.withPort(8080).build()
+).requestBodyMarshaler(new RequestBodyMarshaler() {
+  // This example uses Google's GSON
+  static final Gson GSON = new Gson();
+
+  @Nonnull
+  @Override
+  public Optional<Object> marshalRequestBody(
+    @Nonnull Request request,
+    @Nonnull ResourceMethod resourceMethod,
+    @Nonnull Parameter parameter,
+    @Nonnull Type requestBodyType
+  ) {
+    // Let GSON turn the request body into an instance
+    // of the specified type.
+    //
+    // Note that this method has access to all runtime information 
+    // about the request, which provides the opportunity to, for example,
+    // examine annotations on the method/parameter which might
+    // inform custom marshaling strategies.
+    return Optional.of(GSON.fromJson(
+      request.getBodyAsString().get(), 
+      requestBodyType
+    ));
+  }
+}).build();
+```
+
+Then, apply:
+
+```java
+public record Employee (
+  UUID id,
+  String name
+) {}
+
+// Accepts a JSON-formatted Record type as input
+@POST("/employees")
+public void createEmployee(@RequestBody Employee employee) {
+  System.out.printf("TODO: create %s\n", employee.name());
+}
+```
+
+#### Response Writing
+
+"Happy Path": a non-exceptional, non-OPTIONS, non-CORS, non-404 request: the appropriate Resource Method was invoked and everything worked as expected.
+
+```java
+SokletConfiguration config = SokletConfiguration.withServer(
+  DefaultServer.withPort(8080).build()
+).responseMarshaler(new DefaultResponseMarshaler() {
+  // Let's use Gson to write response body data
+  // See https://github.com/google/gson
+  static final Gson GSON = new Gson();
+
+  @Nonnull
+  @Override
+  public MarshaledResponse forHappyPath(
+    @Nonnull Request request,
+    @Nonnull Response response,
+    @Nonnull ResourceMethod resourceMethod
+  ) {
+    // Turn response body into JSON bytes with Gson
+    Object bodyObject = response.getBody().orElse(null);
+    byte[] body = bodyObject == null 
+      ? null 
+      : GSON.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
+
+    // To be a good citizen, set the Content-Type header
+    Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
+    headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+
+    // Tell Soklet: "OK - here is the final response data to send"
+    return MarshaledResponse.withStatusCode(response.getStatusCode())
+      .headers(headers)
+      .cookies(response.getCookies())
+      .body(body)
+      .build();
+  }
+}).build();
+```
+
+Exceptions:
+
+```java
+SokletConfiguration config = SokletConfiguration.withServer(
+  DefaultServer.withPort(8080).build()
+).responseMarshaler(new DefaultResponseMarshaler() {
+  // Let's use Gson to write response body data
+  // See https://github.com/google/gson
+  static final Gson GSON = new Gson();
+
+  @Nonnull
+  @Override
+  public MarshaledResponse forThrowable(
+    @Nonnull Request request,
+    @Nonnull Throwable throwable,
+    @Nullable ResourceMethod resourceMethod
+  ) {
+    // Keep track of what to write to the response
+    String message;
+    int statusCode;
+
+    // Examine the exception that bubbled out and determine what 
+    // the HTTP status and a user-facing message should be.
+    // Note: real systems should localize these messages
+    switch (throwable) {
+      // Soklet throws this exception, a specific subclass
+      // of BadRequestException
+      case IllegalQueryParameterException ex -> {
+        message = String.format("Illegal value '%s' for parameter '%s'",
+          ex.getQueryParameterValue().orElse("[not provided]"),
+          ex.getQueryParameterName());
+        statusCode = 400;
+      }
+      // Generically handle other BadRequestExceptions
+      case BadRequestException ignored -> {
+        message = "Your request was improperly formatted.";
+        statusCode = 400;
+      }
+      // Something else?  Fall back to a 500
+      default -> {
+        message = "An unexpected error occurred.";
+        statusCode = 500;
+      }
+    }
+
+    // Turn response body into JSON bytes with Gson.
+    // Note: real systems should expose richer error constructs
+    // than an object with a single message field
+    byte[] body = GSON.toJson(Map.of("message", message))
+      .getBytes(StandardCharsets.UTF_8);
+
+    // Specify our headers
+    Map<String, Set<String>> headers = new HashMap<>();
+    headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+
+    return MarshaledResponse.withStatusCode(statusCode)
+      .headers(headers)
+      .body(body)
+      .build();
+  }
+}).build();
+```
+
+Writing bytes to the response:
+
+```java
+@GET("/example-image.png")
+public MarshaledResponse exampleImage() throws IOException {
+  Path imageFile = Path.of("/home/user/test.png");
+  byte[] image = Files.readAllBytes(imageFile);
+  
+  // Use MarshaledResponse to serve "final" bytes over the wire
+  return MarshaledResponse.withStatusCode(200)
+    .headers(Map.of(
+      "Content-Type", Set.of("image/png"),
+      "Content-Length", Set.of(String.valueOf(image.length))
+    ))
+    .body(image)
+    .build();
+}
+```
+
+Redirects:
+
+```java
+@GET("/example-redirect")
+public Response exampleRedirect() {
+  // Response has a convenience builder for performing redirects.
+  // You could alternatively do this "by hand" by setting HTTP status
+  // and headers appropriately.
+  return Response.withRedirect(
+    RedirectType.HTTP_307_TEMPORARY_REDIRECT, "/other-url"
+  ).build();
+}
+```
+
+#### Form Handling
+
+Frontend:
+
+```html
+<form 
+  enctype="application/x-www-form-urlencoded"
+  action="https://example.soklet.com/form?id=123"
+  method="POST">
+  <!-- User can type whatever text they like -->
+  <input type="number" name="numericValue" />
+  <!-- Multiple values for the same name are supported -->
+  <input type="hidden" name="multi" value="1" />
+  <input type="hidden" name="multi" value="2" />
+  <!-- Names with special characters can be remapped -->
+  <textarea name="long-text"></textarea>
+  <!-- Note: browsers send "on" string to indicate "checked" -->
+  <input type="checkbox" name="enabled"/>
+  <input type="submit"/>
+</form>
+```
+
+Backend:
+
+```java
+@POST("/form")
+public String form(
+  @QueryParameter Long id,
+  @FormParameter Integer numericValue,
+  @FormParameter(optional=true) List<String> multi,
+  @FormParameter(name="long-text") String longText,
+  @FormParameter String enabled
+) {
+  // Echo back the inputs
+  return List.of(id, numericValue, multi, longText, enabled).stream()
+    .map(Object::toString)
+    .collect(Collectors.joining("\n"));
+}
+```
+
+Test:
+
+```shell
+% curl -i -X POST 'https://example.soklet.com/form?id=123' \
+   -H 'Content-Type: application/x-www-form-urlencoded' \
+   -d 'numericValue=456&multi=1&multi=2&long-text=long%20multiline%20text&enabled=on'
+HTTP/1.1 200 OK
+Content-Length: 37
+Content-Type: text/plain; charset=UTF-8
+
+123
+456
+[1, 2]
+long multiline text
+on
+```
+
+#### Multipart Handling
+
+Frontend:
+
+```html
+<form 
+  enctype="multipart/form-data"
+  action="https://example.soklet.com/multipart?id=123"
+  method="POST">
+  <!-- User can type whatever text they like -->
+  <input type="text" name="freeform" />
+  <!-- Multiple values for the same name are supported -->
+  <input type="hidden" name="multi" value="1" />
+  <input type="hidden" name="multi" value="2" />
+  <!-- Prompt user to upload a file -->
+  <p>
+    Please attach your document: <input name="doc" type="file" />
+  </p>
+  <!-- Multiple file uploads are supported -->
+  <p>
+    Supplement 1: <input name="extra" type="file" />
+    Supplement 2: <input name="extra" type="file" />
+  </p>  
+  <!-- An optional file -->
+  <p>
+    Optionally, attach a photo: <input name="photo" type="file" />
+  </p>  
+  <input type="submit" value="Upload" />
+</form>
+```
+
+Backend:
+
+```java
+@POST("/multipart")
+public Response multipart(
+  @QueryParam Long id,
+  // Multipart fields work like other Soklet params
+  // with support for Optional<T>, List<T>, custom names, ...
+  @Multipart(optional=true) String freeform,
+  @Multipart(name="multi") List<Integer> numbers,
+  // The MultipartField type allows access to additional data,
+  // like filename and content type (if available).
+  // The @Multipart annotation is optional
+  // when your parameter is of type MultipartField...
+  MultipartField document,
+  // ...but is useful if you need to massage the name.
+  @Multipart(name="extra") List<MultipartField> supplements,
+  // If you specify type byte[] for a @Multipart field,
+  // you'll get just its binary data injected
+  @Multipart(optional=true) byte[] photo
+) {
+  // Let's demonstrate the functionality MultipartField provides.
+
+  // Form field name, always available, e.g. "document"
+  String name = document.getName();
+  // Browser may provide this for files, e.g. "test.pdf"
+  Optional<String> filename = document.getFilename();  
+  // Browser may provide this for files, e.g. "application/pdf"
+  Optional<String> contentType = document.getContentType();
+  // Field data as bytes, if available
+  Optional<byte[]> data = document.getData();
+  // Field data as a string, if available
+  Optional<String> dataAsString = document.getDataAsString();
+
+  // Apply the standard redirect-after-POST pattern
+  return Response.withRedirect(
+    RedirectType.HTTP_307_TEMPORARY_REDIRECT, "/thanks"
+  ).build();  
+}
+```
+
+#### Lifecycle Handling and Interception
+
+Server Start/Stop: execute code immediately before and after server startup and shutdown.
+
+```java
+SokletConfiguration config = new SokletConfiguration.Builder(
+  new DefaultServer.Builder(8080).build()
+).lifecycleInterceptor(new LifecycleInterceptor() {
+  @Override
+  public void willStartServer(@Nonnull Server server) {
+    // Perform startup tasks required prior to server launch
+    MyPayrollSystem.INSTANCE.startLengthyWarmupProcess();
+  }
+
+  @Override
+  public void didStartServer(@Nonnull Server server) {
+    // Server has fully started up and is listening
+    System.out.println("Server started.");
+  }
+
+  @Override
+  public void willStopServer(@Nonnull Server server) {
+    // Perform shutdown tasks required prior to server teardown
+    MyPayrollSystem.INSTANCE.destroy();    
+  }
+
+  @Override
+  public void didStopServer(@Nonnull Server server) {
+    // Server has fully shut down
+    System.out.println("Server stopped.");
+  }
+}).build();
+```
+
+Request Handling: these methods are fired at the very start of request processing and the very end, respectively.
+
+```java
+SokletConfiguration config = new SokletConfiguration.Builder(
+  new DefaultServer.Builder(8080).build()
+).lifecycleInterceptor(new LifecycleInterceptor() {
+  @Override
+  public void didStartRequestHandling(
+    @Nonnull Request request,
+    @Nullable ResourceMethod resourceMethod
+  ) {
+    System.out.printf("Received request: %s\n", request);
+
+    // If there was no resourceMethod matching the request, expect a 404
+    if(resourceMethod != null)
+      System.out.printf("Request to be handled by: %s\n", resourceMethod);
+    else
+      System.out.println("This will be a 404.");
+  }
+
+  @Override
+  public void didFinishRequestHandling(
+    @Nonnull Request request,
+    @Nullable ResourceMethod resourceMethod,
+    @Nonnull MarshaledResponse marshaledResponse,
+    @Nonnull Duration processingDuration,
+    @Nonnull List<Throwable> throwables
+  ) {
+    // We have access to a few things here...
+    // * marshaledResponse is what was ultimately sent
+    //    over the wire
+    // * processingDuration is how long everything took, 
+    //    including sending the response to the client
+    // * throwables is the ordered list of exceptions
+    //    thrown during execution (if any)
+    long millis = processingDuration.toNanos() / 1_000_000.0;
+    System.out.printf("Entire request took %dms\n", millis);
+  }
+}).build();                  
+```
+
+Request Wrapping: wraps around the whole "outside" of an entire request-handling flow.
+
+```java
+// Special scoped value so anyone can access the current Locale.
+// For Java < 21, use ThreadLocal instead
+public static final ScopedValue<Locale> CURRENT_LOCALE;
+
+// Spin up the ScopedValue (or ThreadLocal)
+static {
+  CURRENT_LOCALE = ScopedValue.newInstance();
+}
+
+SokletConfiguration config = new SokletConfiguration.Builder(
+  new DefaultServer.Builder(8080).build()
+).lifecycleInterceptor(new LifecycleInterceptor() {
+  @Override
+  public void wrapRequest(
+    @Nonnull Request request,
+    @Nullable ResourceMethod resourceMethod,
+    @Nonnull Consumer<Request> requestProcessor
+  ) {
+    // Make the locale accessible by other code during this request...
+    Locale locale = request.getLocales().get(0);
+    
+    // ...by binding it to a ScopedValue (or ThreadLocal).
+    ScopedValue.where(CURRENT_LOCALE, locale).run(() -> {
+      // You must call this so downstream processing can proceed
+      requestProcessor.accept(request);
+    });
+  }
+}).build();
+
+// Then, elsewhere in your code while a request is being processed:
+
+class ExampleService {
+  void accessCurrentLocale() {
+    // You now have access to the Locale bound to the logical scope
+    // (or Thread) without having to pass it down the call stack
+    Locale locale = CURRENT_LOCALE.orElse(Locale.getDefault());
+  }
+}
+```
+
+Request Intercepting: provides programmatic control over two processing steps.
+
+1. Invoking the appropriate Resource Method to acquire a response
+2. Sending the response over the wire to the client
+
+```java
+SokletConfiguration config = new SokletConfiguration.Builder(
+  new DefaultServer.Builder(8080).build()
+).lifecycleInterceptor(new LifecycleInterceptor() {
+  @Override
+  public void interceptRequest(
+    @Nonnull Request request,
+    @Nullable ResourceMethod resourceMethod,
+    @Nonnull Function<Request, MarshaledResponse> responseProducer,
+    @Nonnull Consumer<MarshaledResponse> responseWriter
+  ) {
+    // Here's where you might start a DB transaction.
+    // (MyDatabase is a hypothetical construct)
+    MyDatabase.INSTANCE.beginTransaction();
+
+    // Step 1: Invoke the Resource Method and acquire its response
+    MarshaledResponse response = responseProducer.apply(request);
+
+    // Commit the DB transaction before sending the response
+    // to reduce contention by keeping "open" time short
+    MyDatabase.INSTANCE.commitTransaction();
+
+    // Set a special header on the response via mutable copy
+    response = response.copy().headers((mutableHeaders) -> {
+      mutableHeaders.put("X-Powered-By", Set.of("Soklet"));
+    }).finish();
+
+    // Step 2: Send the finalized response over the wire
+    responseWriter.accept(response);
+  }
+}).build();
+```
+
+Response Writing: monitor the response writing process - sending bytes over the wire - which may terminate exceptionally (e.g. unexpected client disconnect).
+
+```java
+SokletConfiguration config = new SokletConfiguration.Builder(
+  new DefaultServer.Builder(8080).build()
+).lifecycleInterceptor(new LifecycleInterceptor() {
+  @Override
+  public void willStartResponseWriting(
+    @Nonnull Request request,
+    @Nullable ResourceMethod resourceMethod,
+    @Nonnull MarshaledResponse marshaledResponse
+  ) {
+    // Access to marshaledResponse here lets us see exactly
+    // what will be going over the wire
+    byte[] body = marshaledResponse.getBody().orElse(new byte[] {});
+    System.out.printf("About to start writing response with " + 
+      "a %d-byte body...\n", body.length);
+  }
+
+  @Override
+  public void didFinishResponseWriting(
+    @Nonnull Request request,
+    @Nullable ResourceMethod resourceMethod,
+    @Nonnull MarshaledResponse marshaledResponse,
+    @Nonnull Duration responseWriteDuration,
+    @Nullable Throwable throwable
+  ) {
+    long millis = processingDuration.toNanos() / 1_000_000.0;
+    System.out.printf("Took %dms to write response\n", millis);
+
+    // You have access to the throwable that might have occurred
+    // while writing the response.  This is useful to, for example,
+    // determine trends in unexpected client disconnect rates
+    if(throwable != null) {
+      System.err.println("Exception occurred while writing response");
+      throwable.printStackTrace();
+    }
+  }
+}).build();
+```
+
+#### CORS Support
+
+Authorize All Origins:
+
+```java
+SokletConfiguration config = new SokletConfiguration.Builder(server)
+  // "Wildcard" (*) CORS authorization. Don't use this in production!
+  .corsAuthorizer(new AllOriginsCorsAuthorizer())
+  .build();
+```
+
+Authorize Whitelisted Origins:
+
+```java
+Set<String> allowedOrigins = Set.of("https://www.revetware.com");
+
+SokletConfiguration config = new SokletConfiguration.Builder(server)
+  .corsAuthorizer(new WhitelistedOriginsCorsAuthorizer(allowedOrigins))
+  .build();
+```
+
+...or be dynamic:
+
+```java
+SokletConfiguration config = new SokletConfiguration.Builder(server)
+  .corsAuthorizer(new WhitelistedOriginsCorsAuthorizer(
+    (origin) -> origin.equals("https://www.revetware.com")
+  ))
+  .build();
+```
+
+Custom CORS logic:
+
+```java
+SokletConfiguration config = new SokletConfiguration.Builder(server)
+  .corsAuthorizer(new CorsAuthorizer() {
+    // Any subdomain under soklet.com is permitted
+    boolean originMatchesValidSubdomain(@Nonnull Cors cors) {
+      return cors.getOrigin().matches("https://(.+)\\.soklet\\.com");
+    }
+
+    @Nonnull
+    @Override
+    public Optional<CorsPreflightResponse> authorizePreflight(
+      @Nonnull Request request,
+      @Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod
+    ) {
+      // Requests here are guaranteed to have the Cors value set
+      Cors cors = request.getCors().get();
+
+      // Only greenlight our soklet.com subdomains
+      if (originMatchesValidSubdomain(cors))
+        return Optional.of(new CorsPreflightResponse.Builder(cors.getOrigin())
+          .accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
+          .accessControlAllowHeaders(Set.of("*"))
+          .accessControlAllowCredentials(true)
+          .accessControlMaxAge(Duration.ofMinutes(10))        
+          .build());
+
+      return Optional.empty();
+    }    
+
+    @Nonnull
+    @Override
+    public Optional<CorsResponse> authorize(@Nonnull Request request) {
+      // Requests here are guaranteed to have the Cors value set
+      Cors cors = request.getCors().get();
+
+      // Only greenlight our soklet.com subdomains
+      if (originMatchesValidSubdomain(cors))
+        return Optional.of(new CorsResponse.Builder(cors.getOrigin())
+          .accessControlExposeHeaders(Set.of("*"))
+          .build());
+
+      return Optional.empty();
+    }
+  })
+  .build();
+```
+
+#### Unit Testing
+
+First, define something to test:
+
+```java
+@Resource
+public class ReverseResource {
+  // Reverse the input
+  @POST("/reverse")
+  public List<Integer> reverse(@RequestBody List<Integer> numbers) {
+    return numbers.reversed();
+  }
+
+  // Reverse the input and set custom headers/cookies
+  @POST("/reverse-again")
+  public Response reverseAgain(@RequestBody List<Integer> numbers) {
+    Integer largest = Collections.max(numbers);
+    Instant lastRequest = Instant.now();
+
+    return Response.withStatusCode(200)
+      .headers(Map.of("X-Largest", Set.of(String.valueOf(largest))))
+      .cookies(Set.of(
+        ResponseCookie.with("lastRequest", lastRequest.toString()).build()
+      ))
+      .body(numbers.reversed())
+      .build();
+  }
+}
+```
+
+Perform tests:
+
+```java
+import org.junit.Assert;
+import org.junit.Test;
+
+@Test
+public void reverseUnitTest() {
+  // Your Resource is a Plain Old Java Object, no Soklet dependency
+  ReverseResource resource = new ReverseResource();
+
+  List<Integer> input = List.of(1, 2, 3);
+  List<Integer> expected = List.of(3, 2, 1);
+  List<Integer> actual = resource.reverse(input);
+
+  Assert.assertEquals("Reverse failed", expected, actual);
+}
+
+@Test
+public void reverseAgainUnitTest() {
+  ReverseResource resource = new ReverseResource();
+  List<Integer> input = List.of(1, 2, 3);
+
+  // Set expectations
+  List<Integer> expectedBody = List.of(3, 2, 1);
+  Integer expectedCode = 200;
+  Integer expectedLargest = Collections.max(input);
+  Instant lastRequestAfter = Instant.now();
+
+  Response response = resource.reverseAgain(input);
+
+  // Extract actuals
+  Integer actualCode = response.getStatusCode();
+  List<Integer> actualBody = (List<Integer>) response.getBody().get();
+
+  Integer actualLargest = response.getHeaders().get("X-Largest").stream()
+    .findAny()
+    .map(value -> Integer.valueOf(value))
+    .get();
+
+  Instant actualLastRequest = response.getCookies().stream()
+    .filter(responseCookie -> responseCookie.getName().equals("lastRequest"))
+    .findAny()
+    .map(responseCookie -> Instant.parse(responseCookie.getValue().get()))
+    .get();
+
+  // Verify expectations vs. actuals
+  Assert.assertEquals("Bad status code", expectedCode, actualCode);
+  Assert.assertEquals("Reverse failed", expectedBody, actualBody);
+  Assert.assertEquals("Largest header failed", expectedLargest, actualLargest);
+  Assert.assertTrue("Last request too early", actualLastRequest.isAfter(lastRequestAfter));  
+}
+```
+
+#### Integration Testing
+
+First, define something to test:
+
+```java
+@Resource
+public class HelloResource {
+  // Hypothetical service that performs business logic
+  private HelloService helloService;
+
+  public HelloResource(HelloService helloService) {
+    this.helloService = helloService;
+  }
+
+  // Respond with a 'hello' message, e.g. Hello, Mark
+  @GET("/hello")
+  public String hello(@QueryParameter String name) {
+    return this.helloService.sayHelloTo(name);
+  }
+}
+```
+
+Perform tests:
+
+```java
+@Test
+public void basicIntegrationTest() {
+  // Build your app's configuration however you like
+  SokletConfiguration config = obtainMySokletConfig();
+
+  // Instead of running in a real HTTP server that listens on a port,
+  // a simulator is provided against which you can issue requests
+  // and receive responses.
+  Soklet.runSimulator(config, (simulator -> {
+    // Construct a request.
+    // You may alternatively specify query parameters directly in the URI
+    // as a query string, e.g. "/hello?name=Mark"
+    Request request = Request.with(HttpMethod.GET, "/hello")
+      .queryParameters(Map.of("name", Set.of("Mark")))
+      .build();
+
+    // Perform the request and get a handle to the response
+    MarshaledResponse marshaledResponse = simulator.performRequest(request);
+    
+    // Verify status code
+    Integer expectedCode = 200;
+    Integer actualCode = response.getStatusCode();
+    Assert.assertEquals("Bad status code", expectedCode, actualCode);
+
+    // Verify response body
+    marshaledResponse.getBody().ifPresentOrElse(body -> {
+      String expectedBody = "Hello, Mark";
+      String actualBody = new String(body, StandardCharsets.UTF_8);
+      Assert.assertEquals("Bad response body", expectedBody, actualBody);
+    }, () -> {
+      Assert.fail("No response body");
+    });
+  }));
+}
+```
+
+#### Servlet Integration
 
 Optional support is available for both legacy [`javax.servlet`](https://github.com/soklet/soklet-servlet-javax) and current [`jakarta.servlet`](https://github.com/soklet/soklet-servlet-jakarta) specifications.  Just add the appropriate JAR to your project and you're good to go.
 
