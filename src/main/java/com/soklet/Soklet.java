@@ -65,6 +65,8 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Soklet's main class - manages a {@link Server} and system configuration.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -74,6 +76,11 @@ public class Soklet implements AutoCloseable, RequestHandler {
 	@Nonnull
 	private final ReentrantLock lock;
 
+	/**
+	 * Creates a Soklet instance with the given configuration.
+	 *
+	 * @param sokletConfiguration configuration that drives the Soklet system
+	 */
 	public Soklet(@Nonnull SokletConfiguration sokletConfiguration) {
 		requireNonNull(sokletConfiguration);
 
@@ -87,6 +94,11 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		sokletConfiguration.getServer().registerRequestHandler(this);
 	}
 
+	/**
+	 * Starts the managed server instance.
+	 * <p>
+	 * If the server is already started, this is a no-op.
+	 */
 	public void start() {
 		getLock().lock();
 
@@ -106,6 +118,11 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		}
 	}
 
+	/**
+	 * Stops the managed server instance.
+	 * <p>
+	 * If the server is already stopped, this is a no-op.
+	 */
 	public void stop() {
 		getLock().lock();
 
@@ -125,6 +142,12 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		}
 	}
 
+	/**
+	 * Performs request handling - <strong>this method should not be called directly unless you are implementing your own instance of {@link Server}</strong>.
+	 *
+	 * @param request                   the request to handle
+	 * @param marshaledResponseConsumer the sink for marshaled responses (to write back to clients over the wire)
+	 */
 	@Override
 	public void handleRequest(@Nonnull Request request,
 														@Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer) {
@@ -577,11 +600,19 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				.build();
 	}
 
+	/**
+	 * Synonym for {@link #stop()}.
+	 */
 	@Override
 	public void close() {
 		stop();
 	}
 
+	/**
+	 * Is the managed server instance started?
+	 *
+	 * @return {@code true} if started, {@code false} otherwise
+	 */
 	@Nonnull
 	public Boolean isStarted() {
 		getLock().lock();
@@ -593,6 +624,14 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		}
 	}
 
+	/**
+	 * Runs Soklet with a special "simulator" server that is useful for integration testing.
+	 * <p>
+	 * See <a href="https://www.soklet.com/docs/automated-testing">https://www.soklet.com/docs/automated-testing</a> for how to write these tests.
+	 *
+	 * @param sokletConfiguration configuration that drives the Soklet system
+	 * @param simulatorConsumer   code to execute within the context of the simulator
+	 */
 	public static void runSimulator(@Nonnull SokletConfiguration sokletConfiguration,
 																	@Nonnull Consumer<Simulator> simulatorConsumer) {
 		requireNonNull(sokletConfiguration);
