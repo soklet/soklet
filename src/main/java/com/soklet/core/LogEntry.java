@@ -20,8 +20,10 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Objects;
 import java.util.Optional;
 
+import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -60,6 +62,33 @@ public class LogEntry {
 		this.request = builder.request;
 		this.resourceMethod = builder.resourceMethod;
 		this.marshaledResponse = builder.marshaledResponse;
+	}
+
+	@Override
+	@Nonnull
+	public String toString() {
+		return format("%s{logEntryType=%s, message=%s}", getClass().getSimpleName(), getLogEntryType(), getMessage());
+	}
+
+	@Override
+	public boolean equals(@Nullable Object object) {
+		if (this == object)
+			return true;
+
+		if (!(object instanceof LogEntry logEntry))
+			return false;
+
+		return Objects.equals(getLogEntryType(), logEntry.getLogEntryType())
+				&& Objects.equals(getMessage(), logEntry.getMessage())
+				&& Objects.equals(getThrowable(), logEntry.getThrowable())
+				&& Objects.equals(getRequest(), logEntry.getRequest())
+				&& Objects.equals(getResourceMethod(), logEntry.getResourceMethod())
+				&& Objects.equals(getMarshaledResponse(), logEntry.getMarshaledResponse());
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(getLogEntryType(), getMessage(), getThrowable(), getRequest(), getResourceMethod(), getMarshaledResponse());
 	}
 
 	@Nonnull
