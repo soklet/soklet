@@ -49,16 +49,18 @@ public class DefaultLogHandler implements LogHandler {
 	public void log(@Nonnull LogEntry logEntry) {
 		requireNonNull(logEntry);
 
-//		if (throwable == null) {
-//			System.err.printf("ERROR: %s\n", message);
-//		} else {
-//			StringWriter stringWriter = new StringWriter();
-//			PrintWriter printWriter = new PrintWriter(stringWriter);
-//			throwable.printStackTrace(printWriter);
-//
-//			String throwableWithStackTrace = stringWriter.toString();
-//
-//			System.err.printf("ERROR: %s\n%s\n", message, throwableWithStackTrace);
-//		}
+		Throwable throwable = logEntry.getThrowable().orElse(null);
+
+		if (throwable == null) {
+			System.err.printf("ERROR: %s\n", logEntry.getMessage());
+		} else {
+			StringWriter stringWriter = new StringWriter();
+			PrintWriter printWriter = new PrintWriter(stringWriter);
+			throwable.printStackTrace(printWriter);
+
+			String throwableWithStackTrace = stringWriter.toString();
+
+			System.err.printf("ERROR: %s\n%s\n", logEntry.getMessage(), throwableWithStackTrace);
+		}
 	}
 }

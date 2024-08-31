@@ -318,8 +318,15 @@ public class Soklet implements AutoCloseable, RequestHandler {
 								lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, null);
 							} catch (Throwable t) {
 								throwables.add(t);
-								logHandler.logError(format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
-										LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
+
+								safelyLog.accept(LogEntry.with(LogEntryType.LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
+												format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
+														LifecycleInterceptor.class.getSimpleName(), requestHolder.get()))
+										.throwable(t)
+										.request(requestHolder.get())
+										.resourceMethod(resourceMethodHolder.get())
+										.marshaledResponse(marshaledResponseHolder.get())
+										.build());
 							} finally {
 								didFinishResponseWritingCompleted.set(true);
 							}
@@ -333,8 +340,15 @@ public class Soklet implements AutoCloseable, RequestHandler {
 								lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
 							} catch (Throwable t2) {
 								throwables.add(t2);
-								logHandler.logError(format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
-										LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t2);
+
+								safelyLog.accept(LogEntry.with(LogEntryType.LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
+												format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
+														LifecycleInterceptor.class.getSimpleName(), requestHolder.get()))
+										.throwable(t2)
+										.request(requestHolder.get())
+										.resourceMethod(resourceMethodHolder.get())
+										.marshaledResponse(marshaledResponseHolder.get())
+										.build());
 							}
 						}
 					} finally {
@@ -344,8 +358,14 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 							lifecycleInterceptor.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
 						} catch (Throwable t) {
-							logHandler.logError(format("An exception occurred while invoking %s.didFinishRequestProcessing() when processing %s",
-									LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
+							safelyLog.accept(LogEntry.with(LogEntryType.LIFECYCLE_INTERCEPTOR_DID_FINISH_REQUEST_HANDLING_FAILED,
+											format("An exception occurred while invoking %s#didFinishRequestHandling when processing %s",
+													LifecycleInterceptor.class.getSimpleName(), requestHolder.get()))
+									.throwable(t)
+									.request(requestHolder.get())
+									.resourceMethod(resourceMethodHolder.get())
+									.marshaledResponse(marshaledResponseHolder.get())
+									.build());
 						} finally {
 							didFinishRequestHandlingCompleted.set(true);
 						}
@@ -355,7 +375,13 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		} catch (Throwable t) {
 			// If an error occurred during request wrapping, it's possible a response was never written/communicated back to LifecycleInterceptor.
 			// Detect that here and inform LifecycleInterceptor accordingly.
-			logHandler.logError(format("An exception occurred during request wrapping while processing %s", requestHolder.get()), t);
+			safelyLog.accept(LogEntry.with(LogEntryType.LIFECYCLE_INTERCEPTOR_WRAP_REQUEST_FAILED,
+							format("An exception occurred during request wrapping while processing %s", requestHolder.get()))
+					.throwable(t)
+					.request(requestHolder.get())
+					.resourceMethod(resourceMethodHolder.get())
+					.marshaledResponse(marshaledResponseHolder.get())
+					.build());
 
 			// If we don't have a response, let the marshaler try to make one for the exception.
 			// If that fails, use the failsafe.
@@ -365,8 +391,14 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				} catch (Throwable t2) {
 					throwables.add(t2);
 
-					logHandler.logError(format("An exception occurred during request wrapping while invoking %s#forThrowable when processing %s",
-							ResponseMarshaler.class.getSimpleName(), requestHolder.get()), t2);
+					safelyLog.accept(LogEntry.with(LogEntryType.RESPONSE_MARSHALER_FOR_THROWABLE_FAILED,
+									format("An exception occurred during request wrapping while invoking %s#forThrowable when processing %s",
+											ResponseMarshaler.class.getSimpleName(), requestHolder.get()))
+							.throwable(t2)
+							.request(requestHolder.get())
+							.resourceMethod(resourceMethodHolder.get())
+							.marshaledResponse(marshaledResponseHolder.get())
+							.build());
 
 					marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), t));
 				}
@@ -376,8 +408,14 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				try {
 					lifecycleInterceptor.willStartResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
 				} catch (Throwable t2) {
-					logHandler.logError(format("An exception occurred while invoking %s.willStartResponseWriting() when processing %s",
-							LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t);
+					safelyLog.accept(LogEntry.with(LogEntryType.LIFECYCLE_INTERCEPTOR_WILL_START_RESPONSE_WRITING_FAILED,
+									format("An exception occurred while invoking %s#willStartResponseWriting() when processing %s",
+											LifecycleInterceptor.class.getSimpleName(), requestHolder.get()))
+							.throwable(t2)
+							.request(requestHolder.get())
+							.resourceMethod(resourceMethodHolder.get())
+							.marshaledResponse(marshaledResponseHolder.get())
+							.build());
 				}
 			}
 
@@ -395,8 +433,15 @@ public class Soklet implements AutoCloseable, RequestHandler {
 							lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, null);
 						} catch (Throwable t2) {
 							throwables.add(t2);
-							logHandler.logError(format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
-									LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t2);
+
+							safelyLog.accept(LogEntry.with(LogEntryType.LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
+											format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
+													LifecycleInterceptor.class.getSimpleName(), requestHolder.get()))
+									.throwable(t2)
+									.request(requestHolder.get())
+									.resourceMethod(resourceMethodHolder.get())
+									.marshaledResponse(marshaledResponseHolder.get())
+									.build());
 						}
 					} catch (Throwable t2) {
 						throwables.add(t2);
@@ -408,8 +453,15 @@ public class Soklet implements AutoCloseable, RequestHandler {
 							lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
 						} catch (Throwable t3) {
 							throwables.add(t3);
-							logHandler.logError(format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
-									LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t2);
+
+							safelyLog.accept(LogEntry.with(LogEntryType.LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
+											format("An exception occurred while invoking %s#didFinishResponseWriting when processing %s",
+													LifecycleInterceptor.class.getSimpleName(), requestHolder.get()))
+									.throwable(t3)
+									.request(requestHolder.get())
+									.resourceMethod(resourceMethodHolder.get())
+									.marshaledResponse(marshaledResponseHolder.get())
+									.build());
 						}
 					}
 				}
@@ -421,8 +473,14 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 						lifecycleInterceptor.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
 					} catch (Throwable t2) {
-						logHandler.logError(format("An exception occurred while invoking %s.didFinishRequestProcessing() when processing %s",
-								LifecycleInterceptor.class.getSimpleName(), requestHolder.get()), t2);
+						safelyLog.accept(LogEntry.with(LogEntryType.LIFECYCLE_INTERCEPTOR_DID_FINISH_REQUEST_HANDLING_FAILED,
+										format("An exception occurred while invoking %s#didFinishRequestHandling() when processing %s",
+												LifecycleInterceptor.class.getSimpleName(), requestHolder.get()))
+								.throwable(t2)
+								.request(requestHolder.get())
+								.resourceMethod(resourceMethodHolder.get())
+								.marshaledResponse(marshaledResponseHolder.get())
+								.build());
 					}
 				}
 			}

@@ -39,6 +39,8 @@ public class LogEntry {
 	private final Request request;
 	@Nullable
 	private final ResourceMethod resourceMethod;
+	@Nullable
+	private final MarshaledResponse marshaledResponse;
 
 	@Nonnull
 	public static Builder with(@Nonnull LogEntryType logEntryType,
@@ -51,11 +53,13 @@ public class LogEntry {
 
 	protected LogEntry(@Nonnull Builder builder) {
 		requireNonNull(builder);
+
 		this.logEntryType = builder.logEntryType;
 		this.message = builder.message;
 		this.throwable = builder.throwable;
 		this.request = builder.request;
 		this.resourceMethod = builder.resourceMethod;
+		this.marshaledResponse = builder.marshaledResponse;
 	}
 
 	@Nonnull
@@ -83,6 +87,11 @@ public class LogEntry {
 		return Optional.ofNullable(this.resourceMethod);
 	}
 
+	@Nonnull
+	public Optional<MarshaledResponse> getMarshaledResponse() {
+		return Optional.ofNullable(this.marshaledResponse);
+	}
+
 	/**
 	 * Builder used to construct instances of {@link LogEntry}.
 	 * <p>
@@ -102,6 +111,8 @@ public class LogEntry {
 		private Request request;
 		@Nullable
 		private ResourceMethod resourceMethod;
+		@Nullable
+		private MarshaledResponse marshaledResponse;
 
 		protected Builder(@Nonnull LogEntryType logEntryType,
 											@Nonnull String message) {
@@ -141,6 +152,12 @@ public class LogEntry {
 		@Nonnull
 		public Builder resourceMethod(@Nullable ResourceMethod resourceMethod) {
 			this.resourceMethod = resourceMethod;
+			return this;
+		}
+
+		@Nonnull
+		public Builder marshaledResponse(@Nullable MarshaledResponse marshaledResponse) {
+			this.marshaledResponse = marshaledResponse;
 			return this;
 		}
 

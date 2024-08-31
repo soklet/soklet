@@ -17,6 +17,7 @@
 package com.soklet.core.impl;
 
 import com.soklet.core.HttpMethod;
+import com.soklet.core.LogEntryType;
 import com.soklet.core.LogHandler;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.MultipartParser;
@@ -163,7 +164,9 @@ public class DefaultServer implements Server {
 
 			if (Utilities.virtualThreadsAvailable())
 				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
-					getLogHandler().logError("Unexpected exception occurred during server HTTP request processing", throwable);
+					getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
+							.throwable(throwable)
+							.build());
 				});
 
 			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
@@ -256,26 +259,36 @@ public class DefaultServer implements Server {
 								try {
 									microHttpCallback.accept(microhttpResponse);
 								} catch (Throwable t) {
-									logHandler.logError("Unable to write Microhttp response", t);
+									getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "Unable to write response")
+											.throwable(t)
+											.build());
 								}
 							} catch (Throwable t) {
-								logHandler.logError("An error occurred while marshaling to a Microhttp response", t);
+								getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
+										.throwable(t)
+										.build());
 
 								try {
 									microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
 								} catch (Throwable t2) {
-									logHandler.logError("An error occurred while writing a failsafe Microhttp response", t2);
+									getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+											.throwable(t2)
+											.build());
 								}
 							}
 						}));
 					} catch (Throwable t) {
-						logHandler.logError("An unexpected error occurred during Microhttp request handling", t);
+						getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
+								.throwable(t)
+								.build());
 
 						if (shouldWriteFailsafeResponse.get()) {
 							try {
 								microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
 							} catch (Throwable t2) {
-								logHandler.logError("An error occurred while writing a failsafe Microhttp response", t2);
+								getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+										.throwable(t2)
+										.build());
 							}
 						}
 					}
@@ -306,7 +319,9 @@ public class DefaultServer implements Server {
 			try {
 				getEventLoop().get().stop();
 			} catch (Exception e) {
-				getLogHandler().logError("Unable to shut down event loop", e);
+				getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
+						.throwable(e)
+						.build());
 			}
 
 			boolean interrupted = false;
@@ -317,7 +332,9 @@ public class DefaultServer implements Server {
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
-				getLogHandler().logError("Unable to shut down request handler executor service", e);
+				getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "Unable to shut down server request handler executor service")
+						.throwable(e)
+						.build());
 			} finally {
 				if (interrupted)
 					Thread.currentThread().interrupt();

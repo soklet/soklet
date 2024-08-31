@@ -348,13 +348,7 @@ public class SokletTests {
 				// Quiet logging to keep the console clean
 				.logHandler(new LogHandler() {
 					@Override
-					public void logError(@Nonnull String message) {
-						// No-op
-					}
-
-					@Override
-					public void logError(@Nonnull String message,
-															 @Nonnull Throwable throwable) {
+					public void log(@Nonnull LogEntry logEntry) {
 						// No-op
 					}
 				})

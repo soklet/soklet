@@ -16,12 +16,21 @@
 
 package com.soklet.core;
 
+import java.time.Duration;
+import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
 /**
  * Kinds of log entries that Soklet can produce.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum LogEntryType {
+	/**
+	 * Indicates that an exception was thrown during core request processing operations.
+	 */
+	REQUEST_PROCESSING_FAILED,
 	/**
 	 * Indicates Resource Method resolution via ({@link ResourceMethodResolver#resourceMethodForRequest(Request)} threw an exception.
 	 */
@@ -31,12 +40,31 @@ public enum LogEntryType {
 	 */
 	LIFECYCLE_INTERCEPTOR_DID_START_REQUEST_HANDLING_FAILED,
 	/**
-	 * Indicates that an exception was thrown during core request processing operations.
+	 * Indicates {@link LifecycleInterceptor#interceptRequest(Request, ResourceMethod, Function, Consumer)} threw an exception.
 	 */
-	REQUEST_PROCESSING_FAILED,
+	LIFECYCLE_INTERCEPTOR_INTERCEPT_REQUEST_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#didFinishResponseWriting(Request, ResourceMethod, MarshaledResponse, Duration, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#didFinishRequestHandling(Request, ResourceMethod, MarshaledResponse, Duration, List)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_DID_FINISH_REQUEST_HANDLING_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#wrapRequest(Request, ResourceMethod, Consumer)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_WRAP_REQUEST_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#willStartResponseWriting(Request, ResourceMethod, MarshaledResponse)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_WILL_START_RESPONSE_WRITING_FAILED,
 	/**
 	 * Indicates {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)} threw an exception.
 	 */
 	RESPONSE_MARSHALER_FOR_THROWABLE_FAILED,
-	LIFECYCLE_INTERCEPTOR_INTERCEPT_REQUEST_FAILED,
+	/**
+	 * Indicates an internal {@link Server} error occurred.
+	 */
+	SERVER_INTERNAL_ERROR
 }

@@ -143,7 +143,7 @@ public final class Utilities {
 		requireNonNull(uncaughtExceptionHandler);
 
 		if (!virtualThreadsAvailable())
-			throw new IllegalStateException("Virtual threads are not available. Please confirm you are using Java 19+ with '--enable-preview' javac parameter specified");
+			throw new IllegalStateException("Virtual threads are not available. Please confirm you are using Java 19-20 with the '--enable-preview' javac parameter specified or Java 21+");
 
 		// Hat tip to https://github.com/javalin/javalin for this technique
 		Class<?> threadBuilderOfVirtualClass;
