@@ -18,7 +18,6 @@ package com.soklet.core.impl;
 
 import com.soklet.core.LogEntry;
 import com.soklet.core.LogHandler;
-import com.soklet.exception.BadRequestException;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
@@ -53,19 +52,13 @@ public class DefaultLogHandler implements LogHandler {
 		if (throwable == null) {
 			System.err.printf("ERROR: %s\n", logEntry.getMessage());
 		} else {
-			// A BadRequestException is "normal" and therefore not severe enough to print to the console.
-			// We want to surface only those throwables that warrant closer inspection
-			boolean shouldLogThrowable = !(throwable instanceof BadRequestException);
+			StringWriter stringWriter = new StringWriter();
+			PrintWriter printWriter = new PrintWriter(stringWriter);
+			throwable.printStackTrace(printWriter);
 
-			if (shouldLogThrowable) {
-				StringWriter stringWriter = new StringWriter();
-				PrintWriter printWriter = new PrintWriter(stringWriter);
-				throwable.printStackTrace(printWriter);
+			String throwableWithStackTrace = stringWriter.toString();
 
-				String throwableWithStackTrace = stringWriter.toString();
-
-				System.err.printf("ERROR: %s\n%s\n", logEntry.getMessage(), throwableWithStackTrace);
-			}
+			System.err.printf("ERROR: %s\n%s\n", logEntry.getMessage(), throwableWithStackTrace);
 		}
 	}
 }

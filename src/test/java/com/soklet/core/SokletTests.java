@@ -345,6 +345,13 @@ public class SokletTests {
 		return SokletConfiguration.withMockServer()
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(new DefaultResourceMethodResolver(resourceClasses))
+				// Quiet logging to keep the console clean
+				.logHandler(new LogHandler() {
+					@Override
+					public void log(@Nonnull LogEntry logEntry) {
+						// No-op
+					}
+				})
 				.build();
 	}
 }
