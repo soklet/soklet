@@ -15,7 +15,7 @@
  */
 
 /**
- * Top-level interfaces {@link com.soklet.Soklet} and {@link com.soklet.SokletConfiguration}.
+ * Top-level types {@link com.soklet.Soklet} and {@link com.soklet.SokletConfiguration}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

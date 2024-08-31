@@ -93,6 +93,7 @@
                 <configuration>
                     <links>
                         <link>https://docs.oracle.com/en/java/javase/21/docs/api/</link>
+                        <link>https://javadoc.io/doc/com.google.code.findbugs/jsr305/latest/</link>
                     </links>
                     <quiet>true</quiet>
                     <notimestamp>true</notimestamp>

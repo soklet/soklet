@@ -36,6 +36,7 @@ import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
 import com.soklet.core.Simulator;
 import com.soklet.core.StatusCode;
+import com.soklet.core.impl.DefaultServer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -65,7 +66,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Soklet's main class - manages a {@link Server} and system configuration.
+ * Soklet's main class - manages a {@link Server} using the provided system configuration.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

@@ -43,6 +43,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Defines how a Soklet system is configured.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -68,18 +70,29 @@ public class SokletConfiguration {
 	@Nonnull
 	private final Server server;
 
+	/**
+	 * Vends a configuration builder for the given server.
+	 *
+	 * @param server the server necessary for construction
+	 * @return a builder for {@link SokletConfiguration} instances
+	 */
 	@Nonnull
 	public static Builder withServer(@Nonnull Server server) {
 		requireNonNull(server);
 		return new Builder(server);
 	}
 
+	/**
+	 * Vends a configuration builder for a mock server, suitable for integration testing.
+	 *
+	 * @return a builder for {@link SokletConfiguration} instances
+	 */
 	@Nonnull
 	public static Builder withMockServer() {
 		return new Builder(new Soklet.MockServer());
 	}
 
-	public SokletConfiguration(@Nonnull Builder builder) {
+	protected SokletConfiguration(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
 		this.server = builder.server;
@@ -94,51 +107,101 @@ public class SokletConfiguration {
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : NoOriginsCorsAuthorizer.sharedInstance();
 	}
 
+	/**
+	 * Vends a mutable copy of this instance's configuration, suitable for building new instances.
+	 *
+	 * @return a mutable copy of this instance's configuration
+	 */
 	@Nonnull
 	public Copier copy() {
 		return new Copier(this);
 	}
 
+	/**
+	 * How Soklet will perform <a href="https://www.soklet.com/docs/instance-creation">instance creation</a>.
+	 *
+	 * @return the instance responsible for instance creation
+	 */
 	@Nonnull
 	public InstanceProvider getInstanceProvider() {
 		return this.instanceProvider;
 	}
 
+	/**
+	 * How Soklet will perform <a href="https://www.soklet.com/docs/value-conversions">conversions from one Java type to another</a>, like a {@link String} to a {@link java.time.LocalDate}.
+	 *
+	 * @return the instance responsible for value conversions
+	 */
 	@Nonnull
 	public ValueConverterRegistry getValueConverterRegistry() {
 		return this.valueConverterRegistry;
 	}
 
+	/**
+	 * How Soklet will <a href="https://www.soklet.com/docs/request-handling#request-body">marshal request bodies to Java types</a>.
+	 *
+	 * @return the instance responsible for request body marshaling
+	 */
 	@Nonnull
 	public RequestBodyMarshaler getRequestBodyMarshaler() {
 		return this.requestBodyMarshaler;
 	}
 
+	/**
+	 * How Soklet performs <a href="https://www.soklet.com/docs/request-handling#resource-method-resolution">Resource Method resolution</a> (experts only!)
+	 *
+	 * @return the instance responsible for resource method resolution
+	 */
 	@Nonnull
 	public ResourceMethodResolver getResourceMethodResolver() {
 		return this.resourceMethodResolver;
 	}
 
+	/**
+	 * How Soklet performs <a href="https://www.soklet.com/docs/request-handling#resource-method-parameter-injection">Resource Method parameter injection</a> (experts only!)
+	 *
+	 * @return the instance responsible for Resource Method parameter injection
+	 */
 	@Nonnull
 	public ResourceMethodParameterProvider getResourceMethodParameterProvider() {
 		return this.resourceMethodParameterProvider;
 	}
 
+	/**
+	 * How Soklet will <a href="https://www.soklet.com/docs/response-writing">marshal response bodies to bytes suitable for transmission over the wire</a>.
+	 *
+	 * @return the instance responsible for response body marshaling
+	 */
 	@Nonnull
 	public ResponseMarshaler getResponseMarshaler() {
 		return this.responseMarshaler;
 	}
 
+	/**
+	 * How Soklet will <a href="https://www.soklet.com/docs/request-lifecycle">perform custom behavior during server and request lifecycle events</a>.
+	 *
+	 * @return the instance responsible for performing lifecycle event customization
+	 */
 	@Nonnull
 	public LifecycleInterceptor getLifecycleInterceptor() {
 		return this.lifecycleInterceptor;
 	}
 
+	/**
+	 * How Soklet handles <a href="https://www.soklet.com/docs/cors">Cross-Origin Resource Sharing (CORS)</a>.
+	 *
+	 * @return the instance responsible for CORS-related processing
+	 */
 	@Nonnull
 	public CorsAuthorizer getCorsAuthorizer() {
 		return this.corsAuthorizer;
 	}
 
+	/**
+	 * The server managed by Soklet.
+	 *
+	 * @return the server instance
+	 */
 	@Nonnull
 	public Server getServer() {
 		return this.server;

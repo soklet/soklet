@@ -605,8 +605,8 @@ Here's how it might look if you use [Google Guice](https://github.com/google/gui
 // Standard Guice setup
 Injector injector = Guice.createInjector(new MyExampleAppModule());
 
-SokletConfiguration config = new SokletConfiguration.Builder(
-  new DefaultServer.Builder(8080).build()
+SokletConfiguration config = SokletConfiguration.withServer(
+  DefaultServer.withPort(8080).build()
 ).instanceProvider(new InstanceProvider() {
   @Nonnull
   @Override  
@@ -641,8 +641,8 @@ public class WidgetResource {
 Server Start/Stop: execute code immediately before and after server startup and shutdown.
 
 ```java
-SokletConfiguration config = new SokletConfiguration.Builder(
-  new DefaultServer.Builder(8080).build()
+SokletConfiguration config = SokletConfiguration.withServer(
+  DefaultServer.withPort(8080).build()
 ).lifecycleInterceptor(new LifecycleInterceptor() {
   @Override
   public void willStartServer(@Nonnull Server server) {
@@ -673,8 +673,8 @@ SokletConfiguration config = new SokletConfiguration.Builder(
 Request Handling: these methods are fired at the very start of request processing and the very end, respectively.
 
 ```java
-SokletConfiguration config = new SokletConfiguration.Builder(
-  new DefaultServer.Builder(8080).build()
+SokletConfiguration config = SokletConfiguration.withServer(
+  DefaultServer.withPort(8080).build()
 ).lifecycleInterceptor(new LifecycleInterceptor() {
   @Override
   public void didStartRequestHandling(
@@ -723,8 +723,8 @@ static {
   CURRENT_LOCALE = ScopedValue.newInstance();
 }
 
-SokletConfiguration config = new SokletConfiguration.Builder(
-  new DefaultServer.Builder(8080).build()
+SokletConfiguration config = SokletConfiguration.withServer(
+  DefaultServer.withPort(8080).build()
 ).lifecycleInterceptor(new LifecycleInterceptor() {
   @Override
   public void wrapRequest(
@@ -760,8 +760,8 @@ Request Intercepting: provides programmatic control over two processing steps.
 2. Sending the response over the wire to the client
 
 ```java
-SokletConfiguration config = new SokletConfiguration.Builder(
-  new DefaultServer.Builder(8080).build()
+SokletConfiguration config = SokletConfiguration.withServer(
+  DefaultServer.withPort(8080).build()
 ).lifecycleInterceptor(new LifecycleInterceptor() {
   @Override
   public void interceptRequest(
@@ -795,8 +795,8 @@ SokletConfiguration config = new SokletConfiguration.Builder(
 Response Writing: monitor the response writing process - sending bytes over the wire - which may terminate exceptionally (e.g. unexpected client disconnect).
 
 ```java
-SokletConfiguration config = new SokletConfiguration.Builder(
-  new DefaultServer.Builder(8080).build()
+SokletConfiguration config = SokletConfiguration.withServer(
+  DefaultServer.withPort(8080).build()
 ).lifecycleInterceptor(new LifecycleInterceptor() {
   @Override
   public void willStartResponseWriting(
@@ -838,7 +838,7 @@ SokletConfiguration config = new SokletConfiguration.Builder(
 Authorize All Origins:
 
 ```java
-SokletConfiguration config = new SokletConfiguration.Builder(server)
+SokletConfiguration config = SokletConfiguration.withServer(server)
   // "Wildcard" (*) CORS authorization. Don't use this in production!
   .corsAuthorizer(new AllOriginsCorsAuthorizer())
   .build();
@@ -849,7 +849,7 @@ Authorize Whitelisted Origins:
 ```java
 Set<String> allowedOrigins = Set.of("https://www.revetware.com");
 
-SokletConfiguration config = new SokletConfiguration.Builder(server)
+SokletConfiguration config = SokletConfiguration.withServer(server)
   .corsAuthorizer(new WhitelistedOriginsCorsAuthorizer(allowedOrigins))
   .build();
 ```
@@ -857,7 +857,7 @@ SokletConfiguration config = new SokletConfiguration.Builder(server)
 ...or be dynamic:
 
 ```java
-SokletConfiguration config = new SokletConfiguration.Builder(server)
+SokletConfiguration config = SokletConfiguration.withServer(server)
   .corsAuthorizer(new WhitelistedOriginsCorsAuthorizer(
     (origin) -> origin.equals("https://www.revetware.com")
   ))
@@ -867,7 +867,7 @@ SokletConfiguration config = new SokletConfiguration.Builder(server)
 Custom CORS logic:
 
 ```java
-SokletConfiguration config = new SokletConfiguration.Builder(server)
+SokletConfiguration config = SokletConfiguration.withServer(server)
   .corsAuthorizer(new CorsAuthorizer() {
     // Any subdomain under soklet.com is permitted
     boolean originMatchesValidSubdomain(@Nonnull Cors cors) {
@@ -885,12 +885,14 @@ SokletConfiguration config = new SokletConfiguration.Builder(server)
 
       // Only greenlight our soklet.com subdomains
       if (originMatchesValidSubdomain(cors))
-        return Optional.of(new CorsPreflightResponse.Builder(cors.getOrigin())
-          .accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
-          .accessControlAllowHeaders(Set.of("*"))
-          .accessControlAllowCredentials(true)
-          .accessControlMaxAge(Duration.ofMinutes(10))        
-          .build());
+        return Optional.of(
+          CorsPreflightResponse.withAccessControlAllowOrigin(cors.getOrigin())
+            .accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
+            .accessControlAllowHeaders(Set.of("*"))
+            .accessControlAllowCredentials(true)
+            .accessControlMaxAge(Duration.ofMinutes(10))        
+            .build()
+        );
 
       return Optional.empty();
     }    
@@ -903,9 +905,11 @@ SokletConfiguration config = new SokletConfiguration.Builder(server)
 
       // Only greenlight our soklet.com subdomains
       if (originMatchesValidSubdomain(cors))
-        return Optional.of(new CorsResponse.Builder(cors.getOrigin())
-          .accessControlExposeHeaders(Set.of("*"))
-          .build());
+        return Optional.of(
+          CorsResponse.withAccessControlAllowOrigin(cors.getOrigin())
+            .accessControlExposeHeaders(Set.of("*"))
+            .build()
+        );
 
       return Optional.empty();
     }
