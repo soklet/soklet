@@ -16,7 +16,9 @@
 
 package com.soklet.core.impl;
 
+import com.soklet.core.LogEntry;
 import com.soklet.core.LogHandler;
+import com.soklet.core.LogEntryType;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -42,27 +44,21 @@ public class DefaultLogHandler implements LogHandler {
 	public static DefaultLogHandler sharedInstance() {
 		return SHARED_INSTANCE;
 	}
-	
-	@Override
-	public void logError(@Nonnull String message) {
-		logError(message, null);
-	}
 
 	@Override
-	public void logError(@Nonnull String message,
-											 @Nullable Throwable throwable) {
-		requireNonNull(message);
+	public void log(@Nonnull LogEntry logEntry) {
+		requireNonNull(logEntry);
 
-		if (throwable == null) {
-			System.err.printf("ERROR: %s\n", message);
-		} else {
-			StringWriter stringWriter = new StringWriter();
-			PrintWriter printWriter = new PrintWriter(stringWriter);
-			throwable.printStackTrace(printWriter);
-
-			String throwableWithStackTrace = stringWriter.toString();
-
-			System.err.printf("ERROR: %s\n%s\n", message, throwableWithStackTrace);
-		}
+//		if (throwable == null) {
+//			System.err.printf("ERROR: %s\n", message);
+//		} else {
+//			StringWriter stringWriter = new StringWriter();
+//			PrintWriter printWriter = new PrintWriter(stringWriter);
+//			throwable.printStackTrace(printWriter);
+//
+//			String throwableWithStackTrace = stringWriter.toString();
+//
+//			System.err.printf("ERROR: %s\n%s\n", message, throwableWithStackTrace);
+//		}
 	}
 }
