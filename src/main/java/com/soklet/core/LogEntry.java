@@ -67,7 +67,8 @@ public class LogEntry {
 	@Override
 	@Nonnull
 	public String toString() {
-		return format("%s{logEntryType=%s, message=%s}", getClass().getSimpleName(), getLogEntryType(), getMessage());
+		return format("%s{logEntryType=%s, message=%s, throwable=%s}", getClass().getSimpleName(),
+				getLogEntryType(), getMessage(), getThrowable().orElse(null));
 	}
 
 	@Override
