@@ -19,7 +19,7 @@ package com.soklet.core;
 import javax.annotation.Nonnull;
 
 /**
- * Simulates server behavior, e.g. performing a request and receiving a response.
+ * Simulates server behavior of accepting a request and returning a response.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

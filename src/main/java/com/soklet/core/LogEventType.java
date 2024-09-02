@@ -22,47 +22,47 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * Kinds of log entries that Soklet can produce.
+ * Kinds of {@link LogEvent} instances that Soklet can produce.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public enum LogEntryType {
+public enum LogEventType {
 	/**
 	 * Indicates that an exception was thrown during core request processing operations.
 	 */
 	REQUEST_PROCESSING_FAILED,
 	/**
-	 * Indicates Resource Method resolution via ({@link ResourceMethodResolver#resourceMethodForRequest(Request)} threw an exception.
+	 * Indicates {@link LifecycleInterceptor#wrapRequest(Request, ResourceMethod, Consumer)} threw an exception.
 	 */
-	RESOURCE_METHOD_RESOLUTION_FAILED,
-	/**
-	 * Indicates {@link LifecycleInterceptor#didStartRequestHandling(Request, ResourceMethod)} threw an exception.
-	 */
-	LIFECYCLE_INTERCEPTOR_DID_START_REQUEST_HANDLING_FAILED,
+	LIFECYCLE_INTERCEPTOR_WRAP_REQUEST_FAILED,
 	/**
 	 * Indicates {@link LifecycleInterceptor#interceptRequest(Request, ResourceMethod, Function, Consumer)} threw an exception.
 	 */
 	LIFECYCLE_INTERCEPTOR_INTERCEPT_REQUEST_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#didFinishResponseWriting(Request, ResourceMethod, MarshaledResponse, Duration, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleInterceptor#didStartRequestHandling(Request, ResourceMethod)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
+	LIFECYCLE_INTERCEPTOR_DID_START_REQUEST_HANDLING_FAILED,
 	/**
 	 * Indicates {@link LifecycleInterceptor#didFinishRequestHandling(Request, ResourceMethod, MarshaledResponse, Duration, List)} threw an exception.
 	 */
 	LIFECYCLE_INTERCEPTOR_DID_FINISH_REQUEST_HANDLING_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#wrapRequest(Request, ResourceMethod, Consumer)} threw an exception.
-	 */
-	LIFECYCLE_INTERCEPTOR_WRAP_REQUEST_FAILED,
-	/**
 	 * Indicates {@link LifecycleInterceptor#willStartResponseWriting(Request, ResourceMethod, MarshaledResponse)} threw an exception.
 	 */
 	LIFECYCLE_INTERCEPTOR_WILL_START_RESPONSE_WRITING_FAILED,
 	/**
+	 * Indicates {@link LifecycleInterceptor#didFinishResponseWriting(Request, ResourceMethod, MarshaledResponse, Duration, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
+	/**
 	 * Indicates {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)} threw an exception.
 	 */
 	RESPONSE_MARSHALER_FOR_THROWABLE_FAILED,
+	/**
+	 * Indicates Resource Method resolution via ({@link ResourceMethodResolver#resourceMethodForRequest(Request)} threw an exception.
+	 */
+	RESOURCE_METHOD_RESOLUTION_FAILED,
 	/**
 	 * Indicates an internal {@link Server} error occurred.
 	 */

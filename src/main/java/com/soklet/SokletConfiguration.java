@@ -20,7 +20,7 @@ import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.core.CorsAuthorizer;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.LifecycleInterceptor;
-import com.soklet.core.LogHandler;
+import com.soklet.core.LogEventHandler;
 import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
@@ -28,7 +28,7 @@ import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
 import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultLifecycleInterceptor;
-import com.soklet.core.impl.DefaultLogHandler;
+import com.soklet.core.impl.DefaultLogEventHandler;
 import com.soklet.core.impl.DefaultRequestBodyMarshaler;
 import com.soklet.core.impl.DefaultResourceMethodParameterProvider;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
@@ -66,7 +66,7 @@ public class SokletConfiguration {
 	@Nonnull
 	private final CorsAuthorizer corsAuthorizer;
 	@Nonnull
-	private final LogHandler logHandler;
+	private final LogEventHandler logEventHandler;
 	@Nonnull
 	private final Server server;
 
@@ -96,7 +96,7 @@ public class SokletConfiguration {
 		requireNonNull(builder);
 
 		this.server = builder.server;
-		this.logHandler = builder.logHandler != null ? builder.logHandler : DefaultLogHandler.sharedInstance();
+		this.logEventHandler = builder.logEventHandler != null ? builder.logEventHandler : DefaultLogEventHandler.sharedInstance();
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : DefaultInstanceProvider.sharedInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.sharedInstance();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : new DefaultRequestBodyMarshaler(getValueConverterRegistry());
@@ -208,8 +208,8 @@ public class SokletConfiguration {
 	}
 
 	@Nonnull
-	public LogHandler getLogHandler() {
-		return this.logHandler;
+	public LogEventHandler getLogEventHandler() {
+		return this.logEventHandler;
 	}
 
 	/**
@@ -240,7 +240,7 @@ public class SokletConfiguration {
 		@Nullable
 		private CorsAuthorizer corsAuthorizer;
 		@Nullable
-		private LogHandler logHandler;
+		private LogEventHandler logEventHandler;
 
 		@Nonnull
 		protected Builder(@Nonnull Server server) {
@@ -304,8 +304,8 @@ public class SokletConfiguration {
 		}
 
 		@Nonnull
-		public Builder logHandler(@Nullable LogHandler logHandler) {
-			this.logHandler = logHandler;
+		public Builder logEventHandler(@Nullable LogEventHandler logEventHandler) {
+			this.logEventHandler = logEventHandler;
 			return this;
 		}
 
@@ -339,7 +339,7 @@ public class SokletConfiguration {
 			this.builder.responseMarshaler = sokletConfiguration.responseMarshaler;
 			this.builder.lifecycleInterceptor = sokletConfiguration.lifecycleInterceptor;
 			this.builder.corsAuthorizer = sokletConfiguration.corsAuthorizer;
-			this.builder.logHandler = sokletConfiguration.logHandler;
+			this.builder.logEventHandler = sokletConfiguration.logEventHandler;
 		}
 
 		@Nonnull
@@ -398,8 +398,8 @@ public class SokletConfiguration {
 		}
 
 		@Nonnull
-		public Copier logHandler(@Nullable LogHandler logHandler) {
-			this.builder.logHandler = logHandler;
+		public Copier logEventHandler(@Nullable LogEventHandler logEventHandler) {
+			this.builder.logEventHandler = logEventHandler;
 			return this;
 		}
 

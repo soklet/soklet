@@ -21,6 +21,7 @@ import javax.annotation.Nonnull;
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface LogHandler {
-	void log(@Nonnull LogEntry logEntry);
+@FunctionalInterface
+public interface LogEventHandler {
+	void log(@Nonnull LogEvent logEvent);
 }

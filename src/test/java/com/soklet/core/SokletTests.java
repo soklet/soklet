@@ -346,9 +346,9 @@ public class SokletTests {
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(new DefaultResourceMethodResolver(resourceClasses))
 				// Quiet logging to keep the console clean
-				.logHandler(new LogHandler() {
+				.logEventHandler(new LogEventHandler() {
 					@Override
-					public void log(@Nonnull LogEntry logEntry) {
+					public void log(@Nonnull LogEvent logEvent) {
 						// No-op
 					}
 				})

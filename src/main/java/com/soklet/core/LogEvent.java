@@ -27,12 +27,14 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * A loggable event that occurs during Soklet's internal processing.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class LogEntry {
+public class LogEvent {
 	@Nonnull
-	private final LogEntryType logEntryType;
+	private final LogEventType logEventType;
 	@Nonnull
 	private final String message;
 	@Nullable
@@ -45,18 +47,18 @@ public class LogEntry {
 	private final MarshaledResponse marshaledResponse;
 
 	@Nonnull
-	public static Builder with(@Nonnull LogEntryType logEntryType,
+	public static Builder with(@Nonnull LogEventType logEventType,
 														 @Nonnull String message) {
-		requireNonNull(logEntryType);
+		requireNonNull(logEventType);
 		requireNonNull(message);
 
-		return new Builder(logEntryType, message);
+		return new Builder(logEventType, message);
 	}
 
-	protected LogEntry(@Nonnull Builder builder) {
+	protected LogEvent(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
-		this.logEntryType = builder.logEntryType;
+		this.logEventType = builder.logEventType;
 		this.message = builder.message;
 		this.throwable = builder.throwable;
 		this.request = builder.request;
@@ -67,8 +69,8 @@ public class LogEntry {
 	@Override
 	@Nonnull
 	public String toString() {
-		return format("%s{logEntryType=%s, message=%s, throwable=%s}", getClass().getSimpleName(),
-				getLogEntryType(), getMessage(), getThrowable().orElse(null));
+		return format("%s{logEventType=%s, message=%s, throwable=%s}", getClass().getSimpleName(),
+				getLogEventType(), getMessage(), getThrowable().orElse(null));
 	}
 
 	@Override
@@ -76,25 +78,25 @@ public class LogEntry {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof LogEntry logEntry))
+		if (!(object instanceof LogEvent logEvent))
 			return false;
 
-		return Objects.equals(getLogEntryType(), logEntry.getLogEntryType())
-				&& Objects.equals(getMessage(), logEntry.getMessage())
-				&& Objects.equals(getThrowable(), logEntry.getThrowable())
-				&& Objects.equals(getRequest(), logEntry.getRequest())
-				&& Objects.equals(getResourceMethod(), logEntry.getResourceMethod())
-				&& Objects.equals(getMarshaledResponse(), logEntry.getMarshaledResponse());
+		return Objects.equals(getLogEventType(), logEvent.getLogEventType())
+				&& Objects.equals(getMessage(), logEvent.getMessage())
+				&& Objects.equals(getThrowable(), logEvent.getThrowable())
+				&& Objects.equals(getRequest(), logEvent.getRequest())
+				&& Objects.equals(getResourceMethod(), logEvent.getResourceMethod())
+				&& Objects.equals(getMarshaledResponse(), logEvent.getMarshaledResponse());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getLogEntryType(), getMessage(), getThrowable(), getRequest(), getResourceMethod(), getMarshaledResponse());
+		return Objects.hash(getLogEventType(), getMessage(), getThrowable(), getRequest(), getResourceMethod(), getMarshaledResponse());
 	}
 
 	@Nonnull
-	public LogEntryType getLogEntryType() {
-		return this.logEntryType;
+	public LogEventType getLogEventType() {
+		return this.logEventType;
 	}
 
 	@Nonnull
@@ -123,7 +125,7 @@ public class LogEntry {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link LogEntry}.
+	 * Builder used to construct instances of {@link LogEvent}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -132,7 +134,7 @@ public class LogEntry {
 	@NotThreadSafe
 	public static class Builder {
 		@Nonnull
-		private LogEntryType logEntryType;
+		private LogEventType logEventType;
 		@Nonnull
 		private String message;
 		@Nullable
@@ -144,19 +146,19 @@ public class LogEntry {
 		@Nullable
 		private MarshaledResponse marshaledResponse;
 
-		protected Builder(@Nonnull LogEntryType logEntryType,
+		protected Builder(@Nonnull LogEventType logEventType,
 											@Nonnull String message) {
-			requireNonNull(logEntryType);
+			requireNonNull(logEventType);
 			requireNonNull(message);
 
-			this.logEntryType = logEntryType;
+			this.logEventType = logEventType;
 			this.message = message;
 		}
 
 		@Nonnull
-		public Builder logEntryType(@Nonnull LogEntryType logEntryType) {
-			requireNonNull(logEntryType);
-			this.logEntryType = logEntryType;
+		public Builder logEventType(@Nonnull LogEventType logEventType) {
+			requireNonNull(logEventType);
+			this.logEventType = logEventType;
 			return this;
 		}
 
@@ -192,8 +194,8 @@ public class LogEntry {
 		}
 
 		@Nonnull
-		public LogEntry build() {
-			return new LogEntry(this);
+		public LogEvent build() {
+			return new LogEvent(this);
 		}
 	}
 }

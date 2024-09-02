@@ -16,8 +16,8 @@
 
 package com.soklet.core.impl;
 
-import com.soklet.core.LogEntry;
-import com.soklet.core.LogHandler;
+import com.soklet.core.LogEvent;
+import com.soklet.core.LogEventHandler;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
@@ -30,27 +30,27 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultLogHandler implements LogHandler {
+public class DefaultLogEventHandler implements LogEventHandler {
 	@Nonnull
-	private static final DefaultLogHandler SHARED_INSTANCE;
+	private static final DefaultLogEventHandler SHARED_INSTANCE;
 
 	static {
-		SHARED_INSTANCE = new DefaultLogHandler();
+		SHARED_INSTANCE = new DefaultLogEventHandler();
 	}
 
 	@Nonnull
-	public static DefaultLogHandler sharedInstance() {
+	public static DefaultLogEventHandler sharedInstance() {
 		return SHARED_INSTANCE;
 	}
 
 	@Override
-	public void log(@Nonnull LogEntry logEntry) {
-		requireNonNull(logEntry);
+	public void log(@Nonnull LogEvent logEvent) {
+		requireNonNull(logEvent);
 
-		Throwable throwable = logEntry.getThrowable().orElse(null);
+		Throwable throwable = logEvent.getThrowable().orElse(null);
 
 		if (throwable == null) {
-			System.err.printf("ERROR: %s\n", logEntry.getMessage());
+			System.err.printf("ERROR: %s\n", logEvent.getMessage());
 		} else {
 			StringWriter stringWriter = new StringWriter();
 			PrintWriter printWriter = new PrintWriter(stringWriter);
@@ -58,7 +58,7 @@ public class DefaultLogHandler implements LogHandler {
 
 			String throwableWithStackTrace = stringWriter.toString();
 
-			System.err.printf("ERROR: %s\n%s\n", logEntry.getMessage(), throwableWithStackTrace);
+			System.err.printf("ERROR: %s\n%s\n", logEvent.getMessage(), throwableWithStackTrace);
 		}
 	}
 }

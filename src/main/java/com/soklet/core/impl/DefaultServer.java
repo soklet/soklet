@@ -17,8 +17,9 @@
 package com.soklet.core.impl;
 
 import com.soklet.core.HttpMethod;
-import com.soklet.core.LogEntryType;
-import com.soklet.core.LogHandler;
+import com.soklet.core.LogEvent;
+import com.soklet.core.LogEventHandler;
+import com.soklet.core.LogEventType;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.MultipartParser;
 import com.soklet.core.Request;
@@ -123,7 +124,7 @@ public class DefaultServer implements Server {
 	@Nonnull
 	private final Integer socketPendingConnectionLimit;
 	@Nonnull
-	private final LogHandler logHandler;
+	private final LogEventHandler logEventHandler;
 	@Nonnull
 	private final MultipartParser multipartParser;
 	@Nonnull
@@ -157,14 +158,14 @@ public class DefaultServer implements Server {
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
-		this.logHandler = builder.logHandler != null ? builder.logHandler : DefaultLogHandler.sharedInstance();
+		this.logEventHandler = builder.logEventHandler != null ? builder.logEventHandler : DefaultLogEventHandler.sharedInstance();
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.sharedInstance();
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "request-handler-";
 
 			if (Utilities.virtualThreadsAvailable())
 				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
-					getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
+					getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
 							.throwable(throwable)
 							.build());
 				});
@@ -259,26 +260,26 @@ public class DefaultServer implements Server {
 								try {
 									microHttpCallback.accept(microhttpResponse);
 								} catch (Throwable t) {
-									getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "Unable to write response")
+									getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
 											.throwable(t)
 											.build());
 								}
 							} catch (Throwable t) {
-								getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
+								getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
 										.throwable(t)
 										.build());
 
 								try {
 									microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
 								} catch (Throwable t2) {
-									getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+									getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 											.throwable(t2)
 											.build());
 								}
 							}
 						}));
 					} catch (Throwable t) {
-						getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
+						getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
 								.throwable(t)
 								.build());
 
@@ -286,7 +287,7 @@ public class DefaultServer implements Server {
 							try {
 								microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
 							} catch (Throwable t2) {
-								getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+								getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 										.throwable(t2)
 										.build());
 							}
@@ -319,7 +320,7 @@ public class DefaultServer implements Server {
 			try {
 				getEventLoop().get().stop();
 			} catch (Exception e) {
-				getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
+				getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
 						.throwable(e)
 						.build());
 			}
@@ -332,7 +333,7 @@ public class DefaultServer implements Server {
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
-				getLogHandler().log(com.soklet.core.LogEntry.with(LogEntryType.SERVER_INTERNAL_ERROR, "Unable to shut down server request handler executor service")
+				getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server request handler executor service")
 						.throwable(e)
 						.build());
 			} finally {
@@ -495,8 +496,8 @@ public class DefaultServer implements Server {
 	}
 
 	@Nonnull
-	protected LogHandler getLogHandler() {
-		return this.logHandler;
+	protected LogEventHandler getLogEventHandler() {
+		return this.logEventHandler;
 	}
 
 	@Nonnull
@@ -594,7 +595,7 @@ public class DefaultServer implements Server {
 		@Nullable
 		private Integer socketPendingConnectionLimit;
 		@Nullable
-		private LogHandler logHandler;
+		private LogEventHandler logEventHandler;
 		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
@@ -662,8 +663,8 @@ public class DefaultServer implements Server {
 		}
 
 		@Nonnull
-		public Builder logHandler(@Nullable LogHandler logHandler) {
-			this.logHandler = logHandler;
+		public Builder logEventHandler(@Nullable LogEventHandler logEventHandler) {
+			this.logEventHandler = logEventHandler;
 			return this;
 		}
 
