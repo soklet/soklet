@@ -48,17 +48,17 @@ public class DefaultLogEventHandler implements LogEventHandler {
 		requireNonNull(logEvent);
 
 		Throwable throwable = logEvent.getThrowable().orElse(null);
+		String message = logEvent.getMessage();
 
 		if (throwable == null) {
-			System.err.printf("ERROR: %s\n", logEvent.getMessage());
+			System.err.println(message);
 		} else {
 			StringWriter stringWriter = new StringWriter();
 			PrintWriter printWriter = new PrintWriter(stringWriter);
 			throwable.printStackTrace(printWriter);
 
-			String throwableWithStackTrace = stringWriter.toString();
-
-			System.err.printf("ERROR: %s\n%s\n", logEvent.getMessage(), throwableWithStackTrace);
+			String throwableWithStackTrace = stringWriter.toString().trim();
+			System.err.printf("%s\n%s\n", message, throwableWithStackTrace);
 		}
 	}
 }
