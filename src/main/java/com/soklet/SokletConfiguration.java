@@ -20,7 +20,6 @@ import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.core.CorsAuthorizer;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.LifecycleInterceptor;
-import com.soklet.core.LogEventHandler;
 import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
@@ -28,7 +27,6 @@ import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
 import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultLifecycleInterceptor;
-import com.soklet.core.impl.DefaultLogEventHandler;
 import com.soklet.core.impl.DefaultRequestBodyMarshaler;
 import com.soklet.core.impl.DefaultResourceMethodParameterProvider;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
@@ -66,8 +64,6 @@ public class SokletConfiguration {
 	@Nonnull
 	private final CorsAuthorizer corsAuthorizer;
 	@Nonnull
-	private final LogEventHandler logEventHandler;
-	@Nonnull
 	private final Server server;
 
 	/**
@@ -96,7 +92,6 @@ public class SokletConfiguration {
 		requireNonNull(builder);
 
 		this.server = builder.server;
-		this.logEventHandler = builder.logEventHandler != null ? builder.logEventHandler : DefaultLogEventHandler.sharedInstance();
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : DefaultInstanceProvider.sharedInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.sharedInstance();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : new DefaultRequestBodyMarshaler(getValueConverterRegistry());
@@ -207,11 +202,6 @@ public class SokletConfiguration {
 		return this.server;
 	}
 
-	@Nonnull
-	public LogEventHandler getLogEventHandler() {
-		return this.logEventHandler;
-	}
-
 	/**
 	 * Builder used to construct instances of {@link SokletConfiguration}.
 	 * <p>
@@ -239,8 +229,6 @@ public class SokletConfiguration {
 		private LifecycleInterceptor lifecycleInterceptor;
 		@Nullable
 		private CorsAuthorizer corsAuthorizer;
-		@Nullable
-		private LogEventHandler logEventHandler;
 
 		@Nonnull
 		protected Builder(@Nonnull Server server) {
@@ -304,12 +292,6 @@ public class SokletConfiguration {
 		}
 
 		@Nonnull
-		public Builder logEventHandler(@Nullable LogEventHandler logEventHandler) {
-			this.logEventHandler = logEventHandler;
-			return this;
-		}
-
-		@Nonnull
 		public SokletConfiguration build() {
 			return new SokletConfiguration(this);
 		}
@@ -339,7 +321,6 @@ public class SokletConfiguration {
 			this.builder.responseMarshaler = sokletConfiguration.responseMarshaler;
 			this.builder.lifecycleInterceptor = sokletConfiguration.lifecycleInterceptor;
 			this.builder.corsAuthorizer = sokletConfiguration.corsAuthorizer;
-			this.builder.logEventHandler = sokletConfiguration.logEventHandler;
 		}
 
 		@Nonnull
@@ -394,12 +375,6 @@ public class SokletConfiguration {
 		@Nonnull
 		public Copier corsAuthorizer(@Nullable CorsAuthorizer corsAuthorizer) {
 			this.builder.corsAuthorizer = corsAuthorizer;
-			return this;
-		}
-
-		@Nonnull
-		public Copier logEventHandler(@Nullable LogEventHandler logEventHandler) {
-			this.builder.logEventHandler = logEventHandler;
 			return this;
 		}
 

@@ -17,8 +17,8 @@
 package com.soklet.core.impl;
 
 import com.soklet.core.HttpMethod;
+import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogEvent;
-import com.soklet.core.LogEventHandler;
 import com.soklet.core.LogEventType;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.MultipartParser;
@@ -124,7 +124,7 @@ public class DefaultServer implements Server {
 	@Nonnull
 	private final Integer socketPendingConnectionLimit;
 	@Nonnull
-	private final LogEventHandler logEventHandler;
+	private final LifecycleInterceptor lifecycleInterceptor;
 	@Nonnull
 	private final MultipartParser multipartParser;
 	@Nonnull
@@ -158,16 +158,23 @@ public class DefaultServer implements Server {
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
-		this.logEventHandler = builder.logEventHandler != null ? builder.logEventHandler : DefaultLogEventHandler.sharedInstance();
+		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.sharedInstance();
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "request-handler-";
 
 			if (Utilities.virtualThreadsAvailable())
 				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
-					getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
-							.throwable(throwable)
-							.build());
+					try {
+						getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
+								.throwable(throwable)
+								.build());
+					} catch (Throwable loggingThrowable) {
+						// We are in a bad state - the log operation in the uncaught exception handler failed.
+						// Not much else we can do here but dump to stderr
+						throwable.printStackTrace();
+						loggingThrowable.printStackTrace();
+					}
 				});
 
 			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
@@ -260,26 +267,26 @@ public class DefaultServer implements Server {
 								try {
 									microHttpCallback.accept(microhttpResponse);
 								} catch (Throwable t) {
-									getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
+									getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
 											.throwable(t)
 											.build());
 								}
 							} catch (Throwable t) {
-								getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
+								getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
 										.throwable(t)
 										.build());
 
 								try {
 									microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
 								} catch (Throwable t2) {
-									getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+									getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 											.throwable(t2)
 											.build());
 								}
 							}
 						}));
 					} catch (Throwable t) {
-						getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
+						getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
 								.throwable(t)
 								.build());
 
@@ -287,7 +294,7 @@ public class DefaultServer implements Server {
 							try {
 								microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
 							} catch (Throwable t2) {
-								getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+								getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 										.throwable(t2)
 										.build());
 							}
@@ -320,7 +327,7 @@ public class DefaultServer implements Server {
 			try {
 				getEventLoop().get().stop();
 			} catch (Exception e) {
-				getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
+				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
 						.throwable(e)
 						.build());
 			}
@@ -333,7 +340,7 @@ public class DefaultServer implements Server {
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
-				getLogEventHandler().log(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server request handler executor service")
+				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server request handler executor service")
 						.throwable(e)
 						.build());
 			} finally {
@@ -496,8 +503,8 @@ public class DefaultServer implements Server {
 	}
 
 	@Nonnull
-	protected LogEventHandler getLogEventHandler() {
-		return this.logEventHandler;
+	protected LifecycleInterceptor getLifecycleInterceptor() {
+		return this.lifecycleInterceptor;
 	}
 
 	@Nonnull
@@ -595,7 +602,7 @@ public class DefaultServer implements Server {
 		@Nullable
 		private Integer socketPendingConnectionLimit;
 		@Nullable
-		private LogEventHandler logEventHandler;
+		private LifecycleInterceptor lifecycleInterceptor;
 		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
@@ -663,8 +670,8 @@ public class DefaultServer implements Server {
 		}
 
 		@Nonnull
-		public Builder logEventHandler(@Nullable LogEventHandler logEventHandler) {
-			this.logEventHandler = logEventHandler;
+		public Builder lifecycleInterceptor(@Nullable LifecycleInterceptor lifecycleInterceptor) {
+			this.lifecycleInterceptor = lifecycleInterceptor;
 			return this;
 		}
 

@@ -25,7 +25,6 @@ import com.soklet.core.HttpMethod;
 import com.soklet.core.InstanceProvider;
 import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogEvent;
-import com.soklet.core.LogEventHandler;
 import com.soklet.core.LogEventType;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
@@ -160,7 +159,6 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		ResourceMethodResolver resourceMethodResolver = sokletConfiguration.getResourceMethodResolver();
 		ResponseMarshaler responseMarshaler = sokletConfiguration.getResponseMarshaler();
 		LifecycleInterceptor lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
-		LogEventHandler logEventHandler = getSokletConfiguration().getLogEventHandler();
 
 		// Holders to permit mutable effectively-final variables
 		AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
@@ -177,7 +175,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 		Consumer<LogEvent> safelyLog = (logEvent -> {
 			try {
-				logEventHandler.log(logEvent);
+				lifecycleInterceptor.didReceiveLogEvent(logEvent);
 			} catch (Throwable t) {
 				throwables.add(t);
 			}
