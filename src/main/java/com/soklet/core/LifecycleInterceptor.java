@@ -196,8 +196,7 @@ public interface LifecycleInterceptor {
 	 * <p>
 	 * This is a more coarse-grained approach than {@link #interceptRequest(Request, ResourceMethod, Function, Consumer)}.
 	 * <pre> // Default implementation: let the request processing proceed as normal
-	 * requestProcessor.accept(request);
-	 * </pre>
+	 * requestProcessor.accept(request);</pre>
 	 * See <a href="https://www.soklet.com/docs/request-lifecycle#request-wrapping">https://www.soklet.com/docs/request-lifecycle#request-wrapping</a> for detailed documentation.
 	 *
 	 * @param request          the request that was received

@@ -23,6 +23,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
+ * Permits multiple {@link PUT} annotations to be applied to the same Resource Method.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @Target(ElementType.METHOD)
