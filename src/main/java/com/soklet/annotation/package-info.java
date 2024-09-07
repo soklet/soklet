@@ -15,7 +15,9 @@
  */
 
 /**
- * Annotations applicable to Resource methods and their parameters.
+ * Annotations applicable to Resource Methods and their parameters.
+ * <p>
+ * These are documented in detail at <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

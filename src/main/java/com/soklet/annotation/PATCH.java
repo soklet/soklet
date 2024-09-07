@@ -32,6 +32,13 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Repeatable(value = PATCHes.class)
 public @interface PATCH {
+	/**
+	 * The {@code PATCH} URL that should be handled by this Resource Method.
+	 * <p>
+	 * The URL must start with a {@code /} character, e.g. {@code /widgets/{widgetId}}.
+	 *
+	 * @return the {@code PATCH} URL that should be handled by this Resource Method
+	 */
 	@Nonnull
 	String value();
 }

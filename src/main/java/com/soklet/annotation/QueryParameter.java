@@ -35,7 +35,7 @@ public @interface QueryParameter {
 	/**
 	 * The name of the HTTP query parameter.
 	 * <p>
-	 * Defaults to the name of the Java method parameter if your application is built with the {@code -parameters} compiler option.
+	 * If {@code null} or blank, defaults to the name of the Java method parameter if your application is built with the {@code -parameters} compiler option.
 	 *
 	 * @return the name of the HTTP query parameter to inject into this Resource Method parameter
 	 */

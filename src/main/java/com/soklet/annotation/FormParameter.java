@@ -23,13 +23,29 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
+ * Apply to Resource Method parameters to enable HTML form parameter injection.
+ * <p>
+ * Refer to documentation at <a href="https://www.soklet.com/docs/request-handling#form-parameters">https://www.soklet.com/docs/request-handling#form-parameters</a> for details.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface FormParameter {
+	/**
+	 * The name of the HTML form parameter.
+	 * <p>
+	 * If {@code null} or blank, defaults to the name of the Java method parameter if your application is built with the {@code -parameters} compiler option.
+	 *
+	 * @return the name of the HTML form parameter to inject into this Resource Method parameter
+	 */
 	@Nullable
 	String name() default "";
 
+	/**
+	 * Is this HTML form parameter optional or required?
+	 *
+	 * @return {@code true} if optional, {@code false} if required
+	 */
 	boolean optional() default false;
 }

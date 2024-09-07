@@ -32,6 +32,13 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Repeatable(value = OPTIONSes.class)
 public @interface OPTIONS {
+	/**
+	 * The {@code OPTIONS} URL that should be handled by this Resource Method.
+	 * <p>
+	 * The URL must start with a {@code /} character, e.g. {@code /widgets/{widgetId}}.
+	 *
+	 * @return the {@code OPTIONS} URL that should be handled by this Resource Method
+	 */
 	@Nonnull
 	String value();
 }

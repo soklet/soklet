@@ -23,13 +23,29 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
+ * Apply to Resource Method parameters to enable HTTP request cookie injection.
+ * <p>
+ * Refer to documentation at <a href="https://www.soklet.com/docs/request-handling#cookies">https://www.soklet.com/docs/request-handling#cookies</a> for details.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface RequestCookie {
+	/**
+	 * The name of the HTTP request cookie.
+	 * <p>
+	 * If {@code null} or blank, defaults to the name of the Java method parameter if your application is built with the {@code -parameters} compiler option.
+	 *
+	 * @return the name of the HTTP request cookie to inject into this Resource Method parameter
+	 */
 	@Nullable
 	String name() default "";
 
+	/**
+	 * Is this HTTP request cookie optional or required?
+	 *
+	 * @return {@code true} if optional, {@code false} if required
+	 */
 	boolean optional() default false;
 }

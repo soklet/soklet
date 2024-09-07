@@ -24,6 +24,17 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
+ * This annotation must be present on a class for Resource Methods to be detected.
+ * <p>
+ * For example:
+ * <pre>{@code  @Resource // This annotation must be here for @GET to work
+ * public class MyResource {
+ *   @GET("/")
+ *   public String index() {
+ *     return "Hello, world!";
+ *   }
+ * }}</pre>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @Target(ElementType.TYPE)
