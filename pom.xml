@@ -89,10 +89,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.5.0</version>
+                <version>3.10.0</version>
                 <configuration>
                     <links>
-                        <link>https://docs.oracle.com/en/java/javase/21/docs/api/</link>
+                        <link>https://docs.oracle.com/en/java/javase/22/docs/api/</link>
                         <link>https://javadoc.io/doc/com.google.code.findbugs/jsr305/latest/</link>
                     </links>
                     <quiet>true</quiet>

@@ -28,6 +28,10 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * A loggable event that occurs during Soklet's internal processing.
+ * <p>
+ * These events are exposed via {@link LifecycleInterceptor#didReceiveLogEvent(LogEvent)}.
+ * <p>
+ * Documentation is available at <a href="https://www.soklet.com/docs/request-lifecycle#event-logging">https://www.soklet.com/docs/request-lifecycle#event-logging</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

@@ -116,7 +116,7 @@ public interface ResponseMarshaler {
 	 * Invoked for any non-preflight CORS request that {@link CorsAuthorizer} approves.
 	 * <p>
 	 * This method will normally return a copy of the {@code marshaledResponse} with these headers applied
-	 * based on the values of {@corsResponse}:
+	 * based on the values of {@code corsResponse}:
 	 * <ul>
 	 *   <li>{@code Access-Control-Allow-Origin} (required)</li>
 	 *   <li>{@code Access-Control-Allow-Credentials} (optional)</li>
