@@ -22,8 +22,10 @@ import java.lang.reflect.Type;
 import java.util.Optional;
 
 /**
- * Contract for converting objects from one type to another. For example, you might have a
- * {@code ValueConverter<String, List<Integer>>} which converts text like {@code "1,2,3"} to a list of numbers.
+ * Contract for converting objects from one type to another.
+ * <p>
+ * For example, you might have a {@code ValueConverter<String, List<Integer>>} which converts
+ * text like {@code "1,2,3"} to a list of numbers.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -31,21 +33,21 @@ public interface ValueConverter<F, T> {
 	/**
 	 * Converts {@code from} to an instance of {@code T}.
 	 *
-	 * @param from The value from which to convert. May be {@code null}.
-	 * @return The {@code T} representation of {@code from}.
-	 * @throws ValueConversionException If an error occurs during conversion.
+	 * @param from the value from which to convert. May be {@code null}
+	 * @return the {@code T} representation of {@code from}
+	 * @throws ValueConversionException if an error occurs during conversion
 	 */
 	@Nonnull
 	Optional<T> convert(@Nullable F from) throws ValueConversionException;
 
 	/**
-	 * @return The type represented by {@code F}.
+	 * @return the type represented by {@code F}
 	 */
 	@Nonnull
 	Type getFromType();
 
 	/**
-	 * @return The type represented by {@code T}.
+	 * @return the type represented by {@code T}
 	 */
 	@Nonnull
 	Type getToType();

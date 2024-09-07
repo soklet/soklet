@@ -16,6 +16,10 @@
 
 /**
  * Utilities which handle converting objects from one type to another.
+ * <p>
+ * For example, converting a {@link java.lang.String} value {@code "2024-09-30"} to a {@link java.time.LocalDate}.
+ * <p>
+ * Value conversion is documented in detail at <a href="https://www.soklet.com/docs/value-conversions">https://www.soklet.com/docs/value-conversions</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

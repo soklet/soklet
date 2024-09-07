@@ -32,6 +32,8 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Convenience superclass which provides default implementations of {@link ValueConverter} methods.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -41,6 +43,9 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	@Nonnull
 	private final Type toType;
 
+	/**
+	 * Supports subclasses that have both 'from' and 'to' generic types.
+	 */
 	public AbstractValueConverter() {
 		List<Type> genericTypes = genericTypesForClass(getClass());
 
@@ -60,6 +65,11 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 		this.toType = toType;
 	}
 
+	/**
+	 * Supports subclasses that have only a 'to' generic type, like {@link FromStringValueConverter}.
+	 *
+	 * @param fromType an explicitly-provided 'from' type
+	 */
 	public AbstractValueConverter(@Nonnull Type fromType) {
 		requireNonNull(fromType);
 
