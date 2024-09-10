@@ -16,8 +16,6 @@
 
 package com.soklet.converter;
 
-import com.soklet.core.Utilities;
-
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -28,6 +26,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import static com.soklet.core.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -92,16 +91,9 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	@Override
 	@SuppressWarnings("unchecked")
 	public final Optional<T> convert(@Nullable F from) throws ValueConversionException {
-		if (from == null)
-			return Optional.empty();
-
 		// Special handling for String types
-		if (from instanceof String) {
-			from = (F) Utilities.trimAggressivelyToNull((String) from);
-
-			if (from == null)
-				return Optional.empty();
-		}
+		if (from instanceof String && shouldTrimFromValues())
+			from = (F) trimAggressivelyToNull((String) from);
 
 		try {
 			return performConversion(from);
@@ -114,7 +106,19 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	}
 
 	@Nonnull
-	public abstract Optional<T> performConversion(@Nonnull F from) throws Exception;
+	protected Boolean shouldTrimFromValues() {
+		return true;
+	}
+
+	/**
+	 * Subclasses must implement this method to convert a 'from' instance to a 'to' instance.
+	 *
+	 * @param from the instance we are converting from
+	 * @return an instance that was converted to
+	 * @throws Exception if an error occured during conversion
+	 */
+	@Nonnull
+	public abstract Optional<T> performConversion(@Nullable F from) throws Exception;
 
 	@Override
 	@Nonnull

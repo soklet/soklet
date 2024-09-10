@@ -41,12 +41,16 @@ public interface ValueConverter<F, T> {
 	Optional<T> convert(@Nullable F from) throws ValueConversionException;
 
 	/**
+	 * The 'converting from' type.
+	 *
 	 * @return the type represented by {@code F}
 	 */
 	@Nonnull
 	Type getFromType();
 
 	/**
+	 * The 'converting to' type.
+	 *
 	 * @return the type represented by {@code T}
 	 */
 	@Nonnull

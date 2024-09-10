@@ -87,7 +87,7 @@ public class ValueConverterRegistry {
 				defaultValueConverters.size()
 						+ customValueConverters.size()
 						+ 1 // reflexive converter
-						+ 50 // leave a little headroom for enum types that might accumulate over time
+						+ 100 // leave a little headroom for enum types that might accumulate over time
 		);
 
 		// By default, we include out-of-the-box converters
@@ -199,8 +199,8 @@ public class ValueConverterRegistry {
 	private static final class ReflexiveValueConverter<T> extends AbstractValueConverter<T, T> {
 		@Nonnull
 		@Override
-		public Optional<T> performConversion(@Nonnull T from) throws Exception {
-			return Optional.of(from);
+		public Optional<T> performConversion(@Nullable T from) throws Exception {
+			return Optional.ofNullable(from);
 		}
 	}
 

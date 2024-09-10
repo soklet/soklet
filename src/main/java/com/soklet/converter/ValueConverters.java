@@ -17,7 +17,9 @@
 package com.soklet.converter;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
@@ -34,6 +36,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.UUID;
 
+import static com.soklet.core.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 
 /**
@@ -92,7 +95,10 @@ public final class ValueConverters {
 	private static final class StringToIntegerValueConverter extends FromStringValueConverter<Integer> {
 		@Override
 		@Nonnull
-		public Optional<Integer> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Integer> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(Integer.parseInt(from));
 		}
 	}
@@ -101,7 +107,10 @@ public final class ValueConverters {
 	private static final class StringToLongValueConverter extends FromStringValueConverter<Long> {
 		@Override
 		@Nonnull
-		public Optional<Long> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Long> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(Long.parseLong(from));
 		}
 	}
@@ -110,7 +119,10 @@ public final class ValueConverters {
 	private static final class StringToDoubleValueConverter extends FromStringValueConverter<Double> {
 		@Override
 		@Nonnull
-		public Optional<Double> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Double> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(Double.parseDouble(from));
 		}
 	}
@@ -119,7 +131,10 @@ public final class ValueConverters {
 	private static final class StringToFloatValueConverter extends FromStringValueConverter<Float> {
 		@Override
 		@Nonnull
-		public Optional<Float> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Float> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(Float.parseFloat(from));
 		}
 	}
@@ -128,7 +143,10 @@ public final class ValueConverters {
 	private static final class StringToByteValueConverter extends FromStringValueConverter<Byte> {
 		@Override
 		@Nonnull
-		public Optional<Byte> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Byte> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(Byte.parseByte(from));
 		}
 	}
@@ -137,22 +155,54 @@ public final class ValueConverters {
 	private static final class StringToShortValueConverter extends FromStringValueConverter<Short> {
 		@Override
 		@Nonnull
-		public Optional<Short> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Short> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(Short.parseShort(from));
 		}
 	}
 
 	@ThreadSafe
 	private static final class StringToCharacterValueConverter extends FromStringValueConverter<Character> {
-		@Override
 		@Nonnull
-		public Optional<Character> performConversion(@Nonnull String from) throws Exception {
-			if (from.length() != 1)
+		@Override
+		public Optional<Character> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
+			String trimmedFrom = trimAggressivelyToNull(from);
+
+			// Special handling for all-whitespace.
+			// If there is at least one space, return ' '
+			if (from.length() > 0 && trimmedFrom == null)
+				return Optional.of(' ');
+
+			if (trimmedFrom.length() != 1)
 				throw new ValueConversionException(format(
-						"Unable to convert %s value '%s' to %s. Reason: '%s' is not a single-character String.", getFromType(), from,
+						"Unable to convert %s value '%s' to %s. Reason: '%s' is not a single-character String.", getFromType(), trimmedFrom,
 						getToType(), from), getFromType(), getToType());
 
-			return Optional.of(from.charAt(0));
+			return Optional.of(trimmedFrom.charAt(0));
+		}
+
+		@Nonnull
+		@Override
+		protected Boolean shouldTrimFromValues() {
+			// Special handling: we want to handle trimming ourselves
+			return false;
+		}
+
+		@Nonnull
+		@Override
+		public Type getFromType() {
+			return String.class;
+		}
+
+		@Nonnull
+		@Override
+		public Type getToType() {
+			return Character.class;
 		}
 	}
 
@@ -160,7 +210,10 @@ public final class ValueConverters {
 	private static final class StringToBooleanValueConverter extends FromStringValueConverter<Boolean> {
 		@Override
 		@Nonnull
-		public Optional<Boolean> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Boolean> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(Boolean.parseBoolean(from));
 		}
 	}
@@ -171,7 +224,10 @@ public final class ValueConverters {
 	private static final class StringToBigIntegerValueConverter extends FromStringValueConverter<BigInteger> {
 		@Override
 		@Nonnull
-		public Optional<BigInteger> performConversion(@Nonnull String from) throws Exception {
+		public Optional<BigInteger> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(new BigInteger(from));
 		}
 	}
@@ -180,7 +236,10 @@ public final class ValueConverters {
 	private static final class StringToBigDecimalValueConverter extends FromStringValueConverter<BigDecimal> {
 		@Override
 		@Nonnull
-		public Optional<BigDecimal> performConversion(@Nonnull String from) throws Exception {
+		public Optional<BigDecimal> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(new BigDecimal(from));
 		}
 	}
@@ -189,7 +248,10 @@ public final class ValueConverters {
 	private static final class StringToNumberValueConverter extends FromStringValueConverter<Number> {
 		@Override
 		@Nonnull
-		public Optional<Number> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Number> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(new BigDecimal(from));
 		}
 	}
@@ -198,7 +260,10 @@ public final class ValueConverters {
 	private static final class StringToUuidValueConverter extends FromStringValueConverter<UUID> {
 		@Override
 		@Nonnull
-		public Optional<UUID> performConversion(@Nonnull String from) throws Exception {
+		public Optional<UUID> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(UUID.fromString(from));
 		}
 	}
@@ -207,7 +272,10 @@ public final class ValueConverters {
 	private static final class StringToDateValueConverter extends FromStringValueConverter<Date> {
 		@Override
 		@Nonnull
-		public Optional<Date> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Date> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(new Date(Long.parseLong(from)));
 		}
 	}
@@ -216,7 +284,10 @@ public final class ValueConverters {
 	private static final class StringToInstantValueConverter extends FromStringValueConverter<Instant> {
 		@Override
 		@Nonnull
-		public Optional<Instant> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Instant> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(Instant.ofEpochMilli(Long.parseLong(from)));
 		}
 	}
@@ -225,7 +296,10 @@ public final class ValueConverters {
 	private static final class StringToLocalDateValueConverter extends FromStringValueConverter<LocalDate> {
 		@Override
 		@Nonnull
-		public Optional<LocalDate> performConversion(@Nonnull String from) throws Exception {
+		public Optional<LocalDate> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(LocalDate.parse(from));
 		}
 	}
@@ -234,7 +308,10 @@ public final class ValueConverters {
 	private static final class StringToLocalTimeValueConverter extends FromStringValueConverter<LocalTime> {
 		@Override
 		@Nonnull
-		public Optional<LocalTime> performConversion(@Nonnull String from) throws Exception {
+		public Optional<LocalTime> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(LocalTime.parse(from));
 		}
 	}
@@ -243,7 +320,10 @@ public final class ValueConverters {
 	private static final class StringToLocalDateTimeValueConverter extends FromStringValueConverter<LocalDateTime> {
 		@Override
 		@Nonnull
-		public Optional<LocalDateTime> performConversion(@Nonnull String from) throws Exception {
+		public Optional<LocalDateTime> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(LocalDateTime.parse(from));
 		}
 	}
@@ -252,7 +332,10 @@ public final class ValueConverters {
 	private static final class StringToZoneIdValueConverter extends FromStringValueConverter<ZoneId> {
 		@Override
 		@Nonnull
-		public Optional<ZoneId> performConversion(@Nonnull String from) throws Exception {
+		public Optional<ZoneId> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(ZoneId.of(from));
 		}
 	}
@@ -261,7 +344,10 @@ public final class ValueConverters {
 	private static final class StringToTimeZoneValueConverter extends FromStringValueConverter<TimeZone> {
 		@Override
 		@Nonnull
-		public Optional<TimeZone> performConversion(@Nonnull String from) throws Exception {
+		public Optional<TimeZone> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			// Use ZoneId.of since it will throw an exception if the format is invalid.
 			// TimeZone.getTimeZone() returns GMT for invalid formats, which is not the behavior we want
 			return Optional.of(TimeZone.getTimeZone(ZoneId.of(from)));
@@ -272,7 +358,10 @@ public final class ValueConverters {
 	private static final class StringToLocaleValueConverter extends FromStringValueConverter<Locale> {
 		@Override
 		@Nonnull
-		public Optional<Locale> performConversion(@Nonnull String from) throws Exception {
+		public Optional<Locale> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
 			return Optional.of(new Locale.Builder().setLanguageTag(from).build());
 		}
 	}
