@@ -101,7 +101,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 			throw e;
 		} catch (Exception e) {
 			throw new ValueConversionException(format("Unable to convert value '%s' of type %s to an instance of %s", from,
-					getFromType(), getToType()), e, getFromType(), getToType());
+					getFromType(), getToType()), e, getFromType(), from, getToType());
 		}
 	}
 

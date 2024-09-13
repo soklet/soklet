@@ -145,7 +145,7 @@ public class ValueConverterRegistry {
 							return Optional.ofNullable((T) Enum.valueOf(toClass, from.toString()));
 						} catch (Exception e) {
 							throw new ValueConversionException(format("Unable to convert value '%s' of type %s to an instance of %s",
-									from, getFromType(), getToType()), e, getFromType(), getToType());
+									from, getFromType(), getToType()), e, getFromType(), from, getToType());
 						}
 					}
 

@@ -181,7 +181,7 @@ public final class ValueConverters {
 			if (trimmedFrom.length() != 1)
 				throw new ValueConversionException(format(
 						"Unable to convert %s value '%s' to %s. Reason: '%s' is not a single-character String.", getFromType(), trimmedFrom,
-						getToType(), from), getFromType(), getToType());
+						getToType(), from), getFromType(), from, getToType());
 
 			return Optional.of(trimmedFrom.charAt(0));
 		}

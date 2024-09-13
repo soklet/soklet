@@ -20,21 +20,38 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.lang.reflect.Type;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Thrown if an error occurs during value conversion.
+ * <p>
+ * For example, a {@link ValueConverter} for 'from' type {@link String} and 'to' type {@link Integer}
+ * might throw this exception if the 'from' value is {@code "abc"}.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
 public class ValueConversionException extends Exception {
 	@Nonnull
 	private final Type fromType;
+	@Nullable
+	private final Object fromValue;
 	@Nonnull
 	private final Type toType;
 
+	/**
+	 * Creates an exception that describes the value conversion error.
+	 *
+	 * @param message   a message describing the error
+	 * @param fromType  the 'from' type
+	 * @param fromValue the value supplied for the 'from' type
+	 * @param toType    the 'to' type
+	 */
 	public ValueConversionException(@Nullable String message,
 																	@Nonnull Type fromType,
+																	@Nullable Object fromValue,
 																	@Nonnull Type toType) {
 		super(message);
 
@@ -42,11 +59,21 @@ public class ValueConversionException extends Exception {
 		requireNonNull(toType);
 
 		this.fromType = fromType;
+		this.fromValue = fromValue;
 		this.toType = toType;
 	}
 
+	/**
+	 * Creates an exception that describes the value conversion error.
+	 *
+	 * @param cause     the underlying exception that caused this one to be thrown
+	 * @param fromType  the 'from' type
+	 * @param fromValue the value supplied for the 'from' type
+	 * @param toType    the 'to' type
+	 */
 	public ValueConversionException(@Nullable Throwable cause,
 																	@Nonnull Type fromType,
+																	@Nullable Object fromValue,
 																	@Nonnull Type toType) {
 		super(cause);
 
@@ -54,12 +81,23 @@ public class ValueConversionException extends Exception {
 		requireNonNull(toType);
 
 		this.fromType = fromType;
+		this.fromValue = fromValue;
 		this.toType = toType;
 	}
 
+	/**
+	 * Creates an exception that describes the value conversion error.
+	 *
+	 * @param message   a message describing the error
+	 * @param cause     the underlying exception that caused this one to be thrown
+	 * @param fromType  the 'from' type
+	 * @param fromValue the value supplied for the 'from' type
+	 * @param toType    the 'to' type
+	 */
 	public ValueConversionException(@Nullable String message,
 																	@Nullable Throwable cause,
 																	@Nonnull Type fromType,
+																	@Nullable Object fromValue,
 																	@Nonnull Type toType) {
 		super(message, cause);
 
@@ -67,14 +105,35 @@ public class ValueConversionException extends Exception {
 		requireNonNull(toType);
 
 		this.fromType = fromType;
+		this.fromValue = fromValue;
 		this.toType = toType;
 	}
 
+	/**
+	 * The 'from' type of the failed {@link ValueConverter}.
+	 *
+	 * @return the 'from' type
+	 */
 	@Nonnull
 	public Type getFromType() {
 		return this.fromType;
 	}
 
+	/**
+	 * The 'from' value of the failed {@link ValueConverter}.
+	 *
+	 * @return the 'from' value that could not be converted to the 'to' type
+	 */
+	@Nonnull
+	public Optional<Object> getFromValue() {
+		return Optional.ofNullable(this.fromValue);
+	}
+
+	/**
+	 * The 'to' type of the failed {@link ValueConverter}.
+	 *
+	 * @return the 'to' type
+	 */
 	@Nonnull
 	public Type getToType() {
 		return this.toType;
