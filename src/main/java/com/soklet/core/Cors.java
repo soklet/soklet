@@ -47,7 +47,7 @@ public class Cors {
 	 * Constructs a CORS <strong>non-preflight</strong> request representation for the given HTTP request data.
 	 *
 	 * @param httpMethod the request's HTTP method
-	 * @param origin     HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value
+	 * @param origin     HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> request header value
 	 */
 	public Cors(@Nonnull HttpMethod httpMethod,
 							@Nonnull String origin) {

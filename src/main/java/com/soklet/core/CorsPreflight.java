@@ -55,8 +55,8 @@ public class CorsPreflight {
 	 * CORS preflight requests always have method {@code OPTIONS} and specify their target method via
 	 * the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header value.
 	 *
-	 * @param origin                     HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value
-	 * @param accessControlRequestMethod HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header value
+	 * @param origin                     HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> request header value
+	 * @param accessControlRequestMethod HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> request header value
 	 */
 	public CorsPreflight(@Nonnull String origin,
 											 @Nonnull HttpMethod accessControlRequestMethod) {
@@ -67,11 +67,11 @@ public class CorsPreflight {
 	 * Constructs a CORS <strong>preflight</strong> request representation for the given HTTP request data.
 	 * <p>
 	 * CORS preflight requests always have method {@code OPTIONS} and specify their target method via
-	 * the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header value.
+	 * the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> request value.
 	 *
-	 * @param origin                      HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value
-	 * @param accessControlRequestMethod  HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header value
-	 * @param accessControlRequestHeaders the optional set of HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Headers">{@code Access-Control-Request-Headers}</a> header values
+	 * @param origin                      HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> request header value
+	 * @param accessControlRequestMethod  HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> request header value
+	 * @param accessControlRequestHeaders the optional set of HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Headers">{@code Access-Control-Request-Headers}</a> request header values
 	 */
 	public CorsPreflight(@Nonnull String origin,
 											 @Nonnull HttpMethod accessControlRequestMethod,
@@ -162,7 +162,7 @@ public class CorsPreflight {
 	}
 
 	/**
-	 * Returns the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value.
+	 * Returns the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> request header value.
 	 *
 	 * @return the header value
 	 */
@@ -172,7 +172,7 @@ public class CorsPreflight {
 	}
 
 	/**
-	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header value.
+	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> request header value.
 	 *
 	 * @return the header value
 	 */
@@ -182,7 +182,7 @@ public class CorsPreflight {
 	}
 
 	/**
-	 * Returns the set of values for the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Headers">{@code Access-Control-Request-Headers}</a> header.
+	 * Returns the set of values for the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Headers">{@code Access-Control-Request-Headers}</a> request header.
 	 *
 	 * @return the set of header values, or the empty set if not present
 	 */

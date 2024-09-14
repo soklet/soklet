@@ -27,7 +27,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -57,13 +56,13 @@ public class MarshaledResponse {
 
 		this.statusCode = builder.statusCode;
 		this.headers = builder.headers == null ? Map.of() : new LinkedCaseInsensitiveMap<>(builder.headers);
-		this.cookies = builder.responseCookies == null ? Set.of() : new LinkedHashSet<>(builder.responseCookies);
+		this.cookies = builder.cookies == null ? Set.of() : new LinkedHashSet<>(builder.cookies);
 		this.body = builder.body;
 	}
 
 	@Override
 	public String toString() {
-		return format("%s{statusCode=%s, headers=%s, responseCookies=%s, body=%s}", getClass().getSimpleName(),
+		return format("%s{statusCode=%s, headers=%s, cookies=%s, body=%s}", getClass().getSimpleName(),
 				getStatusCode(), getHeaders(), getCookies(),
 				format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
 	}
@@ -105,7 +104,7 @@ public class MarshaledResponse {
 		@Nonnull
 		private Integer statusCode;
 		@Nullable
-		private Set<ResponseCookie> responseCookies;
+		private Set<ResponseCookie> cookies;
 		@Nullable
 		private Map<String, Set<String>> headers;
 		@Nullable
@@ -124,8 +123,8 @@ public class MarshaledResponse {
 		}
 
 		@Nonnull
-		public Builder cookies(@Nullable Set<ResponseCookie> responseCookies) {
-			this.responseCookies = responseCookies;
+		public Builder cookies(@Nullable Set<ResponseCookie> cookies) {
+			this.cookies = cookies;
 			return this;
 		}
 
@@ -162,45 +161,50 @@ public class MarshaledResponse {
 		Copier(@Nonnull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
 
-			this.builder = new MarshaledResponse.Builder(marshaledResponse.getStatusCode())
-					.headers(new LinkedCaseInsensitiveMap<>(marshaledResponse.getHeaders()))
-					.cookies(new LinkedHashSet<>(marshaledResponse.getCookies()))
-					.body(marshaledResponse.getBody().orElse(null));
+			this.builder = new MarshaledResponse.Builder(marshaledResponse.getStatusCode());
+			this.builder.headers = new LinkedCaseInsensitiveMap<>(marshaledResponse.getHeaders());
+			this.builder.cookies = new LinkedHashSet<>(marshaledResponse.getCookies());
+			this.builder.body = marshaledResponse.getBody().orElse(null);
 		}
 
 		@Nonnull
-		public Copier statusCode(@Nonnull Function<Integer, Integer> statusCodeFunction) {
-			requireNonNull(statusCodeFunction);
-
-			this.builder = new MarshaledResponse.Builder(statusCodeFunction.apply(builder.statusCode))
-					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
-					.cookies(builder.responseCookies == null ? null : new LinkedHashSet<>(builder.responseCookies))
-					.body(builder.body);
-
+		public Copier statusCode(@Nonnull Integer statusCode) {
+			requireNonNull(statusCode);
+			this.builder.statusCode = statusCode;
 			return this;
 		}
 
 		@Nonnull
+		public Copier headers(@Nonnull Map<String, Set<String>> headers) {
+			builder.headers = headers;
+			return this;
+		}
+
+		// Convenience method for mutation
+		@Nonnull
 		public Copier headers(@Nonnull Consumer<Map<String, Set<String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
-
 			headersConsumer.accept(builder.headers);
 			return this;
 		}
 
 		@Nonnull
+		public Copier cookies(@Nullable Set<ResponseCookie> cookies) {
+			builder.cookies = cookies;
+			return this;
+		}
+
+		// Convenience method for mutation
+		@Nonnull
 		public Copier cookies(@Nonnull Consumer<Set<ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
-
-			cookiesConsumer.accept(builder.responseCookies);
+			cookiesConsumer.accept(builder.cookies);
 			return this;
 		}
 
 		@Nonnull
-		public Copier body(@Nonnull Function<byte[], byte[]> bodyFunction) {
-			requireNonNull(bodyFunction);
-
-			builder.body = bodyFunction.apply(builder.body);
+		public Copier body(@Nullable byte[] body) {
+			builder.body = body;
 			return this;
 		}
 

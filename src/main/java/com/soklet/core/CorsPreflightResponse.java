@@ -21,14 +21,20 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Response headers to send over the wire in response to a <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">CORS preflight</a> request.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/cors#writing-cors-responses">https://www.soklet.com/docs/cors#writing-cors-responses</a> for detailed documentation.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -44,10 +50,26 @@ public class CorsPreflightResponse {
 	@Nonnull
 	private final Set<String> accessControlAllowHeaders;
 
+	/**
+	 * Acquires a builder for {@link CorsPreflightResponse} instances.
+	 *
+	 * @param accessControlAllowOrigin the required <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin">{@code Access-Control-Allow-Origin}</a> response header value
+	 * @return the builder
+	 */
 	@Nonnull
 	public static Builder withAccessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
 		requireNonNull(accessControlAllowOrigin);
 		return new Builder(accessControlAllowOrigin);
+	}
+
+	/**
+	 * Vends a mutable copier seeded with this instance's data, suitable for building new instances.
+	 *
+	 * @return a copier for this instance
+	 */
+	@Nonnull
+	public Copier copy() {
+		return new Copier(this);
 	}
 
 	protected CorsPreflightResponse(@Nonnull Builder builder) {
@@ -91,26 +113,51 @@ public class CorsPreflightResponse {
 				getAccessControlMaxAge(), getAccessControlAllowMethods(), getAccessControlAllowHeaders());
 	}
 
+	/**
+	 * Value for the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin">{@code Access-Control-Allow-Origin}</a> response header.
+	 *
+	 * @return the header value
+	 */
 	@Nonnull
 	public String getAccessControlAllowOrigin() {
 		return this.accessControlAllowOrigin;
 	}
 
+	/**
+	 * Value for the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Credentials">{@code Access-Control-Allow-Credentials}</a> response header.
+	 *
+	 * @return the header value, or {@link Optional#empty()} if not specified
+	 */
 	@Nonnull
 	public Optional<Boolean> getAccessControlAllowCredentials() {
 		return Optional.ofNullable(this.accessControlAllowCredentials);
 	}
 
+	/**
+	 * Value for the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Max-Age">{@code Access-Control-Max-Age}</a> response header.
+	 *
+	 * @return the header value, or {@link Optional#empty()} if not specified
+	 */
 	@Nonnull
 	public Optional<Duration> getAccessControlMaxAge() {
 		return Optional.ofNullable(this.accessControlMaxAge);
 	}
 
+	/**
+	 * Set of values for the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Methods">{@code Access-Control-Allow-Methods}</a> response header.
+	 *
+	 * @return the header values, or the empty set if not specified
+	 */
 	@Nonnull
 	public Set<HttpMethod> getAccessControlAllowMethods() {
 		return this.accessControlAllowMethods;
 	}
 
+	/**
+	 * Set of values for the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Headers">{@code Access-Control-Allow-Headers}</a> response header.
+	 *
+	 * @return the header values, or the empty set if not specified
+	 */
 	@Nonnull
 	public Set<String> getAccessControlAllowHeaders() {
 		return this.accessControlAllowHeaders;
@@ -118,6 +165,8 @@ public class CorsPreflightResponse {
 
 	/**
 	 * Builder used to construct instances of {@link CorsPreflightResponse}.
+	 * <p>
+	 * Instances are created by invoking {@link CorsPreflightResponse#withAccessControlAllowOrigin(String)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -175,6 +224,83 @@ public class CorsPreflightResponse {
 		@Nonnull
 		public CorsPreflightResponse build() {
 			return new CorsPreflightResponse(this);
+		}
+	}
+
+	/**
+	 * Builder used to copy instances of {@link CorsPreflightResponse}.
+	 * <p>
+	 * Instances are created by invoking {@link CorsPreflightResponse#copy()}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	public static class Copier {
+		@Nonnull
+		private Builder builder;
+
+		Copier(@Nonnull CorsPreflightResponse corsPreflightResponse) {
+			requireNonNull(corsPreflightResponse);
+
+			this.builder = new Builder(corsPreflightResponse.getAccessControlAllowOrigin());
+			this.builder.accessControlAllowCredentials = corsPreflightResponse.getAccessControlAllowCredentials().orElse(null);
+			this.builder.accessControlMaxAge = corsPreflightResponse.getAccessControlMaxAge().orElse(null);
+			this.builder.accessControlAllowMethods = new LinkedHashSet<>(corsPreflightResponse.getAccessControlAllowMethods());
+			this.builder.accessControlAllowHeaders = new LinkedHashSet<>(corsPreflightResponse.getAccessControlAllowHeaders());
+		}
+
+		@Nonnull
+		public Copier accessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+			requireNonNull(accessControlAllowOrigin);
+			this.builder.accessControlAllowOrigin = accessControlAllowOrigin;
+			return this;
+		}
+
+		@Nonnull
+		public Copier accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
+			this.builder.accessControlAllowCredentials = accessControlAllowCredentials;
+			return this;
+		}
+
+		@Nonnull
+		public Copier accessControlMaxAge(@Nullable Duration accessControlMaxAge) {
+			this.builder.accessControlMaxAge = accessControlMaxAge;
+			return this;
+		}
+
+		@Nonnull
+		public Copier accessControlAllowMethods(@Nullable Set<HttpMethod> accessControlAllowMethods) {
+			this.builder.accessControlAllowMethods = accessControlAllowMethods;
+			return this;
+		}
+
+		// Convenience method for mutation
+		@Nonnull
+		public Copier accessControlAllowMethods(@Nonnull Consumer<Set<HttpMethod>> accessControlAllowMethodsConsumer) {
+			requireNonNull(accessControlAllowMethodsConsumer);
+			accessControlAllowMethodsConsumer.accept(builder.accessControlAllowMethods);
+			return this;
+		}
+
+		@Nonnull
+		public Copier accessControlAllowHeaders(@Nullable Set<String> accessControlAllowHeaders) {
+			this.builder.accessControlAllowHeaders = accessControlAllowHeaders;
+			return this;
+		}
+
+		// Convenience method for mutation
+		@Nonnull
+		public Copier accessControlAllowHeaders(@Nonnull Consumer<Set<String>> accessControlAllowHeadersConsumer) {
+			requireNonNull(accessControlAllowHeadersConsumer);
+			accessControlAllowHeadersConsumer.accept(builder.accessControlAllowHeaders);
+			return this;
+		}
+
+		@Nonnull
+		public CorsPreflightResponse finish() {
+			return this.builder.build();
 		}
 	}
 }

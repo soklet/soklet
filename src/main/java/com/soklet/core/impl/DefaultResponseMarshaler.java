@@ -195,7 +195,7 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		// A HEAD can never write a response body, but we explicitly set its Content-Length header
 		// so the client knows how long the response would have been.
 		return getMethodMarshaledResponse.copy()
-				.body(oldBody -> null)
+				.body(null)
 				.headers((mutableHeaders) -> {
 					byte[] responseBytes = getMethodMarshaledResponse.getBody().orElse(emptyByteArray());
 					mutableHeaders.put("Content-Length", Set.of(String.valueOf(responseBytes.length)));

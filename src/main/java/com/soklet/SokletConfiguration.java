@@ -205,6 +205,8 @@ public class SokletConfiguration {
 	/**
 	 * Builder used to construct instances of {@link SokletConfiguration}.
 	 * <p>
+	 * Instances are created by invoking {@link SokletConfiguration#withServer(Server)} or {@link SokletConfiguration#withMockServer()}.
+	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -300,6 +302,8 @@ public class SokletConfiguration {
 	/**
 	 * Builder used to copy instances of {@link SokletConfiguration}.
 	 * <p>
+	 * Instances are created by invoking {@link SokletConfiguration#copy()}.
+	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -307,12 +311,12 @@ public class SokletConfiguration {
 	@NotThreadSafe
 	public static class Copier {
 		@Nonnull
-		private SokletConfiguration.Builder builder;
+		private Builder builder;
 
 		Copier(@Nonnull SokletConfiguration sokletConfiguration) {
 			requireNonNull(sokletConfiguration);
 
-			this.builder = new SokletConfiguration.Builder(sokletConfiguration.getServer());
+			this.builder = new Builder(sokletConfiguration.getServer());
 			this.builder.instanceProvider = sokletConfiguration.getInstanceProvider();
 			this.builder.valueConverterRegistry = sokletConfiguration.valueConverterRegistry;
 			this.builder.requestBodyMarshaler = sokletConfiguration.requestBodyMarshaler;
