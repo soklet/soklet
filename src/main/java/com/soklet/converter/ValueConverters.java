@@ -40,6 +40,10 @@ import static com.soklet.core.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 
 /**
+ * Non-instantiable utility class that exists to vend a set of default {@link ValueConverter} instances via {@link #defaultValueConverters()}.
+ * <p>
+ * Default converters are documented at <a href="https://www.soklet.com/docs/value-conversions#default-conversions">https://www.soklet.com/docs/value-conversions#default-conversions</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -55,6 +59,11 @@ public final class ValueConverters {
 		// Cannot instantiate
 	}
 
+	/**
+	 * Vends the system default set of {@link ValueConverter} instances.
+	 *
+	 * @return the default set of converters
+	 */
 	@Nonnull
 	public static Set<ValueConverter<?, ?>> defaultValueConverters() {
 		return DEFAULT_VALUE_CONVERTERS;

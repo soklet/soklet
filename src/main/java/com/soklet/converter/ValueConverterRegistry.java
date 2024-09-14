@@ -91,14 +91,14 @@ public class ValueConverterRegistry {
 	}
 
 	/**
-	 * Creates a registry with a sensible default set of converters.
+	 * Creates a registry with a sensible default set of converters as specified by {@link ValueConverters#defaultValueConverters()}.
 	 */
 	public ValueConverterRegistry() {
 		this(Set.of());
 	}
 
 	/**
-	 * Creates a registry with a sensible default set of converters, optionally supplemented with custom converters.
+	 * Creates a registry with a sensible default set of converters as specified by {@link ValueConverters#defaultValueConverters()}, optionally supplemented with custom converters.
 	 *
 	 * @param customValueConverters the custom value converters to include in the registry
 	 */
