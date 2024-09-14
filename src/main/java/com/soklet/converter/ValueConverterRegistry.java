@@ -16,8 +16,6 @@
 
 package com.soklet.converter;
 
-import com.soklet.core.TypeReference;
-
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -122,13 +120,23 @@ public class ValueConverterRegistry {
 		requireNonNull(fromTypeReference);
 		requireNonNull(toTypeReference);
 
-		return get(fromTypeReference.getType(), toTypeReference.getType());
+		return getInternal(fromTypeReference.getType(), toTypeReference.getType());
 	}
 
 	@SuppressWarnings("unchecked")
 	@Nonnull
-	public <F, T> Optional<ValueConverter<F, T>> get(@Nonnull Type fromType,
-																									 @Nonnull Type toType) {
+	public Optional<ValueConverter<Object, Object>> get(@Nonnull Type fromType,
+																											@Nonnull Type toType) {
+		requireNonNull(fromType);
+		requireNonNull(toType);
+
+		return getInternal(fromType, toType);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Nonnull
+	protected <F, T> Optional<ValueConverter<F, T>> getInternal(@Nonnull Type fromType,
+																															@Nonnull Type toType) {
 		requireNonNull(fromType);
 		requireNonNull(toType);
 
