@@ -16,6 +16,8 @@
 
 package com.soklet.core.impl;
 
+import com.soklet.core.Cors;
+import com.soklet.core.CorsPreflight;
 import com.soklet.core.CorsPreflightResponse;
 import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
@@ -219,8 +221,10 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
 	@Override
 	public MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,
+																									 @Nonnull CorsPreflight corsPreflight,
 																									 @Nonnull CorsPreflightResponse corsPreflightResponse) {
 		requireNonNull(request);
+		requireNonNull(corsPreflight);
 		requireNonNull(corsPreflightResponse);
 
 		Integer statusCode = 204;
@@ -259,8 +263,10 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse forCorsPreflightRejected(@Nonnull Request request) {
+	public MarshaledResponse forCorsPreflightRejected(@Nonnull Request request,
+																										@Nonnull CorsPreflight corsPreflight) {
 		requireNonNull(request);
+		requireNonNull(corsPreflight);
 
 		Integer statusCode = 403;
 
@@ -274,9 +280,11 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
 	@Override
 	public MarshaledResponse forCorsAllowed(@Nonnull Request request,
+																					@Nonnull Cors cors,
 																					@Nonnull CorsResponse corsResponse,
 																					@Nonnull MarshaledResponse marshaledResponse) {
 		requireNonNull(request);
+		requireNonNull(cors);
 		requireNonNull(corsResponse);
 		requireNonNull(marshaledResponse);
 

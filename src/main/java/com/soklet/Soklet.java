@@ -521,9 +521,9 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 					// Allow or reject CORS depending on what the function said to do
 					if (corsPreflightResponse != null)
-						return responseMarshaler.forCorsPreflightAllowed(request, corsPreflightResponse);
+						return responseMarshaler.forCorsPreflightAllowed(request, corsPreflight, corsPreflightResponse);
 					else
-						return responseMarshaler.forCorsPreflightRejected(request);
+						return responseMarshaler.forCorsPreflightRejected(request, corsPreflight);
 				} else {
 					// Just a normal OPTIONS response (non-CORS-preflight).
 					// If there's a matching OPTIONS resource method for this OPTIONS request, then invoke it.
@@ -679,7 +679,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 			return marshaledResponse;
 
 		// Authorized - OK, let's apply the headers to the response
-		return getSokletConfiguration().getResponseMarshaler().forCorsAllowed(request, corsResponse, marshaledResponse);
+		return getSokletConfiguration().getResponseMarshaler().forCorsAllowed(request, cors, corsResponse, marshaledResponse);
 	}
 
 	@Nonnull

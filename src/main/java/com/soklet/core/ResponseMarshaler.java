@@ -79,8 +79,8 @@ public interface ResponseMarshaler {
 	/**
 	 * Writes a response for an HTTP {@code OPTIONS} request.
 	 * <p>
-	 * Note that CORS preflight responses are handled specially by {@link #forCorsPreflightAllowed(Request, CorsPreflightResponse)}
-	 * and {@link #forCorsPreflightRejected(Request)} - not this method.
+	 * Note that CORS preflight responses are handled specially by {@link #forCorsPreflightAllowed(Request, CorsPreflight, CorsPreflightResponse)}
+	 * and {@link #forCorsPreflightRejected(Request, CorsPreflight)} - not this method.
 	 *
 	 * @param request            the HTTP request
 	 * @param allowedHttpMethods appropriate HTTP methods to write to the {@code Allow} response header
@@ -101,6 +101,7 @@ public interface ResponseMarshaler {
 
 	@Nonnull
 	MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,
+																						@Nonnull CorsPreflight corsPreflight,
 																						@Nonnull CorsPreflightResponse corsPreflightResponse);
 
 	/**
@@ -108,7 +109,8 @@ public interface ResponseMarshaler {
 	 * @return the response to send over the wire
 	 */
 	@Nonnull
-	MarshaledResponse forCorsPreflightRejected(@Nonnull Request request);
+	MarshaledResponse forCorsPreflightRejected(@Nonnull Request request,
+																						 @Nonnull CorsPreflight corsPreflight);
 
 	/**
 	 * Applies "CORS is permitted for this request" data to the response.
@@ -124,12 +126,14 @@ public interface ResponseMarshaler {
 	 * </ul>
 	 *
 	 * @param request           the HTTP request
+	 * @param cors              the CORS request data
 	 * @param corsResponse      CORS response data to write as specified by {@link CorsAuthorizer}
 	 * @param marshaledResponse the existing response to which we should apply relevant CORS headers
 	 * @return the response to send over the wire
 	 */
 	@Nonnull
 	MarshaledResponse forCorsAllowed(@Nonnull Request request,
+																	 @Nonnull Cors cors,
 																	 @Nonnull CorsResponse corsResponse,
 																	 @Nonnull MarshaledResponse marshaledResponse);
 }
