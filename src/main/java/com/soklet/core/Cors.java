@@ -18,7 +18,7 @@ package com.soklet.core;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,9 +32,15 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Encapsulates all <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">CORS</a>-related HTTP request data.
+ * <p>
+ * If this is a <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">preflight</a> request, the {@link #isPreflight()} method will return {@code true}.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/cors">https://www.soklet.com/docs/cors</a> for detailed documentation.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@NotThreadSafe
+@ThreadSafe
 public class Cors {
 	@Nonnull
 	private final String origin;
@@ -45,15 +51,10 @@ public class Cors {
 	@Nonnull
 	private final Boolean preflight;
 
-	public Cors(@Nonnull HttpMethod httpMethod,
-							@Nonnull String origin) {
-		this(httpMethod, origin, null, null);
-	}
-
-	public Cors(@Nonnull HttpMethod httpMethod,
-							@Nonnull String origin,
-							@Nullable HttpMethod accessControlRequestMethod,
-							@Nullable Set<String> accessControlRequestHeaders) {
+	protected Cors(@Nonnull HttpMethod httpMethod,
+								 @Nonnull String origin,
+								 @Nullable HttpMethod accessControlRequestMethod,
+								 @Nullable Set<String> accessControlRequestHeaders) {
 		requireNonNull(httpMethod);
 		requireNonNull(origin);
 
@@ -64,6 +65,49 @@ public class Cors {
 		this.preflight = httpMethod == HttpMethod.OPTIONS && accessControlRequestMethod != null;
 	}
 
+	/**
+	 * Constructs a CORS <strong>non-preflight</strong> request representation for the given HTTP request data.
+	 *
+	 * @param httpMethod the request's HTTP method
+	 * @param origin     HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value
+	 * @return the CORS non-preflight request representation
+	 */
+	public static Cors forNonPreflightRequest(@Nonnull HttpMethod httpMethod,
+																						@Nonnull String origin) {
+		requireNonNull(httpMethod);
+		requireNonNull(origin);
+
+		return new Cors(httpMethod, origin, null, null);
+	}
+
+	/**
+	 * Constructs a CORS <strong>preflight</strong> request representation for the given HTTP request data.
+	 * <p>
+	 * CORS preflight requests always have method {@code OPTIONS} and specify their target method via
+	 * the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header value.
+	 *
+	 * @param origin                      HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value
+	 * @param accessControlRequestMethod  HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header value
+	 * @param accessControlRequestHeaders the optional set of HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Headers">{@code Access-Control-Request-Headers}</a> header values
+	 * @return the CORS preflight request representation
+	 */
+	@Nonnull
+	public static Cors forPreflightRequest(@Nonnull String origin,
+																				 @Nonnull HttpMethod accessControlRequestMethod,
+																				 @Nullable Set<String> accessControlRequestHeaders) {
+		requireNonNull(origin);
+		requireNonNull(accessControlRequestMethod);
+
+		return new Cors(HttpMethod.OPTIONS, origin, accessControlRequestMethod, accessControlRequestHeaders);
+	}
+
+	/**
+	 * Extracts a CORS request representation from the given HTTP request data.
+	 *
+	 * @param httpMethod the request's HTTP method
+	 * @param headers    the request headers
+	 * @return the CORS data for this request, or {@link Optional#empty()} if insufficent data is present
+	 */
 	@Nonnull
 	public static Optional<Cors> fromHeaders(@Nonnull HttpMethod httpMethod,
 																					 @Nonnull Map<String, Set<String>> headers) {
@@ -134,21 +178,41 @@ public class Cors {
 		return Objects.hash(getOrigin(), getAccessControlRequestMethod(), getAccessControlRequestHeaders());
 	}
 
+	/**
+	 * Returns the value of the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value.
+	 *
+	 * @return the header value
+	 */
 	@Nonnull
 	public String getOrigin() {
 		return this.origin;
 	}
 
+	/**
+	 * Is this a CORS <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">preflight</a> request?
+	 *
+	 * @return {@code true} if preflight, {@code false} otherwise
+	 */
 	@Nonnull
 	public Boolean isPreflight() {
 		return this.preflight;
 	}
 
+	/**
+	 * Returns the value of the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header value.
+	 *
+	 * @return the header value, or {@link Optional#empty()} if not present
+	 */
 	@Nonnull
 	public Optional<HttpMethod> getAccessControlRequestMethod() {
 		return Optional.ofNullable(this.accessControlRequestMethod);
 	}
 
+	/**
+	 * Returns the set of values for the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Headers">{@code Access-Control-Request-Headers}</a> header.
+	 *
+	 * @return the set of header values, or the empty set if not present
+	 */
 	@Nonnull
 	public Set<String> getAccessControlRequestHeaders() {
 		return this.accessControlRequestHeaders;

@@ -129,7 +129,7 @@ public class ValueConverterRegistry {
 	}
 
 	/**
-	 * Obtain a {@link ValueConverter} that matches the 'from' and 'to' type references specified.
+	 * Obtains a {@link ValueConverter} that matches the 'from' and 'to' type references specified.
 	 * <p>
 	 * Because of type erasure, you cannot directly express a generic type like <code>List&lt;String&gt;.class</code>.
 	 * You must encode it as a type parameter - in this case, <code>new TypeReference&lt;List&lt;String&gt;&gt;() &#123;&#125;</code>.
