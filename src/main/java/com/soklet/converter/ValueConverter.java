@@ -26,6 +26,8 @@ import java.util.Optional;
  * <p>
  * For example, you might have a {@code ValueConverter<String, List<Integer>>} which converts
  * text like {@code "1,2,3"} to a list of numbers.
+ * <p>
+ * Value conversion is documented in detail at <a href="https://www.soklet.com/docs/value-conversions">https://www.soklet.com/docs/value-conversions</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

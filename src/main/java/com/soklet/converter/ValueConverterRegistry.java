@@ -33,6 +33,18 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * A collection of {@link ValueConverter} instances, supplemented with quality-of-life features that most applications need.
+ * <p>
+ * For example, the registry will automatically generate and cache off {@link ValueConverter} instances when the 'from' type is {@link String}
+ * and the 'to' type is an {@link Enum} if no converter was previously specified (this is almost always the behavior you want).
+ * <p>
+ * The registry will also perform primitive mapping when locating {@link ValueConverter} instances.
+ * For example, if a 'from' {@link String} and 'to' {@code int} are specified and that converter does not exist, but a 'from' {@link String} and 'to' {@link Integer} does exist, it will be returned.
+ * <p>
+ * Finally, reflexive {@link ValueConverter} instances are automatically created and cached when the 'from' and 'to' types are identical.
+ * <p>
+ * Value conversion is documented in detail at <a href="https://www.soklet.com/docs/value-conversions">https://www.soklet.com/docs/value-conversions</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
