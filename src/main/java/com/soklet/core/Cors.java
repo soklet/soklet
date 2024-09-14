@@ -72,8 +72,8 @@ public class Cors {
 	 * @param origin     HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value
 	 * @return the CORS non-preflight request representation
 	 */
-	public static Cors forNonPreflightRequest(@Nonnull HttpMethod httpMethod,
-																						@Nonnull String origin) {
+	public static Cors forRequest(@Nonnull HttpMethod httpMethod,
+																@Nonnull String origin) {
 		requireNonNull(httpMethod);
 		requireNonNull(origin);
 
