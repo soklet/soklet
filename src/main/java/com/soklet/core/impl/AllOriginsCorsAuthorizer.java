@@ -16,7 +16,9 @@
 
 package com.soklet.core.impl;
 
+import com.soklet.core.Cors;
 import com.soklet.core.CorsAuthorizer;
+import com.soklet.core.CorsPreflight;
 import com.soklet.core.CorsPreflightResponse;
 import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
@@ -38,8 +40,10 @@ import static java.util.Objects.requireNonNull;
 public class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	@Override
-	public Optional<CorsResponse> authorize(@Nonnull Request request) {
+	public Optional<CorsResponse> authorize(@Nonnull Request request,
+																					@Nonnull Cors cors) {
 		requireNonNull(request);
+		requireNonNull(cors);
 
 		return Optional.of(CorsResponse.withAccessControlAllowOrigin("*")
 				.accessControlExposeHeaders(Set.of("*"))
@@ -50,8 +54,10 @@ public class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	@Override
 	public Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
+																														@Nonnull CorsPreflight corsPreflight,
 																														@Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);
+		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);
 
 		return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin("*")

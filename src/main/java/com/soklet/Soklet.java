@@ -19,6 +19,7 @@ package com.soklet;
 import com.soklet.annotation.Resource;
 import com.soklet.core.Cors;
 import com.soklet.core.CorsAuthorizer;
+import com.soklet.core.CorsPreflight;
 import com.soklet.core.CorsPreflightResponse;
 import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
@@ -494,7 +495,7 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		CorsAuthorizer corsAuthorizer = getSokletConfiguration().getCorsAuthorizer();
 		ResourceMethodResolver resourceMethodResolver = getSokletConfiguration().getResourceMethodResolver();
 		ResponseMarshaler responseMarshaler = getSokletConfiguration().getResponseMarshaler();
-		Cors cors = request.getCors().orElse(null);
+		CorsPreflight corsPreflight = request.getCorsPreflight().orElse(null);
 
 		// Special short-circuit for big requests
 		if (request.isContentTooLarge())
@@ -509,14 +510,14 @@ public class Soklet implements AutoCloseable, RequestHandler {
 				Map<HttpMethod, ResourceMethod> matchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver);
 
 				// Special handling for CORS preflight requests, if needed
-				if (cors != null && cors.isPreflight()) {
+				if (corsPreflight != null) {
 					// Let configuration function determine if we should authorize this request.
 					// Discard any OPTIONS references - see https://stackoverflow.com/a/68529748
 					Map<HttpMethod, ResourceMethod> nonOptionsMatchingResourceMethodsByHttpMethod = matchingResourceMethodsByHttpMethod.entrySet().stream()
 							.filter(entry -> entry.getKey() != HttpMethod.OPTIONS)
 							.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
 
-					CorsPreflightResponse corsPreflightResponse = corsAuthorizer.authorizePreflight(request, nonOptionsMatchingResourceMethodsByHttpMethod).orElse(null);
+					CorsPreflightResponse corsPreflightResponse = corsAuthorizer.authorizePreflight(request, corsPreflight, nonOptionsMatchingResourceMethodsByHttpMethod).orElse(null);
 
 					// Allow or reject CORS depending on what the function said to do
 					if (corsPreflightResponse != null)
@@ -664,14 +665,14 @@ public class Soklet implements AutoCloseable, RequestHandler {
 
 		Cors cors = request.getCors().orElse(null);
 
-		// If non-CORS request or preflight CORS, nothing further to do (preflight was handled earlier)
-		if (cors == null || cors.isPreflight())
+		// If non-CORS request, nothing further to do (note that CORS preflight was handled earlier)
+		if (cors == null)
 			return marshaledResponse;
 
 		CorsAuthorizer corsAuthorizer = getSokletConfiguration().getCorsAuthorizer();
 
 		// Does the authorizer say we are authorized?
-		CorsResponse corsResponse = corsAuthorizer.authorize(request).orElse(null);
+		CorsResponse corsResponse = corsAuthorizer.authorize(request, cors).orElse(null);
 
 		// Not authorized - don't apply CORS headers to the response
 		if (corsResponse == null)

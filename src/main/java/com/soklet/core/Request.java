@@ -85,6 +85,8 @@ public class Request {
 	@Nullable
 	private final Cors cors;
 	@Nullable
+	private final CorsPreflight corsPreflight;
+	@Nullable
 	private final byte[] body;
 	@Nonnull
 	private final Boolean multipart;
@@ -122,6 +124,7 @@ public class Request {
 		this.headers = Collections.unmodifiableMap(new LinkedCaseInsensitiveMap<>(builder.headers));
 		this.cookies = Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(this.headers));
 		this.cors = Cors.fromHeaders(this.httpMethod, this.headers).orElse(null);
+		this.corsPreflight = this.httpMethod == HttpMethod.OPTIONS ? CorsPreflight.fromHeaders(this.headers).orElse(null) : null;
 		this.body = builder.body;
 		this.contentType = Utilities.extractContentTypeFromHeaders(this.headers).orElse(null);
 		this.charset = Utilities.extractCharsetFromHeaders(this.headers).orElse(null);
@@ -332,6 +335,11 @@ public class Request {
 	@Nonnull
 	public Optional<Cors> getCors() {
 		return Optional.ofNullable(this.cors);
+	}
+
+	@Nonnull
+	public Optional<CorsPreflight> getCorsPreflight() {
+		return Optional.ofNullable(this.corsPreflight);
 	}
 
 	@Nonnull

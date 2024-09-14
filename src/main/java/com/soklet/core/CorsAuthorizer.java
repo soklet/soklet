@@ -25,9 +25,11 @@ import java.util.Optional;
  */
 public interface CorsAuthorizer {
 	@Nonnull
-	Optional<CorsResponse> authorize(@Nonnull Request request);
+	Optional<CorsResponse> authorize(@Nonnull Request request,
+																	 @Nonnull Cors cors);
 
 	@Nonnull
 	Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
+																										 @Nonnull CorsPreflight corsPreflight,
 																										 @Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod);
 }

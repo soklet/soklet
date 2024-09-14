@@ -18,6 +18,7 @@ package com.soklet.core.impl;
 
 import com.soklet.core.Cors;
 import com.soklet.core.CorsAuthorizer;
+import com.soklet.core.CorsPreflight;
 import com.soklet.core.CorsPreflightResponse;
 import com.soklet.core.CorsResponse;
 import com.soklet.core.HttpMethod;
@@ -63,13 +64,10 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@Nonnull
 	@Override
-	public Optional<CorsResponse> authorize(@Nonnull Request request) {
+	public Optional<CorsResponse> authorize(@Nonnull Request request,
+																					@Nonnull Cors cors) {
 		requireNonNull(request);
-
-		Cors cors = request.getCors().orElse(null);
-
-		if (cors == null)
-			return Optional.empty();
+		requireNonNull(cors);
 
 		if (getAuthorizer().apply(normalizeOrigin(cors.getOrigin())))
 			return Optional.of(CorsResponse.withAccessControlAllowOrigin(cors.getOrigin())
@@ -82,17 +80,14 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	@Override
 	public Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
+																														@Nonnull CorsPreflight corsPreflight,
 																														@Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);
+		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);
 
-		Cors cors = request.getCors().orElse(null);
-
-		if (cors == null)
-			return Optional.empty();
-
-		if (getAuthorizer().apply(normalizeOrigin(cors.getOrigin())))
-			return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(cors.getOrigin())
+		if (getAuthorizer().apply(normalizeOrigin(corsPreflight.getOrigin())))
+			return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(corsPreflight.getOrigin())
 					.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
 					.accessControlAllowHeaders(Set.of("*"))
 					.build());
