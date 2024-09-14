@@ -33,13 +33,13 @@ import static java.util.Objects.requireNonNull;
 /**
  * A collection of {@link ValueConverter} instances, supplemented with quality-of-life features that most applications need.
  * <p>
- * For example, the registry will automatically generate and cache off {@link ValueConverter} instances when the 'from' type is {@link String}
+ * For example, the registry will automatically generate and cache off {@link ValueConverter} instances when a requested 'from' type is {@link String}
  * and the 'to' type is an {@link Enum} if no converter was previously specified (this is almost always the behavior you want).
  * <p>
  * The registry will also perform primitive mapping when locating {@link ValueConverter} instances.
- * For example, if a 'from' {@link String} and 'to' {@code int} are specified and that converter does not exist, but a 'from' {@link String} and 'to' {@link Integer} does exist, it will be returned.
+ * For example, if a requested 'from' {@link String} and 'to' {@code int} are specified and that converter does not exist, but a 'from' {@link String} and 'to' {@link Integer} does exist, it will be returned.
  * <p>
- * Finally, reflexive {@link ValueConverter} instances are automatically created and cached when the 'from' and 'to' types are identical.
+ * Finally, reflexive {@link ValueConverter} instances are automatically created and cached off when the requested 'from' and 'to' types are identical.
  * <p>
  * Value conversion is documented in detail at <a href="https://www.soklet.com/docs/value-conversions">https://www.soklet.com/docs/value-conversions</a>.
  *
@@ -80,17 +80,31 @@ public class ValueConverterRegistry {
 	@Nonnull
 	private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey;
 
+	/**
+	 * The system's default shared registry instance.
+	 *
+	 * @return the shared registry instance
+	 */
 	@Nonnull
 	public static ValueConverterRegistry sharedInstance() {
 		return SHARED_INSTANCE;
 	}
 
+	/**
+	 * Creates a registry with a sensible default set of converters.
+	 */
 	public ValueConverterRegistry() {
 		this(Set.of());
 	}
 
-	public ValueConverterRegistry(@Nonnull Set<ValueConverter<?, ?>> customValueConverters) {
-		requireNonNull(customValueConverters);
+	/**
+	 * Creates a registry with a sensible default set of converters, optionally supplemented with custom converters.
+	 *
+	 * @param customValueConverters the custom value converters to include in the registry
+	 */
+	public ValueConverterRegistry(@Nullable Set<ValueConverter<?, ?>> customValueConverters) {
+		if (customValueConverters == null)
+			customValueConverters = Set.of();
 
 		Set<ValueConverter<?, ?>> defaultValueConverters = ValueConverters.defaultValueConverters();
 		ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey = new ConcurrentHashMap<>(
@@ -114,6 +128,18 @@ public class ValueConverterRegistry {
 		this.valueConvertersByCacheKey = valueConvertersByCacheKey;
 	}
 
+	/**
+	 * Obtain a {@link ValueConverter} that matches the 'from' and 'to' type references specified.
+	 * <p>
+	 * Because of type erasure, you cannot directly express a generic type like <code>List&lt;String&gt;.class</code>.
+	 * You must encode it as a type parameter - in this case, <code>new TypeReference&lt;List&lt;String&gt;&gt;() &#123;&#125;</code>.
+	 *
+	 * @param fromTypeReference reference to the 'from' type of the converter
+	 * @param toTypeReference   reference to the 'to' type of the converter
+	 * @param <F>               the 'from' type
+	 * @param <T>               the 'to' type
+	 * @return a matching {@link ValueConverter}, or {@link Optional#empty()} if not found
+	 */
 	@Nonnull
 	public <F, T> Optional<ValueConverter<F, T>> get(@Nonnull TypeReference<F> fromTypeReference,
 																									 @Nonnull TypeReference<T> toTypeReference) {
@@ -123,7 +149,13 @@ public class ValueConverterRegistry {
 		return getInternal(fromTypeReference.getType(), toTypeReference.getType());
 	}
 
-	@SuppressWarnings("unchecked")
+	/**
+	 * Obtain a {@link ValueConverter} that matches the 'from' and 'to' types specified.
+	 *
+	 * @param fromType the 'from' type
+	 * @param toType   the 'to' type
+	 * @return a matching {@link ValueConverter}, or {@link Optional#empty()} if not found
+	 */
 	@Nonnull
 	public Optional<ValueConverter<Object, Object>> get(@Nonnull Type fromType,
 																											@Nonnull Type toType) {
