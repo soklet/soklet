@@ -21,13 +21,32 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
+ * Contract for types that authorize <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">CORS</a> requests.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/cors#authorizing-cors-requests">https://www.soklet.com/docs/cors#authorizing-cors-requests</a> for detailed documentation.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public interface CorsAuthorizer {
+	/**
+	 * Authorizes a <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">non-preflight CORS</a> request.
+	 *
+	 * @param request the request to authorize
+	 * @param cors    the CORS data provided in the request
+	 * @return a {@link CorsResponse} if authorized, or {@link Optional#empty()} if not authorized
+	 */
 	@Nonnull
 	Optional<CorsResponse> authorize(@Nonnull Request request,
 																	 @Nonnull Cors cors);
 
+	/**
+	 * Authorizes a <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">CORS preflight</a> request.
+	 *
+	 * @param request                              the preflight request to authorize
+	 * @param corsPreflight                        the CORS preflight data provided in the request
+	 * @param availableResourceMethodsByHttpMethod resource methods that are available to serve requests according to parameters specified by the preflight data
+	 * @return a {@link CorsPreflightResponse} if authorized, or {@link Optional#empty()} if not authorized
+	 */
 	@Nonnull
 	Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
 																										 @Nonnull CorsPreflight corsPreflight,

@@ -162,7 +162,7 @@ public class CorsPreflight {
 	}
 
 	/**
-	 * Returns the value of the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value.
+	 * Returns the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value.
 	 *
 	 * @return the header value
 	 */
@@ -172,7 +172,7 @@ public class CorsPreflight {
 	}
 
 	/**
-	 * Returns the value of the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header.
+	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header value.
 	 *
 	 * @return the header value
 	 */

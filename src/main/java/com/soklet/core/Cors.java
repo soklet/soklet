@@ -118,7 +118,7 @@ public class Cors {
 	}
 
 	/**
-	 * Returns the value of the HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header for this request.
+	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> header value for this request.
 	 *
 	 * @return the header value
 	 */
