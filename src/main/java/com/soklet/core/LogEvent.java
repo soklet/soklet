@@ -59,6 +59,11 @@ public class LogEvent {
 		return new Builder(logEventType, message);
 	}
 
+	@Nonnull
+	public Copier copy() {
+		return new Copier(this);
+	}
+
 	protected LogEvent(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -129,7 +134,7 @@ public class LogEvent {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link LogEvent}.
+	 * Builder used to construct instances of {@link LogEvent} via {@link LogEvent#with(LogEventType, String)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -200,6 +205,72 @@ public class LogEvent {
 		@Nonnull
 		public LogEvent build() {
 			return new LogEvent(this);
+		}
+	}
+
+	/**
+	 * Builder used to copy instances of {@link LogEvent} via {@link LogEvent#copy()}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	public static class Copier {
+		@Nonnull
+		private final Builder builder;
+
+		Copier(@Nonnull LogEvent logEvent) {
+			requireNonNull(logEvent);
+
+			this.builder = new Builder(logEvent.getLogEventType(), logEvent.getMessage())
+					.throwable(logEvent.getThrowable().orElse(null))
+					.request(logEvent.getRequest().orElse(null))
+					.resourceMethod(logEvent.getResourceMethod().orElse(null))
+					.marshaledResponse(logEvent.getMarshaledResponse().orElse(null));
+		}
+
+		@Nonnull
+		public Copier logEventType(@Nonnull LogEventType logEventType) {
+			requireNonNull(logEventType);
+			this.builder.logEventType(logEventType);
+			return this;
+		}
+
+		@Nonnull
+		public Copier message(@Nonnull String message) {
+			requireNonNull(message);
+			this.builder.message(message);
+			return this;
+		}
+
+		@Nonnull
+		public Copier throwable(@Nullable Throwable throwable) {
+			this.builder.throwable(throwable);
+			return this;
+		}
+
+		@Nonnull
+		public Copier request(@Nullable Request request) {
+			this.builder.request(request);
+			return this;
+		}
+
+		@Nonnull
+		public Copier resourceMethod(@Nullable ResourceMethod resourceMethod) {
+			this.builder.resourceMethod(resourceMethod);
+			return this;
+		}
+
+		@Nonnull
+		public Copier marshaledResponse(@Nullable MarshaledResponse marshaledResponse) {
+			this.builder.marshaledResponse(marshaledResponse);
+			return this;
+		}
+
+		@Nonnull
+		public LogEvent finish() {
+			return this.builder.build();
 		}
 	}
 }

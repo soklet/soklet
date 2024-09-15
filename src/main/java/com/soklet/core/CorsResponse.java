@@ -20,9 +20,11 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -43,6 +45,11 @@ public class CorsResponse {
 	public static Builder withAccessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
 		requireNonNull(accessControlAllowOrigin);
 		return new Builder(accessControlAllowOrigin);
+	}
+
+	@Nonnull
+	public Copier copy() {
+		return new Copier(this);
 	}
 
 	protected CorsResponse(@Nonnull Builder builder) {
@@ -96,7 +103,7 @@ public class CorsResponse {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link CorsResponse}.
+	 * Builder used to construct instances of {@link CorsResponse} via {@link CorsResponse#withAccessControlAllowOrigin(String)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -138,6 +145,59 @@ public class CorsResponse {
 		@Nonnull
 		public CorsResponse build() {
 			return new CorsResponse(this);
+		}
+	}
+
+	/**
+	 * Builder used to copy instances of {@link CorsResponse} via {@link CorsResponse#copy()}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	public static class Copier {
+		@Nonnull
+		private final Builder builder;
+
+		Copier(@Nonnull CorsResponse corsResponse) {
+			requireNonNull(corsResponse);
+
+			this.builder = new Builder(corsResponse.getAccessControlAllowOrigin())
+					.accessControlAllowCredentials(corsResponse.getAccessControlAllowCredentials().orElse(null))
+					.accessControlExposeHeaders(new LinkedHashSet<>(corsResponse.getAccessControlExposeHeaders()));
+		}
+
+		@Nonnull
+		public Copier accessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+			requireNonNull(accessControlAllowOrigin);
+			this.builder.accessControlAllowOrigin(accessControlAllowOrigin);
+			return this;
+		}
+
+		@Nonnull
+		public Copier accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
+			this.builder.accessControlAllowCredentials(accessControlAllowCredentials);
+			return this;
+		}
+
+		@Nonnull
+		public Copier accessControlExposeHeaders(@Nullable Set<String> accessControlExposeHeaders) {
+			this.builder.accessControlExposeHeaders(accessControlExposeHeaders);
+			return this;
+		}
+
+		// Convenience method for mutation
+		@Nonnull
+		public Copier accessControlExposeHeaders(@Nonnull Consumer<Set<String>> accessControlExposeHeadersConsumer) {
+			requireNonNull(accessControlExposeHeadersConsumer);
+			accessControlExposeHeadersConsumer.accept(this.builder.accessControlExposeHeaders);
+			return this;
+		}
+
+		@Nonnull
+		public CorsResponse finish() {
+			return this.builder.build();
 		}
 	}
 }
