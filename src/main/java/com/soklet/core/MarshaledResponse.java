@@ -156,27 +156,27 @@ public class MarshaledResponse {
 	@NotThreadSafe
 	public static class Copier {
 		@Nonnull
-		private Builder builder;
+		private final Builder builder;
 
 		Copier(@Nonnull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
 
-			this.builder = new MarshaledResponse.Builder(marshaledResponse.getStatusCode());
-			this.builder.headers = new LinkedCaseInsensitiveMap<>(marshaledResponse.getHeaders());
-			this.builder.cookies = new LinkedHashSet<>(marshaledResponse.getCookies());
-			this.builder.body = marshaledResponse.getBody().orElse(null);
+			this.builder = new Builder(marshaledResponse.getStatusCode())
+					.headers(new LinkedCaseInsensitiveMap<>(marshaledResponse.getHeaders()))
+					.cookies(new LinkedHashSet<>(marshaledResponse.getCookies()))
+					.body(marshaledResponse.getBody().orElse(null));
 		}
 
 		@Nonnull
 		public Copier statusCode(@Nonnull Integer statusCode) {
 			requireNonNull(statusCode);
-			this.builder.statusCode = statusCode;
+			this.builder.statusCode(statusCode);
 			return this;
 		}
 
 		@Nonnull
 		public Copier headers(@Nonnull Map<String, Set<String>> headers) {
-			builder.headers = headers;
+			this.builder.headers(headers);
 			return this;
 		}
 
@@ -184,13 +184,13 @@ public class MarshaledResponse {
 		@Nonnull
 		public Copier headers(@Nonnull Consumer<Map<String, Set<String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
-			headersConsumer.accept(builder.headers);
+			headersConsumer.accept(this.builder.headers);
 			return this;
 		}
 
 		@Nonnull
 		public Copier cookies(@Nullable Set<ResponseCookie> cookies) {
-			builder.cookies = cookies;
+			this.builder.cookies(cookies);
 			return this;
 		}
 
@@ -198,13 +198,13 @@ public class MarshaledResponse {
 		@Nonnull
 		public Copier cookies(@Nonnull Consumer<Set<ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
-			cookiesConsumer.accept(builder.cookies);
+			cookiesConsumer.accept(this.builder.cookies);
 			return this;
 		}
 
 		@Nonnull
 		public Copier body(@Nullable byte[] body) {
-			builder.body = body;
+			this.builder.body(body);
 			return this;
 		}
 

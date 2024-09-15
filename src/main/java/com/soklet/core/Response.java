@@ -29,7 +29,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -222,7 +221,7 @@ public class Response {
 	@NotThreadSafe
 	public static class Copier {
 		@Nonnull
-		private Builder builder;
+		private final Builder builder;
 
 		Copier(@Nonnull Response response) {
 			requireNonNull(response);
@@ -234,38 +233,43 @@ public class Response {
 		}
 
 		@Nonnull
-		public Copier statusCode(@Nonnull Function<Integer, Integer> statusCodeFunction) {
-			requireNonNull(statusCodeFunction);
-
-			this.builder = new Builder(statusCodeFunction.apply(builder.statusCode))
-					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
-					.cookies(builder.cookies == null ? null : new LinkedHashSet<>(builder.cookies))
-					.body(builder.body);
-
+		public Copier statusCode(@Nonnull Integer statusCode) {
+			requireNonNull(statusCode);
+			this.builder.statusCode(statusCode);
 			return this;
 		}
 
+		@Nonnull
+		public Copier headers(@Nullable Map<String, Set<String>> headers) {
+			this.builder.headers(headers);
+			return this;
+		}
+
+		// Convenience method for mutation
 		@Nonnull
 		public Copier headers(@Nonnull Consumer<Map<String, Set<String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
-
-			headersConsumer.accept(builder.headers);
+			headersConsumer.accept(this.builder.headers);
 			return this;
 		}
 
+		@Nonnull
+		public Copier cookies(@Nullable Set<ResponseCookie> cookies) {
+			this.builder.cookies(cookies);
+			return this;
+		}
+
+		// Convenience method for mutation
 		@Nonnull
 		public Copier cookies(@Nonnull Consumer<Set<ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
-
-			cookiesConsumer.accept(builder.cookies);
+			cookiesConsumer.accept(this.builder.cookies);
 			return this;
 		}
 
 		@Nonnull
-		public Copier body(@Nonnull Function<Object, Object> bodyFunction) {
-			requireNonNull(bodyFunction);
-
-			builder.body = bodyFunction.apply(builder.body);
+		public Copier body(@Nullable Object body) {
+			this.builder.body(body);
 			return this;
 		}
 

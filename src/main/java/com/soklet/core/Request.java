@@ -39,7 +39,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.soklet.core.Utilities.trimAggressivelyToNull;
@@ -532,7 +531,7 @@ public class Request {
 	@NotThreadSafe
 	public static class Copier {
 		@Nonnull
-		private Builder builder;
+		private final Builder builder;
 
 		Copier(@Nonnull Request request) {
 			requireNonNull(request);
@@ -546,70 +545,62 @@ public class Request {
 		}
 
 		@Nonnull
-		public Copier httpMethod(@Nonnull Function<HttpMethod, HttpMethod> httpMethodFunction) {
-			requireNonNull(httpMethodFunction);
-
-			this.builder = new Builder(httpMethodFunction.apply(builder.httpMethod), builder.uri)
-					.id(builder.id)
-					.queryParameters(builder.queryParameters == null ? null : new LinkedHashMap<>(builder.queryParameters))
-					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
-					.body(builder.body)
-					.contentTooLarge(builder.contentTooLarge);
-
+		public Copier httpMethod(@Nonnull HttpMethod httpMethod) {
+			requireNonNull(httpMethod);
+			this.builder.httpMethod(httpMethod);
 			return this;
 		}
 
 		@Nonnull
-		public Copier uri(@Nonnull Function<String, String> uriFunction) {
-			requireNonNull(uriFunction);
-
-			this.builder = new Builder(builder.httpMethod, uriFunction.apply(builder.uri))
-					.id(builder.id)
-					.queryParameters(builder.queryParameters == null ? null : new LinkedHashMap<>(builder.queryParameters))
-					.headers(builder.headers == null ? null : new LinkedCaseInsensitiveMap<>(builder.headers))
-					.body(builder.body)
-					.contentTooLarge(builder.contentTooLarge);
-
+		public Copier uri(@Nonnull String uri) {
+			requireNonNull(uri);
+			this.builder.uri(uri);
 			return this;
 		}
 
 		@Nonnull
-		public Copier id(@Nonnull Function<Object, Object> idFunction) {
-			requireNonNull(idFunction);
-
-			builder.id = idFunction.apply(builder.id);
+		public Copier id(@Nullable Object id) {
+			this.builder.id(id);
 			return this;
 		}
 
+		@Nonnull
+		public Copier queryParameters(@Nullable Map<String, Set<String>> queryParameters) {
+			this.builder.queryParameters(queryParameters);
+			return this;
+		}
+
+		// Convenience method for mutation
 		@Nonnull
 		public Copier queryParameters(@Nonnull Consumer<Map<String, Set<String>>> queryParametersConsumer) {
 			requireNonNull(queryParametersConsumer);
-
-			queryParametersConsumer.accept(builder.queryParameters == null ? new LinkedHashMap<>() : builder.queryParameters);
+			queryParametersConsumer.accept(this.builder.queryParameters == null ? new LinkedHashMap<>() : this.builder.queryParameters);
 			return this;
 		}
 
+		@Nonnull
+		public Copier headers(@Nullable Map<String, Set<String>> headers) {
+			this.builder.headers(headers);
+			return this;
+		}
+
+		// Convenience method for mutation
 		@Nonnull
 		public Copier headers(@Nonnull Consumer<Map<String, Set<String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
-
-			headersConsumer.accept(builder.headers == null ? new LinkedCaseInsensitiveMap<>() : builder.headers);
+			headersConsumer.accept(this.builder.headers == null ? new LinkedCaseInsensitiveMap<>() : this.builder.headers);
 			return this;
 		}
 
 		@Nonnull
-		public Copier body(@Nonnull Function<byte[], byte[]> bodyFunction) {
-			requireNonNull(bodyFunction);
-
-			builder.body = bodyFunction.apply(builder.body);
+		public Copier body(@Nullable byte[] body) {
+			this.builder.body(body);
 			return this;
 		}
 
 		@Nonnull
-		public Copier contentTooLarge(@Nonnull Function<Boolean, Boolean> contentTooLargeFunction) {
-			requireNonNull(contentTooLargeFunction);
-
-			builder.contentTooLarge = contentTooLargeFunction.apply(builder.contentTooLarge);
+		public Copier contentTooLarge(@Nullable Boolean contentTooLarge) {
+			this.builder.contentTooLarge(contentTooLarge);
 			return this;
 		}
 

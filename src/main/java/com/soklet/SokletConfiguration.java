@@ -311,20 +311,20 @@ public class SokletConfiguration {
 	@NotThreadSafe
 	public static class Copier {
 		@Nonnull
-		private Builder builder;
+		private final Builder builder;
 
 		Copier(@Nonnull SokletConfiguration sokletConfiguration) {
 			requireNonNull(sokletConfiguration);
 
-			this.builder = new Builder(sokletConfiguration.getServer());
-			this.builder.instanceProvider = sokletConfiguration.getInstanceProvider();
-			this.builder.valueConverterRegistry = sokletConfiguration.valueConverterRegistry;
-			this.builder.requestBodyMarshaler = sokletConfiguration.requestBodyMarshaler;
-			this.builder.resourceMethodResolver = sokletConfiguration.resourceMethodResolver;
-			this.builder.resourceMethodParameterProvider = sokletConfiguration.resourceMethodParameterProvider;
-			this.builder.responseMarshaler = sokletConfiguration.responseMarshaler;
-			this.builder.lifecycleInterceptor = sokletConfiguration.lifecycleInterceptor;
-			this.builder.corsAuthorizer = sokletConfiguration.corsAuthorizer;
+			this.builder = new Builder(sokletConfiguration.getServer())
+					.instanceProvider(sokletConfiguration.getInstanceProvider())
+					.valueConverterRegistry(sokletConfiguration.valueConverterRegistry)
+					.requestBodyMarshaler(sokletConfiguration.requestBodyMarshaler)
+					.resourceMethodResolver(sokletConfiguration.resourceMethodResolver)
+					.resourceMethodParameterProvider(sokletConfiguration.resourceMethodParameterProvider)
+					.responseMarshaler(sokletConfiguration.responseMarshaler)
+					.lifecycleInterceptor(sokletConfiguration.lifecycleInterceptor)
+					.corsAuthorizer(sokletConfiguration.corsAuthorizer);
 		}
 
 		@Nonnull
