@@ -93,7 +93,7 @@ public class MarshaledResponse {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link MarshaledResponse}.
+	 * Builder used to construct instances of {@link MarshaledResponse} via {@link MarshaledResponse#withStatusCode(Integer)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -147,7 +147,7 @@ public class MarshaledResponse {
 	}
 
 	/**
-	 * Builder used to copy instances of {@link MarshaledResponse}.
+	 * Builder used to copy instances of {@link MarshaledResponse} via {@link MarshaledResponse#copy()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *

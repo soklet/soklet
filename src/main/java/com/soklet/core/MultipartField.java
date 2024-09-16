@@ -70,6 +70,11 @@ public class MultipartField {
 		return new Builder(name);
 	}
 
+	@Nonnull
+	public Copier copy() {
+		return new Copier(this);
+	}
+
 	protected MultipartField(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -121,7 +126,8 @@ public class MultipartField {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link MultipartField}.
+	 * Builder used to construct instances of {@link MultipartField} via {@link MultipartField#withName(String)}
+	 * or {@link MultipartField#with(String, byte[])}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -187,6 +193,64 @@ public class MultipartField {
 		@Nonnull
 		public MultipartField build() {
 			return new MultipartField(this);
+		}
+	}
+
+	/**
+	 * Builder used to copy instances of {@link MultipartField} via {@link MultipartField#copy()}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	public static class Copier {
+		@Nonnull
+		private final Builder builder;
+
+		Copier(@Nonnull MultipartField multipartField) {
+			requireNonNull(multipartField);
+
+			this.builder = new Builder(multipartField.getName(), multipartField.getData().orElse(null))
+					.filename(multipartField.getFilename().orElse(null))
+					.contentType(multipartField.getContentType().orElse(null))
+					.charset(multipartField.getCharset().orElse(null));
+		}
+
+		@Nonnull
+		public Copier name(@Nonnull String name) {
+			requireNonNull(name);
+			this.builder.name(name);
+			return this;
+		}
+
+		@Nonnull
+		public Copier data(@Nullable byte[] data) {
+			this.builder.data(data);
+			return this;
+		}
+
+		@Nonnull
+		public Copier filename(@Nullable String filename) {
+			this.builder.filename(filename);
+			return this;
+		}
+
+		@Nonnull
+		public Copier contentType(@Nullable String contentType) {
+			this.builder.contentType(contentType);
+			return this;
+		}
+
+		@Nonnull
+		public Copier contentType(@Nullable Charset charset) {
+			this.builder.charset(charset);
+			return this;
+		}
+
+		@Nonnull
+		public MultipartField finish() {
+			return this.builder.build();
 		}
 	}
 

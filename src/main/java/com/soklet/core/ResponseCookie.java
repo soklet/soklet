@@ -70,6 +70,11 @@ public class ResponseCookie {
 	}
 
 	@Nonnull
+	public Copier copy() {
+		return new Copier(this);
+	}
+
+	@Nonnull
 	public static Set<ResponseCookie> fromSetCookieHeaderRepresentation(@Nullable String setCookieHeaderRepresentation) {
 		setCookieHeaderRepresentation = setCookieHeaderRepresentation == null ? null : setCookieHeaderRepresentation.trim();
 
@@ -247,7 +252,8 @@ public class ResponseCookie {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link ResponseCookie}.
+	 * Builder used to construct instances of {@link ResponseCookie} via {@link ResponseCookie#withName(String)}
+	 * or {@link ResponseCookie#with(String, String)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -336,6 +342,86 @@ public class ResponseCookie {
 		@Nonnull
 		public ResponseCookie build() {
 			return new ResponseCookie(this);
+		}
+	}
+
+	/**
+	 * Builder used to copy instances of {@link ResponseCookie} via {@link ResponseCookie#copy()}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	public static class Copier {
+		@Nonnull
+		private final Builder builder;
+
+		Copier(@Nonnull ResponseCookie responseCookie) {
+			requireNonNull(responseCookie);
+
+			this.builder = new Builder(responseCookie.getName())
+					.value(responseCookie.getValue().orElse(null))
+					.maxAge(responseCookie.getMaxAge().orElse(null))
+					.domain(responseCookie.getDomain().orElse(null))
+					.path(responseCookie.getPath().orElse(null))
+					.secure(responseCookie.getSecure())
+					.httpOnly(responseCookie.getHttpOnly())
+					.sameSite(responseCookie.getSameSite().orElse(null));
+		}
+
+		@Nonnull
+		public Copier name(@Nonnull String name) {
+			requireNonNull(name);
+			this.builder.name(name);
+			return this;
+		}
+
+		@Nonnull
+		public Copier value(@Nullable String value) {
+			this.builder.value(value);
+			return this;
+		}
+
+		@Nonnull
+		public Copier maxAge(@Nullable Duration maxAge) {
+			this.builder.maxAge(maxAge);
+			return this;
+		}
+
+		@Nonnull
+		public Copier domain(@Nullable String domain) {
+			this.builder.domain(domain);
+			return this;
+		}
+
+		@Nonnull
+		public Copier path(@Nullable String path) {
+			this.builder.path(path);
+			return this;
+		}
+
+		@Nonnull
+		public Copier secure(@Nullable Boolean secure) {
+			this.builder.secure(secure);
+			return this;
+		}
+
+		@Nonnull
+		public Copier httpOnly(@Nullable Boolean httpOnly) {
+			this.builder.httpOnly(httpOnly);
+			return this;
+		}
+
+		@Nonnull
+		public Copier sameSite(@Nullable SameSite sameSite) {
+			this.builder.sameSite(sameSite);
+			return this;
+		}
+
+		@Nonnull
+		public ResponseCookie finish() {
+			return this.builder.build();
 		}
 	}
 

@@ -132,7 +132,8 @@ public class Response {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link Response}.
+	 * Builder used to construct instances of {@link Response} via {@link Response#withStatusCode(Integer)}
+	 * or {@link Response#withRedirect(RedirectType, String)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -212,7 +213,7 @@ public class Response {
 	}
 
 	/**
-	 * Builder used to copy instances of {@link Response}.
+	 * Builder used to copy instances of {@link Response} via {@link Response#copy()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *

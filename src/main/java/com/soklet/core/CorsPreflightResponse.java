@@ -164,9 +164,7 @@ public class CorsPreflightResponse {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link CorsPreflightResponse}.
-	 * <p>
-	 * Instances are created by invoking {@link CorsPreflightResponse#withAccessControlAllowOrigin(String)}.
+	 * Builder used to construct instances of {@link CorsPreflightResponse} via {@link CorsPreflightResponse#withAccessControlAllowOrigin(String)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -228,9 +226,7 @@ public class CorsPreflightResponse {
 	}
 
 	/**
-	 * Builder used to copy instances of {@link CorsPreflightResponse}.
-	 * <p>
-	 * Instances are created by invoking {@link CorsPreflightResponse#copy()}.
+	 * Builder used to copy instances of {@link CorsPreflightResponse} via {@link CorsPreflightResponse#copy()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *

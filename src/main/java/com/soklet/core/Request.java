@@ -423,7 +423,7 @@ public class Request {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link Request}.
+	 * Builder used to construct instances of {@link Request} via {@link Request#with(HttpMethod, String)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -522,7 +522,7 @@ public class Request {
 	}
 
 	/**
-	 * Builder used to copy instances of {@link Request}.
+	 * Builder used to copy instances of {@link Request} via {@link Request#copy()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
