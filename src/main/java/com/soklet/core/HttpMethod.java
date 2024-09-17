@@ -22,15 +22,38 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
+ * Typesafe representation of <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods">HTTP request methods</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum HttpMethod {
+	/**
+	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/GET">{@code GET}</a> request method.
+	 */
 	GET,
+	/**
+	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/POST">{@code POST}</a> request method.
+	 */
 	POST,
+	/**
+	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/PUT">{@code PUT}</a> request method.
+	 */
 	PUT,
+	/**
+	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/PATCH">{@code PATCH}</a> request method.
+	 */
 	PATCH,
+	/**
+	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS">{@code OPTIONS}</a> request method.
+	 */
 	OPTIONS,
+	/**
+	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/HEAD">{@code HEAD}</a> request method.
+	 */
 	HEAD,
+	/**
+	 * The HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/DELETE">{@code DELETE}</a> request method.
+	 */
 	DELETE;
 
 	@Nonnull
@@ -40,6 +63,11 @@ public enum HttpMethod {
 		VALUES_AS_SET = Arrays.stream(HttpMethod.values()).collect(Collectors.toUnmodifiableSet());
 	}
 
+	/**
+	 * Exposes {@link HttpMethod#values()} as a {@link Set} for convenience.
+	 *
+	 * @return a {@link Set} representation of this enum's values
+	 */
 	@Nonnull
 	public static Set<HttpMethod> valuesAsSet() {
 		return VALUES_AS_SET;

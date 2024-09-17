@@ -30,6 +30,10 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Response headers to send over the wire for <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">non-preflight CORS</a> requests.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/cors#writing-cors-responses">https://www.soklet.com/docs/cors#writing-cors-responses</a> for detailed documentation.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -41,12 +45,23 @@ public class CorsResponse {
 	@Nonnull
 	private final Set<String> accessControlExposeHeaders;
 
+	/**
+	 * Acquires a builder for {@link CorsResponse} instances.
+	 *
+	 * @param accessControlAllowOrigin the required <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin">{@code Access-Control-Allow-Origin}</a> response header value
+	 * @return the builder
+	 */
 	@Nonnull
 	public static Builder withAccessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
 		requireNonNull(accessControlAllowOrigin);
 		return new Builder(accessControlAllowOrigin);
 	}
 
+	/**
+	 * Vends a mutable copier seeded with this instance's data, suitable for building new instances.
+	 *
+	 * @return a copier for this instance
+	 */
 	@Nonnull
 	public Copier copy() {
 		return new Copier(this);
@@ -87,16 +102,31 @@ public class CorsResponse {
 				getAccessControlExposeHeaders());
 	}
 
+	/**
+	 * Value for the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin">{@code Access-Control-Allow-Origin}</a> response header.
+	 *
+	 * @return the header value
+	 */
 	@Nonnull
 	public String getAccessControlAllowOrigin() {
 		return this.accessControlAllowOrigin;
 	}
 
+	/**
+	 * Value for the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Credentials">{@code Access-Control-Allow-Credentials}</a> response header.
+	 *
+	 * @return the header value
+	 */
 	@Nonnull
 	public Optional<Boolean> getAccessControlAllowCredentials() {
 		return Optional.ofNullable(this.accessControlAllowCredentials);
 	}
 
+	/**
+	 * Value for the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Expose-Headers">{@code Access-Control-Expose-Headers}</a> response header.
+	 *
+	 * @return the header value
+	 */
 	@Nonnull
 	public Set<String> getAccessControlExposeHeaders() {
 		return this.accessControlExposeHeaders;

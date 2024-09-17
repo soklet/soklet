@@ -31,7 +31,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Response headers to send over the wire in response to a <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">CORS preflight</a> request.
+ * Response headers to send over the wire for <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">CORS preflight</a> requests.
  * <p>
  * See <a href="https://www.soklet.com/docs/cors#writing-cors-responses">https://www.soklet.com/docs/cors#writing-cors-responses</a> for detailed documentation.
  *
