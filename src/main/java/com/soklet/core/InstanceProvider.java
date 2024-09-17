@@ -19,10 +19,23 @@ package com.soklet.core;
 import javax.annotation.Nonnull;
 
 /**
+ * Contract for concrete instance generation given type information.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/instance-creation">https://www.soklet.com/docs/instance-creation</a> for detailed documentation.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
 public interface InstanceProvider {
+	/**
+	 * Vends an instance of the given class.
+	 * <p>
+	 * The instance does not necessarily have to be new for every invocation (for example, implementors might return cached instances).
+	 *
+	 * @param instanceClass type token which represents the class to instantiate
+	 * @param <T>           the type of class to instantiate
+	 * @return an instance of {@code T}
+	 */
 	@Nonnull
 	<T> T provide(@Nonnull Class<T> instanceClass);
 }

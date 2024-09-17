@@ -19,10 +19,17 @@ package com.soklet.core;
 import javax.annotation.Nonnull;
 
 /**
+ * Contract for types that generate identifiers: sequential integers, UUIDs, etc.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
 public interface IdGenerator {
+	/**
+	 * Vends an identifier, not necessarily unique.
+	 *
+	 * @return an identifier
+	 */
 	@Nonnull
 	Object generateId();
 }
