@@ -276,6 +276,10 @@ public class CorsPreflightResponse {
 		@Nonnull
 		public Copier accessControlAllowMethods(@Nonnull Consumer<Set<HttpMethod>> accessControlAllowMethodsConsumer) {
 			requireNonNull(accessControlAllowMethodsConsumer);
+
+			if (this.builder.accessControlAllowMethods == null)
+				this.builder.accessControlAllowMethods(new LinkedHashSet<>());
+
 			accessControlAllowMethodsConsumer.accept(this.builder.accessControlAllowMethods);
 			return this;
 		}
@@ -290,6 +294,10 @@ public class CorsPreflightResponse {
 		@Nonnull
 		public Copier accessControlAllowHeaders(@Nonnull Consumer<Set<String>> accessControlAllowHeadersConsumer) {
 			requireNonNull(accessControlAllowHeadersConsumer);
+
+			if (this.builder.accessControlAllowHeaders == null)
+				this.builder.accessControlAllowHeaders(new LinkedHashSet<>());
+
 			accessControlAllowHeadersConsumer.accept(this.builder.accessControlAllowHeaders);
 			return this;
 		}

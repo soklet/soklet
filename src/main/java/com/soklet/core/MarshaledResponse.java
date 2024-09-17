@@ -184,6 +184,10 @@ public class MarshaledResponse {
 		@Nonnull
 		public Copier headers(@Nonnull Consumer<Map<String, Set<String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
+
+			if (this.builder.headers == null)
+				this.builder.headers(new LinkedCaseInsensitiveMap<>());
+
 			headersConsumer.accept(this.builder.headers);
 			return this;
 		}
@@ -198,6 +202,10 @@ public class MarshaledResponse {
 		@Nonnull
 		public Copier cookies(@Nonnull Consumer<Set<ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
+
+			if (this.builder.cookies == null)
+				this.builder.cookies(new LinkedHashSet<>());
+
 			cookiesConsumer.accept(this.builder.cookies);
 			return this;
 		}

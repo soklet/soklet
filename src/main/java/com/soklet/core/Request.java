@@ -574,7 +574,11 @@ public class Request {
 		@Nonnull
 		public Copier queryParameters(@Nonnull Consumer<Map<String, Set<String>>> queryParametersConsumer) {
 			requireNonNull(queryParametersConsumer);
-			queryParametersConsumer.accept(this.builder.queryParameters == null ? new LinkedHashMap<>() : this.builder.queryParameters);
+
+			if (this.builder.queryParameters == null)
+				this.builder.queryParameters(new LinkedHashMap<>());
+
+			queryParametersConsumer.accept(this.builder.queryParameters);
 			return this;
 		}
 
@@ -588,7 +592,11 @@ public class Request {
 		@Nonnull
 		public Copier headers(@Nonnull Consumer<Map<String, Set<String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
-			headersConsumer.accept(this.builder.headers == null ? new LinkedCaseInsensitiveMap<>() : this.builder.headers);
+
+			if (this.builder.headers == null)
+				this.builder.headers(new LinkedCaseInsensitiveMap<>());
+
+			headersConsumer.accept(this.builder.headers);
 			return this;
 		}
 

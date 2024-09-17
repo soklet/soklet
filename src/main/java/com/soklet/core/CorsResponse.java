@@ -191,6 +191,10 @@ public class CorsResponse {
 		@Nonnull
 		public Copier accessControlExposeHeaders(@Nonnull Consumer<Set<String>> accessControlExposeHeadersConsumer) {
 			requireNonNull(accessControlExposeHeadersConsumer);
+
+			if (this.builder.accessControlExposeHeaders == null)
+				this.builder.accessControlExposeHeaders(new LinkedHashSet<>());
+
 			accessControlExposeHeadersConsumer.accept(this.builder.accessControlExposeHeaders);
 			return this;
 		}
