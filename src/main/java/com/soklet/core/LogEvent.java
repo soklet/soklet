@@ -27,7 +27,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A loggable event that occurs during Soklet's internal processing.
+ * An informational "loggable" event that occurs during Soklet's internal processing - for example, if an error occurs while handling a request.
  * <p>
  * These events are exposed via {@link LifecycleInterceptor#didReceiveLogEvent(LogEvent)}.
  * <p>
@@ -50,6 +50,13 @@ public class LogEvent {
 	@Nullable
 	private final MarshaledResponse marshaledResponse;
 
+	/**
+	 * Acquires a builder for {@link LogEvent} instances.
+	 *
+	 * @param logEventType what kind of log event this is
+	 * @param message      the message for this log event
+	 * @return the builder
+	 */
 	@Nonnull
 	public static Builder with(@Nonnull LogEventType logEventType,
 														 @Nonnull String message) {
@@ -59,6 +66,11 @@ public class LogEvent {
 		return new Builder(logEventType, message);
 	}
 
+	/**
+	 * Vends a mutable copier seeded with this instance's data, suitable for building new instances.
+	 *
+	 * @return a copier for this instance
+	 */
 	@Nonnull
 	public Copier copy() {
 		return new Copier(this);
@@ -103,31 +115,61 @@ public class LogEvent {
 		return Objects.hash(getLogEventType(), getMessage(), getThrowable(), getRequest(), getResourceMethod(), getMarshaledResponse());
 	}
 
+	/**
+	 * The type of log event this is.
+	 *
+	 * @return the log event type
+	 */
 	@Nonnull
 	public LogEventType getLogEventType() {
 		return this.logEventType;
 	}
 
+	/**
+	 * The message for this log event.
+	 *
+	 * @return the message
+	 */
 	@Nonnull
 	public String getMessage() {
 		return this.message;
 	}
 
+	/**
+	 * The throwable for this log event, if available.
+	 *
+	 * @return the throwable, or {@link Optional#empty()} if not available
+	 */
 	@Nonnull
 	public Optional<Throwable> getThrowable() {
 		return Optional.ofNullable(this.throwable);
 	}
 
+	/**
+	 * The request associated with this log event, if available.
+	 *
+	 * @return the request, or {@link Optional#empty()} if not available
+	 */
 	@Nonnull
 	public Optional<Request> getRequest() {
 		return Optional.ofNullable(this.request);
 	}
 
+	/**
+	 * The resource method associated with this log event, if available.
+	 *
+	 * @return the resource method, or {@link Optional#empty()} if not available
+	 */
 	@Nonnull
 	public Optional<ResourceMethod> getResourceMethod() {
 		return Optional.ofNullable(this.resourceMethod);
 	}
 
+	/**
+	 * The response associated with this log event, if available.
+	 *
+	 * @return the response, or {@link Optional#empty()} if not available
+	 */
 	@Nonnull
 	public Optional<MarshaledResponse> getMarshaledResponse() {
 		return Optional.ofNullable(this.marshaledResponse);

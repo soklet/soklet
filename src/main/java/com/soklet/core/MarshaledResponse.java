@@ -32,6 +32,16 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * A finalized representation of a {@link Response}, suitable for sending to clients over the wire.
+ * <p>
+ * Your application's {@link ResponseMarshaler} is responsible for taking the {@link Response} returned by a Resource Method as input
+ * and converting its {@link Response#getBody()} to a {@code byte[]}.
+ * <p>
+ * For example, if a {@link Response} were to specify a body of {@code List.of("one", "two")}, a {@link ResponseMarshaler} might
+ * convert it to the JSON string {@code ["one", "two"]} and create a {@link MarshaledResponse} with a body of UTF-8 bytes that represent {@code ["one", "two"]}.
+ * <p>
+ * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -45,10 +55,26 @@ public class MarshaledResponse {
 	@Nullable
 	private final byte[] body;
 
+	/**
+	 * Acquires a builder for {@link MarshaledResponse} instances.
+	 *
+	 * @param statusCode the HTTP status code for this response
+	 * @return the builder
+	 */
 	@Nonnull
 	public static Builder withStatusCode(@Nonnull Integer statusCode) {
 		requireNonNull(statusCode);
 		return new Builder(statusCode);
+	}
+
+	/**
+	 * Vends a mutable copier seeded with this instance's data, suitable for building new instances.
+	 *
+	 * @return a copier for this instance
+	 */
+	@Nonnull
+	public Copier copy() {
+		return new Copier(this);
 	}
 
 	protected MarshaledResponse(@Nonnull Builder builder) {
@@ -67,26 +93,41 @@ public class MarshaledResponse {
 				format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
 	}
 
-	@Nonnull
-	public Copier copy() {
-		return new Copier(this);
-	}
-
+	/**
+	 * The HTTP status code for this response.
+	 *
+	 * @return the status code
+	 */
 	@Nonnull
 	public Integer getStatusCode() {
 		return this.statusCode;
 	}
 
+	/**
+	 * The HTTP headers to write for this response.
+	 *
+	 * @return the headers to write
+	 */
 	@Nonnull
 	public Map<String, Set<String>> getHeaders() {
 		return this.headers;
 	}
 
+	/**
+	 * The HTTP cookies to write for this response.
+	 *
+	 * @return the cookies to write
+	 */
 	@Nonnull
 	public Set<ResponseCookie> getCookies() {
 		return this.cookies;
 	}
 
+	/**
+	 * The HTTP response body to write, if available.
+	 *
+	 * @return the response body to write, or {@link Optional#empty()}) if no body should be written
+	 */
 	@Nonnull
 	public Optional<byte[]> getBody() {
 		return Optional.ofNullable(this.body);
