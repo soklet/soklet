@@ -38,7 +38,7 @@ import static java.util.Objects.requireNonNull;
  * and converting its {@link Response#getBody()} to a {@code byte[]}.
  * <p>
  * For example, if a {@link Response} were to specify a body of {@code List.of("one", "two")}, a {@link ResponseMarshaler} might
- * convert it to the JSON string {@code ["one", "two"]} and create a {@link MarshaledResponse} with a body of UTF-8 bytes that represent {@code ["one", "two"]}.
+ * convert it to the JSON string {@code ["one", "two"]} and provide as output a corresponding {@link MarshaledResponse} with a body of UTF-8 bytes that represent {@code ["one", "two"]}.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *

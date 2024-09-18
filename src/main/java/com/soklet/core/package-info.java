@@ -16,6 +16,8 @@
 
 /**
  * Core Soklet contracts and functionality.
+ * <p>
+ * Full documentation is available at <a href="https://www.soklet.com">https://www.soklet.com</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

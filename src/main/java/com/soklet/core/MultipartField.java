@@ -31,6 +31,10 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Encapsulates an HTML form element name, binary and {@link String} representations of its value, and other attributes as encoded according to the <a href="https://datatracker.ietf.org/doc/html/rfc7578">{@code multipart/form-data}</a> specification.
+ * <p>
+ * Full documentation is available at <a href="https://www.soklet.com/docs/request-handling#multipart-form-data">https://www.soklet.com/docs/request-handling#multipart-form-data</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -57,6 +61,25 @@ public class MultipartField {
 	@Nonnull
 	private final ReentrantLock lock;
 
+	/**
+	 * Acquires a builder for {@link MultipartField} instances.
+	 *
+	 * @param name the name of this field
+	 * @return the builder
+	 */
+	@Nonnull
+	public static Builder withName(@Nonnull String name) {
+		requireNonNull(name);
+		return new Builder(name);
+	}
+
+	/**
+	 * Acquires a builder for {@link MultipartField} instances.
+	 *
+	 * @param name  the name of this field
+	 * @param value the optional value for this field
+	 * @return the builder
+	 */
 	@Nonnull
 	public static Builder with(@Nonnull String name,
 														 @Nullable byte[] value) {
@@ -64,12 +87,11 @@ public class MultipartField {
 		return new Builder(name, value);
 	}
 
-	@Nonnull
-	public static Builder withName(@Nonnull String name) {
-		requireNonNull(name);
-		return new Builder(name);
-	}
-
+	/**
+	 * Vends a mutable copier seeded with this instance's data, suitable for building new instances.
+	 *
+	 * @return a copier for this instance
+	 */
 	@Nonnull
 	public Copier copy() {
 		return new Copier(this);
@@ -254,6 +276,11 @@ public class MultipartField {
 		}
 	}
 
+	/**
+	 * The value of this field represented as a string, if available.
+	 *
+	 * @return the string value, or {@link Optional#empty()} if not available
+	 */
 	@Nonnull
 	public Optional<String> getDataAsString() {
 		// Lazily instantiate a string instance using double-checked locking
@@ -270,26 +297,51 @@ public class MultipartField {
 		return Optional.ofNullable(this.dataAsString);
 	}
 
+	/**
+	 * The name of this field.
+	 *
+	 * @return the name of this field
+	 */
 	@Nonnull
 	public String getName() {
 		return this.name;
 	}
 
+	/**
+	 * The filename associated with this field, if available.
+	 *
+	 * @return the filename, or {@link Optional#empty()} if not available
+	 */
 	@Nonnull
 	public Optional<String> getFilename() {
 		return Optional.ofNullable(this.filename);
 	}
 
+	/**
+	 * The content type for this field, e.g. {@code image/png} for an image file, if available.
+	 *
+	 * @return the content type, or {@link Optional#empty()} if not available
+	 */
 	@Nonnull
 	public Optional<String> getContentType() {
 		return Optional.ofNullable(this.contentType);
 	}
 
+	/**
+	 * The charset used to encode this field, if applicable.
+	 *
+	 * @return the charset, or {@link Optional#empty()} if not available
+	 */
 	@Nonnull
 	public Optional<Charset> getCharset() {
 		return Optional.ofNullable(this.charset);
 	}
 
+	/**
+	 * The binary value of this field, if available.
+	 *
+	 * @return the binary value, or {@link Optional#empty()} if not available
+	 */
 	@Nonnull
 	public Optional<byte[]> getData() {
 		return Optional.ofNullable(this.data);
