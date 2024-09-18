@@ -21,13 +21,32 @@ import javax.annotation.Nonnull;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Typesafe representation of <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections">HTTP Redirect</a> types ({@code 301, 302, 303, 307, 308}).
+ * <p>
+ * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#redirects">https://www.soklet.com/docs/response-writing#redirects</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum RedirectType {
+	/**
+	 * Represents <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/301">{@code 301 Moved Permanently}</a>.
+	 */
 	HTTP_301_MOVED_PERMANENTLY(StatusCode.HTTP_301),
+	/**
+	 * Represents <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/302">{@code 302 Found}</a>.
+	 */
 	HTTP_302_FOUND(StatusCode.HTTP_302),
+	/**
+	 * Represents <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/303">{@code 303 See Other}</a>.
+	 */
 	HTTP_303_SEE_OTHER(StatusCode.HTTP_303),
+	/**
+	 * Represents <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/307">{@code 307 Temporary Redirect}</a>.
+	 */
 	HTTP_307_TEMPORARY_REDIRECT(StatusCode.HTTP_307),
+	/**
+	 * Represents <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/308">{@code 308 Permanent Redirect}</a>.
+	 */
 	HTTP_308_PERMANENT_REDIRECT(StatusCode.HTTP_308);
 
 	@Nonnull
@@ -38,6 +57,11 @@ public enum RedirectType {
 		this.statusCode = statusCode;
 	}
 
+	/**
+	 * The HTTP status code for this redirect type.
+	 *
+	 * @return the status code
+	 */
 	@Nonnull
 	public StatusCode getStatusCode() {
 		return this.statusCode;
