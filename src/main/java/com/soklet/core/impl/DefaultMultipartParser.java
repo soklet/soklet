@@ -100,14 +100,11 @@ public class DefaultMultipartParser implements MultipartParser {
 			throw new MissingRequestHeaderException("The 'Content-Type' header must be specified for multipart requests.", "Content-Type");
 
 		Map<String, String> contentTypeHeaderFields = extractFields(contentTypeHeader);
-
-		ByteArrayInputStream input = new ByteArrayInputStream(requestBody);
-		MultipartStream multipartStream = new MultipartStream(input,
-				contentTypeHeaderFields.get("boundary").getBytes(), progressNotifier);
-
 		Map<String, Set<MultipartField>> multipartFieldsByName = new LinkedHashMap<>();
 
-		try {
+		try (ByteArrayInputStream input = new ByteArrayInputStream(requestBody)) {
+			MultipartStream multipartStream = new MultipartStream(input, contentTypeHeaderFields.get("boundary").getBytes(), progressNotifier);
+
 			boolean hasNext = multipartStream.skipPreamble();
 
 			while (hasNext) {

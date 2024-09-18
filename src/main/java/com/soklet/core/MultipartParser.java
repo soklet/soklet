@@ -21,10 +21,18 @@ import java.util.Map;
 import java.util.Set;
 
 /**
+ * Contract for parsing HTML form fields encoded according to the <a href="https://datatracker.ietf.org/doc/html/rfc7578">{@code multipart/form-data}</a> specification.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
 public interface MultipartParser {
+	/**
+	 * Given a request, detect all HTML form fields with <a href="https://datatracker.ietf.org/doc/html/rfc7578">{@code multipart/form-data}</a> encoding and parse their values.
+	 *
+	 * @param request the request to parse
+	 * @return a mapping of form field names to corresponding sets of form field values
+	 */
 	@Nonnull
 	Map<String, Set<MultipartField>> extractMultipartFields(@Nonnull Request request);
 }
