@@ -29,13 +29,13 @@ import com.soklet.core.LogEvent;
 import com.soklet.core.LogEventType;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
-import com.soklet.core.RequestHandler;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.Response;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
+import com.soklet.core.Server.RequestHandler;
 import com.soklet.core.Simulator;
 import com.soklet.core.StatusCode;
 

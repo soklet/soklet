@@ -18,21 +18,72 @@ package com.soklet.core;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.function.Consumer;
 
 /**
+ * Contract for HTTP server implementations that are designed to be managed by a {@link com.soklet.Soklet} instance.
+ * <p>
+ * <strong>Most Soklet applications will use {@link com.soklet.core.impl.DefaultServer} and therefore do not need to implement this interface directly.</strong>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public interface Server extends AutoCloseable {
+	/**
+	 * Starts the server, which makes it able to accept requests from clients.
+	 * <p>
+	 * If the server is already started, no action is taken.
+	 */
 	void start();
 
+	/**
+	 * Stops the server, which makes it unable to accept requests from clients.
+	 * <p>
+	 * If the server is already stopped, no action is taken.
+	 */
 	void stop();
 
+	/**
+	 * Is this server started (that is, able to handle requests from clients)?
+	 *
+	 * @return {@code true} if the server is started, {@code false} otherwise
+	 */
 	@Nonnull
 	Boolean isStarted();
 
 	void registerRequestHandler(@Nullable RequestHandler requestHandler);
 
+	/**
+	 * {@link AutoCloseable}-enabled synonym for {@link #stop()}.
+	 *
+	 * @throws Exception if an exception occurs while stopping the server
+	 */
+	@Override
 	default void close() throws Exception {
 		stop();
+	}
+
+	/**
+	 * Request/response processing contract for custom {@link Server} implementations.
+	 * <p>
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
+	 * <p>
+	 * <strong>Most Soklet applications will use {@link com.soklet.core.impl.DefaultServer} and therefore do not need to implement this interface directly.</strong>
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@FunctionalInterface
+	public interface RequestHandler {
+		/**
+		 * Callback to be invoked by a {@link Server} implementation after it has received an HTTP request but prior to writing an HTTP response.
+		 * <p>
+		 * The {@link Server} is responsible for converting its internal request representation into a {@link Request}, which a {@link com.soklet.Soklet} instance consumes and performs Soklet application request processing logic.
+		 * <p>
+		 * The {@link com.soklet.Soklet} instance will generate a {@link MarshaledResponse} for the request, which it "hands back" to the {@link Server} to be sent over the wire to the client.
+		 *
+		 * @param request                   a Soklet {@link Request} representation of the {@link Server}'s internal HTTP request data
+		 * @param marshaledResponseConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link Server} to write HTTP response data to the client
+		 */
+		void handleRequest(@Nonnull Request request,
+											 @Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer);
 	}
 }

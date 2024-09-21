@@ -23,7 +23,6 @@ import com.soklet.core.LogEventType;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.MultipartParser;
 import com.soklet.core.Request;
-import com.soklet.core.RequestHandler;
 import com.soklet.core.ResponseCookie;
 import com.soklet.core.Server;
 import com.soklet.core.StatusCode;
