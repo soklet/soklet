@@ -22,10 +22,61 @@ import java.lang.reflect.Type;
 import java.util.Optional;
 
 /**
+ * Contract for converting request body bytes into a corresponding Java type.
+ * <p>
+ * For example, given this Resource Method with a parameter annotated with {@link com.soklet.annotation.RequestBody}:
+ * <pre>{@code  @POST("/find-biggest")
+ * public Integer findBiggest(@RequestBody List<Integer> numbers) {
+ *   // JSON request body [1,2,3] results in 3 being returned
+ *   return Collections.max(numbers);
+ * }}</pre>
+ * <p>
+ * You might implement a {@link RequestBodyMarshaler} to accept JSON like this:
+ * <pre>{@code  SokletConfiguration config = SokletConfiguration.withServer(
+ *   DefaultServer.withPort(8080).build()
+ * ).requestBodyMarshaler(new RequestBodyMarshaler() {
+ *   // This example uses Google's GSON
+ *   static final Gson GSON = new Gson();
+ *
+ *   @Nonnull
+ *   @Override
+ *   public Optional<Object> marshalRequestBody(
+ *     @Nonnull Request request,
+ *     @Nonnull ResourceMethod resourceMethod,
+ *     @Nonnull Parameter parameter,
+ *     @Nonnull Type requestBodyType
+ *   ) {
+ *     // Let GSON turn the request body into an instance
+ *     // of the specified type.
+ *     //
+ *     // Note that this method has access to all runtime information
+ *     // about the request, which provides the opportunity to, for example,
+ *     // examine annotations on the method/parameter which might
+ *     // inform custom marshaling strategies.
+ *     return Optional.of(GSON.fromJson(
+ *       request.getBodyAsString().get(),
+ *       requestBodyType
+ *     ));
+ *   }
+ * }).build();}</pre>
+ * <p>
+ * See <a href="https://www.soklet.com/docs/request-handling#request-body">https://www.soklet.com/docs/request-handling#request-body</a> for detailed documentation.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
 public interface RequestBodyMarshaler {
+	/**
+	 * Given a request, the Resource Method that will handle it, and a {@link com.soklet.annotation.RequestBody}-annotated parameter + its type, convert the request body bytes into an instance of type {@code requestBodyType}.
+	 * <p>
+	 * This instance will be injected by Soklet when it invokes the Resource Method to handle the request.
+	 *
+	 * @param request         the request whose body should be converted into a Java type
+	 * @param resourceMethod  the Resource Method that is configured to handle the request
+	 * @param parameter       the Resource Method parameter into which the returned instance will be injected
+	 * @param requestBodyType the type of the Resource Method parameter (provided for convenience)
+	 * @return the Java instance that corresponds to the request body bytes suitable for assignment to the Resource Method parameter, or {@link Optional#empty()} if no instance should be marshaled
+	 */
 	@Nonnull
 	Optional<Object> marshalRequestBody(@Nonnull Request request,
 																			@Nonnull ResourceMethod resourceMethod,
