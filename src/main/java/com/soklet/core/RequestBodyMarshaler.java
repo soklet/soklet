@@ -24,7 +24,7 @@ import java.util.Optional;
 /**
  * Contract for converting request body bytes into a corresponding Java type.
  * <p>
- * For example, given this Resource Method with a parameter annotated with {@link com.soklet.annotation.RequestBody}:
+ * For example, if your Resource Methods expect JSON request bodies like this (note the {@link com.soklet.annotation.RequestBody} annotation):
  * <pre>{@code  @POST("/find-biggest")
  * public Integer findBiggest(@RequestBody List<Integer> numbers) {
  *   // JSON request body [1,2,3] results in 3 being returned
