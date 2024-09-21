@@ -47,6 +47,10 @@ import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Encapsulates information specified in an HTTP request.
+ * <p>
+ * Detailed documentation available at <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -100,6 +104,13 @@ public class Request {
 	@Nullable
 	private volatile List<Locale> locales = null;
 
+	/**
+	 * Acquires a builder for {@link Request} instances.
+	 *
+	 * @param httpMethod the HTTP method for this request ({@code GET, POST, etc.})
+	 * @param uri        the URI for this request, which must start with a {@code /} character, e.g. {@code /example/123} or {@code /one?two=three}
+	 * @return the builder
+	 */
 	@Nonnull
 	public static Builder with(@Nonnull HttpMethod httpMethod,
 														 @Nonnull String uri) {
@@ -107,6 +118,16 @@ public class Request {
 		requireNonNull(uri);
 
 		return new Builder(httpMethod, uri);
+	}
+
+	/**
+	 * Vends a mutable copier seeded with this instance's data, suitable for building new instances.
+	 *
+	 * @return a copier for this instance
+	 */
+	@Nonnull
+	public Copier copy() {
+		return new Copier(this);
 	}
 
 	protected Request(@Nonnull Builder builder) {
@@ -240,11 +261,11 @@ public class Request {
 		return Objects.hash(getId(), getHttpMethod(), getUri(), getQueryParameters(), getHeaders(), getBody(), isContentTooLarge());
 	}
 
-	@Nonnull
-	public Copier copy() {
-		return new Copier(this);
-	}
-
+	/**
+	 * An application-specific identifier for this request.
+	 *
+	 * @return the identifier for this request.
+	 */
 	@Nonnull
 	public Object getId() {
 		return this.id;

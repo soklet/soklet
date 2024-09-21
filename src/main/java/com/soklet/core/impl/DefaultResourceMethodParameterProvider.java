@@ -345,6 +345,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	}
 
 	@Nullable
+	@SuppressWarnings("unchecked")
 	protected Object extractQueryParameterValue(@Nonnull Request request,
 																							@Nonnull ResourceMethod resourceMethod,
 																							@Nonnull Parameter parameter,
@@ -374,6 +375,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	}
 
 	@Nullable
+	@SuppressWarnings("unchecked")
 	protected Object extractFormParameterValue(@Nonnull Request request,
 																						 @Nonnull ResourceMethod resourceMethod,
 																						 @Nonnull Parameter parameter,
@@ -403,6 +405,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	}
 
 	@Nullable
+	@SuppressWarnings("unchecked")
 	protected Object extractRequestHeaderValue(@Nonnull Request request,
 																						 @Nonnull ResourceMethod resourceMethod,
 																						 @Nonnull Parameter parameter,
@@ -432,6 +435,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 	}
 
 	@Nullable
+	@SuppressWarnings("unchecked")
 	protected Object extractRequestCookieValue(@Nonnull Request request,
 																						 @Nonnull ResourceMethod resourceMethod,
 																						 @Nonnull Parameter parameter,
@@ -710,6 +714,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		@Nonnull
 		private final IllegalExceptionProvider illegalExceptionProvider;
 
+		@SuppressWarnings("unchecked")
 		protected RequestValueExtractionConfig(@Nonnull Builder builder) {
 			requireNonNull(builder);
 
