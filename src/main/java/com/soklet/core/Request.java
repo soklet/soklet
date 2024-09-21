@@ -108,7 +108,7 @@ public class Request {
 	 * Acquires a builder for {@link Request} instances.
 	 *
 	 * @param httpMethod the HTTP method for this request ({@code GET, POST, etc.})
-	 * @param uri        the URI for this request, which must start with a {@code /} character, e.g. {@code /example/123} or {@code /one?two=three}
+	 * @param uri        the URI for this request, which must start with a {@code /} character and might include query parameters, e.g. {@code /example/123} or {@code /one?two=three}
 	 * @return the builder
 	 */
 	@Nonnull
@@ -263,74 +263,186 @@ public class Request {
 
 	/**
 	 * An application-specific identifier for this request.
+	 * <p>
+	 * The identifier is not necessarily unique (for example, numbers that "wrap around" if they get too large).
 	 *
-	 * @return the identifier for this request.
+	 * @return the request's identifier
 	 */
 	@Nonnull
 	public Object getId() {
 		return this.id;
 	}
 
+	/**
+	 * The <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods">HTTP method</a> for this request.
+	 *
+	 * @return the request's HTTP method
+	 */
 	@Nonnull
 	public HttpMethod getHttpMethod() {
 		return this.httpMethod;
 	}
 
+	/**
+	 * The URI for this request, which must start with a {@code /} character and might include query parameters, such as {@code /example/123} or {@code /one?two=three}.
+	 *
+	 * @return the request's URI
+	 */
 	@Nonnull
 	public String getUri() {
 		return this.uri;
 	}
 
+	/**
+	 * The path component of the request, which is the value returned by {@link #getUri()} with the query string (if any) removed.
+	 *
+	 * @return the request's path component
+	 */
 	@Nonnull
 	public String getPath() {
 		return this.path;
 	}
 
+	/**
+	 * The cookies provided by the client for this request.
+	 * <p>
+	 * The keys are the {@code Cookie} header names and the values are {@code Cookie} header values
+	 * (it is possible for a client to send multiple {@code Cookie} headers with the same name).
+	 * <p>
+	 * <em>Note that {@code Cookie} headers, like all request headers, have case-insensitive names per the HTTP spec.</em>
+	 * <p>
+	 * Use {@link #getCookie(String)} for a convenience method to access cookie values when only one is expected.
+	 *
+	 * @return the request's cookies
+	 */
 	@Nonnull
 	public Map<String, Set<String>> getCookies() {
 		return this.cookies;
 	}
 
+	/**
+	 * The query parameters provided by the client for this request.
+	 * <p>
+	 * The keys are the query parameter names and the values are query parameter values
+	 * (it is possible for a client to send multiple query parameters with the same name, e.g. {@code ?test=1&test=2}).
+	 * <p>
+	 * <em>Note that query parameters have case-sensitive names per the HTTP spec.</em>
+	 * <p>
+	 * Use {@link #getQueryParameter(String)} for a convenience method to access query parameter values when only one is expected.
+	 *
+	 * @return the request's query parameters
+	 */
 	@Nonnull
 	public Map<String, Set<String>> getQueryParameters() {
 		return this.queryParameters;
 	}
 
+	/**
+	 * The HTML {@code form} parameters provided by the client for this request.
+	 * <p>
+	 * The keys are the form parameter names and the values are form parameter values
+	 * (it is possible for a client to send multiple form parameters with the same name, e.g. {@code ?test=1&test=2}).
+	 * <p>
+	 * <em>Note that form parameters have case-sensitive names per the HTTP spec.</em>
+	 * <p>
+	 * Use {@link #getFormParameter(String)} for a convenience method to access form parameter values when only one is expected.
+	 *
+	 * @return the request's form parameters
+	 */
 	@Nonnull
 	public Map<String, Set<String>> getFormParameters() {
 		return this.formParameters;
 	}
 
+	/**
+	 * The headers provided by the client for this request.
+	 * <p>
+	 * The keys are the header names and the values are header values
+	 * (it is possible for a client to send multiple query parameters with the same name, e.g. {@code ?test=1&test=2}).
+	 * <p>
+	 * <em>Note that request headers have case-insensitive names per the HTTP spec.</em>
+	 * <p>
+	 * Use {@link #getHeader(String)} for a convenience method to access header values when only one is expected.
+	 *
+	 * @return the request's headers
+	 */
 	@Nonnull
 	public Map<String, Set<String>> getHeaders() {
 		return this.headers;
 	}
 
+	/**
+	 * The {@code Content-Type} header value, as specified by the client.
+	 *
+	 * @return the request's {@code Content-Type} header value, or {@link Optional#empty()} if not specified
+	 */
 	@Nonnull
 	public Optional<String> getContentType() {
 		return Optional.ofNullable(this.contentType);
 	}
 
+	/**
+	 * The request's character encoding, as specified by the client in the {@code Content-Type} header value.
+	 *
+	 * @return the request's character encoding, or {@link Optional#empty()} if not specified
+	 */
 	@Nonnull
 	public Optional<Charset> getCharset() {
 		return Optional.ofNullable(this.charset);
 	}
 
+	/**
+	 * Is this a request with {@code Content-Type} of {@code multipart/form-data}?
+	 *
+	 * @return {@code true} if this is a {@code multipart/form-data} request, {@code false} otherwise
+	 */
 	@Nonnull
 	public Boolean isMultipart() {
 		return this.multipart;
 	}
 
+	/**
+	 * The HTML {@code multipart/form-data} fields provided by the client for this request.
+	 * <p>
+	 * The keys are the multipart field names and the values are multipart field values
+	 * (it is possible for a client to send multiple multipart fields with the same name).
+	 * <p>
+	 * <em>Note that multipart fields have case-sensitive names per the HTTP spec.</em>
+	 * <p>
+	 * Use {@link #getMultipartField(String)} for a convenience method to access a multipart parameter field value when only one is expected.
+	 * <p>
+	 * When using {@link com.soklet.core.impl.DefaultServer}, multipart fields are parsed using the {@link MultipartParser} as configured by {@link com.soklet.core.impl.DefaultServer.Builder#multipartParser(MultipartParser)}.
+	 *
+	 * @return the request's multipart fields, or the empty map if none are present
+	 */
 	@Nonnull
 	public Map<String, Set<MultipartField>> getMultipartFields() {
 		return this.multipartFields;
 	}
 
+	/**
+	 * The raw bytes of the request body.
+	 * <p>
+	 * For convenience, {@link #getBodyAsString()} is available if you expect your request body to be of type {@link String}.
+	 *
+	 * @return the request body bytes, or {@link Optional#empty()} if none was supplied
+	 */
 	@Nonnull
 	public Optional<byte[]> getBody() {
 		return Optional.ofNullable(this.body);
 	}
 
+	/**
+	 * Was this request too large for the server to handle?
+	 * <p>
+	 * <em>If so, this request might have incomplete sets of headers/cookies. It will always have a zero-length body.</em>
+	 * <p>
+	 * Soklet is designed to power systems that exchange small "transactional" payloads that live entirely in memory. It is not appropriate for handling multipart files at scale, buffering uploads to disk, streaming, etc.
+	 * <p>
+	 * When using {@link com.soklet.core.impl.DefaultServer}, maximum request size is configured by {@link com.soklet.core.impl.DefaultServer.Builder#maximumRequestSizeInBytes(Integer)}.
+	 *
+	 * @return {@code true} if this request is larger than the server is able to handle, {@code false} otherwise
+	 */
 	@Nonnull
 	public Boolean isContentTooLarge() {
 		return this.contentTooLarge;
