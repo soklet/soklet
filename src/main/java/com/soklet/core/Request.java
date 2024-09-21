@@ -448,6 +448,17 @@ public class Request {
 		return this.contentTooLarge;
 	}
 
+	/**
+	 * Convenience method that provides the {@link #getBody()} bytes as a {@link String} encoded using the client-specified character set per {@link #getCharset()}.
+	 * <p>
+	 * If no character set is specified, {@link StandardCharsets#UTF_8} is used to perform the encoding.
+	 * <p>
+	 * This method will lazily convert the raw bytes as specified by {@link #getBody()} to an instance of {@link String} when first invoked.  The {@link String} representation is then cached and re-used for subsequent invocations.
+	 * <p>
+	 * This method is threadsafe.
+	 *
+	 * @return a {@link String} representation of this request's body, or {@link Optional#empty()} if no request body was specified by the client
+	 */
 	@Nonnull
 	public Optional<String> getBodyAsString() {
 		// Lazily instantiate a string instance using double-checked locking
@@ -464,16 +475,39 @@ public class Request {
 		return Optional.ofNullable(this.bodyAsString);
 	}
 
+	/**
+	 * <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">Non-preflight CORS</a> request data.
+	 * <p>
+	 * See <a href="https://www.soklet.com/docs/cors">https://www.soklet.com/docs/cors</a> for details.
+	 *
+	 * @return non-preflight CORS request data, or {@link Optional#empty()} if none was specified
+	 */
 	@Nonnull
 	public Optional<Cors> getCors() {
 		return Optional.ofNullable(this.cors);
 	}
 
+	/**
+	 * <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">CORS preflight</a>-related request data.
+	 * <p>
+	 * See <a href="https://www.soklet.com/docs/cors">https://www.soklet.com/docs/cors</a> for details.
+	 *
+	 * @return preflight CORS request data, or {@link Optional#empty()} if none was specified
+	 */
 	@Nonnull
 	public Optional<CorsPreflight> getCorsPreflight() {
 		return Optional.ofNullable(this.corsPreflight);
 	}
 
+	/**
+	 * Locale information for this request as specified by {@code Accept-Language} header value[s] and ordered by weight as defined by <a href="https://www.rfc-editor.org/rfc/rfc7231#section-5.3.5">RFC 7231, Section 5.3.5</a>.
+	 * <p>
+	 * This method will lazily parse {@code Accept-Language} header values into to an ordered {@link List} of {@link Locale} when first invoked.  This representation is then cached and re-used for subsequent invocations.
+	 * <p>
+	 * This method is threadsafe.
+	 *
+	 * @return locale information for this request, or the empty list if none was specified
+	 */
 	@Nonnull
 	public List<Locale> getLocales() {
 		// Lazily instantiate our parsed locales using double-checked locking
@@ -498,30 +532,90 @@ public class Request {
 		return this.locales;
 	}
 
+	/**
+	 * Convenience method to access a query parameter's value when at most one is expected for the given {@code name}.
+	 * <p>
+	 * If a query parameter {@code name} can support multiple values, {@link #getQueryParameters()} should be used instead of this method.
+	 * <p>
+	 * If this method is invoked for a query parameter {@code name} with multiple values, Soklet does not guarantee which value will be returned.
+	 * <p>
+	 * <em>Note that query parameters have case-sensitive names per the HTTP spec.</em>
+	 *
+	 * @param name the name of the query parameter
+	 * @return the value for the query parameter, or {@link Optional#empty()} if none is present
+	 */
 	@Nonnull
 	public Optional<String> getQueryParameter(@Nonnull String name) {
 		requireNonNull(name);
 		return singleValueForName(name, getQueryParameters());
 	}
 
+	/**
+	 * Convenience method to access a form parameter's value when at most one is expected for the given {@code name}.
+	 * <p>
+	 * If a form parameter {@code name} can support multiple values, {@link #getFormParameters()} should be used instead of this method.
+	 * <p>
+	 * If this method is invoked for a form parameter {@code name} with multiple values, Soklet does not guarantee which value will be returned.
+	 * <p>
+	 * <em>Note that form parameters have case-sensitive names per the HTTP spec.</em>
+	 *
+	 * @param name the name of the form parameter
+	 * @return the value for the form parameter, or {@link Optional#empty()} if none is present
+	 */
 	@Nonnull
 	public Optional<String> getFormParameter(@Nonnull String name) {
 		requireNonNull(name);
 		return singleValueForName(name, getFormParameters());
 	}
 
+	/**
+	 * Convenience method to access a header's value when at most one is expected for the given {@code name}.
+	 * <p>
+	 * If a header {@code name} can support multiple values, {@link #getHeaders()} should be used instead of this method.
+	 * <p>
+	 * If this method is invoked for a header {@code name} with multiple values, Soklet does not guarantee which value will be returned.
+	 * <p>
+	 * <em>Note that request headers have case-insensitive names per the HTTP spec.</em>
+	 *
+	 * @param name the name of the header
+	 * @return the value for the header, or {@link Optional#empty()} if none is present
+	 */
 	@Nonnull
 	public Optional<String> getHeader(@Nonnull String name) {
 		requireNonNull(name);
 		return singleValueForName(name, getHeaders());
 	}
 
+	/**
+	 * Convenience method to access a cookie's value when at most one is expected for the given {@code name}.
+	 * <p>
+	 * If a cookie {@code name} can support multiple values, {@link #getCookies()} should be used instead of this method.
+	 * <p>
+	 * If this method is invoked for a cookie {@code name} with multiple values, Soklet does not guarantee which value will be returned.
+	 * <p>
+	 * <em>Note that {@code Cookie} headers, like all request headers, have case-insensitive names per the HTTP spec.</em>
+	 *
+	 * @param name the name of the cookie
+	 * @return the value for the cookie, or {@link Optional#empty()} if none is present
+	 */
 	@Nonnull
 	public Optional<String> getCookie(@Nonnull String name) {
 		requireNonNull(name);
 		return singleValueForName(name, getCookies());
 	}
 
+	/**
+	 * Convenience method to access a multipart field when at most one is expected for the given {@code name}.
+	 * <p>
+	 * If a {@code name} can support multiple multipart fields, {@link #getMultipartFields()} should be used instead of this method.
+	 * <p>
+	 * If this method is invoked for a {@code name} with multiple multipart field values, Soklet does not guarantee which value will be returned.
+	 * <p>
+	 * <em>Note that multipart fields have case-sensitive names per the HTTP spec.</em>
+	 *
+	 * @param name the name of the multipart field
+	 * @return the multipart field value, or {@link Optional#empty()} if none is present
+	 */
 	@Nonnull
 	public Optional<MultipartField> getMultipartField(@Nonnull String name) {
 		requireNonNull(name);
