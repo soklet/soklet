@@ -26,6 +26,10 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Represents a <em>Resource Method</em>, which is a Java {@link Method} invoked by Soklet to handle an HTTP request.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a> for details.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -37,20 +41,27 @@ public class ResourceMethod {
 	@Nonnull
 	private final Method method;
 
-	public ResourceMethod(@Nonnull HttpMethod httpMethod,
-												@Nonnull ResourcePath resourcePath,
-												@Nonnull Method method) {
+	/**
+	 * Constructs a <em>Resource Method</em> given its unique components.
+	 *
+	 * @param httpMethod   an HTTP method
+	 * @param resourcePath an HTTP path which might contain placeholders, e.g. {@code /example/{exampleId}}
+	 * @param method       a Java method to invoke for the combination of HTTP method and resource path
+	 * @return
+	 */
+	@Nonnull
+	public static ResourceMethod withComponents(@Nonnull HttpMethod httpMethod,
+																							@Nonnull ResourcePath resourcePath,
+																							@Nonnull Method method) {
 		requireNonNull(httpMethod);
 		requireNonNull(resourcePath);
 		requireNonNull(method);
 
-		this.httpMethod = httpMethod;
-		this.resourcePath = resourcePath;
-		this.method = method;
+		return new ResourceMethod(httpMethod, resourcePath, method);
 	}
 
 	/**
-	 * Convenience constructor for pairing a request with a method.
+	 * Obtains a <em>Resource Method</em> by pairing a request with a method.
 	 * <p>
 	 * Useful if you already have a request available to you at runtime and want to express
 	 * "this is the method I'd like to associate it with".
@@ -58,13 +69,24 @@ public class ResourceMethod {
 	 * @param request the request from which to extract HTTP method and path information
 	 * @param method  the method to pair with the request
 	 */
-	public ResourceMethod(@Nonnull Request request,
-												@Nonnull Method method) {
+	@Nonnull
+	public static ResourceMethod fromRequest(@Nonnull Request request,
+																					 @Nonnull Method method) {
 		requireNonNull(request);
 		requireNonNull(method);
 
-		this.httpMethod = request.getHttpMethod();
-		this.resourcePath = ResourcePath.fromPathInstance(request.getPath());
+		return new ResourceMethod(request.getHttpMethod(), ResourcePath.fromPathInstance(request.getPath()), method);
+	}
+
+	protected ResourceMethod(@Nonnull HttpMethod httpMethod,
+													 @Nonnull ResourcePath resourcePath,
+													 @Nonnull Method method) {
+		requireNonNull(httpMethod);
+		requireNonNull(resourcePath);
+		requireNonNull(method);
+
+		this.httpMethod = httpMethod;
+		this.resourcePath = resourcePath;
 		this.method = method;
 	}
 
@@ -92,16 +114,31 @@ public class ResourceMethod {
 		return Objects.hash(getHttpMethod(), getResourcePath(), getMethod());
 	}
 
+	/**
+	 * Returns the HTTP method for this <em>Resource Method</em>.
+	 *
+	 * @return the HTTP method
+	 */
 	@Nonnull
 	public HttpMethod getHttpMethod() {
 		return this.httpMethod;
 	}
 
+	/**
+	 * Returns the HTTP path for this <em>Resource Method</em>, which might contain placeholders - for example, {@code /example/{exampleId}}.
+	 *
+	 * @return the HTTP path
+	 */
 	@Nonnull
 	public ResourcePath getResourcePath() {
 		return this.resourcePath;
 	}
 
+	/**
+	 * Returns the Java method to invoke for the combination of HTTP method and resource path.
+	 *
+	 * @return the Java method to invoke
+	 */
 	@Nonnull
 	public Method getMethod() {
 		return this.method;

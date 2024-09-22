@@ -68,6 +68,17 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Soklet's main class - manages a {@link Server} using the provided system configuration.
+ * <p>
+ * <pre>{@code  // Use out-of-the-box defaults
+ * SokletConfiguration config = SokletConfiguration.withServer(
+ *   DefaultServer.withPort(8080).build()
+ * ).build();
+ *
+ * try (Soklet soklet = new Soklet(config)) {
+ *   soklet.start();
+ *   System.out.println("Soklet started, press [enter] to exit");
+ *   System.in.read(); // or Thread.currentThread().join() in containers
+ * }}</pre>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

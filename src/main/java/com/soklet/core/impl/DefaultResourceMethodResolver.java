@@ -124,7 +124,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 				for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths) {
 					ResourcePath resourcePath = httpMethodResourcePath.getResourcePath();
-					ResourceMethod resourceMethod = new ResourceMethod(httpMethod, resourcePath, method);
+					ResourceMethod resourceMethod = ResourceMethod.withComponents(httpMethod, resourcePath, method);
 					resourceMethods.add(resourceMethod);
 				}
 			}
@@ -154,7 +154,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths)
 				if (httpMethodResourcePath.getHttpMethod().equals(request.getHttpMethod())
 						&& resourcePath.matches(httpMethodResourcePath.getResourcePath()))
-					matchingResourceMethods.add(new ResourceMethod(request.getHttpMethod(), httpMethodResourcePath.getResourcePath(), method));
+					matchingResourceMethods.add(ResourceMethod.withComponents(request.getHttpMethod(), httpMethodResourcePath.getResourcePath(), method));
 		}
 
 		// Simple case - exact route match
