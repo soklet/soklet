@@ -35,7 +35,6 @@ import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.Response;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
-import com.soklet.core.Server.RequestHandler;
 import com.soklet.core.Simulator;
 import com.soklet.core.StatusCode;
 
@@ -73,7 +72,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class Soklet implements AutoCloseable, RequestHandler {
+public class Soklet implements AutoCloseable {
 	@Nonnull
 	private final SokletConfiguration sokletConfiguration;
 	@Nonnull
@@ -94,7 +93,14 @@ public class Soklet implements AutoCloseable, RequestHandler {
 		if (sokletConfiguration.getResourceMethodResolver().getResourceMethods().size() == 0)
 			throw new IllegalArgumentException(format("No classes annotated with @%s were found.", Resource.class.getSimpleName()));
 
-		sokletConfiguration.getServer().registerRequestHandler(this);
+		// Use a layer of indirection here so the Soklet type does not need to directly implement the `RequestHandler` interface.
+		// Reasoning: the `handleRequest` method for Soklet should not be public, which might lead to accidental invocation by users.
+		// That method should only be called by the managed `Server` instance.
+		Soklet soklet = this;
+		sokletConfiguration.getServer().registerRequestHandler((request, marshaledResponseConsumer) -> {
+			// Delegate to Soklet's internal request handling method
+			soklet.handleRequest(request, marshaledResponseConsumer);
+		});
 	}
 
 	/**
@@ -146,14 +152,12 @@ public class Soklet implements AutoCloseable, RequestHandler {
 	}
 
 	/**
-	 * Performs request handling - <strong>this method should not be called directly unless you are implementing your own instance of {@link Server}</strong>.
-	 *
-	 * @param request                   the request to handle
-	 * @param marshaledResponseConsumer the sink for marshaled responses (to write back to clients over the wire)
+	 * Nonpublic "informal" implementation of {@link com.soklet.core.Server.RequestHandler} so Soklet does not need to expose {@code handleRequest} publicly.
+	 * Reasoning: users of this library should never call {@code handleRequest} directly - it should only be invoked in response to events
+	 * provided by a {@link Server} implementation.
 	 */
-	@Override
-	public void handleRequest(@Nonnull Request request,
-														@Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer) {
+	protected void handleRequest(@Nonnull Request request,
+															 @Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer) {
 		Instant processingStarted = Instant.now();
 
 		SokletConfiguration sokletConfiguration = getSokletConfiguration();

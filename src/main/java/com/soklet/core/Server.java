@@ -72,7 +72,7 @@ public interface Server extends AutoCloseable {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@FunctionalInterface
-	public interface RequestHandler {
+	interface RequestHandler {
 		/**
 		 * Callback to be invoked by a {@link Server} implementation after it has received an HTTP request but prior to writing an HTTP response.
 		 * <p>

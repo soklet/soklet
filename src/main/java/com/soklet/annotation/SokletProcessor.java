@@ -33,8 +33,7 @@ import com.soklet.internal.classindex.processor.ClassIndexProcessor;
  *     <artifactId>maven-compiler-plugin</artifactId>
  *     <version>...</version>
  *     <configuration>
- *         <source>...</source>
- *         <target>...</target>
+ *         <release>...</release>
  *         <compilerArgs>
  *             <arg>-processor</arg>
  *             <arg>com.soklet.annotation.SokletProcessor</arg>
