@@ -20,10 +20,26 @@ import javax.annotation.Nonnull;
 import java.util.List;
 
 /**
+ * Contract for determining parameter values to inject when invoking <em>Resource Methods</em>.
+ * <p>
+ * Soklet's default implementation of this type, {@link com.soklet.core.impl.DefaultResourceMethodParameterProvider}, is sufficient for most applications.
+ * <p>
+ * However, should a custom implementation be necessary for your application, documentation is available at <a href="https://www.soklet.com/docs/request-handling#resource-method-parameter-injection">https://www.soklet.com/docs/request-handling#resource-method-parameter-injection</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
 public interface ResourceMethodParameterProvider {
+	/**
+	 * For the given {@code request} and {@code resourceMethod}, vends the list of parameters to use when invoking the
+	 * underlying Java method located at {@link ResourceMethod#getMethod()}.
+	 * <p>
+	 * The size of the returned list of parameters must exactly match the number of parameters required by the Java method signature.
+	 *
+	 * @param request        the HTTP request
+	 * @param resourceMethod the resource method associated with the HTTP request
+	 * @return the list of parameters to use when performing Java method invocation, or the empty list if no parameters are necessary
+	 */
 	@Nonnull
 	List<Object> parameterValuesForResourceMethod(@Nonnull Request request,
 																								@Nonnull ResourceMethod resourceMethod);
