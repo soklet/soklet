@@ -38,6 +38,30 @@ import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
 /**
+ * An HTTP path associated with an annotated <em>Resource Method</em>, such as {@code @POST("/users")}.
+ * <p>
+ * {@link ResourcePath} instances must start with the {@code /} character and may contain placeholders denoted by single-mustache syntax.
+ * For example, the {@link ResourcePath} {@code /users/{userId}} has a placeholder named {@code userId}.
+ * <p>
+ * <strong>Please note the following restrictions on {@link ResourcePath} structure:</strong>
+ * <p>
+ * 1. It is not legal to use the same placeholder name more than once in a {@link ResourcePath}.
+ * <p>
+ * For example:
+ * <ul>
+ *  <li>{@code /users/{userId}} is valid resource path</li>
+ *  <li>{@code /users/{userId}/roles/{roleId}} is valid resource path</li>
+ *  <li>{@code /users/{userId}/other/{userId}} is an <em>invalid</em> resource path</li>
+ * </ul>
+ * 2. Placeholders must span the entire {@code /}-delimited path component in which they reside.
+ * <p>
+ * For example:
+ * <ul>
+ *   <li>{@code /users/{userId}} is a valid resource path</li>
+ *   <li>{@code /users/{userId}/details} is a valid resource path</li>
+ *   <li>{@code /users/prefix{userId}} is an <em>invalid</em> resource path</li>
+ * </ul>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
