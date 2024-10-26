@@ -22,19 +22,17 @@ import com.soklet.core.ResourcePath.ComponentType;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static com.soklet.core.ResourcePath.normalizePath;
 import static java.lang.String.format;
-import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
-import static java.util.stream.Collectors.toList;
 
 /**
  * An HTTP URL path associated with an annotated <em>Resource Method</em>, such as {@code "/users/123"}.
@@ -46,7 +44,7 @@ public class ResourcePathInstance {
 	@Nonnull
 	private final String path;
 	@Nonnull
-	private final List<Component> components;
+	private final List<String> components;
 
 	/**
 	 * Creates an instance that represents a runtime "instance" of a resource path, e.g. {@code /users/123}.
@@ -58,7 +56,7 @@ public class ResourcePathInstance {
 	 */
 	public ResourcePathInstance(@Nonnull String path) {
 		requireNonNull(path);
-		this.path = normalizePath(path);
+		this.path = ResourcePath.normalizePath(path);
 		this.components = unmodifiableList(extractComponents(this.path));
 	}
 
@@ -79,12 +77,12 @@ public class ResourcePathInstance {
 
 		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
 			Component resourcePathComponent = resourcePath.getComponents().get(i);
-			Component resourcePathInstanceComponent = getComponents().get(i);
+			String resourcePathInstanceComponent = getComponents().get(i);
 
 			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
 				continue;
 
-			if (!resourcePathComponent.getValue().equals(resourcePathInstanceComponent.getValue()))
+			if (!resourcePathComponent.getValue().equals(resourcePathInstanceComponent))
 				return false;
 		}
 
@@ -103,10 +101,10 @@ public class ResourcePathInstance {
 
 		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
 			Component resourcePathComponent = resourcePath.getComponents().get(i);
-			Component resourcePathInstanceComponent = getComponents().get(i);
+			String resourcePathInstanceComponent = getComponents().get(i);
 
 			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
-				placeholders.put(resourcePathComponent.getValue(), resourcePathInstanceComponent.getValue());
+				placeholders.put(resourcePathComponent.getValue(), resourcePathInstanceComponent);
 		}
 
 		return Collections.unmodifiableMap(placeholders);
@@ -118,7 +116,7 @@ public class ResourcePathInstance {
 	}
 
 	@Nonnull
-	public List<Component> getComponents() {
+	public List<String> getComponents() {
 		return this.components;
 	}
 
@@ -129,7 +127,7 @@ public class ResourcePathInstance {
 	 * @return Logical components of the supplied {@code path}
 	 */
 	@Nonnull
-	protected List<Component> extractComponents(@Nonnull String path) {
+	protected List<String> extractComponents(@Nonnull String path) {
 		requireNonNull(path);
 
 		if ("/".equals(path))
@@ -138,11 +136,7 @@ public class ResourcePathInstance {
 		// Strip off leading /
 		path = path.substring(1);
 
-		List<String> values = asList(path.split("/"));
-
-		return values.stream().map(value -> {
-			return new Component(value, ComponentType.LITERAL);
-		}).collect(toList());
+		return Arrays.asList(path.split("/"));
 	}
 
 	@Override
@@ -158,11 +152,11 @@ public class ResourcePathInstance {
 		if (!(object instanceof ResourcePathInstance resourcePath))
 			return false;
 
-		return Objects.equals(getPath(), resourcePath.getPath()) && Objects.equals(getComponents(), resourcePath.getComponents());
+		return Objects.equals(getPath(), resourcePath.getPath());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getPath(), getComponents());
+		return Objects.hash(getPath());
 	}
 }

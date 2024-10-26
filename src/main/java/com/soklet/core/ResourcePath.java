@@ -113,13 +113,13 @@ public class ResourcePath {
 			return false;
 
 		for (int i = 0; i < resourcePathInstance.getComponents().size(); ++i) {
-			Component resourcePathInstanceComponent = resourcePathInstance.getComponents().get(i);
+			String resourcePathInstanceComponent = resourcePathInstance.getComponents().get(i);
 			Component resourcePathComponent = getComponents().get(i);
 
 			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
 				continue;
 
-			if (!resourcePathComponent.getValue().equals(resourcePathInstanceComponent.getValue()))
+			if (!resourcePathComponent.getValue().equals(resourcePathInstanceComponent))
 				return false;
 		}
 
@@ -137,16 +137,14 @@ public class ResourcePath {
 		Map<String, String> placeholders = new HashMap<>(resourcePathInstance.getComponents().size());
 
 		for (int i = 0; i < resourcePathInstance.getComponents().size(); ++i) {
-			Component resourcePathInstanceComponent = resourcePathInstance.getComponents().get(i);
+			String resourcePathInstanceComponent = resourcePathInstance.getComponents().get(i);
 			Component resourcePathComponent = getComponents().get(i);
 
 			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER) {
-				String resourcePathInstanceComponentValue = resourcePathInstanceComponent.getValue();
+				if (resourcePathInstanceComponent != null)
+					resourcePathInstanceComponent = URLDecoder.decode(resourcePathInstanceComponent, StandardCharsets.UTF_8);
 
-				if (resourcePathInstanceComponentValue != null)
-					resourcePathInstanceComponentValue = URLDecoder.decode(resourcePathInstanceComponentValue, StandardCharsets.UTF_8);
-
-				placeholders.put(resourcePathComponent.getValue(), resourcePathInstanceComponentValue);
+				placeholders.put(resourcePathComponent.getValue(), resourcePathInstanceComponent);
 			}
 		}
 
@@ -173,7 +171,7 @@ public class ResourcePath {
 	}
 
 	@Nonnull
-	protected static String normalizePath(@Nonnull String path) {
+	static String normalizePath(@Nonnull String path) {
 		requireNonNull(path);
 
 		path = trimAggressively(path);
