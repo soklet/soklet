@@ -22,7 +22,10 @@ import com.soklet.core.ResourcePath.ComponentType;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import static com.soklet.core.ResourcePath.normalizePath;
@@ -86,6 +89,27 @@ public class ResourcePathInstance {
 		}
 
 		return true;
+	}
+
+	@Nonnull
+	public Map<String, String> extractPlaceholders(@Nonnull ResourcePath resourcePath) {
+		requireNonNull(resourcePath);
+
+		if (!matches(resourcePath))
+			throw new IllegalArgumentException(format("%s is not a match for %s so we cannot extract placeholders", this,
+					resourcePath));
+
+		Map<String, String> placeholders = new HashMap<>(resourcePath.getComponents().size());
+
+		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
+			Component resourcePathComponent = resourcePath.getComponents().get(i);
+			Component resourcePathInstanceComponent = getComponents().get(i);
+
+			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
+				placeholders.put(resourcePathComponent.getValue(), resourcePathInstanceComponent.getValue());
+		}
+
+		return Collections.unmodifiableMap(placeholders);
 	}
 
 	@Nonnull

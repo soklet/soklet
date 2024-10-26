@@ -137,18 +137,16 @@ public class ResourcePath {
 		Map<String, String> placeholders = new HashMap<>(resourcePathInstance.getComponents().size());
 
 		for (int i = 0; i < resourcePathInstance.getComponents().size(); ++i) {
-			Component component1 = resourcePathInstance.getComponents().get(i);
-			Component component2 = getComponents().get(i);
+			Component resourcePathInstanceComponent = resourcePathInstance.getComponents().get(i);
+			Component resourcePathComponent = getComponents().get(i);
 
-			if (component1.getType() == ComponentType.PLACEHOLDER && component2.getType() == ComponentType.LITERAL) {
-				placeholders.put(component1.getValue(), component2.getValue());
-			} else if (component1.getType() == ComponentType.LITERAL && component2.getType() == ComponentType.PLACEHOLDER) {
-				String component1Value = component1.getValue();
+			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER) {
+				String resourcePathInstanceComponentValue = resourcePathInstanceComponent.getValue();
 
-				if (component1Value != null)
-					component1Value = URLDecoder.decode(component1Value, StandardCharsets.UTF_8);
+				if (resourcePathInstanceComponentValue != null)
+					resourcePathInstanceComponentValue = URLDecoder.decode(resourcePathInstanceComponentValue, StandardCharsets.UTF_8);
 
-				placeholders.put(component2.getValue(), component1Value);
+				placeholders.put(resourcePathComponent.getValue(), resourcePathInstanceComponentValue);
 			}
 		}
 
