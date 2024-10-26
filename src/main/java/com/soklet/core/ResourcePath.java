@@ -38,7 +38,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
 /**
- * An HTTP path associated with an annotated <em>Resource Method</em>, such as {@code @POST("/users")}.
+ * An HTTP URL path associated with an annotated <em>Resource Method</em>, such as {@code @POST("/users")}.
  * <p>
  * {@link ResourcePath} instances must start with the {@code /} character and may contain placeholders denoted by single-mustache syntax.
  * For example, the {@link ResourcePath} {@code /users/{userId}} has a placeholder named {@code userId}.
@@ -95,18 +95,41 @@ public class ResourcePath {
 		this.components = unmodifiableList(extractComponents(this.path, strategy));
 	}
 
+	/**
+	 * Vends an instance that represents a compile-time path declaration, e.g. {@code /users/{userId}}.
+	 *
+	 * @param path a compile-time path declaration that may include placeholders
+	 * @return a resource path that represents the path declaration
+	 */
 	@Nonnull
 	public static ResourcePath fromPathDeclaration(@Nonnull String path) {
 		requireNonNull(path);
 		return new ResourcePath(path, ComponentParsingStrategy.FROM_DECLARATION);
 	}
 
+	/**
+	 * Vends an instance that represents a runtime path, e.g. {@code /users/123}.
+	 * <p>
+	 * This is in contrast to {@link #fromPathDeclaration(String)}, which represents compile-time path declarations
+	 * that may include placeholders, e.g. {@code /users/{userId}}.
+	 *
+	 * @param path a runtime path that may not include placeholders
+	 * @return a resource path that represents the path instance
+	 */
 	@Nonnull
 	public static ResourcePath fromPathInstance(@Nonnull String path) {
 		requireNonNull(path);
 		return new ResourcePath(path, ComponentParsingStrategy.FROM_INSTANCE);
 	}
 
+	/**
+	 * Does this resource path match the given resource path (taking placeholders into account, if present)?
+	 * <p>
+	 * For example, {@code /users/{userId}} would match {@code /users/123}.
+	 *
+	 * @param resourcePath the resource path against which to match
+	 * @return {@code true} if the paths match, {@code false} otherwise
+	 */
 	@Nonnull
 	public Boolean matches(@Nonnull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
@@ -127,9 +150,9 @@ public class ResourcePath {
 
 		return true;
 	}
-
+	
 	@Nonnull
-	public Map<String, String> placeholders(@Nonnull ResourcePath resourcePath) {
+	public Map<String, String> extractPlaceholders(@Nonnull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
 
 		if (!matches(resourcePath))
