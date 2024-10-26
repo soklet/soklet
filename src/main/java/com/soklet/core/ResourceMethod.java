@@ -60,24 +60,6 @@ public class ResourceMethod {
 		return new ResourceMethod(httpMethod, resourcePath, method);
 	}
 
-	/**
-	 * Obtains a <em>Resource Method</em> by pairing a request with a method.
-	 * <p>
-	 * Useful if you already have a request available to you at runtime and want to express
-	 * "this is the method I'd like to associate it with".
-	 *
-	 * @param request the request from which to extract HTTP method and path information
-	 * @param method  the method to pair with the request
-	 */
-	@Nonnull
-	public static ResourceMethod fromRequest(@Nonnull Request request,
-																					 @Nonnull Method method) {
-		requireNonNull(request);
-		requireNonNull(method);
-
-		return new ResourceMethod(request.getHttpMethod(), ResourcePath.fromPathInstance(request.getPath()), method);
-	}
-
 	protected ResourceMethod(@Nonnull HttpMethod httpMethod,
 													 @Nonnull ResourcePath resourcePath,
 													 @Nonnull Method method) {

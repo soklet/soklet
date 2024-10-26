@@ -86,59 +86,34 @@ public class ResourcePath {
 	@Nonnull
 	private final List<Component> components;
 
-	protected ResourcePath(@Nonnull String path,
-												 @Nonnull ComponentParsingStrategy strategy) {
-		requireNonNull(path);
-		requireNonNull(strategy);
-
-		this.path = normalizePath(path);
-		this.components = unmodifiableList(extractComponents(this.path, strategy));
-	}
-
 	/**
-	 * Vends an instance that represents a compile-time path declaration, e.g. {@code /users/{userId}}.
+	 * Creates an instance that represents a compile-time path declaration, e.g. {@code /users/{userId}}.
 	 *
 	 * @param path a compile-time path declaration that may include placeholders
-	 * @return a resource path that represents the path declaration
 	 */
-	@Nonnull
-	public static ResourcePath fromPathDeclaration(@Nonnull String path) {
+	public ResourcePath(@Nonnull String path) {
 		requireNonNull(path);
-		return new ResourcePath(path, ComponentParsingStrategy.FROM_DECLARATION);
+		this.path = normalizePath(path);
+		this.components = unmodifiableList(extractComponents(this.path));
 	}
 
 	/**
-	 * Vends an instance that represents a runtime path, e.g. {@code /users/123}.
-	 * <p>
-	 * This is in contrast to {@link #fromPathDeclaration(String)}, which represents compile-time path declarations
-	 * that may include placeholders, e.g. {@code /users/{userId}}.
-	 *
-	 * @param path a runtime path that may not include placeholders
-	 * @return a resource path that represents the path instance
-	 */
-	@Nonnull
-	public static ResourcePath fromPathInstance(@Nonnull String path) {
-		requireNonNull(path);
-		return new ResourcePath(path, ComponentParsingStrategy.FROM_INSTANCE);
-	}
-
-	/**
-	 * Does this resource path match the given resource path (taking placeholders into account, if present)?
+	 * Does this resource path match the given resource path instance (taking placeholders into account, if present)?
 	 * <p>
 	 * For example, {@code /users/{userId}} would match {@code /users/123}.
 	 *
-	 * @param resourcePath the resource path against which to match
+	 * @param resourcePathInstance the resource path instance against which to match
 	 * @return {@code true} if the paths match, {@code false} otherwise
 	 */
 	@Nonnull
-	public Boolean matches(@Nonnull ResourcePath resourcePath) {
-		requireNonNull(resourcePath);
+	public Boolean matches(@Nonnull ResourcePathInstance resourcePathInstance) {
+		requireNonNull(resourcePathInstance);
 
-		if (resourcePath.getComponents().size() != getComponents().size())
+		if (resourcePathInstance.getComponents().size() != getComponents().size())
 			return false;
 
-		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
-			Component component1 = resourcePath.getComponents().get(i);
+		for (int i = 0; i < resourcePathInstance.getComponents().size(); ++i) {
+			Component component1 = resourcePathInstance.getComponents().get(i);
 			Component component2 = getComponents().get(i);
 
 			if (component1.getType() == ComponentType.PLACEHOLDER || component2.getType() == ComponentType.PLACEHOLDER)
@@ -150,19 +125,19 @@ public class ResourcePath {
 
 		return true;
 	}
-	
+
 	@Nonnull
-	public Map<String, String> extractPlaceholders(@Nonnull ResourcePath resourcePath) {
-		requireNonNull(resourcePath);
+	public Map<String, String> extractPlaceholders(@Nonnull ResourcePathInstance resourcePathInstance) {
+		requireNonNull(resourcePathInstance);
 
-		if (!matches(resourcePath))
+		if (!matches(resourcePathInstance))
 			throw new IllegalArgumentException(format("%s is not a match for %s so we cannot extract placeholders", this,
-					resourcePath));
+					resourcePathInstance));
 
-		Map<String, String> placeholders = new HashMap<>(resourcePath.getComponents().size());
+		Map<String, String> placeholders = new HashMap<>(resourcePathInstance.getComponents().size());
 
-		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
-			Component component1 = resourcePath.getComponents().get(i);
+		for (int i = 0; i < resourcePathInstance.getComponents().size(); ++i) {
+			Component component1 = resourcePathInstance.getComponents().get(i);
 			Component component2 = getComponents().get(i);
 
 			if (component1.getType() == ComponentType.PLACEHOLDER && component2.getType() == ComponentType.LITERAL) {
@@ -200,7 +175,7 @@ public class ResourcePath {
 	}
 
 	@Nonnull
-	protected String normalizePath(@Nonnull String path) {
+	protected static String normalizePath(@Nonnull String path) {
 		requireNonNull(path);
 
 		path = trimAggressively(path);
@@ -226,15 +201,12 @@ public class ResourcePath {
 	/**
 	 * Assumes {@code path} is already normalized via {@link #normalizePath(String)}.
 	 *
-	 * @param path     (nonnull) Path from which components are extracted
-	 * @param strategy (nonnull) How to perform the extraction (literal or look for placeholders)
+	 * @param path (nonnull) Path from which components are extracted
 	 * @return Logical components of the supplied {@code path}
 	 */
 	@Nonnull
-	protected List<Component> extractComponents(@Nonnull String path,
-																							@Nonnull ComponentParsingStrategy strategy) {
+	protected List<Component> extractComponents(@Nonnull String path) {
 		requireNonNull(path);
-		requireNonNull(strategy);
 
 		if ("/".equals(path))
 			return emptyList();
@@ -243,21 +215,16 @@ public class ResourcePath {
 		path = path.substring(1);
 
 		List<String> values = asList(path.split("/"));
-		boolean checkForPlaceholder = strategy == ComponentParsingStrategy.FROM_DECLARATION;
 
 		return values.stream().map(value -> {
-			if (checkForPlaceholder) {
-				ComponentType type = ComponentType.LITERAL;
+			ComponentType type = ComponentType.LITERAL;
 
-				if (COMPONENT_PLACEHOLDER_PATTERN.matcher(value).matches()) {
-					type = ComponentType.PLACEHOLDER;
-					value = value.substring(1, value.length() - 1);
-				}
-
-				return new Component(value, type);
-			} else {
-				return new Component(value, ComponentType.LITERAL);
+			if (COMPONENT_PLACEHOLDER_PATTERN.matcher(value).matches()) {
+				type = ComponentType.PLACEHOLDER;
+				value = value.substring(1, value.length() - 1);
 			}
+
+			return new Component(value, type);
 		}).collect(toList());
 	}
 
@@ -282,7 +249,6 @@ public class ResourcePath {
 		return Objects.hash(getPath(), getComponents());
 	}
 
-
 	/**
 	 * How to interpret a {@link Component} of a {@link ResourcePath} - is it literal text or a placeholder?
 	 * <p>
@@ -299,26 +265,6 @@ public class ResourcePath {
 	public enum ComponentType {
 		LITERAL,
 		PLACEHOLDER
-	}
-
-	/**
-	 * Parsing modes for {@link ResourcePath}s.
-	 * <p>
-	 * We parse path declarations (which might include placeholders) differently from the path a user might type in a web
-	 * browser.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 * @see ResourcePath
-	 */
-	private enum ComponentParsingStrategy {
-		/**
-		 * For parsing annotation-specified declarations, e.g. <code>@GET("/languages/&#123;languageId&#125;")</code>
-		 */
-		FROM_DECLARATION,
-		/**
-		 * For parsing end-user-specified URLs, e.g. {@code /languages/en}
-		 */
-		FROM_INSTANCE
 	}
 
 	/**
