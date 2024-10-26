@@ -62,7 +62,7 @@ public class ResourcePathInstance {
 	/**
 	 * Does this resource path instance match the given resource path (taking placeholders into account, if present)?
 	 * <p>
-	 * For example, {@code /users/123} would match {@code /users/{userId}}.
+	 * For example, this resource path instance {@code /users/123} would match the resource path {@code /users/{userId}}.
 	 *
 	 * @param resourcePath the resource path against which to match
 	 * @return {@code true} if the paths match, {@code false} otherwise
@@ -75,13 +75,13 @@ public class ResourcePathInstance {
 			return false;
 
 		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
-			Component component1 = resourcePath.getComponents().get(i);
-			Component component2 = getComponents().get(i);
+			Component resourcePathComponent = resourcePath.getComponents().get(i);
+			Component resourcePathInstanceComponent = getComponents().get(i);
 
-			if (component1.getType() == ComponentType.PLACEHOLDER || component2.getType() == ComponentType.PLACEHOLDER)
+			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
 				continue;
 
-			if (!component1.getValue().equals(component2.getValue()))
+			if (!resourcePathComponent.getValue().equals(resourcePathInstanceComponent.getValue()))
 				return false;
 		}
 
