@@ -20,10 +20,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -40,8 +38,15 @@ import static java.util.stream.Collectors.toList;
 /**
  * An HTTP URL path associated with an annotated <em>Resource Method</em>, such as {@code @POST("/users")}.
  * <p>
+ * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
+ * <p>
  * {@link ResourcePath} instances must start with the {@code /} character and may contain placeholders denoted by single-mustache syntax.
  * For example, the {@link ResourcePath} {@code /users/{userId}} has a placeholder named {@code userId}.
+ * <p>
+ * A {@link ResourcePath} is intended for compile-time <em>Resource Method</em> HTTP URL path declarations.
+ * The corresponding runtime type is {@link ResourcePathInstance} and functionality is provided to check if the two "match".
+ * <p>
+ * For example, a {@link ResourcePath} {@code /users/{userId}} would match {@link ResourcePathInstance} {@code /users/123}.
  * <p>
  * <strong>Please note the following restrictions on {@link ResourcePath} structure:</strong>
  * <p>
@@ -87,7 +92,7 @@ public class ResourcePath {
 	private final List<Component> components;
 
 	/**
-	 * Creates an instance that represents a compile-time path declaration, e.g. {@code /users/{userId}}.
+	 * Creates an instance that represents a compile-time path declaration, for example {@code /users/{userId}}.
 	 *
 	 * @param path a compile-time path declaration that may include placeholders
 	 */
@@ -126,6 +131,16 @@ public class ResourcePath {
 		return true;
 	}
 
+	/**
+	 * What is the mapping between this resource path's placeholder names to the given resource path instance's placeholder values?
+	 * <p>
+	 * For example, placeholder extraction for resource path {@code /users/{userId}} and resource path instance {@code /users/123}
+	 * would result in a value equivalent to {@code Map.of("userId", "123")}.
+	 *
+	 * @param resourcePathInstance runtime version of this resource path, used to provide placeholder values
+	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
+	 * @throws IllegalArgumentException if the provided resource path instance does not match this resource path, i.e. {@link #matches(ResourcePathInstance)} is {@code false}
+	 */
 	@Nonnull
 	public Map<String, String> extractPlaceholders(@Nonnull ResourcePathInstance resourcePathInstance) {
 		requireNonNull(resourcePathInstance);
@@ -134,33 +149,48 @@ public class ResourcePath {
 			throw new IllegalArgumentException(format("%s is not a match for %s so we cannot extract placeholders", this,
 					resourcePathInstance));
 
-		Map<String, String> placeholders = new HashMap<>(resourcePathInstance.getComponents().size());
+		// No placeholders? Nothing to do
+		if (isLiteral())
+			return Map.of();
+
+		Map<String, String> placeholders = new LinkedHashMap<>(resourcePathInstance.getComponents().size());
 
 		for (int i = 0; i < resourcePathInstance.getComponents().size(); ++i) {
 			String resourcePathInstanceComponent = resourcePathInstance.getComponents().get(i);
 			Component resourcePathComponent = getComponents().get(i);
 
-			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER) {
-				if (resourcePathInstanceComponent != null)
-					resourcePathInstanceComponent = URLDecoder.decode(resourcePathInstanceComponent, StandardCharsets.UTF_8);
-
+			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
 				placeholders.put(resourcePathComponent.getValue(), resourcePathInstanceComponent);
-			}
 		}
 
 		return Collections.unmodifiableMap(placeholders);
 	}
 
+	/**
+	 * What is the string representation of this resource path?
+	 *
+	 * @return the string representation of this resource path, which must start with {@code /}
+	 */
 	@Nonnull
 	public String getPath() {
 		return this.path;
 	}
 
+	/**
+	 * What are the {@code /}-delimited components of this resource path?
+	 *
+	 * @return the components, or the empty list if this path is equal to {@code /}
+	 */
 	@Nonnull
 	public List<Component> getComponents() {
 		return this.components;
 	}
 
+	/**
+	 * Is this resource path comprised of all "literal" components (that is, no placeholders)?
+	 *
+	 * @return {@code true} if this resource path is entirely literal, {@code false} otherwise
+	 */
 	@Nonnull
 	public Boolean isLiteral() {
 		for (Component component : components)
@@ -249,11 +279,12 @@ public class ResourcePath {
 	 * How to interpret a {@link Component} of a {@link ResourcePath} - is it literal text or a placeholder?
 	 * <p>
 	 * For example, given the path declaration <code>/languages/&#123;languageId&#125;</code>
-	 *
 	 * <ul>
 	 * <li>{@code ComponentType} 0 would be {@code LITERAL}
 	 * <li>{@code ComponentType} 1 would be {@code PLACEHOLDER}
 	 * </ul>
+	 * <p>
+	 * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 * @see ResourcePath
@@ -267,11 +298,12 @@ public class ResourcePath {
 	 * Represents a {@code /}-delimited part of a {@link ResourcePath}.
 	 * <p>
 	 * For example, given the path <code>/languages/&#123;languageId&#125;</code>
-	 *
 	 * <ul>
 	 * <li>{@code Component} 0 would have type {@code LITERAL} and value {@code languages}
 	 * <li>{@code Component} 1 would have type {@code PLACEHOLDER} and value {@code languageId}
 	 * </ul>
+	 * <p>
+	 * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 * @see ResourcePath

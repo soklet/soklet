@@ -24,7 +24,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -36,6 +36,8 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * An HTTP URL path associated with an annotated <em>Resource Method</em>, such as {@code "/users/123"}.
+ * <p>
+ * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -97,7 +99,7 @@ public class ResourcePathInstance {
 			throw new IllegalArgumentException(format("%s is not a match for %s so we cannot extract placeholders", this,
 					resourcePath));
 
-		Map<String, String> placeholders = new HashMap<>(resourcePath.getComponents().size());
+		Map<String, String> placeholders = new LinkedHashMap<>(resourcePath.getComponents().size());
 
 		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
 			Component resourcePathComponent = resourcePath.getComponents().get(i);
