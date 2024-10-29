@@ -20,6 +20,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,7 +38,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
 /**
- * An HTTP URL path associated with an annotated <em>Resource Method</em>, such as {@code @POST("/users")}.
+ * A compile-time HTTP URL path associated with an annotated <em>Resource Method</em>, such as {@code /users/{userId}}.
  * <p>
  * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
  * <p>
@@ -105,7 +107,7 @@ public class ResourcePath {
 	/**
 	 * Does this resource path match the given resource path instance (taking placeholders into account, if present)?
 	 * <p>
-	 * For example, this resource path {@code /users/{userId}} would match the instance {@code /users/123}.
+	 * For example, resource path {@code /users/{userId}} would match the instance {@code /users/123}.
 	 *
 	 * @param resourcePathInstance the resource path instance against which to match
 	 * @return {@code true} if the paths match, {@code false} otherwise
@@ -136,6 +138,9 @@ public class ResourcePath {
 	 * <p>
 	 * For example, placeholder extraction for resource path {@code /users/{userId}} and resource path instance {@code /users/123}
 	 * would result in a value equivalent to {@code Map.of("userId", "123")}.
+	 * <p>
+	 * Resource path placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path {@code /users/{userId}}
+	 * and resource path instance {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
 	 *
 	 * @param resourcePathInstance runtime version of this resource path, used to provide placeholder values
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
@@ -160,7 +165,7 @@ public class ResourcePath {
 			Component resourcePathComponent = getComponents().get(i);
 
 			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
-				placeholders.put(resourcePathComponent.getValue(), resourcePathInstanceComponent);
+				placeholders.put(resourcePathComponent.getValue(), URLDecoder.decode(resourcePathInstanceComponent, StandardCharsets.UTF_8));
 		}
 
 		return Collections.unmodifiableMap(placeholders);
@@ -278,10 +283,10 @@ public class ResourcePath {
 	/**
 	 * How to interpret a {@link Component} of a {@link ResourcePath} - is it literal text or a placeholder?
 	 * <p>
-	 * For example, given the path declaration <code>/languages/&#123;languageId&#125;</code>
+	 * For example, given the path declaration <code>/languages/&#123;languageId&#125;</code>:
 	 * <ul>
-	 * <li>{@code ComponentType} 0 would be {@code LITERAL}
-	 * <li>{@code ComponentType} 1 would be {@code PLACEHOLDER}
+	 * <li>{@code ComponentType} at index 0 would be {@code LITERAL}
+	 * <li>{@code ComponentType} at index 1 would be {@code PLACEHOLDER}
 	 * </ul>
 	 * <p>
 	 * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
@@ -290,14 +295,24 @@ public class ResourcePath {
 	 * @see ResourcePath
 	 */
 	public enum ComponentType {
+		/**
+		 * A literal component of a resource path.
+		 * <p>
+		 * For example, given resource path {@code /users/{userId}}, the {@code users} component would be of type {@code LITERAL}.
+		 */
 		LITERAL,
+		/**
+		 * A placeholder component (that is, one whose value is provided at runtime) of a resource path.
+		 * <p>
+		 * For example, given resource path {@code /users/{userId}}, the {@code userId} component would be of type {@code PLACEHOLDER}.
+		 */
 		PLACEHOLDER
 	}
 
 	/**
 	 * Represents a {@code /}-delimited part of a {@link ResourcePath}.
 	 * <p>
-	 * For example, given the path <code>/languages/&#123;languageId&#125;</code>
+	 * For example, given the path declaration <code>/languages/&#123;languageId&#125;</code>:
 	 * <ul>
 	 * <li>{@code Component} 0 would have type {@code LITERAL} and value {@code languages}
 	 * <li>{@code Component} 1 would have type {@code PLACEHOLDER} and value {@code languageId}
@@ -345,11 +360,25 @@ public class ResourcePath {
 			return Objects.hash(getValue(), getType());
 		}
 
+		/**
+		 * What is the value of this resource path component?
+		 * <p>
+		 * Note that the value of a {@link ComponentType#PLACEHOLDER} component does not include enclosing braces.
+		 * For example, given the path declaration <code>/languages/&#123;languageId&#125;</code>,
+		 * the component at index 1 would have value {@code languageId}, not {@code {languageId}}.
+		 *
+		 * @return the value of this component
+		 */
 		@Nonnull
 		public String getValue() {
 			return value;
 		}
 
+		/**
+		 * What type of resource path component is this?
+		 *
+		 * @return the type of component, e.g. {@link ComponentType#LITERAL} or {@link ComponentType#PLACEHOLDER}
+		 */
 		@Nonnull
 		public ComponentType getType() {
 			return type;

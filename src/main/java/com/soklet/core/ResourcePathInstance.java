@@ -35,9 +35,13 @@ import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
 
 /**
- * An HTTP URL path associated with an annotated <em>Resource Method</em>, such as {@code "/users/123"}.
+ * An HTTP URL path used to resolve a <em>Resource Method</em> at runtime, such as {@code /users/123}.
  * <p>
  * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
+ * <p>
+ * The corresponding compile-time type for {@link ResourcePathInstance} is {@link ResourcePath} and functionality is provided to check if the two "match".
+ * <p>
+ * For example, a {@link ResourcePathInstance} {@code /users/123} would match {@link ResourcePath} {@code /users/{userId}}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -49,12 +53,12 @@ public class ResourcePathInstance {
 	private final List<String> components;
 
 	/**
-	 * Creates an instance that represents a runtime "instance" of a resource path, e.g. {@code /users/123}.
+	 * Creates an instance that represents a runtime "instance" of a resource path, for example {@code /users/123}.
 	 * <p>
 	 * This is in contrast to {@link ResourcePath}, which represents compile-time path declarations
 	 * that may include placeholders, e.g. {@code /users/{userId}}.
 	 *
-	 * @param path a runtime path that may not include placeholders
+	 * @param path a runtime path which may not include placeholders
 	 */
 	public ResourcePathInstance(@Nonnull String path) {
 		requireNonNull(path);
@@ -65,7 +69,7 @@ public class ResourcePathInstance {
 	/**
 	 * Does this resource path instance match the given resource path (taking placeholders into account, if present)?
 	 * <p>
-	 * For example, this resource path instance {@code /users/123} would match the resource path {@code /users/{userId}}.
+	 * For example, resource path instance {@code /users/123} would match the resource path {@code /users/{userId}}.
 	 *
 	 * @param resourcePath the resource path against which to match
 	 * @return {@code true} if the paths match, {@code false} otherwise
@@ -91,6 +95,19 @@ public class ResourcePathInstance {
 		return true;
 	}
 
+	/**
+	 * What is the mapping between this resource path instance's placeholder values to the given resource path's placeholder names?
+	 * <p>
+	 * For example, placeholder extraction for resource path instance {@code /users/123} and resource path {@code /users/{userId}}
+	 * would result in a value equivalent to {@code Map.of("userId", "123")}.
+	 * <p>
+	 * Resource path placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path {@code /users/{userId}}
+	 * and resource path instance {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
+	 *
+	 * @param resourcePath compile-time resource path, used to provide placeholder names
+	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
+	 * @throws IllegalArgumentException if the provided resource path does not match this resource path instance, i.e. {@link #matches(ResourcePath)} is {@code false}
+	 */
 	@Nonnull
 	public Map<String, String> extractPlaceholders(@Nonnull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
@@ -112,11 +129,21 @@ public class ResourcePathInstance {
 		return Collections.unmodifiableMap(placeholders);
 	}
 
+	/**
+	 * What is the string representation of this resource path instance?
+	 *
+	 * @return the string representation of this resource path instance, which must start with {@code /}
+	 */
 	@Nonnull
 	public String getPath() {
 		return this.path;
 	}
 
+	/**
+	 * What are the {@code /}-delimited components of this resource path instance?
+	 *
+	 * @return the components, or the empty list if this path instance is equal to {@code /}
+	 */
 	@Nonnull
 	public List<String> getComponents() {
 		return this.components;
