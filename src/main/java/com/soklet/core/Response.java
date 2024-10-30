@@ -34,6 +34,13 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Represents a logical HTTP response returned by a <em>Resource Method</em>.
+ * <p>
+ * Your application's {@link ResponseMarshaler} is responsible for taking the {@link Response} returned by a <em>Resource Method</em> as input
+ * and creating a finalized binary representation ({@link MarshaledResponse}), suitable for sending to clients over the wire.
+ * <p>
+ * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -271,7 +278,7 @@ public class Response {
 
 			if (this.builder.cookies == null)
 				this.builder.cookies(new LinkedHashSet<>());
-			
+
 			cookiesConsumer.accept(this.builder.cookies);
 			return this;
 		}

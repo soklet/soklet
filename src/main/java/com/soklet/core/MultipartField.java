@@ -318,7 +318,7 @@ public class MultipartField {
 	}
 
 	/**
-	 * The content type for this field, e.g. {@code image/png} for an image file, if available.
+	 * The content type for this field, if available (for example, {@code image/png} for an image file).
 	 *
 	 * @return the content type, or {@link Optional#empty()} if not available
 	 */
