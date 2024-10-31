@@ -56,6 +56,13 @@ public class ResponseCookie {
 	@Nullable
 	private final SameSite sameSite;
 
+	/**
+	 * Acquires a builder for {@link ResponseCookie} instances.
+	 *
+	 * @param name  the cookie name
+	 * @param value the cookie value
+	 * @return the builder
+	 */
 	@Nonnull
 	public static Builder with(@Nonnull String name,
 														 @Nullable String value) {
@@ -63,12 +70,23 @@ public class ResponseCookie {
 		return new Builder(name, value);
 	}
 
+	/**
+	 * Acquires a builder for {@link ResponseCookie} instances without specifying the cookie's value.
+	 *
+	 * @param name the cookie name
+	 * @return the builder
+	 */
 	@Nonnull
 	public static Builder withName(@Nonnull String name) {
 		requireNonNull(name);
 		return new Builder(name);
 	}
 
+	/**
+	 * Vends a mutable copier seeded with this instance's data, suitable for building new instances.
+	 *
+	 * @return a copier for this instance
+	 */
 	@Nonnull
 	public Copier copy() {
 		return new Copier(this);
@@ -219,9 +237,28 @@ public class ResponseCookie {
 		return Optional.ofNullable(this.sameSite);
 	}
 
+	/**
+	 * Values which control whether or not a response cookie is sent with cross-site requests, providing some protection against cross-site request forgery attacks (CSRF).
+	 * <p>
+	 * See <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value</a> for details.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
 	public enum SameSite {
+		/**
+		 * Means that the browser sends the cookie only for same-site requests, that is, requests originating from the same site that set the cookie.
+		 * If a request originates from a different domain or scheme (even with the same domain), no cookies with the {@code SameSite=Strict} attribute are sent.
+		 */
 		STRICT("Strict"),
+		/**
+		 * Means that the cookie is not sent on cross-site requests, such as on requests to load images or frames, but is sent when a user is navigating to the origin site from an external site (for example, when following a link).
+		 * This is the default behavior if the {@code SameSite} attribute is not specified.
+		 */
 		LAX("Lax"),
+		/**
+		 * Means that the browser sends the cookie with both cross-site and same-site requests.
+		 * The {@code Secure} attribute must also be set when setting this value, like so {@code SameSite=None; Secure}. If {@code Secure} is missing, an error will be logged.
+		 */
 		NONE("None");
 
 		@Nonnull
@@ -232,6 +269,12 @@ public class ResponseCookie {
 			this.headerRepresentation = headerRepresentation;
 		}
 
+		/**
+		 * Returns the {@link SameSite} enum value that matches the corresponding {@code SameSite} response header value representation (one of {@code Strict}, {@code Lax}, or {@code None} - case-insensitive).
+		 *
+		 * @param headerRepresentation a case-insensitive HTTP header value - one of {@code Strict}, {@code Lax}, or {@code None}
+		 * @return the enum value that corresponds to the given the header representation, or {@link Optional#empty()} if none matches
+		 */
 		@Nonnull
 		public static Optional<SameSite> fromHeaderRepresentation(@Nonnull String headerRepresentation) {
 			requireNonNull(headerRepresentation);
@@ -245,6 +288,11 @@ public class ResponseCookie {
 			return Optional.empty();
 		}
 
+		/**
+		 * The HTTP header value that corresponds to this enum value - one of {@code Strict}, {@code Lax}, or {@code None}.
+		 *
+		 * @return the HTTP header value for this enum
+		 */
 		@Nonnull
 		public String getHeaderRepresentation() {
 			return this.headerRepresentation;
