@@ -50,6 +50,13 @@ public interface Server extends AutoCloseable {
 	@Nonnull
 	Boolean isStarted();
 
+	/**
+	 * The {@link com.soklet.Soklet} instance which manages this {@link Server} will invoke this method exactly once at initialization time - this allows {@link com.soklet.Soklet} to "talk" to your {@link Server}.
+	 * <p>
+	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
+	 *
+	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link Server}-provided request as input and supplies a {@link MarshaledResponse} as output for the  {@link Server} to write back to the client
+	 */
 	void registerRequestHandler(@Nullable RequestHandler requestHandler);
 
 	/**
