@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
@@ -92,22 +91,42 @@ public class ResponseCookie {
 		return new Copier(this);
 	}
 
+	/**
+	 * Given a {@code Set-Cookie} header representation, provide a {@link ResponseCookie} that matches it.
+	 * <p>
+	 * An example of a {@code Set-Cookie} header representation is {@code Set-Cookie: <cookie-name>=<cookie-value>; Domain=<domain-value>; Secure; HttpOnly}
+	 * <p>
+	 * Note: while the spec does not forbid multiple cookie name/value pairs to be specified in the same {@code Set-Cookie} header, this format is unusual - Soklet does not currently support parsing these kinds of cookies.
+	 * <p>
+	 * See <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie</a> for details.
+	 *
+	 * @param setCookieHeaderRepresentation a {@code Set-Cookie} header representation
+	 * @return a {@link ResponseCookie} representation of the {@code Set-Cookie} header, or {@link Optional#empty()} if the header is null, empty, or does not include cookie data
+	 * @throws IllegalArgumentException if the {@code Set-Cookie} header representation is malformed
+	 */
 	@Nonnull
-	public static Set<ResponseCookie> fromSetCookieHeaderRepresentation(@Nullable String setCookieHeaderRepresentation) {
+	public static Optional<ResponseCookie> fromSetCookieHeaderRepresentation(@Nullable String setCookieHeaderRepresentation) {
 		setCookieHeaderRepresentation = setCookieHeaderRepresentation == null ? null : setCookieHeaderRepresentation.trim();
 
-		if (setCookieHeaderRepresentation == null)
-			return Set.of();
+		if (setCookieHeaderRepresentation == null || setCookieHeaderRepresentation.length() == 0)
+			return Optional.empty();
 
-		return HttpCookie.parse(setCookieHeaderRepresentation).stream()
-				.map(httpCookie -> new Builder(httpCookie.getName(), httpCookie.getValue())
-						.maxAge(Duration.ofSeconds(httpCookie.getMaxAge()))
-						.domain(httpCookie.getDomain())
-						.httpOnly(httpCookie.isHttpOnly())
-						.secure(httpCookie.getSecure())
-						.path(httpCookie.getPath())
-						.build())
-				.collect(Collectors.toSet());
+		List<HttpCookie> cookies = HttpCookie.parse(setCookieHeaderRepresentation);
+
+		if (cookies.size() == 0)
+			return Optional.empty();
+
+		// Technically OK per the spec to "fold" multiple cookie name/value pairs into the same header but this is
+		// unusual and we don't support it here.  Pick the first cookie and use it.
+		HttpCookie httpCookie = cookies.get(0);
+
+		return Optional.of(ResponseCookie.with(httpCookie.getName(), httpCookie.getValue())
+				.maxAge(Duration.ofSeconds(httpCookie.getMaxAge()))
+				.domain(httpCookie.getDomain())
+				.httpOnly(httpCookie.isHttpOnly())
+				.secure(httpCookie.getSecure())
+				.path(httpCookie.getPath())
+				.build());
 	}
 
 	protected ResponseCookie(@Nonnull Builder builder) {
@@ -128,11 +147,16 @@ public class ResponseCookie {
 		Rfc6265Utils.validatePath(getPath().orElse(null));
 	}
 
+	/**
+	 * Generates a {@code Set-Cookie} header representation of this response cookie, for example {@code Set-Cookie: <cookie-name>=<cookie-value>; Domain=<domain-value>; Secure; HttpOnly}
+	 * <p>
+	 * See <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie</a> for details.
+	 *
+	 * @return this response cookie in {@code Set-Cookie} header format
+	 */
 	@Nonnull
 	public String toSetCookieHeaderRepresentation() {
-		// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie
-
-		List<String> components = new ArrayList<>();
+		List<String> components = new ArrayList<>(8);
 
 		components.add(format("%s=%s", getName(), getValue().orElse("")));
 
