@@ -221,41 +221,81 @@ public class ResponseCookie {
 		return toSetCookieHeaderRepresentation();
 	}
 
+	/**
+	 * Gets the cookie's name.
+	 *
+	 * @return the name of the cookie
+	 */
 	@Nonnull
 	public String getName() {
 		return this.name;
 	}
 
+	/**
+	 * Gets the cookie's value, if present.
+	 *
+	 * @return the value of the cookie, or {@link Optional#empty()} if there is none
+	 */
 	@Nonnull
 	public Optional<String> getValue() {
 		return Optional.ofNullable(this.value);
 	}
 
+	/**
+	 * Gets the cookie's {@code Max-Age} value expressed as a {@link Duration}, if present.
+	 *
+	 * @return the {@code Max-Age} value of the cookie, or {@link Optional#empty()} if there is none
+	 */
 	@Nonnull
 	public Optional<Duration> getMaxAge() {
 		return Optional.ofNullable(this.maxAge);
 	}
 
+	/**
+	 * Gets the cookie's {@code Domain} value, if present.
+	 *
+	 * @return the {@code Domain} value of the cookie, or {@link Optional#empty()} if there is none
+	 */
 	@Nonnull
 	public Optional<String> getDomain() {
 		return Optional.ofNullable(this.domain);
 	}
 
+	/**
+	 * Gets the cookie's {@code Path} value, if present.
+	 *
+	 * @return the {@code Path} value of the cookie, or {@link Optional#empty()} if there is none
+	 */
 	@Nonnull
 	public Optional<String> getPath() {
 		return Optional.ofNullable(this.path);
 	}
 
+	/**
+	 * Gets the cookie's {@code Secure} flag, if present.
+	 *
+	 * @return {@code true} if the {@code Secure} flag of the cookie is present, {@code false} otherwise
+	 */
 	@Nonnull
 	public Boolean getSecure() {
 		return this.secure;
 	}
 
+	/**
+	 * Gets the cookie's {@code HttpOnly} flag, if present.
+	 *
+	 * @return {@code true} if the {@code HttpOnly} flag of the cookie is present, {@code false} otherwise
+	 */
 	@Nonnull
 	public Boolean getHttpOnly() {
 		return this.httpOnly;
 	}
 
+	/**
+	 * Gets the cookie's {@code SameSite} value, if present.
+	 *
+	 * @return the {@code SameSite} value of the cookie, or {@link Optional#empty()} if there is none
+	 */
 	@Nonnull
 	public Optional<SameSite> getSameSite() {
 		return Optional.ofNullable(this.sameSite);
