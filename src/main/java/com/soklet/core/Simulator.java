@@ -19,12 +19,47 @@ package com.soklet.core;
 import javax.annotation.Nonnull;
 
 /**
- * Simulates server behavior of accepting a request and returning a response.
+ * Simulates server behavior of accepting a request and returning a response, useful for writing integration tests.
+ * <p>
+ * Full documentation is available at <a href="https://www.soklet.com/docs/automated-testing">https://www.soklet.com/docs/automated-testing</a>.
+ * <p>
+ * For example:
+ * <pre>{@code  @Test
+ * public void basicIntegrationTest() {
+ *   // Build your app's configuration however you like
+ *   SokletConfiguration config = obtainMySokletConfig();
+ *
+ *   // Instead of running on a real HTTP server that listens on a port,
+ *   // a simulator is provided against which you can issue requests
+ *   // and receive responses.
+ *   Soklet.runSimulator(config, (simulator -> {
+ *     // Construct a request.
+ *     // You may alternatively specify query parameters directly in the URI
+ *     // as a query string, e.g. "/hello?name=Mark"
+ *     Request request = Request.with(HttpMethod.GET, "/hello")
+ *       .queryParameters(Map.of("name", Set.of("Mark")))
+ *       .build();
+ *
+ *     // Perform the request and get a handle to the response
+ *     MarshaledResponse marshaledResponse = simulator.performRequest(request);
+ *
+ *     // Verify status code
+ *     Integer expectedCode = 200;
+ *     Integer actualCode = response.getStatusCode();
+ *     Assert.assertEquals("Bad status code", expectedCode, actualCode);
+ *   }));
+ * }}</pre>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @FunctionalInterface
 public interface Simulator {
+	/**
+	 * Given a request, process it and return a response ready to be written back over the wire.
+	 *
+	 * @param request the request to process
+	 * @return the response that corresponds to the request
+	 */
 	@Nonnull
 	MarshaledResponse performRequest(@Nonnull Request request);
 }
