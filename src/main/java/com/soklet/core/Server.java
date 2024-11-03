@@ -24,6 +24,17 @@ import java.util.function.Consumer;
  * Contract for HTTP server implementations that are designed to be managed by a {@link com.soklet.Soklet} instance.
  * <p>
  * <strong>Most Soklet applications will use {@link com.soklet.core.impl.DefaultServer} and therefore do not need to implement this interface directly.</strong>
+ * <p>
+ * For example:
+ * <pre>{@code  SokletConfiguration config = SokletConfiguration.withServer(
+ *   DefaultServer.withPort(8080).build()
+ * ).build();
+ *
+ * try (Soklet soklet = new Soklet(config)) {
+ *   soklet.start();
+ *   System.out.println("Soklet started, press [enter] to exit");
+ *   System.in.read(); // or Thread.currentThread().join() in containers
+ * }}</pre>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -72,7 +83,7 @@ public interface Server extends AutoCloseable {
 	/**
 	 * Request/response processing contract for custom {@link Server} implementations.
 	 * <p>
-	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server} via {@link Server#registerRequestHandler(RequestHandler)}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
 	 * <strong>Most Soklet applications will use {@link com.soklet.core.impl.DefaultServer} and therefore do not need to implement this interface directly.</strong>
 	 *
