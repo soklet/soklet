@@ -66,5 +66,9 @@ public enum LogEventType {
 	/**
 	 * Indicates an internal {@link Server} error occurred.
 	 */
-	SERVER_INTERNAL_ERROR
+	SERVER_INTERNAL_ERROR,
+	/**
+	 * Indicates an internal {@link ServerSentEventServer} error occurred.
+	 */
+	SSE_SERVER_INTERNAL_ERROR
 }

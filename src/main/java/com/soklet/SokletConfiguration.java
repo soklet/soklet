@@ -25,6 +25,7 @@ import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
+import com.soklet.core.ServerSentEventServer;
 import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultLifecycleInterceptor;
 import com.soklet.core.impl.DefaultRequestBodyMarshaler;
@@ -37,6 +38,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -65,6 +67,8 @@ public class SokletConfiguration {
 	private final CorsAuthorizer corsAuthorizer;
 	@Nonnull
 	private final Server server;
+	@Nullable
+	private final ServerSentEventServer serverSentEventServer;
 
 	/**
 	 * Vends a configuration builder for the given server.
@@ -92,6 +96,7 @@ public class SokletConfiguration {
 		requireNonNull(builder);
 
 		this.server = builder.server;
+		this.serverSentEventServer = builder.serverSentEventServer;
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : DefaultInstanceProvider.sharedInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.sharedInstance();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : new DefaultRequestBodyMarshaler(getValueConverterRegistry());
@@ -203,6 +208,16 @@ public class SokletConfiguration {
 	}
 
 	/**
+	 * The SSE server managed by Soklet, if configured.
+	 *
+	 * @return the SSE server instance, or {@link Optional#empty()} is none was configured
+	 */
+	@Nonnull
+	public Optional<ServerSentEventServer> getServerSentEventServer() {
+		return Optional.ofNullable(this.serverSentEventServer);
+	}
+
+	/**
 	 * Builder used to construct instances of {@link SokletConfiguration}.
 	 * <p>
 	 * Instances are created by invoking {@link SokletConfiguration#withServer(Server)} or {@link SokletConfiguration#withMockServer()}.
@@ -215,6 +230,8 @@ public class SokletConfiguration {
 	public static class Builder {
 		@Nonnull
 		private Server server;
+		@Nullable
+		private ServerSentEventServer serverSentEventServer;
 		@Nullable
 		private InstanceProvider instanceProvider;
 		@Nullable
@@ -242,6 +259,12 @@ public class SokletConfiguration {
 		public Builder server(@Nonnull Server server) {
 			requireNonNull(server);
 			this.server = server;
+			return this;
+		}
+
+		@Nonnull
+		public Builder serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
+			this.serverSentEventServer = serverSentEventServer;
 			return this;
 		}
 
@@ -317,6 +340,7 @@ public class SokletConfiguration {
 			requireNonNull(sokletConfiguration);
 
 			this.builder = new Builder(sokletConfiguration.getServer())
+					.serverSentEventServer(sokletConfiguration.getServerSentEventServer().orElse(null))
 					.instanceProvider(sokletConfiguration.getInstanceProvider())
 					.valueConverterRegistry(sokletConfiguration.valueConverterRegistry)
 					.requestBodyMarshaler(sokletConfiguration.requestBodyMarshaler)
@@ -331,6 +355,12 @@ public class SokletConfiguration {
 		public Copier server(@Nonnull Server server) {
 			requireNonNull(server);
 			this.builder.server = server;
+			return this;
+		}
+
+		@Nonnull
+		public Copier serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
+			this.builder.serverSentEventServer = serverSentEventServer;
 			return this;
 		}
 
