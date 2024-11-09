@@ -340,6 +340,20 @@ public class SokletTests {
 		}
 	}
 
+	@Test
+	public void serverSentEventSource() {
+		final ResourcePath SSE_RESOURCE_PATH = new ResourcePath("/test");
+
+		SokletConfiguration configuration = configurationForResourceClasses(Set.of(HttpHeadResource.class)).copy()
+				.serverSentEventSourceResourcePaths(Set.of(SSE_RESOURCE_PATH))
+				.finish();
+
+		try (Soklet soklet = new Soklet(configuration)) {
+			ServerSentEventSource serverSentEventSource = soklet.acquireServerSentEventSource(SSE_RESOURCE_PATH).get();
+			serverSentEventSource.send(new ServerSentEvent());
+		}
+	}
+
 	@Nonnull
 	protected SokletConfiguration configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
 		return SokletConfiguration.withMockServer()
