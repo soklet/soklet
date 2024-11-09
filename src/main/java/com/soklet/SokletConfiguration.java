@@ -23,7 +23,6 @@ import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
-import com.soklet.core.ResourcePath;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
 import com.soklet.core.impl.DefaultInstanceProvider;
@@ -38,9 +37,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -69,8 +65,6 @@ public class SokletConfiguration {
 	private final CorsAuthorizer corsAuthorizer;
 	@Nonnull
 	private final Server server;
-	@Nonnull
-	private final Set<ResourcePath> serverSentEventSourceResourcePaths;
 
 	/**
 	 * Vends a configuration builder for the given server.
@@ -106,7 +100,6 @@ public class SokletConfiguration {
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : DefaultResponseMarshaler.sharedInstance();
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : NoOriginsCorsAuthorizer.sharedInstance();
-		this.serverSentEventSourceResourcePaths = builder.serverSentEventSourceResourcePaths != null ? Collections.unmodifiableSet(new LinkedHashSet<>(builder.serverSentEventSourceResourcePaths)) : Set.of();
 	}
 
 	/**
@@ -199,11 +192,6 @@ public class SokletConfiguration {
 		return this.corsAuthorizer;
 	}
 
-	@Nonnull
-	public Set<ResourcePath> getServerSentEventSourceResourcePaths() {
-		return this.serverSentEventSourceResourcePaths;
-	}
-
 	/**
 	 * The server managed by Soklet.
 	 *
@@ -243,8 +231,6 @@ public class SokletConfiguration {
 		private LifecycleInterceptor lifecycleInterceptor;
 		@Nullable
 		private CorsAuthorizer corsAuthorizer;
-		@Nullable
-		private Set<ResourcePath> serverSentEventSourceResourcePaths;
 
 		@Nonnull
 		protected Builder(@Nonnull Server server) {
@@ -308,12 +294,6 @@ public class SokletConfiguration {
 		}
 
 		@Nonnull
-		public Builder serverSentEventSourceResourcePaths(@Nullable Set<ResourcePath> serverSentEventSourceResourcePaths) {
-			this.serverSentEventSourceResourcePaths = serverSentEventSourceResourcePaths;
-			return this;
-		}
-
-		@Nonnull
 		public SokletConfiguration build() {
 			return new SokletConfiguration(this);
 		}
@@ -344,8 +324,7 @@ public class SokletConfiguration {
 					.resourceMethodParameterProvider(sokletConfiguration.resourceMethodParameterProvider)
 					.responseMarshaler(sokletConfiguration.responseMarshaler)
 					.lifecycleInterceptor(sokletConfiguration.lifecycleInterceptor)
-					.corsAuthorizer(sokletConfiguration.corsAuthorizer)
-					.serverSentEventSourceResourcePaths(sokletConfiguration.serverSentEventSourceResourcePaths);
+					.corsAuthorizer(sokletConfiguration.corsAuthorizer);
 		}
 
 		@Nonnull
@@ -400,12 +379,6 @@ public class SokletConfiguration {
 		@Nonnull
 		public Copier corsAuthorizer(@Nullable CorsAuthorizer corsAuthorizer) {
 			this.builder.corsAuthorizer = corsAuthorizer;
-			return this;
-		}
-
-		@Nonnull
-		public Copier serverSentEventSourceResourcePaths(@Nullable Set<ResourcePath> serverSentEventSourceResourcePaths) {
-			this.builder.serverSentEventSourceResourcePaths = serverSentEventSourceResourcePaths;
 			return this;
 		}
 

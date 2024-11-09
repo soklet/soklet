@@ -32,11 +32,9 @@ import com.soklet.core.Request;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
-import com.soklet.core.ResourcePath;
 import com.soklet.core.Response;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
-import com.soklet.core.ServerSentEventSource;
 import com.soklet.core.Simulator;
 import com.soklet.core.StatusCode;
 
@@ -103,19 +101,8 @@ public class Soklet implements AutoCloseable {
 		this.lock = new ReentrantLock();
 
 		// Fail fast in the event that Soklet appears misconfigured
-		Set<ResourceMethod> resourceMethods = sokletConfiguration.getResourceMethodResolver().getResourceMethods();
-
-		if (resourceMethods.isEmpty())
+		if (sokletConfiguration.getResourceMethodResolver().getResourceMethods().size() == 0)
 			throw new IllegalArgumentException(format("No classes annotated with @%s were found.", Resource.class.getSimpleName()));
-
-		Set<ResourcePath> resourceMethodResourcePaths = resourceMethods.stream()
-				.map(resourceMethod -> resourceMethod.getResourcePath())
-				.collect(Collectors.toSet());
-
-		for (ResourcePath resourcePath : sokletConfiguration.getServerSentEventSourceResourcePaths())
-			if (resourceMethodResourcePaths.contains(resourcePath))
-				throw new IllegalArgumentException(format("%s '%s' is ambiguously registered for both a Resource Method and a %s.",
-						ResourcePath.class.getSimpleName(), resourcePath.getPath(), ServerSentEventSource.class.getSimpleName()));
 
 		// Use a layer of indirection here so the Soklet type does not need to directly implement the `RequestHandler` interface.
 		// Reasoning: the `handleRequest` method for Soklet should not be public, which might lead to accidental invocation by users.
@@ -173,15 +160,6 @@ public class Soklet implements AutoCloseable {
 		} finally {
 			getLock().unlock();
 		}
-	}
-
-	@Nonnull
-	public Optional<ServerSentEventSource> acquireServerSentEventSource(@Nonnull ResourcePath resourcePath) {
-		requireNonNull(resourcePath);
-		
-		// TODO: implement
-
-		return Optional.empty();
 	}
 
 	/**
