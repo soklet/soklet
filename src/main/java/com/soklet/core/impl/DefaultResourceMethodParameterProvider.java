@@ -33,6 +33,7 @@ import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourcePath;
+import com.soklet.core.ResourcePathInstance;
 import com.soklet.exception.BadRequestException;
 import com.soklet.exception.IllegalFormParameterException;
 import com.soklet.exception.IllegalMultipartFieldException;
@@ -160,9 +161,9 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 						PathParameter.class.getSimpleName(), Optional.class.getSimpleName()));
 
 			String pathParameterName = extractParameterName(resourceMethod, parameter, pathParameter, pathParameter.name());
-			ResourcePath requestResourcePath = ResourcePath.fromPathInstance(request.getPath());
+			ResourcePathInstance resourcePathInstance = new ResourcePathInstance(request.getPath());
 
-			Map<String, String> valuesByPathParameter = resourceMethod.getResourcePath().extractPlaceholders(requestResourcePath);
+			Map<String, String> valuesByPathParameter = resourceMethod.getResourcePath().extractPlaceholders(resourcePathInstance);
 			String pathParameterValue = valuesByPathParameter.get(pathParameterName);
 
 			if (pathParameterValue == null)

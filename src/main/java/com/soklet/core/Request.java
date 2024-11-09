@@ -358,7 +358,7 @@ public class Request {
 	 * The headers provided by the client for this request.
 	 * <p>
 	 * The keys are the header names and the values are header values
-	 * (it is possible for a client to send multiple query parameters with the same name, e.g. {@code ?test=1&test=2}).
+	 * (it is possible for a client to send multiple headers with the same name).
 	 * <p>
 	 * <em>Note that request headers have case-insensitive names per the HTTP spec.</em>
 	 * <p>

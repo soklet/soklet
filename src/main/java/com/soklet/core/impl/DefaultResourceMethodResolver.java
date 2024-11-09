@@ -36,6 +36,7 @@ import com.soklet.core.Request;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.ResourcePath;
+import com.soklet.core.ResourcePathInstance;
 import com.soklet.internal.classindex.ClassIndex;
 
 import javax.annotation.Nonnull;
@@ -143,7 +144,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		if (methods == null)
 			return Optional.empty();
 
-		ResourcePath resourcePath = ResourcePath.fromPathInstance(request.getPath());
+		ResourcePathInstance resourcePathInstance = new ResourcePathInstance(request.getPath());
 		Set<ResourceMethod> matchingResourceMethods = new HashSet<>(4); // Normally there are few (if any) potential matches
 
 		// TODO: faster matching via path component tree structure instead of linear scan
@@ -153,7 +154,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 			for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths)
 				if (httpMethodResourcePath.getHttpMethod().equals(request.getHttpMethod())
-						&& resourcePath.matches(httpMethodResourcePath.getResourcePath()))
+						&& resourcePathInstance.matches(httpMethodResourcePath.getResourcePath()))
 					matchingResourceMethods.add(ResourceMethod.withComponents(request.getHttpMethod(), httpMethodResourcePath.getResourcePath(), method));
 		}
 
@@ -189,54 +190,54 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 			for (Annotation annotation : method.getAnnotations()) {
 				if (annotation instanceof GET) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath
-							.fromPathDeclaration(((GET) annotation).value())));
+					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, new ResourcePath
+							(((GET) annotation).value())));
 				} else if (annotation instanceof POST) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.POST, ResourcePath
-							.fromPathDeclaration(((POST) annotation).value())));
+					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.POST, new ResourcePath
+							(((POST) annotation).value())));
 				} else if (annotation instanceof PUT) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PUT, ResourcePath
-							.fromPathDeclaration(((PUT) annotation).value())));
+					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PUT, new ResourcePath
+							(((PUT) annotation).value())));
 				} else if (annotation instanceof PATCH) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PATCH, ResourcePath
-							.fromPathDeclaration(((PATCH) annotation).value())));
+					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PATCH, new ResourcePath
+							(((PATCH) annotation).value())));
 				} else if (annotation instanceof DELETE) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.DELETE, ResourcePath
-							.fromPathDeclaration(((DELETE) annotation).value())));
+					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.DELETE, new ResourcePath
+							(((DELETE) annotation).value())));
 				} else if (annotation instanceof OPTIONS) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.OPTIONS, ResourcePath
-							.fromPathDeclaration(((OPTIONS) annotation).value())));
+					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.OPTIONS, new ResourcePath
+							(((OPTIONS) annotation).value())));
 				} else if (annotation instanceof HEAD) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.HEAD, ResourcePath
-							.fromPathDeclaration(((HEAD) annotation).value())));
+					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.HEAD, new ResourcePath
+							(((HEAD) annotation).value())));
 				} else if (annotation instanceof GETs) {
 					for (GET get : ((GETs) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath
-								.fromPathDeclaration(get.value())));
+						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, new ResourcePath
+								(get.value())));
 				} else if (annotation instanceof POSTs) {
 					for (POST post : ((POSTs) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.POST, ResourcePath
-								.fromPathDeclaration(post.value())));
+						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.POST, new ResourcePath
+								(post.value())));
 				} else if (annotation instanceof PUTs) {
 					for (PUT put : ((PUTs) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PUT, ResourcePath
-								.fromPathDeclaration(put.value())));
+						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PUT, new ResourcePath
+								(put.value())));
 				} else if (annotation instanceof PATCHes) {
 					for (PATCH patch : ((PATCHes) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PATCH, ResourcePath
-								.fromPathDeclaration(patch.value())));
+						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PATCH, new ResourcePath
+								(patch.value())));
 				} else if (annotation instanceof DELETEs) {
 					for (DELETE delete : ((DELETEs) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.DELETE, ResourcePath
-								.fromPathDeclaration(delete.value())));
+						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.DELETE, new ResourcePath
+								(delete.value())));
 				} else if (annotation instanceof OPTIONSes) {
 					for (OPTIONS options : ((OPTIONSes) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.OPTIONS, ResourcePath
-								.fromPathDeclaration(options.value())));
+						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.OPTIONS, new ResourcePath
+								(options.value())));
 				} else if (annotation instanceof HEADs) {
 					for (HEAD head : ((HEADs) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.HEAD, ResourcePath
-								.fromPathDeclaration(head.value())));
+						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.HEAD, new ResourcePath
+								(head.value())));
 				}
 
 				Set<HttpMethodResourcePath> httpMethodResourcePaths =

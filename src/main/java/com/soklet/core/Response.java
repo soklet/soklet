@@ -34,6 +34,13 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Represents a logical HTTP response returned by a <em>Resource Method</em>.
+ * <p>
+ * Your application's {@link ResponseMarshaler} is responsible for taking the {@link Response} returned by a <em>Resource Method</em> as input
+ * and creating a finalized binary representation ({@link MarshaledResponse}), suitable for sending to clients over the wire.
+ * <p>
+ * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -47,12 +54,25 @@ public class Response {
 	@Nullable
 	private final Object body;
 
+	/**
+	 * Acquires a builder for {@link Response} instances.
+	 *
+	 * @param statusCode the HTTP status code for this request ({@code 200, 201, etc.})
+	 * @return the builder
+	 */
 	@Nonnull
 	public static Builder withStatusCode(@Nonnull Integer statusCode) {
 		requireNonNull(statusCode);
 		return new Builder(statusCode);
 	}
 
+	/**
+	 * Acquires a builder for {@link Response} instances that are intended to redirect the client.
+	 *
+	 * @param redirectType the kind of redirect to perform, for example {@link RedirectType#HTTP_307_TEMPORARY_REDIRECT}
+	 * @param location     the URL to redirect to
+	 * @return the builder
+	 */
 	@Nonnull
 	public static Builder withRedirect(@Nonnull RedirectType redirectType,
 																		 @Nonnull String location) {
@@ -106,26 +126,64 @@ public class Response {
 		return Objects.hash(getStatusCode(), getCookies(), getHeaders(), getBody());
 	}
 
+	/**
+	 * Vends a mutable copier seeded with this instance's data, suitable for building new instances.
+	 *
+	 * @return a copier for this instance
+	 */
 	@Nonnull
 	public Copier copy() {
 		return new Copier(this);
 	}
 
+	/**
+	 * The HTTP status code to be written to the client for this response.
+	 * <p>
+	 * See {@link StatusCode} for an enumeration of all HTTP status codes.
+	 *
+	 * @return the HTTP status code to write to the response
+	 */
 	@Nonnull
 	public Integer getStatusCode() {
 		return this.statusCode;
 	}
 
+	/**
+	 * The cookies to be written to the client for this response.
+	 * <p>
+	 * It is possible to send multiple {@code ResponseCookie} values with the same name to the client.
+	 * <p>
+	 * <em>Note that {@code ResponseCookie} values, like all response headers, have case-insensitive names per the HTTP spec.</em>
+	 *
+	 * @return the cookies to write to the response
+	 */
 	@Nonnull
 	public Set<ResponseCookie> getCookies() {
 		return this.cookies;
 	}
 
+	/**
+	 * The headers to be written to the client for this response.
+	 * <p>
+	 * The keys are the header names and the values are header values
+	 * (it is possible to send the client multiple headers with the same name).
+	 * <p>
+	 * <em>Note that response headers have case-insensitive names per the HTTP spec.</em>
+	 *
+	 * @return the headers to write to the response
+	 */
 	@Nonnull
 	public Map<String, Set<String>> getHeaders() {
 		return this.headers;
 	}
 
+	/**
+	 * The "logical" body content to be written to the response, if present.
+	 * <p>
+	 * It is the responsibility of the {@link ResponseMarshaler} to take this object and convert it into bytes to send over the wire.
+	 *
+	 * @return the object representing the response body, or {@link Optional#empty()} if no response body should be written
+	 */
 	@Nonnull
 	public Optional<Object> getBody() {
 		return Optional.ofNullable(this.body);
@@ -271,7 +329,7 @@ public class Response {
 
 			if (this.builder.cookies == null)
 				this.builder.cookies(new LinkedHashSet<>());
-			
+
 			cookiesConsumer.accept(this.builder.cookies);
 			return this;
 		}
