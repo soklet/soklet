@@ -26,7 +26,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Enumeration of valid HTTP status codes.
+ * Formal enumeration of valid HTTP status codes.
  * <p>
  * See <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status">https://developer.mozilla.org/en-US/docs/Web/HTTP/Status</a> for details.
  *
@@ -305,16 +305,59 @@ public enum StatusCode {
 	 * The user agent requested a resource that cannot legally be provided, such as a web page censored by a government.
 	 */
 	HTTP_451(451, "Unavailable For Legal Reasons"),
+	/**
+	 * The server has encountered a situation it does not know how to handle.
+	 * <p>
+	 * This error is generic, indicating that the server cannot find a more appropriate {@code 5XX} status code to respond with.
+	 */
 	HTTP_500(500, "Internal Server Error"),
+	/**
+	 * The request method is not supported by the server and cannot be handled.
+	 * <p>
+	 * The only methods that servers are required to support (and therefore that must not return this code) are <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/GET">GET</a> and <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/HEAD">HEAD</a>.
+	 */
 	HTTP_501(501, "Not Implemented"),
+	/**
+	 * This error response means that the server, while working as a gateway to get a response needed to handle the request, got an invalid response.
+	 */
 	HTTP_502(502, "Bad Gateway"),
+	/**
+	 * The server is not ready to handle the request.
+	 * <p>
+	 * Common causes are a server that is down for maintenance or that is overloaded.
+	 * <p>
+	 * Note that together with this response, a user-friendly page explaining the problem should be sent. This response should be used for temporary conditions and the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After">Retry-After</a> HTTP header should, if possible, contain the estimated time before the recovery of the service.
+	 * <p>
+	 * The webmaster must also take care about the caching-related headers that are sent along with this response, as these temporary condition responses should usually not be cached.
+	 */
 	HTTP_503(503, "Service Unavailable"),
+	/**
+	 * This error response is given when the server is acting as a gateway and cannot get a response in time.
+	 */
 	HTTP_504(504, "Gateway Timeout"),
+	/**
+	 * The HTTP version used in the request is not supported by the server.
+	 */
 	HTTP_505(505, "HTTP Version Not supported"),
+	/**
+	 * The server has an internal configuration error: during content negotiation, the chosen variant is configured to engage in content negotiation itself, which results in circular references when creating responses.
+	 */
 	HTTP_506(506, "Variant Also Negotiates"),
+	/**
+	 * (<a href="https://developer.mozilla.org/en-US/docs/Glossary/WebDAV">WebDAV</a>) The method could not be performed on the resource because the server is unable to store the representation needed to successfully complete the request.
+	 */
 	HTTP_507(507, "Insufficient Storage"),
+	/**
+	 * (<a href="https://developer.mozilla.org/en-US/docs/Glossary/WebDAV">WebDAV</a>) The server detected an infinite loop while processing the request.
+	 */
 	HTTP_508(508, "Loop Detected"),
+	/**
+	 * The client request declares an HTTP Extension (<a href="https://datatracker.ietf.org/doc/html/rfc2774">RFC 2774</a>) that should be used to process the request, but the extension is not supported.
+	 */
 	HTTP_510(510, "Not Extended"),
+	/**
+	 * Indicates that the client needs to authenticate to gain network access.
+	 */
 	HTTP_511(511, "Network Authentication Required");
 
 	@Nonnull
@@ -343,6 +386,12 @@ public enum StatusCode {
 		this.reasonPhrase = reasonPhrase;
 	}
 
+	/**
+	 * Given an HTTP status code, return the corresponding enum value.
+	 *
+	 * @param statusCode the HTTP status code
+	 * @return the enum value that corresponds to the provided HTTP status code, or {@link Optional#empty()} if none exists
+	 */
 	@Nonnull
 	public static Optional<StatusCode> fromStatusCode(@Nonnull Integer statusCode) {
 		return Optional.ofNullable(STATUS_CODES_BY_NUMBER.get(statusCode));
@@ -353,11 +402,23 @@ public enum StatusCode {
 		return format("%s.%s{statusCode=%s, reasonPhrase=%s}", getClass().getSimpleName(), name(), getStatusCode(), getReasonPhrase());
 	}
 
+	/**
+	 * The HTTP status code that corresponds to this enum value.
+	 *
+	 * @return the HTTP status code
+	 */
 	@Nonnull
 	public Integer getStatusCode() {
 		return this.statusCode;
 	}
 
+	/**
+	 * An English-language description for this HTTP status code.
+	 * <p>
+	 * For example, {@link StatusCode#HTTP_404} has reason phrase {@code Not Found}.
+	 *
+	 * @return English description for this HTTP status code
+	 */
 	@Nonnull
 	public String getReasonPhrase() {
 		return this.reasonPhrase;

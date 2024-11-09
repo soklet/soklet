@@ -52,6 +52,8 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * A non-instantiable collection of utility methods.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -107,33 +109,34 @@ public final class Utilities {
 		// Non-instantiable
 	}
 
+	/**
+	 * Does the platform runtime support virtual threads (either Java 19 and 20 w/preview enabled or Java 21+)?
+	 *
+	 * @return {@code true} if the runtime supports virtual threads, {@code false} otherwise
+	 */
 	@Nonnull
 	public static Boolean virtualThreadsAvailable() {
 		return VIRTUAL_THREADS_AVAILABLE;
 	}
 
 	/**
-	 * Method handle-based invocation to provide a Java 19+ virtual-thread-per-task executor service.
+	 * Provides a virtual-thread-per-task executor service if supported by the runtime.
 	 * <p>
-	 * In order to support Soklet users who are not yet ready to enable virtual threads (Java 19+ w/preview features),
-	 * we compile Soklet with a source level &lt; 19 and avoid any hard references to virtual threads by dynamically creating
-	 * our executor service via method handles.
+	 * In order to support Soklet users who are not yet ready to enable virtual threads (those <strong>not</strong> running either Java 19 and 20 w/preview enabled or Java 21+),
+	 * we compile Soklet with a source level &lt; 19 and avoid any hard references to virtual threads by dynamically creating our executor service via {@link MethodHandle} references.
 	 * <p>
-	 * You should not call this method if {@link Utilities#virtualThreadsAvailable()} is {@code false}.
-	 *
-	 * <pre>
-	 * {@code
-	 *   // This method is equivalent to this code
-	 *   Executors.newThreadPerTaskExecutor(Thread.ofVirtual()
+	 * <strong>You should not call this method if {@link Utilities#virtualThreadsAvailable()} is {@code false}.</strong>
+	 * <pre>{@code  // This method is effectively equivalent to this code
+	 * return Executors.newThreadPerTaskExecutor(
+	 *   Thread.ofVirtual()
 	 *    .name(threadNamePrefix)
-	 * 		.uncaughtExceptionHandler(uncaughtExceptionHandler)
-	 * 		.factory());
-	 * }
-	 * </pre>
+	 *    .uncaughtExceptionHandler(uncaughtExceptionHandler)
+	 *    .factory()
+	 * );}</pre>
 	 *
 	 * @param threadNamePrefix         thread name prefix for the virtual thread factory builder
 	 * @param uncaughtExceptionHandler uncaught exception handler for the virtual thread factory builder
-	 * @return a Java 19+ virtual-thread-per-task executor service
+	 * @return a virtual-thread-per-task executor service
 	 * @throws IllegalStateException if the runtime environment does not support virtual threads
 	 */
 	@Nonnull
@@ -367,6 +370,7 @@ public final class Utilities {
 	 *   <li>{@code X-Forwarded-Host}</li>
 	 *   <li>{@code X-Forwarded-Port}</li>
 	 * </ul>
+	 * <p>
 	 * This method may take these and other headers into account when determining URL prefix.
 	 * <p>
 	 * For example, the following would be legal URL prefixes returned from this method:
@@ -384,7 +388,7 @@ public final class Utilities {
 	 * </ul>
 	 *
 	 * @param headers HTTP request headers
-	 * @return the URL prefix, or the empty value if it could not be determined
+	 * @return the URL prefix, or {@link Optional#empty()} if it could not be determined
 	 */
 	@Nonnull
 	public static Optional<String> extractClientUrlPrefixFromHeaders(@Nonnull Map<String, Set<String>> headers) {
@@ -712,13 +716,13 @@ public final class Utilities {
 	 * A "stronger" version of {@link String#trim()} which discards any kind of whitespace or invisible separator.
 	 * <p>
 	 * In a web environment with user-supplied inputs, this is the behavior we want the vast majority of the time.
-	 * For example, users copy-paste URLs from Word or Outlook and it's easy to accidentally include a U+202F
-	 * "Narrow No-Break Space (NNBSP)" character at the end, which might break parsing.
+	 * For example, users copy-paste URLs from Microsoft Word or Outlook and it's easy to accidentally include a {@code U+202F
+	 * "Narrow No-Break Space (NNBSP)"} character at the end, which might break parsing.
 	 * <p>
 	 * See <a href="https://www.compart.com/en/unicode/U+202F">https://www.compart.com/en/unicode/U+202F</a> for details.
 	 *
-	 * @param string (nullable) the string to trim
-	 * @return (nullable) the trimmed string
+	 * @param string the string to trim
+	 * @return the trimmed string, or {@code null} if the input string is {@code null} or the trimmed representation is of length {@code 0}
 	 */
 	@Nullable
 	public static String trimAggressively(@Nullable String string) {
