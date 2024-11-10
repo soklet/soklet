@@ -196,6 +196,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			while (!getStopPoisonPill().get()) {
 				SocketChannel clientSocketChannel = serverSocket.accept();
+				clientSocketChannel.configureBlocking(false);
 				System.out.println("Accepted connection from: " + clientSocketChannel.getRemoteAddress());
 				executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
 			}
@@ -242,13 +243,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private HttpRequest parseHttpRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
 		requireNonNull(clientSocketChannel);
 
-		// TODO: need a dynamic buffer
-		ByteBuffer buffer = ByteBuffer.allocate(1024 * 8);
-		clientSocketChannel.read(buffer);
-		buffer.flip();
-		String requestData = StandardCharsets.UTF_8.decode(buffer).toString();
+		ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
+		StringBuilder requestDataBuffer = new StringBuilder();
 
-		System.out.println("Parsed request data: " + requestData.toString().trim());
+		while (clientSocketChannel.read(byteBuffer) > 0) {
+			byteBuffer.flip();
+			requestDataBuffer.append(StandardCharsets.UTF_8.decode(byteBuffer));
+			byteBuffer.clear();
+		}
+
+		String requestData = requestDataBuffer.toString();
+
+		// System.out.println("Parsed request data:\n" + requestData.toString().trim());
 
 		// Use Scanner to parse request data line by line
 		try (Scanner scanner = new Scanner(requestData.toString())) {
