@@ -19,7 +19,10 @@ package com.soklet.core.impl;
 import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogEvent;
 import com.soklet.core.LogEventType;
+import com.soklet.core.ResourcePath;
+import com.soklet.core.ServerSentEvent;
 import com.soklet.core.ServerSentEventServer;
+import com.soklet.core.ServerSentEventSource;
 import com.soklet.core.Utilities;
 
 import javax.annotation.Nonnull;
@@ -34,10 +37,14 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Scanner;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -111,6 +118,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final LifecycleInterceptor lifecycleInterceptor;
 	@Nonnull
+	private final ExecutorService clientSocketChannelWriteExecutorService;
+	// Keeps track of Server-Sent Event Sources by Resource Path.
+	// This map's keys and values are fully specified at construction time and will never change.
+	// As a result, this can be a regular HashMap<K,V> as opposed to a ConcurrentHashMap<K,V>.
+	@Nonnull
+	private final Map<ResourcePath, DefaultServerSentEventSource> serverSentEventSourcesByResourcePath;
+	// We don't want to have multiple writing threads write to the same client SocketChannel concurrently.
+	// So, we maintain this map of per-channel locks to ensure thread safety when writing.
+	// When a write is about to occur, the writer must acquire the lock and then release it after writing.
+	@Nonnull
+	private final ConcurrentHashMap<SocketChannel, ReentrantLock> writeLocksByClientSocketChannel;
+	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
@@ -122,6 +141,103 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private volatile Boolean started;
 	@Nullable
 	private Thread eventLoopThread;
+
+	@ThreadSafe
+	protected static class DefaultServerSentEventSource implements ServerSentEventSource {
+		@Nonnull
+		private final ResourcePath resourcePath;
+		@Nonnull
+		private final ExecutorService clientSocketChannelWriteExecutorService;
+		@Nonnull
+		private final ConcurrentHashMap<SocketChannel, ReentrantLock> writeLocksByClientSocketChannel;
+		// Keeps track of client SocketChannel instances.
+		// This must be a threadsafe set, as it will be modified over time.
+		@Nonnull
+		private final Set<SocketChannel> clientSocketChannels;
+
+		public DefaultServerSentEventSource(@Nonnull ResourcePath resourcePath,
+																				@Nonnull ExecutorService clientSocketChannelWriteExecutorService,
+																				@Nonnull ConcurrentHashMap<SocketChannel, ReentrantLock> writeLocksByClientSocketChannel,
+																				@Nonnull Integer initialCapacity) {
+			requireNonNull(resourcePath);
+			requireNonNull(clientSocketChannelWriteExecutorService);
+			requireNonNull(writeLocksByClientSocketChannel);
+			requireNonNull(initialCapacity);
+
+			this.resourcePath = resourcePath;
+			this.clientSocketChannelWriteExecutorService = clientSocketChannelWriteExecutorService;
+			this.writeLocksByClientSocketChannel = writeLocksByClientSocketChannel;
+			this.clientSocketChannels = ConcurrentHashMap.newKeySet(initialCapacity);
+		}
+
+		@Nonnull
+		@Override
+		public ResourcePath getResourcePath() {
+			return this.resourcePath;
+		}
+
+		@Nonnull
+		@Override
+		public Long getClientCount() {
+			return (long) this.clientSocketChannels.size();
+		}
+
+		@Override
+		public void send(@Nonnull ServerSentEvent serverSentEvent) {
+			for (SocketChannel clientSocketChannel : this.clientSocketChannels) {
+				this.clientSocketChannelWriteExecutorService.submit(() -> {
+					ReentrantLock writeLock = writeLocksByClientSocketChannel.getOrDefault(getResourcePath(), new ReentrantLock());
+					writeLock.lock();
+
+					try {
+						String fakeData = "Fake data for now";
+						String message = "data: " + fakeData + "\n\n";
+						System.out.println("Sending fake data to client: " + message.trim());
+						ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+
+						if(clientSocketChannel.isOpen()) {
+							clientSocketChannel.write(buffer);
+						} else {
+							// Socket is no longer open, remove it
+							System.out.println("Socket is no longer open, remove it");
+							removeClientSocketChannel(clientSocketChannel);
+						}
+					} catch (Exception e) {
+						// TODO: send to lifecycle interceptor
+						e.printStackTrace();
+
+						// Looks like this channel is junk now
+						removeClientSocketChannel(clientSocketChannel);
+					} finally {
+						writeLock.unlock();
+					}
+				});
+			}
+		}
+
+		@Nonnull
+		public Boolean addClientSocketChannel(@Nullable SocketChannel clientSocketChannel) {
+			if (clientSocketChannel == null)
+				return false;
+
+			return this.clientSocketChannels.add(clientSocketChannel);
+		}
+
+		@Nonnull
+		public Boolean removeClientSocketChannel(@Nullable SocketChannel clientSocketChannel) {
+			if (clientSocketChannel == null)
+				return false;
+
+			try {
+				clientSocketChannel.close();
+			} catch (IOException e) {
+				System.err.println("Unable to close socket: " + e.getMessage());
+				// Unable to close socket channel, nothing we can do
+			}
+
+			return this.clientSocketChannels.remove(clientSocketChannel);
+		}
+	}
 
 	@Nonnull
 	public static Builder withPort(@Nonnull Integer port) {
@@ -146,6 +262,36 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
+
+		// TODO: let clients specify the executor service
+		this.clientSocketChannelWriteExecutorService = Utilities.createVirtualThreadsNewThreadPerTaskExecutor("sse-stream-writer-", (Thread thread, Throwable throwable) -> {
+			try {
+				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_EVENT_STREAM_WRITING_ERROR, "Unexpected exception occurred during Server-Sent Event stream writing")
+						.throwable(throwable)
+						.build());
+			} catch (Throwable loggingThrowable) {
+				// We are in a bad state - the log operation in the uncaught exception handler failed.
+				// Not much else we can do here but dump to stderr
+				throwable.printStackTrace();
+				loggingThrowable.printStackTrace();
+			}
+		});
+
+		// TODO: let clients specify initial capacity
+		this.writeLocksByClientSocketChannel = new ConcurrentHashMap<>(1_024);
+
+		// Keeps track of Server-Sent Event Sources by Resource Path.
+		// This map's keys and values are fully specified at construction time and will never change.
+		// As a result, this can be a regular HashMap<K,V> as opposed to a ConcurrentHashMap<K,V>.
+		Set<ResourcePath> resourcePaths = builder.resourcePaths != null ? new HashSet<>(builder.resourcePaths) : Set.of();
+		Map<ResourcePath, DefaultServerSentEventSource> serverSentEventSourcesByResourcePath = new HashMap<>(resourcePaths.size());
+
+		// TODO: let clients specify initial capacity
+		for (ResourcePath resourcePath : resourcePaths)
+			serverSentEventSourcesByResourcePath.put(resourcePath, new DefaultServerSentEventSource(resourcePath, this.clientSocketChannelWriteExecutorService, writeLocksByClientSocketChannel, 256));
+
+		this.serverSentEventSourcesByResourcePath = Collections.unmodifiableMap(serverSentEventSourcesByResourcePath);
+
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "sse-handler-";
 
@@ -156,7 +302,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 				try {
-					getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
+					getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event processing")
 							.throwable(throwable)
 							.build());
 				} catch (Throwable loggingThrowable) {
@@ -208,12 +354,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private void handleClientSocketChannel(@Nonnull SocketChannel clientSocketChannel) {
 		requireNonNull(clientSocketChannel);
 
+		DefaultServerSentEventSource serverSentEventSource = null;
+
 		try (clientSocketChannel) {
 			// Parse HTTP request to determine the requested URL and headers
 			HttpRequest request = parseHttpRequest(clientSocketChannel);
 
 			// Check if the requested URL is allowed
-			if (!isAllowedUrl(request.url)) {
+			ResourcePath resourcePath = new ResourcePath(request.url);
+			serverSentEventSource = resourcePath == null ? null : serverSentEventSourcesByResourcePath.get(resourcePath);
+
+			if (resourcePath == null || serverSentEventSource == null) {
 				// Respond with a 404 Not Found if the URL is not allowed
 				String response = "HTTP/1.1 404 Not Found\r\n\r\n";
 				clientSocketChannel.write(ByteBuffer.wrap(response.getBytes(StandardCharsets.UTF_8)));
@@ -223,20 +374,29 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// Write SSE headers
 			clientSocketChannel.write(ByteBuffer.wrap(SSE_HEADER.getBytes()));
+			System.out.println("Wrote SSE header bytes");
+
+			// Hang on to this socket channel for later writes via ServerSentEventSource
+			serverSentEventSource.addClientSocketChannel(clientSocketChannel);
+
 
 			// Send different messages depending on the URL
-			String messageData = getMessageForUrl(request.url);
+			//String messageData = getMessageForUrl(request.url);
 
 			// Keep sending messages until the client disconnects
-			while (clientSocketChannel.isOpen()) {
-				sendToClient(clientSocketChannel, messageData);
+			//while (clientSocketChannel.isOpen()) {
+			//sendToClient(clientSocketChannel, messageData);
 
-				// Wait for a second between messages
-				Thread.sleep(1000);
-			}
-		} catch (IOException | InterruptedException e) {
+			// Wait for a second between messages
+			//Thread.sleep(1000);
+			//}
+		} catch (Exception e) {
 			System.out.println("Client disconnected: " + e.getMessage());
-			Thread.currentThread().interrupt();  // Restore interrupt status
+			// Hang on to this socket channel for later writes via ServerSentEventSource
+			if (serverSentEventSource != null)
+				serverSentEventSource.removeClientSocketChannel(clientSocketChannel);
+
+			//Thread.currentThread().interrupt();  // Restore interrupt status
 		}
 	}
 
@@ -300,16 +460,16 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	protected void sendToClient(@Nonnull SocketChannel clientSocketChannel,
-															@Nonnull String data) throws IOException {
-		requireNonNull(clientSocketChannel);
-		requireNonNull(data);
-
-		String message = "data: " + data + "\n\n";
-		System.out.println("Sending to client: " + message.trim());
-		ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
-		clientSocketChannel.write(buffer);
-	}
+//	protected void sendToClient(@Nonnull SocketChannel clientSocketChannel,
+//															@Nonnull String data) throws IOException {
+//		requireNonNull(clientSocketChannel);
+//		requireNonNull(data);
+//
+//		String message = "data: " + data + "\n\n";
+//		System.out.println("Sending to client: " + message.trim());
+//		ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+//		clientSocketChannel.write(buffer);
+//	}
 
 	// TODO: clean this up
 	@NotThreadSafe
@@ -385,6 +545,16 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
+	@Override
+	public Optional<ServerSentEventSource> acquireEventSource(@Nullable ResourcePath resourcePath) {
+		if (resourcePath == null)
+			return Optional.empty();
+
+		ServerSentEventSource serverSentEventSource = getServerSentEventSourcesByResourcePath().get(resourcePath);
+		return Optional.ofNullable(serverSentEventSource);
+	}
+
+	@Nonnull
 	protected Integer getPort() {
 		return this.port;
 	}
@@ -432,6 +602,21 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected LifecycleInterceptor getLifecycleInterceptor() {
 		return this.lifecycleInterceptor;
+	}
+
+	@Nonnull
+	protected ExecutorService getClientSocketChannelWriteExecutorService() {
+		return this.clientSocketChannelWriteExecutorService;
+	}
+
+	@Nonnull
+	protected Map<ResourcePath, DefaultServerSentEventSource> getServerSentEventSourcesByResourcePath() {
+		return this.serverSentEventSourcesByResourcePath;
+	}
+
+	@Nonnull
+	protected ConcurrentHashMap<SocketChannel, ReentrantLock> getWriteLocksByClientSocketChannel() {
+		return this.writeLocksByClientSocketChannel;
 	}
 
 	@Nonnull
@@ -488,6 +673,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		private Integer socketPendingConnectionLimit;
 		@Nullable
 		private LifecycleInterceptor lifecycleInterceptor;
+		@Nullable
+		private Set<ResourcePath> resourcePaths;
 		@Nullable
 		private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 
@@ -555,6 +742,12 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public Builder lifecycleInterceptor(@Nullable LifecycleInterceptor lifecycleInterceptor) {
 			this.lifecycleInterceptor = lifecycleInterceptor;
+			return this;
+		}
+
+		@Nonnull
+		public Builder resourcePaths(@Nullable Set<ResourcePath> resourcePaths) {
+			this.resourcePaths = resourcePaths;
 			return this;
 		}
 

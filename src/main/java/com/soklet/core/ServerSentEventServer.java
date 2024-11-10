@@ -17,6 +17,8 @@
 package com.soklet.core;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.Optional;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -53,4 +55,7 @@ public interface ServerSentEventServer extends AutoCloseable {
 	default void close() throws Exception {
 		stop();
 	}
+
+	@Nonnull
+	Optional<ServerSentEventSource> acquireEventSource(@Nullable ResourcePath resourcePath);
 }

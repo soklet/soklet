@@ -332,8 +332,12 @@ public class SokletTests {
 	@Test
 	public void serverSentEventServer() {
 		// TODO: remove the DefaultServer reference once we have finalized SSE constructs
+		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
+				.resourcePaths(Set.of(new ResourcePath("/")))
+				.build();
+
 		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
-				.serverSentEventServer(DefaultServerSentEventServer.withPort(8081).build())
+				.serverSentEventServer(serverSentEventServer)
 				.build();
 
 		try (Soklet soklet = new Soklet(configuration)) {
@@ -341,6 +345,11 @@ public class SokletTests {
 			soklet.start();
 
 			try {
+				Thread.sleep(3_000L);
+
+				ServerSentEventSource serverSentEventSource = serverSentEventServer.acquireEventSource(new ResourcePath("/")).get();
+				serverSentEventSource.send(new ServerSentEvent());
+
 				Thread.sleep(5_000L);
 			} catch (InterruptedException e) {
 				// Ignore

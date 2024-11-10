@@ -68,6 +68,10 @@ public enum LogEventType {
 	 */
 	SERVER_INTERNAL_ERROR,
 	/**
+	 * Indicates an error occurred when writing to a Server-Sent Event stream.
+	 */
+	SSE_EVENT_STREAM_WRITING_ERROR,
+	/**
 	 * Indicates an internal {@link ServerSentEventServer} error occurred.
 	 */
 	SSE_SERVER_INTERNAL_ERROR
