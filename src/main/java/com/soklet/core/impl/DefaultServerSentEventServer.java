@@ -26,9 +26,21 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
@@ -40,6 +52,9 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public class DefaultServerSentEventServer implements ServerSentEventServer {
+	@Nonnull
+	private static final String SSE_HEADER;
+
 	@Nonnull
 	private static final String DEFAULT_HOST;
 	@Nonnull
@@ -58,6 +73,13 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 
 	static {
+		SSE_HEADER = "HTTP/1.1 200 OK\r\n" +
+				"Content-Type: text/event-stream\r\n" +
+				"Cache-Control: no-cache\r\n" +
+				// TODO: remove this and let clients specify
+				"Access-Control-Allow-Origin: *\r\n" +
+				"Connection: keep-alive\r\n\r\n";
+
 		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors();
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofHours(12);
@@ -92,10 +114,14 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final ReentrantLock lock;
 	@Nonnull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+	@Nonnull
+	private final AtomicBoolean stopPoisonPill;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nonnull
 	private volatile Boolean started;
+	@Nullable
+	private Thread eventLoopThread;
 
 	@Nonnull
 	public static Builder withPort(@Nonnull Integer port) {
@@ -106,6 +132,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	protected DefaultServerSentEventServer(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
+		this.stopPoisonPill = new AtomicBoolean(false);
 		this.started = false;
 		this.lock = new ReentrantLock();
 
@@ -122,7 +149,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "sse-handler-";
 
-			// Cowardly refuse to run on anything other than a runtime that supports Virtual threads
+			// Default implementation: cowardly refuse to run on anything other than a runtime that supports Virtual threads.
+			// Applications can override this by bringing their own ExecutorService via requestHandlerExecutorServiceSupplier, but it's not recommended.
 			if (!Utilities.virtualThreadsAvailable())
 				throw new IllegalStateException(format("Virtual threads are required for %s", getClass().getSimpleName()));
 
@@ -149,11 +177,147 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (isStarted())
 				return;
 
-			// TODO: start
-
+			System.out.println("Starting...");
+			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
+			this.eventLoopThread = new Thread(this::startInternal, "sse-event-loop");
+			eventLoopThread.start();
 			this.started = true;
+			System.out.println("Started.");
 		} finally {
 			getLock().unlock();
+		}
+	}
+
+	protected void startInternal() {
+		try (ServerSocketChannel serverSocket = ServerSocketChannel.open()) {
+			serverSocket.bind(new InetSocketAddress(getPort()));
+			System.out.println("SSE Server started on port " + getPort());
+			ExecutorService executorService = getRequestHandlerExecutorService().get();
+
+			while (!getStopPoisonPill().get()) {
+				SocketChannel clientSocketChannel = serverSocket.accept();
+				System.out.println("Accepted connection from: " + clientSocketChannel.getRemoteAddress());
+				executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
+			}
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	private void handleClientSocketChannel(@Nonnull SocketChannel clientSocketChannel) {
+		requireNonNull(clientSocketChannel);
+
+		try (clientSocketChannel) {
+			// Parse HTTP request to determine the requested URL and headers
+			HttpRequest request = parseHttpRequest(clientSocketChannel);
+
+			// Check if the requested URL is allowed
+			if (!isAllowedUrl(request.url)) {
+				// Respond with a 404 Not Found if the URL is not allowed
+				String response = "HTTP/1.1 404 Not Found\r\n\r\n";
+				clientSocketChannel.write(ByteBuffer.wrap(response.getBytes(StandardCharsets.UTF_8)));
+				System.out.println("Rejected connection for URL: " + request.url);
+				return;
+			}
+
+			// Write SSE headers
+			clientSocketChannel.write(ByteBuffer.wrap(SSE_HEADER.getBytes()));
+
+			// Send different messages depending on the URL
+			String messageData = getMessageForUrl(request.url);
+
+			// Keep sending messages until the client disconnects
+			while (clientSocketChannel.isOpen()) {
+				sendToClient(clientSocketChannel, messageData);
+
+				// Wait for a second between messages
+				Thread.sleep(1000);
+			}
+		} catch (IOException | InterruptedException e) {
+			System.out.println("Client disconnected: " + e.getMessage());
+			Thread.currentThread().interrupt();  // Restore interrupt status
+		}
+	}
+
+	private HttpRequest parseHttpRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
+		requireNonNull(clientSocketChannel);
+
+		// TODO: need a dynamic buffer
+		ByteBuffer buffer = ByteBuffer.allocate(1024 * 8);
+		clientSocketChannel.read(buffer);
+		buffer.flip();
+		String requestData = StandardCharsets.UTF_8.decode(buffer).toString();
+
+		System.out.println("Parsed request data: " + requestData.toString().trim());
+
+		// Use Scanner to parse request data line by line
+		try (Scanner scanner = new Scanner(requestData.toString())) {
+			// Parse the request line
+			String requestLine = scanner.nextLine();
+			String[] requestLineParts = requestLine.split(" ");
+			String method = requestLineParts[0];
+			String url = requestLineParts[1];
+			String version = requestLineParts[2];
+
+			// Parse headers into a map
+			Map<String, String> headers = new HashMap<>();
+			while (scanner.hasNextLine()) {
+				String line = scanner.nextLine();
+				if (line.isEmpty()) break; // End of headers
+
+				String[] headerParts = line.split(": ", 2);
+				if (headerParts.length == 2) {
+					headers.put(headerParts[0], headerParts[1]);
+				}
+			}
+
+			return new HttpRequest(method, url, version, headers);
+		}
+	}
+
+	// TODO: this is for testing only
+	private Boolean isAllowedUrl(@Nonnull String url) {
+		requireNonNull(url);
+		return "/".equals(url);
+	}
+
+	// TODO: this is for testing only
+	@Nonnull
+	protected String getMessageForUrl(@Nonnull String url) {
+		requireNonNull(url);
+
+		switch (url) {
+			case "/":
+				return "Hello from /!";
+			default:
+				return "Unknown URL";
+		}
+	}
+
+	protected void sendToClient(@Nonnull SocketChannel clientSocketChannel,
+															@Nonnull String data) throws IOException {
+		requireNonNull(clientSocketChannel);
+		requireNonNull(data);
+
+		String message = "data: " + data + "\n\n";
+		System.out.println("Sending to client: " + message.trim());
+		ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+		clientSocketChannel.write(buffer);
+	}
+
+	// TODO: clean this up
+	@NotThreadSafe
+	private static class HttpRequest {
+		String method;
+		String url;
+		String version;
+		Map<String, String> headers;
+
+		HttpRequest(String method, String url, String version, Map<String, String> headers) {
+			this.method = method;
+			this.url = url;
+			this.version = version;
+			this.headers = headers;
 		}
 	}
 
@@ -165,11 +329,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (!isStarted())
 				return;
 
+			System.out.println("Stopping...");
+
 			try {
-
-				//	getEventLoop().get().stop();
-				// TODO: stop
-
+				getStopPoisonPill().set(true);
 			} catch (Exception e) {
 				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
 						.throwable(e)
@@ -179,10 +342,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			boolean interrupted = false;
 
 			try {
-//				getRequestHandlerExecutorService().get().shutdown();
-//				getRequestHandlerExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
-//			} catch (InterruptedException e) {
-//				interrupted = true;
+				getRequestHandlerExecutorService().get().shutdown();
+				getRequestHandlerExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				interrupted = true;
 			} catch (Exception e) {
 				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down server request handler executor service")
 						.throwable(e)
@@ -193,7 +356,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 		} finally {
 			this.started = false;
+			this.eventLoopThread = null;
 			this.requestHandlerExecutorService = null;
+			getStopPoisonPill().set(false);
+
+			System.out.println("Stopped.");
 
 			getLock().unlock();
 		}
@@ -274,6 +441,16 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Supplier<ExecutorService> getRequestHandlerExecutorServiceSupplier() {
 		return this.requestHandlerExecutorServiceSupplier;
+	}
+
+	@Nonnull
+	protected AtomicBoolean getStopPoisonPill() {
+		return this.stopPoisonPill;
+	}
+
+	@Nonnull
+	protected Optional<Thread> getEventLoopThread() {
+		return Optional.ofNullable(this.eventLoopThread);
 	}
 
 	/**

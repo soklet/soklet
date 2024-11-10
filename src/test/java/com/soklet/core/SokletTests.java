@@ -25,6 +25,8 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
+import com.soklet.core.impl.DefaultServer;
+import com.soklet.core.impl.DefaultServerSentEventServer;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -325,6 +327,25 @@ public class SokletTests {
 					emptyByteArray(),
 					explicitHeadMarshaledResponse.getBody().orElse(emptyByteArray()));
 		}));
+	}
+
+	@Test
+	public void serverSentEventServer() {
+		// TODO: remove the DefaultServer reference once we have finalized SSE constructs
+		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
+				.serverSentEventServer(DefaultServerSentEventServer.withPort(8081).build())
+				.build();
+
+		try (Soklet soklet = new Soklet(configuration)) {
+			// TODO: test SSE
+			soklet.start();
+
+			try {
+				Thread.sleep(5_000L);
+			} catch (InterruptedException e) {
+				// Ignore
+			}
+		}
 	}
 
 	@ThreadSafe
