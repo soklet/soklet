@@ -35,6 +35,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
@@ -49,7 +50,6 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -66,9 +66,6 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public class DefaultServerSentEventServer implements ServerSentEventServer {
-	@Nonnull
-	private static final String SSE_HEADER;
-
 	@Nonnull
 	private static final String DEFAULT_HOST;
 	@Nonnull
@@ -87,13 +84,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 
 	static {
-		SSE_HEADER = "HTTP/1.1 200 OK\r\n" +
-				"Content-Type: text/event-stream\r\n" +
-				"Cache-Control: no-cache\r\n" +
-				// TODO: remove this and let clients specify
-				"Access-Control-Allow-Origin: *\r\n" +
-				"Connection: keep-alive\r\n\r\n";
-
 		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors();
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofHours(12);
@@ -315,8 +305,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	public static ConcurrentLinkedQueue<ServerSentEvent> socketChannelQueue = new ConcurrentLinkedQueue<>();
-
 	protected void startInternal() {
 		try (ServerSocketChannel serverSocketChannel = ServerSocketChannel.open()) {
 			serverSocketChannel.bind(new InetSocketAddress(getPort()));
@@ -327,10 +315,13 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				SocketChannel clientSocketChannel = serverSocketChannel.accept();
 				executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
 			}
+		} catch (ClosedByInterruptException e) {
+			System.out.println("Server socket channel closed via interrupt.");
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		} finally {
-			// Call stop?
+			// In case we are not already being stopped, force a stop
+			stop();
 		}
 	}
 
@@ -345,8 +336,15 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			ServerSentEventConnection serverSentEventConnection = registerClientSocketChannel(clientSocketChannel, request, resourcePath).get();
 
+			final String SSE_HEADERS_AS_STRING = "HTTP/1.1 200 OK\r\n" +
+					"Content-Type: text/event-stream\r\n" +
+					"Cache-Control: no-cache\r\n" +
+					// TODO: let clients specify this and other headers
+					"Access-Control-Allow-Origin: *\r\n" +
+					"Connection: keep-alive\r\n\r\n";
+
 			// Immediately send SSE headers
-			clientSocketChannel.write(ByteBuffer.wrap(SSE_HEADER.getBytes()));
+			clientSocketChannel.write(ByteBuffer.wrap(SSE_HEADERS_AS_STRING.getBytes()));
 
 			while (true) {
 				ServerSentEvent serverSentEvent = serverSentEventConnection.getWriteQueue().take();
@@ -449,8 +447,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		connectionSet.add(serverSentEventConnection);
 
-		//serverSentEventSource.addClientSocketChannel(clientSocketChannel);
-
 		return Optional.of(serverSentEventConnection);
 	}
 
@@ -459,7 +455,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (clientSocketChannel == null)
 			return false;
 
-		boolean removed = this.serverSentEventConnectionsBySocketChannel.remove(clientSocketChannel) != null;
+		ServerSentEventConnection eventConnection = this.serverSentEventConnectionsBySocketChannel.remove(clientSocketChannel);
+
+		if (eventConnection != null) {
+			DefaultServerSentEventSource eventSource = this.serverSentEventSourcesByResourcePath.get(eventConnection.getResourcePath());
+
+			if (eventSource != null) {
+				Set<ServerSentEventConnection> eventConnections = connectionSetsByEventSource.get(eventSource);
+
+				if (eventConnections != null)
+					eventConnections.remove(eventConnection);
+			}
+		}
 
 		try {
 			System.out.println("Unregistering client socket channel " + clientSocketChannel.getRemoteAddress());
@@ -473,7 +480,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Don't worry about it
 		}
 
-		return removed;
+		return eventConnection != null;
 	}
 
 	private HttpRequest parseHttpRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
@@ -534,11 +541,14 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	public void stop() {
 		getLock().lock();
 
+		boolean stopping = false;
+
 		try {
 			if (!isStarted())
 				return;
 
 			System.out.println("Stopping...");
+			stopping = true;
 
 			try {
 				getStopPoisonPill().set(true);
@@ -580,7 +590,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.requestHandlerExecutorService = null;
 			getStopPoisonPill().set(false);
 
-			System.out.println("Stopped.");
+			if (stopping)
+				System.out.println("Stopped.");
 
 			getLock().unlock();
 		}
