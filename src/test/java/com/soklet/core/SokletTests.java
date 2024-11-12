@@ -341,7 +341,6 @@ public class SokletTests {
 				.build();
 
 		try (Soklet soklet = new Soklet(configuration)) {
-			// TODO: test SSE
 			soklet.start();
 
 			try {

@@ -16,9 +16,11 @@
 
 package com.soklet.core.impl;
 
+import com.soklet.core.HttpMethod;
 import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogEvent;
 import com.soklet.core.LogEventType;
+import com.soklet.core.Request;
 import com.soklet.core.ResourcePath;
 import com.soklet.core.ServerSentEvent;
 import com.soklet.core.ServerSentEventServer;
@@ -44,11 +46,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import static java.lang.String.format;
@@ -124,11 +131,14 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	// As a result, this can be a regular HashMap<K,V> as opposed to a ConcurrentHashMap<K,V>.
 	@Nonnull
 	private final Map<ResourcePath, DefaultServerSentEventSource> serverSentEventSourcesByResourcePath;
-	// We don't want to have multiple writing threads write to the same client SocketChannel concurrently.
-	// So, we maintain this map of per-channel locks to ensure thread safety when writing.
-	// When a write is about to occur, the writer must acquire the lock and then release it after writing.
 	@Nonnull
-	private final ConcurrentHashMap<SocketChannel, ReentrantLock> writeLocksByClientSocketChannel;
+	private final ConcurrentHashMap<SocketChannel, ServerSentEventConnection> serverSentEventConnectionsBySocketChannel;
+	// This map's keys and values are fully specified at construction time and will never change.
+	// As a result, this can be a regular HashMap<K,V> as opposed to a ConcurrentHashMap<K,V>.
+	// Note: this map's values must be a concurrent hashset, as the contents of the set can be modified by multiple threads at runtime.
+	// However, the set instances themselves will never change.
+	@Nonnull
+	private final Map<DefaultServerSentEventSource, Set<ServerSentEventConnection>> connectionSetsByEventSource;
 	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
@@ -149,25 +159,24 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final ExecutorService clientSocketChannelWriteExecutorService;
 		@Nonnull
-		private final ConcurrentHashMap<SocketChannel, ReentrantLock> writeLocksByClientSocketChannel;
-		// Keeps track of client SocketChannel instances.
-		// This must be a threadsafe set, as it will be modified over time.
+		private final Function<DefaultServerSentEventSource, Set<ServerSentEventConnection>> connectionsSupplierFunction;
 		@Nonnull
-		private final Set<SocketChannel> clientSocketChannels;
+		private final Consumer<ServerSentEventConnection> connectionRemovalConsumer;
 
 		public DefaultServerSentEventSource(@Nonnull ResourcePath resourcePath,
 																				@Nonnull ExecutorService clientSocketChannelWriteExecutorService,
-																				@Nonnull ConcurrentHashMap<SocketChannel, ReentrantLock> writeLocksByClientSocketChannel,
-																				@Nonnull Integer initialCapacity) {
+																				@Nonnull Function<DefaultServerSentEventSource, Set<ServerSentEventConnection>> connectionsSupplierFunction,
+																				@Nonnull Consumer<ServerSentEventConnection> connectionRemovalConsumer
+		) {
 			requireNonNull(resourcePath);
 			requireNonNull(clientSocketChannelWriteExecutorService);
-			requireNonNull(writeLocksByClientSocketChannel);
-			requireNonNull(initialCapacity);
+			requireNonNull(connectionsSupplierFunction);
+			requireNonNull(connectionRemovalConsumer);
 
 			this.resourcePath = resourcePath;
 			this.clientSocketChannelWriteExecutorService = clientSocketChannelWriteExecutorService;
-			this.writeLocksByClientSocketChannel = writeLocksByClientSocketChannel;
-			this.clientSocketChannels = ConcurrentHashMap.newKeySet(initialCapacity);
+			this.connectionsSupplierFunction = connectionsSupplierFunction;
+			this.connectionRemovalConsumer = connectionRemovalConsumer;
 		}
 
 		@Nonnull
@@ -179,63 +188,21 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		@Override
 		public Long getClientCount() {
-			return (long) this.clientSocketChannels.size();
+			return (long) getConnections().size();
+		}
+
+		@Nonnull
+		protected Set<ServerSentEventConnection> getConnections() {
+			return this.connectionsSupplierFunction.apply(this);
 		}
 
 		@Override
 		public void send(@Nonnull ServerSentEvent serverSentEvent) {
-			for (SocketChannel clientSocketChannel : this.clientSocketChannels) {
-				this.clientSocketChannelWriteExecutorService.submit(() -> {
-					ReentrantLock writeLock = writeLocksByClientSocketChannel.getOrDefault(getResourcePath(), new ReentrantLock());
-					writeLock.lock();
-
-					try {
-						String fakeData = "Fake data for now";
-						String message = "data: " + fakeData + "\n\n";
-						System.out.println("Sending fake data to client: " + message.trim());
-						ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
-
-						if(clientSocketChannel.isOpen()) {
-							clientSocketChannel.write(buffer);
-						} else {
-							// Socket is no longer open, remove it
-							System.out.println("Socket is no longer open, remove it");
-							removeClientSocketChannel(clientSocketChannel);
-						}
-					} catch (Exception e) {
-						// TODO: send to lifecycle interceptor
-						e.printStackTrace();
-
-						// Looks like this channel is junk now
-						removeClientSocketChannel(clientSocketChannel);
-					} finally {
-						writeLock.unlock();
-					}
-				});
-			}
-		}
-
-		@Nonnull
-		public Boolean addClientSocketChannel(@Nullable SocketChannel clientSocketChannel) {
-			if (clientSocketChannel == null)
-				return false;
-
-			return this.clientSocketChannels.add(clientSocketChannel);
-		}
-
-		@Nonnull
-		public Boolean removeClientSocketChannel(@Nullable SocketChannel clientSocketChannel) {
-			if (clientSocketChannel == null)
-				return false;
-
-			try {
-				clientSocketChannel.close();
-			} catch (IOException e) {
-				System.err.println("Unable to close socket: " + e.getMessage());
-				// Unable to close socket channel, nothing we can do
-			}
-
-			return this.clientSocketChannels.remove(clientSocketChannel);
+			this.clientSocketChannelWriteExecutorService.submit(() -> {
+				for (ServerSentEventConnection serverSentEventConnection : getConnections()) {
+					serverSentEventConnection.getWriteQueue().add(serverSentEvent);
+				}
+			});
 		}
 	}
 
@@ -278,7 +245,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		});
 
 		// TODO: let clients specify initial capacity
-		this.writeLocksByClientSocketChannel = new ConcurrentHashMap<>(1_024);
+		this.serverSentEventConnectionsBySocketChannel = new ConcurrentHashMap<>(1_024);
 
 		// Keeps track of Server-Sent Event Sources by Resource Path.
 		// This map's keys and values are fully specified at construction time and will never change.
@@ -286,9 +253,23 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		Set<ResourcePath> resourcePaths = builder.resourcePaths != null ? new HashSet<>(builder.resourcePaths) : Set.of();
 		Map<ResourcePath, DefaultServerSentEventSource> serverSentEventSourcesByResourcePath = new HashMap<>(resourcePaths.size());
 
-		// TODO: let clients specify initial capacity
-		for (ResourcePath resourcePath : resourcePaths)
-			serverSentEventSourcesByResourcePath.put(resourcePath, new DefaultServerSentEventSource(resourcePath, this.clientSocketChannelWriteExecutorService, writeLocksByClientSocketChannel, 256));
+		this.connectionSetsByEventSource = new ConcurrentHashMap<>();
+
+		for (ResourcePath resourcePath : resourcePaths) {
+			DefaultServerSentEventSource serverSentEventSource = new DefaultServerSentEventSource(
+					resourcePath,
+					this.clientSocketChannelWriteExecutorService,
+					(DefaultServerSentEventSource defaultServerSentEventSource) -> {
+						return this.connectionSetsByEventSource.get(defaultServerSentEventSource);
+					}, (@Nonnull ServerSentEventConnection serverSentEventConnection) -> {
+				unregisterClientSocketChannel(serverSentEventConnection.getClientSocketChannel());
+			});
+
+			serverSentEventSourcesByResourcePath.put(resourcePath, serverSentEventSource);
+
+			// TODO: let clients specify capacity per-resource-path
+			connectionSetsByEventSource.put(serverSentEventSource, ConcurrentHashMap.newKeySet(1_024));
+		}
 
 		this.serverSentEventSourcesByResourcePath = Collections.unmodifiableMap(serverSentEventSourcesByResourcePath);
 
@@ -334,87 +315,179 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
+	public static ConcurrentLinkedQueue<ServerSentEvent> socketChannelQueue = new ConcurrentLinkedQueue<>();
+
 	protected void startInternal() {
-		try (ServerSocketChannel serverSocket = ServerSocketChannel.open()) {
-			serverSocket.bind(new InetSocketAddress(getPort()));
+		try (ServerSocketChannel serverSocketChannel = ServerSocketChannel.open()) {
+			serverSocketChannel.bind(new InetSocketAddress(getPort()));
 			System.out.println("SSE Server started on port " + getPort());
 			ExecutorService executorService = getRequestHandlerExecutorService().get();
 
 			while (!getStopPoisonPill().get()) {
-				SocketChannel clientSocketChannel = serverSocket.accept();
-				clientSocketChannel.configureBlocking(false);
-				System.out.println("Accepted connection from: " + clientSocketChannel.getRemoteAddress());
+				SocketChannel clientSocketChannel = serverSocketChannel.accept();
 				executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
 			}
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
+		} finally {
+			// Call stop?
 		}
 	}
 
-	private void handleClientSocketChannel(@Nonnull SocketChannel clientSocketChannel) {
+	protected void handleClientSocketChannel(@Nonnull SocketChannel clientSocketChannel) {
 		requireNonNull(clientSocketChannel);
 
-		DefaultServerSentEventSource serverSentEventSource = null;
-
 		try (clientSocketChannel) {
-			// Parse HTTP request to determine the requested URL and headers
-			HttpRequest request = parseHttpRequest(clientSocketChannel);
+			// HttpRequest httpRequest = parseHttpRequest(clientSocketChannel);
 
-			// Check if the requested URL is allowed
-			ResourcePath resourcePath = new ResourcePath(request.url);
-			serverSentEventSource = resourcePath == null ? null : serverSentEventSourcesByResourcePath.get(resourcePath);
+			Request request = Request.with(HttpMethod.GET, "/").build(); // TODO: replace with real value
+			ResourcePath resourcePath = new ResourcePath("/"); // TODO: pull from request
 
-			if (resourcePath == null || serverSentEventSource == null) {
-				// Respond with a 404 Not Found if the URL is not allowed
-				String response = "HTTP/1.1 404 Not Found\r\n\r\n";
-				clientSocketChannel.write(ByteBuffer.wrap(response.getBytes(StandardCharsets.UTF_8)));
-				System.out.println("Rejected connection for URL: " + request.url);
-				return;
-			}
+			ServerSentEventConnection serverSentEventConnection = registerClientSocketChannel(clientSocketChannel, request, resourcePath).get();
 
-			// Write SSE headers
+			// Immediately send SSE headers
 			clientSocketChannel.write(ByteBuffer.wrap(SSE_HEADER.getBytes()));
-			System.out.println("Wrote SSE header bytes");
 
-			// Hang on to this socket channel for later writes via ServerSentEventSource
-			serverSentEventSource.addClientSocketChannel(clientSocketChannel);
+			while (true) {
+				ServerSentEvent serverSentEvent = serverSentEventConnection.getWriteQueue().take();
 
-
-			// Send different messages depending on the URL
-			//String messageData = getMessageForUrl(request.url);
-
-			// Keep sending messages until the client disconnects
-			//while (clientSocketChannel.isOpen()) {
-			//sendToClient(clientSocketChannel, messageData);
-
-			// Wait for a second between messages
-			//Thread.sleep(1000);
-			//}
-		} catch (Exception e) {
+				System.out.println("Writing data...");
+				String message = "data: " + serverSentEvent.toString() + "\n\n";
+				ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
+				clientSocketChannel.write(buffer);
+				System.out.println("Wrote data.");
+			}
+		} catch (IOException | InterruptedException e) {
 			System.out.println("Client disconnected: " + e.getMessage());
-			// Hang on to this socket channel for later writes via ServerSentEventSource
-			if (serverSentEventSource != null)
-				serverSentEventSource.removeClientSocketChannel(clientSocketChannel);
 
-			//Thread.currentThread().interrupt();  // Restore interrupt status
+			if (e instanceof InterruptedException) {
+				System.out.println("Interrupted");
+				Thread.currentThread().interrupt();  // Restore interrupt status
+			}
+		} finally {
+			unregisterClientSocketChannel(clientSocketChannel);
 		}
+	}
+
+	@ThreadSafe
+	protected static class ServerSentEventConnection {
+		@Nonnull
+		private final Request request;
+		@Nonnull
+		private final ResourcePath resourcePath;
+		@Nonnull
+		private final SocketChannel clientSocketChannel;
+		@Nonnull
+		private final BlockingQueue<ServerSentEvent> writeQueue;
+
+		public ServerSentEventConnection(@Nonnull Request request,
+																		 @Nonnull ResourcePath resourcePath,
+																		 @Nonnull SocketChannel clientSocketChannel) {
+			requireNonNull(request);
+			requireNonNull(resourcePath);
+			requireNonNull(clientSocketChannel);
+
+			this.request = request;
+			this.resourcePath = resourcePath;
+			this.clientSocketChannel = clientSocketChannel;
+			this.writeQueue = new ArrayBlockingQueue<>(8);
+		}
+
+		@Nonnull
+		public Request getRequest() {
+			return this.request;
+		}
+
+		@Nonnull
+		public ResourcePath getResourcePath() {
+			return this.resourcePath;
+		}
+
+		@Nonnull
+		public SocketChannel getClientSocketChannel() {
+			return this.clientSocketChannel;
+		}
+
+		@Nonnull
+		public BlockingQueue<ServerSentEvent> getWriteQueue() {
+			return this.writeQueue;
+		}
+	}
+
+	@Nonnull
+	protected Optional<ServerSentEventConnection> registerClientSocketChannel(@Nonnull SocketChannel clientSocketChannel,
+																																						@Nonnull Request request,
+																																						@Nonnull ResourcePath resourcePath) {
+		requireNonNull(clientSocketChannel);
+		requireNonNull(request);
+		requireNonNull(resourcePath);
+
+		DefaultServerSentEventSource serverSentEventSource = this.serverSentEventSourcesByResourcePath.get(resourcePath);
+
+		// Should never occur
+		if (serverSentEventSource == null) {
+			System.out.println("WARNING: no event source for resource path " + resourcePath);
+			return Optional.empty();
+		}
+
+		try {
+			System.out.println("Registering client socket channel " + clientSocketChannel.getRemoteAddress());
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, resourcePath, clientSocketChannel);
+
+		this.serverSentEventConnectionsBySocketChannel.put(clientSocketChannel, serverSentEventConnection);
+
+		Set<ServerSentEventConnection> connectionSet = this.connectionSetsByEventSource.get(serverSentEventSource);
+
+		if (connectionSet == null) {
+			System.out.println("WARNING: no connection set for event source " + serverSentEventSource);
+			return Optional.empty();
+		}
+
+		connectionSet.add(serverSentEventConnection);
+
+		//serverSentEventSource.addClientSocketChannel(clientSocketChannel);
+
+		return Optional.of(serverSentEventConnection);
+	}
+
+	@Nonnull
+	protected Boolean unregisterClientSocketChannel(@Nullable SocketChannel clientSocketChannel) {
+		if (clientSocketChannel == null)
+			return false;
+
+		boolean removed = this.serverSentEventConnectionsBySocketChannel.remove(clientSocketChannel) != null;
+
+		try {
+			System.out.println("Unregistering client socket channel " + clientSocketChannel.getRemoteAddress());
+		} catch (Exception ignored) {
+			// Don't worry about it
+		}
+
+		try {
+			clientSocketChannel.close();
+		} catch (Exception ignored) {
+			// Don't worry about it
+		}
+
+		return removed;
 	}
 
 	private HttpRequest parseHttpRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
 		requireNonNull(clientSocketChannel);
 
-		ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
-		StringBuilder requestDataBuffer = new StringBuilder();
+		// Read the initial HTTP request line
+		ByteBuffer buffer = ByteBuffer.allocate(1024);
+		clientSocketChannel.read(buffer);
+		buffer.flip();
 
-		while (clientSocketChannel.read(byteBuffer) > 0) {
-			byteBuffer.flip();
-			requestDataBuffer.append(StandardCharsets.UTF_8.decode(byteBuffer));
-			byteBuffer.clear();
-		}
+		// Convert buffer to a string and parse the request line
+		String requestData = StandardCharsets.UTF_8.decode(buffer).toString();
 
-		String requestData = requestDataBuffer.toString();
-
-		// System.out.println("Parsed request data:\n" + requestData.toString().trim());
+		//System.out.println("Parsed request data:\n" + requestData.toString().trim());
 
 		// Use Scanner to parse request data line by line
 		try (Scanner scanner = new Scanner(requestData.toString())) {
@@ -440,36 +513,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			return new HttpRequest(method, url, version, headers);
 		}
 	}
-
-	// TODO: this is for testing only
-	private Boolean isAllowedUrl(@Nonnull String url) {
-		requireNonNull(url);
-		return "/".equals(url);
-	}
-
-	// TODO: this is for testing only
-	@Nonnull
-	protected String getMessageForUrl(@Nonnull String url) {
-		requireNonNull(url);
-
-		switch (url) {
-			case "/":
-				return "Hello from /!";
-			default:
-				return "Unknown URL";
-		}
-	}
-
-//	protected void sendToClient(@Nonnull SocketChannel clientSocketChannel,
-//															@Nonnull String data) throws IOException {
-//		requireNonNull(clientSocketChannel);
-//		requireNonNull(data);
-//
-//		String message = "data: " + data + "\n\n";
-//		System.out.println("Sending to client: " + message.trim());
-//		ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
-//		clientSocketChannel.write(buffer);
-//	}
 
 	// TODO: clean this up
 	@NotThreadSafe
@@ -499,10 +542,21 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			try {
 				getStopPoisonPill().set(true);
+				this.eventLoopThread.interrupt();
 			} catch (Exception e) {
 				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
 						.throwable(e)
 						.build());
+			}
+
+			// TODO: unregister might be unsafe during iteration here
+			for (SocketChannel clientSocketChannel : this.serverSentEventConnectionsBySocketChannel.keySet()) {
+				try {
+					unregisterClientSocketChannel(clientSocketChannel);
+				} catch (Exception e) {
+				} finally {
+					// TODO: logging/cleanup
+				}
 			}
 
 			boolean interrupted = false;
@@ -612,11 +666,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Map<ResourcePath, DefaultServerSentEventSource> getServerSentEventSourcesByResourcePath() {
 		return this.serverSentEventSourcesByResourcePath;
-	}
-
-	@Nonnull
-	protected ConcurrentHashMap<SocketChannel, ReentrantLock> getWriteLocksByClientSocketChannel() {
-		return this.writeLocksByClientSocketChannel;
 	}
 
 	@Nonnull
