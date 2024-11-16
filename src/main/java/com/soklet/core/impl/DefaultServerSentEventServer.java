@@ -35,7 +35,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
@@ -44,6 +43,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Scanner;
 import java.util.Set;
@@ -83,6 +83,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 
+	@Nonnull
+	private static final ServerSentEvent SERVER_SENT_EVENT_POISON_PILL;
+
 	static {
 		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors();
@@ -92,6 +95,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 8;
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
+
+		SERVER_SENT_EVENT_POISON_PILL = new ServerSentEvent();
 	}
 
 	@Nonnull
@@ -315,8 +320,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				SocketChannel clientSocketChannel = serverSocketChannel.accept();
 				executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
 			}
-		} catch (ClosedByInterruptException e) {
-			System.out.println("Server socket channel closed via interrupt.");
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		} finally {
@@ -348,6 +351,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			while (true) {
 				ServerSentEvent serverSentEvent = serverSentEventConnection.getWriteQueue().take();
+
+				if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) {
+					System.out.println("Encountered poison pill, exiting...");
+					break;
+				}
 
 				System.out.println("Writing data...");
 				String message = "data: " + serverSentEvent.toString() + "\n\n";
@@ -550,17 +558,16 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			System.out.println("Stopping...");
 			stopping = true;
 
-			try {
-				getStopPoisonPill().set(true);
-				this.eventLoopThread.interrupt();
-			} catch (Exception e) {
-				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
-						.throwable(e)
-						.build());
-			}
+			getStopPoisonPill().set(true);
 
 			// TODO: unregister might be unsafe during iteration here
-			for (SocketChannel clientSocketChannel : this.serverSentEventConnectionsBySocketChannel.keySet()) {
+			for (Entry<SocketChannel, ServerSentEventConnection> entry : this.serverSentEventConnectionsBySocketChannel.entrySet()) {
+				SocketChannel clientSocketChannel = entry.getKey();
+				ServerSentEventConnection connection = entry.getValue();
+
+				// Stop the writer
+				connection.getWriteQueue().add(SERVER_SENT_EVENT_POISON_PILL);
+
 				try {
 					unregisterClientSocketChannel(clientSocketChannel);
 				} catch (Exception e) {
