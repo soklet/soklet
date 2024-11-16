@@ -21,7 +21,10 @@
   const log = (message) => {
     const newElement = document.createElement("li");
     newElement.textContent = message;
-    listEvents.appendChild(newElement);
+
+    if (listEvents.firstChild)
+      listEvents.insertBefore(newElement, listEvents.firstChild);
+    else listEvents.appendChild(newElement);
   };
 
   buttonShutDownServer.addEventListener("click", (e) => {
