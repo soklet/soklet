@@ -24,6 +24,8 @@ import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
+import com.soklet.core.impl.AllOriginsCorsAuthorizer;
+import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.DefaultServer;
 import com.soklet.core.impl.DefaultServerSentEventServer;
@@ -45,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.SynchronousQueue;
 
 import static com.soklet.core.Utilities.emptyByteArray;
 import static java.util.Objects.requireNonNull;
@@ -330,34 +333,72 @@ public class SokletTests {
 	}
 
 	@Test
-	public void serverSentEventServer() {
-		// TODO: remove the DefaultServer reference once we have finalized SSE constructs
+	public void serverSentEventServer() throws InterruptedException {
+		SynchronousQueue<String> shutdownQueue = new SynchronousQueue<>();
+
 		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
 				.resourcePaths(Set.of(new ResourcePath("/")))
 				.build();
 
 		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
 				.serverSentEventServer(serverSentEventServer)
+				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ServerSentEventResource.class)))
+				.corsAuthorizer(new AllOriginsCorsAuthorizer())
+				.instanceProvider(new DefaultInstanceProvider() {
+					@Nonnull
+					@Override
+					public <T> T provide(@Nonnull Class<T> instanceClass) {
+						if (instanceClass.equals(ServerSentEventResource.class))
+							return (T) new ServerSentEventResource(serverSentEventServer, () -> {
+								try {
+									shutdownQueue.put("poison pill");
+								} catch (InterruptedException e) {
+									// Nothing to do
+									Thread.currentThread().interrupt();
+								}
+							});
+
+						return super.provide(instanceClass);
+					}
+				})
 				.build();
 
 		try (Soklet soklet = new Soklet(configuration)) {
 			soklet.start();
-
-			try {
-				Thread.sleep(3_000L);
-
-				ServerSentEventSource serverSentEventSource = serverSentEventServer.acquireEventSource(new ResourcePath("/")).get();
-				serverSentEventSource.send(new ServerSentEvent());
-
-				Thread.sleep(5_000L);
-			} catch (InterruptedException e) {
-				// Ignore
-			}
+			shutdownQueue.take(); // Wait for someone to tell us to stop
 		}
 	}
 
 	@ThreadSafe
-	public static class HttpHeadResource {
+	protected static class ServerSentEventResource {
+		@Nonnull
+		private final ServerSentEventServer serverSentEventServer;
+		@Nonnull
+		private final Runnable sokletStopper;
+
+		public ServerSentEventResource(@Nonnull ServerSentEventServer serverSentEventServer,
+																	 @Nonnull Runnable sokletStopper) {
+			requireNonNull(serverSentEventServer);
+			requireNonNull(sokletStopper);
+
+			this.serverSentEventServer = serverSentEventServer;
+			this.sokletStopper = sokletStopper;
+		}
+
+		@POST("/fire-server-sent-event")
+		public void fireServerSentEvent() {
+			ServerSentEventSource serverSentEventSource = this.serverSentEventServer.acquireEventSource(new ResourcePath("/")).get();
+			serverSentEventSource.send(new ServerSentEvent());
+		}
+
+		@POST("/shutdown")
+		public void shutdown() {
+			this.sokletStopper.run();
+		}
+	}
+
+	@ThreadSafe
+	protected static class HttpHeadResource {
 		@GET("/hello-world")
 		public String helloWorld() {
 			return "hello world";
