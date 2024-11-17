@@ -450,7 +450,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			e.printStackTrace();
 		}
 
-		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, serverSentEventSource.getResourcePathInstance(), clientSocketChannel);
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, serverSentEventSource.getResourcePathInstance());
 
 		this.serverSentEventConnectionsBySocketChannel.put(clientSocketChannel, serverSentEventConnection);
 
