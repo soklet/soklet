@@ -569,25 +569,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	protected String readRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
 		requireNonNull(clientSocketChannel);
 
-		// Example request structure:
-		//
-		// GET /testing?one=two HTTP/1.1
-		// Host: localhost:8081
-		// Connection: keep-alive
-		// sec-ch-ua-platform: "macOS"
-		// Cache-Control: no-cache
-		// User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
-		// Accept: text/event-stream
-		// sec-ch-ua: "Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"
-		// sec-ch-ua-mobile: ?0
-		// Origin: null
-		// Sec-Fetch-Site: cross-site
-		// Sec-Fetch-Mode: cors
-		// Sec-Fetch-Dest: empty
-		// Accept-Encoding: gzip, deflate, br, zstd
-		// Accept-Language: en-US,en;q=0.9,fr-CA;q=0.8,fr;q=0.7
-
-		final int INITIAL_BUFFER_SIZE = 1024;
+		final int INITIAL_BUFFER_SIZE = 1_024;
 
 		ByteBuffer buffer = ByteBuffer.allocate(INITIAL_BUFFER_SIZE);
 		StringBuilder requestBuilder = new StringBuilder();
@@ -619,7 +601,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			buffer.clear();
 		}
 
-		// The HTTP request headers are now in the requestBuilder
 		return requestBuilder.toString();
 	}
 
