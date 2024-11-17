@@ -20,7 +20,7 @@
 
   const log = (message) => {
     const newElement = document.createElement("li");
-    newElement.textContent = message;
+    newElement.textContent = `${new Date().toISOString()} ${message}`;
 
     if (listEvents.firstChild)
       listEvents.insertBefore(newElement, listEvents.firstChild);

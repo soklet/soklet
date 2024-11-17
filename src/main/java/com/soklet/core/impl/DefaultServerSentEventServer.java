@@ -240,19 +240,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// TODO: let clients specify initial capacity
 		this.serverSentEventConnectionsBySocketChannel = new ConcurrentHashMap<>(1_024);
-
-		// Keeps track of Server-Sent Event Sources by Resource Path.
-		// This map's keys and values are fully specified at construction time and will never change.
-		// As a result, this can be a regular HashMap<K,V> as opposed to a ConcurrentHashMap<K,V>.
-		//Set<ResourcePath> resourcePaths = builder.resourcePaths != null ? new HashSet<>(builder.resourcePaths) : Set.of();
-		//Map<ResourcePath, DefaultServerSentEventSource> serverSentEventSourcesByResourcePath = new HashMap<>(resourcePaths.size());
-
-		this.connectionSetsByEventSource = new ConcurrentHashMap<>();
-
-		// TODO: let clients specify
+		this.connectionSetsByEventSource = new ConcurrentHashMap<>(1_024);
 		this.serverSentEventSourcesByResourcePathInstance = new ConcurrentHashMap<>(1_024);
-
-		// TODO: let clients specify
 		this.resourcePathsByResourcePathInstance = new ConcurrentHashMap<>(1_024);
 
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
@@ -377,7 +366,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 
 				System.out.println("Writing data...");
-				String message = "data: " + serverSentEvent.toString() + "\n\n";
+				String message = format("data: %s\n\n", serverSentEvent);
 				ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
 				clientSocketChannel.write(buffer);
 				System.out.println("Wrote data.");
@@ -466,8 +455,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			return newServerSentEventSource;
 		});
-
-		//DefaultServerSentEventSource serverSentEventSource = acquireEventSourceInternal(resourcePathInstance).orElse(null);
 
 		// Should never occur
 		if (serverSentEventSource == null) {
@@ -773,21 +760,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (resourcePathInstance == null)
 			return Optional.empty();
 
-		// DefaultServerSentEventSource serverSentEventSource = null;
-
 		return Optional.ofNullable(getServerSentEventSourcesByResourcePathInstance().get(resourcePathInstance));
-
-		// TODO: this could be optimized, but a system with hundreds of SSE event sources to walk would be very uncommon, so this is simple to understand and "fast enough"
-//		for (Entry<ResourcePathInstance, DefaultServerSentEventSource> entry : getServerSentEventSourcesByResourcePathInstance().entrySet()) {
-//			ResourcePathInstance resourcePathInstance = entry.getKey();
-//
-//			if (resourcePathInstance.matches(resourcePath)) {
-//				serverSentEventSource = entry.getValue();
-//				break;
-//			}
-//		}
-//
-//		return Optional.ofNullable(serverSentEventSource);
 	}
 
 	@Nonnull
