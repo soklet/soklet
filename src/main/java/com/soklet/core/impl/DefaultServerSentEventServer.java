@@ -53,7 +53,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -153,23 +152,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final ExecutorService clientSocketChannelWriteExecutorService;
 		@Nonnull
 		private final Function<DefaultServerSentEventSource, Set<ServerSentEventConnection>> connectionsSupplierFunction;
-		@Nonnull
-		private final Consumer<ServerSentEventConnection> connectionRemovalConsumer;
 
 		public DefaultServerSentEventSource(@Nonnull ResourcePathInstance resourcePathInstance,
 																				@Nonnull ExecutorService clientSocketChannelWriteExecutorService,
-																				@Nonnull Function<DefaultServerSentEventSource, Set<ServerSentEventConnection>> connectionsSupplierFunction,
-																				@Nonnull Consumer<ServerSentEventConnection> connectionRemovalConsumer
+																				@Nonnull Function<DefaultServerSentEventSource, Set<ServerSentEventConnection>> connectionsSupplierFunction
 		) {
 			requireNonNull(resourcePathInstance);
 			requireNonNull(clientSocketChannelWriteExecutorService);
 			requireNonNull(connectionsSupplierFunction);
-			requireNonNull(connectionRemovalConsumer);
 
 			this.resourcePathInstance = resourcePathInstance;
 			this.clientSocketChannelWriteExecutorService = clientSocketChannelWriteExecutorService;
 			this.connectionsSupplierFunction = connectionsSupplierFunction;
-			this.connectionRemovalConsumer = connectionRemovalConsumer;
 		}
 
 		@Nonnull
@@ -390,20 +384,15 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final ResourcePathInstance resourcePathInstance;
 		@Nonnull
-		private final SocketChannel clientSocketChannel;
-		@Nonnull
 		private final BlockingQueue<ServerSentEvent> writeQueue;
 
 		public ServerSentEventConnection(@Nonnull Request request,
-																		 @Nonnull ResourcePathInstance resourcePathInstance,
-																		 @Nonnull SocketChannel clientSocketChannel) {
+																		 @Nonnull ResourcePathInstance resourcePathInstance) {
 			requireNonNull(request);
 			requireNonNull(resourcePathInstance);
-			requireNonNull(clientSocketChannel);
 
 			this.request = request;
 			this.resourcePathInstance = resourcePathInstance;
-			this.clientSocketChannel = clientSocketChannel;
 			this.writeQueue = new ArrayBlockingQueue<>(8);
 		}
 
@@ -415,11 +404,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public ResourcePathInstance getResourcePathInstance() {
 			return this.resourcePathInstance;
-		}
-
-		@Nonnull
-		public SocketChannel getClientSocketChannel() {
-			return this.clientSocketChannel;
 		}
 
 		@Nonnull
@@ -446,9 +430,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					this.clientSocketChannelWriteExecutorService,
 					(DefaultServerSentEventSource defaultServerSentEventSource) -> {
 						return this.connectionSetsByEventSource.get(defaultServerSentEventSource);
-					}, (@Nonnull ServerSentEventConnection serverSentEventConnection) -> {
-				unregisterClientSocketChannel(serverSentEventConnection.getClientSocketChannel());
-			});
+					});
 
 			// TODO: let clients specify capacity per-resource-path-instance
 			connectionSetsByEventSource.put(newServerSentEventSource, ConcurrentHashMap.newKeySet(1_024));
