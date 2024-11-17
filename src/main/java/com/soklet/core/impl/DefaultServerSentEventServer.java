@@ -460,7 +460,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
 
-		ResourcePathInstance resourcePathInstance = new ResourcePathInstance(request.getPath());
+		ResourcePathInstance resourcePathInstance = ResourcePathInstance.of(request.getPath());
 
 		// TODO: check to see if this is a 404 and if so, short-circuit
 

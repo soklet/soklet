@@ -37,7 +37,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * An HTTP URL path used to resolve a <em>Resource Method</em> at runtime, such as {@code /users/123}.
  * <p>
- * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
+ * You may obtain instances via the {@link #of(String)} factory method.
+ * <p>
+ * <strong>Note: this type is not normally used by Soklet applications unless they they support <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Events</a> or choose to implement a custom {@link ResourceMethodResolver}.</strong>
  * <p>
  * The corresponding compile-time type for {@link ResourcePathInstance} is {@link ResourcePath} and functionality is provided to check if the two "match".
  * <p>
@@ -53,14 +55,20 @@ public class ResourcePathInstance {
 	private final List<String> components;
 
 	/**
-	 * Creates an instance that represents a runtime "instance" of a resource path, for example {@code /users/123}.
+	 * Vends an instance that represents a runtime "instance" of a resource path, for example {@code /users/123}.
 	 * <p>
 	 * This is in contrast to {@link ResourcePath}, which represents compile-time path declarations
 	 * that may include placeholders, e.g. {@code /users/{userId}}.
 	 *
 	 * @param path a runtime path which may not include placeholders
 	 */
-	public ResourcePathInstance(@Nonnull String path) {
+	@Nonnull
+	public static ResourcePathInstance of(@Nonnull String path) {
+		requireNonNull(path);
+		return new ResourcePathInstance(path);
+	}
+
+	protected ResourcePathInstance(@Nonnull String path) {
 		requireNonNull(path);
 		this.path = ResourcePath.normalizePath(path);
 		this.components = unmodifiableList(extractComponents(this.path));

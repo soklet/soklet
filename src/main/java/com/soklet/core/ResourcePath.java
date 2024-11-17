@@ -40,7 +40,9 @@ import static java.util.stream.Collectors.toList;
 /**
  * A compile-time HTTP URL path associated with an annotated <em>Resource Method</em>, such as {@code /users/{userId}}.
  * <p>
- * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
+ * You may obtain instances via the {@link #of(String)} factory method.
+ * <p>
+ * <strong>Note: this type is not normally used by Soklet applications unless they support <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Events</a> or choose to implement a custom {@link ResourceMethodResolver}.</strong>
  * <p>
  * {@link ResourcePath} instances must start with the {@code /} character and may contain placeholders denoted by single-mustache syntax.
  * For example, the {@link ResourcePath} {@code /users/{userId}} has a placeholder named {@code userId}.
@@ -94,11 +96,17 @@ public class ResourcePath {
 	private final List<Component> components;
 
 	/**
-	 * Creates an instance that represents a compile-time path declaration, for example {@code /users/{userId}}.
+	 * Vends an instance that represents a compile-time path declaration, for example {@code /users/{userId}}.
 	 *
 	 * @param path a compile-time path declaration that may include placeholders
 	 */
-	public ResourcePath(@Nonnull String path) {
+	@Nonnull
+	public static ResourcePath of(@Nonnull String path) {
+		requireNonNull(path);
+		return new ResourcePath(path);
+	}
+
+	protected ResourcePath(@Nonnull String path) {
 		requireNonNull(path);
 		this.path = normalizePath(path);
 		this.components = unmodifiableList(extractComponents(this.path));
