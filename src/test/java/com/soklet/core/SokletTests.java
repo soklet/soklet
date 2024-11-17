@@ -393,11 +393,16 @@ public class SokletTests {
 			ServerSentEventSource serverSentEventSource = this.serverSentEventServer.acquireEventSource(resourcePathInstance).get();
 
 			ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
-					.data("{\"testing\": 123}")
+					.data("""
+							{
+							  "testing": 123,
+							  "value": "abc"
+							}
+							""")
 					.id(UUID.randomUUID().toString())
 					.retry(Duration.ofSeconds(5))
 					.build();
-			
+
 			serverSentEventSource.broadcast(serverSentEvent);
 		}
 

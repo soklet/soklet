@@ -441,7 +441,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (dataLines.size() > 0)
 			lines.addAll(dataLines);
 
-
 		if (lines.size() == 0)
 			return ":\n\n";
 

@@ -87,6 +87,7 @@
 
     eventSource.addEventListener("test", (e) => {
       log(`test: ${e.data}`);
+	  // console.log(JSON.parse(e.data));
     });
 
     eventSource.addEventListener("error", (e) => {

@@ -32,6 +32,20 @@ import static java.util.Objects.requireNonNull;
 /**
  * Encapsulates a  <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> payload that can be sent across the wire to a client.
  * <p>
+ * For example:
+ * <pre>{@code  ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
+ *   .data("""
+ *     {
+ *       "testing": 123,
+ *       "value": "abc"
+ *     }
+ *     """)
+ *   .id(UUID.randomUUID().toString())
+ *   .retry(Duration.ofSeconds(5))
+ *   .build();}</pre>
+ * <p>
+ * To acquire an event suitable for heartbeats, use the {@link #forHeartbeat()} factory method.
+ * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  * <p>
  * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
@@ -143,14 +157,14 @@ public class ServerSentEvent {
 	public String toString() {
 		List<String> components = new ArrayList<>(4);
 
-		if (this.id != null)
-			components.add(format("id=%s", this.id));
 		if (this.event != null)
 			components.add(format("event=%s", this.event));
-		if (this.data != null)
-			components.add(format("data=%s", this.data));
+		if (this.id != null)
+			components.add(format("id=%s", this.id));
 		if (this.retry != null)
 			components.add(format("retry=%s", this.retry));
+		if (this.data != null)
+			components.add(format("data=%s", this.data.trim()));
 
 		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
 	}
