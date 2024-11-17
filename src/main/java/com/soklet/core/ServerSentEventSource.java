@@ -25,7 +25,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public interface ServerSentEventSource {
 	@Nonnull
-	ResourcePath getResourcePath();
+	ResourcePathInstance getResourcePathInstance();
 
 	@Nonnull
 	Long getClientCount();

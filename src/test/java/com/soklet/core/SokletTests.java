@@ -387,7 +387,7 @@ public class SokletTests {
 
 		@POST("/fire-server-sent-event")
 		public void fireServerSentEvent() {
-			ResourcePathInstance resourcePathInstance = new ResourcePathInstance("/examples/1234"); // Matches /examples/{exampleId}
+			ResourcePathInstance resourcePathInstance = new ResourcePathInstance("/examples/abc"); // Matches /examples/{exampleId}
 			ServerSentEventSource serverSentEventSource = this.serverSentEventServer.acquireEventSource(resourcePathInstance).get();
 			serverSentEventSource.broadcast(new ServerSentEvent());
 		}

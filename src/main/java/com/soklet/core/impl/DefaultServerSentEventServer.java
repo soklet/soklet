@@ -41,9 +41,6 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -123,19 +120,16 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final LifecycleInterceptor lifecycleInterceptor;
 	@Nonnull
 	private final ExecutorService clientSocketChannelWriteExecutorService;
-	// Keeps track of Server-Sent Event Sources by Resource Path.
-	// This map's keys and values are fully specified at construction time and will never change.
-	// As a result, this can be a regular HashMap<K,V> as opposed to a ConcurrentHashMap<K,V>.
 	@Nonnull
-	private final Map<ResourcePath, DefaultServerSentEventSource> serverSentEventSourcesByResourcePath;
+	private final ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventSource> serverSentEventSourcesByResourcePathInstance;
 	@Nonnull
 	private final ConcurrentHashMap<SocketChannel, ServerSentEventConnection> serverSentEventConnectionsBySocketChannel;
-	// This map's keys and values are fully specified at construction time and will never change.
-	// As a result, this can be a regular HashMap<K,V> as opposed to a ConcurrentHashMap<K,V>.
-	// Note: this map's values must be a concurrent hashset, as the contents of the set can be modified by multiple threads at runtime.
-	// However, the set instances themselves will never change.
+	// Note: this map's values must be concurrent hashsets, as the contents of the set can be modified by multiple threads at runtime.
+	// However, the set references themselves (the map's values) will never change.
 	@Nonnull
-	private final Map<DefaultServerSentEventSource, Set<ServerSentEventConnection>> connectionSetsByEventSource;
+	private final ConcurrentHashMap<DefaultServerSentEventSource, Set<ServerSentEventConnection>> connectionSetsByEventSource;
+	@Nonnull
+	private final ConcurrentHashMap<ResourcePathInstance, ResourcePath> resourcePathsByResourcePathInstance;
 	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
@@ -154,7 +148,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@ThreadSafe
 	protected static class DefaultServerSentEventSource implements ServerSentEventSource {
 		@Nonnull
-		private final ResourcePath resourcePath;
+		private final ResourcePathInstance resourcePathInstance;
 		@Nonnull
 		private final ExecutorService clientSocketChannelWriteExecutorService;
 		@Nonnull
@@ -162,17 +156,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final Consumer<ServerSentEventConnection> connectionRemovalConsumer;
 
-		public DefaultServerSentEventSource(@Nonnull ResourcePath resourcePath,
+		public DefaultServerSentEventSource(@Nonnull ResourcePathInstance resourcePathInstance,
 																				@Nonnull ExecutorService clientSocketChannelWriteExecutorService,
 																				@Nonnull Function<DefaultServerSentEventSource, Set<ServerSentEventConnection>> connectionsSupplierFunction,
 																				@Nonnull Consumer<ServerSentEventConnection> connectionRemovalConsumer
 		) {
-			requireNonNull(resourcePath);
+			requireNonNull(resourcePathInstance);
 			requireNonNull(clientSocketChannelWriteExecutorService);
 			requireNonNull(connectionsSupplierFunction);
 			requireNonNull(connectionRemovalConsumer);
 
-			this.resourcePath = resourcePath;
+			this.resourcePathInstance = resourcePathInstance;
 			this.clientSocketChannelWriteExecutorService = clientSocketChannelWriteExecutorService;
 			this.connectionsSupplierFunction = connectionsSupplierFunction;
 			this.connectionRemovalConsumer = connectionRemovalConsumer;
@@ -180,8 +174,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		@Nonnull
 		@Override
-		public ResourcePath getResourcePath() {
-			return this.resourcePath;
+		public ResourcePathInstance getResourcePathInstance() {
+			return this.resourcePathInstance;
 		}
 
 		@Nonnull
@@ -250,28 +244,16 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Keeps track of Server-Sent Event Sources by Resource Path.
 		// This map's keys and values are fully specified at construction time and will never change.
 		// As a result, this can be a regular HashMap<K,V> as opposed to a ConcurrentHashMap<K,V>.
-		Set<ResourcePath> resourcePaths = builder.resourcePaths != null ? new HashSet<>(builder.resourcePaths) : Set.of();
-		Map<ResourcePath, DefaultServerSentEventSource> serverSentEventSourcesByResourcePath = new HashMap<>(resourcePaths.size());
+		//Set<ResourcePath> resourcePaths = builder.resourcePaths != null ? new HashSet<>(builder.resourcePaths) : Set.of();
+		//Map<ResourcePath, DefaultServerSentEventSource> serverSentEventSourcesByResourcePath = new HashMap<>(resourcePaths.size());
 
 		this.connectionSetsByEventSource = new ConcurrentHashMap<>();
 
-		for (ResourcePath resourcePath : resourcePaths) {
-			DefaultServerSentEventSource serverSentEventSource = new DefaultServerSentEventSource(
-					resourcePath,
-					this.clientSocketChannelWriteExecutorService,
-					(DefaultServerSentEventSource defaultServerSentEventSource) -> {
-						return this.connectionSetsByEventSource.get(defaultServerSentEventSource);
-					}, (@Nonnull ServerSentEventConnection serverSentEventConnection) -> {
-				unregisterClientSocketChannel(serverSentEventConnection.getClientSocketChannel());
-			});
+		// TODO: let clients specify
+		this.serverSentEventSourcesByResourcePathInstance = new ConcurrentHashMap<>(1_024);
 
-			serverSentEventSourcesByResourcePath.put(resourcePath, serverSentEventSource);
-
-			// TODO: let clients specify capacity per-resource-path
-			connectionSetsByEventSource.put(serverSentEventSource, ConcurrentHashMap.newKeySet(1_024));
-		}
-
-		this.serverSentEventSourcesByResourcePath = Collections.unmodifiableMap(serverSentEventSourcesByResourcePath);
+		// TODO: let clients specify
+		this.resourcePathsByResourcePathInstance = new ConcurrentHashMap<>(1_024);
 
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "sse-handler-";
@@ -288,7 +270,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 							.build());
 				} catch (Throwable loggingThrowable) {
 					// We are in a bad state - the log operation in the uncaught exception handler failed.
-					// Not much else we can do here but dump to stderr
+					// Not much else we can do here but dump to stderr and try to stop the server.
 					throwable.printStackTrace();
 					loggingThrowable.printStackTrace();
 				}
@@ -417,21 +399,21 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final Request request;
 		@Nonnull
-		private final ResourcePath resourcePath;
+		private final ResourcePathInstance resourcePathInstance;
 		@Nonnull
 		private final SocketChannel clientSocketChannel;
 		@Nonnull
 		private final BlockingQueue<ServerSentEvent> writeQueue;
 
 		public ServerSentEventConnection(@Nonnull Request request,
-																		 @Nonnull ResourcePath resourcePath,
+																		 @Nonnull ResourcePathInstance resourcePathInstance,
 																		 @Nonnull SocketChannel clientSocketChannel) {
 			requireNonNull(request);
-			requireNonNull(resourcePath);
+			requireNonNull(resourcePathInstance);
 			requireNonNull(clientSocketChannel);
 
 			this.request = request;
-			this.resourcePath = resourcePath;
+			this.resourcePathInstance = resourcePathInstance;
 			this.clientSocketChannel = clientSocketChannel;
 			this.writeQueue = new ArrayBlockingQueue<>(8);
 		}
@@ -442,8 +424,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public ResourcePath getResourcePath() {
-			return this.resourcePath;
+		public ResourcePathInstance getResourcePathInstance() {
+			return this.resourcePathInstance;
 		}
 
 		@Nonnull
@@ -465,7 +447,27 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		ResourcePathInstance resourcePathInstance = new ResourcePathInstance(request.getPath());
 
-		DefaultServerSentEventSource serverSentEventSource = acquireEventSourceInternal(resourcePathInstance).orElse(null);
+		// TODO: check to see if this is a 404 and don't do the getOrDefault below
+
+		// Get a handle to the event source, creating it if it doesn't already exist
+		DefaultServerSentEventSource serverSentEventSource = getServerSentEventSourcesByResourcePathInstance().computeIfAbsent(resourcePathInstance, (rpi) -> {
+			System.out.println("Creating event source for " + resourcePathInstance);
+			DefaultServerSentEventSource newServerSentEventSource = new DefaultServerSentEventSource(
+					resourcePathInstance,
+					this.clientSocketChannelWriteExecutorService,
+					(DefaultServerSentEventSource defaultServerSentEventSource) -> {
+						return this.connectionSetsByEventSource.get(defaultServerSentEventSource);
+					}, (@Nonnull ServerSentEventConnection serverSentEventConnection) -> {
+				unregisterClientSocketChannel(serverSentEventConnection.getClientSocketChannel());
+			});
+
+			// TODO: let clients specify capacity per-resource-path-instance
+			connectionSetsByEventSource.put(newServerSentEventSource, ConcurrentHashMap.newKeySet(1_024));
+
+			return newServerSentEventSource;
+		});
+
+		//DefaultServerSentEventSource serverSentEventSource = acquireEventSourceInternal(resourcePathInstance).orElse(null);
 
 		// Should never occur
 		if (serverSentEventSource == null) {
@@ -479,7 +481,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			e.printStackTrace();
 		}
 
-		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, serverSentEventSource.getResourcePath(), clientSocketChannel);
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, serverSentEventSource.getResourcePathInstance(), clientSocketChannel);
 
 		this.serverSentEventConnectionsBySocketChannel.put(clientSocketChannel, serverSentEventConnection);
 
@@ -500,13 +502,13 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (clientSocketChannel == null)
 			return false;
 
-		ServerSentEventConnection eventConnection = this.serverSentEventConnectionsBySocketChannel.remove(clientSocketChannel);
+		ServerSentEventConnection eventConnection = getServerSentEventConnectionsBySocketChannel().remove(clientSocketChannel);
 
 		if (eventConnection != null) {
-			DefaultServerSentEventSource eventSource = this.serverSentEventSourcesByResourcePath.get(eventConnection.getResourcePath());
+			DefaultServerSentEventSource eventSource = getServerSentEventSourcesByResourcePathInstance().get(eventConnection.getResourcePathInstance());
 
 			if (eventSource != null) {
-				Set<ServerSentEventConnection> eventConnections = connectionSetsByEventSource.get(eventSource);
+				Set<ServerSentEventConnection> eventConnections = getConnectionSetsByEventSource().get(eventSource);
 
 				if (eventConnections != null)
 					eventConnections.remove(eventConnection);
@@ -771,19 +773,21 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (resourcePathInstance == null)
 			return Optional.empty();
 
-		DefaultServerSentEventSource serverSentEventSource = null;
+		// DefaultServerSentEventSource serverSentEventSource = null;
+
+		return Optional.ofNullable(getServerSentEventSourcesByResourcePathInstance().get(resourcePathInstance));
 
 		// TODO: this could be optimized, but a system with hundreds of SSE event sources to walk would be very uncommon, so this is simple to understand and "fast enough"
-		for (Entry<ResourcePath, DefaultServerSentEventSource> entry : getServerSentEventSourcesByResourcePath().entrySet()) {
-			ResourcePath resourcePath = entry.getKey();
-
-			if (resourcePathInstance.matches(resourcePath)) {
-				serverSentEventSource = entry.getValue();
-				break;
-			}
-		}
-
-		return Optional.ofNullable(serverSentEventSource);
+//		for (Entry<ResourcePathInstance, DefaultServerSentEventSource> entry : getServerSentEventSourcesByResourcePathInstance().entrySet()) {
+//			ResourcePathInstance resourcePathInstance = entry.getKey();
+//
+//			if (resourcePathInstance.matches(resourcePath)) {
+//				serverSentEventSource = entry.getValue();
+//				break;
+//			}
+//		}
+//
+//		return Optional.ofNullable(serverSentEventSource);
 	}
 
 	@Nonnull
@@ -842,8 +846,23 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected Map<ResourcePath, DefaultServerSentEventSource> getServerSentEventSourcesByResourcePath() {
-		return this.serverSentEventSourcesByResourcePath;
+	protected ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventSource> getServerSentEventSourcesByResourcePathInstance() {
+		return this.serverSentEventSourcesByResourcePathInstance;
+	}
+
+	@Nonnull
+	protected ConcurrentHashMap<ResourcePathInstance, ResourcePath> getResourcePathsByResourcePathInstance() {
+		return this.resourcePathsByResourcePathInstance;
+	}
+
+	@Nonnull
+	protected ConcurrentHashMap<SocketChannel, ServerSentEventConnection> getServerSentEventConnectionsBySocketChannel() {
+		return this.serverSentEventConnectionsBySocketChannel;
+	}
+
+	@Nonnull
+	protected ConcurrentHashMap<DefaultServerSentEventSource, Set<ServerSentEventConnection>> getConnectionSetsByEventSource() {
+		return this.connectionSetsByEventSource;
 	}
 
 	@Nonnull
