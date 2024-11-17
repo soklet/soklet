@@ -25,5 +25,6 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public class ServerSentEvent {
+	// See https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events
 	// TODO: event/data/id/retry builder
 }
