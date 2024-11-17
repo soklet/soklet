@@ -195,7 +195,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void send(@Nonnull ServerSentEvent serverSentEvent) {
+		public void broadcast(@Nonnull ServerSentEvent serverSentEvent) {
 			this.clientSocketChannelWriteExecutorService.submit(() -> {
 				for (ServerSentEventConnection serverSentEventConnection : getConnections()) {
 					serverSentEventConnection.getWriteQueue().add(serverSentEvent);

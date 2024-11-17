@@ -30,5 +30,5 @@ public interface ServerSentEventSource {
 	@Nonnull
 	Long getClientCount();
 
-	void send(@Nonnull ServerSentEvent serverSentEvent);
+	void broadcast(@Nonnull ServerSentEvent serverSentEvent);
 }
