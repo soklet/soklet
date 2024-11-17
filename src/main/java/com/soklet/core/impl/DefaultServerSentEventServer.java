@@ -26,6 +26,7 @@ import com.soklet.core.ServerSentEvent;
 import com.soklet.core.ServerSentEventServer;
 import com.soklet.core.ServerSentEventSource;
 import com.soklet.core.Utilities;
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -42,10 +43,10 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
-import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -144,6 +145,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nonnull
 	private volatile Boolean started;
+	@Nonnull
+	private volatile Boolean stopping;
 	@Nullable
 	private Thread eventLoopThread;
 
@@ -212,6 +215,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		this.stopPoisonPill = new AtomicBoolean(false);
 		this.started = false;
+		this.stopping = false;
 		this.lock = new ReentrantLock();
 
 		this.port = builder.port;
@@ -311,9 +315,25 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	protected void startInternal() {
+		// Handle scenario where server is stopped immediately after starting (and before this thread is scheduled)
+		// TODO: clean this up
+		if (!isStarted() || isStopping()) {
+			System.out.println("Server is stopped or stopping, exiting SSE event loop...");
+			return;
+		}
+
 		try (ServerSocketChannel serverSocketChannel = ServerSocketChannel.open()) {
 			serverSocketChannel.bind(new InetSocketAddress(getPort()));
+
+			// Handle scenario where server is stopped immediately after starting (and before this thread is scheduled)
+			// TODO: clean this up
+			if (!isStarted() || isStopping()) {
+				System.out.println("Server is stopped or stopping, exiting SSE event loop...");
+				return;
+			}
+
 			System.out.println("SSE Server started on port " + getPort());
+
 			ExecutorService executorService = getRequestHandlerExecutorService().get();
 
 			while (!getStopPoisonPill().get()) {
@@ -332,9 +352,27 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(clientSocketChannel);
 
 		try (clientSocketChannel) {
-			// HttpRequest httpRequest = parseHttpRequest(clientSocketChannel);
+			String rawRequest = null;
 
-			Request request = Request.with(HttpMethod.GET, "/").build(); // TODO: replace with real value
+			try {
+				rawRequest = readRequest(clientSocketChannel);
+			} catch (Exception e) {
+				// TODO: cleanup
+				System.out.println("Unable to read raw request.");
+				e.printStackTrace();
+			}
+
+			Request request = null;
+
+			try {
+				request = parseRequest(rawRequest);
+				System.out.println(request);
+			} catch (Exception e) {
+				// TODO: cleanup
+				System.out.println("Unable to parse raw request.");
+				e.printStackTrace();
+			}
+
 			ResourcePath resourcePath = new ResourcePath("/"); // TODO: pull from request
 
 			ServerSentEventConnection serverSentEventConnection = registerClientSocketChannel(clientSocketChannel, request, resourcePath).get();
@@ -491,72 +529,165 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		return eventConnection != null;
 	}
 
-	private HttpRequest parseHttpRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
-		requireNonNull(clientSocketChannel);
+	@Nonnull
+	protected Request parseRequest(@Nonnull String rawRequest) {
+		requireNonNull(rawRequest);
 
-		// Read the initial HTTP request line
-		ByteBuffer buffer = ByteBuffer.allocate(1024);
-		clientSocketChannel.read(buffer);
-		buffer.flip();
+		rawRequest = Utilities.trimAggressivelyToNull(rawRequest);
 
-		// Convert buffer to a string and parse the request line
-		String requestData = StandardCharsets.UTF_8.decode(buffer).toString();
+		if (rawRequest == null)
+			throw new IllegalStateException("Server-Sent Event HTTP request has no data");
 
-		//System.out.println("Parsed request data:\n" + requestData.toString().trim());
+		// Example request structure:
+		//
+		// GET /testing?one=two HTTP/1.1
+		// Host: localhost:8081
+		// Connection: keep-alive
+		// sec-ch-ua-platform: "macOS"
+		// Cache-Control: no-cache
+		// User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
+		// Accept: text/event-stream
+		// sec-ch-ua: "Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"
+		// sec-ch-ua-mobile: ?0
+		// Origin: null
+		// Sec-Fetch-Site: cross-site
+		// Sec-Fetch-Mode: cors
+		// Sec-Fetch-Dest: empty
+		// Accept-Encoding: gzip, deflate, br, zstd
+		// Accept-Language: en-US,en;q=0.9,fr-CA;q=0.8,fr;q=0.7
 
-		// Use Scanner to parse request data line by line
-		try (Scanner scanner = new Scanner(requestData.toString())) {
-			// Parse the request line
-			String requestLine = scanner.nextLine();
-			String[] requestLineParts = requestLine.split(" ");
-			String method = requestLineParts[0];
-			String url = requestLineParts[1];
-			String version = requestLineParts[2];
+		// We know any EventSource request must be a GET.  As a result, we know there is no request body.
 
-			// Parse headers into a map
-			Map<String, String> headers = new HashMap<>();
-			while (scanner.hasNextLine()) {
-				String line = scanner.nextLine();
-				if (line.isEmpty()) break; // End of headers
+		// First line is the URL and the rest are headers.
+		// Line 1: GET /testing?one=two HTTP/1.1
+		// Line 2: Accept-Encoding: gzip, deflate, br, zstd
+		// ...and so forth.
 
-				String[] headerParts = line.split(": ", 2);
-				if (headerParts.length == 2) {
-					headers.put(headerParts[0], headerParts[1]);
+		Request.Builder requestBuilder = null;
+		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>(32);
+
+		for (String line : rawRequest.lines().toList()) {
+			line = Utilities.trimAggressivelyToNull(line);
+
+			if (line == null)
+				continue;
+
+			if (requestBuilder == null) {
+				// This is the first line.
+				// Example: GET /testing?one=two HTTP/1.1
+				String[] components = line.split(" ");
+
+				if (components.length != 3)
+					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
+
+				String httpMethod = components[0];
+				String uri = components[1];
+
+				if (!httpMethod.equals("GET"))
+					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
+
+				if (!uri.startsWith("/"))
+					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
+
+				requestBuilder = Request.with(HttpMethod.GET, uri);
+			} else {
+				// This is a header line.
+				// Example: Accept-Encoding: gzip, deflate, br, zstd
+
+				int indexOfFirstColon = line.indexOf(":");
+
+				if (indexOfFirstColon == -1)
+					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'Header-Name: Value", line));
+
+				String headerName = line.substring(0, indexOfFirstColon);
+				String headerValue = Utilities.trimAggressivelyToNull(line.substring(indexOfFirstColon + 1));
+
+				Set<String> headerValues = headers.get(headerName);
+
+				if (headerValues == null) {
+					headerValues = new LinkedHashSet<>();
+					headers.put(headerName, headerValues);
 				}
-			}
 
-			return new HttpRequest(method, url, version, headers);
+				// Blank headers will have a key in the map, but an empty set of header values.
+				if (headerValue != null)
+					headerValues.add(headerValue);
+			}
 		}
+
+		return requestBuilder.headers(headers).build();
 	}
 
-	// TODO: clean this up
-	@NotThreadSafe
-	private static class HttpRequest {
-		String method;
-		String url;
-		String version;
-		Map<String, String> headers;
+	@Nonnull
+	protected String readRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
+		requireNonNull(clientSocketChannel);
 
-		HttpRequest(String method, String url, String version, Map<String, String> headers) {
-			this.method = method;
-			this.url = url;
-			this.version = version;
-			this.headers = headers;
+		// Example request structure:
+		//
+		// GET /testing?one=two HTTP/1.1
+		// Host: localhost:8081
+		// Connection: keep-alive
+		// sec-ch-ua-platform: "macOS"
+		// Cache-Control: no-cache
+		// User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
+		// Accept: text/event-stream
+		// sec-ch-ua: "Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"
+		// sec-ch-ua-mobile: ?0
+		// Origin: null
+		// Sec-Fetch-Site: cross-site
+		// Sec-Fetch-Mode: cors
+		// Sec-Fetch-Dest: empty
+		// Accept-Encoding: gzip, deflate, br, zstd
+		// Accept-Language: en-US,en;q=0.9,fr-CA;q=0.8,fr;q=0.7
+
+		final int INITIAL_BUFFER_SIZE = 1024;
+
+		ByteBuffer buffer = ByteBuffer.allocate(INITIAL_BUFFER_SIZE);
+		StringBuilder requestBuilder = new StringBuilder();
+		boolean headersComplete = false;
+
+		while (!headersComplete) {
+			// Read data from the SocketChannel
+			int bytesRead = clientSocketChannel.read(buffer);
+
+			if (bytesRead == -1) {
+				// End of stream (connection closed by client)
+				throw new IOException("Client closed the connection before request was complete");
+			}
+
+			// Flip the buffer to read mode
+			buffer.flip();
+
+			// Decode the buffer content to a string and append to the request
+			byte[] bytes = new byte[buffer.remaining()];
+			buffer.get(bytes);
+			requestBuilder.append(new String(bytes, StandardCharsets.UTF_8));
+
+			// Check if the headers are complete (look for the "\r\n\r\n" marker)
+			if (requestBuilder.indexOf("\r\n\r\n") != -1) {
+				headersComplete = true;
+			}
+
+			// Clear the buffer for the next read
+			buffer.clear();
 		}
+
+		// The HTTP request headers are now in the requestBuilder
+		return requestBuilder.toString();
 	}
 
 	@Override
 	public void stop() {
 		getLock().lock();
 
-		boolean stopping = false;
+		this.stopping = false;
 
 		try {
 			if (!isStarted())
 				return;
 
 			System.out.println("Stopping...");
-			stopping = true;
+			this.stopping = true;
 
 			getStopPoisonPill().set(true);
 
@@ -597,7 +728,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.requestHandlerExecutorService = null;
 			getStopPoisonPill().set(false);
 
-			if (stopping)
+			if (this.stopping)
 				System.out.println("Stopped.");
 
 			getLock().unlock();
@@ -611,6 +742,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		try {
 			return this.started;
+		} finally {
+			getLock().unlock();
+		}
+	}
+
+	@Nonnull
+	protected Boolean isStopping() {
+		getLock().lock();
+
+		try {
+			return this.stopping;
 		} finally {
 			getLock().unlock();
 		}

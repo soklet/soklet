@@ -1,5 +1,5 @@
 (() => {
-  const EVENT_SOURCE_URL = "http://localhost:8081/testing";
+  const EVENT_SOURCE_URL = "http://localhost:8081/testing?one=two";
   const FIRE_SERVER_SENT_EVENT_URL =
     "http://localhost:8080/fire-server-sent-event";
   const SHUTDOWN_URL = "http://localhost:8080/shutdown";
@@ -76,7 +76,10 @@
   });
 
   buttonRegisterEventSource.addEventListener("click", (e) => {
-    eventSource = new EventSource(EVENT_SOURCE_URL);
+	// TODO: test CORS when true
+    eventSource = new EventSource(EVENT_SOURCE_URL, {
+		withCredentials: false
+	});
 
     eventSource.addEventListener("open", (e) => {
       log(`EventSource connection opened for ${EVENT_SOURCE_URL}`);
