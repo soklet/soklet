@@ -341,16 +341,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				e.printStackTrace();
 			}
 
-			Request request = null;
+			// Use the socket's address as an identifier
+			String requestIdentifier = clientSocketChannel.getRemoteAddress().toString();
+			Request request = parseRequest(requestIdentifier, rawRequest);
 
-			try {
-				request = parseRequest(rawRequest);
-				System.out.println(request);
-			} catch (Exception e) {
-				// TODO: cleanup
-				System.out.println("Unable to parse raw request.");
-				e.printStackTrace();
-			}
+			System.out.println(format("Bound SSE request to socket: %s", debuggingString(request)));
 
 			clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).get();
 
@@ -372,11 +367,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					break;
 				}
 
-				System.out.println("Writing data...");
+				System.out.println(format("Writing data to %s...", debuggingString(request)));
 				String message = format("data: %s\n\n", serverSentEvent);
 				ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
 				clientSocketChannel.write(buffer);
-				System.out.println("Wrote data.");
+				System.out.println(format("Wrote data to %s", debuggingString(request)));
 			}
 		} catch (Exception e) {
 			System.out.println("Closing socket due to exception: " + e.getMessage());
@@ -390,6 +385,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (clientSocketChannelRegistration != null) {
 				try {
 					clientSocketChannelRegistration.serverSentEventSource().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
+
+					System.out.println(format("SSE socket thread completed for request: %s", debuggingString(clientSocketChannelRegistration.serverSentEventConnection().getRequest())));
 				} catch (Exception ignored) {
 					System.out.println("Unable to de-register connection");
 					ignored.printStackTrace();
@@ -406,6 +403,12 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			}
 		}
+	}
+
+	@Nonnull
+	protected String debuggingString(@Nonnull Request request) {
+		requireNonNull(request);
+		return format("%s %s %s", request.getId(), request.getHttpMethod().name(), request.getUri());
 	}
 
 	@ThreadSafe
@@ -464,12 +467,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Get a handle to the event source (it will be created if necessary)
 		DefaultServerSentEventSource serverSentEventSource = acquireEventSourceInternal(resourcePathInstance).get();
 
-		try {
-			System.out.println("Registering client socket channel " + clientSocketChannel.getRemoteAddress());
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-
 		// Create the connection and register it with the EventSource
 		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, serverSentEventSource.getResourcePathInstance());
 		serverSentEventSource.registerServerSentEventConnection(serverSentEventConnection);
@@ -478,7 +475,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected Request parseRequest(@Nonnull String rawRequest) {
+	protected Request parseRequest(@Nonnull String requestIdentifier,
+																 @Nonnull String rawRequest) {
+		requireNonNull(requestIdentifier);
 		requireNonNull(rawRequest);
 
 		rawRequest = Utilities.trimAggressivelyToNull(rawRequest);
@@ -563,7 +562,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 		}
 
-		return requestBuilder.headers(headers).build();
+		return requestBuilder.id(requestIdentifier).headers(headers).build();
 	}
 
 	@Nonnull
