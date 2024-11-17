@@ -337,7 +337,7 @@ public class SokletTests {
 		SynchronousQueue<String> shutdownQueue = new SynchronousQueue<>();
 
 		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
-				.resourcePaths(Set.of(new ResourcePath("/")))
+				.resourcePaths(Set.of(new ResourcePath("/examples/{exampleId}")))
 				.build();
 
 		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
@@ -387,8 +387,9 @@ public class SokletTests {
 
 		@POST("/fire-server-sent-event")
 		public void fireServerSentEvent() {
-			ServerSentEventSource serverSentEventSource = this.serverSentEventServer.acquireEventSource(new ResourcePath("/")).get();
-			serverSentEventSource.send(new ServerSentEvent());
+			ResourcePathInstance resourcePathInstance = new ResourcePathInstance("/examples/1234"); // Matches /examples/{exampleId}
+			ServerSentEventSource serverSentEventSource = this.serverSentEventServer.acquireEventSource(resourcePathInstance).get();
+			serverSentEventSource.broadcast(new ServerSentEvent());
 		}
 
 		@POST("/shutdown")

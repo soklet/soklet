@@ -1,5 +1,5 @@
 (() => {
-  const EVENT_SOURCE_URL = "http://localhost:8081/testing?one=two";
+  const EVENT_SOURCE_URL = "http://localhost:8081/examples/abc";
   const FIRE_SERVER_SENT_EVENT_URL =
     "http://localhost:8080/fire-server-sent-event";
   const SHUTDOWN_URL = "http://localhost:8080/shutdown";

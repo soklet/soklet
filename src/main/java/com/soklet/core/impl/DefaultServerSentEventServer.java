@@ -22,6 +22,7 @@ import com.soklet.core.LogEvent;
 import com.soklet.core.LogEventType;
 import com.soklet.core.Request;
 import com.soklet.core.ResourcePath;
+import com.soklet.core.ResourcePathInstance;
 import com.soklet.core.ServerSentEvent;
 import com.soklet.core.ServerSentEventServer;
 import com.soklet.core.ServerSentEventSource;
@@ -373,9 +374,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				e.printStackTrace();
 			}
 
-			ResourcePath resourcePath = new ResourcePath("/"); // TODO: pull from request
-
-			ServerSentEventConnection serverSentEventConnection = registerClientSocketChannel(clientSocketChannel, request, resourcePath).get();
+			ServerSentEventConnection serverSentEventConnection = registerClientSocketChannel(clientSocketChannel, request).get();
 
 			final String SSE_HEADERS_AS_STRING = "HTTP/1.1 200 OK\r\n" +
 					"Content-Type: text/event-stream\r\n" +
@@ -460,17 +459,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@Nonnull
 	protected Optional<ServerSentEventConnection> registerClientSocketChannel(@Nonnull SocketChannel clientSocketChannel,
-																																						@Nonnull Request request,
-																																						@Nonnull ResourcePath resourcePath) {
+																																						@Nonnull Request request) {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
-		requireNonNull(resourcePath);
 
-		DefaultServerSentEventSource serverSentEventSource = this.serverSentEventSourcesByResourcePath.get(resourcePath);
+		ResourcePathInstance resourcePathInstance = new ResourcePathInstance(request.getPath());
+
+		DefaultServerSentEventSource serverSentEventSource = acquireEventSourceInternal(resourcePathInstance).orElse(null);
 
 		// Should never occur
 		if (serverSentEventSource == null) {
-			System.out.println("WARNING: no event source for resource path " + resourcePath);
+			System.out.println("WARNING: no event source for resource path instance " + resourcePathInstance);
 			return Optional.empty();
 		}
 
@@ -480,7 +479,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			e.printStackTrace();
 		}
 
-		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, resourcePath, clientSocketChannel);
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, serverSentEventSource.getResourcePath(), clientSocketChannel);
 
 		this.serverSentEventConnectionsBySocketChannel.put(clientSocketChannel, serverSentEventConnection);
 
@@ -760,11 +759,30 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@Nonnull
 	@Override
-	public Optional<ServerSentEventSource> acquireEventSource(@Nullable ResourcePath resourcePath) {
-		if (resourcePath == null)
+	public Optional<? extends ServerSentEventSource> acquireEventSource(@Nullable ResourcePathInstance resourcePathInstance) {
+		if (resourcePathInstance == null)
 			return Optional.empty();
 
-		ServerSentEventSource serverSentEventSource = getServerSentEventSourcesByResourcePath().get(resourcePath);
+		return acquireEventSourceInternal(resourcePathInstance);
+	}
+
+	@Nonnull
+	protected Optional<DefaultServerSentEventSource> acquireEventSourceInternal(@Nullable ResourcePathInstance resourcePathInstance) {
+		if (resourcePathInstance == null)
+			return Optional.empty();
+
+		DefaultServerSentEventSource serverSentEventSource = null;
+
+		// TODO: this could be optimized, but a system with hundreds of SSE event sources to walk would be very uncommon, so this is simple to understand and "fast enough"
+		for (Entry<ResourcePath, DefaultServerSentEventSource> entry : getServerSentEventSourcesByResourcePath().entrySet()) {
+			ResourcePath resourcePath = entry.getKey();
+
+			if (resourcePathInstance.matches(resourcePath)) {
+				serverSentEventSource = entry.getValue();
+				break;
+			}
+		}
+
 		return Optional.ofNullable(serverSentEventSource);
 	}
 
