@@ -16,15 +16,167 @@
 
 package com.soklet.core;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import static java.lang.String.format;
+import static java.util.Objects.requireNonNull;
 
 /**
- * See <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a> for details.
+ * Encapsulates a  <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> payload that can be sent across the wire to a client.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
+ * <p>
+ * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public class ServerSentEvent {
-	// See https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events
-	// TODO: event/data/id/retry builder
+	@Nonnull
+	private static final ServerSentEvent HEARTBEAT;
+
+	@Nullable
+	private final String id;
+	@Nullable
+	private final String event;
+	@Nullable
+	private final String data;
+	@Nullable
+	private final Duration retry;
+
+	static {
+		// This would be an event like ":\n\n"
+		HEARTBEAT = new ServerSentEvent(new ServerSentEvent.Builder());
+	}
+
+	@Nonnull
+	public static ServerSentEvent forHeartbeat() {
+		return HEARTBEAT;
+	}
+
+	@Nonnull
+	public static ServerSentEvent.Builder withEvent(@Nullable String event) {
+		return new Builder().event(event);
+	}
+
+	@Nonnull
+	public static ServerSentEvent.Builder withData(@Nullable String data) {
+		return new Builder().data(data);
+	}
+
+	@Nonnull
+	public static ServerSentEvent.Builder builder() {
+		return new Builder();
+	}
+
+	protected ServerSentEvent(@Nonnull ServerSentEvent.Builder builder) {
+		requireNonNull(builder);
+
+		this.id = builder.id;
+		this.event = builder.event;
+		this.data = builder.data;
+		this.retry = builder.retry;
+	}
+
+	/**
+	 * Builder used to construct instances of {@link ServerSentEvent}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	public static class Builder {
+		@Nullable
+		private String id;
+		@Nullable
+		private String event;
+		@Nullable
+		private String data;
+		@Nullable
+		private Duration retry;
+
+		protected Builder() {
+			// Nothing to do
+		}
+
+		@Nonnull
+		public Builder id(@Nullable String id) {
+			this.id = id;
+			return this;
+		}
+
+		@Nonnull
+		public Builder event(@Nullable String event) {
+			this.event = event;
+			return this;
+		}
+
+		@Nonnull
+		public Builder data(@Nullable String data) {
+			this.data = data;
+			return this;
+		}
+
+		@Nonnull
+		public Builder retry(@Nullable Duration retry) {
+			this.retry = retry;
+			return this;
+		}
+
+		@Nonnull
+		public ServerSentEvent build() {
+			return new ServerSentEvent(this);
+		}
+	}
+
+	@Override
+	@Nonnull
+	public String toString() {
+		List<String> components = new ArrayList<>(4);
+
+		if (this.id != null)
+			components.add(format("id=%s", this.id));
+		if (this.event != null)
+			components.add(format("event=%s", this.event));
+		if (this.data != null)
+			components.add(format("data=%s", this.data));
+		if (this.retry != null)
+			components.add(format("retry=%s", this.retry));
+
+		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
+	}
+
+	@Nonnull
+	public Boolean isHeartbeat() {
+		return this == HEARTBEAT;
+	}
+
+	@Nonnull
+	public Optional<String> getId() {
+		return Optional.ofNullable(this.id);
+	}
+
+	@Nonnull
+	public Optional<String> getEvent() {
+		return Optional.ofNullable(this.event);
+	}
+
+	@Nonnull
+	public Optional<String> getData() {
+		return Optional.ofNullable(this.data);
+	}
+
+	@Nonnull
+	public Optional<Duration> getRetry() {
+		return Optional.ofNullable(this.retry);
+	}
 }

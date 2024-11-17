@@ -85,8 +85,8 @@
       log(`EventSource connection opened for ${EVENT_SOURCE_URL}`);
     });
 
-    eventSource.addEventListener("message", (e) => {
-      log(`message: ${e.data}`);
+    eventSource.addEventListener("test", (e) => {
+      log(`test: ${e.data}`);
     });
 
     eventSource.addEventListener("error", (e) => {

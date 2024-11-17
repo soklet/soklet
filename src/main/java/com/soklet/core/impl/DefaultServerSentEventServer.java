@@ -41,8 +41,10 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -54,6 +56,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -93,7 +96,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 
-		SERVER_SENT_EVENT_POISON_PILL = new ServerSentEvent();
+		// Make a unique "poison pill" server-sent event used to stop a socket thread by injecting it into the relevant write queue.
+		// The contents don't matter; the object reference is used to determine if it's poison.
+		SERVER_SENT_EVENT_POISON_PILL = ServerSentEvent.withData("poison").build();
 	}
 
 	@Nonnull
@@ -367,11 +372,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					break;
 				}
 
-				System.out.println(format("Writing data to %s...", debuggingString(request)));
-				String message = format("data: %s\n\n", serverSentEvent);
+				System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
+				String message = formatForResponse(serverSentEvent);
 				ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
 				clientSocketChannel.write(buffer);
-				System.out.println(format("Wrote data to %s", debuggingString(request)));
+				System.out.println(format("Wrote %s to %s", serverSentEvent, debuggingString(request)));
 			}
 		} catch (Exception e) {
 			System.out.println("Closing socket due to exception: " + e.getMessage());
@@ -403,6 +408,44 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			}
 		}
+	}
+
+	@Nonnull
+	protected String formatForResponse(@Nonnull ServerSentEvent serverSentEvent) {
+		requireNonNull(serverSentEvent);
+
+		if (serverSentEvent.isHeartbeat())
+			return ":\n\n";
+
+		String event = serverSentEvent.getEvent().orElse(null);
+
+		String data = serverSentEvent.getData().orElse(null);
+		List<String> dataLines = data == null ? List.of() : data.lines()
+				.map(line -> format("data: %s", line))
+				.toList();
+
+		String id = serverSentEvent.getId().orElse(null);
+		Duration retry = serverSentEvent.getRetry().orElse(null);
+
+		List<String> lines = new ArrayList<>(16);
+
+		if (event != null)
+			lines.add(format("event: %s", event));
+
+		if (id != null)
+			lines.add(format("id: %s", id));
+
+		if (retry != null)
+			lines.add(format("retry: %d", retry.toMillis()));
+
+		if (dataLines.size() > 0)
+			lines.addAll(dataLines);
+
+
+		if (lines.size() == 0)
+			return ":\n\n";
+
+		return format("%s\n\n", lines.stream().collect(Collectors.joining("\n")));
 	}
 
 	@Nonnull

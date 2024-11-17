@@ -41,12 +41,14 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.SynchronousQueue;
 
 import static com.soklet.core.Utilities.emptyByteArray;
@@ -389,7 +391,14 @@ public class SokletTests {
 		public void fireServerSentEvent() {
 			ResourcePathInstance resourcePathInstance = ResourcePathInstance.of("/examples/abc"); // Matches /examples/{exampleId}
 			ServerSentEventSource serverSentEventSource = this.serverSentEventServer.acquireEventSource(resourcePathInstance).get();
-			serverSentEventSource.broadcast(new ServerSentEvent());
+
+			ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
+					.data("{\"testing\": 123}")
+					.id(UUID.randomUUID().toString())
+					.retry(Duration.ofSeconds(5))
+					.build();
+			
+			serverSentEventSource.broadcast(serverSentEvent);
 		}
 
 		@POST("/shutdown")
