@@ -449,6 +449,10 @@ public class SokletTests {
 		// Just experimenting
 		ServerSentEventSourceConfiguration.withResourcePath(ResourcePath.of("/examples/{exampleId}"))
 				.handshakePerformer((Request request) -> {
+					// TODO: how do we handle accessing path parameters, e.g. "exampleId" here?
+					//   - Should we add them to Request?
+					//   - Should we introduce a Resource Method-like construct to permit annotations? (this would give us typed QueryParameters too)
+
 					// Either 200 OK or HTTP status >= 400.
 					// Also need to control headers.
 
