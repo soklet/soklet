@@ -29,11 +29,13 @@ import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.DefaultServer;
 import com.soklet.core.impl.DefaultServerSentEventServer;
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.junit.Assert;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -44,12 +46,14 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.SynchronousQueue;
+import java.util.function.Function;
 
 import static com.soklet.core.Utilities.emptyByteArray;
 import static java.util.Objects.requireNonNull;
@@ -334,9 +338,137 @@ public class SokletTests {
 		}));
 	}
 
+	// Just experimenting
+	@ThreadSafe
+	protected static class ServerSentEventSourceConfiguration {
+		@Nonnull
+		private final ResourcePath resourcePath;
+		@Nullable
+		private final Function<Request, ServerSentEventHandshake> handshakePerformer;
+
+		@Nonnull
+		public static Builder withResourcePath(@Nonnull ResourcePath resourcePath) {
+			requireNonNull(resourcePath);
+			return new Builder(resourcePath);
+		}
+
+		protected ServerSentEventSourceConfiguration(@Nonnull Builder builder) {
+			requireNonNull(builder);
+			this.resourcePath = builder.resourcePath;
+			this.handshakePerformer = builder.handshakePerformer;
+		}
+
+		@NotThreadSafe
+		public static class Builder {
+			@Nonnull
+			private final ResourcePath resourcePath;
+			@Nullable
+			private Function<Request, ServerSentEventHandshake> handshakePerformer;
+
+			protected Builder(@Nonnull ResourcePath resourcePath) {
+				requireNonNull(resourcePath);
+				this.resourcePath = resourcePath;
+			}
+
+			@Nonnull
+			public Builder handshakePerformer(@Nullable Function<Request, ServerSentEventHandshake> handshakePerformer) {
+				this.handshakePerformer = handshakePerformer;
+				return this;
+			}
+
+			@Nonnull
+			public ServerSentEventSourceConfiguration build() {
+				return new ServerSentEventSourceConfiguration(this);
+			}
+		}
+	}
+
+	@ThreadSafe
+	protected static class ServerSentEventHandshake {
+		@Nonnull
+		private final Integer statusCode;
+		@Nonnull
+		private final Map<String, Set<String>> headers;
+
+		@Nonnull
+		public static Builder accept() {
+			return new Builder(200);
+		}
+
+		@Nonnull
+		public static Builder rejectWithStatusCode(@Nonnull Integer statusCode) {
+			requireNonNull(statusCode);
+			return new Builder(statusCode);
+		}
+
+		protected ServerSentEventHandshake(@Nonnull Builder builder) {
+			requireNonNull(builder);
+			this.statusCode = builder.statusCode;
+			this.headers = builder.headers == null ? Map.of() : Collections.unmodifiableMap(new LinkedCaseInsensitiveMap<>(builder.headers));
+		}
+
+		@NotThreadSafe
+		public static class Builder {
+			@Nonnull
+			private final Integer statusCode;
+			@Nullable
+			private Map<String, Set<String>> headers;
+
+			protected Builder(@Nonnull Integer statusCode) {
+				requireNonNull(statusCode);
+				this.statusCode = statusCode;
+			}
+
+			@Nonnull
+			public Builder headers(@Nullable Map<String, Set<String>> headers) {
+				this.headers = headers;
+				return this;
+			}
+
+			@Nonnull
+			public ServerSentEventHandshake build() {
+				return new ServerSentEventHandshake(this);
+			}
+		}
+
+		@Nonnull
+		public Integer getStatusCode() {
+			return this.statusCode;
+		}
+
+		@Nonnull
+		public Map<String, Set<String>> getHeaders() {
+			return this.headers;
+		}
+	}
+
 	@Test
 	public void serverSentEventServer() throws InterruptedException {
 		SynchronousQueue<String> shutdownQueue = new SynchronousQueue<>();
+
+		// Just experimenting
+		ServerSentEventSourceConfiguration.withResourcePath(ResourcePath.of("/examples/{exampleId}"))
+				.handshakePerformer((Request request) -> {
+					// Either 200 OK or HTTP status >= 400.
+					// Also need to control headers.
+
+					// Defaults:
+					//
+					// 					"Content-Type: text/event-stream\r\n" +
+					//					"Cache-Control: no-cache\r\n" +
+					//					"Connection: keep-alive\r\n\r\n";
+
+					//
+					// Also need a CorsAuthorizer, but not the preflight part.
+					// Spec does not permit custom headers so all calls are "simple" CORS, i.e. never preflighted.
+					// Should we just rely on the standard Soklet-configured CorsAuthorizer?
+					// Should we also just rely on the standard Soklet-configured LifecycleInterceptor?
+
+					return ServerSentEventHandshake.accept()
+							.headers(Map.of("testing", Set.of("one", "two")))
+							.build();
+				})
+				.build();
 
 		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
 				.resourcePaths(Set.of(ResourcePath.of("/examples/{exampleId}")))
