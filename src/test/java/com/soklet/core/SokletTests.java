@@ -473,10 +473,8 @@ public class SokletTests {
 				})
 				.build();
 */
-		
-		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
-				.resourcePaths(Set.of(ResourcePath.of("/examples/{exampleId}")))
-				.build();
+
+		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081).build();
 
 		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
 				.serverSentEventServer(serverSentEventServer)

@@ -31,6 +31,8 @@ import com.soklet.annotation.POSTs;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.PUTs;
 import com.soklet.annotation.Resource;
+import com.soklet.annotation.ServerSentEventSource;
+import com.soklet.annotation.ServerSentEventSources;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
 import com.soklet.core.ResourceMethod;
@@ -210,6 +212,9 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				} else if (annotation instanceof HEAD) {
 					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.HEAD, ResourcePath.of
 							(((HEAD) annotation).value())));
+				} else if (annotation instanceof ServerSentEventSource) {
+					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath.of
+							(((ServerSentEventSource) annotation).value())));
 				} else if (annotation instanceof GETs) {
 					for (GET get : ((GETs) annotation).value())
 						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath.of
@@ -238,6 +243,10 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 					for (HEAD head : ((HEADs) annotation).value())
 						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.HEAD, ResourcePath.of
 								(head.value())));
+				} else if (annotation instanceof ServerSentEventSources) {
+					for (ServerSentEventSource serverSentEventSource : ((ServerSentEventSources) annotation).value())
+						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath.of
+								(serverSentEventSource.value())));
 				}
 
 				Set<HttpMethodResourcePath> httpMethodResourcePaths =
@@ -302,6 +311,8 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 					httpMethod = HttpMethod.OPTIONS;
 				else if (annotation instanceof HEAD || annotation instanceof HEADs)
 					httpMethod = HttpMethod.HEAD;
+				else if (annotation instanceof ServerSentEventSource || annotation instanceof ServerSentEventSources)
+					httpMethod = HttpMethod.GET;
 
 				if (httpMethod == null)
 					continue;
@@ -330,13 +341,15 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 							|| annotation instanceof DELETE
 							|| annotation instanceof OPTIONS
 							|| annotation instanceof HEAD
+							|| annotation instanceof ServerSentEventSource
 							|| annotation instanceof GETs
 							|| annotation instanceof POSTs
 							|| annotation instanceof PUTs
 							|| annotation instanceof PATCHes
 							|| annotation instanceof DELETEs
 							|| annotation instanceof OPTIONSes
-							|| annotation instanceof HEADs)
+							|| annotation instanceof HEADs
+							|| annotation instanceof ServerSentEventSources)
 						methods.add(method);
 
 		return methods;

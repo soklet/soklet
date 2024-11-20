@@ -18,29 +18,23 @@ package com.soklet.annotation;
 
 import javax.annotation.Nonnull;
 import java.lang.annotation.ElementType;
-import java.lang.annotation.Repeatable;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Apply to Resource Methods to make them function as <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event Sources</a>.
+ * Allows multiple {@link ServerSentEventSource} annotations to be applied to the same Resource Method.
  * <p>
- * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
+ * Soklet applications should not need to use this annotation directly.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-@Repeatable(value = ServerSentEventSources.class)
-public @interface ServerSentEventSource {
+public @interface ServerSentEventSources {
 	/**
-	 * The Server-Sent Event Source {@code GET} URL that should be handled by this Resource Method.
-	 * <p>
-	 * The URL must start with a {@code /} character, e.g. {@code /widgets/{widgetId}}.
-	 *
-	 * @return the Server-Sent Event Source {@code GET} URL that should be handled by this Resource Method
+	 * @return the {@link ServerSentEventSource} annotations on this Resource Method
 	 */
 	@Nonnull
-	String value();
+	ServerSentEventSource[] value() default {};
 }
