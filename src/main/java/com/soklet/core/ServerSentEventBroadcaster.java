@@ -23,7 +23,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public interface ServerSentEventSource {
+public interface ServerSentEventBroadcaster {
 	@Nonnull
 	ResourcePathInstance getResourcePathInstance();
 

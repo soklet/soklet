@@ -57,5 +57,5 @@ public interface ServerSentEventServer extends AutoCloseable {
 	}
 
 	@Nonnull
-	Optional<? extends ServerSentEventSource> acquireEventSource(@Nullable ResourcePathInstance resourcePathInstance);
+	Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePathInstance resourcePathInstance);
 }

@@ -24,8 +24,8 @@ import com.soklet.core.Request;
 import com.soklet.core.ResourcePath;
 import com.soklet.core.ResourcePathInstance;
 import com.soklet.core.ServerSentEvent;
+import com.soklet.core.ServerSentEventBroadcaster;
 import com.soklet.core.ServerSentEventServer;
-import com.soklet.core.ServerSentEventSource;
 import com.soklet.core.Utilities;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
@@ -124,7 +124,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final Set<ResourcePath> registeredResourcePaths;
 	@Nonnull
-	private final ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventSource> serverSentEventSourcesByResourcePathInstance;
+	private final ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventBroadcaster> broadcastersByResourcePathInstance;
 	@Nonnull
 	private final ConcurrentHashMap<ResourcePathInstance, ResourcePath> resourcePathsByResourcePathInstanceCache;
 	@Nonnull
@@ -143,14 +143,14 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private Thread eventLoopThread;
 
 	@ThreadSafe
-	protected static class DefaultServerSentEventSource implements ServerSentEventSource {
+	protected static class DefaultServerSentEventBroadcaster implements ServerSentEventBroadcaster {
 		@Nonnull
 		private final ResourcePathInstance resourcePathInstance;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@Nonnull
 		private final Set<ServerSentEventConnection> serverSentEventConnections;
 
-		public DefaultServerSentEventSource(@Nonnull ResourcePathInstance resourcePathInstance) {
+		public DefaultServerSentEventBroadcaster(@Nonnull ResourcePathInstance resourcePathInstance) {
 			requireNonNull(resourcePathInstance);
 
 			this.resourcePathInstance = resourcePathInstance;
@@ -251,7 +251,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.registeredResourcePaths = builder.resourcePaths == null ? Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(builder.resourcePaths));
 
 		// TODO: let clients specify initial capacity
-		this.serverSentEventSourcesByResourcePathInstance = new ConcurrentHashMap<>(1_024);
+		this.broadcastersByResourcePathInstance = new ConcurrentHashMap<>(1_024);
 		this.resourcePathsByResourcePathInstanceCache = new ConcurrentHashMap<>(1_024);
 
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
@@ -389,7 +389,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// First, tell the event source to unregister the connection
 			if (clientSocketChannelRegistration != null) {
 				try {
-					clientSocketChannelRegistration.serverSentEventSource().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
+					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
 
 					System.out.println(format("SSE socket thread completed for request: %s", debuggingString(clientSocketChannelRegistration.serverSentEventConnection().getRequest())));
 				} catch (Exception ignored) {
@@ -489,10 +489,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	protected record ClientSocketChannelRegistration(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																									 @Nonnull DefaultServerSentEventSource serverSentEventSource) {
+																									 @Nonnull DefaultServerSentEventBroadcaster broadcaster) {
 		public ClientSocketChannelRegistration {
 			requireNonNull(serverSentEventConnection);
-			requireNonNull(serverSentEventSource);
+			requireNonNull(broadcaster);
 		}
 	}
 
@@ -507,13 +507,13 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		// TODO: check to see if this is a 404 and if so, short-circuit
 
 		// Get a handle to the event source (it will be created if necessary)
-		DefaultServerSentEventSource serverSentEventSource = acquireEventSourceInternal(resourcePathInstance).get();
+		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePathInstance).get();
 
 		// Create the connection and register it with the EventSource
-		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, serverSentEventSource.getResourcePathInstance());
-		serverSentEventSource.registerServerSentEventConnection(serverSentEventConnection);
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, broadcaster.getResourcePathInstance());
+		broadcaster.registerServerSentEventConnection(serverSentEventConnection);
 
-		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, serverSentEventSource));
+		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
 	}
 
 	@Nonnull
@@ -662,7 +662,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			getStopPoisonPill().set(true);
 
 			// TODO: need an additional check/lock to prevent race condition where someone acquires an event source while we are shutting down
-			for (DefaultServerSentEventSource serverSentEventSource : getServerSentEventSourcesByResourcePathInstance().values()) {
+			for (DefaultServerSentEventBroadcaster serverSentEventSource : getBroadcastersByResourcePathInstance().values()) {
 				try {
 					serverSentEventSource.unregisterAllServerSentEventConnections(true);
 				} catch (Exception e) {
@@ -690,7 +690,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.started = false;
 			this.eventLoopThread = null;
 			this.requestHandlerExecutorService = null;
-			this.getServerSentEventSourcesByResourcePathInstance().clear();
+			this.getBroadcastersByResourcePathInstance().clear();
 			this.getResourcePathsByResourcePathInstanceCache().clear();
 			getStopPoisonPill().set(false);
 
@@ -726,15 +726,15 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@Nonnull
 	@Override
-	public Optional<? extends ServerSentEventSource> acquireEventSource(@Nullable ResourcePathInstance resourcePathInstance) {
+	public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePathInstance resourcePathInstance) {
 		if (resourcePathInstance == null)
 			return Optional.empty();
 
-		return acquireEventSourceInternal(resourcePathInstance);
+		return acquireBroadcasterInternal(resourcePathInstance);
 	}
 
 	@Nonnull
-	protected Optional<DefaultServerSentEventSource> acquireEventSourceInternal(@Nullable ResourcePathInstance resourcePathInstance) {
+	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@Nullable ResourcePathInstance resourcePathInstance) {
 		if (resourcePathInstance == null)
 			return Optional.empty();
 
@@ -759,10 +759,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			return Optional.empty();
 
 		// Create the event source if it does not already exist
-		DefaultServerSentEventSource serverSentEventSource = getServerSentEventSourcesByResourcePathInstance()
-				.computeIfAbsent(resourcePathInstance, (ignored) -> new DefaultServerSentEventSource(resourcePathInstance));
+		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePathInstance()
+				.computeIfAbsent(resourcePathInstance, (ignored) -> new DefaultServerSentEventBroadcaster(resourcePathInstance));
 
-		return Optional.of(serverSentEventSource);
+		return Optional.of(broadcaster);
 	}
 
 	@Nonnull
@@ -821,8 +821,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventSource> getServerSentEventSourcesByResourcePathInstance() {
-		return this.serverSentEventSourcesByResourcePathInstance;
+	protected ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePathInstance() {
+		return this.broadcastersByResourcePathInstance;
 	}
 
 	@Nonnull

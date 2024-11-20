@@ -526,7 +526,7 @@ public class SokletTests {
 		@POST("/fire-server-sent-event")
 		public void fireServerSentEvent() {
 			ResourcePathInstance resourcePathInstance = ResourcePathInstance.of("/examples/abc"); // Matches /examples/{exampleId}
-			ServerSentEventSource serverSentEventSource = this.serverSentEventServer.acquireEventSource(resourcePathInstance).get();
+			ServerSentEventBroadcaster broadcaster = this.serverSentEventServer.acquireBroadcaster(resourcePathInstance).get();
 
 			ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
 					.data("""
@@ -539,7 +539,7 @@ public class SokletTests {
 					.retry(Duration.ofSeconds(5))
 					.build();
 
-			serverSentEventSource.broadcast(serverSentEvent);
+			broadcaster.broadcast(serverSentEvent);
 		}
 
 		@POST("/shutdown")

@@ -78,7 +78,7 @@
   buttonRegisterEventSource.addEventListener("click", (e) => {
 	// TODO: test CORS when true
     eventSource = new EventSource(EVENT_SOURCE_URL, {
-		withCredentials: true
+		withCredentials: false
 	});
 
     eventSource.addEventListener("open", (e) => {
