@@ -40,42 +40,50 @@ public class ResourceMethod {
 	private final ResourcePath resourcePath;
 	@Nonnull
 	private final Method method;
+	@Nonnull
+	private final Boolean serverSentEventSource;
 
 	/**
-	 * Constructs a <em>Resource Method</em> given its unique components.
+	 * Vends a <em>Resource Method</em> given its unique components.
 	 *
-	 * @param httpMethod   an HTTP method
-	 * @param resourcePath an HTTP path which might contain placeholders, e.g. {@code /example/{exampleId}}
-	 * @param method       a Java method to invoke for the combination of HTTP method and resource path
-	 * @return
+	 * @param httpMethod            an HTTP method
+	 * @param resourcePath          an HTTP path which might contain placeholders, e.g. {@code /example/{exampleId}}
+	 * @param method                a Java method to invoke for the combination of HTTP method and resource path
+	 * @param serverSentEventSource is this <em>Resource Method</em> configured as a server-sent event source?
+	 * @return a <em>Resource Method</em> for the supplied components
 	 */
 	@Nonnull
 	public static ResourceMethod withComponents(@Nonnull HttpMethod httpMethod,
 																							@Nonnull ResourcePath resourcePath,
-																							@Nonnull Method method) {
+																							@Nonnull Method method,
+																							@Nonnull Boolean serverSentEventSource) {
 		requireNonNull(httpMethod);
 		requireNonNull(resourcePath);
 		requireNonNull(method);
+		requireNonNull(serverSentEventSource);
 
-		return new ResourceMethod(httpMethod, resourcePath, method);
+		return new ResourceMethod(httpMethod, resourcePath, method, serverSentEventSource);
 	}
 
 	protected ResourceMethod(@Nonnull HttpMethod httpMethod,
 													 @Nonnull ResourcePath resourcePath,
-													 @Nonnull Method method) {
+													 @Nonnull Method method,
+													 @Nonnull Boolean serverSentEventSource) {
 		requireNonNull(httpMethod);
 		requireNonNull(resourcePath);
 		requireNonNull(method);
+		requireNonNull(serverSentEventSource);
 
 		this.httpMethod = httpMethod;
 		this.resourcePath = resourcePath;
 		this.method = method;
+		this.serverSentEventSource = serverSentEventSource;
 	}
 
 	@Override
 	public String toString() {
-		return format("%s{httpMethod=%s, resourcePath=%s, method=%s}", getClass().getSimpleName(),
-				getHttpMethod(), getResourcePath(), getMethod());
+		return format("%s{httpMethod=%s, resourcePath=%s, method=%s, serverSentEventSource=%s}", getClass().getSimpleName(),
+				getHttpMethod(), getResourcePath(), getMethod(), isServerSentEventSource());
 	}
 
 	@Override
@@ -88,12 +96,13 @@ public class ResourceMethod {
 
 		return Objects.equals(getHttpMethod(), resourceMethod.getHttpMethod())
 				&& Objects.equals(getResourcePath(), resourceMethod.getResourcePath())
-				&& Objects.equals(getMethod(), resourceMethod.getMethod());
+				&& Objects.equals(getMethod(), resourceMethod.getMethod())
+				&& Objects.equals(isServerSentEventSource(), resourceMethod.isServerSentEventSource());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getHttpMethod(), getResourcePath(), getMethod());
+		return Objects.hash(getHttpMethod(), getResourcePath(), getMethod(), isServerSentEventSource());
 	}
 
 	/**
@@ -124,5 +133,15 @@ public class ResourceMethod {
 	@Nonnull
 	public Method getMethod() {
 		return this.method;
+	}
+
+	/**
+	 * Returns whether or not this <em>Resource Method</em> functions as a Server-Sent Event Source.
+	 *
+	 * @return {@code true} if this <em>Resource Method</em> functions as a Server-Sent Event Source, {@code false} otherwise
+	 */
+	@Nonnull
+	public Boolean isServerSentEventSource() {
+		return this.serverSentEventSource;
 	}
 }

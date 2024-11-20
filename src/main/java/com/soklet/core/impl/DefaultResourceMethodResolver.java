@@ -127,7 +127,8 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 				for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths) {
 					ResourcePath resourcePath = httpMethodResourcePath.getResourcePath();
-					ResourceMethod resourceMethod = ResourceMethod.withComponents(httpMethod, resourcePath, method);
+					Boolean serverSentEventSource = httpMethodResourcePath.isServerSentEventSource();
+					ResourceMethod resourceMethod = ResourceMethod.withComponents(httpMethod, resourcePath, method, serverSentEventSource);
 					resourceMethods.add(resourceMethod);
 				}
 			}
@@ -157,7 +158,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths)
 				if (httpMethodResourcePath.getHttpMethod().equals(request.getHttpMethod())
 						&& resourcePathInstance.matches(httpMethodResourcePath.getResourcePath()))
-					matchingResourceMethods.add(ResourceMethod.withComponents(request.getHttpMethod(), httpMethodResourcePath.getResourcePath(), method));
+					matchingResourceMethods.add(ResourceMethod.withComponents(request.getHttpMethod(), httpMethodResourcePath.getResourcePath(), method, httpMethodResourcePath.isServerSentEventSource()));
 		}
 
 		// Simple case - exact route match
@@ -214,7 +215,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 							(((HEAD) annotation).value())));
 				} else if (annotation instanceof ServerSentEventSource) {
 					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath.of
-							(((ServerSentEventSource) annotation).value())));
+							(((ServerSentEventSource) annotation).value()), true));
 				} else if (annotation instanceof GETs) {
 					for (GET get : ((GETs) annotation).value())
 						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath.of
@@ -246,7 +247,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				} else if (annotation instanceof ServerSentEventSources) {
 					for (ServerSentEventSource serverSentEventSource : ((ServerSentEventSources) annotation).value())
 						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath.of
-								(serverSentEventSource.value())));
+								(serverSentEventSource.value()), true));
 				}
 
 				Set<HttpMethodResourcePath> httpMethodResourcePaths =
@@ -382,20 +383,30 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		private final HttpMethod httpMethod;
 		@Nonnull
 		private final ResourcePath resourcePath;
+		@Nonnull
+		private final Boolean serverSentEventSource;
 
 		public HttpMethodResourcePath(@Nonnull HttpMethod httpMethod,
 																	@Nonnull ResourcePath resourcePath) {
+			this(httpMethod, resourcePath, false);
+		}
+
+		public HttpMethodResourcePath(@Nonnull HttpMethod httpMethod,
+																	@Nonnull ResourcePath resourcePath,
+																	@Nonnull Boolean serverSentEventSource) {
 			requireNonNull(httpMethod);
 			requireNonNull(resourcePath);
+			requireNonNull(serverSentEventSource);
 
 			this.httpMethod = httpMethod;
 			this.resourcePath = resourcePath;
+			this.serverSentEventSource = serverSentEventSource;
 		}
 
 		@Override
 		public String toString() {
-			return format("%s{httpMethod=%s, resourcePath=%s}", getClass().getSimpleName(),
-					getHttpMethod(), getResourcePath());
+			return format("%s{httpMethod=%s, resourcePath=%s, serverSentEventSource=%s}", getClass().getSimpleName(),
+					getHttpMethod(), getResourcePath(), isServerSentEventSource());
 		}
 
 		@Override
@@ -407,12 +418,13 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				return false;
 
 			return Objects.equals(getHttpMethod(), httpMethodResourcePath.getHttpMethod())
-					&& Objects.equals(getResourcePath(), httpMethodResourcePath.getResourcePath());
+					&& Objects.equals(getResourcePath(), httpMethodResourcePath.getResourcePath())
+					&& Objects.equals(isServerSentEventSource(), httpMethodResourcePath.isServerSentEventSource());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getHttpMethod(), getResourcePath());
+			return Objects.hash(getHttpMethod(), getResourcePath(), isServerSentEventSource());
 		}
 
 		@Nonnull
@@ -423,6 +435,11 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		@Nonnull
 		public ResourcePath getResourcePath() {
 			return this.resourcePath;
+		}
+
+		@Nonnull
+		public Boolean isServerSentEventSource() {
+			return this.serverSentEventSource;
 		}
 	}
 }

@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.annotation.Resource;
 import com.soklet.core.Cors;
 import com.soklet.core.CorsAuthorizer;
 import com.soklet.core.CorsPreflight;
@@ -100,10 +101,9 @@ public class Soklet implements AutoCloseable {
 		this.sokletConfiguration = sokletConfiguration;
 		this.lock = new ReentrantLock();
 
-		// TODO: modify this check to be "no resource methods" OR "no SSE server set up"
 		// Fail fast in the event that Soklet appears misconfigured
-//		if (sokletConfiguration.getResourceMethodResolver().getResourceMethods().size() == 0)
-//			throw new IllegalArgumentException(format("No classes annotated with @%s were found.", Resource.class.getSimpleName()));
+		if (sokletConfiguration.getResourceMethodResolver().getResourceMethods().size() == 0)
+			throw new IllegalArgumentException(format("No classes annotated with @%s were found.", Resource.class.getSimpleName()));
 
 		// Use a layer of indirection here so the Soklet type does not need to directly implement the `RequestHandler` interface.
 		// Reasoning: the `handleRequest` method for Soklet should not be public, which might lead to accidental invocation by users.
