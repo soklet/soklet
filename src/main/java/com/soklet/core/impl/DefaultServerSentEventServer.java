@@ -662,9 +662,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			getStopPoisonPill().set(true);
 
 			// TODO: need an additional check/lock to prevent race condition where someone acquires an event source while we are shutting down
-			for (DefaultServerSentEventBroadcaster serverSentEventSource : getBroadcastersByResourcePathInstance().values()) {
+			for (DefaultServerSentEventBroadcaster broadcaster : getBroadcastersByResourcePathInstance().values()) {
 				try {
-					serverSentEventSource.unregisterAllServerSentEventConnections(true);
+					broadcaster.unregisterAllServerSentEventConnections(true);
 				} catch (Exception e) {
 					System.out.println("Unable to unregister connection, continuing on...");
 					e.printStackTrace();
