@@ -24,18 +24,17 @@ import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
+import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.core.impl.AllOriginsCorsAuthorizer;
 import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.DefaultServer;
 import com.soklet.core.impl.DefaultServerSentEventServer;
-import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.junit.Assert;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -46,14 +45,12 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.SynchronousQueue;
-import java.util.function.Function;
 
 import static com.soklet.core.Utilities.emptyByteArray;
 import static java.util.Objects.requireNonNull;
@@ -338,6 +335,7 @@ public class SokletTests {
 		}));
 	}
 
+	/*
 	// Just experimenting
 	@ThreadSafe
 	protected static class ServerSentEventSourceConfiguration {
@@ -441,11 +439,12 @@ public class SokletTests {
 			return this.headers;
 		}
 	}
-
+*/
 	@Test
 	public void serverSentEventServer() throws InterruptedException {
 		SynchronousQueue<String> shutdownQueue = new SynchronousQueue<>();
 
+		/*
 		// Just experimenting
 		ServerSentEventSourceConfiguration.withResourcePath(ResourcePath.of("/examples/{exampleId}"))
 				.handshakePerformer((Request request) -> {
@@ -473,7 +472,8 @@ public class SokletTests {
 							.build();
 				})
 				.build();
-
+*/
+		
 		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
 				.resourcePaths(Set.of(ResourcePath.of("/examples/{exampleId}")))
 				.build();
@@ -521,6 +521,11 @@ public class SokletTests {
 
 			this.serverSentEventServer = serverSentEventServer;
 			this.sokletStopper = sokletStopper;
+		}
+
+		@ServerSentEventSource("/examples/{exampleId}")
+		public void ok() {
+			System.out.println("OK!");
 		}
 
 		@POST("/fire-server-sent-event")
