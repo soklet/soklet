@@ -72,6 +72,7 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 		if (getAuthorizer().apply(normalizeOrigin(cors.getOrigin())))
 			return Optional.of(CorsResponse.withAccessControlAllowOrigin(cors.getOrigin())
 					.accessControlExposeHeaders(Set.of("*"))
+					.accessControlAllowCredentials(true)
 					.build());
 
 		return Optional.empty();
@@ -90,6 +91,7 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 			return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(corsPreflight.getOrigin())
 					.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
 					.accessControlAllowHeaders(Set.of("*"))
+					.accessControlAllowCredentials(true)
 					.build());
 
 		return Optional.empty();
