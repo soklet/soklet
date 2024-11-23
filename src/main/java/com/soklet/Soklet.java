@@ -111,10 +111,20 @@ public class Soklet implements AutoCloseable {
 		// Reasoning: the `handleRequest` method for Soklet should not be public, which might lead to accidental invocation by users.
 		// That method should only be called by the managed `Server` instance.
 		Soklet soklet = this;
+
 		sokletConfiguration.getServer().registerRequestHandler((request, marshaledResponseConsumer) -> {
 			// Delegate to Soklet's internal request handling method
 			soklet.handleRequest(request, marshaledResponseConsumer);
 		});
+
+		ServerSentEventServer serverSentEventServer = sokletConfiguration.getServerSentEventServer().orElse(null);
+
+		if (serverSentEventServer != null) {
+			serverSentEventServer.registerRequestHandler((request, marshaledResponseConsumer) -> {
+				// Delegate to Soklet's internal request handling method
+				soklet.handleRequest(request, marshaledResponseConsumer);
+			});
+		}
 	}
 
 	/**
@@ -178,7 +188,7 @@ public class Soklet implements AutoCloseable {
 	/**
 	 * Nonpublic "informal" implementation of {@link com.soklet.core.Server.RequestHandler} so Soklet does not need to expose {@code handleRequest} publicly.
 	 * Reasoning: users of this library should never call {@code handleRequest} directly - it should only be invoked in response to events
-	 * provided by a {@link Server} implementation.
+	 * provided by a {@link Server} or {@link ServerSentEventServer} implementation.
 	 */
 	protected void handleRequest(@Nonnull Request request,
 															 @Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer) {

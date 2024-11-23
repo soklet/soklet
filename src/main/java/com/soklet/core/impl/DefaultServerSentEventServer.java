@@ -20,12 +20,14 @@ import com.soklet.core.HttpMethod;
 import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogEvent;
 import com.soklet.core.LogEventType;
+import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
 import com.soklet.core.ResourcePath;
 import com.soklet.core.ResourcePathInstance;
 import com.soklet.core.ServerSentEvent;
 import com.soklet.core.ServerSentEventBroadcaster;
 import com.soklet.core.ServerSentEventServer;
+import com.soklet.core.StatusCode;
 import com.soklet.core.Utilities;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
@@ -46,6 +48,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -141,6 +144,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private volatile Boolean stopping;
 	@Nullable
 	private Thread eventLoopThread;
+	@Nullable
+	private RequestHandler requestHandler;
 
 	@ThreadSafe
 	protected static class DefaultServerSentEventBroadcaster implements ServerSentEventBroadcaster {
@@ -278,12 +283,21 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Override
+	public void registerRequestHandler(@Nullable RequestHandler requestHandler) {
+		this.requestHandler = requestHandler;
+	}
+
+	@Override
 	public void start() {
 		getLock().lock();
 
 		try {
 			if (isStarted())
 				return;
+
+			// Should never happen, this would already be set by the Soklet instance
+			if (getRequestHandler().isEmpty())
+				throw new IllegalStateException(format("No %s was registered for %s", RequestHandler.class, getClass()));
 
 			System.out.println("Starting...");
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
@@ -354,15 +368,21 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).get();
 
-			final String SSE_HEADERS_AS_STRING = "HTTP/1.1 200 OK\r\n" +
-					"Content-Type: text/event-stream\r\n" +
-					"Cache-Control: no-cache\r\n" +
-					// TODO: let clients specify this and other headers
-					"Access-Control-Allow-Origin: *\r\n" +
-					"Connection: keep-alive\r\n\r\n";
+			// OK, we have a request.
+			// First thing to do is write an HTTP response (status, headers) - and then we keep the socket open for subsequent writes.
+			// To write this initial "handshake" response, we delegate to the Soklet instance, handing it the request we just parsed
+			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
+			// Subsequent writes to the open socket are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
+			getRequestHandler().get().handleRequest(request, (@Nonnull MarshaledResponse marshaledResponse) -> {
+				System.out.println("Got marshaled response.");
+				String handshakeResponse = toHandshakeResponse(marshaledResponse);
 
-			// Immediately send SSE headers
-			clientSocketChannel.write(ByteBuffer.wrap(SSE_HEADERS_AS_STRING.getBytes()));
+				try {
+					clientSocketChannel.write(ByteBuffer.wrap(handshakeResponse.getBytes(StandardCharsets.UTF_8)));
+				} catch (IOException e) {
+					throw new UncheckedIOException("Unable to write initial SSE handshake response", e);
+				}
+			});
 
 			while (true) {
 				ServerSentEvent serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
@@ -379,6 +399,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				System.out.println(format("Wrote %s to %s", serverSentEvent, debuggingString(request)));
 			}
 		} catch (Exception e) {
+			e.printStackTrace();
 			System.out.println("Closing socket due to exception: " + e.getMessage());
 
 			if (e instanceof InterruptedException) {
@@ -408,6 +429,64 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			}
 		}
+	}
+
+	@Nonnull
+	protected String toHandshakeResponse(@Nonnull MarshaledResponse marshaledResponse) {
+		requireNonNull(marshaledResponse);
+
+		// For example:
+		//
+		// "HTTP/1.1 200 OK\r\n" +
+		// "Content-Type: text/event-stream\r\n" +
+		// "Cache-Control: no-cache\r\n" +
+		// "X-Accel-Buffering: no\r\n" +
+		// "Connection: keep-alive\r\n\r\n";
+
+		// TODO: make this a configurable value.  It's just here temporarily.
+		final Map<String, Set<String>> DEFAULT_HEADERS = Map.of(
+				"Content-Type", Set.of("text/event-stream"),
+				"Cache-Control", Set.of("no-cache"),
+				"Connection", Set.of("keep-alive"),
+				"X-Accel-Buffering", Set.of("on")
+		);
+
+		int statusCode = marshaledResponse.getStatusCode();
+		Map<String, Set<String>> headers = marshaledResponse.getHeaders();
+
+		List<String> lines = new ArrayList<>(1 + headers.size());
+
+		// e.g. "HTTP/1.1 200 OK"
+		lines.add(format("HTTP/1.1 %s %d", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()));
+
+		// Write default headers
+		for (Entry<String, Set<String>> entry : DEFAULT_HEADERS.entrySet()) {
+			String headerName = entry.getKey();
+			Set<String> headerValues = entry.getValue();
+
+			if (headerValues != null)
+				for (String headerValue : headerValues)
+					lines.add(format("%s: %s", headerName, headerValue));
+		}
+
+		// Write custom headers
+		for (Entry<String, Set<String>> entry : headers.entrySet()) {
+			// TODO: case-insensitive comparison
+			String headerName = entry.getKey();
+			Set<String> headerValues = entry.getValue();
+
+			// Only write headers that are not part of the default set
+			if (!DEFAULT_HEADERS.containsKey(headerName))
+				if (headerValues != null)
+					for (String headerValue : headerValues)
+						lines.add(format("%s: %s", headerName, headerValue));
+		}
+
+		String response = lines.stream().collect(Collectors.joining("\r\n")) + "\r\n";
+
+		System.out.println(response);
+
+		return response;
 	}
 
 	@Nonnull
@@ -853,6 +932,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Optional<Thread> getEventLoopThread() {
 		return Optional.ofNullable(this.eventLoopThread);
+	}
+
+	@Nonnull
+	protected Optional<RequestHandler> getRequestHandler() {
+		return Optional.ofNullable(this.requestHandler);
 	}
 
 	/**
