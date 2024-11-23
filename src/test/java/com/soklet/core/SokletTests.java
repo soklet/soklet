@@ -22,14 +22,15 @@ import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
 import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
+import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
 import com.soklet.annotation.ServerSentEventSource;
-import com.soklet.core.impl.AllOriginsCorsAuthorizer;
 import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.DefaultServer;
 import com.soklet.core.impl.DefaultServerSentEventServer;
+import com.soklet.core.impl.WhitelistedOriginsCorsAuthorizer;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -343,7 +344,7 @@ public class SokletTests {
 		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
 				.serverSentEventServer(serverSentEventServer)
 				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ServerSentEventResource.class)))
-				.corsAuthorizer(new AllOriginsCorsAuthorizer())
+				.corsAuthorizer(new WhitelistedOriginsCorsAuthorizer(Set.of("http://127.0.0.1:8082")))
 				.instanceProvider(new DefaultInstanceProvider() {
 					@Nonnull
 					@Override
@@ -386,8 +387,9 @@ public class SokletTests {
 		}
 
 		@ServerSentEventSource("/examples/{exampleId}")
-		public void ok() {
-			System.out.println("OK!");
+		public void exampleServerSentEventSource(@Nonnull Request request,
+																						 @Nonnull @PathParameter String exampleId) {
+			System.out.printf("Server-Sent Event Source connection initiated for %s with exampleId value %s\n", request.getId(), exampleId);
 		}
 
 		@POST("/fire-server-sent-event")

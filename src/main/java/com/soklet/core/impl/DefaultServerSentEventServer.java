@@ -16,6 +16,7 @@
 
 package com.soklet.core.impl;
 
+import com.soklet.SokletConfiguration;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogEvent;
@@ -44,7 +45,6 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -125,8 +125,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final LifecycleInterceptor lifecycleInterceptor;
 	@Nonnull
-	private final Set<ResourcePath> registeredResourcePaths;
-	@Nonnull
 	private final ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventBroadcaster> broadcastersByResourcePathInstance;
 	@Nonnull
 	private final ConcurrentHashMap<ResourcePathInstance, ResourcePath> resourcePathsByResourcePathInstanceCache;
@@ -144,6 +142,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private volatile Boolean stopping;
 	@Nullable
 	private Thread eventLoopThread;
+	@Nonnull
+	private Set<ResourcePath> registeredResourcePaths;
 	@Nullable
 	private RequestHandler requestHandler;
 
@@ -251,9 +251,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
-
-		// Registered resource paths are registered at creation time and can never change
-		this.registeredResourcePaths = builder.resourcePaths == null ? Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(builder.resourcePaths));
+		this.registeredResourcePaths = Set.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
 		// TODO: let clients specify initial capacity
 		this.broadcastersByResourcePathInstance = new ConcurrentHashMap<>(1_024);
@@ -283,8 +281,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Override
-	public void registerRequestHandler(@Nullable RequestHandler requestHandler) {
+	public void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+												 @Nonnull RequestHandler requestHandler) {
+		requireNonNull(sokletConfiguration);
+		requireNonNull(requestHandler);
+
 		this.requestHandler = requestHandler;
+
+		// Registered resource paths are registered here just once and will never change
+		this.registeredResourcePaths = sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
+				.filter(resourceMethod -> resourceMethod.isServerSentEventSource())
+				.map(resourceMethod -> resourceMethod.getResourcePath())
+				.collect(Collectors.toUnmodifiableSet());
 	}
 
 	@Override
@@ -374,7 +382,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
 			// Subsequent writes to the open socket are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
 			getRequestHandler().get().handleRequest(request, (@Nonnull MarshaledResponse marshaledResponse) -> {
-				System.out.println("Got marshaled response.");
 				String handshakeResponse = toHandshakeResponse(marshaledResponse);
 
 				try {
@@ -451,13 +458,19 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				"X-Accel-Buffering", Set.of("on")
 		);
 
+		final Set<String> ILLEGAL_HEADER_NAMES = Set.of("Content-Length");
+
 		int statusCode = marshaledResponse.getStatusCode();
 		Map<String, Set<String>> headers = marshaledResponse.getHeaders();
 
 		List<String> lines = new ArrayList<>(1 + headers.size());
 
+		// HTTP 204 is illegal for these, coerce to 200
+		if (statusCode == 204)
+			statusCode = 200;
+
 		// e.g. "HTTP/1.1 200 OK"
-		lines.add(format("HTTP/1.1 %s %d", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()));
+		lines.add(format("HTTP/1.1 %d %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()));
 
 		// Write default headers
 		for (Entry<String, Set<String>> entry : DEFAULT_HEADERS.entrySet()) {
@@ -476,17 +489,13 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			Set<String> headerValues = entry.getValue();
 
 			// Only write headers that are not part of the default set
-			if (!DEFAULT_HEADERS.containsKey(headerName))
+			if (!DEFAULT_HEADERS.containsKey(headerName) && !ILLEGAL_HEADER_NAMES.contains(headerName))
 				if (headerValues != null)
 					for (String headerValue : headerValues)
 						lines.add(format("%s: %s", headerName, headerValue));
 		}
 
-		String response = lines.stream().collect(Collectors.joining("\r\n")) + "\r\n";
-
-		System.out.println(response);
-
-		return response;
+		return lines.stream().collect(Collectors.joining("\r\n")) + "\r\n\r\n";
 	}
 
 	@Nonnull

@@ -16,6 +16,8 @@
 
 package com.soklet.core;
 
+import com.soklet.SokletConfiguration;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Optional;
@@ -67,7 +69,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 *
 	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link ServerSentEventServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link ServerSentEventServer} to write back to the client
 	 */
-	void registerRequestHandler(@Nullable RequestHandler requestHandler);
+	void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+									@Nonnull RequestHandler requestHandler);
 
 	/**
 	 * Request/response processing contract for custom {@link ServerSentEventServer} implementations.

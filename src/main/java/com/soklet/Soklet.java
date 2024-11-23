@@ -119,12 +119,11 @@ public class Soklet implements AutoCloseable {
 
 		ServerSentEventServer serverSentEventServer = sokletConfiguration.getServerSentEventServer().orElse(null);
 
-		if (serverSentEventServer != null) {
-			serverSentEventServer.registerRequestHandler((request, marshaledResponseConsumer) -> {
+		if (serverSentEventServer != null)
+			serverSentEventServer.initialize(sokletConfiguration, (request, marshaledResponseConsumer) -> {
 				// Delegate to Soklet's internal request handling method
 				soklet.handleRequest(request, marshaledResponseConsumer);
 			});
-		}
 	}
 
 	/**

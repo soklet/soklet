@@ -76,10 +76,9 @@
   });
 
   buttonRegisterEventSource.addEventListener("click", (e) => {
-	// TODO: test CORS when true
     eventSource = new EventSource(EVENT_SOURCE_URL, {
-		withCredentials: false
-	});
+      withCredentials: true,
+    });
 
     eventSource.addEventListener("open", (e) => {
       log(`EventSource connection opened for ${EVENT_SOURCE_URL}`);
@@ -87,7 +86,7 @@
 
     eventSource.addEventListener("test", (e) => {
       log(`test: ${e.data}`);
-	  // console.log(JSON.parse(e.data));
+      // console.log(JSON.parse(e.data));
     });
 
     eventSource.addEventListener("error", (e) => {
