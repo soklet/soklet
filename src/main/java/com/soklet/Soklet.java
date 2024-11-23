@@ -32,9 +32,11 @@ import com.soklet.core.Request;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
+import com.soklet.core.ResourcePathInstance;
 import com.soklet.core.Response;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
+import com.soklet.core.ServerSentEventBroadcaster;
 import com.soklet.core.ServerSentEventServer;
 import com.soklet.core.Simulator;
 import com.soklet.core.StatusCode;
@@ -793,6 +795,19 @@ public class Soklet implements AutoCloseable {
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	@Nonnull
+	public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePathInstance resourcePathInstance) {
+		requireNonNull(resourcePathInstance);
+
+		ServerSentEventServer serverSentEventServer = getSokletConfiguration().getServerSentEventServer().orElse(null);
+
+		if (serverSentEventServer == null)
+			return Optional.empty();
+
+		// Just delegate to the SSE server
+		return serverSentEventServer.acquireBroadcaster(resourcePathInstance);
 	}
 
 	@Nonnull
