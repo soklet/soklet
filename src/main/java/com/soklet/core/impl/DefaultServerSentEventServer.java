@@ -57,6 +57,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -372,9 +373,13 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			String requestIdentifier = clientSocketChannel.getRemoteAddress().toString();
 			Request request = parseRequest(requestIdentifier, rawRequest);
 
-			System.out.println(format("Bound SSE request to socket: %s", debuggingString(request)));
+			System.out.println(format("Received SSE request on socket: %s", debuggingString(request)));
 
-			clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).get();
+			// This will be null for a 404
+			clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).orElse(null);
+			boolean serverSentEventResourceMethodExists = clientSocketChannelRegistration != null;
+
+			AtomicInteger marshaledResponseStatusCode = new AtomicInteger(500);
 
 			// OK, we have a request.
 			// First thing to do is write an HTTP response (status, headers) - and then we keep the socket open for subsequent writes.
@@ -382,6 +387,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
 			// Subsequent writes to the open socket are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
 			getRequestHandler().get().handleRequest(request, (@Nonnull MarshaledResponse marshaledResponse) -> {
+				marshaledResponseStatusCode.set(marshaledResponse.getStatusCode());
 				String handshakeResponse = toHandshakeResponse(marshaledResponse);
 
 				try {
@@ -391,19 +397,34 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			});
 
-			while (true) {
-				ServerSentEvent serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
+			// Happy path? Keep the connection open for future ServerSentEvent writes.
+			// If no socket channel registration (404) or >= 300 HTTP status, we're done immediately now that initial data has been written.
+			if (serverSentEventResourceMethodExists && marshaledResponseStatusCode.get() < 300) {
+				while (true) {
+					// TODO: periodically send a special event similar to the poison pill which we can use to check and see if the socket is still open (clientSocketChannel.isConnected()?)  Otherwise, sockets can live too long (e.g. client unregisters/leaves the webpage)
+					System.out.println(format("Waiting for SSE broadcasts on socket: %s", debuggingString(request)));
+					ServerSentEvent serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
 
-				if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) {
-					System.out.println("Encountered poison pill, exiting...");
-					break;
+					if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) {
+						System.out.println("Encountered poison pill, exiting...");
+						break;
+					}
+
+					System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
+					String message = formatForResponse(serverSentEvent);
+					ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
+					clientSocketChannel.write(buffer);
+					System.out.println(format("Wrote %s to %s", serverSentEvent, debuggingString(request)));
 				}
+			} else {
+				String reason = "unknown";
 
-				System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
-				String message = formatForResponse(serverSentEvent);
-				ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
-				clientSocketChannel.write(buffer);
-				System.out.println(format("Wrote %s to %s", serverSentEvent, debuggingString(request)));
+				if (!serverSentEventResourceMethodExists)
+					reason = format("no SSE resource method exists for %s", request.getUri());
+				else if (marshaledResponseStatusCode.get() >= 300)
+					reason = format("SSE resource method status code is %d", marshaledResponseStatusCode.get());
+
+				System.out.println(format("Closing socket %s immediately after handshake instead of waiting for broadcasts. Reason: %s", debuggingString(request), reason));
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -473,6 +494,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		lines.add(format("HTTP/1.1 %d %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()));
 
 		// Write default headers
+		// TODO: do these apply for responses > HTTP 299?  Probably not.
 		for (Entry<String, Set<String>> entry : DEFAULT_HEADERS.entrySet()) {
 			String headerName = entry.getKey();
 			Set<String> headerValues = entry.getValue();
@@ -592,7 +614,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		ResourcePathInstance resourcePathInstance = ResourcePathInstance.of(request.getPath());
 
-		// TODO: check to see if this is a 404 and if so, short-circuit
+		if (!matchingResourcePath(resourcePathInstance).isPresent())
+			return Optional.empty();
 
 		// Get a handle to the event source (it will be created if necessary)
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePathInstance).get();
@@ -826,6 +849,23 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (resourcePathInstance == null)
 			return Optional.empty();
 
+		ResourcePath resourcePath = matchingResourcePath(resourcePathInstance).orElse(null);
+
+		if (resourcePath == null)
+			return Optional.empty();
+
+		// Create the event source if it does not already exist
+		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePathInstance()
+				.computeIfAbsent(resourcePathInstance, (ignored) -> new DefaultServerSentEventBroadcaster(resourcePathInstance));
+
+		return Optional.of(broadcaster);
+	}
+
+	@Nonnull
+	protected Optional<ResourcePath> matchingResourcePath(@Nullable ResourcePathInstance resourcePathInstance) {
+		if (resourcePathInstance == null)
+			return Optional.empty();
+
 		// Try a cache lookup first
 		ResourcePath resourcePath = getResourcePathsByResourcePathInstanceCache().get(resourcePathInstance);
 
@@ -843,15 +883,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				getResourcePathsByResourcePathInstanceCache().put(resourcePathInstance, resourcePath);
 		}
 
-		// The resource path instance doesn't match a resource path we already have on file - no event source exists for it.
-		if (resourcePath == null)
-			return Optional.empty();
-
-		// Create the event source if it does not already exist
-		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePathInstance()
-				.computeIfAbsent(resourcePathInstance, (ignored) -> new DefaultServerSentEventBroadcaster(resourcePathInstance));
-
-		return Optional.of(broadcaster);
+		return Optional.ofNullable(resourcePath);
 	}
 
 	@Nonnull
