@@ -830,7 +830,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			// Put the value in the cache for quick access later
-			getResourcePathsByResourcePathInstanceCache().put(resourcePathInstance, resourcePath);
+			if (resourcePath != null)
+				getResourcePathsByResourcePathInstanceCache().put(resourcePathInstance, resourcePath);
 		}
 
 		// The resource path instance doesn't match a resource path we already have on file - no event source exists for it.
