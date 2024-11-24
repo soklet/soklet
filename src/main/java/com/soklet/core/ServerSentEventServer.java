@@ -75,7 +75,7 @@ public interface ServerSentEventServer extends AutoCloseable {
 	/**
 	 * Request/response processing contract for custom {@link ServerSentEventServer} implementations.
 	 * <p>
-	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link ServerSentEventServer} via {@link ServerSentEventServer#registerRequestHandler(ServerSentEventServer.RequestHandler)}.
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link ServerSentEventServer} via {@link ServerSentEventServer#initialize(SokletConfiguration, RequestHandler)}.
 	 * It's the responsibility of the {@link ServerSentEventServer} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
 	 * <strong>Most Soklet applications will use {@link com.soklet.core.impl.DefaultServerSentEventServer} and therefore do not need to implement this interface directly.</strong>
