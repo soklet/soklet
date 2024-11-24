@@ -44,7 +44,9 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +57,9 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -88,6 +93,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 
 	@Nonnull
+	private static final ServerSentEvent SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK;
+	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_POISON_PILL;
 
 	static {
@@ -100,9 +107,16 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 
-		// Make a unique "poison pill" server-sent event used to stop a socket thread by injecting it into the relevant write queue.
+		// Make a unique "validity check" server-sent event used to wake a socket listener thread by injecting it into the relevant write queue.
+		// When this event is taken off of the queue, a validity check is performed on the socket to see if it's still active.
+		// If not, socket is torn down and the thread finishes running.
+		// The contents don't matter; the object reference is used to determine if it's a validity check.
+		SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK = ServerSentEvent.withEvent("validity-check").build();
+
+		// Make a unique "poison pill" server-sent event used to stop a socket listener thread by injecting it into the relevant write queue.
+		// When this event is taken off of the queue, the socket is torn down and the thread finishes running.
 		// The contents don't matter; the object reference is used to determine if it's poison.
-		SERVER_SENT_EVENT_POISON_PILL = ServerSentEvent.withData("poison").build();
+		SERVER_SENT_EVENT_POISON_PILL = ServerSentEvent.withEvent("poison").build();
 	}
 
 	@Nonnull
@@ -137,6 +151,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final AtomicBoolean stopPoisonPill;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
+	@Nullable
+	private volatile ScheduledExecutorService connectionValidityExecutorService;
 	@Nonnull
 	private volatile Boolean started;
 	@Nonnull
@@ -312,10 +328,64 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
 			this.eventLoopThread = new Thread(this::startInternal, "sse-event-loop");
 			eventLoopThread.start();
+
+			this.connectionValidityExecutorService = Executors.newScheduledThreadPool(1, new ThreadFactory() {
+				@Override
+				@Nonnull
+				public Thread newThread(@Nonnull Runnable runnable) {
+					requireNonNull(runnable);
+					return new Thread(runnable, "sse-connection-validator");
+				}
+			});
+
+			// TODO: make durations configurable
+			this.connectionValidityExecutorService.scheduleWithFixedDelay(() -> {
+				try {
+					performConnectionValidityTask();
+				} catch (Throwable throwable) {
+					// TODO: send to logger
+					throwable.printStackTrace();
+					System.out.println("Connection validity checker failed");
+				}
+			}, 5, 15, TimeUnit.SECONDS);
+
 			this.started = true;
 			System.out.println("Started.");
 		} finally {
 			getLock().unlock();
+		}
+	}
+
+	protected void performConnectionValidityTask() {
+		Collection<DefaultServerSentEventBroadcaster> broadcasters = getBroadcastersByResourcePathInstance().values();
+		int i = 0;
+
+		if (broadcasters.size() > 0) {
+			for (DefaultServerSentEventBroadcaster broadcaster : broadcasters) {
+				++i;
+				System.out.println(format("Performing validity checks for broadcaster %d of %d (%s)...", i, broadcasters.size(), broadcaster.getResourcePathInstance().getPath()));
+
+				Set<ServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
+
+				System.out.println(format("This broadcaster has %d SSE connections", serverSentEventConnections.size()));
+
+				if (serverSentEventConnections.size() == 0) {
+					// This broadcaster can be entirely dealloced because it has no more connections.
+					// TODO: this should be more of a failsafe, we should factor into its own method and call this at the end of a socket thread too for immediate cleanup
+					// TODO: broadcaster removes/adds be protected with a "broadcasterLock"
+					System.out.println("Because this broadcaster has no connections, removing it.");
+					getBroadcastersByResourcePathInstance().remove(broadcaster.getResourcePathInstance());
+				} else {
+					int j = 0;
+
+					for (ServerSentEventConnection serverSentEventConnection : serverSentEventConnections) {
+						++j;
+						System.out.println(format("Enqueuing heartbeat for socket %d of %d...", j, serverSentEventConnections.size()));
+						// TODO: keep track of when the most recent validity check was done so we don't do it too frequently, e.g. with AtomicReference<Instant> on ServerSentEventConnection (nice-to-have)
+						serverSentEventConnection.writeQueue.add(SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK); // TODO: should this just be the heartbeat event?
+					}
+				}
+			}
 		}
 	}
 
@@ -410,11 +480,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 						break;
 					}
 
-					System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
-					String message = formatForResponse(serverSentEvent);
-					ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
-					clientSocketChannel.write(buffer);
-					System.out.println(format("Wrote %s to %s", serverSentEvent, debuggingString(request)));
+					if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK) {
+						System.out.println("Performing socket validity check by writing a heartbeat message...");
+						String message = formatForResponse(ServerSentEvent.forHeartbeat());
+						ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+						clientSocketChannel.write(buffer);
+					} else {
+						System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
+						String message = formatForResponse(serverSentEvent);
+						ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+						clientSocketChannel.write(buffer);
+					}
 				}
 			} else {
 				String reason = "unknown";
@@ -571,6 +647,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final ResourcePathInstance resourcePathInstance;
 		@Nonnull
 		private final BlockingQueue<ServerSentEvent> writeQueue;
+		@Nonnull
+		private final Instant establishedAt;
 
 		public ServerSentEventConnection(@Nonnull Request request,
 																		 @Nonnull ResourcePathInstance resourcePathInstance) {
@@ -580,6 +658,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.request = request;
 			this.resourcePathInstance = resourcePathInstance;
 			this.writeQueue = new ArrayBlockingQueue<>(8);
+			this.establishedAt = Instant.now();
 		}
 
 		@Nonnull
@@ -595,6 +674,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public BlockingQueue<ServerSentEvent> getWriteQueue() {
 			return this.writeQueue;
+		}
+
+		@Nonnull
+		public Instant getEstablishedAt() {
+			return this.establishedAt;
 		}
 	}
 
@@ -761,6 +845,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	public void stop() {
 		getLock().lock();
 
+		boolean interrupted = false;
 		this.stopping = false;
 
 		try {
@@ -769,6 +854,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			System.out.println("Stopping...");
 			this.stopping = true;
+
+			try {
+				this.connectionValidityExecutorService.shutdown();
+				this.connectionValidityExecutorService.awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				interrupted = true;
+			} catch (Exception e) {
+				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event connection validity checker")
+						.throwable(e)
+						.build());
+			}
 
 			getStopPoisonPill().set(true);
 
@@ -782,31 +878,30 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			}
 
-			boolean interrupted = false;
-
 			try {
 				getRequestHandlerExecutorService().get().shutdown();
 				getRequestHandlerExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
-				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down server request handler executor service")
+				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event request handler")
 						.throwable(e)
 						.build());
-			} finally {
-				if (interrupted)
-					Thread.currentThread().interrupt();
 			}
 		} finally {
 			this.started = false;
 			this.eventLoopThread = null;
 			this.requestHandlerExecutorService = null;
+			this.connectionValidityExecutorService = null;
 			this.getBroadcastersByResourcePathInstance().clear();
 			this.getResourcePathsByResourcePathInstanceCache().clear();
 			getStopPoisonPill().set(false);
 
 			if (this.stopping)
 				System.out.println("Stopped.");
+
+			if (interrupted)
+				Thread.currentThread().interrupt();
 
 			getLock().unlock();
 		}
