@@ -562,10 +562,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		List<String> lines = new ArrayList<>(1 + headers.size());
 
-		// HTTP 204 is illegal for these, coerce to 200
-		if (statusCode == 204)
-			statusCode = 200;
-
 		// e.g. "HTTP/1.1 200 OK"
 		lines.add(format("HTTP/1.1 %d %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()));
 

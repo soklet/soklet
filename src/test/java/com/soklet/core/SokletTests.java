@@ -387,9 +387,10 @@ public class SokletTests {
 		}
 
 		@ServerSentEventSource("/examples/{exampleId}")
-		public void exampleServerSentEventSource(@Nonnull Request request,
-																						 @Nonnull @PathParameter String exampleId) {
+		public Response exampleServerSentEventSource(@Nonnull Request request,
+																								 @Nonnull @PathParameter String exampleId) {
 			System.out.printf("Server-Sent Event Source connection initiated for %s with exampleId value %s\n", request.getId(), exampleId);
+			return Response.withStatusCode(200).build();
 		}
 
 		@POST("/fire-server-sent-event")
