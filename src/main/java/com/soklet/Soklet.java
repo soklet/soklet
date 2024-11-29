@@ -36,6 +36,7 @@ import com.soklet.core.ResourcePathInstance;
 import com.soklet.core.Response;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
+import com.soklet.core.ServerSentEvent;
 import com.soklet.core.ServerSentEventBroadcaster;
 import com.soklet.core.ServerSentEventServer;
 import com.soklet.core.Simulator;
@@ -879,6 +880,74 @@ public class Soklet implements AutoCloseable {
 		@Nullable
 		protected Optional<RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
+		}
+	}
+
+	/**
+	 * Mock Server-Sent Event broadcaster that doesn't touch the network at all, useful for testing.
+	 */
+	@ThreadSafe
+	static class MockServerSentEventBroadcaster implements ServerSentEventBroadcaster {
+		@Nonnull
+		@Override
+		public ResourcePathInstance getResourcePathInstance() {
+			throw new UnsupportedOperationException();
+		}
+
+		@Nonnull
+		@Override
+		public Long getClientCount() {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public void broadcast(@Nonnull ServerSentEvent serverSentEvent) {
+			requireNonNull(serverSentEvent);
+			throw new UnsupportedOperationException();
+		}
+	}
+
+	/**
+	 * Mock Server-Sent Event server that doesn't touch the network at all, useful for testing.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	static class MockServerSentEventServer implements ServerSentEventServer {
+		@Override
+		public void start() {
+			// No-op
+		}
+
+		@Override
+		public void stop() {
+			// No-op
+		}
+
+		@Nonnull
+		@Override
+		public Boolean isStarted() {
+			return true;
+		}
+
+		@Nonnull
+		@Override
+		public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePathInstance resourcePathInstance) {
+			if (resourcePathInstance == null)
+				return Optional.empty();
+
+			// TODO: return MockServerSentEventBroadcaster, if available
+
+			return Optional.empty();
+		}
+
+		@Override
+		public void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+													 @Nonnull RequestHandler requestHandler) {
+			requireNonNull(sokletConfiguration);
+			requireNonNull(requestHandler);
+
+			throw new UnsupportedOperationException();
 		}
 	}
 }
