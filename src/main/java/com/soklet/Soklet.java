@@ -828,8 +828,6 @@ public class Soklet implements AutoCloseable {
 		private MockServer server;
 		@Nullable
 		private MockServerSentEventServer serverSentEventServer;
-		@Nonnull
-		private final ConcurrentHashMap<ResourcePathInstance, Set<Consumer<ServerSentEvent>>> serverSentEventConsumersByResourcePathInstance;
 
 		public DefaultSimulator(@Nonnull MockServer server,
 														@Nonnull MockServerSentEventServer serverSentEventServer) {
@@ -838,7 +836,6 @@ public class Soklet implements AutoCloseable {
 
 			this.server = server;
 			this.serverSentEventServer = serverSentEventServer;
-			this.serverSentEventConsumersByResourcePathInstance = new ConcurrentHashMap<>();
 		}
 
 		@Nonnull
@@ -863,10 +860,8 @@ public class Soklet implements AutoCloseable {
 			requireNonNull(resourcePathInstance);
 			requireNonNull(serverSentEventConsumer);
 
-			Set<Consumer<ServerSentEvent>> serverSentEventConsumers = getServerSentEventConsumersByResourcePathInstance()
-					.computeIfAbsent(resourcePathInstance, rpi -> ConcurrentHashMap.newKeySet());
-
-			serverSentEventConsumers.add(serverSentEventConsumer);
+			// Delegate to the mock SSE server
+			getServerSentEventServer().registerServerSentEventConsumer(resourcePathInstance, serverSentEventConsumer);
 		}
 
 		@Nonnull
@@ -887,11 +882,6 @@ public class Soklet implements AutoCloseable {
 		@Nullable
 		protected MockServerSentEventServer getServerSentEventServer() {
 			return this.serverSentEventServer;
-		}
-
-		@Nonnull
-		protected ConcurrentHashMap<ResourcePathInstance, Set<Consumer<ServerSentEvent>>> getServerSentEventConsumersByResourcePathInstance() {
-			return this.serverSentEventConsumersByResourcePathInstance;
 		}
 	}
 
@@ -939,21 +929,52 @@ public class Soklet implements AutoCloseable {
 	@ThreadSafe
 	static class MockServerSentEventBroadcaster implements ServerSentEventBroadcaster {
 		@Nonnull
+		private final ResourcePathInstance resourcePathInstance;
+		@Nonnull
+		private final Set<Consumer<ServerSentEvent>> serverSentEventConsumers;
+
+		public MockServerSentEventBroadcaster(@Nonnull ResourcePathInstance resourcePathInstance) {
+			requireNonNull(resourcePathInstance);
+
+			this.resourcePathInstance = resourcePathInstance;
+			this.serverSentEventConsumers = ConcurrentHashMap.newKeySet();
+		}
+
+		@Nonnull
 		@Override
 		public ResourcePathInstance getResourcePathInstance() {
-			throw new UnsupportedOperationException();
+			return this.resourcePathInstance;
 		}
 
 		@Nonnull
 		@Override
 		public Long getClientCount() {
-			throw new UnsupportedOperationException();
+			return Long.valueOf(getServerSentEventConsumers().size());
 		}
 
 		@Override
 		public void broadcast(@Nonnull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
-			throw new UnsupportedOperationException();
+
+			for (Consumer<ServerSentEvent> serverSentEventConsumer : getServerSentEventConsumers()) {
+				try {
+					serverSentEventConsumer.accept(serverSentEvent);
+				} catch (Throwable throwable) {
+					// TODO: revisit this - should we communicate back exceptions, and should we fire these on separate threads for "realism" (probably not)?
+					throwable.printStackTrace();
+				}
+			}
+		}
+
+		@Nonnull
+		public Boolean registerServerSentEventConsumer(@Nonnull Consumer<ServerSentEvent> serverSentEventConsumer) {
+			requireNonNull(serverSentEventConsumer);
+			return getServerSentEventConsumers().add(serverSentEventConsumer);
+		}
+
+		@Nonnull
+		protected Set<Consumer<ServerSentEvent>> getServerSentEventConsumers() {
+			return this.serverSentEventConsumers;
 		}
 	}
 
@@ -968,6 +989,12 @@ public class Soklet implements AutoCloseable {
 		private SokletConfiguration sokletConfiguration;
 		@Nullable
 		private ServerSentEventServer.RequestHandler requestHandler;
+		@Nonnull
+		private final ConcurrentHashMap<ResourcePathInstance, MockServerSentEventBroadcaster> broadcastersByResourcePathInstance;
+
+		public MockServerSentEventServer() {
+			this.broadcastersByResourcePathInstance = new ConcurrentHashMap<>();
+		}
 
 		@Override
 		public void start() {
@@ -991,9 +1018,18 @@ public class Soklet implements AutoCloseable {
 			if (resourcePathInstance == null)
 				return Optional.empty();
 
-			// TODO: return MockServerSentEventBroadcaster, if available
+			return Optional.ofNullable(getBroadcastersByResourcePathInstance().get(resourcePathInstance));
+		}
 
-			return Optional.empty();
+		public void registerServerSentEventConsumer(@Nonnull ResourcePathInstance resourcePathInstance,
+																								@Nonnull Consumer<ServerSentEvent> serverSentEventConsumer) {
+			requireNonNull(resourcePathInstance);
+			requireNonNull(serverSentEventConsumer);
+
+			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePathInstance()
+					.computeIfAbsent(resourcePathInstance, rpi -> new MockServerSentEventBroadcaster(rpi));
+
+			broadcaster.registerServerSentEventConsumer(serverSentEventConsumer);
 		}
 
 		@Override
@@ -1014,6 +1050,11 @@ public class Soklet implements AutoCloseable {
 		@Nullable
 		protected Optional<ServerSentEventServer.RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
+		}
+
+		@Nonnull
+		protected ConcurrentHashMap<ResourcePathInstance, MockServerSentEventBroadcaster> getBroadcastersByResourcePathInstance() {
+			return this.broadcastersByResourcePathInstance;
 		}
 	}
 }
