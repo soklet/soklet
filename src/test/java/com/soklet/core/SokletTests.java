@@ -345,6 +345,7 @@ public class SokletTests {
 		Soklet.runSimulator(configuration, (simulator -> {
 			simulator.registerServerSentEventConsumer(ResourcePathInstance.of("/examples/abc"), (serverSentEvent -> {
 				System.out.println("Received SSE: " + serverSentEvent);
+				Assert.assertEquals("SSE event mismatch", "example", serverSentEvent.getEvent().get());
 			}));
 
 			// Perform initial handshake with /examples/abc and verify 200 response
