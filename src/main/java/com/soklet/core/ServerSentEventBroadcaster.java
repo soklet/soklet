@@ -35,7 +35,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * // Publish SSE payload to all listening clients
  * broadcaster.broadcast(serverSentEvent);}</pre>
  * <p>
- * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePathInstance}.  Soklet is responsible for creation and management of {@link ServerSentEventBroadcaster} instances.
+ * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePathInstance}.  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
  * <p>
  * You may acquire a broadcaster via {@link ServerSentEventServer#acquireBroadcaster(ResourcePathInstance)}.
  * <p>

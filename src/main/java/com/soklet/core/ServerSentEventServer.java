@@ -73,7 +73,7 @@ public interface ServerSentEventServer extends AutoCloseable {
 									@Nonnull RequestHandler requestHandler);
 
 	/**
-	 * Request/response processing contract for custom {@link ServerSentEventServer} implementations.
+	 * Request/response processing contract for {@link ServerSentEventServer} implementations.
 	 * <p>
 	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link ServerSentEventServer} via {@link ServerSentEventServer#initialize(SokletConfiguration, RequestHandler)}.
 	 * It's the responsibility of the {@link ServerSentEventServer} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
