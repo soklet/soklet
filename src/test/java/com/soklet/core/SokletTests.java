@@ -339,16 +339,35 @@ public class SokletTests {
 	@Test
 	public void serverSentEventServerSimulator() throws InterruptedException {
 		SokletConfiguration configuration = SokletConfiguration.forIntegrationTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ServerSentEventResource.class)))
+				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
 
 		Soklet.runSimulator(configuration, (simulator -> {
-			// TODO: finish up
+			simulator.registerServerSentEventConsumer(ResourcePathInstance.of("/examples/abc"), (serverSentEvent -> {
+				System.out.println("Received SSE: " + serverSentEvent);
+			}));
+
+			// Perform initial handshake with /examples/abc and verify 200 response
+			Request request = Request.with(HttpMethod.GET, "/examples/abc").build();
+			MarshaledResponse marshaledResponse = simulator.performRequest(request);
+
+			Assert.assertEquals(Integer.valueOf(200), marshaledResponse.getStatusCode());
+
+			// Create a server-sent event...
+			ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
+					.data("data")
+					.id("abc")
+					.retry(Duration.ofSeconds(10))
+					.build();
+
+			// ...and broadcast it to all /examples/abc listeners
+			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePathInstance.of("/examples/abc")).get();
+			broadcaster.broadcast(serverSentEvent);
 		}));
 	}
 
 	@ThreadSafe
-	protected static class ServerSentEventSimulatorResource {
+	public static class ServerSentEventSimulatorResource {
 		@ServerSentEventSource("/examples/{exampleId}")
 		public Response exampleServerSentEventSource(@Nonnull Request request,
 																								 @Nonnull @PathParameter String exampleId) {

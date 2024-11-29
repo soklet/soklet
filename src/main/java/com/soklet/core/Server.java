@@ -82,7 +82,7 @@ public interface Server extends AutoCloseable {
 	/**
 	 * Request/response processing contract for custom {@link Server} implementations.
 	 * <p>
-	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server} via {@link Server#registerRequestHandler(RequestHandler)}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server} via {@link Server#initialize(RequestHandler)}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
 	 * <strong>Most Soklet applications will use {@link com.soklet.core.impl.DefaultServer} and therefore do not need to implement this interface directly.</strong>
 	 *

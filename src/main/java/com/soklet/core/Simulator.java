@@ -17,10 +17,14 @@
 package com.soklet.core;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
  * Simulates server behavior of accepting a request and returning a response, useful for writing integration tests.
+ * <p>
+ * <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Event</a> simulation is also supported.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/automated-testing">https://www.soklet.com/docs/automated-testing</a>.
  * <p>
@@ -65,4 +69,7 @@ public interface Simulator {
 
 	void registerServerSentEventConsumer(@Nonnull ResourcePathInstance resourcePathInstance,
 																			 @Nonnull Consumer<ServerSentEvent> serverSentEventConsumer);
+
+	@Nonnull
+	Optional<? extends ServerSentEventBroadcaster> acquireServerSentEventBroadcaster(@Nullable ResourcePathInstance resourcePathInstance);
 }
