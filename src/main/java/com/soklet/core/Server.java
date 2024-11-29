@@ -17,7 +17,6 @@
 package com.soklet.core;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.function.Consumer;
 
 /**
@@ -68,7 +67,7 @@ public interface Server extends AutoCloseable {
 	 *
 	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link Server}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link Server} to write back to the client
 	 */
-	void registerRequestHandler(@Nullable RequestHandler requestHandler);
+	void initialize(@Nonnull RequestHandler requestHandler);
 
 	/**
 	 * {@link AutoCloseable}-enabled synonym for {@link #stop()}.

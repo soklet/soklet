@@ -419,7 +419,7 @@ public class SokletTests {
 	}
 
 	@ThreadSafe
-	protected static class HttpHeadResource {
+	public static class HttpHeadResource {
 		@GET("/hello-world")
 		public String helloWorld() {
 			return "hello world";

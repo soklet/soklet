@@ -17,6 +17,7 @@
 package com.soklet.core;
 
 import javax.annotation.Nonnull;
+import java.util.function.Consumer;
 
 /**
  * Simulates server behavior of accepting a request and returning a response, useful for writing integration tests.
@@ -52,7 +53,6 @@ import javax.annotation.Nonnull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@FunctionalInterface
 public interface Simulator {
 	/**
 	 * Given a request, process it and return a response ready to be written back over the wire.
@@ -62,4 +62,7 @@ public interface Simulator {
 	 */
 	@Nonnull
 	MarshaledResponse performRequest(@Nonnull Request request);
+
+	void registerServerSentEventConsumer(@Nonnull ResourcePathInstance resourcePathInstance,
+																			 @Nonnull Consumer<ServerSentEvent> serverSentEventConsumer);
 }

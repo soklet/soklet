@@ -113,7 +113,7 @@ public class Soklet implements AutoCloseable {
 		// That method should only be called by the managed `Server` instance.
 		Soklet soklet = this;
 
-		sokletConfiguration.getServer().registerRequestHandler((request, marshaledResponseConsumer) -> {
+		sokletConfiguration.getServer().initialize((request, marshaledResponseConsumer) -> {
 			// Delegate to Soklet's internal request handling method
 			soklet.handleRequest(request, marshaledResponseConsumer);
 		});
@@ -791,15 +791,19 @@ public class Soklet implements AutoCloseable {
 		requireNonNull(sokletConfiguration);
 		requireNonNull(simulatorConsumer);
 
-		MockServer mockServer = new MockServer();
+		MockServer server = new MockServer();
+		MockServerSentEventServer serverSentEventServer = new MockServerSentEventServer();
 
 		SokletConfiguration mockConfiguration = sokletConfiguration.copy()
-				.server(mockServer)
+				.server(server)
+				.serverSentEventServer(serverSentEventServer)
 				.finish();
+
+		Simulator simulator = new DefaultSimulator(server, serverSentEventServer);
 
 		try (Soklet soklet = new Soklet(mockConfiguration)) {
 			soklet.start();
-			simulatorConsumer.accept(mockServer);
+			simulatorConsumer.accept(simulator);
 		} catch (RuntimeException e) {
 			throw e;
 		} catch (Exception e) {
@@ -830,15 +834,67 @@ public class Soklet implements AutoCloseable {
 		return this.lock;
 	}
 
+	@ThreadSafe
+	static class DefaultSimulator implements Simulator {
+		@Nullable
+		private MockServer server;
+		@Nullable
+		private MockServerSentEventServer serverSentEventServer;
+
+		public DefaultSimulator(@Nonnull MockServer server,
+														@Nonnull MockServerSentEventServer serverSentEventServer) {
+			requireNonNull(server);
+			requireNonNull(serverSentEventServer);
+
+			this.server = server;
+			this.serverSentEventServer = serverSentEventServer;
+		}
+
+		@Nonnull
+		@Override
+		public MarshaledResponse performRequest(@Nonnull Request request) {
+			AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
+			Server.RequestHandler requestHandler = getServer().getRequestHandler().orElse(null);
+
+			if (requestHandler == null)
+				throw new IllegalStateException("You must register a request handler prior to simulating requests");
+
+			requestHandler.handleRequest(request, (marshaledResponse -> {
+				marshaledResponseHolder.set(marshaledResponse);
+			}));
+
+			return marshaledResponseHolder.get();
+		}
+
+		@Override
+		public void registerServerSentEventConsumer(@Nonnull ResourcePathInstance resourcePathInstance,
+																								@Nonnull Consumer<ServerSentEvent> serverSentEventConsumer) {
+			requireNonNull(resourcePathInstance);
+			requireNonNull(serverSentEventConsumer);
+
+			throw new UnsupportedOperationException();
+		}
+
+		@Nullable
+		protected MockServer getServer() {
+			return this.server;
+		}
+
+		@Nullable
+		protected MockServerSentEventServer getServerSentEventServer() {
+			return this.serverSentEventServer;
+		}
+	}
+
 	/**
 	 * Mock server that doesn't touch the network at all, useful for testing.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	static class MockServer implements Server, Simulator {
+	static class MockServer implements Server {
 		@Nullable
-		private RequestHandler requestHandler;
+		private Server.RequestHandler requestHandler;
 
 		@Override
 		public void start() {
@@ -856,24 +912,9 @@ public class Soklet implements AutoCloseable {
 			return true;
 		}
 
-		@Nonnull
 		@Override
-		public MarshaledResponse performRequest(@Nonnull Request request) {
-			AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
-			RequestHandler requestHandler = getRequestHandler().orElse(null);
-
-			if (requestHandler == null)
-				throw new IllegalStateException("You must register a request handler prior to simulating requests");
-
-			requestHandler.handleRequest(request, (marshaledResponse -> {
-				marshaledResponseHolder.set(marshaledResponse);
-			}));
-
-			return marshaledResponseHolder.get();
-		}
-
-		@Override
-		public void registerRequestHandler(@Nullable RequestHandler requestHandler) {
+		public void initialize(@Nonnull RequestHandler requestHandler) {
+			requireNonNull(requestHandler);
 			this.requestHandler = requestHandler;
 		}
 
@@ -914,6 +955,11 @@ public class Soklet implements AutoCloseable {
 	 */
 	@ThreadSafe
 	static class MockServerSentEventServer implements ServerSentEventServer {
+		@Nullable
+		private SokletConfiguration sokletConfiguration;
+		@Nullable
+		private ServerSentEventServer.RequestHandler requestHandler;
+
 		@Override
 		public void start() {
 			// No-op
@@ -943,11 +989,22 @@ public class Soklet implements AutoCloseable {
 
 		@Override
 		public void initialize(@Nonnull SokletConfiguration sokletConfiguration,
-													 @Nonnull RequestHandler requestHandler) {
+													 @Nonnull ServerSentEventServer.RequestHandler requestHandler) {
 			requireNonNull(sokletConfiguration);
 			requireNonNull(requestHandler);
 
-			throw new UnsupportedOperationException();
+			this.sokletConfiguration = sokletConfiguration;
+			this.requestHandler = requestHandler;
+		}
+
+		@Nullable
+		protected Optional<SokletConfiguration> getSokletConfiguration() {
+			return Optional.ofNullable(this.sokletConfiguration);
+		}
+
+		@Nullable
+		protected Optional<ServerSentEventServer.RequestHandler> getRequestHandler() {
+			return Optional.ofNullable(this.requestHandler);
 		}
 	}
 }

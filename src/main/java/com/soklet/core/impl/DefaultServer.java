@@ -382,7 +382,8 @@ public class DefaultServer implements Server {
 	}
 
 	@Override
-	public void registerRequestHandler(@Nullable RequestHandler requestHandler) {
+	public void initialize(@Nonnull RequestHandler requestHandler) {
+		requireNonNull(requestHandler);
 		this.requestHandler = requestHandler;
 	}
 
