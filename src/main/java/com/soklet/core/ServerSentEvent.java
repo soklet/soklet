@@ -71,21 +71,43 @@ public class ServerSentEvent {
 		HEARTBEAT = new ServerSentEvent(new ServerSentEvent.Builder());
 	}
 
+	/**
+	 * Acquires a reference to the shared "heartbeat" event.
+	 *
+	 * @return the shared "heartbeat" event
+	 */
 	@Nonnull
 	public static ServerSentEvent forHeartbeat() {
 		return HEARTBEAT;
 	}
 
+	/**
+	 * Acquires a builder for {@link ServerSentEvent} instances, seeded with an {@code event} value.
+	 *
+	 * @param event the {@code event} value for the instance
+	 * @return the builder
+	 */
 	@Nonnull
 	public static ServerSentEvent.Builder withEvent(@Nullable String event) {
 		return new Builder().event(event);
 	}
 
+	/**
+	 * Acquires a builder for {@link ServerSentEvent} instances, seeded with a {@code data} value.
+	 *
+	 * @param data the {@code data} value for the instance
+	 * @return the builder
+	 */
 	@Nonnull
 	public static ServerSentEvent.Builder withData(@Nullable String data) {
 		return new Builder().data(data);
 	}
 
+	/**
+	 * Acquires an "empty" builder for {@link ServerSentEvent} instances.
+	 *
+	 * @return the builder
+	 */
 	@Nonnull
 	public static ServerSentEvent.Builder builder() {
 		return new Builder();
@@ -101,7 +123,7 @@ public class ServerSentEvent {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link ServerSentEvent}.
+	 * Builder used to construct instances of {@link ServerSentEvent} via {@link ServerSentEvent#withEvent(String)} or {@link ServerSentEvent#withData(String)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -169,26 +191,59 @@ public class ServerSentEvent {
 		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
 	}
 
+	/**
+	 * Is this instance the shared "heartbeat" event (as provided via {@link ServerSentEvent#forHeartbeat()})?
+	 *
+	 * @return {@code true} if this instance is the shared "heartbeat" event, {@code false} otherwise
+	 */
 	@Nonnull
 	public Boolean isHeartbeat() {
 		return this == HEARTBEAT;
 	}
 
+	/**
+	 * The {@code id} for this Server-Sent Event, used by clients to populate the {@code Last-Event-ID} request header should a reconnect occur.
+	 * <p>
+	 * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
+	 *
+	 * @return the optional {@code id} for this Server-Sent Event
+	 */
 	@Nonnull
 	public Optional<String> getId() {
 		return Optional.ofNullable(this.id);
 	}
 
+	/**
+	 * The {@code event} value for this Server-Sent Event.
+	 * <p>
+	 * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
+	 *
+	 * @return the optional {@code event} value for this Server-Sent Event
+	 */
 	@Nonnull
 	public Optional<String> getEvent() {
 		return Optional.ofNullable(this.event);
 	}
 
+	/**
+	 * The {@code data} payload for this Server-Sent Event.
+	 * <p>
+	 * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
+	 *
+	 * @return the optional {@code data} payload for this Server-Sent Event
+	 */
 	@Nonnull
 	public Optional<String> getData() {
 		return Optional.ofNullable(this.data);
 	}
 
+	/**
+	 * The {@code retry} duration for this Server-Sent Event.
+	 * <p>
+	 * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
+	 *
+	 * @return the optional {@code retry} duration for this Server-Sent Event
+	 */
 	@Nonnull
 	public Optional<Duration> getRetry() {
 		return Optional.ofNullable(this.retry);

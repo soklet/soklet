@@ -20,15 +20,65 @@ import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
+ * Broadcasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> payload to all clients listening on a {@link ResourcePathInstance}.
+ * <p>
+ * For example:
+ * <pre>{@code  // Acquire our SSE broadcaster (sends to anyone listening to "/examples/123")
+ * ServerSentEventServer server = ...;
+ * ServerSentEventBroadcaster broadcaster = server.acquireBroadcaster(ResourcePathInstance.of("/examples/123")).get();
+ *
+ * // Create our SSE payload
+ * ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
+ *   .data("example")
+ *   .build();
+ *
+ * // Publish SSE payload to all listening clients
+ * broadcaster.broadcast(serverSentEvent);}</pre>
+ * <p>
+ * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePathInstance}.  Soklet is responsible for creation and management of {@link ServerSentEventBroadcaster} instances.
+ * <p>
+ * You may acquire a broadcaster via {@link ServerSentEventServer#acquireBroadcaster(ResourcePathInstance)}.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
+ * <p>
+ * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public interface ServerSentEventBroadcaster {
+	/**
+	 * The runtime Resource Path instance with which this broadcaster is associated.
+	 * <p>
+	 * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePathInstance}.
+	 * <p>
+	 * For example, a client may register for SSE broadcasts for Resource Method {@code @ServerSentEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}.
+	 * <p>
+	 * A broadcaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to all clients via {@link #broadcast(ServerSentEvent)}.
+	 *
+	 * @return the runtime Resource Path instance with which this broadcaster is associated
+	 */
 	@Nonnull
 	ResourcePathInstance getResourcePathInstance();
 
+	/**
+	 * How many clients are estimated to be listening to this broadcaster's {@link ResourcePathInstance}?
+	 * <p>
+	 * For performance reasons, this number may be an estimate, or a snapshot of a recent moment-in-time.
+	 * It's possible for some clients to have already disconnected, but we won't know until we attempt to broadcast to them.
+	 *
+	 * @return the approximate number of clients who will receive a broadcasted event
+	 */
 	@Nonnull
 	Long getClientCount();
 
+	/**
+	 * Broadcasts a Server-Sent Event payload to all clients listening to this broadcaster's {@link ResourcePathInstance}.
+	 * <p>
+	 * In practice, implementations will return "immediately" and broadcast operation[s] will occur on separate threads of execution.
+	 * However, mock implementations may wish to block until broadcasts have completed in order to simplify automated testing (for example).
+	 *
+	 * @param serverSentEvent the Server-Sent Event payload to broadcast
+	 */
 	void broadcast(@Nonnull ServerSentEvent serverSentEvent);
 }
