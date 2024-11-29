@@ -337,6 +337,27 @@ public class SokletTests {
 	}
 
 	@Test
+	public void serverSentEventServerSimulator() throws InterruptedException {
+		SokletConfiguration configuration = SokletConfiguration.forIntegrationTesting()
+				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ServerSentEventResource.class)))
+				.build();
+
+		Soklet.runSimulator(configuration, (simulator -> {
+			// TODO: finish up
+		}));
+	}
+
+	@ThreadSafe
+	protected static class ServerSentEventSimulatorResource {
+		@ServerSentEventSource("/examples/{exampleId}")
+		public Response exampleServerSentEventSource(@Nonnull Request request,
+																								 @Nonnull @PathParameter String exampleId) {
+			System.out.printf("Server-Sent Event Source connection initiated for %s with exampleId value %s\n", request.getId(), exampleId);
+			return Response.withStatusCode(200).build();
+		}
+	}
+
+	@Test
 	public void serverSentEventServer() throws InterruptedException {
 		SynchronousQueue<String> shutdownQueue = new SynchronousQueue<>();
 		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081).build();
@@ -433,7 +454,7 @@ public class SokletTests {
 
 	@Nonnull
 	protected SokletConfiguration configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
-		return SokletConfiguration.withMockServer()
+		return SokletConfiguration.forIntegrationTesting()
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(new DefaultResourceMethodResolver(resourceClasses))
 				// Quiet logging to keep the console clean
