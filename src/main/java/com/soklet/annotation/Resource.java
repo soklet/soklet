@@ -24,7 +24,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * This annotation must be present on a class for Resource Methods to be detected.
+ * This annotation must be present on a class for <em>Resource Methods</em> to be detected.
  * <p>
  * For example:
  * <pre>{@code  @Resource // This annotation must be here for @GET to work

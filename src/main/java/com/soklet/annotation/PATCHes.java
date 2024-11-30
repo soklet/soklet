@@ -23,7 +23,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Allows multiple {@link PATCH} annotations to be applied to the same Resource Method.
+ * Allows multiple {@link PATCH} annotations to be applied to the same <em>Resource Method</em>.
  * <p>
  * Soklet applications should not need to use this annotation directly.
  *
@@ -33,7 +33,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface PATCHes {
 	/**
-	 * @return the {@link PATCH} annotations on this Resource Method
+	 * @return the {@link PATCH} annotations on this <em>Resource Method</em>
 	 */
 	@Nonnull
 	PATCH[] value() default {};

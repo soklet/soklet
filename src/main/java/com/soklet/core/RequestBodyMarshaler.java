@@ -24,7 +24,7 @@ import java.util.Optional;
 /**
  * Contract for converting request body bytes into a corresponding Java type.
  * <p>
- * For example, if your Resource Methods expect JSON request bodies like this (note the {@link com.soklet.annotation.RequestBody} annotation):
+ * For example, if your <em>Resource Methods</em> expect JSON request bodies like this (note the {@link com.soklet.annotation.RequestBody} annotation):
  * <pre>{@code  @POST("/find-biggest")
  * public Integer findBiggest(@RequestBody List<Integer> numbers) {
  *   // JSON request body [1,2,3] results in 3 being returned
@@ -67,15 +67,15 @@ import java.util.Optional;
 @FunctionalInterface
 public interface RequestBodyMarshaler {
 	/**
-	 * Given a request, the Resource Method that will handle it, and a {@link com.soklet.annotation.RequestBody}-annotated parameter + its type, convert the request body bytes into an instance of type {@code requestBodyType}.
+	 * Given a request, the <em>Resource Method</em> that will handle it, and a {@link com.soklet.annotation.RequestBody}-annotated parameter + its type, convert the request body bytes into an instance of type {@code requestBodyType}.
 	 * <p>
-	 * This instance will be injected by Soklet when it invokes the Resource Method to handle the request.
+	 * This instance will be injected by Soklet when it invokes the <em>Resource Method</em> to handle the request.
 	 *
 	 * @param request         the request whose body should be converted into a Java type
-	 * @param resourceMethod  the Resource Method that is configured to handle the request
-	 * @param parameter       the Resource Method parameter into which the returned instance will be injected
-	 * @param requestBodyType the type of the Resource Method parameter (provided for convenience)
-	 * @return the Java instance that corresponds to the request body bytes suitable for assignment to the Resource Method parameter, or {@link Optional#empty()} if no instance should be marshaled
+	 * @param resourceMethod  the <em>Resource Method</em> that is configured to handle the request
+	 * @param parameter       the <em>Resource Method</em> parameter into which the returned instance will be injected
+	 * @param requestBodyType the type of the <em>Resource Method</em> parameter (provided for convenience)
+	 * @return the Java instance that corresponds to the request body bytes suitable for assignment to the <em>Resource Method</em> parameter, or {@link Optional#empty()} if no instance should be marshaled
 	 */
 	@Nonnull
 	Optional<Object> marshalRequestBody(@Nonnull Request request,

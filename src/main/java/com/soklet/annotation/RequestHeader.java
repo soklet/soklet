@@ -23,7 +23,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Apply to Resource Method parameters to enable HTTP request header injection.
+ * Apply to <em>Resource Method</em> parameters to enable HTTP request header injection.
  * <p>
  * Refer to documentation at <a href="https://www.soklet.com/docs/request-handling#headers">https://www.soklet.com/docs/request-handling#headers</a> for details.
  *
@@ -37,7 +37,7 @@ public @interface RequestHeader {
 	 * <p>
 	 * If {@code null} or blank, defaults to the name of the Java method parameter if your application is built with the {@code -parameters} compiler option.
 	 *
-	 * @return the name of the HTTP request header to inject into this Resource Method parameter
+	 * @return the name of the HTTP request header to inject into this <em>Resource Method</em> parameter
 	 */
 	@Nullable
 	String name() default "";

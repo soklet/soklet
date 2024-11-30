@@ -24,6 +24,12 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
+ * A special HTTP server whose only purpose is to provide <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> functionality.
+ * <p>
+ * A Soklet application which supports Server-Sent Events will be configured with both a {@link Server} and a {@link ServerSentEventServer}.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public interface ServerSentEventServer extends AutoCloseable {
@@ -59,6 +65,16 @@ public interface ServerSentEventServer extends AutoCloseable {
 		stop();
 	}
 
+	/**
+	 * Given a {@link ResourcePathInstance} that corresponds to a <em>Resource Method</em> annotated with {@link com.soklet.annotation.ServerSentEventSource}, acquire a {@link ServerSentEventBroadcaster} which is capable of "pushing" messages to all connected Server-Sent Event clients.
+	 * <p>
+	 * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePathInstance}.  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
+	 * <p>
+	 * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
+	 *
+	 * @param resourcePathInstance the {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em> for which to acquire a broadcaster
+	 * @return a broadcaster for the given {@link ResourcePathInstance}, or {@link Optional#empty()} if there is no broadcaster available
+	 */
 	@Nonnull
 	Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePathInstance resourcePathInstance);
 

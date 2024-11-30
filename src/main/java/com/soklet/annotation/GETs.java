@@ -23,7 +23,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Allows multiple {@link GET} annotations to be applied to the same Resource Method.
+ * Allows multiple {@link GET} annotations to be applied to the same <em>Resource Method</em>.
  * <p>
  * Soklet applications should not need to use this annotation directly.
  *
@@ -33,7 +33,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface GETs {
 	/**
-	 * @return the {@link GET} annotations on this Resource Method
+	 * @return the {@link GET} annotations on this <em>Resource Method</em>
 	 */
 	@Nonnull
 	GET[] value() default {};

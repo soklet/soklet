@@ -24,7 +24,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Apply to Resource Methods to support the HTTP {@code DELETE} method.
+ * Apply to <em>Resource Methods</em> to support the HTTP {@code DELETE} method.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -33,11 +33,11 @@ import java.lang.annotation.Target;
 @Repeatable(value = DELETEs.class)
 public @interface DELETE {
 	/**
-	 * The {@code DELETE} URL that should be handled by this Resource Method.
+	 * The {@code DELETE} URL that should be handled by this <em>Resource Method</em>.
 	 * <p>
 	 * The URL must start with a {@code /} character, e.g. {@code /widgets/{widgetId}}.
 	 *
-	 * @return the {@code DELETE} URL that should be handled by this Resource Method
+	 * @return the {@code DELETE} URL that should be handled by this <em>Resource Method</em>
 	 */
 	@Nonnull
 	String value();

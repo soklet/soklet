@@ -22,7 +22,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Apply to Resource Method parameters to enable HTTP request body injection.
+ * Apply to <em>Resource Method</em> parameters to enable HTTP request body injection.
  * <p>
  * Refer to documentation at <a href="https://www.soklet.com/docs/request-handling#request-body">https://www.soklet.com/docs/request-handling#request-body</a> for details.
  *

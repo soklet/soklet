@@ -15,7 +15,7 @@
  */
 
 /**
- * Annotations applicable to Resource Methods and their parameters.
+ * Annotations applicable to <em>Resource Methods</em> and their parameters.
  * <p>
  * These are documented in detail at <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
  *

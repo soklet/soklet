@@ -19,7 +19,7 @@ package com.soklet.annotation;
 import com.soklet.internal.classindex.processor.ClassIndexProcessor;
 
 /**
- * Soklet's standard Annotation Processor which is used to generate lookup tables of Resource Method definitions at compile time.
+ * Soklet's standard Annotation Processor which is used to generate lookup tables of <em>Resource Method</em> definitions at compile time.
  * <p>
  * Soklet applications should not need to reference this class directly - the compiler should automatically detect this Annotation Processor and apply it.
  * <p>

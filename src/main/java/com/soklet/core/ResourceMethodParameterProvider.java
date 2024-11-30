@@ -37,7 +37,7 @@ public interface ResourceMethodParameterProvider {
 	 * The size of the returned list of parameters must exactly match the number of parameters required by the Java method signature.
 	 *
 	 * @param request        the HTTP request
-	 * @param resourceMethod the resource method associated with the HTTP request
+	 * @param resourceMethod the <em>Resource Method</em> associated with the HTTP request
 	 * @return the list of parameters to use when performing Java method invocation, or the empty list if no parameters are necessary
 	 */
 	@Nonnull

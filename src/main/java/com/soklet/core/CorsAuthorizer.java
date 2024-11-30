@@ -44,7 +44,7 @@ public interface CorsAuthorizer {
 	 *
 	 * @param request                              the preflight request to authorize
 	 * @param corsPreflight                        the CORS preflight data provided in the request
-	 * @param availableResourceMethodsByHttpMethod resource methods that are available to serve requests according to parameters specified by the preflight data
+	 * @param availableResourceMethodsByHttpMethod <em>Resource Methods</em> that are available to serve requests according to parameters specified by the preflight data
 	 * @return a {@link CorsPreflightResponse} if authorized, or {@link Optional#empty()} if not authorized
 	 */
 	@Nonnull

@@ -52,7 +52,7 @@ public interface ServerSentEventBroadcaster {
 	 * <p>
 	 * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePathInstance}.
 	 * <p>
-	 * For example, a client may register for SSE broadcasts for Resource Method {@code @ServerSentEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}.
+	 * For example, a client may register for SSE broadcasts for <em>Resource Method</em> {@code @ServerSentEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}.
 	 * <p>
 	 * A broadcaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to all clients via {@link #broadcast(ServerSentEvent)}.
 	 *
@@ -75,7 +75,8 @@ public interface ServerSentEventBroadcaster {
 	/**
 	 * Broadcasts a Server-Sent Event payload to all clients listening to this broadcaster's {@link ResourcePathInstance}.
 	 * <p>
-	 * In practice, implementations will return "immediately" and broadcast operation[s] will occur on separate threads of execution.
+	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
+	 * <p>
 	 * However, mock implementations may wish to block until broadcasts have completed in order to simplify automated testing (for example).
 	 *
 	 * @param serverSentEvent the Server-Sent Event payload to broadcast

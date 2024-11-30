@@ -32,13 +32,13 @@ import java.util.Set;
  */
 public interface ResponseMarshaler {
 	/**
-	 * Prepares a "happy path" response - the request was matched to a resource method and executed non-exceptionally.
+	 * Prepares a "happy path" response - the request was matched to a <em>Resource Method</em> and executed non-exceptionally.
 	 * <p>
 	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#happy-path">https://www.soklet.com/docs/response-writing#happy-path</a>.
 	 *
 	 * @param request        the HTTP request
-	 * @param response       the response provided by the resource method that handled the request
-	 * @param resourceMethod the resource method that handled the request
+	 * @param response       the response provided by the <em>Resource Method</em> that handled the request
+	 * @param resourceMethod the <em>Resource Method</em> that handled the request
 	 * @return the response to be sent over the wire
 	 */
 	@Nonnull
@@ -78,7 +78,7 @@ public interface ResponseMarshaler {
 	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#413-content-too-large">https://www.soklet.com/docs/response-writing#413-content-too-large</a>.
 	 *
 	 * @param request        the HTTP request
-	 * @param resourceMethod the resource method that would have handled the request, if available
+	 * @param resourceMethod the <em>Resource Method</em> that would have handled the request, if available
 	 * @return the response to be sent over the wire
 	 */
 	@Nonnull
@@ -108,7 +108,7 @@ public interface ResponseMarshaler {
 	 *
 	 * @param request        the HTTP request
 	 * @param throwable      the exception that was thrown
-	 * @param resourceMethod the resource method that would have handled the request, if available
+	 * @param resourceMethod the <em>Resource Method</em> that would have handled the request, if available
 	 * @return the response to be sent over the wire
 	 */
 	@Nonnull

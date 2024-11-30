@@ -24,7 +24,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Apply to Resource Methods to support the HTTP {@code POST} method.
+ * Apply to <em>Resource Methods</em> to support the HTTP {@code POST} method.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * A finalized representation of a {@link Response}, suitable for sending to clients over the wire.
  * <p>
- * Your application's {@link ResponseMarshaler} is responsible for taking the {@link Response} returned by a Resource Method as input
+ * Your application's {@link ResponseMarshaler} is responsible for taking the {@link Response} returned by a <em>Resource Method</em> as input
  * and converting its {@link Response#getBody()} to a {@code byte[]}.
  * <p>
  * For example, if a {@link Response} were to specify a body of {@code List.of("one", "two")}, a {@link ResponseMarshaler} might

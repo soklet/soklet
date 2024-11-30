@@ -148,9 +148,9 @@ public class SokletConfiguration {
 	}
 
 	/**
-	 * How Soklet performs <a href="https://www.soklet.com/docs/request-handling#resource-method-resolution">Resource Method resolution</a> (experts only!)
+	 * How Soklet performs <a href="https://www.soklet.com/docs/request-handling#resource-method-resolution"><em>Resource Method</em> resolution</a> (experts only!)
 	 *
-	 * @return the instance responsible for resource method resolution
+	 * @return the instance responsible for <em>Resource Method</em> resolution
 	 */
 	@Nonnull
 	public ResourceMethodResolver getResourceMethodResolver() {
@@ -158,9 +158,9 @@ public class SokletConfiguration {
 	}
 
 	/**
-	 * How Soklet performs <a href="https://www.soklet.com/docs/request-handling#resource-method-parameter-injection">Resource Method parameter injection</a> (experts only!)
+	 * How Soklet performs <a href="https://www.soklet.com/docs/request-handling#resource-method-parameter-injection"><em>Resource Method</em> parameter injection</a> (experts only!)
 	 *
-	 * @return the instance responsible for Resource Method parameter injection
+	 * @return the instance responsible for <em>Resource Method</em> parameter injection
 	 */
 	@Nonnull
 	public ResourceMethodParameterProvider getResourceMethodParameterProvider() {

@@ -76,11 +76,11 @@ public interface LifecycleInterceptor {
 	}
 
 	/**
-	 * Called as soon as a request is received and a Resource Method has been resolved to handle it.
+	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
 	 *
 	 * @param request        the request that was received
-	 * @param resourceMethod the Resource Method that will handle the request.
-	 *                       May be {@code null} if no Resource Method was resolved, e.g. a 404
+	 * @param resourceMethod the <em>Resource Method</em> that will handle the request.
+	 *                       May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 */
 	default void didStartRequestHandling(@Nonnull Request request,
 																			 @Nullable ResourceMethod resourceMethod) {
@@ -91,8 +91,8 @@ public interface LifecycleInterceptor {
 	 * Called after a request has fully completed processing and a response has been sent to the client.
 	 *
 	 * @param request            the request that was received
-	 * @param resourceMethod     the Resource Method that will handle the request.
-	 *                           May be {@code null} if no Resource Method was resolved, e.g. a 404
+	 * @param resourceMethod     the <em>Resource Method</em> that will handle the request.
+	 *                           May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 * @param marshaledResponse  the response that was sent to the client
 	 * @param processingDuration how long it took to process the whole request, including time to send the response to the client
 	 * @param throwables         exceptions that occurred during request handling
@@ -109,8 +109,8 @@ public interface LifecycleInterceptor {
 	 * Called before the response is sent to the client.
 	 *
 	 * @param request           the request that was received
-	 * @param resourceMethod    the Resource Method that handled the request.
-	 *                          May be {@code null} if no Resource Method was resolved, e.g. a 404
+	 * @param resourceMethod    the <em>Resource Method</em> that handled the request.
+	 *                          May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 * @param marshaledResponse the response to send to the client
 	 */
 	default void willStartResponseWriting(@Nonnull Request request,
@@ -123,8 +123,8 @@ public interface LifecycleInterceptor {
 	 * Called after the response is sent to the client.
 	 *
 	 * @param request               the request that was received
-	 * @param resourceMethod        the Resource Method that handled the request.
-	 *                              May be {@code null} if no Resource Method was resolved, e.g. a 404
+	 * @param resourceMethod        the <em>Resource Method</em> that handled the request.
+	 *                              May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 * @param marshaledResponse     the response that was sent to the client
 	 * @param responseWriteDuration how long it took to send the response to the client
 	 * @param throwable             the exception thrown during response writing (if any)
@@ -172,9 +172,9 @@ public interface LifecycleInterceptor {
 	 * See <a href="https://www.soklet.com/docs/request-lifecycle#request-intercepting">https://www.soklet.com/docs/request-lifecycle#request-intercepting</a> for detailed documentation.
 	 *
 	 * @param request          the request that was received
-	 * @param resourceMethod   the Resource Method that will handle the request.
-	 *                         May be {@code null} if no Resource Method was resolved, e.g. a 404
-	 * @param responseProducer function that accepts the request as input and provides a response as output (usually by invoking the Resource Method)
+	 * @param resourceMethod   the <em>Resource Method</em> that will handle the request.
+	 *                         May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
+	 * @param responseProducer function that accepts the request as input and provides a response as output (usually by invoking the <em>Resource Method</em>)
 	 * @param responseWriter   function that accepts a response as input and writes the response to the client
 	 */
 	default void interceptRequest(@Nonnull Request request,
@@ -192,7 +192,7 @@ public interface LifecycleInterceptor {
 	/**
 	 * Wraps around the whole "outside" of the entire request-handling flow.
 	 * <p>
-	 * The "inside" of the flow is everything from Resource Method execution to writing response bytes to the client.
+	 * The "inside" of the flow is everything from <em>Resource Method</em> execution to writing response bytes to the client.
 	 * <p>
 	 * This is a more coarse-grained approach than {@link #interceptRequest(Request, ResourceMethod, Function, Consumer)}.
 	 * <pre> // Default implementation: let the request processing proceed as normal
@@ -200,8 +200,8 @@ public interface LifecycleInterceptor {
 	 * See <a href="https://www.soklet.com/docs/request-lifecycle#request-wrapping">https://www.soklet.com/docs/request-lifecycle#request-wrapping</a> for detailed documentation.
 	 *
 	 * @param request          the request that was received
-	 * @param resourceMethod   the Resource Method that will handle the request.
-	 *                         May be {@code null} if no Resource Method was resolved, e.g. a 404
+	 * @param resourceMethod   the <em>Resource Method</em> that will handle the request.
+	 *                         May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 * @param requestProcessor function that takes the request as input and performs all downstream processing
 	 */
 	default void wrapRequest(@Nonnull Request request,

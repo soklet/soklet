@@ -23,7 +23,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Allows multiple {@link HEAD} annotations to be applied to the same Resource Method.
+ * Allows multiple {@link HEAD} annotations to be applied to the same <em>Resource Method</em>.
  * <p>
  * Soklet applications should not need to use this annotation directly.
  *
@@ -33,7 +33,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface HEADs {
 	/**
-	 * @return the {@link HEAD} annotations on this Resource Method
+	 * @return the {@link HEAD} annotations on this <em>Resource Method</em>
 	 */
 	@Nonnull
 	HEAD[] value() default {};

@@ -156,9 +156,9 @@ public class LogEvent {
 	}
 
 	/**
-	 * The resource method associated with this log event, if available.
+	 * The <em>Resource Method</em> associated with this log event, if available.
 	 *
-	 * @return the resource method, or {@link Optional#empty()} if not available
+	 * @return the <em>Resource Method</em>, or {@link Optional#empty()} if not available
 	 */
 	@Nonnull
 	public Optional<ResourceMethod> getResourceMethod() {
