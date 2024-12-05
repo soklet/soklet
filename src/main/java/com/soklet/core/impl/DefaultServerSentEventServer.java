@@ -170,7 +170,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final ResourcePathInstance resourcePathInstance;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@Nonnull
-		private final Set<ServerSentEventConnection> serverSentEventConnections;
+		private final Set<DefaultServerSentEventConnection> serverSentEventConnections;
 
 		public DefaultServerSentEventBroadcaster(@Nonnull ResourcePathInstance resourcePathInstance) {
 			requireNonNull(resourcePathInstance);
@@ -198,12 +198,12 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
-			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
+			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
 				serverSentEventConnection.getWriteQueue().add(serverSentEvent);
 		}
 
 		@Nonnull
-		public Boolean registerServerSentEventConnection(@Nullable ServerSentEventConnection serverSentEventConnection) {
+		public Boolean registerServerSentEventConnection(@Nullable DefaultServerSentEventConnection serverSentEventConnection) {
 			if (serverSentEventConnection == null)
 				return false;
 
@@ -212,7 +212,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public Boolean unregisterServerSentEventConnection(@Nullable ServerSentEventConnection serverSentEventConnection,
+		public Boolean unregisterServerSentEventConnection(@Nullable DefaultServerSentEventConnection serverSentEventConnection,
 																											 @Nonnull Boolean sendPoisonPill) {
 			requireNonNull(sendPoisonPill);
 
@@ -234,12 +234,12 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			requireNonNull(sendPoisonPill);
 
 			// TODO: we probably want to have a lock around registration/unregistration
-			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
+			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
 				unregisterServerSentEventConnection(serverSentEventConnection, sendPoisonPill);
 		}
 
 		@Nonnull
-		protected Set<ServerSentEventConnection> getServerSentEventConnections() {
+		protected Set<DefaultServerSentEventConnection> getServerSentEventConnections() {
 			return this.serverSentEventConnections;
 		}
 	}
@@ -365,7 +365,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				++i;
 				System.out.println(format("Performing validity checks for broadcaster %d of %d (%s)...", i, broadcasters.size(), broadcaster.getResourcePathInstance().getPath()));
 
-				Set<ServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
+				Set<DefaultServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
 
 				System.out.println(format("This broadcaster has %d SSE connections", serverSentEventConnections.size()));
 
@@ -378,7 +378,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				} else {
 					int j = 0;
 
-					for (ServerSentEventConnection serverSentEventConnection : serverSentEventConnections) {
+					for (DefaultServerSentEventConnection serverSentEventConnection : serverSentEventConnections) {
 						++j;
 						System.out.println(format("Enqueuing heartbeat for socket %d of %d...", j, serverSentEventConnections.size()));
 						// TODO: keep track of when the most recent validity check was done so we don't do it too frequently, e.g. with AtomicReference<Instant> on ServerSentEventConnection (nice-to-have)
@@ -471,7 +471,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// If no socket channel registration (404) or >= 300 HTTP status, we're done immediately now that initial data has been written.
 			if (serverSentEventResourceMethodExists && marshaledResponseStatusCode.get() < 300) {
 				while (true) {
-					// TODO: periodically send a special event similar to the poison pill which we can use to check and see if the socket is still open (clientSocketChannel.isConnected()?)  Otherwise, sockets can live too long (e.g. client unregisters/leaves the webpage)
 					System.out.println(format("Waiting for SSE broadcasts on socket: %s", debuggingString(request)));
 					ServerSentEvent serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
 
@@ -636,7 +635,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@ThreadSafe
-	protected static class ServerSentEventConnection {
+	protected static class DefaultServerSentEventConnection {
 		@Nonnull
 		private final Request request;
 		@Nonnull
@@ -646,8 +645,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final Instant establishedAt;
 
-		public ServerSentEventConnection(@Nonnull Request request,
-																		 @Nonnull ResourcePathInstance resourcePathInstance) {
+		public DefaultServerSentEventConnection(@Nonnull Request request,
+																						@Nonnull ResourcePathInstance resourcePathInstance) {
 			requireNonNull(request);
 			requireNonNull(resourcePathInstance);
 
@@ -678,7 +677,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	protected record ClientSocketChannelRegistration(@Nonnull ServerSentEventConnection serverSentEventConnection,
+	protected record ClientSocketChannelRegistration(@Nonnull DefaultServerSentEventConnection serverSentEventConnection,
 																									 @Nonnull DefaultServerSentEventBroadcaster broadcaster) {
 		public ClientSocketChannelRegistration {
 			requireNonNull(serverSentEventConnection);
@@ -701,7 +700,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePathInstance).get();
 
 		// Create the connection and register it with the EventSource
-		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, broadcaster.getResourcePathInstance());
+		DefaultServerSentEventConnection serverSentEventConnection = new DefaultServerSentEventConnection(request, broadcaster.getResourcePathInstance());
 		broadcaster.registerServerSentEventConnection(serverSentEventConnection);
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
