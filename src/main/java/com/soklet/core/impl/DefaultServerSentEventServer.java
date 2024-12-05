@@ -284,7 +284,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 				try {
-					getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event processing")
+					safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event processing")
 							.throwable(throwable)
 							.build());
 				} catch (Throwable loggingThrowable) {
@@ -856,7 +856,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
-				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event connection validity checker")
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event connection validity checker")
 						.throwable(e)
 						.build());
 			}
@@ -879,7 +879,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
-				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event request handler")
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event request handler")
 						.throwable(e)
 						.build());
 			}
@@ -974,6 +974,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		return Optional.ofNullable(resourcePath);
+	}
+
+	protected void safelyLog(@Nonnull LogEvent logEvent) {
+		requireNonNull(logEvent);
+
+		try {
+			getLifecycleInterceptor().didReceiveLogEvent(logEvent);
+		} catch (Throwable throwable) {
+			// The LifecycleInterceptor implementation errored out, but we can't let that affect us - swallow its exception.
+			// Not much else we can do here but dump to stderr
+			throwable.printStackTrace();
+		}
 	}
 
 	@Nonnull

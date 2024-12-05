@@ -164,16 +164,9 @@ public class DefaultServer implements Server {
 
 			if (Utilities.virtualThreadsAvailable())
 				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
-					try {
-						getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
-								.throwable(throwable)
-								.build());
-					} catch (Throwable loggingThrowable) {
-						// We are in a bad state - the log operation in the uncaught exception handler failed.
-						// Not much else we can do here but dump to stderr
-						throwable.printStackTrace();
-						loggingThrowable.printStackTrace();
-					}
+					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
+							.throwable(throwable)
+							.build());
 				});
 
 			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
@@ -266,26 +259,26 @@ public class DefaultServer implements Server {
 								try {
 									microHttpCallback.accept(microhttpResponse);
 								} catch (Throwable t) {
-									getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
+									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
 											.throwable(t)
 											.build());
 								}
 							} catch (Throwable t) {
-								getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
+								safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
 										.throwable(t)
 										.build());
 
 								try {
 									microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
 								} catch (Throwable t2) {
-									getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 											.throwable(t2)
 											.build());
 								}
 							}
 						}));
 					} catch (Throwable t) {
-						getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
+						safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
 								.throwable(t)
 								.build());
 
@@ -293,7 +286,7 @@ public class DefaultServer implements Server {
 							try {
 								microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
 							} catch (Throwable t2) {
-								getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+								safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 										.throwable(t2)
 										.build());
 							}
@@ -326,7 +319,7 @@ public class DefaultServer implements Server {
 			try {
 				getEventLoop().get().stop();
 			} catch (Exception e) {
-				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
 						.throwable(e)
 						.build());
 			}
@@ -339,7 +332,7 @@ public class DefaultServer implements Server {
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
-				getLifecycleInterceptor().didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server request handler executor service")
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server request handler executor service")
 						.throwable(e)
 						.build());
 			} finally {
@@ -455,6 +448,18 @@ public class DefaultServer implements Server {
 	protected Boolean isAlreadySorted(@Nonnull Set<?> set) {
 		requireNonNull(set);
 		return set instanceof SortedSet || set instanceof LinkedHashSet;
+	}
+
+	protected void safelyLog(@Nonnull LogEvent logEvent) {
+		requireNonNull(logEvent);
+
+		try {
+			getLifecycleInterceptor().didReceiveLogEvent(logEvent);
+		} catch (Throwable throwable) {
+			// The LifecycleInterceptor implementation errored out, but we can't let that affect us - swallow its exception.
+			// Not much else we can do here but dump to stderr
+			throwable.printStackTrace();
+		}
 	}
 
 	@Nonnull
