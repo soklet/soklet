@@ -212,4 +212,40 @@ public interface LifecycleInterceptor {
 
 		requestProcessor.accept(request);
 	}
+
+	/**
+	 * Called before the Server-Sent Event server starts.
+	 *
+	 * @param serverSentEventServer the Server-Sent Event server that will start
+	 */
+	default void willStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the Server-Sent Event server starts.
+	 *
+	 * @param serverSentEventServer the Server-Sent Event server that started
+	 */
+	default void didStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before the Server-Sent Event server stops.
+	 *
+	 * @param serverSentEventServer the Server-Sent Event server that will stop
+	 */
+	default void willStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the Server-Sent Event server stops.
+	 *
+	 * @param serverSentEventServer the Server-Sent Event server that stopped
+	 */
+	default void didStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		// No-op by default
+	}
 }

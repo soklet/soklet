@@ -16,6 +16,8 @@
 
 package com.soklet.core;
 
+import com.soklet.SokletConfiguration;
+
 import javax.annotation.Nonnull;
 import java.util.function.Consumer;
 
@@ -65,9 +67,11 @@ public interface Server extends AutoCloseable {
 	 * <p>
 	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 *
-	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link Server}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link Server} to write back to the client
+	 * @param sokletConfiguration configuration for the Soklet instance that controls this server
+	 * @param requestHandler      a {@link com.soklet.Soklet}-internal request handler which takes a {@link Server}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link Server} to write back to the client
 	 */
-	void initialize(@Nonnull RequestHandler requestHandler);
+	void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+									@Nonnull RequestHandler requestHandler);
 
 	/**
 	 * {@link AutoCloseable}-enabled synonym for {@link #stop()}.
@@ -82,7 +86,7 @@ public interface Server extends AutoCloseable {
 	/**
 	 * Request/response processing contract for {@link Server} implementations.
 	 * <p>
-	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server} via {@link Server#initialize(RequestHandler)}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server} via {@link Server#initialize(SokletConfiguration, RequestHandler)}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
 	 * <strong>Most Soklet applications will use {@link com.soklet.core.impl.DefaultServer} and therefore do not need to implement this interface directly.</strong>
 	 *

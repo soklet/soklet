@@ -16,6 +16,7 @@
 
 package com.soklet.core.impl;
 
+import com.soklet.SokletConfiguration;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogEvent;
@@ -123,8 +124,6 @@ public class DefaultServer implements Server {
 	@Nonnull
 	private final Integer socketPendingConnectionLimit;
 	@Nonnull
-	private final LifecycleInterceptor lifecycleInterceptor;
-	@Nonnull
 	private final MultipartParser multipartParser;
 	@Nonnull
 	private final ReentrantLock lock;
@@ -134,6 +133,8 @@ public class DefaultServer implements Server {
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
 	private volatile RequestHandler requestHandler;
+	@Nullable
+	private volatile LifecycleInterceptor lifecycleInterceptor;
 	@Nullable
 	private volatile EventLoop eventLoop;
 
@@ -157,7 +158,6 @@ public class DefaultServer implements Server {
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
-		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.sharedInstance();
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "request-handler-";
@@ -375,9 +375,13 @@ public class DefaultServer implements Server {
 	}
 
 	@Override
-	public void initialize(@Nonnull RequestHandler requestHandler) {
+	public void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+												 @Nonnull RequestHandler requestHandler) {
 		requireNonNull(requestHandler);
+		requireNonNull(sokletConfiguration);
+
 		this.requestHandler = requestHandler;
+		this.lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
 	}
 
 	@Nonnull
@@ -454,7 +458,7 @@ public class DefaultServer implements Server {
 		requireNonNull(logEvent);
 
 		try {
-			getLifecycleInterceptor().didReceiveLogEvent(logEvent);
+			getLifecycleInterceptor().get().didReceiveLogEvent(logEvent);
 		} catch (Throwable throwable) {
 			// The LifecycleInterceptor implementation errored out, but we can't let that affect us - swallow its exception.
 			// Not much else we can do here but dump to stderr
@@ -508,11 +512,6 @@ public class DefaultServer implements Server {
 	}
 
 	@Nonnull
-	protected LifecycleInterceptor getLifecycleInterceptor() {
-		return this.lifecycleInterceptor;
-	}
-
-	@Nonnull
 	protected MultipartParser getMultipartParser() {
 		return this.multipartParser;
 	}
@@ -540,6 +539,11 @@ public class DefaultServer implements Server {
 	@Nonnull
 	protected Supplier<ExecutorService> getRequestHandlerExecutorServiceSupplier() {
 		return this.requestHandlerExecutorServiceSupplier;
+	}
+
+	@Nonnull
+	protected Optional<LifecycleInterceptor> getLifecycleInterceptor() {
+		return Optional.ofNullable(this.lifecycleInterceptor);
 	}
 
 	@Nonnull
@@ -607,8 +611,6 @@ public class DefaultServer implements Server {
 		@Nullable
 		private Integer socketPendingConnectionLimit;
 		@Nullable
-		private LifecycleInterceptor lifecycleInterceptor;
-		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
 		private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
@@ -671,12 +673,6 @@ public class DefaultServer implements Server {
 		@Nonnull
 		public Builder socketReadBufferSizeInBytes(@Nullable Integer socketReadBufferSizeInBytes) {
 			this.socketReadBufferSizeInBytes = socketReadBufferSizeInBytes;
-			return this;
-		}
-
-		@Nonnull
-		public Builder lifecycleInterceptor(@Nullable LifecycleInterceptor lifecycleInterceptor) {
-			this.lifecycleInterceptor = lifecycleInterceptor;
 			return this;
 		}
 

@@ -83,6 +83,7 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * <p>
 	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 *
+	 * @param sokletConfiguration configuration for the Soklet instance that controls this server
 	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link ServerSentEventServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link ServerSentEventServer} to write back to the client
 	 */
 	void initialize(@Nonnull SokletConfiguration sokletConfiguration,

@@ -138,8 +138,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final Integer socketPendingConnectionLimit;
 	@Nonnull
-	private final LifecycleInterceptor lifecycleInterceptor;
-	@Nonnull
 	private final ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventBroadcaster> broadcastersByResourcePathInstance;
 	@Nonnull
 	private final ConcurrentHashMap<ResourcePathInstance, ResourcePath> resourcePathsByResourcePathInstanceCache;
@@ -163,6 +161,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private Set<ResourcePath> registeredResourcePaths;
 	@Nullable
 	private RequestHandler requestHandler;
+	@Nullable
+	private LifecycleInterceptor lifecycleInterceptor;
 
 	@ThreadSafe
 	protected static class DefaultServerSentEventBroadcaster implements ServerSentEventBroadcaster {
@@ -267,7 +267,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
-		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
 		this.registeredResourcePaths = Set.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
 		// TODO: let clients specify initial capacity
@@ -284,7 +283,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 				try {
-					safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event processing")
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event processing")
 							.throwable(throwable)
 							.build());
 				} catch (Throwable loggingThrowable) {
@@ -303,6 +302,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(sokletConfiguration);
 		requireNonNull(requestHandler);
 
+		this.lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
 		this.requestHandler = requestHandler;
 
 		// Registered resource paths are registered here just once and will never change
@@ -324,7 +324,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (getRequestHandler().isEmpty())
 				throw new IllegalStateException(format("No %s was registered for %s", RequestHandler.class, getClass()));
 
-			System.out.println("Starting...");
+			if (getLifecycleInterceptor().isEmpty())
+				throw new IllegalStateException(format("No %s was registered for %s", LifecycleInterceptor.class, getClass()));
+
+			getLifecycleInterceptor().get().willStartServerSentEventServer(this);
+
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
 			this.eventLoopThread = new Thread(this::startInternal, "sse-event-loop");
 			eventLoopThread.start();
@@ -350,7 +354,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			}, 5, 15, TimeUnit.SECONDS);
 
 			this.started = true;
-			System.out.println("Started.");
+			getLifecycleInterceptor().get().didStartServerSentEventServer(this);
 		} finally {
 			getLock().unlock();
 		}
@@ -847,7 +851,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (!isStarted())
 				return;
 
-			System.out.println("Stopping...");
+			getLifecycleInterceptor().get().willStopServerSentEventServer(this);
 			this.stopping = true;
 
 			try {
@@ -856,7 +860,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event connection validity checker")
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event connection validity checker")
 						.throwable(e)
 						.build());
 			}
@@ -879,7 +883,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event request handler")
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event request handler")
 						.throwable(e)
 						.build());
 			}
@@ -893,7 +897,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			getStopPoisonPill().set(false);
 
 			if (this.stopping)
-				System.out.println("Stopped.");
+				getLifecycleInterceptor().get().didStopServerSentEventServer(this);
 
 			if (interrupted)
 				Thread.currentThread().interrupt();
@@ -980,7 +984,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(logEvent);
 
 		try {
-			getLifecycleInterceptor().didReceiveLogEvent(logEvent);
+			getLifecycleInterceptor().get().didReceiveLogEvent(logEvent);
 		} catch (Throwable throwable) {
 			// The LifecycleInterceptor implementation errored out, but we can't let that affect us - swallow its exception.
 			// Not much else we can do here but dump to stderr
@@ -1034,11 +1038,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected LifecycleInterceptor getLifecycleInterceptor() {
-		return this.lifecycleInterceptor;
-	}
-
-	@Nonnull
 	protected Set<ResourcePath> getRegisteredResourcePaths() {
 		return this.registeredResourcePaths;
 	}
@@ -1083,6 +1082,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		return Optional.ofNullable(this.requestHandler);
 	}
 
+	@Nonnull
+	protected Optional<LifecycleInterceptor> getLifecycleInterceptor() {
+		return Optional.ofNullable(this.lifecycleInterceptor);
+	}
+
 	/**
 	 * Builder used to construct instances of {@link DefaultServerSentEventServer}.
 	 * <p>
@@ -1110,8 +1114,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		private Integer socketReadBufferSizeInBytes;
 		@Nullable
 		private Integer socketPendingConnectionLimit;
-		@Nullable
-		private LifecycleInterceptor lifecycleInterceptor;
 		@Nullable
 		private Set<ResourcePath> resourcePaths;
 		@Nullable
@@ -1175,12 +1177,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public Builder socketReadBufferSizeInBytes(@Nullable Integer socketReadBufferSizeInBytes) {
 			this.socketReadBufferSizeInBytes = socketReadBufferSizeInBytes;
-			return this;
-		}
-
-		@Nonnull
-		public Builder lifecycleInterceptor(@Nullable LifecycleInterceptor lifecycleInterceptor) {
-			this.lifecycleInterceptor = lifecycleInterceptor;
 			return this;
 		}
 

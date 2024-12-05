@@ -52,6 +52,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.SynchronousQueue;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static com.soklet.core.Utilities.emptyByteArray;
 import static java.util.Objects.requireNonNull;
@@ -401,6 +403,103 @@ public class SokletTests {
 							});
 
 						return super.provide(instanceClass);
+					}
+				})
+				.lifecycleInterceptor(new LifecycleInterceptor() {
+					@Override
+					public void willStartServer(@Nonnull Server server) {
+						System.out.println("XXX Will start server");
+					}
+
+					@Override
+					public void didStartServer(@Nonnull Server server) {
+						System.out.println("XXX Did start server");
+					}
+
+					@Override
+					public void willStopServer(@Nonnull Server server) {
+						System.out.println("XXX Will stop server");
+					}
+
+					@Override
+					public void didStopServer(@Nonnull Server server) {
+						System.out.println("XXX Did stop server");
+					}
+
+					@Override
+					public void didStartRequestHandling(@Nonnull Request request,
+																							@Nullable ResourceMethod resourceMethod) {
+						System.out.println("XXX Did start request handling: " + request + ", resource method: " + resourceMethod);
+					}
+
+					@Override
+					public void didFinishRequestHandling(@Nonnull Request request,
+																							 @Nullable ResourceMethod resourceMethod,
+																							 @Nonnull MarshaledResponse marshaledResponse,
+																							 @Nonnull Duration processingDuration,
+																							 @Nonnull List<Throwable> throwables) {
+						System.out.println("XXX Did finish request handling: " + request + ", resource method: " + resourceMethod + ", marshaled response: " + marshaledResponse);
+					}
+
+					@Override
+					public void willStartResponseWriting(@Nonnull Request request,
+																							 @Nullable ResourceMethod resourceMethod,
+																							 @Nonnull MarshaledResponse marshaledResponse) {
+						System.out.println("XXX Will start response writing: " + request + ", resource method: " + resourceMethod);
+					}
+
+					@Override
+					public void didFinishResponseWriting(@Nonnull Request request,
+																							 @Nullable ResourceMethod resourceMethod,
+																							 @Nonnull MarshaledResponse marshaledResponse,
+																							 @Nonnull Duration responseWriteDuration,
+																							 @Nullable Throwable throwable) {
+						System.out.println("XXX Did finish response writing: " + request + ", resource method: " + resourceMethod);
+					}
+
+					@Override
+					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
+						System.out.println("XXX Did receive log event: " + logEvent);
+					}
+
+					@Override
+					public void interceptRequest(@Nonnull Request request,
+																			 @Nullable ResourceMethod resourceMethod,
+																			 @Nonnull Function<Request, MarshaledResponse> responseProducer,
+																			 @Nonnull Consumer<MarshaledResponse> responseWriter) {
+						System.out.println("XXX Intercepting request: " + request);
+						MarshaledResponse response = responseProducer.apply(request);
+						responseWriter.accept(response);
+						System.out.println("XXX Done intercepting request: " + request);
+					}
+
+					@Override
+					public void wrapRequest(@Nonnull Request request,
+																	@Nullable ResourceMethod resourceMethod,
+																	@Nonnull Consumer<Request> requestProcessor) {
+						System.out.println("XXX Wrapping request: " + request);
+						requestProcessor.accept(request);
+						System.out.println("XXX Done wrapping request: " + request);
+					}
+
+					@Override
+					public void willStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+						System.out.println("XXX Will start server-sent event server");
+					}
+
+					@Override
+					public void didStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+						System.out.println("XXX Did start server-sent event server");
+					}
+
+					@Override
+					public void willStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+						System.out.println("XXX Will stop server-sent event server");
+					}
+
+					@Override
+					public void didStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+						System.out.println("XXX Did stop server-sent event server");
 					}
 				})
 				.build();

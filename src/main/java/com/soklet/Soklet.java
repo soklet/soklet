@@ -114,7 +114,7 @@ public class Soklet implements AutoCloseable {
 		// That method should only be called by the managed `Server` instance.
 		Soklet soklet = this;
 
-		sokletConfiguration.getServer().initialize((request, marshaledResponseConsumer) -> {
+		sokletConfiguration.getServer().initialize(getSokletConfiguration(), (request, marshaledResponseConsumer) -> {
 			// Delegate to Soklet's internal request handling method
 			soklet.handleRequest(request, marshaledResponseConsumer);
 		});
@@ -893,6 +893,8 @@ public class Soklet implements AutoCloseable {
 	@ThreadSafe
 	static class MockServer implements Server {
 		@Nullable
+		private SokletConfiguration sokletConfiguration;
+		@Nullable
 		private Server.RequestHandler requestHandler;
 
 		@Override
@@ -912,12 +914,20 @@ public class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		public void initialize(@Nonnull RequestHandler requestHandler) {
+		public void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+													 @Nonnull RequestHandler requestHandler) {
+			requireNonNull(sokletConfiguration);
 			requireNonNull(requestHandler);
+
 			this.requestHandler = requestHandler;
 		}
 
-		@Nullable
+		@Nonnull
+		protected Optional<SokletConfiguration> getSokletConfiguration() {
+			return Optional.ofNullable(this.sokletConfiguration);
+		}
+
+		@Nonnull
 		protected Optional<RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
 		}
