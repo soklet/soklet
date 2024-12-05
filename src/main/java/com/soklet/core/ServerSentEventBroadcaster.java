@@ -45,7 +45,6 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@ThreadSafe
 public interface ServerSentEventBroadcaster {
 	/**
 	 * The runtime Resource Path instance with which this broadcaster is associated.
