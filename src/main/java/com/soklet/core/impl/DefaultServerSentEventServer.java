@@ -23,6 +23,7 @@ import com.soklet.core.LogEvent;
 import com.soklet.core.LogEventType;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
+import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourcePath;
 import com.soklet.core.ResourcePathInstance;
 import com.soklet.core.ServerSentEvent;
@@ -64,6 +65,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -158,7 +160,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nullable
 	private Thread eventLoopThread;
 	@Nonnull
-	private Set<ResourcePath> registeredResourcePaths;
+	private Map<ResourcePath, ResourceMethod> resourceMethodsByResourcePath;
 	@Nullable
 	private RequestHandler requestHandler;
 	@Nullable
@@ -167,17 +169,27 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@ThreadSafe
 	protected static class DefaultServerSentEventBroadcaster implements ServerSentEventBroadcaster {
 		@Nonnull
+		private final ResourceMethod resourceMethod;
+		@Nonnull
 		private final ResourcePathInstance resourcePathInstance;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@Nonnull
 		private final Set<DefaultServerSentEventConnection> serverSentEventConnections;
 
-		public DefaultServerSentEventBroadcaster(@Nonnull ResourcePathInstance resourcePathInstance) {
+		public DefaultServerSentEventBroadcaster(@Nonnull ResourceMethod resourceMethod,
+																						 @Nonnull ResourcePathInstance resourcePathInstance) {
+			requireNonNull(resourceMethod);
 			requireNonNull(resourcePathInstance);
 
+			this.resourceMethod = resourceMethod;
 			this.resourcePathInstance = resourcePathInstance;
 			// TODO: let clients specify capacity
 			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(1_024);
+		}
+
+		@Nonnull
+		public ResourceMethod getResourceMethod() {
+			return this.resourceMethod;
 		}
 
 		@Nonnull
@@ -267,7 +279,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
-		this.registeredResourcePaths = Set.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
+		this.resourceMethodsByResourcePath = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
 		// TODO: let clients specify initial capacity
 		this.broadcastersByResourcePathInstance = new ConcurrentHashMap<>(1_024);
@@ -305,11 +317,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
 		this.requestHandler = requestHandler;
 
-		// Registered resource paths are registered here just once and will never change
-		this.registeredResourcePaths = sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
+		// Pick out all the @ServerSentEventSource resource methods and store off keyed on resource path for ease of lookup.
+		// This is computed just once here and will never change.
+		this.resourceMethodsByResourcePath = sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
 				.filter(resourceMethod -> resourceMethod.isServerSentEventSource())
-				.map(resourceMethod -> resourceMethod.getResourcePath())
-				.collect(Collectors.toUnmodifiableSet());
+				.collect(Collectors.toMap(ResourceMethod::getResourcePath, Function.identity()));
 	}
 
 	@Override
@@ -643,6 +655,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final Request request;
 		@Nonnull
+		private final ResourceMethod resourceMethod;
+		@Nonnull
 		private final ResourcePathInstance resourcePathInstance;
 		@Nonnull
 		private final BlockingQueue<ServerSentEvent> writeQueue;
@@ -650,11 +664,14 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final Instant establishedAt;
 
 		public DefaultServerSentEventConnection(@Nonnull Request request,
+																						@Nonnull ResourceMethod resourceMethod,
 																						@Nonnull ResourcePathInstance resourcePathInstance) {
 			requireNonNull(request);
+			requireNonNull(resourceMethod);
 			requireNonNull(resourcePathInstance);
 
 			this.request = request;
+			this.resourceMethod = resourceMethod;
 			this.resourcePathInstance = resourcePathInstance;
 			this.writeQueue = new ArrayBlockingQueue<>(8);
 			this.establishedAt = Instant.now();
@@ -663,6 +680,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public Request getRequest() {
 			return this.request;
+		}
+
+		@Nonnull
+		public ResourceMethod getResourceMethod() {
+			return this.resourceMethod;
 		}
 
 		@Nonnull
@@ -704,7 +726,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePathInstance).get();
 
 		// Create the connection and register it with the EventSource
-		DefaultServerSentEventConnection serverSentEventConnection = new DefaultServerSentEventConnection(request, broadcaster.getResourcePathInstance());
+		DefaultServerSentEventConnection serverSentEventConnection = new DefaultServerSentEventConnection(request, broadcaster.getResourceMethod(), broadcaster.getResourcePathInstance());
 		broadcaster.registerServerSentEventConnection(serverSentEventConnection);
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
@@ -948,9 +970,15 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (resourcePath == null)
 			return Optional.empty();
 
+		ResourceMethod resourceMethod = getResourceMethodsByResourcePath().get(resourcePath);
+
+		// TODO: should this be sent as a LogEvent?
+		if (resourceMethod == null)
+			throw new IllegalStateException(format("Internal error: unable to find %s instance that matches %s", ResourceMethod.class, resourcePath));
+
 		// Create the event source if it does not already exist
 		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePathInstance()
-				.computeIfAbsent(resourcePathInstance, (ignored) -> new DefaultServerSentEventBroadcaster(resourcePathInstance));
+				.computeIfAbsent(resourcePathInstance, (ignored) -> new DefaultServerSentEventBroadcaster(resourceMethod, resourcePathInstance));
 
 		return Optional.of(broadcaster);
 	}
@@ -960,12 +988,14 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (resourcePathInstance == null)
 			return Optional.empty();
 
+		// TODO: convert to computeIfAbsent()
+
 		// Try a cache lookup first
 		ResourcePath resourcePath = getResourcePathsByResourcePathInstanceCache().get(resourcePathInstance);
 
 		if (resourcePath == null) {
 			// If the cache lookup fails, perform a manual lookup
-			for (ResourcePath registeredResourcePath : getRegisteredResourcePaths()) {
+			for (ResourcePath registeredResourcePath : getResourceMethodsByResourcePath().keySet()) {
 				if (registeredResourcePath.matches(resourcePathInstance)) {
 					resourcePath = registeredResourcePath;
 					break;
@@ -1038,8 +1068,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected Set<ResourcePath> getRegisteredResourcePaths() {
-		return this.registeredResourcePaths;
+	public Map<ResourcePath, ResourceMethod> getResourceMethodsByResourcePath() {
+		return this.resourceMethodsByResourcePath;
 	}
 
 	@Nonnull
