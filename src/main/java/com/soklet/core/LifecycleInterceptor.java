@@ -79,7 +79,7 @@ public interface LifecycleInterceptor {
 	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
 	 *
 	 * @param request        the request that was received
-	 * @param resourceMethod the <em>Resource Method</em> that will handle the request.
+	 * @param resourceMethod the <em>Resource Method</em> that will handle the request
 	 *                       May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 */
 	default void didStartRequestHandling(@Nonnull Request request,
@@ -91,7 +91,7 @@ public interface LifecycleInterceptor {
 	 * Called after a request has fully completed processing and a response has been sent to the client.
 	 *
 	 * @param request            the request that was received
-	 * @param resourceMethod     the <em>Resource Method</em> that will handle the request.
+	 * @param resourceMethod     the <em>Resource Method</em> that will handle the request
 	 *                           May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 * @param marshaledResponse  the response that was sent to the client
 	 * @param processingDuration how long it took to process the whole request, including time to send the response to the client
@@ -172,7 +172,7 @@ public interface LifecycleInterceptor {
 	 * See <a href="https://www.soklet.com/docs/request-lifecycle#request-intercepting">https://www.soklet.com/docs/request-lifecycle#request-intercepting</a> for detailed documentation.
 	 *
 	 * @param request          the request that was received
-	 * @param resourceMethod   the <em>Resource Method</em> that will handle the request.
+	 * @param resourceMethod   the <em>Resource Method</em> that will handle the request
 	 *                         May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 * @param responseProducer function that accepts the request as input and provides a response as output (usually by invoking the <em>Resource Method</em>)
 	 * @param responseWriter   function that accepts a response as input and writes the response to the client
@@ -200,7 +200,7 @@ public interface LifecycleInterceptor {
 	 * See <a href="https://www.soklet.com/docs/request-lifecycle#request-wrapping">https://www.soklet.com/docs/request-lifecycle#request-wrapping</a> for detailed documentation.
 	 *
 	 * @param request          the request that was received
-	 * @param resourceMethod   the <em>Resource Method</em> that will handle the request.
+	 * @param resourceMethod   the <em>Resource Method</em> that will handle the request
 	 *                         May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 * @param requestProcessor function that takes the request as input and performs all downstream processing
 	 */
@@ -246,6 +246,40 @@ public interface LifecycleInterceptor {
 	 * @param serverSentEventServer the Server-Sent Event server that stopped
 	 */
 	default void didStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before a Server-Sent Event is sent to the client.
+	 *
+	 * @param request              the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod       the <em>Resource Method</em> that handled the "handshake"
+	 * @param resourcePathInstance the request's resource path instance that matched the Server-Sent Event "handshake" <em>Resource Method</em>
+	 * @param serverSentEvent      the Server-Sent Event to send to the client
+	 */
+	default void willStartServerSentEventWriting(@Nonnull Request request,
+																							 @Nonnull ResourceMethod resourceMethod,
+																							 @Nonnull ResourcePathInstance resourcePathInstance,
+																							 @Nonnull ServerSentEvent serverSentEvent) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a Server-Sent Event is sent to the client.
+	 *
+	 * @param request              the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod       the <em>Resource Method</em> that handled the "handshake"
+	 * @param resourcePathInstance the request's resource path instance that matched the Server-Sent Event "handshake" <em>Resource Method</em>
+	 * @param serverSentEvent      the Server-Sent Event to send to the client
+	 * @param writeDuration        how long it took to send the Server-Sent Event to the client
+	 * @param throwable            the exception thrown during Server-Sent Event writing (if any)
+	 */
+	default void didFinishServerSentEventWriting(@Nonnull Request request,
+																							 @Nonnull ResourceMethod resourceMethod,
+																							 @Nonnull ResourcePathInstance resourcePathInstance,
+																							 @Nonnull ServerSentEvent serverSentEvent,
+																							 @Nonnull Duration writeDuration,
+																							 @Nullable Throwable throwable) {
 		// No-op by default
 	}
 }
