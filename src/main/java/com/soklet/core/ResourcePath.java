@@ -55,7 +55,7 @@ public class ResourcePath {
 	private final List<String> components;
 
 	/**
-	 * Vends an instance that represents a runtime "instance" of a resource path, for example {@code /users/123}.
+	 * Vends an instance that represents a runtime representation of a resource path, for example {@code /users/123}.
 	 * <p>
 	 * This is in contrast to {@link ResourcePathDeclaration}, which represents compile-time path declarations
 	 * that may include placeholders, e.g. {@code /users/{userId}}.
@@ -138,9 +138,9 @@ public class ResourcePath {
 	}
 
 	/**
-	 * What is the string representation of this resource path instance?
+	 * What is the string representation of this resource path?
 	 *
-	 * @return the string representation of this resource path instance, which must start with {@code /}
+	 * @return the string representation of this resource path, which must start with {@code /}
 	 */
 	@Nonnull
 	public String getPath() {
@@ -148,9 +148,9 @@ public class ResourcePath {
 	}
 
 	/**
-	 * What are the {@code /}-delimited components of this resource path instance?
+	 * What are the {@code /}-delimited components of this resource path?
 	 *
-	 * @return the components, or the empty list if this path instance is equal to {@code /}
+	 * @return the components, or the empty list if this path is equal to {@code /}
 	 */
 	@Nonnull
 	public List<String> getComponents() {

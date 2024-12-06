@@ -72,7 +72,7 @@ public class Request {
 	@Nonnull
 	private final String uri;
 	@Nonnull
-	private final String path;
+	private final ResourcePath resourcePath;
 	@Nonnull
 	private final Map<String, Set<String>> cookies;
 	@Nonnull
@@ -200,7 +200,7 @@ public class Request {
 			}
 		}
 
-		this.path = Utilities.normalizedPathForUrl(uri);
+		this.resourcePath = ResourcePath.of(Utilities.normalizedPathForUrl(uri));
 
 		// Form parameters
 		// TODO: optimize copy/modify scenarios - we don't want to be re-processing body data
@@ -234,8 +234,8 @@ public class Request {
 
 	@Override
 	public String toString() {
-		return format("%s{id=%s, httpMethod=%s, uri=%s, path=%s, cookies=%s, queryParameters=%s, headers=%s, body=%s}",
-				getClass().getSimpleName(), getId(), getHttpMethod(), getUri(), getPath(), getCookies(), getQueryParameters(),
+		return format("%s{id=%s, httpMethod=%s, uri=%s, resourcePath=%s, cookies=%s, queryParameters=%s, headers=%s, body=%s}",
+				getClass().getSimpleName(), getId(), getHttpMethod(), getUri(), getResourcePath().getPath(), getCookies(), getQueryParameters(),
 				getHeaders(), format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
 	}
 
@@ -294,13 +294,13 @@ public class Request {
 	}
 
 	/**
-	 * The path component of the request, which is the value returned by {@link #getUri()} with the query string (if any) removed.
+	 * The path component of the request, which is a representation of the value returned by {@link #getUri()} with the query string (if any) removed.
 	 *
-	 * @return the request's path component
+	 * @return the resource path for this request
 	 */
 	@Nonnull
-	public String getPath() {
-		return this.path;
+	public ResourcePath getResourcePath() {
+		return this.resourcePath;
 	}
 
 	/**

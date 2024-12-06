@@ -147,7 +147,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		if (methods == null)
 			return Optional.empty();
 
-		ResourcePath resourcePath = ResourcePath.of(request.getPath());
+		ResourcePath resourcePath = request.getResourcePath();
 		Set<ResourceMethod> matchingResourceMethods = new HashSet<>(4); // Normally there are few (if any) potential matches
 
 		// TODO: faster matching via path component tree structure instead of linear scan
@@ -173,7 +173,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			if (mostSpecificResourceMethods.size() == 1)
 				return mostSpecificResourceMethods.stream().findFirst();
 
-			throw new RuntimeException(format("Multiple routes match '%s %s'. Ambiguous matches were:\n%s", request.getHttpMethod().name(), request.getPath(),
+			throw new RuntimeException(format("Multiple routes match '%s %s'. Ambiguous matches were:\n%s", request.getHttpMethod().name(), request.getResourcePath().getPath(),
 					matchingResourceMethods.stream()
 							.map(matchingResourceMethod -> matchingResourceMethod.getMethod().toString())
 							.collect(Collectors.joining("\n"))));

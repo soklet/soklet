@@ -718,7 +718,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
 
-		ResourcePath resourcePath = ResourcePath.of(request.getPath());
+		ResourcePath resourcePath = request.getResourcePath();
 
 		if (!matchingResourcePath(resourcePath).isPresent())
 			return Optional.empty();

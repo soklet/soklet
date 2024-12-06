@@ -160,7 +160,7 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 						PathParameter.class.getSimpleName(), Optional.class.getSimpleName()));
 
 			String pathParameterName = extractParameterName(resourceMethod, parameter, pathParameter, pathParameter.name());
-			ResourcePath resourcePath = ResourcePath.of(request.getPath());
+			ResourcePath resourcePath = request.getResourcePath();
 
 			Map<String, String> valuesByPathParameter = resourceMethod.getResourcePath().extractPlaceholders(resourcePath);
 			String pathParameterValue = valuesByPathParameter.get(pathParameterName);
