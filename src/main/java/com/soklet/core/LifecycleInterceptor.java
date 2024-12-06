@@ -259,12 +259,10 @@ public interface LifecycleInterceptor {
 	 *
 	 * @param request              the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod       the <em>Resource Method</em> that handled the "handshake"
-	 * @param resourcePathInstance the request's resource path instance that matched the Server-Sent Event "handshake" <em>Resource Method</em>
 	 * @param serverSentEvent      the Server-Sent Event to send to the client
 	 */
 	default void willStartServerSentEventWriting(@Nonnull Request request,
 																							 @Nonnull ResourceMethod resourceMethod,
-																							 @Nonnull ResourcePathInstance resourcePathInstance,
 																							 @Nonnull ServerSentEvent serverSentEvent) {
 		// No-op by default
 	}
@@ -274,14 +272,12 @@ public interface LifecycleInterceptor {
 	 *
 	 * @param request              the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod       the <em>Resource Method</em> that handled the "handshake"
-	 * @param resourcePathInstance the request's resource path instance that matched the Server-Sent Event "handshake" <em>Resource Method</em>
 	 * @param serverSentEvent      the Server-Sent Event to send to the client
 	 * @param writeDuration        how long it took to send the Server-Sent Event to the client
 	 * @param throwable            the exception thrown during Server-Sent Event writing (if any)
 	 */
 	default void didFinishServerSentEventWriting(@Nonnull Request request,
 																							 @Nonnull ResourceMethod resourceMethod,
-																							 @Nonnull ResourcePathInstance resourcePathInstance,
 																							 @Nonnull ServerSentEvent serverSentEvent,
 																							 @Nonnull Duration writeDuration,
 																							 @Nullable Throwable throwable) {

@@ -142,7 +142,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventBroadcaster> broadcastersByResourcePathInstance;
 	@Nonnull
-	private final ConcurrentHashMap<ResourcePathInstance, ResourcePathDeclaration> resourcePathsByResourcePathInstanceCache;
+	private final ConcurrentHashMap<ResourcePathInstance, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathInstanceCache;
 	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
@@ -160,7 +160,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nullable
 	private Thread eventLoopThread;
 	@Nonnull
-	private Map<ResourcePathDeclaration, ResourceMethod> resourceMethodsByResourcePath;
+	private Map<ResourcePathDeclaration, ResourceMethod> resourceMethodsByResourcePathDeclaration;
 	@Nullable
 	private RequestHandler requestHandler;
 	@Nullable
@@ -279,11 +279,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
-		this.resourceMethodsByResourcePath = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
+		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
 		// TODO: let clients specify initial capacity
 		this.broadcastersByResourcePathInstance = new ConcurrentHashMap<>(1_024);
-		this.resourcePathsByResourcePathInstanceCache = new ConcurrentHashMap<>(1_024);
+		this.resourcePathDeclarationsByResourcePathInstanceCache = new ConcurrentHashMap<>(1_024);
 
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "sse-handler-";
@@ -320,7 +320,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Pick out all the @ServerSentEventSource resource methods and store off keyed on resource path for ease of lookup.
 		// This is computed just once here and will never change.
 		// TODO: we should fail-fast if there are multiple @ServerSentEventSource annotations with the same resource path.  Should that happen here or at the Soklet level?
-		this.resourceMethodsByResourcePath = sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
+		this.resourceMethodsByResourcePathDeclaration = sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
 				.filter(resourceMethod -> resourceMethod.isServerSentEventSource())
 				.collect(Collectors.toMap(ResourceMethod::getResourcePath, Function.identity()));
 	}
@@ -916,7 +916,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.requestHandlerExecutorService = null;
 			this.connectionValidityExecutorService = null;
 			this.getBroadcastersByResourcePathInstance().clear();
-			this.getResourcePathsByResourcePathInstanceCache().clear();
+			this.getResourcePathDeclarationsByResourcePathInstanceCache().clear();
 			getStopPoisonPill().set(false);
 
 			if (this.stopping)
@@ -971,7 +971,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (resourcePathDeclaration == null)
 			return Optional.empty();
 
-		ResourceMethod resourceMethod = getResourceMethodsByResourcePath().get(resourcePathDeclaration);
+		ResourceMethod resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
 
 		// TODO: should this be sent as a LogEvent?
 		if (resourceMethod == null)
@@ -992,11 +992,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		// TODO: convert to computeIfAbsent()
 
 		// Try a cache lookup first
-		ResourcePathDeclaration resourcePathDeclaration = getResourcePathsByResourcePathInstanceCache().get(resourcePathInstance);
+		ResourcePathDeclaration resourcePathDeclaration = getResourcePathDeclarationsByResourcePathInstanceCache().get(resourcePathInstance);
 
 		if (resourcePathDeclaration == null) {
 			// If the cache lookup fails, perform a manual lookup
-			for (ResourcePathDeclaration registeredResourcePathDeclaration : getResourceMethodsByResourcePath().keySet()) {
+			for (ResourcePathDeclaration registeredResourcePathDeclaration : getResourceMethodsByResourcePathDeclaration().keySet()) {
 				if (registeredResourcePathDeclaration.matches(resourcePathInstance)) {
 					resourcePathDeclaration = registeredResourcePathDeclaration;
 					break;
@@ -1005,7 +1005,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// Put the value in the cache for quick access later
 			if (resourcePathDeclaration != null)
-				getResourcePathsByResourcePathInstanceCache().put(resourcePathInstance, resourcePathDeclaration);
+				getResourcePathDeclarationsByResourcePathInstanceCache().put(resourcePathInstance, resourcePathDeclaration);
 		}
 
 		return Optional.ofNullable(resourcePathDeclaration);
@@ -1069,8 +1069,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	public Map<ResourcePathDeclaration, ResourceMethod> getResourceMethodsByResourcePath() {
-		return this.resourceMethodsByResourcePath;
+	public Map<ResourcePathDeclaration, ResourceMethod> getResourceMethodsByResourcePathDeclaration() {
+		return this.resourceMethodsByResourcePathDeclaration;
 	}
 
 	@Nonnull
@@ -1079,8 +1079,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected ConcurrentHashMap<ResourcePathInstance, ResourcePathDeclaration> getResourcePathsByResourcePathInstanceCache() {
-		return this.resourcePathsByResourcePathInstanceCache;
+	protected ConcurrentHashMap<ResourcePathInstance, ResourcePathDeclaration> getResourcePathDeclarationsByResourcePathInstanceCache() {
+		return this.resourcePathDeclarationsByResourcePathInstanceCache;
 	}
 
 	@Nonnull
@@ -1212,7 +1212,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public Builder resourcePaths(@Nullable Set<ResourcePathDeclaration> resourcePathDeclarations) {
+		public Builder resourcePathDeclarations(@Nullable Set<ResourcePathDeclaration> resourcePathDeclarations) {
 			this.resourcePathDeclarations = resourcePathDeclarations;
 			return this;
 		}
