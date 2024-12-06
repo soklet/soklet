@@ -345,7 +345,7 @@ public class SokletTests {
 				.build();
 
 		Soklet.runSimulator(configuration, (simulator -> {
-			simulator.registerServerSentEventConsumer(ResourcePathInstance.of("/examples/abc"), (serverSentEvent -> {
+			simulator.registerServerSentEventConsumer(ResourcePath.of("/examples/abc"), (serverSentEvent -> {
 				System.out.println("Received SSE: " + serverSentEvent);
 				Assert.assertEquals("SSE event mismatch", "example", serverSentEvent.getEvent().get());
 			}));
@@ -364,7 +364,7 @@ public class SokletTests {
 					.build();
 
 			// ...and broadcast it to all /examples/abc listeners
-			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePathInstance.of("/examples/abc")).get();
+			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.of("/examples/abc")).get();
 			broadcaster.broadcast(serverSentEvent);
 		}));
 	}
@@ -535,8 +535,8 @@ public class SokletTests {
 
 		@POST("/fire-server-sent-event")
 		public void fireServerSentEvent() {
-			ResourcePathInstance resourcePathInstance = ResourcePathInstance.of("/examples/abc"); // Matches /examples/{exampleId}
-			ServerSentEventBroadcaster broadcaster = this.serverSentEventServer.acquireBroadcaster(resourcePathInstance).get();
+			ResourcePath resourcePath = ResourcePath.of("/examples/abc"); // Matches /examples/{exampleId}
+			ServerSentEventBroadcaster broadcaster = this.serverSentEventServer.acquireBroadcaster(resourcePath).get();
 
 			ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
 					.data("""

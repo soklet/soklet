@@ -24,8 +24,8 @@ import com.soklet.core.LogEventType;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
 import com.soklet.core.ResourceMethod;
+import com.soklet.core.ResourcePath;
 import com.soklet.core.ResourcePathDeclaration;
-import com.soklet.core.ResourcePathInstance;
 import com.soklet.core.ServerSentEvent;
 import com.soklet.core.ServerSentEventBroadcaster;
 import com.soklet.core.ServerSentEventServer;
@@ -140,9 +140,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final Integer socketPendingConnectionLimit;
 	@Nonnull
-	private final ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventBroadcaster> broadcastersByResourcePathInstance;
+	private final ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
 	@Nonnull
-	private final ConcurrentHashMap<ResourcePathInstance, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathInstanceCache;
+	private final ConcurrentHashMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
 	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
@@ -171,18 +171,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final ResourceMethod resourceMethod;
 		@Nonnull
-		private final ResourcePathInstance resourcePathInstance;
+		private final ResourcePath resourcePath;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@Nonnull
 		private final Set<DefaultServerSentEventConnection> serverSentEventConnections;
 
 		public DefaultServerSentEventBroadcaster(@Nonnull ResourceMethod resourceMethod,
-																						 @Nonnull ResourcePathInstance resourcePathInstance) {
+																						 @Nonnull ResourcePath resourcePath) {
 			requireNonNull(resourceMethod);
-			requireNonNull(resourcePathInstance);
+			requireNonNull(resourcePath);
 
 			this.resourceMethod = resourceMethod;
-			this.resourcePathInstance = resourcePathInstance;
+			this.resourcePath = resourcePath;
 			// TODO: let clients specify capacity
 			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(1_024);
 		}
@@ -194,8 +194,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		@Nonnull
 		@Override
-		public ResourcePathInstance getResourcePathInstance() {
-			return this.resourcePathInstance;
+		public ResourcePath getResourcePath() {
+			return this.resourcePath;
 		}
 
 		@Nonnull
@@ -282,8 +282,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
 		// TODO: let clients specify initial capacity
-		this.broadcastersByResourcePathInstance = new ConcurrentHashMap<>(1_024);
-		this.resourcePathDeclarationsByResourcePathInstanceCache = new ConcurrentHashMap<>(1_024);
+		this.broadcastersByResourcePath = new ConcurrentHashMap<>(1_024);
+		this.resourcePathDeclarationsByResourcePathCache = new ConcurrentHashMap<>(1_024);
 
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "sse-handler-";
@@ -374,13 +374,13 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	protected void performConnectionValidityTask() {
-		Collection<DefaultServerSentEventBroadcaster> broadcasters = getBroadcastersByResourcePathInstance().values();
+		Collection<DefaultServerSentEventBroadcaster> broadcasters = getBroadcastersByResourcePath().values();
 		int i = 0;
 
 		if (broadcasters.size() > 0) {
 			for (DefaultServerSentEventBroadcaster broadcaster : broadcasters) {
 				++i;
-				System.out.println(format("Performing validity checks for broadcaster %d of %d (%s)...", i, broadcasters.size(), broadcaster.getResourcePathInstance().getPath()));
+				System.out.println(format("Performing validity checks for broadcaster %d of %d (%s)...", i, broadcasters.size(), broadcaster.getResourcePath().getPath()));
 
 				Set<DefaultServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
 
@@ -391,7 +391,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					// TODO: this should be more of a failsafe, we should factor into its own method and call this at the end of a socket thread too for immediate cleanup
 					// TODO: broadcaster removes/adds be protected with a "broadcasterLock"
 					System.out.println("Because this broadcaster has no connections, removing it.");
-					getBroadcastersByResourcePathInstance().remove(broadcaster.getResourcePathInstance());
+					getBroadcastersByResourcePath().remove(broadcaster.getResourcePath());
 				} else {
 					int j = 0;
 
@@ -658,7 +658,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final ResourceMethod resourceMethod;
 		@Nonnull
-		private final ResourcePathInstance resourcePathInstance;
+		private final ResourcePath resourcePath;
 		@Nonnull
 		private final BlockingQueue<ServerSentEvent> writeQueue;
 		@Nonnull
@@ -666,14 +666,14 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		public DefaultServerSentEventConnection(@Nonnull Request request,
 																						@Nonnull ResourceMethod resourceMethod,
-																						@Nonnull ResourcePathInstance resourcePathInstance) {
+																						@Nonnull ResourcePath resourcePath) {
 			requireNonNull(request);
 			requireNonNull(resourceMethod);
-			requireNonNull(resourcePathInstance);
+			requireNonNull(resourcePath);
 
 			this.request = request;
 			this.resourceMethod = resourceMethod;
-			this.resourcePathInstance = resourcePathInstance;
+			this.resourcePath = resourcePath;
 			this.writeQueue = new ArrayBlockingQueue<>(8);
 			this.establishedAt = Instant.now();
 		}
@@ -689,8 +689,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public ResourcePathInstance getResourcePathInstance() {
-			return this.resourcePathInstance;
+		public ResourcePath getResourcePath() {
+			return this.resourcePath;
 		}
 
 		@Nonnull
@@ -718,16 +718,16 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
 
-		ResourcePathInstance resourcePathInstance = ResourcePathInstance.of(request.getPath());
+		ResourcePath resourcePath = ResourcePath.of(request.getPath());
 
-		if (!matchingResourcePath(resourcePathInstance).isPresent())
+		if (!matchingResourcePath(resourcePath).isPresent())
 			return Optional.empty();
 
 		// Get a handle to the event source (it will be created if necessary)
-		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePathInstance).get();
+		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath).get();
 
 		// Create the connection and register it with the EventSource
-		DefaultServerSentEventConnection serverSentEventConnection = new DefaultServerSentEventConnection(request, broadcaster.getResourceMethod(), broadcaster.getResourcePathInstance());
+		DefaultServerSentEventConnection serverSentEventConnection = new DefaultServerSentEventConnection(request, broadcaster.getResourceMethod(), broadcaster.getResourcePath());
 		broadcaster.registerServerSentEventConnection(serverSentEventConnection);
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
@@ -891,7 +891,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			getStopPoisonPill().set(true);
 
 			// TODO: need an additional check/lock to prevent race condition where someone acquires an event source while we are shutting down
-			for (DefaultServerSentEventBroadcaster broadcaster : getBroadcastersByResourcePathInstance().values()) {
+			for (DefaultServerSentEventBroadcaster broadcaster : getBroadcastersByResourcePath().values()) {
 				try {
 					broadcaster.unregisterAllServerSentEventConnections(true);
 				} catch (Exception e) {
@@ -915,8 +915,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.eventLoopThread = null;
 			this.requestHandlerExecutorService = null;
 			this.connectionValidityExecutorService = null;
-			this.getBroadcastersByResourcePathInstance().clear();
-			this.getResourcePathDeclarationsByResourcePathInstanceCache().clear();
+			this.getBroadcastersByResourcePath().clear();
+			this.getResourcePathDeclarationsByResourcePathCache().clear();
 			getStopPoisonPill().set(false);
 
 			if (this.stopping)
@@ -954,19 +954,19 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@Nonnull
 	@Override
-	public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePathInstance resourcePathInstance) {
-		if (resourcePathInstance == null)
+	public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
+		if (resourcePath == null)
 			return Optional.empty();
 
-		return acquireBroadcasterInternal(resourcePathInstance);
+		return acquireBroadcasterInternal(resourcePath);
 	}
 
 	@Nonnull
-	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@Nullable ResourcePathInstance resourcePathInstance) {
-		if (resourcePathInstance == null)
+	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@Nullable ResourcePath resourcePath) {
+		if (resourcePath == null)
 			return Optional.empty();
 
-		ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(resourcePathInstance).orElse(null);
+		ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(resourcePath).orElse(null);
 
 		if (resourcePathDeclaration == null)
 			return Optional.empty();
@@ -978,26 +978,26 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			throw new IllegalStateException(format("Internal error: unable to find %s instance that matches %s", ResourceMethod.class, resourcePathDeclaration));
 
 		// Create the event source if it does not already exist
-		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePathInstance()
-				.computeIfAbsent(resourcePathInstance, (ignored) -> new DefaultServerSentEventBroadcaster(resourceMethod, resourcePathInstance));
+		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
+				.computeIfAbsent(resourcePath, (ignored) -> new DefaultServerSentEventBroadcaster(resourceMethod, resourcePath));
 
 		return Optional.of(broadcaster);
 	}
 
 	@Nonnull
-	protected Optional<ResourcePathDeclaration> matchingResourcePath(@Nullable ResourcePathInstance resourcePathInstance) {
-		if (resourcePathInstance == null)
+	protected Optional<ResourcePathDeclaration> matchingResourcePath(@Nullable ResourcePath resourcePath) {
+		if (resourcePath == null)
 			return Optional.empty();
 
 		// TODO: convert to computeIfAbsent()
 
 		// Try a cache lookup first
-		ResourcePathDeclaration resourcePathDeclaration = getResourcePathDeclarationsByResourcePathInstanceCache().get(resourcePathInstance);
+		ResourcePathDeclaration resourcePathDeclaration = getResourcePathDeclarationsByResourcePathCache().get(resourcePath);
 
 		if (resourcePathDeclaration == null) {
 			// If the cache lookup fails, perform a manual lookup
 			for (ResourcePathDeclaration registeredResourcePathDeclaration : getResourceMethodsByResourcePathDeclaration().keySet()) {
-				if (registeredResourcePathDeclaration.matches(resourcePathInstance)) {
+				if (registeredResourcePathDeclaration.matches(resourcePath)) {
 					resourcePathDeclaration = registeredResourcePathDeclaration;
 					break;
 				}
@@ -1005,7 +1005,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// Put the value in the cache for quick access later
 			if (resourcePathDeclaration != null)
-				getResourcePathDeclarationsByResourcePathInstanceCache().put(resourcePathInstance, resourcePathDeclaration);
+				getResourcePathDeclarationsByResourcePathCache().put(resourcePath, resourcePathDeclaration);
 		}
 
 		return Optional.ofNullable(resourcePathDeclaration);
@@ -1074,13 +1074,13 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePathInstance() {
-		return this.broadcastersByResourcePathInstance;
+	protected ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
+		return this.broadcastersByResourcePath;
 	}
 
 	@Nonnull
-	protected ConcurrentHashMap<ResourcePathInstance, ResourcePathDeclaration> getResourcePathDeclarationsByResourcePathInstanceCache() {
-		return this.resourcePathDeclarationsByResourcePathInstanceCache;
+	protected ConcurrentHashMap<ResourcePath, ResourcePathDeclaration> getResourcePathDeclarationsByResourcePathCache() {
+		return this.resourcePathDeclarationsByResourcePathCache;
 	}
 
 	@Nonnull

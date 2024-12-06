@@ -37,8 +37,8 @@ import com.soklet.core.HttpMethod;
 import com.soklet.core.Request;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodResolver;
+import com.soklet.core.ResourcePath;
 import com.soklet.core.ResourcePathDeclaration;
-import com.soklet.core.ResourcePathInstance;
 import com.soklet.internal.classindex.ClassIndex;
 
 import javax.annotation.Nonnull;
@@ -147,7 +147,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		if (methods == null)
 			return Optional.empty();
 
-		ResourcePathInstance resourcePathInstance = ResourcePathInstance.of(request.getPath());
+		ResourcePath resourcePath = ResourcePath.of(request.getPath());
 		Set<ResourceMethod> matchingResourceMethods = new HashSet<>(4); // Normally there are few (if any) potential matches
 
 		// TODO: faster matching via path component tree structure instead of linear scan
@@ -157,7 +157,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 			for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations)
 				if (httpMethodResourcePathDeclaration.getHttpMethod().equals(request.getHttpMethod())
-						&& resourcePathInstance.matches(httpMethodResourcePathDeclaration.getResourcePathDeclaration()))
+						&& resourcePath.matches(httpMethodResourcePathDeclaration.getResourcePathDeclaration()))
 					matchingResourceMethods.add(ResourceMethod.withComponents(request.getHttpMethod(), httpMethodResourcePathDeclaration.getResourcePathDeclaration(), method, httpMethodResourcePathDeclaration.isServerSentEventSource()));
 		}
 

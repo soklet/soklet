@@ -41,14 +41,14 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * <strong>Note: this type is not normally used by Soklet applications unless they support <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Events</a> or choose to implement a custom {@link ResourceMethodResolver}.</strong>
  * <p>
- * The corresponding compile-time type for {@link ResourcePathInstance} is {@link ResourcePathDeclaration} and functionality is provided to check if the two "match".
+ * The corresponding compile-time type for {@link ResourcePath} is {@link ResourcePathDeclaration} and functionality is provided to check if the two "match" via {@link #matches(ResourcePathDeclaration)}.
  * <p>
- * For example, a {@link ResourcePathInstance} {@code /users/123} would match {@link ResourcePathDeclaration} {@code /users/{userId}}.
+ * For example, a {@link ResourcePath} {@code /users/123} would match {@link ResourcePathDeclaration} {@code /users/{userId}}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class ResourcePathInstance {
+public class ResourcePath {
 	@Nonnull
 	private final String path;
 	@Nonnull
@@ -63,21 +63,21 @@ public class ResourcePathInstance {
 	 * @param path a runtime path which may not include placeholders
 	 */
 	@Nonnull
-	public static ResourcePathInstance of(@Nonnull String path) {
+	public static ResourcePath of(@Nonnull String path) {
 		requireNonNull(path);
-		return new ResourcePathInstance(path);
+		return new ResourcePath(path);
 	}
 
-	protected ResourcePathInstance(@Nonnull String path) {
+	protected ResourcePath(@Nonnull String path) {
 		requireNonNull(path);
 		this.path = ResourcePathDeclaration.normalizePath(path);
 		this.components = unmodifiableList(extractComponents(this.path));
 	}
 
 	/**
-	 * Does this resource path instance match the given resource path (taking placeholders into account, if present)?
+	 * Does this resource path match the given resource path (taking placeholders into account, if present)?
 	 * <p>
-	 * For example, resource path instance {@code /users/123} would match the resource path {@code /users/{userId}}.
+	 * For example, resource path {@code /users/123} would match the resource path declaration {@code /users/{userId}}.
 	 *
 	 * @param resourcePathDeclaration the resource path against which to match
 	 * @return {@code true} if the paths match, {@code false} otherwise
@@ -90,13 +90,13 @@ public class ResourcePathInstance {
 			return false;
 
 		for (int i = 0; i < resourcePathDeclaration.getComponents().size(); ++i) {
-			Component resourcePathComponent = resourcePathDeclaration.getComponents().get(i);
-			String resourcePathInstanceComponent = getComponents().get(i);
+			Component resourcePathDeclarationComponent = resourcePathDeclaration.getComponents().get(i);
+			String resourcePathComponent = getComponents().get(i);
 
-			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
+			if (resourcePathDeclarationComponent.getType() == ComponentType.PLACEHOLDER)
 				continue;
 
-			if (!resourcePathComponent.getValue().equals(resourcePathInstanceComponent))
+			if (!resourcePathDeclarationComponent.getValue().equals(resourcePathComponent))
 				return false;
 		}
 
@@ -104,17 +104,17 @@ public class ResourcePathInstance {
 	}
 
 	/**
-	 * What is the mapping between this resource path instance's placeholder values to the given resource path's placeholder names?
+	 * What is the mapping between this resource path's placeholder values to the given resource path declaration's placeholder names?
 	 * <p>
-	 * For example, placeholder extraction for resource path instance {@code /users/123} and resource path {@code /users/{userId}}
+	 * For example, placeholder extraction for resource path {@code /users/123} and resource path declaration {@code /users/{userId}}
 	 * would result in a value equivalent to {@code Map.of("userId", "123")}.
 	 * <p>
-	 * Resource path placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path {@code /users/{userId}}
-	 * and resource path instance {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
+	 * Resource path placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path declaration {@code /users/{userId}}
+	 * and resource path {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
 	 *
 	 * @param resourcePathDeclaration compile-time resource path, used to provide placeholder names
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
-	 * @throws IllegalArgumentException if the provided resource path does not match this resource path instance, i.e. {@link #matches(ResourcePathDeclaration)} is {@code false}
+	 * @throws IllegalArgumentException if the provided resource path declaration does not match this resource path, i.e. {@link #matches(ResourcePathDeclaration)} is {@code false}
 	 */
 	@Nonnull
 	public Map<String, String> extractPlaceholders(@Nonnull ResourcePathDeclaration resourcePathDeclaration) {
@@ -127,11 +127,11 @@ public class ResourcePathInstance {
 		Map<String, String> placeholders = new LinkedHashMap<>(resourcePathDeclaration.getComponents().size());
 
 		for (int i = 0; i < resourcePathDeclaration.getComponents().size(); ++i) {
-			Component resourcePathComponent = resourcePathDeclaration.getComponents().get(i);
-			String resourcePathInstanceComponent = getComponents().get(i);
+			Component resourcePathDeclarationComponent = resourcePathDeclaration.getComponents().get(i);
+			String resourcePathComponent = getComponents().get(i);
 
-			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
-				placeholders.put(resourcePathComponent.getValue(), resourcePathInstanceComponent);
+			if (resourcePathDeclarationComponent.getType() == ComponentType.PLACEHOLDER)
+				placeholders.put(resourcePathDeclarationComponent.getValue(), resourcePathComponent);
 		}
 
 		return Collections.unmodifiableMap(placeholders);
@@ -186,7 +186,7 @@ public class ResourcePathInstance {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof ResourcePathInstance resourcePath))
+		if (!(object instanceof ResourcePath resourcePath))
 			return false;
 
 		return Objects.equals(getPath(), resourcePath.getPath());

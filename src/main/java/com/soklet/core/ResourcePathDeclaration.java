@@ -48,9 +48,9 @@ import static java.util.stream.Collectors.toList;
  * For example, the {@link ResourcePathDeclaration} {@code /users/{userId}} has a placeholder named {@code userId}.
  * <p>
  * A {@link ResourcePathDeclaration} is intended for compile-time <em>Resource Method</em> HTTP URL path declarations.
- * The corresponding runtime type is {@link ResourcePathInstance} and functionality is provided to check if the two "match" via {@link #matches(ResourcePathInstance)}.
+ * The corresponding runtime type is {@link ResourcePath} and functionality is provided to check if the two "match" via {@link #matches(ResourcePath)}.
  * <p>
- * For example, a {@link ResourcePathDeclaration} {@code /users/{userId}} would match {@link ResourcePathInstance} {@code /users/123}.
+ * For example, a {@link ResourcePathDeclaration} {@code /users/{userId}} would match {@link ResourcePath} {@code /users/123}.
  * <p>
  * <strong>Please note the following restrictions on {@link ResourcePathDeclaration} structure:</strong>
  * <p>
@@ -117,24 +117,24 @@ public class ResourcePathDeclaration {
 	 * <p>
 	 * For example, resource path declaration {@code /users/{userId}} would match {@code /users/123}.
 	 *
-	 * @param resourcePathInstance the resource path instance against which to match
+	 * @param resourcePath the resource path against which to match
 	 * @return {@code true} if the paths match, {@code false} otherwise
 	 */
 	@Nonnull
-	public Boolean matches(@Nonnull ResourcePathInstance resourcePathInstance) {
-		requireNonNull(resourcePathInstance);
+	public Boolean matches(@Nonnull ResourcePath resourcePath) {
+		requireNonNull(resourcePath);
 
-		if (resourcePathInstance.getComponents().size() != getComponents().size())
+		if (resourcePath.getComponents().size() != getComponents().size())
 			return false;
 
-		for (int i = 0; i < resourcePathInstance.getComponents().size(); ++i) {
-			String resourcePathInstanceComponent = resourcePathInstance.getComponents().get(i);
-			Component resourcePathComponent = getComponents().get(i);
+		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
+			String resourcePathComponent = resourcePath.getComponents().get(i);
+			Component resourcePathDeclarationComponent = getComponents().get(i);
 
-			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
+			if (resourcePathDeclarationComponent.getType() == ComponentType.PLACEHOLDER)
 				continue;
 
-			if (!resourcePathComponent.getValue().equals(resourcePathInstanceComponent))
+			if (!resourcePathDeclarationComponent.getValue().equals(resourcePathComponent))
 				return false;
 		}
 
@@ -150,30 +150,30 @@ public class ResourcePathDeclaration {
 	 * Resource path declaration placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path declaration {@code /users/{userId}}
 	 * and resource path {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
 	 *
-	 * @param resourcePathInstance runtime version of this resource path declaration, used to provide placeholder values
+	 * @param resourcePath runtime version of this resource path declaration, used to provide placeholder values
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
-	 * @throws IllegalArgumentException if the provided resource path does not match this resource path declaration, i.e. {@link #matches(ResourcePathInstance)} is {@code false}
+	 * @throws IllegalArgumentException if the provided resource path does not match this resource path declaration, i.e. {@link #matches(ResourcePath)} is {@code false}
 	 */
 	@Nonnull
-	public Map<String, String> extractPlaceholders(@Nonnull ResourcePathInstance resourcePathInstance) {
-		requireNonNull(resourcePathInstance);
+	public Map<String, String> extractPlaceholders(@Nonnull ResourcePath resourcePath) {
+		requireNonNull(resourcePath);
 
-		if (!matches(resourcePathInstance))
+		if (!matches(resourcePath))
 			throw new IllegalArgumentException(format("%s is not a match for %s so we cannot extract placeholders", this,
-					resourcePathInstance));
+					resourcePath));
 
 		// No placeholders? Nothing to do
 		if (isLiteral())
 			return Map.of();
 
-		Map<String, String> placeholders = new LinkedHashMap<>(resourcePathInstance.getComponents().size());
+		Map<String, String> placeholders = new LinkedHashMap<>(resourcePath.getComponents().size());
 
-		for (int i = 0; i < resourcePathInstance.getComponents().size(); ++i) {
-			String resourcePathInstanceComponent = resourcePathInstance.getComponents().get(i);
-			Component resourcePathComponent = getComponents().get(i);
+		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
+			String resourcePathComponent = resourcePath.getComponents().get(i);
+			Component resourcePathDeclarationComponent = getComponents().get(i);
 
-			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
-				placeholders.put(resourcePathComponent.getValue(), URLDecoder.decode(resourcePathInstanceComponent, StandardCharsets.UTF_8));
+			if (resourcePathDeclarationComponent.getType() == ComponentType.PLACEHOLDER)
+				placeholders.put(resourcePathDeclarationComponent.getValue(), URLDecoder.decode(resourcePathComponent, StandardCharsets.UTF_8));
 		}
 
 		return Collections.unmodifiableMap(placeholders);

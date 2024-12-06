@@ -67,9 +67,9 @@ public interface Simulator {
 	@Nonnull
 	MarshaledResponse performRequest(@Nonnull Request request);
 
-	void registerServerSentEventConsumer(@Nonnull ResourcePathInstance resourcePathInstance,
+	void registerServerSentEventConsumer(@Nonnull ResourcePath resourcePath,
 																			 @Nonnull Consumer<ServerSentEvent> serverSentEventConsumer);
 
 	@Nonnull
-	Optional<? extends ServerSentEventBroadcaster> acquireServerSentEventBroadcaster(@Nullable ResourcePathInstance resourcePathInstance);
+	Optional<? extends ServerSentEventBroadcaster> acquireServerSentEventBroadcaster(@Nullable ResourcePath resourcePath);
 }
