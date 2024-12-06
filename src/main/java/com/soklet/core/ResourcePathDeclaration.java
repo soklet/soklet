@@ -48,7 +48,7 @@ import static java.util.stream.Collectors.toList;
  * For example, the {@link ResourcePathDeclaration} {@code /users/{userId}} has a placeholder named {@code userId}.
  * <p>
  * A {@link ResourcePathDeclaration} is intended for compile-time <em>Resource Method</em> HTTP URL path declarations.
- * The corresponding runtime type is {@link ResourcePathInstance} and functionality is provided to check if the two "match".
+ * The corresponding runtime type is {@link ResourcePathInstance} and functionality is provided to check if the two "match" via {@link #matches(ResourcePathInstance)}.
  * <p>
  * For example, a {@link ResourcePathDeclaration} {@code /users/{userId}} would match {@link ResourcePathInstance} {@code /users/123}.
  * <p>
@@ -113,9 +113,9 @@ public class ResourcePathDeclaration {
 	}
 
 	/**
-	 * Does this resource path match the given resource path instance (taking placeholders into account, if present)?
+	 * Does this resource path declaration match the given resource path (taking placeholders into account, if present)?
 	 * <p>
-	 * For example, resource path {@code /users/{userId}} would match the instance {@code /users/123}.
+	 * For example, resource path declaration {@code /users/{userId}} would match {@code /users/123}.
 	 *
 	 * @param resourcePathInstance the resource path instance against which to match
 	 * @return {@code true} if the paths match, {@code false} otherwise
@@ -152,7 +152,7 @@ public class ResourcePathDeclaration {
 	 *
 	 * @param resourcePathInstance runtime version of this resource path declaration, used to provide placeholder values
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
-	 * @throws IllegalArgumentException if the provided resource path instance does not match this resource path declaration, i.e. {@link #matches(ResourcePathInstance)} is {@code false}
+	 * @throws IllegalArgumentException if the provided resource path does not match this resource path declaration, i.e. {@link #matches(ResourcePathInstance)} is {@code false}
 	 */
 	@Nonnull
 	public Map<String, String> extractPlaceholders(@Nonnull ResourcePathInstance resourcePathInstance) {
