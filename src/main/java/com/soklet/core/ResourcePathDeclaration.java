@@ -38,23 +38,23 @@ import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
 /**
- * A compile-time HTTP URL path associated with an annotated <em>Resource Method</em>, such as {@code /users/{userId}}.
+ * A compile-time HTTP URL path declaration associated with an annotated <em>Resource Method</em>, such as {@code /users/{userId}}.
  * <p>
  * You may obtain instances via the {@link #of(String)} factory method.
  * <p>
  * <strong>Note: this type is not normally used by Soklet applications unless they support <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Events</a> or choose to implement a custom {@link ResourceMethodResolver}.</strong>
  * <p>
- * {@link ResourcePath} instances must start with the {@code /} character and may contain placeholders denoted by single-mustache syntax.
- * For example, the {@link ResourcePath} {@code /users/{userId}} has a placeholder named {@code userId}.
+ * {@link ResourcePathDeclaration} instances must start with the {@code /} character and may contain placeholders denoted by single-mustache syntax.
+ * For example, the {@link ResourcePathDeclaration} {@code /users/{userId}} has a placeholder named {@code userId}.
  * <p>
- * A {@link ResourcePath} is intended for compile-time <em>Resource Method</em> HTTP URL path declarations.
+ * A {@link ResourcePathDeclaration} is intended for compile-time <em>Resource Method</em> HTTP URL path declarations.
  * The corresponding runtime type is {@link ResourcePathInstance} and functionality is provided to check if the two "match".
  * <p>
- * For example, a {@link ResourcePath} {@code /users/{userId}} would match {@link ResourcePathInstance} {@code /users/123}.
+ * For example, a {@link ResourcePathDeclaration} {@code /users/{userId}} would match {@link ResourcePathInstance} {@code /users/123}.
  * <p>
- * <strong>Please note the following restrictions on {@link ResourcePath} structure:</strong>
+ * <strong>Please note the following restrictions on {@link ResourcePathDeclaration} structure:</strong>
  * <p>
- * 1. It is not legal to use the same placeholder name more than once in a {@link ResourcePath}.
+ * 1. It is not legal to use the same placeholder name more than once in a {@link ResourcePathDeclaration}.
  * <p>
  * For example:
  * <ul>
@@ -74,7 +74,7 @@ import static java.util.stream.Collectors.toList;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class ResourcePath {
+public class ResourcePathDeclaration {
 	/**
 	 * Pattern which matches a placeholder in a path component.
 	 * <p>
@@ -101,12 +101,12 @@ public class ResourcePath {
 	 * @param path a compile-time path declaration that may include placeholders
 	 */
 	@Nonnull
-	public static ResourcePath of(@Nonnull String path) {
+	public static ResourcePathDeclaration of(@Nonnull String path) {
 		requireNonNull(path);
-		return new ResourcePath(path);
+		return new ResourcePathDeclaration(path);
 	}
 
-	protected ResourcePath(@Nonnull String path) {
+	protected ResourcePathDeclaration(@Nonnull String path) {
 		requireNonNull(path);
 		this.path = normalizePath(path);
 		this.components = unmodifiableList(extractComponents(this.path));
@@ -142,17 +142,17 @@ public class ResourcePath {
 	}
 
 	/**
-	 * What is the mapping between this resource path's placeholder names to the given resource path instance's placeholder values?
+	 * What is the mapping between this resource path declaration's placeholder names to the given resource path's placeholder values?
 	 * <p>
-	 * For example, placeholder extraction for resource path {@code /users/{userId}} and resource path instance {@code /users/123}
+	 * For example, placeholder extraction for resource path declaration {@code /users/{userId}} and resource path {@code /users/123}
 	 * would result in a value equivalent to {@code Map.of("userId", "123")}.
 	 * <p>
-	 * Resource path placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path {@code /users/{userId}}
-	 * and resource path instance {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
+	 * Resource path declaration placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path declaration {@code /users/{userId}}
+	 * and resource path {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
 	 *
-	 * @param resourcePathInstance runtime version of this resource path, used to provide placeholder values
+	 * @param resourcePathInstance runtime version of this resource path declaration, used to provide placeholder values
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
-	 * @throws IllegalArgumentException if the provided resource path instance does not match this resource path, i.e. {@link #matches(ResourcePathInstance)} is {@code false}
+	 * @throws IllegalArgumentException if the provided resource path instance does not match this resource path declaration, i.e. {@link #matches(ResourcePathInstance)} is {@code false}
 	 */
 	@Nonnull
 	public Map<String, String> extractPlaceholders(@Nonnull ResourcePathInstance resourcePathInstance) {
@@ -180,9 +180,9 @@ public class ResourcePath {
 	}
 
 	/**
-	 * What is the string representation of this resource path?
+	 * What is the string representation of this resource path declaration?
 	 *
-	 * @return the string representation of this resource path, which must start with {@code /}
+	 * @return the string representation of this resource path declaration, which must start with {@code /}
 	 */
 	@Nonnull
 	public String getPath() {
@@ -190,7 +190,7 @@ public class ResourcePath {
 	}
 
 	/**
-	 * What are the {@code /}-delimited components of this resource path?
+	 * What are the {@code /}-delimited components of this resource path declaration?
 	 *
 	 * @return the components, or the empty list if this path is equal to {@code /}
 	 */
@@ -200,9 +200,9 @@ public class ResourcePath {
 	}
 
 	/**
-	 * Is this resource path comprised of all "literal" components (that is, no placeholders)?
+	 * Is this resource path declaration comprised of all "literal" components (that is, no placeholders)?
 	 *
-	 * @return {@code true} if this resource path is entirely literal, {@code false} otherwise
+	 * @return {@code true} if this resource path declaration is entirely literal, {@code false} otherwise
 	 */
 	@Nonnull
 	public Boolean isLiteral() {
@@ -277,10 +277,10 @@ public class ResourcePath {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof ResourcePath resourcePath))
+		if (!(object instanceof ResourcePathDeclaration resourcePathDeclaration))
 			return false;
 
-		return Objects.equals(getPath(), resourcePath.getPath()) && Objects.equals(getComponents(), resourcePath.getComponents());
+		return Objects.equals(getPath(), resourcePathDeclaration.getPath()) && Objects.equals(getComponents(), resourcePathDeclaration.getComponents());
 	}
 
 	@Override
@@ -289,7 +289,7 @@ public class ResourcePath {
 	}
 
 	/**
-	 * How to interpret a {@link Component} of a {@link ResourcePath} - is it literal text or a placeholder?
+	 * How to interpret a {@link Component} of a {@link ResourcePathDeclaration} - is it literal text or a placeholder?
 	 * <p>
 	 * For example, given the path declaration <code>/languages/&#123;languageId&#125;</code>:
 	 * <ul>
@@ -300,25 +300,25 @@ public class ResourcePath {
 	 * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 * @see ResourcePath
+	 * @see ResourcePathDeclaration
 	 */
 	public enum ComponentType {
 		/**
-		 * A literal component of a resource path.
+		 * A literal component of a resource path declaration.
 		 * <p>
-		 * For example, given resource path {@code /users/{userId}}, the {@code users} component would be of type {@code LITERAL}.
+		 * For example, given resource path declaration {@code /users/{userId}}, the {@code users} component would be of type {@code LITERAL}.
 		 */
 		LITERAL,
 		/**
-		 * A placeholder component (that is, one whose value is provided at runtime) of a resource path.
+		 * A placeholder component (that is, one whose value is provided at runtime) of a resource path declaration.
 		 * <p>
-		 * For example, given resource path {@code /users/{userId}}, the {@code userId} component would be of type {@code PLACEHOLDER}.
+		 * For example, given resource path declaration {@code /users/{userId}}, the {@code userId} component would be of type {@code PLACEHOLDER}.
 		 */
 		PLACEHOLDER
 	}
 
 	/**
-	 * Represents a {@code /}-delimited part of a {@link ResourcePath}.
+	 * Represents a {@code /}-delimited part of a {@link ResourcePathDeclaration}.
 	 * <p>
 	 * For example, given the path declaration <code>/languages/&#123;languageId&#125;</code>:
 	 * <ul>
@@ -329,7 +329,7 @@ public class ResourcePath {
 	 * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 * @see ResourcePath
+	 * @see ResourcePathDeclaration
 	 */
 	@Immutable
 	public static class Component {
@@ -369,7 +369,7 @@ public class ResourcePath {
 		}
 
 		/**
-		 * What is the value of this resource path component?
+		 * What is the value of this resource path declaration component?
 		 * <p>
 		 * Note that the value of a {@link ComponentType#PLACEHOLDER} component does not include enclosing braces.
 		 * For example, given the path declaration <code>/languages/&#123;languageId&#125;</code>,
@@ -383,7 +383,7 @@ public class ResourcePath {
 		}
 
 		/**
-		 * What type of resource path component is this?
+		 * What type of resource path declaration component is this?
 		 *
 		 * @return the type of component, e.g. {@link ComponentType#LITERAL} or {@link ComponentType#PLACEHOLDER}
 		 */

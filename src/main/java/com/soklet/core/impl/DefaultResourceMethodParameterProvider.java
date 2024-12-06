@@ -32,7 +32,6 @@ import com.soklet.core.Request;
 import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
-import com.soklet.core.ResourcePath;
 import com.soklet.core.ResourcePathInstance;
 import com.soklet.exception.BadRequestException;
 import com.soklet.exception.IllegalFormParameterException;

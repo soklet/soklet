@@ -16,8 +16,8 @@
 
 package com.soklet.core;
 
-import com.soklet.core.ResourcePath.Component;
-import com.soklet.core.ResourcePath.ComponentType;
+import com.soklet.core.ResourcePathDeclaration.Component;
+import com.soklet.core.ResourcePathDeclaration.ComponentType;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -41,9 +41,9 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * <strong>Note: this type is not normally used by Soklet applications unless they support <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Events</a> or choose to implement a custom {@link ResourceMethodResolver}.</strong>
  * <p>
- * The corresponding compile-time type for {@link ResourcePathInstance} is {@link ResourcePath} and functionality is provided to check if the two "match".
+ * The corresponding compile-time type for {@link ResourcePathInstance} is {@link ResourcePathDeclaration} and functionality is provided to check if the two "match".
  * <p>
- * For example, a {@link ResourcePathInstance} {@code /users/123} would match {@link ResourcePath} {@code /users/{userId}}.
+ * For example, a {@link ResourcePathInstance} {@code /users/123} would match {@link ResourcePathDeclaration} {@code /users/{userId}}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -57,7 +57,7 @@ public class ResourcePathInstance {
 	/**
 	 * Vends an instance that represents a runtime "instance" of a resource path, for example {@code /users/123}.
 	 * <p>
-	 * This is in contrast to {@link ResourcePath}, which represents compile-time path declarations
+	 * This is in contrast to {@link ResourcePathDeclaration}, which represents compile-time path declarations
 	 * that may include placeholders, e.g. {@code /users/{userId}}.
 	 *
 	 * @param path a runtime path which may not include placeholders
@@ -70,7 +70,7 @@ public class ResourcePathInstance {
 
 	protected ResourcePathInstance(@Nonnull String path) {
 		requireNonNull(path);
-		this.path = ResourcePath.normalizePath(path);
+		this.path = ResourcePathDeclaration.normalizePath(path);
 		this.components = unmodifiableList(extractComponents(this.path));
 	}
 
@@ -79,18 +79,18 @@ public class ResourcePathInstance {
 	 * <p>
 	 * For example, resource path instance {@code /users/123} would match the resource path {@code /users/{userId}}.
 	 *
-	 * @param resourcePath the resource path against which to match
+	 * @param resourcePathDeclaration the resource path against which to match
 	 * @return {@code true} if the paths match, {@code false} otherwise
 	 */
 	@Nonnull
-	public Boolean matches(@Nonnull ResourcePath resourcePath) {
-		requireNonNull(resourcePath);
+	public Boolean matches(@Nonnull ResourcePathDeclaration resourcePathDeclaration) {
+		requireNonNull(resourcePathDeclaration);
 
-		if (resourcePath.getComponents().size() != getComponents().size())
+		if (resourcePathDeclaration.getComponents().size() != getComponents().size())
 			return false;
 
-		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
-			Component resourcePathComponent = resourcePath.getComponents().get(i);
+		for (int i = 0; i < resourcePathDeclaration.getComponents().size(); ++i) {
+			Component resourcePathComponent = resourcePathDeclaration.getComponents().get(i);
 			String resourcePathInstanceComponent = getComponents().get(i);
 
 			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
@@ -112,22 +112,22 @@ public class ResourcePathInstance {
 	 * Resource path placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path {@code /users/{userId}}
 	 * and resource path instance {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
 	 *
-	 * @param resourcePath compile-time resource path, used to provide placeholder names
+	 * @param resourcePathDeclaration compile-time resource path, used to provide placeholder names
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
-	 * @throws IllegalArgumentException if the provided resource path does not match this resource path instance, i.e. {@link #matches(ResourcePath)} is {@code false}
+	 * @throws IllegalArgumentException if the provided resource path does not match this resource path instance, i.e. {@link #matches(ResourcePathDeclaration)} is {@code false}
 	 */
 	@Nonnull
-	public Map<String, String> extractPlaceholders(@Nonnull ResourcePath resourcePath) {
-		requireNonNull(resourcePath);
+	public Map<String, String> extractPlaceholders(@Nonnull ResourcePathDeclaration resourcePathDeclaration) {
+		requireNonNull(resourcePathDeclaration);
 
-		if (!matches(resourcePath))
+		if (!matches(resourcePathDeclaration))
 			throw new IllegalArgumentException(format("%s is not a match for %s so we cannot extract placeholders", this,
-					resourcePath));
+					resourcePathDeclaration));
 
-		Map<String, String> placeholders = new LinkedHashMap<>(resourcePath.getComponents().size());
+		Map<String, String> placeholders = new LinkedHashMap<>(resourcePathDeclaration.getComponents().size());
 
-		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
-			Component resourcePathComponent = resourcePath.getComponents().get(i);
+		for (int i = 0; i < resourcePathDeclaration.getComponents().size(); ++i) {
+			Component resourcePathComponent = resourcePathDeclaration.getComponents().get(i);
 			String resourcePathInstanceComponent = getComponents().get(i);
 
 			if (resourcePathComponent.getType() == ComponentType.PLACEHOLDER)
@@ -158,7 +158,7 @@ public class ResourcePathInstance {
 	}
 
 	/**
-	 * Assumes {@code path} is already normalized via {@link ResourcePath#normalizePath(String)}.
+	 * Assumes {@code path} is already normalized via {@link ResourcePathDeclaration#normalizePath(String)}.
 	 *
 	 * @param path (nonnull) Path from which components are extracted
 	 * @return Logical components of the supplied {@code path}
