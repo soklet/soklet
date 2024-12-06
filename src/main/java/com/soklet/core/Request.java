@@ -234,8 +234,8 @@ public class Request {
 
 	@Override
 	public String toString() {
-		return format("%s{id=%s, httpMethod=%s, uri=%s, resourcePath=%s, cookies=%s, queryParameters=%s, headers=%s, body=%s}",
-				getClass().getSimpleName(), getId(), getHttpMethod(), getUri(), getResourcePath().getPath(), getCookies(), getQueryParameters(),
+		return format("%s{id=%s, httpMethod=%s, uri=%s, path=%s, cookies=%s, queryParameters=%s, headers=%s, body=%s}",
+				getClass().getSimpleName(), getId(), getHttpMethod(), getUri(), getPath(), getCookies(), getQueryParameters(),
 				getHeaders(), format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
 	}
 
@@ -294,7 +294,17 @@ public class Request {
 	}
 
 	/**
-	 * The path component of the request, which is a representation of the value returned by {@link #getUri()} with the query string (if any) removed.
+	 * The path component of this request, which is a representation of the value returned by {@link #getUri()} with the query string (if any) removed.
+	 *
+	 * @return the resource path for this request
+	 */
+	@Nonnull
+	public String getPath() {
+		return getResourcePath().getPath();
+	}
+
+	/**
+	 * A {@link ResourcePath} representation of the path component of this request.
 	 *
 	 * @return the resource path for this request
 	 */
