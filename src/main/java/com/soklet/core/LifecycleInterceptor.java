@@ -249,6 +249,11 @@ public interface LifecycleInterceptor {
 		// No-op by default
 	}
 
+	// TODO: willEstablishServerSentEventConnection (pre-handshake)
+	// TODO: didEstablishServerSentEventConnection (post-successful handshake)
+	// TODO: willTerminateServerSentEventConnection (start of finally block on socket close, includes reason and optional exception)
+	// TODO: didTerminateServerSentEventConnection (end of finally block on socket close)
+
 	/**
 	 * Called before a Server-Sent Event is sent to the client.
 	 *

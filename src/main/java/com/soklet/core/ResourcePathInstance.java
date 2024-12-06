@@ -39,7 +39,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * You may obtain instances via the {@link #of(String)} factory method.
  * <p>
- * <strong>Note: this type is not normally used by Soklet applications unless they they support <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Events</a> or choose to implement a custom {@link ResourceMethodResolver}.</strong>
+ * <strong>Note: this type is not normally used by Soklet applications unless they support <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Events</a> or choose to implement a custom {@link ResourceMethodResolver}.</strong>
  * <p>
  * The corresponding compile-time type for {@link ResourcePathInstance} is {@link ResourcePath} and functionality is provided to check if the two "match".
  * <p>
