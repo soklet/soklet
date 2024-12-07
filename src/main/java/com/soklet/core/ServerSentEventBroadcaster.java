@@ -60,7 +60,7 @@ public interface ServerSentEventBroadcaster {
 	ResourcePath getResourcePath();
 
 	/**
-	 * How many clients are estimated to be listening to this broadcaster's {@link ResourcePath}?
+	 * How many clients are listening to this broadcaster's {@link ResourcePath}?
 	 * <p>
 	 * For performance reasons, this number may be an estimate, or a snapshot of a recent moment-in-time.
 	 * It's possible for some clients to have already disconnected, but we won't know until we attempt to broadcast to them.
@@ -75,7 +75,7 @@ public interface ServerSentEventBroadcaster {
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
 	 * <p>
-	 * However, mock implementations may wish to block until broadcasts have completed in order to simplify automated testing (for example).
+	 * However, mock implementations may wish to block until broadcasts have completed - for example, to simplify automated testing.
 	 *
 	 * @param serverSentEvent the Server-Sent Event payload to broadcast
 	 */
