@@ -444,6 +444,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(clientSocketChannel);
 
 		ClientSocketChannelRegistration clientSocketChannelRegistration = null;
+		Request request = null;
+		ServerSentEvent serverSentEvent = null;
+		Instant writeStarted = null;
+		Throwable throwable = null;
 
 		try (clientSocketChannel) {
 			String rawRequest = null;
@@ -451,14 +455,14 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			try {
 				rawRequest = readRequest(clientSocketChannel);
 			} catch (Exception e) {
-				// TODO: cleanup
+				// TODO: cleanup, send a 400?
 				System.out.println("Unable to read raw request.");
 				e.printStackTrace();
 			}
 
 			// Use the socket's address as an identifier
 			String requestIdentifier = clientSocketChannel.getRemoteAddress().toString();
-			Request request = parseRequest(requestIdentifier, rawRequest);
+			request = parseRequest(requestIdentifier, rawRequest);
 
 			System.out.println(format("Received SSE request on socket: %s", debuggingString(request)));
 
@@ -489,24 +493,35 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (serverSentEventResourceMethodExists && marshaledResponseStatusCode.get() < 300) {
 				while (true) {
 					System.out.println(format("Waiting for SSE broadcasts on socket: %s", debuggingString(request)));
-					ServerSentEvent serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
+					serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
 
 					if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) {
 						System.out.println("Encountered poison pill, exiting...");
 						break;
 					}
 
+					getLifecycleInterceptor().get().willStartServerSentEventWriting(request,
+							clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent);
+
+					writeStarted = Instant.now();
+
 					if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK) {
-						System.out.println("Performing socket validity check by writing a heartbeat message...");
+						//System.out.println("Performing socket validity check by writing a heartbeat message...");
 						String message = formatForResponse(ServerSentEvent.forHeartbeat());
 						ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
 						clientSocketChannel.write(buffer);
 					} else {
-						System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
+						//System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
 						String message = formatForResponse(serverSentEvent);
 						ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
 						clientSocketChannel.write(buffer);
 					}
+
+					Instant writeFinished = Instant.now();
+					Duration writeDuration = Duration.between(writeStarted, writeFinished);
+
+					getLifecycleInterceptor().get().didFinishServerSentEventWriting(request,
+							clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, null);
 				}
 			} else {
 				String reason = "unknown";
@@ -518,17 +533,24 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				System.out.println(format("Closing socket %s immediately after handshake instead of waiting for broadcasts. Reason: %s", debuggingString(request), reason));
 			}
-		} catch (Exception e) {
-			e.printStackTrace();
-			System.out.println("Closing socket due to exception: " + e.getMessage());
+		} catch (Throwable t) {
+			throwable = t;
+			System.out.println("Closing socket due to exception: " + t.getMessage());
 
-			if (e instanceof InterruptedException) {
+			if (t instanceof InterruptedException) {
 				System.out.println("Socket thread was interrupted");
 				Thread.currentThread().interrupt();  // Restore interrupt status
 			}
 		} finally {
 			// First, tell the event source to unregister the connection
 			if (clientSocketChannelRegistration != null) {
+				Instant writeFinished = Instant.now();
+				Duration writeDuration = Duration.between(writeStarted, writeFinished);
+
+				if (throwable != null)
+					getLifecycleInterceptor().get().didFinishServerSentEventWriting(request,
+							clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, throwable);
+
 				try {
 					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
 

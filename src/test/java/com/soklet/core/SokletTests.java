@@ -501,6 +501,22 @@ public class SokletTests {
 					public void didStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
 						System.out.println("XXX Did stop server-sent event server");
 					}
+
+					@Override
+					public void willStartServerSentEventWriting(@Nonnull Request request,
+																											@Nonnull ResourceMethod resourceMethod,
+																											@Nonnull ServerSentEvent serverSentEvent) {
+						System.out.println("XXX Starting server-sent event write for " + request.getPath() + ": " + serverSentEvent);
+					}
+
+					@Override
+					public void didFinishServerSentEventWriting(@Nonnull Request request,
+																											@Nonnull ResourceMethod resourceMethod,
+																											@Nonnull ServerSentEvent serverSentEvent,
+																											@Nonnull Duration writeDuration,
+																											@Nullable Throwable throwable) {
+						System.out.println("XXX Finished server-sent event write for " + request.getPath() + ": " + serverSentEvent);
+					}
 				})
 				.build();
 
