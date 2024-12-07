@@ -296,7 +296,7 @@ public class Request {
 	/**
 	 * The path component of this request, which is a representation of the value returned by {@link #getUri()} with the query string (if any) removed.
 	 *
-	 * @return the resource path for this request
+	 * @return the path for this request
 	 */
 	@Nonnull
 	public String getPath() {
@@ -304,7 +304,7 @@ public class Request {
 	}
 
 	/**
-	 * A {@link ResourcePath} representation of the path component of this request.
+	 * Convenience method to acquire a {@link ResourcePath} representation of {@link #getPath()}.
 	 *
 	 * @return the resource path for this request
 	 */
