@@ -174,7 +174,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final ResourcePath resourcePath;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@Nonnull
-		private final Set<DefaultServerSentEventConnection> serverSentEventConnections;
+		private final Set<ServerSentEventConnection> serverSentEventConnections;
 
 		public DefaultServerSentEventBroadcaster(@Nonnull ResourceMethod resourceMethod,
 																						 @Nonnull ResourcePath resourcePath) {
@@ -210,12 +210,12 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
-			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
+			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
 				serverSentEventConnection.getWriteQueue().add(serverSentEvent);
 		}
 
 		@Nonnull
-		public Boolean registerServerSentEventConnection(@Nullable DefaultServerSentEventConnection serverSentEventConnection) {
+		public Boolean registerServerSentEventConnection(@Nullable ServerSentEventConnection serverSentEventConnection) {
 			if (serverSentEventConnection == null)
 				return false;
 
@@ -224,7 +224,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public Boolean unregisterServerSentEventConnection(@Nullable DefaultServerSentEventConnection serverSentEventConnection,
+		public Boolean unregisterServerSentEventConnection(@Nullable ServerSentEventConnection serverSentEventConnection,
 																											 @Nonnull Boolean sendPoisonPill) {
 			requireNonNull(sendPoisonPill);
 
@@ -246,12 +246,12 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			requireNonNull(sendPoisonPill);
 
 			// TODO: we probably want to have a lock around registration/unregistration
-			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
+			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
 				unregisterServerSentEventConnection(serverSentEventConnection, sendPoisonPill);
 		}
 
 		@Nonnull
-		protected Set<DefaultServerSentEventConnection> getServerSentEventConnections() {
+		protected Set<ServerSentEventConnection> getServerSentEventConnections() {
 			return this.serverSentEventConnections;
 		}
 	}
@@ -382,7 +382,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				++i;
 				System.out.println(format("Performing validity checks for broadcaster %d of %d (%s)...", i, broadcasters.size(), broadcaster.getResourcePath().getPath()));
 
-				Set<DefaultServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
+				Set<ServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
 
 				System.out.println(format("This broadcaster has %d SSE connections", serverSentEventConnections.size()));
 
@@ -395,7 +395,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				} else {
 					int j = 0;
 
-					for (DefaultServerSentEventConnection serverSentEventConnection : serverSentEventConnections) {
+					for (ServerSentEventConnection serverSentEventConnection : serverSentEventConnections) {
 						++j;
 						System.out.println(format("Enqueuing heartbeat for socket %d of %d...", j, serverSentEventConnections.size()));
 						// TODO: keep track of when the most recent validity check was done so we don't do it too frequently, e.g. with AtomicReference<Instant> on ServerSentEventConnection (nice-to-have)
@@ -683,7 +683,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@ThreadSafe
-	protected static class DefaultServerSentEventConnection {
+	protected static class ServerSentEventConnection {
 		@Nonnull
 		private final Request request;
 		@Nonnull
@@ -693,15 +693,15 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final Instant establishedAt;
 
-		public DefaultServerSentEventConnection(@Nonnull Request request,
-																						@Nonnull ResourceMethod resourceMethod) {
+		public ServerSentEventConnection(@Nonnull Request request,
+																		 @Nonnull ResourceMethod resourceMethod) {
 			requireNonNull(request);
 			requireNonNull(resourceMethod);
 
 			this.request = request;
 			this.resourceMethod = resourceMethod;
 			this.writeQueue = new ArrayBlockingQueue<>(8);
-			this.establishedAt = Instant.now();
+			this.establishedAt = Instant.now(); // Don't use this for anything currently, but might later
 		}
 
 		@Nonnull
@@ -725,7 +725,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	protected record ClientSocketChannelRegistration(@Nonnull DefaultServerSentEventConnection serverSentEventConnection,
+	protected record ClientSocketChannelRegistration(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																									 @Nonnull DefaultServerSentEventBroadcaster broadcaster) {
 		public ClientSocketChannelRegistration {
 			requireNonNull(serverSentEventConnection);
@@ -748,7 +748,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath).get();
 
 		// Create the connection and register it with the EventSource
-		DefaultServerSentEventConnection serverSentEventConnection = new DefaultServerSentEventConnection(request, broadcaster.getResourceMethod());
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, broadcaster.getResourceMethod());
 		broadcaster.registerServerSentEventConnection(serverSentEventConnection);
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));

@@ -254,11 +254,27 @@ public interface LifecycleInterceptor {
 	// TODO: willTerminateServerSentEventConnection (start of finally block on socket close, includes reason and optional exception)
 	// TODO: didTerminateServerSentEventConnection (end of finally block on socket close)
 
+	/**
+	 * Called immediately before a Server-Sent Event connection of indefinite duration to the client is opened.
+	 * <p>
+	 * This occurs after the initial "handshake" Server-Sent Event request has successfully completed (that is, an HTTP 200 response).
+	 *
+	 * @param request        the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
+	 */
 	default void willEstablishServerSentEventConnection(@Nonnull Request request,
 																											@Nonnull ResourceMethod resourceMethod) {
 		// No-op by default
 	}
 
+	/**
+	 * Called immediately after a Server-Sent Event connection of indefinite duration to the client is opened.
+	 * <p>
+	 * This occurs after the initial "handshake" Server-Sent Event request has successfully completed (that is, an HTTP 200 response).
+	 *
+	 * @param request        the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
+	 */
 	default void didEstablishServerSentEventConnection(@Nonnull Request request,
 																										 @Nonnull ResourceMethod resourceMethod) {
 		// No-op by default
