@@ -429,7 +429,7 @@ public class SokletTests {
 					@Override
 					public void didStartRequestHandling(@Nonnull Request request,
 																							@Nullable ResourceMethod resourceMethod) {
-						System.out.println("XXX Did start request handling: " + request + ", resource method: " + resourceMethod);
+						//System.out.println("XXX Did start request handling: " + request + ", resource method: " + resourceMethod);
 					}
 
 					@Override
@@ -438,14 +438,14 @@ public class SokletTests {
 																							 @Nonnull MarshaledResponse marshaledResponse,
 																							 @Nonnull Duration processingDuration,
 																							 @Nonnull List<Throwable> throwables) {
-						System.out.println("XXX Did finish request handling: " + request + ", resource method: " + resourceMethod + ", marshaled response: " + marshaledResponse);
+						//System.out.println("XXX Did finish request handling: " + request + ", resource method: " + resourceMethod + ", marshaled response: " + marshaledResponse);
 					}
 
 					@Override
 					public void willStartResponseWriting(@Nonnull Request request,
 																							 @Nullable ResourceMethod resourceMethod,
 																							 @Nonnull MarshaledResponse marshaledResponse) {
-						System.out.println("XXX Will start response writing: " + request + ", resource method: " + resourceMethod);
+						//System.out.println("XXX Will start response writing: " + request + ", resource method: " + resourceMethod);
 					}
 
 					@Override
@@ -454,7 +454,7 @@ public class SokletTests {
 																							 @Nonnull MarshaledResponse marshaledResponse,
 																							 @Nonnull Duration responseWriteDuration,
 																							 @Nullable Throwable throwable) {
-						System.out.println("XXX Did finish response writing: " + request + ", resource method: " + resourceMethod);
+						//System.out.println("XXX Did finish response writing: " + request + ", resource method: " + resourceMethod);
 					}
 
 					@Override
@@ -467,19 +467,19 @@ public class SokletTests {
 																			 @Nullable ResourceMethod resourceMethod,
 																			 @Nonnull Function<Request, MarshaledResponse> responseProducer,
 																			 @Nonnull Consumer<MarshaledResponse> responseWriter) {
-						System.out.println("XXX Intercepting request: " + request);
+						//System.out.println("XXX Intercepting request: " + request);
 						MarshaledResponse response = responseProducer.apply(request);
 						responseWriter.accept(response);
-						System.out.println("XXX Done intercepting request: " + request);
+						//System.out.println("XXX Done intercepting request: " + request);
 					}
 
 					@Override
 					public void wrapRequest(@Nonnull Request request,
 																	@Nullable ResourceMethod resourceMethod,
 																	@Nonnull Consumer<Request> requestProcessor) {
-						System.out.println("XXX Wrapping request: " + request);
+						//System.out.println("XXX Wrapping request: " + request);
 						requestProcessor.accept(request);
-						System.out.println("XXX Done wrapping request: " + request);
+						//System.out.println("XXX Done wrapping request: " + request);
 					}
 
 					@Override
@@ -500,6 +500,18 @@ public class SokletTests {
 					@Override
 					public void didStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
 						System.out.println("XXX Did stop server-sent event server");
+					}
+
+					@Override
+					public void willEstablishServerSentEventConnection(@Nonnull Request request,
+																														 @Nonnull ResourceMethod resourceMethod) {
+						System.out.println("XXX Will establish server-sent event connection");
+					}
+
+					@Override
+					public void didEstablishServerSentEventConnection(@Nonnull Request request,
+																														@Nonnull ResourceMethod resourceMethod) {
+						System.out.println("XXX Did establish server-sent event connection");
 					}
 
 					@Override

@@ -445,6 +445,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		ClientSocketChannelRegistration clientSocketChannelRegistration = null;
 		Request request = null;
+		ResourceMethod resourceMethod = null;
 		ServerSentEvent serverSentEvent = null;
 		Instant writeStarted = null;
 		Throwable throwable = null;
@@ -466,9 +467,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			System.out.println(format("Received SSE request on socket: %s", debuggingString(request)));
 
-			// This will be null for a 404
-			clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).orElse(null);
-			boolean serverSentEventResourceMethodExists = clientSocketChannelRegistration != null;
+			// Determine the resource path
+			ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(request.getResourcePath()).orElse(null);
+
+			if (resourcePathDeclaration != null)
+				resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
 
 			AtomicInteger marshaledResponseStatusCode = new AtomicInteger(500);
 
@@ -488,9 +491,15 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			});
 
-			// Happy path? Keep the connection open for future ServerSentEvent writes.
+			// Happy path? Register the channel for future ServerSentEvent writes.
 			// If no socket channel registration (404) or >= 300 HTTP status, we're done immediately now that initial data has been written.
-			if (serverSentEventResourceMethodExists && marshaledResponseStatusCode.get() < 300) {
+			if (resourceMethod != null && marshaledResponseStatusCode.get() < 300) {
+				getLifecycleInterceptor().get().willEstablishServerSentEventConnection(request, resourceMethod);
+
+				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).get();
+
+				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
+
 				while (true) {
 					System.out.println(format("Waiting for SSE broadcasts on socket: %s", debuggingString(request)));
 					serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
@@ -526,7 +535,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			} else {
 				String reason = "unknown";
 
-				if (!serverSentEventResourceMethodExists)
+				if (resourceMethod == null)
 					reason = format("no SSE resource method exists for %s", request.getUri());
 				else if (marshaledResponseStatusCode.get() >= 300)
 					reason = format("SSE resource method status code is %d", marshaledResponseStatusCode.get());
@@ -680,22 +689,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final ResourceMethod resourceMethod;
 		@Nonnull
-		private final ResourcePath resourcePath;
-		@Nonnull
 		private final BlockingQueue<ServerSentEvent> writeQueue;
 		@Nonnull
 		private final Instant establishedAt;
 
 		public DefaultServerSentEventConnection(@Nonnull Request request,
-																						@Nonnull ResourceMethod resourceMethod,
-																						@Nonnull ResourcePath resourcePath) {
+																						@Nonnull ResourceMethod resourceMethod) {
 			requireNonNull(request);
 			requireNonNull(resourceMethod);
-			requireNonNull(resourcePath);
 
 			this.request = request;
 			this.resourceMethod = resourceMethod;
-			this.resourcePath = resourcePath;
 			this.writeQueue = new ArrayBlockingQueue<>(8);
 			this.establishedAt = Instant.now();
 		}
@@ -708,11 +712,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public ResourceMethod getResourceMethod() {
 			return this.resourceMethod;
-		}
-
-		@Nonnull
-		public ResourcePath getResourcePath() {
-			return this.resourcePath;
 		}
 
 		@Nonnull
@@ -749,7 +748,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath).get();
 
 		// Create the connection and register it with the EventSource
-		DefaultServerSentEventConnection serverSentEventConnection = new DefaultServerSentEventConnection(request, broadcaster.getResourceMethod(), broadcaster.getResourcePath());
+		DefaultServerSentEventConnection serverSentEventConnection = new DefaultServerSentEventConnection(request, broadcaster.getResourceMethod());
 		broadcaster.registerServerSentEventConnection(serverSentEventConnection);
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));

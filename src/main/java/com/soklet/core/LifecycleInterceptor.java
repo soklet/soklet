@@ -254,12 +254,22 @@ public interface LifecycleInterceptor {
 	// TODO: willTerminateServerSentEventConnection (start of finally block on socket close, includes reason and optional exception)
 	// TODO: didTerminateServerSentEventConnection (end of finally block on socket close)
 
+	default void willEstablishServerSentEventConnection(@Nonnull Request request,
+																											@Nonnull ResourceMethod resourceMethod) {
+		// No-op by default
+	}
+
+	default void didEstablishServerSentEventConnection(@Nonnull Request request,
+																										 @Nonnull ResourceMethod resourceMethod) {
+		// No-op by default
+	}
+
 	/**
 	 * Called before a Server-Sent Event is sent to the client.
 	 *
-	 * @param request              the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod       the <em>Resource Method</em> that handled the "handshake"
-	 * @param serverSentEvent      the Server-Sent Event to send to the client
+	 * @param request         the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
+	 * @param serverSentEvent the Server-Sent Event to send to the client
 	 */
 	default void willStartServerSentEventWriting(@Nonnull Request request,
 																							 @Nonnull ResourceMethod resourceMethod,
@@ -270,11 +280,11 @@ public interface LifecycleInterceptor {
 	/**
 	 * Called after a Server-Sent Event is sent to the client.
 	 *
-	 * @param request              the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod       the <em>Resource Method</em> that handled the "handshake"
-	 * @param serverSentEvent      the Server-Sent Event to send to the client
-	 * @param writeDuration        how long it took to send the Server-Sent Event to the client
-	 * @param throwable            the exception thrown during Server-Sent Event writing (if any)
+	 * @param request         the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
+	 * @param serverSentEvent the Server-Sent Event to send to the client
+	 * @param writeDuration   how long it took to send the Server-Sent Event to the client
+	 * @param throwable       the exception thrown during Server-Sent Event writing (if any)
 	 */
 	default void didFinishServerSentEventWriting(@Nonnull Request request,
 																							 @Nonnull ResourceMethod resourceMethod,
