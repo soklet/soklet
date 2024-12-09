@@ -321,7 +321,7 @@ public interface LifecycleInterceptor {
 	 *
 	 * @param request         the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
-	 * @param serverSentEvent the Server-Sent Event to send to the client
+	 * @param serverSentEvent the Server-Sent Event that was sent to the client
 	 * @param writeDuration   how long it took to send the Server-Sent Event to the client
 	 * @param throwable       the exception thrown during Server-Sent Event writing (if any)
 	 */
