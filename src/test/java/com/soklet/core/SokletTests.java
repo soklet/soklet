@@ -529,6 +529,21 @@ public class SokletTests {
 																											@Nullable Throwable throwable) {
 						System.out.println("XXX Finished server-sent event write for " + request.getPath() + ": " + serverSentEvent);
 					}
+
+					@Override
+					public void willTerminateServerSentEventConnection(@Nonnull Request request,
+																														 @Nonnull ResourceMethod resourceMethod,
+																														 @Nullable Throwable throwable) {
+						System.out.println("XXX Will terminate server-sent event connection for " + request.getPath() + ": " + throwable);
+					}
+
+					@Override
+					public void didTerminateServerSentEventConnection(@Nonnull Request request,
+																														@Nonnull ResourceMethod resourceMethod,
+																														@Nonnull Duration connectionDuration,
+																														@Nullable Throwable throwable) {
+						System.out.println("XXX Did terminate server-sent event connection for " + request.getPath() + ": " + throwable);
+					}
 				})
 				.build();
 

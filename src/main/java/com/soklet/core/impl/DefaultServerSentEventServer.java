@@ -509,28 +509,38 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 						break;
 					}
 
-					getLifecycleInterceptor().get().willStartServerSentEventWriting(request,
-							clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent);
-
-					writeStarted = Instant.now();
+					ByteBuffer buffer = null;
 
 					if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK) {
 						//System.out.println("Performing socket validity check by writing a heartbeat message...");
 						String message = formatForResponse(ServerSentEvent.forHeartbeat());
-						ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
-						clientSocketChannel.write(buffer);
+						buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
 					} else {
 						//System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
 						String message = formatForResponse(serverSentEvent);
-						ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
-						clientSocketChannel.write(buffer);
+						buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
 					}
 
-					Instant writeFinished = Instant.now();
-					Duration writeDuration = Duration.between(writeStarted, writeFinished);
+					getLifecycleInterceptor().get().willStartServerSentEventWriting(request,
+							clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent);
 
-					getLifecycleInterceptor().get().didFinishServerSentEventWriting(request,
-							clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, null);
+					writeStarted = Instant.now();
+					Throwable writeThrowable = null;
+
+					try {
+						clientSocketChannel.write(buffer);
+					} catch (Throwable t) {
+						writeThrowable = t;
+					} finally {
+						Instant writeFinished = Instant.now();
+						Duration writeDuration = Duration.between(writeStarted, writeFinished);
+
+						getLifecycleInterceptor().get().didFinishServerSentEventWriting(request,
+								clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, throwable);
+
+						if (writeThrowable != null)
+							throw writeThrowable;
+					}
 				}
 			} else {
 				String reason = "unknown";
@@ -553,12 +563,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		} finally {
 			// First, tell the event source to unregister the connection
 			if (clientSocketChannelRegistration != null) {
-				Instant writeFinished = Instant.now();
-				Duration writeDuration = Duration.between(writeStarted, writeFinished);
-
-				if (throwable != null)
-					getLifecycleInterceptor().get().didFinishServerSentEventWriting(request,
-							clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, throwable);
+				if (resourceMethod != null)
+					getLifecycleInterceptor().get().willTerminateServerSentEventConnection(request, resourceMethod, throwable);
 
 				try {
 					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
@@ -573,10 +579,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Then, close the channel itself
 			if (clientSocketChannel != null) {
 				try {
+					// Should already be closed, but just in case
 					clientSocketChannel.close();
 				} catch (Exception ignored) {
 					System.out.println("Unable to close socket channel");
 					ignored.printStackTrace();
+				} finally {
+					if (clientSocketChannelRegistration != null && resourceMethod != null) {
+						Instant connectionFinished = Instant.now();
+						Duration connectionDuration = Duration.between(clientSocketChannelRegistration.serverSentEventConnection().getEstablishedAt(), connectionFinished);
+
+						getLifecycleInterceptor().get().didTerminateServerSentEventConnection(request, resourceMethod, connectionDuration, throwable);
+					}
 				}
 			}
 		}

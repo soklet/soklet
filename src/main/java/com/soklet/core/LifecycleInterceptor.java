@@ -249,11 +249,6 @@ public interface LifecycleInterceptor {
 		// No-op by default
 	}
 
-	// TODO: willEstablishServerSentEventConnection (pre-handshake)
-	// TODO: didEstablishServerSentEventConnection (post-successful handshake)
-	// TODO: willTerminateServerSentEventConnection (start of finally block on socket close, includes reason and optional exception)
-	// TODO: didTerminateServerSentEventConnection (end of finally block on socket close)
-
 	/**
 	 * Called immediately before a Server-Sent Event connection of indefinite duration to the client is opened.
 	 * <p>
@@ -277,6 +272,34 @@ public interface LifecycleInterceptor {
 	 */
 	default void didEstablishServerSentEventConnection(@Nonnull Request request,
 																										 @Nonnull ResourceMethod resourceMethod) {
+		// No-op by default
+	}
+
+	/**
+	 * Called immediately before a Server-Sent Event connection to the client is terminated.
+	 *
+	 * @param request        the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
+	 * @param throwable      the exception thrown which caused the connection to terminate (if any)
+	 */
+	default void willTerminateServerSentEventConnection(@Nonnull Request request,
+																											@Nonnull ResourceMethod resourceMethod,
+																											@Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called immediately after a Server-Sent Event connection to the client is terminated.
+	 *
+	 * @param request            the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod     the <em>Resource Method</em> that handled the "handshake"
+	 * @param connectionDuration how long the connection was open for
+	 * @param throwable          the exception thrown which caused the connection to terminate (if any)
+	 */
+	default void didTerminateServerSentEventConnection(@Nonnull Request request,
+																										 @Nonnull ResourceMethod resourceMethod,
+																										 @Nonnull Duration connectionDuration,
+																										 @Nullable Throwable throwable) {
 		// No-op by default
 	}
 
