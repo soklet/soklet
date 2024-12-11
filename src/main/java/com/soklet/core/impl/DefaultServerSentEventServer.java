@@ -138,8 +138,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final Integer socketReadBufferSizeInBytes;
 	@Nonnull
-	private final Integer socketPendingConnectionLimit;
-	@Nonnull
 	private final ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
 	@Nonnull
 	private final ConcurrentHashMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
@@ -147,6 +145,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final ReentrantLock lock;
 	@Nonnull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+	@Nonnull
+	private final Integer concurrentConnectionLimit;
+	@Nonnull
+	private final Function<ResourcePath, Integer> concurrentConnectionLimitsByResourcePath;
 	@Nonnull
 	private final AtomicBoolean stopPoisonPill;
 	@Nullable
@@ -306,6 +308,15 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			});
 		};
+
+		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : 8_192;
+
+		if (this.concurrentConnectionLimit < 1)
+			throw new IllegalArgumentException("The value for concurrentConnectionLimit must be > 0");
+
+		this.concurrentConnectionLimitsByResourcePath = builder.concurrentConnectionLimitsByResourcePath != null ? builder.concurrentConnectionLimitsByResourcePath : (resourcePath -> {
+			return 1_024; // Arbitrary default
+		});
 	}
 
 	@Override
@@ -1099,11 +1110,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected Integer getSocketPendingConnectionLimit() {
-		return this.socketPendingConnectionLimit;
-	}
-
-	@Nonnull
 	public Map<ResourcePathDeclaration, ResourceMethod> getResourceMethodsByResourcePathDeclaration() {
 		return this.resourceMethodsByResourcePathDeclaration;
 	}
@@ -1131,6 +1137,21 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Supplier<ExecutorService> getRequestHandlerExecutorServiceSupplier() {
 		return this.requestHandlerExecutorServiceSupplier;
+	}
+
+	@Nonnull
+	protected Integer getConcurrentConnectionLimit() {
+		return this.concurrentConnectionLimit;
+	}
+
+	@Nonnull
+	protected Function<ResourcePath, Integer> getConcurrentConnectionLimitsByResourcePath() {
+		return this.concurrentConnectionLimitsByResourcePath;
+	}
+
+	@Nullable
+	protected ScheduledExecutorService getConnectionValidityExecutorService() {
+		return this.connectionValidityExecutorService;
 	}
 
 	@Nonnull
@@ -1179,11 +1200,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nullable
 		private Integer socketReadBufferSizeInBytes;
 		@Nullable
-		private Integer socketPendingConnectionLimit;
-		@Nullable
-		private Set<ResourcePathDeclaration> resourcePathDeclarations;
-		@Nullable
 		private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+		@Nullable
+		private Integer concurrentConnectionLimit;
+		@Nullable
+		private Function<ResourcePath, Integer> concurrentConnectionLimitsByResourcePath;
 
 		@Nonnull
 		protected Builder(@Nonnull Integer port) {
@@ -1223,12 +1244,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public Builder socketPendingConnectionLimit(@Nullable Integer socketPendingConnectionLimit) {
-			this.socketPendingConnectionLimit = socketPendingConnectionLimit;
-			return this;
-		}
-
-		@Nonnull
 		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
 			this.shutdownTimeout = shutdownTimeout;
 			return this;
@@ -1247,14 +1262,20 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public Builder resourcePathDeclarations(@Nullable Set<ResourcePathDeclaration> resourcePathDeclarations) {
-			this.resourcePathDeclarations = resourcePathDeclarations;
+		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
+			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
 			return this;
 		}
 
 		@Nonnull
-		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
-			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
+		public Builder concurrentConnectionLimit(@Nullable Integer concurrentConnectionLimit) {
+			this.concurrentConnectionLimit = concurrentConnectionLimit;
+			return this;
+		}
+
+		@Nonnull
+		public Builder concurrentConnectionLimitsByResourcePath(@Nullable Function<ResourcePath, Integer> concurrentConnectionLimitsByResourcePath) {
+			this.concurrentConnectionLimitsByResourcePath = concurrentConnectionLimitsByResourcePath;
 			return this;
 		}
 
