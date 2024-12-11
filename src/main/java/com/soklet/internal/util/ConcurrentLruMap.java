@@ -17,6 +17,7 @@
 package com.soklet.internal.util;
 
 
+import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.AbstractMap;
 import java.util.ArrayList;
@@ -30,6 +31,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
@@ -43,8 +45,14 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	private final ConcurrentHashMap<K, Node<K, V>> map;
 	private final ConcurrentLinkedDeque<Node<K, V>> deque;
 	private final ReentrantLock evictionLock;
+	private final BiConsumer<K, V> evictionListener;
 
 	public ConcurrentLruMap(int capacity) {
+		this(capacity, null);
+	}
+
+	public ConcurrentLruMap(int capacity,
+													BiConsumer<K, V> evictionListener) {
 		if (capacity <= 0) {
 			throw new IllegalArgumentException("Capacity must be greater than zero");
 		}
@@ -52,6 +60,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		this.map = new ConcurrentHashMap<>(capacity);
 		this.deque = new ConcurrentLinkedDeque<>();
 		this.evictionLock = new ReentrantLock();
+		this.evictionListener = evictionListener != null ? evictionListener : (k, v) -> { /* no-op */ };
 	}
 
 	@Override
@@ -220,17 +229,23 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 	private void evictIfNeeded() {
 		if (map.size() > capacity) {
+			Node<K, V> evictedNode = null;
+
 			evictionLock.lock();
+
 			try {
 				while (map.size() > capacity) {
 					Node<K, V> tailNode = deque.pollLast();
-					if (tailNode != null) {
-						map.remove(tailNode.key, tailNode);
-					}
+
+					if (tailNode != null && map.remove(tailNode.key, tailNode))
+						evictedNode = tailNode;
 				}
 			} finally {
 				evictionLock.unlock();
 			}
+
+			if (evictedNode != null)
+				getEvictionListener().accept(evictedNode.key, evictedNode.value);
 		}
 	}
 
@@ -242,5 +257,10 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			this.key = key;
 			this.value = value;
 		}
+	}
+
+	@Nonnull
+	protected BiConsumer<K, V> getEvictionListener() {
+		return this.evictionListener;
 	}
 }

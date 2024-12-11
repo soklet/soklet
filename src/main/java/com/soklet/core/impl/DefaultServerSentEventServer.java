@@ -90,8 +90,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Integer DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
 	@Nonnull
-	private static final Integer DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
-	@Nonnull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 
 	@Nonnull
@@ -106,7 +104,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
 		DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 8;
-		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 
 		// Make a unique "validity check" server-sent event used to wake a socket listener thread by injecting it into the relevant write queue.
@@ -279,7 +276,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.socketReadBufferSizeInBytes = builder.socketReadBufferSizeInBytes != null ? builder.socketReadBufferSizeInBytes : DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
-		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 

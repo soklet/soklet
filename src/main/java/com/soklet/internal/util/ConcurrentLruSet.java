@@ -17,6 +17,8 @@
 package com.soklet.internal.util;
 
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -27,6 +29,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * A threadsafe LRU {@link Set}.
@@ -39,15 +44,25 @@ public class ConcurrentLruSet<E> implements Set<E> {
 	private final ConcurrentHashMap<E, Node<E>> map;
 	private final ConcurrentLinkedDeque<Node<E>> deque;
 	private final ReentrantLock evictionLock;
+	@Nonnull
+	private final Consumer<E> evictionListener;
 
-	public ConcurrentLruSet(int capacity) {
-		if (capacity <= 0) {
+	public ConcurrentLruSet(@Nonnull Integer capacity) {
+		this(capacity, null);
+	}
+
+	public ConcurrentLruSet(@Nonnull Integer capacity,
+													@Nullable Consumer<E> evictionListener) {
+		requireNonNull(capacity);
+
+		if (capacity <= 0)
 			throw new IllegalArgumentException("Capacity must be greater than zero.");
-		}
+
 		this.capacity = capacity;
 		this.map = new ConcurrentHashMap<>(capacity);
 		this.deque = new ConcurrentLinkedDeque<>();
 		this.evictionLock = new ReentrantLock();
+		this.evictionListener = evictionListener != null ? evictionListener : (e) -> { /* no-op */ };
 	}
 
 	@Override
@@ -201,17 +216,23 @@ public class ConcurrentLruSet<E> implements Set<E> {
 	 */
 	private void evictIfNeeded() {
 		if (map.size() > capacity) {
+			Node<E> evictedNode = null;
+
 			evictionLock.lock();
+			
 			try {
 				while (map.size() > capacity) {
 					Node<E> lru = deque.pollLast();
-					if (lru != null) {
-						map.remove(lru.key, lru);
-					}
+
+					if (lru != null && map.remove(lru.key, lru))
+						evictedNode = lru;
 				}
 			} finally {
 				evictionLock.unlock();
 			}
+
+			if (evictedNode != null)
+				getEvictionListener().accept(evictedNode.key);
 		}
 	}
 
@@ -221,5 +242,10 @@ public class ConcurrentLruSet<E> implements Set<E> {
 		Node(E key) {
 			this.key = key;
 		}
+	}
+
+	@Nonnull
+	protected Consumer<E> getEvictionListener() {
+		return this.evictionListener;
 	}
 }
