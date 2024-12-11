@@ -382,7 +382,9 @@ public class SokletTests {
 	@Test
 	public void serverSentEventServer() throws InterruptedException {
 		SynchronousQueue<String> shutdownQueue = new SynchronousQueue<>();
-		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081).build();
+		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
+				.concurrentConnectionLimit(2)
+				.build();
 
 		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
 				.serverSentEventServer(serverSentEventServer)
