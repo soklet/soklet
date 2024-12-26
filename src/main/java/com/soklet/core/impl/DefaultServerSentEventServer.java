@@ -279,7 +279,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.started = false;
 		this.stopping = false;
 		this.lock = new ReentrantLock();
-
 		this.port = builder.port;
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
@@ -322,7 +321,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// Initialize the global LRU map with the specified limit. Assume ConcurrentLRUMap supports a removal listener.
 		this.globalConnections = new ConcurrentLruMap<>(this.concurrentConnectionLimit, (evictedConnection, broadcaster) -> {
-			System.out.println("Evicted!!");
 			// This callback is triggered when a connection is evicted from the global LRU map.
 			// Unregister the evicted connection from the broadcaster and send poison pill to close it.
 			broadcaster.unregisterServerSentEventConnection(evictedConnection, true);
@@ -397,6 +395,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	protected void performConnectionValidityTask() {
 		Collection<DefaultServerSentEventBroadcaster> broadcasters = getBroadcastersByResourcePath().values();
 		int i = 0;
+
+		//System.out.println("Global connections (" + getGlobalConnections().size() + "): " + getGlobalConnections());
 
 		if (broadcasters.size() > 0) {
 			for (DefaultServerSentEventBroadcaster broadcaster : broadcasters) {
@@ -1045,7 +1045,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Create the event source if it does not already exist
 		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
 				.computeIfAbsent(resourcePath, (ignored) -> new DefaultServerSentEventBroadcaster(resourceMethod, resourcePath, (serverSentEventConnection -> {
-					System.out.println("Broadcaster said removal occurred!!");
 					// When the broadcaster unregisters a connection it manages, remove it from the global set of connections as well
 					getGlobalConnections().remove(serverSentEventConnection);
 				})));

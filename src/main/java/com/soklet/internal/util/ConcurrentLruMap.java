@@ -16,7 +16,6 @@
 
 package com.soklet.internal.util;
 
-
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.AbstractMap;
