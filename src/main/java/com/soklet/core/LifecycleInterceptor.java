@@ -34,6 +34,11 @@ import static java.util.Objects.requireNonNull;
  * The ability to modify request processing control flow is provided via {@link #wrapRequest(Request, ResourceMethod, Consumer)}
  * and {@link #interceptRequest(Request, ResourceMethod, Function, Consumer)}.
  * <p>
+ * Note: some of these methods are "fail-fast" - exceptions thrown will bubble out and stop execution - and for others, Soklet will
+ * catch exceptions and surface separately via {@link #didReceiveLogEvent(LogEvent)}.  Generally speaking, lifecycle events that are scoped
+ * at the server level (e.g. {@link #willStartServer(Server)}) will fail-fast and events that are scoped at the request level
+ * (e.g. {@link #didStartRequestHandling(Request, ResourceMethod)}) will not fail-fast.
+ * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/request-lifecycle">https://www.soklet.com/docs/request-lifecycle</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
