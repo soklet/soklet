@@ -216,8 +216,9 @@ public class Soklet implements AutoCloseable {
 		Consumer<LogEvent> safelyLog = (logEvent -> {
 			try {
 				lifecycleInterceptor.didReceiveLogEvent(logEvent);
-			} catch (Throwable t) {
-				throwables.add(t);
+			} catch (Throwable throwable) {
+				throwable.printStackTrace();
+				throwables.add(throwable);
 			}
 		});
 

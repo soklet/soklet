@@ -56,6 +56,30 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
 	/**
+	 * Indicates {@link LifecycleInterceptor#willEstablishServerSentEventConnection(Request, ResourceMethod)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_WILL_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#didEstablishServerSentEventConnection(Request, ResourceMethod)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#willTerminateServerSentEventConnection(Request, ResourceMethod, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#didTerminateServerSentEventConnection(Request, ResourceMethod, Duration, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#willStartServerSentEventWriting(Request, ResourceMethod, ServerSentEvent)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_WILL_START_SERVER_SENT_EVENT_WRITING_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#didFinishServerSentEventWriting(Request, ResourceMethod, ServerSentEvent, Duration, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_DID_FINISH_SERVER_SENT_EVENT_WRITING_FAILED,
+	/**
 	 * Indicates {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)} threw an exception.
 	 */
 	RESPONSE_MARSHALER_FOR_THROWABLE_FAILED,

@@ -46,6 +46,8 @@ import static java.util.Objects.requireNonNull;
 public interface LifecycleInterceptor {
 	/**
 	 * Called before the server starts.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
 	 *
 	 * @param server the server that will start
 	 */
@@ -55,6 +57,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called after the server starts.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
 	 *
 	 * @param server the server that started
 	 */
@@ -64,6 +68,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called before the server stops.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
 	 *
 	 * @param server the server that will stop
 	 */
@@ -73,6 +79,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called after the server stops.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
 	 *
 	 * @param server the server that stopped
 	 */
@@ -82,6 +90,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_START_REQUEST_HANDLING_FAILED}.
 	 *
 	 * @param request        the request that was received
 	 * @param resourceMethod the <em>Resource Method</em> that will handle the request
@@ -94,6 +104,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called after a request has fully completed processing and a response has been sent to the client.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_FINISH_REQUEST_HANDLING_FAILED}.
 	 *
 	 * @param request            the request that was received
 	 * @param resourceMethod     the <em>Resource Method</em> that will handle the request
@@ -112,6 +124,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called before the response is sent to the client.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_START_RESPONSE_WRITING_FAILED}.
 	 *
 	 * @param request           the request that was received
 	 * @param resourceMethod    the <em>Resource Method</em> that handled the request.
@@ -126,6 +140,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called after the response is sent to the client.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED}.
 	 *
 	 * @param request               the request that was received
 	 * @param resourceMethod        the <em>Resource Method</em> that handled the request.
@@ -144,6 +160,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called when an event suitable for logging occurs during processing (generally, an exception).
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch the exception and print its stack trace to stderr.
 	 *
 	 * @param logEvent the event that occurred
 	 */
@@ -174,6 +192,9 @@ public interface LifecycleInterceptor {
 	 *
 	 * // Second, send the response over the wire.
 	 * responseWriter.accept(marshaledResponse);</pre>
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_INTERCEPT_REQUEST_FAILED}.
+	 * <p>
 	 * See <a href="https://www.soklet.com/docs/request-lifecycle#request-intercepting">https://www.soklet.com/docs/request-lifecycle#request-intercepting</a> for detailed documentation.
 	 *
 	 * @param request          the request that was received
@@ -202,6 +223,9 @@ public interface LifecycleInterceptor {
 	 * This is a more coarse-grained approach than {@link #interceptRequest(Request, ResourceMethod, Function, Consumer)}.
 	 * <pre> // Default implementation: let the request processing proceed as normal
 	 * requestProcessor.accept(request);</pre>
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WRAP_REQUEST_FAILED}.
+	 * <p>
 	 * See <a href="https://www.soklet.com/docs/request-lifecycle#request-wrapping">https://www.soklet.com/docs/request-lifecycle#request-wrapping</a> for detailed documentation.
 	 *
 	 * @param request          the request that was received
@@ -220,6 +244,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called before the Server-Sent Event server starts.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
 	 *
 	 * @param serverSentEventServer the Server-Sent Event server that will start
 	 */
@@ -229,6 +255,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called after the Server-Sent Event server starts.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
 	 *
 	 * @param serverSentEventServer the Server-Sent Event server that started
 	 */
@@ -238,6 +266,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called before the Server-Sent Event server stops.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
 	 *
 	 * @param serverSentEventServer the Server-Sent Event server that will stop
 	 */
@@ -247,6 +277,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called after the Server-Sent Event server stops.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
 	 *
 	 * @param serverSentEventServer the Server-Sent Event server that stopped
 	 */
@@ -258,6 +290,8 @@ public interface LifecycleInterceptor {
 	 * Called immediately before a Server-Sent Event connection of indefinite duration to the client is opened.
 	 * <p>
 	 * This occurs after the initial "handshake" Server-Sent Event request has successfully completed (that is, an HTTP 200 response).
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED}.
 	 *
 	 * @param request        the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
@@ -271,6 +305,8 @@ public interface LifecycleInterceptor {
 	 * Called immediately after a Server-Sent Event connection of indefinite duration to the client is opened.
 	 * <p>
 	 * This occurs after the initial "handshake" Server-Sent Event request has successfully completed (that is, an HTTP 200 response).
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED}.
 	 *
 	 * @param request        the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
@@ -282,6 +318,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called immediately before a Server-Sent Event connection to the client is terminated.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED}.
 	 *
 	 * @param request        the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
@@ -295,6 +333,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called immediately after a Server-Sent Event connection to the client is terminated.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED}.
 	 *
 	 * @param request            the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod     the <em>Resource Method</em> that handled the "handshake"
@@ -310,6 +350,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called before a Server-Sent Event is sent to the client.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_START_SERVER_SENT_EVENT_WRITING_FAILED}.
 	 *
 	 * @param request         the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
@@ -323,6 +365,8 @@ public interface LifecycleInterceptor {
 
 	/**
 	 * Called after a Server-Sent Event is sent to the client.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_FINISH_SERVER_SENT_EVENT_WRITING_FAILED}.
 	 *
 	 * @param request         the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
