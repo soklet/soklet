@@ -17,6 +17,7 @@
 package com.soklet.internal.util;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -40,10 +41,6 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	@Nonnull
-	private final Integer capacity;
-	@Nonnull
-	private final BiConsumer<K, V> evictionListener;
-	@Nonnull
 	private final Lock readLock;
 	@Nonnull
 	private final Lock writeLock;
@@ -66,16 +63,18 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 		ReentrantReadWriteLock reentrantReadWriteLock = new ReentrantReadWriteLock();
 
-		this.capacity = capacity;
-		this.evictionListener = evictionListener;
 		this.readLock = reentrantReadWriteLock.readLock();
 		this.writeLock = reentrantReadWriteLock.writeLock();
 
+		// Between this and load factor of 1, we ensure the backing map never needs to resize itself
+		// since there's a hard limit on size (we always evict the eldest entry once capacity is reached)
+		int backingMapTrueCapacity = capacity + 1;
+
 		// Access-order = true -> get operations move entry to most-recently-used position
-		this.backingMap = new LinkedHashMap<K, V>(capacity, 0.75f, true) {
+		this.backingMap = new LinkedHashMap<K, V>(backingMapTrueCapacity, 1, true) {
 			@Override
 			protected boolean removeEldestEntry(@Nonnull Entry<K, V> eldest) {
-				if (size() > getCapacity()) {
+				if (size() > capacity) {
 					evictionListener.accept(eldest.getKey(), eldest.getValue());
 					return true;
 				}
@@ -116,7 +115,9 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public boolean containsKey(Object key) {
+	public boolean containsKey(@Nonnull Object key) {
+		requireNonNull(key);
+
 		getReadLock().lock();
 		try {
 			return getBackingMap().containsKey(key);
@@ -126,7 +127,9 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public boolean containsValue(Object value) {
+	public boolean containsValue(@Nonnull Object value) {
+		requireNonNull(value);
+
 		getReadLock().lock();
 		try {
 			return getBackingMap().containsValue(value);
@@ -136,7 +139,10 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public V get(Object key) {
+	@Nullable
+	public V get(@Nonnull Object key) {
+		requireNonNull(key);
+
 		getReadLock().lock();
 		try {
 			return getBackingMap().get(key);
@@ -150,7 +156,12 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * {@code defaultValue} if this map contains no mapping for the key.
 	 */
 	@Override
-	public V getOrDefault(Object key, V defaultValue) {
+	@Nonnull
+	public V getOrDefault(@Nonnull Object key,
+												@Nonnull V defaultValue) {
+		requireNonNull(key);
+		requireNonNull(defaultValue);
+
 		getReadLock().lock();
 		try {
 			return getBackingMap().getOrDefault(key, defaultValue);
@@ -160,7 +171,12 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public V put(K key, V value) {
+	@Nonnull
+	public V put(@Nonnull K key,
+							 @Nonnull V value) {
+		requireNonNull(key);
+		requireNonNull(value);
+
 		getWriteLock().lock();
 		try {
 			return getBackingMap().put(key, value);
@@ -174,7 +190,12 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * with the given value and return null, else return the current value.
 	 */
 	@Override
-	public V putIfAbsent(K key, V value) {
+	@Nullable
+	public V putIfAbsent(@Nonnull K key,
+											 @Nonnull V value) {
+		requireNonNull(key);
+		requireNonNull(value);
+
 		getWriteLock().lock();
 		try {
 			return getBackingMap().putIfAbsent(key, value);
@@ -189,7 +210,12 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * and enters it into this map unless null.
 	 */
 	@Override
-	public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+	@Nullable
+	public V computeIfAbsent(@Nonnull K key,
+													 @Nonnull Function<? super K, ? extends V> mappingFunction) {
+		requireNonNull(key);
+		requireNonNull(mappingFunction);
+
 		getWriteLock().lock();
 		try {
 			return getBackingMap().computeIfAbsent(key, mappingFunction);
@@ -199,7 +225,10 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public V remove(Object key) {
+	@Nullable
+	public V remove(@Nonnull Object key) {
+		requireNonNull(key);
+
 		getWriteLock().lock();
 		try {
 			return getBackingMap().remove(key);
@@ -209,12 +238,13 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public void putAll(Map<? extends K, ? extends V> m) {
+	public void putAll(@Nonnull Map<? extends K, ? extends V> map) {
+		requireNonNull(map);
+
 		getWriteLock().lock();
 		try {
-			for (Map.Entry<? extends K, ? extends V> entry : m.entrySet()) {
+			for (Entry<? extends K, ? extends V> entry : map.entrySet())
 				getBackingMap().put(entry.getKey(), entry.getValue());
-			}
 		} finally {
 			getWriteLock().unlock();
 		}
@@ -235,6 +265,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * Iterating over this set will not reflect subsequent modifications.
 	 */
 	@Override
+	@Nonnull
 	public Set<K> keySet() {
 		getReadLock().lock();
 		try {
@@ -248,6 +279,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * Returns a snapshot of the values in this map at the time of calling.
 	 * Iterating over this collection will not reflect subsequent modifications.
 	 */
+	@Nonnull
 	@Override
 	public Collection<V> values() {
 		getReadLock().lock();
@@ -262,24 +294,15 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * Returns a snapshot of the entries in this map at the time of calling.
 	 * Iterating over this set will not reflect subsequent modifications.
 	 */
+	@Nonnull
 	@Override
-	public Set<Map.Entry<K, V>> entrySet() {
+	public Set<Entry<K, V>> entrySet() {
 		getReadLock().lock();
 		try {
 			return new LinkedHashSet<>(getBackingMap().entrySet());
 		} finally {
 			getReadLock().unlock();
 		}
-	}
-
-	@Nonnull
-	protected Integer getCapacity() {
-		return this.capacity;
-	}
-
-	@Nonnull
-	protected BiConsumer<K, V> getEvictionListener() {
-		return this.evictionListener;
 	}
 
 	@Nonnull
