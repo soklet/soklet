@@ -18,20 +18,19 @@ package com.soklet.internal.util;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+
+import static java.util.Map.Entry;
+import static java.util.Objects.requireNonNull;
 
 /**
  * A threadsafe LRU {@link Map}.
@@ -40,226 +39,261 @@ import java.util.function.Function;
  */
 @ThreadSafe
 public class ConcurrentLruMap<K, V> implements Map<K, V> {
-	private final int capacity;
-	private final ConcurrentHashMap<K, Node<K, V>> map;
-	private final ConcurrentLinkedDeque<Node<K, V>> deque;
-	private final ReentrantLock evictionLock;
+	@Nonnull
+	private final Integer capacity;
+	@Nonnull
 	private final BiConsumer<K, V> evictionListener;
+	@Nonnull
+	private final Lock readLock;
+	@Nonnull
+	private final Lock writeLock;
 
-	public ConcurrentLruMap(int capacity) {
-		this(capacity, null);
+	/**
+	 * A LinkedHashMap with access-order and custom eviction behavior.
+	 * When the size exceeds 'capacity', the eldest entry is removed,
+	 * and 'evictionListener' is invoked.
+	 */
+	@Nonnull
+	private final LinkedHashMap<K, V> backingMap;
+
+	public ConcurrentLruMap(@Nonnull Integer capacity,
+													@Nonnull BiConsumer<K, V> evictionListener) {
+		requireNonNull(capacity);
+		requireNonNull(evictionListener);
+
+		if (capacity <= 0)
+			throw new IllegalArgumentException("Capacity must be greater than 0");
+
+		ReentrantReadWriteLock reentrantReadWriteLock = new ReentrantReadWriteLock();
+
+		this.capacity = capacity;
+		this.evictionListener = evictionListener;
+		this.readLock = reentrantReadWriteLock.readLock();
+		this.writeLock = reentrantReadWriteLock.writeLock();
+
+		// Access-order = true -> get operations move entry to most-recently-used position
+		this.backingMap = new LinkedHashMap<K, V>(capacity, 0.75f, true) {
+			@Override
+			protected boolean removeEldestEntry(@Nonnull Entry<K, V> eldest) {
+				if (size() > getCapacity()) {
+					evictionListener.accept(eldest.getKey(), eldest.getValue());
+					return true;
+				}
+
+				return false;
+			}
+		};
 	}
 
-	public ConcurrentLruMap(int capacity,
-													BiConsumer<K, V> evictionListener) {
-		if (capacity <= 0) {
-			throw new IllegalArgumentException("Capacity must be greater than zero");
+	@Override
+	public String toString() {
+		getReadLock().lock();
+		try {
+			return getBackingMap().toString();
+		} finally {
+			getReadLock().unlock();
 		}
-		this.capacity = capacity;
-		this.map = new ConcurrentHashMap<>(capacity);
-		this.deque = new ConcurrentLinkedDeque<>();
-		this.evictionLock = new ReentrantLock();
-		this.evictionListener = evictionListener != null ? evictionListener : (k, v) -> { /* no-op */ };
 	}
 
 	@Override
 	public int size() {
-		return map.size();
+		getReadLock().lock();
+		try {
+			return getBackingMap().size();
+		} finally {
+			getReadLock().unlock();
+		}
 	}
 
 	@Override
 	public boolean isEmpty() {
-		return map.isEmpty();
+		getReadLock().lock();
+		try {
+			return getBackingMap().isEmpty();
+		} finally {
+			getReadLock().unlock();
+		}
 	}
 
 	@Override
 	public boolean containsKey(Object key) {
-		return map.containsKey(key);
+		getReadLock().lock();
+		try {
+			return getBackingMap().containsKey(key);
+		} finally {
+			getReadLock().unlock();
+		}
 	}
 
 	@Override
 	public boolean containsValue(Object value) {
-		for (Node<K, V> node : map.values()) {
-			if (Objects.equals(node.value, value)) {
-				return true;
-			}
+		getReadLock().lock();
+		try {
+			return getBackingMap().containsValue(value);
+		} finally {
+			getReadLock().unlock();
 		}
-		return false;
 	}
 
 	@Override
-	@SuppressWarnings("unchecked")
 	public V get(Object key) {
-		Node<K, V> node = map.get((K) key);
-		if (node == null) {
-			return null;
+		getReadLock().lock();
+		try {
+			return getBackingMap().get(key);
+		} finally {
+			getReadLock().unlock();
 		}
-		// Move to MRU position
-		deque.remove(node);
-		deque.addFirst(node);
-		return node.value;
 	}
 
 	/**
-	 * Returns the value associated with the key, or defaultValue if not present.
-	 * If the key is present, moves it to MRU position.
+	 * Returns the value to which the specified key is mapped, or
+	 * {@code defaultValue} if this map contains no mapping for the key.
 	 */
 	@Override
 	public V getOrDefault(Object key, V defaultValue) {
-		Node<K, V> node = map.get(key);
-		if (node == null) {
-			return defaultValue;
+		getReadLock().lock();
+		try {
+			return getBackingMap().getOrDefault(key, defaultValue);
+		} finally {
+			getReadLock().unlock();
 		}
-		deque.remove(node);
-		deque.addFirst(node);
-		return node.value;
 	}
 
 	@Override
 	public V put(K key, V value) {
-		Node<K, V> newNode = new Node<>(key, value);
-		Node<K, V> oldNode = map.put(key, newNode);
-
-		if (oldNode != null) {
-			deque.remove(oldNode);
+		getWriteLock().lock();
+		try {
+			return getBackingMap().put(key, value);
+		} finally {
+			getWriteLock().unlock();
 		}
-		deque.addFirst(newNode);
-
-		V oldValue = (oldNode != null) ? oldNode.value : null;
-		evictIfNeeded();
-		return oldValue;
 	}
 
 	/**
-	 * Inserts the key-value pair only if the key is not already present.
-	 * If the key is present, returns the existing value and moves that entry to MRU.
+	 * If the specified key is not already associated with a value, associate it
+	 * with the given value and return null, else return the current value.
 	 */
 	@Override
 	public V putIfAbsent(K key, V value) {
-		Node<K, V> newNode = new Node<>(key, value);
-		Node<K, V> existing = map.putIfAbsent(key, newNode);
-		if (existing == null) {
-			// Newly inserted
-			deque.addFirst(newNode);
-			evictIfNeeded();
-			return null;
-		} else {
-			// Key existed, move to MRU
-			deque.remove(existing);
-			deque.addFirst(existing);
-			return existing.value;
+		getWriteLock().lock();
+		try {
+			return getBackingMap().putIfAbsent(key, value);
+		} finally {
+			getWriteLock().unlock();
 		}
 	}
 
 	/**
-	 * If the key is not already present, attempts to compute its value using the given mappingFunction.
-	 * If a value is computed (not null), inserts it and returns it.
-	 * If the key exists, returns the existing value and moves it to MRU.
-	 * If the mapping function returns null, returns null and does not insert.
+	 * If the specified key is not already associated with a value (or is mapped
+	 * to null), attempts to compute its value using the given mapping function
+	 * and enters it into this map unless null.
 	 */
+	@Override
 	public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
-		// Atomically compute or retrieve the node
-		Node<K, V> node = map.computeIfAbsent(key, k -> {
-			V newVal = mappingFunction.apply(k);
-			return (newVal == null) ? null : new Node<>(k, newVal);
-		});
-
-		if (node == null) {
-			// No entry was inserted (mappingFunction returned null), return null
-			return null;
+		getWriteLock().lock();
+		try {
+			return getBackingMap().computeIfAbsent(key, mappingFunction);
+		} finally {
+			getWriteLock().unlock();
 		}
-
-		// Node is present (either existing or newly created)
-		// Move it to MRU position
-		deque.remove(node);
-		deque.addFirst(node);
-
-		// If newly created, we might need to evict
-		evictIfNeeded();
-		return node.value;
 	}
 
 	@Override
-	@SuppressWarnings("unchecked")
 	public V remove(Object key) {
-		Node<K, V> node = map.remove((K) key);
-		if (node == null) {
-			return null;
+		getWriteLock().lock();
+		try {
+			return getBackingMap().remove(key);
+		} finally {
+			getWriteLock().unlock();
 		}
-		deque.remove(node);
-		return node.value;
 	}
 
 	@Override
 	public void putAll(Map<? extends K, ? extends V> m) {
-		for (Entry<? extends K, ? extends V> e : m.entrySet()) {
-			put(e.getKey(), e.getValue());
+		getWriteLock().lock();
+		try {
+			for (Map.Entry<? extends K, ? extends V> entry : m.entrySet()) {
+				getBackingMap().put(entry.getKey(), entry.getValue());
+			}
+		} finally {
+			getWriteLock().unlock();
 		}
 	}
 
 	@Override
 	public void clear() {
-		map.clear();
-		deque.clear();
+		getWriteLock().lock();
+		try {
+			getBackingMap().clear();
+		} finally {
+			getWriteLock().unlock();
+		}
 	}
 
+	/**
+	 * Returns a snapshot of the keys in this map at the time of calling.
+	 * Iterating over this set will not reflect subsequent modifications.
+	 */
 	@Override
 	public Set<K> keySet() {
-		return Collections.unmodifiableSet(map.keySet());
+		getReadLock().lock();
+		try {
+			return new LinkedHashSet<>(getBackingMap().keySet());
+		} finally {
+			getReadLock().unlock();
+		}
 	}
 
+	/**
+	 * Returns a snapshot of the values in this map at the time of calling.
+	 * Iterating over this collection will not reflect subsequent modifications.
+	 */
 	@Override
 	public Collection<V> values() {
-		List<V> vals = new ArrayList<>(map.size());
-		for (Node<K, V> node : map.values()) {
-			vals.add(node.value);
+		getReadLock().lock();
+		try {
+			return new ArrayList<>(getBackingMap().values());
+		} finally {
+			getReadLock().unlock();
 		}
-		return Collections.unmodifiableList(vals);
 	}
 
+	/**
+	 * Returns a snapshot of the entries in this map at the time of calling.
+	 * Iterating over this set will not reflect subsequent modifications.
+	 */
 	@Override
-	public Set<Entry<K, V>> entrySet() {
-		Set<Entry<K, V>> entries = new HashSet<>();
-		for (Map.Entry<K, Node<K, V>> e : map.entrySet()) {
-			entries.add(new AbstractMap.SimpleEntry<>(e.getKey(), e.getValue().value));
-		}
-		return Collections.unmodifiableSet(entries);
-	}
-
-	private void evictIfNeeded() {
-		if (map.size() > capacity) {
-			Node<K, V> evictedNode = null;
-
-			evictionLock.lock();
-
-			try {
-				while (map.size() > capacity) {
-					Node<K, V> tailNode = deque.pollLast();
-
-					if (tailNode != null && map.remove(tailNode.key, tailNode))
-						evictedNode = tailNode;
-				}
-			} finally {
-				evictionLock.unlock();
-			}
-
-			if (evictedNode != null)
-				getEvictionListener().accept(evictedNode.key, evictedNode.value);
+	public Set<Map.Entry<K, V>> entrySet() {
+		getReadLock().lock();
+		try {
+			return new LinkedHashSet<>(getBackingMap().entrySet());
+		} finally {
+			getReadLock().unlock();
 		}
 	}
 
-	private static class Node<K, V> {
-		final K key;
-		volatile V value;
-
-		Node(K key, V value) {
-			this.key = key;
-			this.value = value;
-		}
+	@Nonnull
+	protected Integer getCapacity() {
+		return this.capacity;
 	}
 
 	@Nonnull
 	protected BiConsumer<K, V> getEvictionListener() {
 		return this.evictionListener;
+	}
+
+	@Nonnull
+	protected Lock getReadLock() {
+		return this.readLock;
+	}
+
+	@Nonnull
+	protected Lock getWriteLock() {
+		return this.writeLock;
+	}
+
+	@Nonnull
+	protected LinkedHashMap<K, V> getBackingMap() {
+		return this.backingMap;
 	}
 }
