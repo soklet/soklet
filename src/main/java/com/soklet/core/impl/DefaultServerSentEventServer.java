@@ -377,9 +377,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				try {
 					performConnectionValidityTask();
 				} catch (Throwable throwable) {
-					// TODO: send to logger
-					throwable.printStackTrace();
-					System.out.println("Connection validity checker failed");
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Server-Sent Event connection validity checker encountered an error")
+							.throwable(throwable)
+							.build());
 				}
 			}, 5, 15, TimeUnit.SECONDS);
 
@@ -441,8 +441,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				System.out.println("Server is stopped or stopping, exiting SSE event loop...");
 				return;
 			}
-
-			System.out.println("SSE Server started on port " + getPort());
 
 			ExecutorService executorService = getRequestHandlerExecutorService().get();
 
@@ -516,6 +514,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).get();
 
+				// TODO: is this the right spot?  Should it be lower down?
 				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
 
 				while (true) {
@@ -523,7 +522,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
 
 					if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) {
-						System.out.println("Encountered poison pill, exiting...");
+						//System.out.println("Encountered poison pill, exiting...");
 						break;
 					}
 
@@ -572,10 +571,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 		} catch (Throwable t) {
 			throwable = t;
-			System.out.println("Closing socket due to exception: " + t.getMessage());
+			// System.out.println("Closing socket due to exception: " + t.getMessage());
 
 			if (t instanceof InterruptedException) {
-				System.out.println("Socket thread was interrupted");
+				// System.out.println("Socket thread was interrupted");
 				Thread.currentThread().interrupt();  // Restore interrupt status
 			}
 		} finally {
@@ -587,10 +586,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				try {
 					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
 
-					System.out.println(format("SSE socket thread completed for request: %s", debuggingString(clientSocketChannelRegistration.serverSentEventConnection().getRequest())));
-				} catch (Exception ignored) {
-					System.out.println("Unable to de-register connection");
-					ignored.printStackTrace();
+					// System.out.println(format("SSE socket thread completed for request: %s", debuggingString(clientSocketChannelRegistration.serverSentEventConnection().getRequest())));
+				} catch (Exception exception) {
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
+							.throwable(exception)
+							.build());
 				}
 			}
 
@@ -599,9 +599,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				try {
 					// Should already be closed, but just in case
 					clientSocketChannel.close();
-				} catch (Exception ignored) {
-					System.out.println("Unable to close socket channel");
-					ignored.printStackTrace();
+				} catch (Exception exception) {
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event connection socket channel")
+							.throwable(exception)
+							.build());
 				} finally {
 					if (clientSocketChannelRegistration != null && resourceMethod != null) {
 						Instant connectionFinished = Instant.now();
@@ -953,8 +954,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				try {
 					broadcaster.unregisterAllServerSentEventConnections(true);
 				} catch (Exception e) {
-					System.out.println("Unable to unregister connection, continuing on...");
-					e.printStackTrace();
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to shut down open Server-Sent Event connections")
+							.throwable(e)
+							.build());
 				}
 			}
 
