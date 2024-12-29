@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Revetware LLC.
+ * Copyright 2022-2025 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,7 +72,7 @@ public class Request {
 	@Nonnull
 	private final String uri;
 	@Nonnull
-	private final String path;
+	private final ResourcePath resourcePath;
 	@Nonnull
 	private final Map<String, Set<String>> cookies;
 	@Nonnull
@@ -200,7 +200,7 @@ public class Request {
 			}
 		}
 
-		this.path = Utilities.normalizedPathForUrl(uri);
+		this.resourcePath = ResourcePath.of(Utilities.normalizedPathForUrl(uri));
 
 		// Form parameters
 		// TODO: optimize copy/modify scenarios - we don't want to be re-processing body data
@@ -294,13 +294,23 @@ public class Request {
 	}
 
 	/**
-	 * The path component of the request, which is the value returned by {@link #getUri()} with the query string (if any) removed.
+	 * The path component of this request, which is a representation of the value returned by {@link #getUri()} with the query string (if any) removed.
 	 *
-	 * @return the request's path component
+	 * @return the path for this request
 	 */
 	@Nonnull
 	public String getPath() {
-		return this.path;
+		return getResourcePath().getPath();
+	}
+
+	/**
+	 * Convenience method to acquire a {@link ResourcePath} representation of {@link #getPath()}.
+	 *
+	 * @return the resource path for this request
+	 */
+	@Nonnull
+	public ResourcePath getResourcePath() {
+		return this.resourcePath;
 	}
 
 	/**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Revetware LLC.
+ * Copyright 2022-2025 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -67,9 +67,9 @@ public interface Simulator {
 	@Nonnull
 	MarshaledResponse performRequest(@Nonnull Request request);
 
-	void registerServerSentEventConsumer(@Nonnull ResourcePathInstance resourcePathInstance,
+	void registerServerSentEventConsumer(@Nonnull ResourcePath resourcePath,
 																			 @Nonnull Consumer<ServerSentEvent> serverSentEventConsumer);
 
 	@Nonnull
-	Optional<? extends ServerSentEventBroadcaster> acquireServerSentEventBroadcaster(@Nullable ResourcePathInstance resourcePathInstance);
+	Optional<? extends ServerSentEventBroadcaster> acquireServerSentEventBroadcaster(@Nullable ResourcePath resourcePath);
 }

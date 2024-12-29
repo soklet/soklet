@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Revetware LLC.
+ * Copyright 2022-2025 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,6 +55,30 @@ public enum LogEventType {
 	 * Indicates {@link LifecycleInterceptor#didFinishResponseWriting(Request, ResourceMethod, MarshaledResponse, Duration, Throwable)} threw an exception.
 	 */
 	LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#willEstablishServerSentEventConnection(Request, ResourceMethod)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_WILL_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#didEstablishServerSentEventConnection(Request, ResourceMethod)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#willTerminateServerSentEventConnection(Request, ResourceMethod, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#didTerminateServerSentEventConnection(Request, ResourceMethod, Duration, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#willStartServerSentEventWriting(Request, ResourceMethod, ServerSentEvent)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_WILL_START_SERVER_SENT_EVENT_WRITING_FAILED,
+	/**
+	 * Indicates {@link LifecycleInterceptor#didFinishServerSentEventWriting(Request, ResourceMethod, ServerSentEvent, Duration, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_INTERCEPTOR_DID_FINISH_SERVER_SENT_EVENT_WRITING_FAILED,
 	/**
 	 * Indicates {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)} threw an exception.
 	 */

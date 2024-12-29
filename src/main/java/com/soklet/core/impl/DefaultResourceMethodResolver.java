@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Revetware LLC.
+ * Copyright 2022-2025 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ import com.soklet.core.Request;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.ResourcePath;
-import com.soklet.core.ResourcePathInstance;
+import com.soklet.core.ResourcePathDeclaration;
 import com.soklet.internal.classindex.ClassIndex;
 
 import javax.annotation.Nonnull;
@@ -78,7 +78,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	@Nonnull
 	private final Map<HttpMethod, Set<Method>> methodsByHttpMethod;
 	@Nonnull
-	private final Map<Method, Set<HttpMethodResourcePath>> httpMethodResourcePathsByMethod;
+	private final Map<Method, Set<HttpMethodResourcePathDeclaration>> httpMethodResourcePathDeclarationsByMethod;
 	@Nonnull
 	private final Set<ResourceMethod> resourceMethods;
 
@@ -107,7 +107,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 		this.methods = Collections.unmodifiableSet(allMethods);
 		this.methodsByHttpMethod = Collections.unmodifiableMap(createMethodsByHttpMethod(getMethods()));
-		this.httpMethodResourcePathsByMethod = Collections.unmodifiableMap(createHttpMethodResourcePathsByMethod(getMethods()));
+		this.httpMethodResourcePathDeclarationsByMethod = Collections.unmodifiableMap(createHttpMethodResourcePathDeclarationsByMethod(getMethods()));
 
 		// Collect up all resource methods into a single set for easy access
 		Set<ResourceMethod> resourceMethods = new HashSet<>();
@@ -120,15 +120,15 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				continue;
 
 			for (Method method : currentMethods) {
-				Set<HttpMethodResourcePath> httpMethodResourcePaths = this.httpMethodResourcePathsByMethod.get(method);
+				Set<HttpMethodResourcePathDeclaration> httpMethodResourcePathDeclarations = this.httpMethodResourcePathDeclarationsByMethod.get(method);
 
-				if (httpMethodResourcePaths == null)
+				if (httpMethodResourcePathDeclarations == null)
 					continue;
 
-				for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths) {
-					ResourcePath resourcePath = httpMethodResourcePath.getResourcePath();
-					Boolean serverSentEventSource = httpMethodResourcePath.isServerSentEventSource();
-					ResourceMethod resourceMethod = ResourceMethod.withComponents(httpMethod, resourcePath, method, serverSentEventSource);
+				for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations) {
+					ResourcePathDeclaration resourcePathDeclaration = httpMethodResourcePathDeclaration.getResourcePathDeclaration();
+					Boolean serverSentEventSource = httpMethodResourcePathDeclaration.isServerSentEventSource();
+					ResourceMethod resourceMethod = ResourceMethod.withComponents(httpMethod, resourcePathDeclaration, method, serverSentEventSource);
 					resourceMethods.add(resourceMethod);
 				}
 			}
@@ -147,18 +147,18 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		if (methods == null)
 			return Optional.empty();
 
-		ResourcePathInstance resourcePathInstance = ResourcePathInstance.of(request.getPath());
+		ResourcePath resourcePath = request.getResourcePath();
 		Set<ResourceMethod> matchingResourceMethods = new HashSet<>(4); // Normally there are few (if any) potential matches
 
 		// TODO: faster matching via path component tree structure instead of linear scan
-		for (Entry<Method, Set<HttpMethodResourcePath>> entry : getHttpMethodResourcePathsByMethod().entrySet()) {
+		for (Entry<Method, Set<HttpMethodResourcePathDeclaration>> entry : getHttpMethodResourcePathDeclarationsByMethod().entrySet()) {
 			Method method = entry.getKey();
-			Set<HttpMethodResourcePath> httpMethodResourcePaths = entry.getValue();
+			Set<HttpMethodResourcePathDeclaration> httpMethodResourcePathDeclarations = entry.getValue();
 
-			for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths)
-				if (httpMethodResourcePath.getHttpMethod().equals(request.getHttpMethod())
-						&& resourcePathInstance.matches(httpMethodResourcePath.getResourcePath()))
-					matchingResourceMethods.add(ResourceMethod.withComponents(request.getHttpMethod(), httpMethodResourcePath.getResourcePath(), method, httpMethodResourcePath.isServerSentEventSource()));
+			for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations)
+				if (httpMethodResourcePathDeclaration.getHttpMethod().equals(request.getHttpMethod())
+						&& resourcePath.matches(httpMethodResourcePathDeclaration.getResourcePathDeclaration()))
+					matchingResourceMethods.add(ResourceMethod.withComponents(request.getHttpMethod(), httpMethodResourcePathDeclaration.getResourcePathDeclaration(), method, httpMethodResourcePathDeclaration.isServerSentEventSource()));
 		}
 
 		// Simple case - exact route match
@@ -173,7 +173,7 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			if (mostSpecificResourceMethods.size() == 1)
 				return mostSpecificResourceMethods.stream().findFirst();
 
-			throw new RuntimeException(format("Multiple routes match '%s %s'. Ambiguous matches were:\n%s", request.getHttpMethod().name(), request.getPath(),
+			throw new RuntimeException(format("Multiple routes match '%s %s'. Ambiguous matches were:\n%s", request.getHttpMethod().name(), request.getResourcePath().getPath(),
 					matchingResourceMethods.stream()
 							.map(matchingResourceMethod -> matchingResourceMethod.getMethod().toString())
 							.collect(Collectors.joining("\n"))));
@@ -183,80 +183,80 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	protected Map<Method, Set<HttpMethodResourcePath>> createHttpMethodResourcePathsByMethod(@Nonnull Set<Method> methods) {
+	protected Map<Method, Set<HttpMethodResourcePathDeclaration>> createHttpMethodResourcePathDeclarationsByMethod(@Nonnull Set<Method> methods) {
 		requireNonNull(methods);
 
-		Map<Method, Set<HttpMethodResourcePath>> httpMethodResourcePathsByMethod = new HashMap<>();
+		Map<Method, Set<HttpMethodResourcePathDeclaration>> httpMethodResourcePathDeclarationsByMethod = new HashMap<>();
 
 		for (Method method : methods) {
-			Set<HttpMethodResourcePath> matchedHttpMethodResourcePaths = new HashSet<>();
+			Set<HttpMethodResourcePathDeclaration> matchedHttpMethodResourcePathDeclarations = new HashSet<>();
 
 			for (Annotation annotation : method.getAnnotations()) {
 				if (annotation instanceof GET) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath.of
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.of
 							(((GET) annotation).value())));
 				} else if (annotation instanceof POST) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.POST, ResourcePath.of
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.POST, ResourcePathDeclaration.of
 							(((POST) annotation).value())));
 				} else if (annotation instanceof PUT) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PUT, ResourcePath.of
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PUT, ResourcePathDeclaration.of
 							(((PUT) annotation).value())));
 				} else if (annotation instanceof PATCH) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PATCH, ResourcePath.of
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PATCH, ResourcePathDeclaration.of
 							(((PATCH) annotation).value())));
 				} else if (annotation instanceof DELETE) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.DELETE, ResourcePath.of
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.DELETE, ResourcePathDeclaration.of
 							(((DELETE) annotation).value())));
 				} else if (annotation instanceof OPTIONS) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.OPTIONS, ResourcePath.of
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.OPTIONS, ResourcePathDeclaration.of
 							(((OPTIONS) annotation).value())));
 				} else if (annotation instanceof HEAD) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.HEAD, ResourcePath.of
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.of
 							(((HEAD) annotation).value())));
 				} else if (annotation instanceof ServerSentEventSource) {
-					matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath.of
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.of
 							(((ServerSentEventSource) annotation).value()), true));
 				} else if (annotation instanceof GETs) {
 					for (GET get : ((GETs) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath.of
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.of
 								(get.value())));
 				} else if (annotation instanceof POSTs) {
 					for (POST post : ((POSTs) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.POST, ResourcePath.of
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.POST, ResourcePathDeclaration.of
 								(post.value())));
 				} else if (annotation instanceof PUTs) {
 					for (PUT put : ((PUTs) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PUT, ResourcePath.of
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PUT, ResourcePathDeclaration.of
 								(put.value())));
 				} else if (annotation instanceof PATCHes) {
 					for (PATCH patch : ((PATCHes) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.PATCH, ResourcePath.of
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PATCH, ResourcePathDeclaration.of
 								(patch.value())));
 				} else if (annotation instanceof DELETEs) {
 					for (DELETE delete : ((DELETEs) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.DELETE, ResourcePath.of
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.DELETE, ResourcePathDeclaration.of
 								(delete.value())));
 				} else if (annotation instanceof OPTIONSes) {
 					for (OPTIONS options : ((OPTIONSes) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.OPTIONS, ResourcePath.of
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.OPTIONS, ResourcePathDeclaration.of
 								(options.value())));
 				} else if (annotation instanceof HEADs) {
 					for (HEAD head : ((HEADs) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.HEAD, ResourcePath.of
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.of
 								(head.value())));
 				} else if (annotation instanceof ServerSentEventSources) {
 					for (ServerSentEventSource serverSentEventSource : ((ServerSentEventSources) annotation).value())
-						matchedHttpMethodResourcePaths.add(new HttpMethodResourcePath(HttpMethod.GET, ResourcePath.of
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.of
 								(serverSentEventSource.value()), true));
 				}
 
-				Set<HttpMethodResourcePath> httpMethodResourcePaths =
-						httpMethodResourcePathsByMethod.computeIfAbsent(method, k -> new HashSet<>());
-				httpMethodResourcePaths.addAll(matchedHttpMethodResourcePaths);
+				Set<HttpMethodResourcePathDeclaration> httpMethodResourcePathDeclarations =
+						httpMethodResourcePathDeclarationsByMethod.computeIfAbsent(method, k -> new HashSet<>());
+				httpMethodResourcePathDeclarations.addAll(matchedHttpMethodResourcePathDeclarations);
 			}
 		}
 
-		return httpMethodResourcePathsByMethod;
+		return httpMethodResourcePathDeclarationsByMethod;
 	}
 
 	@Nonnull
@@ -268,16 +268,16 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		SortedMap<Long, Set<ResourceMethod>> resourceMethodsByPlaceholderComponentCount = new TreeMap<>();
 
 		for (ResourceMethod resourceMethod : resourceMethods) {
-			Set<HttpMethodResourcePath> httpMethodResourcePaths = getHttpMethodResourcePathsByMethod().get(resourceMethod.getMethod());
+			Set<HttpMethodResourcePathDeclaration> httpMethodResourcePathDeclarations = getHttpMethodResourcePathDeclarationsByMethod().get(resourceMethod.getMethod());
 
-			if (httpMethodResourcePaths == null || httpMethodResourcePaths.size() == 0)
+			if (httpMethodResourcePathDeclarations == null || httpMethodResourcePathDeclarations.size() == 0)
 				continue;
 
-			for (HttpMethodResourcePath httpMethodResourcePath : httpMethodResourcePaths) {
-				if (httpMethodResourcePath.getHttpMethod() != request.getHttpMethod())
+			for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations) {
+				if (httpMethodResourcePathDeclaration.getHttpMethod() != request.getHttpMethod())
 					continue;
 
-				long literalComponentCount = httpMethodResourcePath.getResourcePath().getComponents().stream().filter(component -> component.getType() == ResourcePath.ComponentType.PLACEHOLDER).count();
+				long literalComponentCount = httpMethodResourcePathDeclaration.getResourcePathDeclaration().getComponents().stream().filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.PLACEHOLDER).count();
 				Set<ResourceMethod> resourceMethodsWithEquivalentComponentCount = resourceMethodsByPlaceholderComponentCount.computeIfAbsent(literalComponentCount, k -> new HashSet<>());
 
 				resourceMethodsWithEquivalentComponentCount.add(resourceMethod);
@@ -368,8 +368,8 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	public Map<Method, Set<HttpMethodResourcePath>> getHttpMethodResourcePathsByMethod() {
-		return this.httpMethodResourcePathsByMethod;
+	public Map<Method, Set<HttpMethodResourcePathDeclaration>> getHttpMethodResourcePathDeclarationsByMethod() {
+		return this.httpMethodResourcePathDeclarationsByMethod;
 	}
 
 	@Nonnull
@@ -378,35 +378,35 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@ThreadSafe
-	protected static class HttpMethodResourcePath {
+	protected static class HttpMethodResourcePathDeclaration {
 		@Nonnull
 		private final HttpMethod httpMethod;
 		@Nonnull
-		private final ResourcePath resourcePath;
+		private final ResourcePathDeclaration resourcePathDeclaration;
 		@Nonnull
 		private final Boolean serverSentEventSource;
 
-		public HttpMethodResourcePath(@Nonnull HttpMethod httpMethod,
-																	@Nonnull ResourcePath resourcePath) {
-			this(httpMethod, resourcePath, false);
+		public HttpMethodResourcePathDeclaration(@Nonnull HttpMethod httpMethod,
+																						 @Nonnull ResourcePathDeclaration resourcePathDeclaration) {
+			this(httpMethod, resourcePathDeclaration, false);
 		}
 
-		public HttpMethodResourcePath(@Nonnull HttpMethod httpMethod,
-																	@Nonnull ResourcePath resourcePath,
-																	@Nonnull Boolean serverSentEventSource) {
+		public HttpMethodResourcePathDeclaration(@Nonnull HttpMethod httpMethod,
+																						 @Nonnull ResourcePathDeclaration resourcePathDeclaration,
+																						 @Nonnull Boolean serverSentEventSource) {
 			requireNonNull(httpMethod);
-			requireNonNull(resourcePath);
+			requireNonNull(resourcePathDeclaration);
 			requireNonNull(serverSentEventSource);
 
 			this.httpMethod = httpMethod;
-			this.resourcePath = resourcePath;
+			this.resourcePathDeclaration = resourcePathDeclaration;
 			this.serverSentEventSource = serverSentEventSource;
 		}
 
 		@Override
 		public String toString() {
-			return format("%s{httpMethod=%s, resourcePath=%s, serverSentEventSource=%s}", getClass().getSimpleName(),
-					getHttpMethod(), getResourcePath(), isServerSentEventSource());
+			return format("%s{httpMethod=%s, resourcePathDeclaration=%s, serverSentEventSource=%s}", getClass().getSimpleName(),
+					getHttpMethod(), getResourcePathDeclaration(), isServerSentEventSource());
 		}
 
 		@Override
@@ -414,17 +414,17 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			if (this == object)
 				return true;
 
-			if (!(object instanceof HttpMethodResourcePath httpMethodResourcePath))
+			if (!(object instanceof HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration))
 				return false;
 
-			return Objects.equals(getHttpMethod(), httpMethodResourcePath.getHttpMethod())
-					&& Objects.equals(getResourcePath(), httpMethodResourcePath.getResourcePath())
-					&& Objects.equals(isServerSentEventSource(), httpMethodResourcePath.isServerSentEventSource());
+			return Objects.equals(getHttpMethod(), httpMethodResourcePathDeclaration.getHttpMethod())
+					&& Objects.equals(getResourcePathDeclaration(), httpMethodResourcePathDeclaration.getResourcePathDeclaration())
+					&& Objects.equals(isServerSentEventSource(), httpMethodResourcePathDeclaration.isServerSentEventSource());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getHttpMethod(), getResourcePath(), isServerSentEventSource());
+			return Objects.hash(getHttpMethod(), getResourcePathDeclaration(), isServerSentEventSource());
 		}
 
 		@Nonnull
@@ -433,8 +433,8 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 
 		@Nonnull
-		public ResourcePath getResourcePath() {
-			return this.resourcePath;
+		public ResourcePathDeclaration getResourcePathDeclaration() {
+			return this.resourcePathDeclaration;
 		}
 
 		@Nonnull

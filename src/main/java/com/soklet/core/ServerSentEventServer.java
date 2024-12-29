@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Revetware LLC.
+ * Copyright 2022-2025 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -66,17 +66,17 @@ public interface ServerSentEventServer extends AutoCloseable {
 	}
 
 	/**
-	 * Given a {@link ResourcePathInstance} that corresponds to a <em>Resource Method</em> annotated with {@link com.soklet.annotation.ServerSentEventSource}, acquire a {@link ServerSentEventBroadcaster} which is capable of "pushing" messages to all connected Server-Sent Event clients.
+	 * Given a {@link ResourcePath} that corresponds to a <em>Resource Method</em> annotated with {@link com.soklet.annotation.ServerSentEventSource}, acquire a {@link ServerSentEventBroadcaster} which is capable of "pushing" messages to all connected Server-Sent Event clients.
 	 * <p>
-	 * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePathInstance}.  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
+	 * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath}.  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
 	 * <p>
 	 * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
 	 *
-	 * @param resourcePathInstance the {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em> for which to acquire a broadcaster
-	 * @return a broadcaster for the given {@link ResourcePathInstance}, or {@link Optional#empty()} if there is no broadcaster available
+	 * @param resourcePath the {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em> for which to acquire a broadcaster
+	 * @return a broadcaster for the given {@link ResourcePath}, or {@link Optional#empty()} if there is no broadcaster available
 	 */
 	@Nonnull
-	Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePathInstance resourcePathInstance);
+	Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath);
 
 	/**
 	 * The {@link com.soklet.Soklet} instance which manages this {@link ServerSentEventServer} will invoke this method exactly once at initialization time - this allows {@link com.soklet.Soklet} to "talk" to your {@link ServerSentEventServer}.

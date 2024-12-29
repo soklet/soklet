@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Revetware LLC.
+ * Copyright 2022-2025 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -345,7 +345,7 @@ public class SokletTests {
 				.build();
 
 		Soklet.runSimulator(configuration, (simulator -> {
-			simulator.registerServerSentEventConsumer(ResourcePathInstance.of("/examples/abc"), (serverSentEvent -> {
+			simulator.registerServerSentEventConsumer(ResourcePath.of("/examples/abc"), (serverSentEvent -> {
 				System.out.println("Received SSE: " + serverSentEvent);
 				Assert.assertEquals("SSE event mismatch", "example", serverSentEvent.getEvent().get());
 			}));
@@ -364,7 +364,7 @@ public class SokletTests {
 					.build();
 
 			// ...and broadcast it to all /examples/abc listeners
-			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePathInstance.of("/examples/abc")).get();
+			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.of("/examples/abc")).get();
 			broadcaster.broadcast(serverSentEvent);
 		}));
 	}
@@ -382,7 +382,9 @@ public class SokletTests {
 	@Test
 	public void serverSentEventServer() throws InterruptedException {
 		SynchronousQueue<String> shutdownQueue = new SynchronousQueue<>();
-		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081).build();
+		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
+				.concurrentConnectionLimit(2)
+				.build();
 
 		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
 				.serverSentEventServer(serverSentEventServer)
@@ -429,7 +431,7 @@ public class SokletTests {
 					@Override
 					public void didStartRequestHandling(@Nonnull Request request,
 																							@Nullable ResourceMethod resourceMethod) {
-						System.out.println("XXX Did start request handling: " + request + ", resource method: " + resourceMethod);
+						//System.out.println("XXX Did start request handling: " + request + ", resource method: " + resourceMethod);
 					}
 
 					@Override
@@ -438,14 +440,14 @@ public class SokletTests {
 																							 @Nonnull MarshaledResponse marshaledResponse,
 																							 @Nonnull Duration processingDuration,
 																							 @Nonnull List<Throwable> throwables) {
-						System.out.println("XXX Did finish request handling: " + request + ", resource method: " + resourceMethod + ", marshaled response: " + marshaledResponse);
+						//System.out.println("XXX Did finish request handling: " + request + ", resource method: " + resourceMethod + ", marshaled response: " + marshaledResponse);
 					}
 
 					@Override
 					public void willStartResponseWriting(@Nonnull Request request,
 																							 @Nullable ResourceMethod resourceMethod,
 																							 @Nonnull MarshaledResponse marshaledResponse) {
-						System.out.println("XXX Will start response writing: " + request + ", resource method: " + resourceMethod);
+						//System.out.println("XXX Will start response writing: " + request + ", resource method: " + resourceMethod);
 					}
 
 					@Override
@@ -454,7 +456,7 @@ public class SokletTests {
 																							 @Nonnull MarshaledResponse marshaledResponse,
 																							 @Nonnull Duration responseWriteDuration,
 																							 @Nullable Throwable throwable) {
-						System.out.println("XXX Did finish response writing: " + request + ", resource method: " + resourceMethod);
+						//System.out.println("XXX Did finish response writing: " + request + ", resource method: " + resourceMethod);
 					}
 
 					@Override
@@ -467,19 +469,19 @@ public class SokletTests {
 																			 @Nullable ResourceMethod resourceMethod,
 																			 @Nonnull Function<Request, MarshaledResponse> responseProducer,
 																			 @Nonnull Consumer<MarshaledResponse> responseWriter) {
-						System.out.println("XXX Intercepting request: " + request);
+						//System.out.println("XXX Intercepting request: " + request);
 						MarshaledResponse response = responseProducer.apply(request);
 						responseWriter.accept(response);
-						System.out.println("XXX Done intercepting request: " + request);
+						//System.out.println("XXX Done intercepting request: " + request);
 					}
 
 					@Override
 					public void wrapRequest(@Nonnull Request request,
 																	@Nullable ResourceMethod resourceMethod,
 																	@Nonnull Consumer<Request> requestProcessor) {
-						System.out.println("XXX Wrapping request: " + request);
+						//System.out.println("XXX Wrapping request: " + request);
 						requestProcessor.accept(request);
-						System.out.println("XXX Done wrapping request: " + request);
+						//System.out.println("XXX Done wrapping request: " + request);
 					}
 
 					@Override
@@ -500,6 +502,49 @@ public class SokletTests {
 					@Override
 					public void didStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
 						System.out.println("XXX Did stop server-sent event server");
+					}
+
+					@Override
+					public void willEstablishServerSentEventConnection(@Nonnull Request request,
+																														 @Nonnull ResourceMethod resourceMethod) {
+						System.out.println("XXX Will establish server-sent event connection");
+					}
+
+					@Override
+					public void didEstablishServerSentEventConnection(@Nonnull Request request,
+																														@Nonnull ResourceMethod resourceMethod) {
+						System.out.println("XXX Did establish server-sent event connection");
+					}
+
+					@Override
+					public void willStartServerSentEventWriting(@Nonnull Request request,
+																											@Nonnull ResourceMethod resourceMethod,
+																											@Nonnull ServerSentEvent serverSentEvent) {
+						System.out.println("XXX Starting server-sent event write for " + request.getPath() + ": " + serverSentEvent);
+					}
+
+					@Override
+					public void didFinishServerSentEventWriting(@Nonnull Request request,
+																											@Nonnull ResourceMethod resourceMethod,
+																											@Nonnull ServerSentEvent serverSentEvent,
+																											@Nonnull Duration writeDuration,
+																											@Nullable Throwable throwable) {
+						System.out.println("XXX Finished server-sent event write for " + request.getPath() + ": " + serverSentEvent);
+					}
+
+					@Override
+					public void willTerminateServerSentEventConnection(@Nonnull Request request,
+																														 @Nonnull ResourceMethod resourceMethod,
+																														 @Nullable Throwable throwable) {
+						System.out.println("XXX Will terminate server-sent event connection for " + request.getPath() + ": " + throwable);
+					}
+
+					@Override
+					public void didTerminateServerSentEventConnection(@Nonnull Request request,
+																														@Nonnull ResourceMethod resourceMethod,
+																														@Nonnull Duration connectionDuration,
+																														@Nullable Throwable throwable) {
+						System.out.println("XXX Did terminate server-sent event connection for " + request.getPath() + ": " + throwable);
 					}
 				})
 				.build();
@@ -535,8 +580,8 @@ public class SokletTests {
 
 		@POST("/fire-server-sent-event")
 		public void fireServerSentEvent() {
-			ResourcePathInstance resourcePathInstance = ResourcePathInstance.of("/examples/abc"); // Matches /examples/{exampleId}
-			ServerSentEventBroadcaster broadcaster = this.serverSentEventServer.acquireBroadcaster(resourcePathInstance).get();
+			ResourcePath resourcePath = ResourcePath.of("/examples/abc"); // Matches /examples/{exampleId}
+			ServerSentEventBroadcaster broadcaster = this.serverSentEventServer.acquireBroadcaster(resourcePath).get();
 
 			ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
 					.data("""

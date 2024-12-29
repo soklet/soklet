@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Revetware LLC.
+ * Copyright 2022-2025 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,15 +17,14 @@
 package com.soklet.core;
 
 import javax.annotation.Nonnull;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Broadcasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> payload to all clients listening on a {@link ResourcePathInstance}.
+ * Broadcasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> payload to all clients listening on a {@link ResourcePath}.
  * <p>
  * For example:
  * <pre>{@code  // Acquire our SSE broadcaster (sends to anyone listening to "/examples/123")
  * ServerSentEventServer server = ...;
- * ServerSentEventBroadcaster broadcaster = server.acquireBroadcaster(ResourcePathInstance.of("/examples/123")).get();
+ * ServerSentEventBroadcaster broadcaster = server.acquireBroadcaster(ResourcePath.of("/examples/123")).get();
  *
  * // Create our SSE payload
  * ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
@@ -35,9 +34,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * // Publish SSE payload to all listening clients
  * broadcaster.broadcast(serverSentEvent);}</pre>
  * <p>
- * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePathInstance}.  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
+ * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath}.  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
  * <p>
- * You may acquire a broadcaster via {@link ServerSentEventServer#acquireBroadcaster(ResourcePathInstance)}.
+ * You may acquire a broadcaster via {@link ServerSentEventServer#acquireBroadcaster(ResourcePath)}.
  * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  * <p>
@@ -47,9 +46,9 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 public interface ServerSentEventBroadcaster {
 	/**
-	 * The runtime Resource Path instance with which this broadcaster is associated.
+	 * The runtime Resource Path with which this broadcaster is associated.
 	 * <p>
-	 * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePathInstance}.
+	 * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath}.
 	 * <p>
 	 * For example, a client may register for SSE broadcasts for <em>Resource Method</em> {@code @ServerSentEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}.
 	 * <p>
@@ -58,10 +57,10 @@ public interface ServerSentEventBroadcaster {
 	 * @return the runtime Resource Path instance with which this broadcaster is associated
 	 */
 	@Nonnull
-	ResourcePathInstance getResourcePathInstance();
+	ResourcePath getResourcePath();
 
 	/**
-	 * How many clients are estimated to be listening to this broadcaster's {@link ResourcePathInstance}?
+	 * How many clients are listening to this broadcaster's {@link ResourcePath}?
 	 * <p>
 	 * For performance reasons, this number may be an estimate, or a snapshot of a recent moment-in-time.
 	 * It's possible for some clients to have already disconnected, but we won't know until we attempt to broadcast to them.
@@ -72,11 +71,11 @@ public interface ServerSentEventBroadcaster {
 	Long getClientCount();
 
 	/**
-	 * Broadcasts a Server-Sent Event payload to all clients listening to this broadcaster's {@link ResourcePathInstance}.
+	 * Broadcasts a Server-Sent Event payload to all clients listening to this broadcaster's {@link ResourcePath}.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
 	 * <p>
-	 * However, mock implementations may wish to block until broadcasts have completed in order to simplify automated testing (for example).
+	 * However, mock implementations may wish to block until broadcasts have completed - for example, to simplify automated testing.
 	 *
 	 * @param serverSentEvent the Server-Sent Event payload to broadcast
 	 */

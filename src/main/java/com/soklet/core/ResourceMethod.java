@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Revetware LLC.
+ * Copyright 2022-2025 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ public class ResourceMethod {
 	@Nonnull
 	private final HttpMethod httpMethod;
 	@Nonnull
-	private final ResourcePath resourcePath;
+	private final ResourcePathDeclaration resourcePathDeclaration;
 	@Nonnull
 	private final Method method;
 	@Nonnull
@@ -47,42 +47,42 @@ public class ResourceMethod {
 	 * Vends a <em>Resource Method</em> given its unique components.
 	 *
 	 * @param httpMethod            an HTTP method
-	 * @param resourcePath          an HTTP path which might contain placeholders, e.g. {@code /example/{exampleId}}
+	 * @param resourcePathDeclaration          an HTTP path which might contain placeholders, e.g. {@code /example/{exampleId}}
 	 * @param method                a Java method to invoke for the combination of HTTP method and resource path
 	 * @param serverSentEventSource is this <em>Resource Method</em> configured as a server-sent event source?
 	 * @return a <em>Resource Method</em> for the supplied components
 	 */
 	@Nonnull
 	public static ResourceMethod withComponents(@Nonnull HttpMethod httpMethod,
-																							@Nonnull ResourcePath resourcePath,
+																							@Nonnull ResourcePathDeclaration resourcePathDeclaration,
 																							@Nonnull Method method,
 																							@Nonnull Boolean serverSentEventSource) {
 		requireNonNull(httpMethod);
-		requireNonNull(resourcePath);
+		requireNonNull(resourcePathDeclaration);
 		requireNonNull(method);
 		requireNonNull(serverSentEventSource);
 
-		return new ResourceMethod(httpMethod, resourcePath, method, serverSentEventSource);
+		return new ResourceMethod(httpMethod, resourcePathDeclaration, method, serverSentEventSource);
 	}
 
 	protected ResourceMethod(@Nonnull HttpMethod httpMethod,
-													 @Nonnull ResourcePath resourcePath,
+													 @Nonnull ResourcePathDeclaration resourcePathDeclaration,
 													 @Nonnull Method method,
 													 @Nonnull Boolean serverSentEventSource) {
 		requireNonNull(httpMethod);
-		requireNonNull(resourcePath);
+		requireNonNull(resourcePathDeclaration);
 		requireNonNull(method);
 		requireNonNull(serverSentEventSource);
 
 		this.httpMethod = httpMethod;
-		this.resourcePath = resourcePath;
+		this.resourcePathDeclaration = resourcePathDeclaration;
 		this.method = method;
 		this.serverSentEventSource = serverSentEventSource;
 	}
 
 	@Override
 	public String toString() {
-		return format("%s{httpMethod=%s, resourcePath=%s, method=%s, serverSentEventSource=%s}", getClass().getSimpleName(),
+		return format("%s{httpMethod=%s, resourcePathDeclaration=%s, method=%s, serverSentEventSource=%s}", getClass().getSimpleName(),
 				getHttpMethod(), getResourcePath(), getMethod(), isServerSentEventSource());
 	}
 
@@ -121,8 +121,8 @@ public class ResourceMethod {
 	 * @return the HTTP path
 	 */
 	@Nonnull
-	public ResourcePath getResourcePath() {
-		return this.resourcePath;
+	public ResourcePathDeclaration getResourcePath() {
+		return this.resourcePathDeclaration;
 	}
 
 	/**

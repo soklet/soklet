@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2024 Revetware LLC.
+ * Copyright 2022-2025 Revetware LLC.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,13 +25,14 @@ import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourcePath;
-import com.soklet.core.ResourcePathInstance;
+import com.soklet.core.ResourcePathDeclaration;
 import com.soklet.core.ServerSentEvent;
 import com.soklet.core.ServerSentEventBroadcaster;
 import com.soklet.core.ServerSentEventServer;
 import com.soklet.core.StatusCode;
 import com.soklet.core.Utilities;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
+import com.soklet.internal.util.ConcurrentLruMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -65,6 +66,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -80,8 +82,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final String DEFAULT_HOST;
 	@Nonnull
-	private static final Integer DEFAULT_CONCURRENCY;
-	@Nonnull
 	private static final Duration DEFAULT_REQUEST_TIMEOUT;
 	@Nonnull
 	private static final Duration DEFAULT_SOCKET_SELECT_TIMEOUT;
@@ -89,8 +89,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 	@Nonnull
 	private static final Integer DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
-	@Nonnull
-	private static final Integer DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 	@Nonnull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 
@@ -101,12 +99,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
-		DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors();
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofHours(12);
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
 		DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 8;
-		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 
 		// Make a unique "validity check" server-sent event used to wake a socket listener thread by injecting it into the relevant write queue.
@@ -126,8 +122,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final String host;
 	@Nonnull
-	private final Integer concurrency;
-	@Nonnull
 	private final Duration requestTimeout;
 	@Nonnull
 	private final Duration socketSelectTimeout;
@@ -138,15 +132,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final Integer socketReadBufferSizeInBytes;
 	@Nonnull
-	private final Integer socketPendingConnectionLimit;
+	private final ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
 	@Nonnull
-	private final ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventBroadcaster> broadcastersByResourcePathInstance;
+	private final ConcurrentHashMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
 	@Nonnull
-	private final ConcurrentHashMap<ResourcePathInstance, ResourcePath> resourcePathsByResourcePathInstanceCache;
+	private final ConcurrentLruMap<ServerSentEventConnection, DefaultServerSentEventBroadcaster> globalConnections;
 	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+	@Nonnull
+	private final Integer concurrentConnectionLimit;
 	@Nonnull
 	private final AtomicBoolean stopPoisonPill;
 	@Nullable
@@ -160,7 +156,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nullable
 	private Thread eventLoopThread;
 	@Nonnull
-	private Map<ResourcePath, ResourceMethod> resourceMethodsByResourcePath;
+	private Map<ResourcePathDeclaration, ResourceMethod> resourceMethodsByResourcePathDeclaration;
 	@Nullable
 	private RequestHandler requestHandler;
 	@Nullable
@@ -171,18 +167,23 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final ResourceMethod resourceMethod;
 		@Nonnull
-		private final ResourcePathInstance resourcePathInstance;
+		private final ResourcePath resourcePath;
+		@Nonnull
+		private final Consumer<ServerSentEventConnection> connectionUnregisteredListener;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@Nonnull
-		private final Set<DefaultServerSentEventConnection> serverSentEventConnections;
+		private final Set<ServerSentEventConnection> serverSentEventConnections;
 
 		public DefaultServerSentEventBroadcaster(@Nonnull ResourceMethod resourceMethod,
-																						 @Nonnull ResourcePathInstance resourcePathInstance) {
+																						 @Nonnull ResourcePath resourcePath,
+																						 @Nonnull Consumer<ServerSentEventConnection> connectionUnregisteredListener) {
 			requireNonNull(resourceMethod);
-			requireNonNull(resourcePathInstance);
+			requireNonNull(resourcePath);
+			requireNonNull(connectionUnregisteredListener);
 
 			this.resourceMethod = resourceMethod;
-			this.resourcePathInstance = resourcePathInstance;
+			this.resourcePath = resourcePath;
+			this.connectionUnregisteredListener = connectionUnregisteredListener;
 			// TODO: let clients specify capacity
 			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(1_024);
 		}
@@ -194,8 +195,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		@Nonnull
 		@Override
-		public ResourcePathInstance getResourcePathInstance() {
-			return this.resourcePathInstance;
+		public ResourcePath getResourcePath() {
+			return this.resourcePath;
 		}
 
 		@Nonnull
@@ -210,12 +211,12 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
-			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
+			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
 				serverSentEventConnection.getWriteQueue().add(serverSentEvent);
 		}
 
 		@Nonnull
-		public Boolean registerServerSentEventConnection(@Nullable DefaultServerSentEventConnection serverSentEventConnection) {
+		public Boolean registerServerSentEventConnection(@Nullable ServerSentEventConnection serverSentEventConnection) {
 			if (serverSentEventConnection == null)
 				return false;
 
@@ -224,7 +225,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public Boolean unregisterServerSentEventConnection(@Nullable DefaultServerSentEventConnection serverSentEventConnection,
+		public Boolean unregisterServerSentEventConnection(@Nullable ServerSentEventConnection serverSentEventConnection,
 																											 @Nonnull Boolean sendPoisonPill) {
 			requireNonNull(sendPoisonPill);
 
@@ -234,9 +235,13 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Underlying set is threadsafe so this is OK
 			boolean unregistered = getServerSentEventConnections().remove(serverSentEventConnection);
 
-			// Send a poison pill so the socket thread gets terminated
-			if (unregistered && sendPoisonPill)
-				serverSentEventConnection.getWriteQueue().add(SERVER_SENT_EVENT_POISON_PILL);
+			if (unregistered) {
+				getConnectionUnregisteredListener().accept(serverSentEventConnection);
+
+				// If requested, send a poison pill so the socket thread gets terminated
+				if (sendPoisonPill)
+					serverSentEventConnection.getWriteQueue().add(SERVER_SENT_EVENT_POISON_PILL);
+			}
 
 			return unregistered;
 		}
@@ -246,13 +251,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			requireNonNull(sendPoisonPill);
 
 			// TODO: we probably want to have a lock around registration/unregistration
-			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
+			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
 				unregisterServerSentEventConnection(serverSentEventConnection, sendPoisonPill);
 		}
 
 		@Nonnull
-		protected Set<DefaultServerSentEventConnection> getServerSentEventConnections() {
+		protected Set<ServerSentEventConnection> getServerSentEventConnections() {
 			return this.serverSentEventConnections;
+		}
+
+		@Nonnull
+		protected Consumer<ServerSentEventConnection> getConnectionUnregisteredListener() {
+			return this.connectionUnregisteredListener;
 		}
 	}
 
@@ -269,21 +279,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.started = false;
 		this.stopping = false;
 		this.lock = new ReentrantLock();
-
 		this.port = builder.port;
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
-		this.concurrency = builder.concurrency != null ? builder.concurrency : DEFAULT_CONCURRENCY;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 		this.socketReadBufferSizeInBytes = builder.socketReadBufferSizeInBytes != null ? builder.socketReadBufferSizeInBytes : DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
-		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
-		this.resourceMethodsByResourcePath = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
+		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
 		// TODO: let clients specify initial capacity
-		this.broadcastersByResourcePathInstance = new ConcurrentHashMap<>(1_024);
-		this.resourcePathsByResourcePathInstanceCache = new ConcurrentHashMap<>(1_024);
+		this.broadcastersByResourcePath = new ConcurrentHashMap<>(1_024);
+		this.resourcePathDeclarationsByResourcePathCache = new ConcurrentHashMap<>(1_024);
 
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "sse-handler-";
@@ -306,6 +313,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			});
 		};
+
+		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : 8_192;
+
+		if (this.concurrentConnectionLimit < 1)
+			throw new IllegalArgumentException("The value for concurrentConnectionLimit must be > 0");
+
+		// Initialize the global LRU map with the specified limit. Assume ConcurrentLRUMap supports a removal listener.
+		this.globalConnections = new ConcurrentLruMap<>(this.concurrentConnectionLimit, (evictedConnection, broadcaster) -> {
+			// This callback is triggered when a connection is evicted from the global LRU map.
+			// Unregister the evicted connection from the broadcaster and send poison pill to close it.
+			broadcaster.unregisterServerSentEventConnection(evictedConnection, true);
+		});
 	}
 
 	@Override
@@ -320,7 +339,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Pick out all the @ServerSentEventSource resource methods and store off keyed on resource path for ease of lookup.
 		// This is computed just once here and will never change.
 		// TODO: we should fail-fast if there are multiple @ServerSentEventSource annotations with the same resource path.  Should that happen here or at the Soklet level?
-		this.resourceMethodsByResourcePath = sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
+		this.resourceMethodsByResourcePathDeclaration = sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
 				.filter(resourceMethod -> resourceMethod.isServerSentEventSource())
 				.collect(Collectors.toMap(ResourceMethod::getResourcePath, Function.identity()));
 	}
@@ -374,15 +393,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	protected void performConnectionValidityTask() {
-		Collection<DefaultServerSentEventBroadcaster> broadcasters = getBroadcastersByResourcePathInstance().values();
+		Collection<DefaultServerSentEventBroadcaster> broadcasters = getBroadcastersByResourcePath().values();
 		int i = 0;
+
+		//System.out.println("Global connections (" + getGlobalConnections().size() + "): " + getGlobalConnections());
 
 		if (broadcasters.size() > 0) {
 			for (DefaultServerSentEventBroadcaster broadcaster : broadcasters) {
 				++i;
-				System.out.println(format("Performing validity checks for broadcaster %d of %d (%s)...", i, broadcasters.size(), broadcaster.getResourcePathInstance().getPath()));
+				System.out.println(format("Performing validity checks for broadcaster %d of %d (%s)...", i, broadcasters.size(), broadcaster.getResourcePath().getPath()));
 
-				Set<DefaultServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
+				Set<ServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
 
 				System.out.println(format("This broadcaster has %d SSE connections", serverSentEventConnections.size()));
 
@@ -391,11 +412,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					// TODO: this should be more of a failsafe, we should factor into its own method and call this at the end of a socket thread too for immediate cleanup
 					// TODO: broadcaster removes/adds be protected with a "broadcasterLock"
 					System.out.println("Because this broadcaster has no connections, removing it.");
-					getBroadcastersByResourcePathInstance().remove(broadcaster.getResourcePathInstance());
+					getBroadcastersByResourcePath().remove(broadcaster.getResourcePath());
 				} else {
 					int j = 0;
 
-					for (DefaultServerSentEventConnection serverSentEventConnection : serverSentEventConnections) {
+					for (ServerSentEventConnection serverSentEventConnection : serverSentEventConnections) {
 						++j;
 						System.out.println(format("Enqueuing heartbeat for socket %d of %d...", j, serverSentEventConnections.size()));
 						// TODO: keep track of when the most recent validity check was done so we don't do it too frequently, e.g. with AtomicReference<Instant> on ServerSentEventConnection (nice-to-have)
@@ -444,6 +465,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(clientSocketChannel);
 
 		ClientSocketChannelRegistration clientSocketChannelRegistration = null;
+		Request request = null;
+		ResourceMethod resourceMethod = null;
+		ServerSentEvent serverSentEvent = null;
+		Instant writeStarted = null;
+		Throwable throwable = null;
 
 		try (clientSocketChannel) {
 			String rawRequest = null;
@@ -451,20 +477,22 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			try {
 				rawRequest = readRequest(clientSocketChannel);
 			} catch (Exception e) {
-				// TODO: cleanup
+				// TODO: cleanup, send a 400?
 				System.out.println("Unable to read raw request.");
 				e.printStackTrace();
 			}
 
 			// Use the socket's address as an identifier
 			String requestIdentifier = clientSocketChannel.getRemoteAddress().toString();
-			Request request = parseRequest(requestIdentifier, rawRequest);
+			request = parseRequest(requestIdentifier, rawRequest);
 
 			System.out.println(format("Received SSE request on socket: %s", debuggingString(request)));
 
-			// This will be null for a 404
-			clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).orElse(null);
-			boolean serverSentEventResourceMethodExists = clientSocketChannelRegistration != null;
+			// Determine the resource path
+			ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(request.getResourcePath()).orElse(null);
+
+			if (resourcePathDeclaration != null)
+				resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
 
 			AtomicInteger marshaledResponseStatusCode = new AtomicInteger(500);
 
@@ -484,51 +512,81 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			});
 
-			// Happy path? Keep the connection open for future ServerSentEvent writes.
+			// Happy path? Register the channel for future ServerSentEvent writes.
 			// If no socket channel registration (404) or >= 300 HTTP status, we're done immediately now that initial data has been written.
-			if (serverSentEventResourceMethodExists && marshaledResponseStatusCode.get() < 300) {
+			if (resourceMethod != null && marshaledResponseStatusCode.get() < 300) {
+				getLifecycleInterceptor().get().willEstablishServerSentEventConnection(request, resourceMethod);
+
+				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).get();
+
+				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
+
 				while (true) {
 					System.out.println(format("Waiting for SSE broadcasts on socket: %s", debuggingString(request)));
-					ServerSentEvent serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
+					serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
 
 					if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) {
 						System.out.println("Encountered poison pill, exiting...");
 						break;
 					}
 
+					ByteBuffer buffer = null;
+
 					if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK) {
-						System.out.println("Performing socket validity check by writing a heartbeat message...");
+						//System.out.println("Performing socket validity check by writing a heartbeat message...");
 						String message = formatForResponse(ServerSentEvent.forHeartbeat());
-						ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
-						clientSocketChannel.write(buffer);
+						buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
 					} else {
-						System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
+						//System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
 						String message = formatForResponse(serverSentEvent);
-						ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+						buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+					}
+
+					getLifecycleInterceptor().get().willStartServerSentEventWriting(request,
+							clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent);
+
+					writeStarted = Instant.now();
+					Throwable writeThrowable = null;
+
+					try {
 						clientSocketChannel.write(buffer);
+					} catch (Throwable t) {
+						writeThrowable = t;
+					} finally {
+						Instant writeFinished = Instant.now();
+						Duration writeDuration = Duration.between(writeStarted, writeFinished);
+
+						getLifecycleInterceptor().get().didFinishServerSentEventWriting(request,
+								clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, throwable);
+
+						if (writeThrowable != null)
+							throw writeThrowable;
 					}
 				}
 			} else {
 				String reason = "unknown";
 
-				if (!serverSentEventResourceMethodExists)
+				if (resourceMethod == null)
 					reason = format("no SSE resource method exists for %s", request.getUri());
 				else if (marshaledResponseStatusCode.get() >= 300)
 					reason = format("SSE resource method status code is %d", marshaledResponseStatusCode.get());
 
 				System.out.println(format("Closing socket %s immediately after handshake instead of waiting for broadcasts. Reason: %s", debuggingString(request), reason));
 			}
-		} catch (Exception e) {
-			e.printStackTrace();
-			System.out.println("Closing socket due to exception: " + e.getMessage());
+		} catch (Throwable t) {
+			throwable = t;
+			System.out.println("Closing socket due to exception: " + t.getMessage());
 
-			if (e instanceof InterruptedException) {
+			if (t instanceof InterruptedException) {
 				System.out.println("Socket thread was interrupted");
 				Thread.currentThread().interrupt();  // Restore interrupt status
 			}
 		} finally {
 			// First, tell the event source to unregister the connection
 			if (clientSocketChannelRegistration != null) {
+				if (resourceMethod != null)
+					getLifecycleInterceptor().get().willTerminateServerSentEventConnection(request, resourceMethod, throwable);
+
 				try {
 					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
 
@@ -542,10 +600,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Then, close the channel itself
 			if (clientSocketChannel != null) {
 				try {
+					// Should already be closed, but just in case
 					clientSocketChannel.close();
 				} catch (Exception ignored) {
 					System.out.println("Unable to close socket channel");
 					ignored.printStackTrace();
+				} finally {
+					if (clientSocketChannelRegistration != null && resourceMethod != null) {
+						Instant connectionFinished = Instant.now();
+						Duration connectionDuration = Duration.between(clientSocketChannelRegistration.serverSentEventConnection().getEstablishedAt(), connectionFinished);
+
+						getLifecycleInterceptor().get().didTerminateServerSentEventConnection(request, resourceMethod, connectionDuration, throwable);
+					}
 				}
 			}
 		}
@@ -652,30 +718,25 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@ThreadSafe
-	protected static class DefaultServerSentEventConnection {
+	protected static class ServerSentEventConnection {
 		@Nonnull
 		private final Request request;
 		@Nonnull
 		private final ResourceMethod resourceMethod;
 		@Nonnull
-		private final ResourcePathInstance resourcePathInstance;
-		@Nonnull
 		private final BlockingQueue<ServerSentEvent> writeQueue;
 		@Nonnull
 		private final Instant establishedAt;
 
-		public DefaultServerSentEventConnection(@Nonnull Request request,
-																						@Nonnull ResourceMethod resourceMethod,
-																						@Nonnull ResourcePathInstance resourcePathInstance) {
+		public ServerSentEventConnection(@Nonnull Request request,
+																		 @Nonnull ResourceMethod resourceMethod) {
 			requireNonNull(request);
 			requireNonNull(resourceMethod);
-			requireNonNull(resourcePathInstance);
 
 			this.request = request;
 			this.resourceMethod = resourceMethod;
-			this.resourcePathInstance = resourcePathInstance;
 			this.writeQueue = new ArrayBlockingQueue<>(8);
-			this.establishedAt = Instant.now();
+			this.establishedAt = Instant.now(); // Don't use this for anything currently, but might later
 		}
 
 		@Nonnull
@@ -689,11 +750,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public ResourcePathInstance getResourcePathInstance() {
-			return this.resourcePathInstance;
-		}
-
-		@Nonnull
 		public BlockingQueue<ServerSentEvent> getWriteQueue() {
 			return this.writeQueue;
 		}
@@ -704,7 +760,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	protected record ClientSocketChannelRegistration(@Nonnull DefaultServerSentEventConnection serverSentEventConnection,
+	protected record ClientSocketChannelRegistration(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																									 @Nonnull DefaultServerSentEventBroadcaster broadcaster) {
 		public ClientSocketChannelRegistration {
 			requireNonNull(serverSentEventConnection);
@@ -718,17 +774,23 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
 
-		ResourcePathInstance resourcePathInstance = ResourcePathInstance.of(request.getPath());
+		ResourcePath resourcePath = request.getResourcePath();
 
-		if (!matchingResourcePath(resourcePathInstance).isPresent())
+		if (!matchingResourcePath(resourcePath).isPresent())
 			return Optional.empty();
 
 		// Get a handle to the event source (it will be created if necessary)
-		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePathInstance).get();
+		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath).get();
 
 		// Create the connection and register it with the EventSource
-		DefaultServerSentEventConnection serverSentEventConnection = new DefaultServerSentEventConnection(request, broadcaster.getResourceMethod(), broadcaster.getResourcePathInstance());
-		broadcaster.registerServerSentEventConnection(serverSentEventConnection);
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, broadcaster.getResourceMethod());
+
+		if (!broadcaster.registerServerSentEventConnection(serverSentEventConnection))
+			return Optional.empty();
+
+		// Also register the connection globally so we can enforce an overall limit on the number of open connections.
+		// If this causes an eviction, the eviction callback supplied to the ConcurrentLruMap will handle cleanup.
+		getGlobalConnections().put(serverSentEventConnection, broadcaster);
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
 	}
@@ -891,7 +953,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			getStopPoisonPill().set(true);
 
 			// TODO: need an additional check/lock to prevent race condition where someone acquires an event source while we are shutting down
-			for (DefaultServerSentEventBroadcaster broadcaster : getBroadcastersByResourcePathInstance().values()) {
+			for (DefaultServerSentEventBroadcaster broadcaster : getBroadcastersByResourcePath().values()) {
 				try {
 					broadcaster.unregisterAllServerSentEventConnections(true);
 				} catch (Exception e) {
@@ -899,6 +961,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					e.printStackTrace();
 				}
 			}
+
+			// Clear global connections map for sanity (though it should be empty by this point)
+			getGlobalConnections().clear();
 
 			try {
 				getRequestHandlerExecutorService().get().shutdown();
@@ -915,8 +980,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.eventLoopThread = null;
 			this.requestHandlerExecutorService = null;
 			this.connectionValidityExecutorService = null;
-			this.getBroadcastersByResourcePathInstance().clear();
-			this.getResourcePathsByResourcePathInstanceCache().clear();
+			this.getBroadcastersByResourcePath().clear();
+			this.getResourcePathDeclarationsByResourcePathCache().clear();
 			getStopPoisonPill().set(false);
 
 			if (this.stopping)
@@ -954,61 +1019,64 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@Nonnull
 	@Override
-	public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePathInstance resourcePathInstance) {
-		if (resourcePathInstance == null)
-			return Optional.empty();
-
-		return acquireBroadcasterInternal(resourcePathInstance);
-	}
-
-	@Nonnull
-	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@Nullable ResourcePathInstance resourcePathInstance) {
-		if (resourcePathInstance == null)
-			return Optional.empty();
-
-		ResourcePath resourcePath = matchingResourcePath(resourcePathInstance).orElse(null);
-
+	public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
 		if (resourcePath == null)
 			return Optional.empty();
 
-		ResourceMethod resourceMethod = getResourceMethodsByResourcePath().get(resourcePath);
+		return acquireBroadcasterInternal(resourcePath);
+	}
+
+	@Nonnull
+	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@Nullable ResourcePath resourcePath) {
+		if (resourcePath == null)
+			return Optional.empty();
+
+		ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(resourcePath).orElse(null);
+
+		if (resourcePathDeclaration == null)
+			return Optional.empty();
+
+		ResourceMethod resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
 
 		// TODO: should this be sent as a LogEvent?
 		if (resourceMethod == null)
-			throw new IllegalStateException(format("Internal error: unable to find %s instance that matches %s", ResourceMethod.class, resourcePath));
+			throw new IllegalStateException(format("Internal error: unable to find %s instance that matches %s", ResourceMethod.class, resourcePathDeclaration));
 
 		// Create the event source if it does not already exist
-		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePathInstance()
-				.computeIfAbsent(resourcePathInstance, (ignored) -> new DefaultServerSentEventBroadcaster(resourceMethod, resourcePathInstance));
+		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
+				.computeIfAbsent(resourcePath, (ignored) -> new DefaultServerSentEventBroadcaster(resourceMethod, resourcePath, (serverSentEventConnection -> {
+					// When the broadcaster unregisters a connection it manages, remove it from the global set of connections as well
+					getGlobalConnections().remove(serverSentEventConnection);
+				})));
 
 		return Optional.of(broadcaster);
 	}
 
 	@Nonnull
-	protected Optional<ResourcePath> matchingResourcePath(@Nullable ResourcePathInstance resourcePathInstance) {
-		if (resourcePathInstance == null)
+	protected Optional<ResourcePathDeclaration> matchingResourcePath(@Nullable ResourcePath resourcePath) {
+		if (resourcePath == null)
 			return Optional.empty();
 
 		// TODO: convert to computeIfAbsent()
 
 		// Try a cache lookup first
-		ResourcePath resourcePath = getResourcePathsByResourcePathInstanceCache().get(resourcePathInstance);
+		ResourcePathDeclaration resourcePathDeclaration = getResourcePathDeclarationsByResourcePathCache().get(resourcePath);
 
-		if (resourcePath == null) {
+		if (resourcePathDeclaration == null) {
 			// If the cache lookup fails, perform a manual lookup
-			for (ResourcePath registeredResourcePath : getResourceMethodsByResourcePath().keySet()) {
-				if (registeredResourcePath.matches(resourcePathInstance)) {
-					resourcePath = registeredResourcePath;
+			for (ResourcePathDeclaration registeredResourcePathDeclaration : getResourceMethodsByResourcePathDeclaration().keySet()) {
+				if (registeredResourcePathDeclaration.matches(resourcePath)) {
+					resourcePathDeclaration = registeredResourcePathDeclaration;
 					break;
 				}
 			}
 
 			// Put the value in the cache for quick access later
-			if (resourcePath != null)
-				getResourcePathsByResourcePathInstanceCache().put(resourcePathInstance, resourcePath);
+			if (resourcePathDeclaration != null)
+				getResourcePathDeclarationsByResourcePathCache().put(resourcePath, resourcePathDeclaration);
 		}
 
-		return Optional.ofNullable(resourcePath);
+		return Optional.ofNullable(resourcePathDeclaration);
 	}
 
 	protected void safelyLog(@Nonnull LogEvent logEvent) {
@@ -1026,11 +1094,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Integer getPort() {
 		return this.port;
-	}
-
-	@Nonnull
-	protected Integer getConcurrency() {
-		return this.concurrency;
 	}
 
 	@Nonnull
@@ -1064,23 +1127,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected Integer getSocketPendingConnectionLimit() {
-		return this.socketPendingConnectionLimit;
+	public Map<ResourcePathDeclaration, ResourceMethod> getResourceMethodsByResourcePathDeclaration() {
+		return this.resourceMethodsByResourcePathDeclaration;
 	}
 
 	@Nonnull
-	public Map<ResourcePath, ResourceMethod> getResourceMethodsByResourcePath() {
-		return this.resourceMethodsByResourcePath;
+	protected ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
+		return this.broadcastersByResourcePath;
 	}
 
 	@Nonnull
-	protected ConcurrentHashMap<ResourcePathInstance, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePathInstance() {
-		return this.broadcastersByResourcePathInstance;
-	}
-
-	@Nonnull
-	protected ConcurrentHashMap<ResourcePathInstance, ResourcePath> getResourcePathsByResourcePathInstanceCache() {
-		return this.resourcePathsByResourcePathInstanceCache;
+	protected ConcurrentHashMap<ResourcePath, ResourcePathDeclaration> getResourcePathDeclarationsByResourcePathCache() {
+		return this.resourcePathDeclarationsByResourcePathCache;
 	}
 
 	@Nonnull
@@ -1096,6 +1154,21 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Supplier<ExecutorService> getRequestHandlerExecutorServiceSupplier() {
 		return this.requestHandlerExecutorServiceSupplier;
+	}
+
+	@Nonnull
+	protected Integer getConcurrentConnectionLimit() {
+		return this.concurrentConnectionLimit;
+	}
+
+	@Nonnull
+	protected ConcurrentLruMap<ServerSentEventConnection, DefaultServerSentEventBroadcaster> getGlobalConnections() {
+		return this.globalConnections;
+	}
+
+	@Nullable
+	protected ScheduledExecutorService getConnectionValidityExecutorService() {
+		return this.connectionValidityExecutorService;
 	}
 
 	@Nonnull
@@ -1132,8 +1205,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nullable
 		private String host;
 		@Nullable
-		private Integer concurrency;
-		@Nullable
 		private Duration requestTimeout;
 		@Nullable
 		private Duration socketSelectTimeout;
@@ -1144,11 +1215,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nullable
 		private Integer socketReadBufferSizeInBytes;
 		@Nullable
-		private Integer socketPendingConnectionLimit;
-		@Nullable
-		private Set<ResourcePath> resourcePaths;
-		@Nullable
 		private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+		@Nullable
+		private Integer concurrentConnectionLimit;
 
 		@Nonnull
 		protected Builder(@Nonnull Integer port) {
@@ -1170,12 +1239,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public Builder concurrency(@Nullable Integer concurrency) {
-			this.concurrency = concurrency;
-			return this;
-		}
-
-		@Nonnull
 		public Builder requestTimeout(@Nullable Duration requestTimeout) {
 			this.requestTimeout = requestTimeout;
 			return this;
@@ -1184,12 +1247,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public Builder socketSelectTimeout(@Nullable Duration socketSelectTimeout) {
 			this.socketSelectTimeout = socketSelectTimeout;
-			return this;
-		}
-
-		@Nonnull
-		public Builder socketPendingConnectionLimit(@Nullable Integer socketPendingConnectionLimit) {
-			this.socketPendingConnectionLimit = socketPendingConnectionLimit;
 			return this;
 		}
 
@@ -1212,8 +1269,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public Builder resourcePaths(@Nullable Set<ResourcePath> resourcePaths) {
-			this.resourcePaths = resourcePaths;
+		public Builder concurrentConnectionLimit(@Nullable Integer concurrentConnectionLimit) {
+			this.concurrentConnectionLimit = concurrentConnectionLimit;
 			return this;
 		}
 
