@@ -150,8 +150,11 @@ public class Soklet implements AutoCloseable {
 
 			ServerSentEventServer serverSentEventServer = sokletConfiguration.getServerSentEventServer().orElse(null);
 
-			if (serverSentEventServer != null)
+			if (serverSentEventServer != null) {
+				lifecycleInterceptor.willStartServerSentEventServer(serverSentEventServer);
 				serverSentEventServer.start();
+				lifecycleInterceptor.didStartServerSentEventServer(serverSentEventServer);
+			}
 		} finally {
 			getLock().unlock();
 		}
@@ -173,14 +176,19 @@ public class Soklet implements AutoCloseable {
 			LifecycleInterceptor lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
 			Server server = sokletConfiguration.getServer();
 
-			lifecycleInterceptor.willStopServer(server);
-			server.stop();
-			lifecycleInterceptor.didStopServer(server);
+			if (server.isStarted()) {
+				lifecycleInterceptor.willStopServer(server);
+				server.stop();
+				lifecycleInterceptor.didStopServer(server);
+			}
 
 			ServerSentEventServer serverSentEventServer = sokletConfiguration.getServerSentEventServer().orElse(null);
 
-			if (serverSentEventServer != null)
+			if (serverSentEventServer != null && serverSentEventServer.isStarted()) {
+				lifecycleInterceptor.willStopServerSentEventServer(serverSentEventServer);
 				serverSentEventServer.stop();
+				lifecycleInterceptor.didStopServerSentEventServer(serverSentEventServer);
+			}
 		} finally {
 			getLock().unlock();
 		}
@@ -765,16 +773,20 @@ public class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Is the managed server instance started?
+	 * Is either the managed {@link Server} or {@link ServerSentEventServer} started?
 	 *
-	 * @return {@code true} if started, {@code false} otherwise
+	 * @return {@code true} if at least one is started, {@code false} otherwise
 	 */
 	@Nonnull
 	public Boolean isStarted() {
 		getLock().lock();
 
 		try {
-			return getSokletConfiguration().getServer().isStarted();
+			if (getSokletConfiguration().getServer().isStarted())
+				return true;
+
+			ServerSentEventServer serverSentEventServer = getSokletConfiguration().getServerSentEventServer().orElse(null);
+			return serverSentEventServer != null && serverSentEventServer.isStarted();
 		} finally {
 			getLock().unlock();
 		}

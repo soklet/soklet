@@ -359,8 +359,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (getLifecycleInterceptor().isEmpty())
 				throw new IllegalStateException(format("No %s was registered for %s", LifecycleInterceptor.class, getClass()));
 
-			getLifecycleInterceptor().get().willStartServerSentEventServer(this);
-
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
 			this.eventLoopThread = new Thread(this::startInternal, "sse-event-loop");
 			eventLoopThread.start();
@@ -386,7 +384,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			}, 5, 15, TimeUnit.SECONDS);
 
 			this.started = true;
-			getLifecycleInterceptor().get().didStartServerSentEventServer(this);
 		} finally {
 			getLock().unlock();
 		}
@@ -936,7 +933,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (!isStarted())
 				return;
 
-			getLifecycleInterceptor().get().willStopServerSentEventServer(this);
 			this.stopping = true;
 
 			try {
@@ -983,9 +979,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.getBroadcastersByResourcePath().clear();
 			this.getResourcePathDeclarationsByResourcePathCache().clear();
 			getStopPoisonPill().set(false);
-
-			if (this.stopping)
-				getLifecycleInterceptor().get().didStopServerSentEventServer(this);
 
 			if (interrupted)
 				Thread.currentThread().interrupt();
