@@ -39,8 +39,10 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -58,11 +60,14 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -84,11 +89,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Duration DEFAULT_REQUEST_TIMEOUT;
 	@Nonnull
-	private static final Duration DEFAULT_SOCKET_SELECT_TIMEOUT;
-	@Nonnull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 	@Nonnull
-	private static final Integer DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
+	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 	@Nonnull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 
@@ -99,10 +102,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
-		DEFAULT_REQUEST_TIMEOUT = Duration.ofHours(12);
-		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
+		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
-		DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 8;
+		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 
 		// Make a unique "validity check" server-sent event used to wake a socket listener thread by injecting it into the relevant write queue.
@@ -124,13 +126,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final Duration requestTimeout;
 	@Nonnull
-	private final Duration socketSelectTimeout;
-	@Nonnull
 	private final Duration shutdownTimeout;
 	@Nonnull
 	private final Integer maximumRequestSizeInBytes;
 	@Nonnull
-	private final Integer socketReadBufferSizeInBytes;
+	private final Integer requestReadBufferSizeInBytes;
 	@Nonnull
 	private final ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
 	@Nonnull
@@ -142,11 +142,15 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 	@Nonnull
+	private final Supplier<ExecutorService> requestReaderExecutorServiceSupplier;
+	@Nonnull
 	private final Integer concurrentConnectionLimit;
 	@Nonnull
 	private final AtomicBoolean stopPoisonPill;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
+	@Nullable
+	private volatile ExecutorService requestReaderExecutorService;
 	@Nullable
 	private volatile ScheduledExecutorService connectionValidityExecutorService;
 	@Nonnull
@@ -282,27 +286,48 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.port = builder.port;
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
-		this.socketReadBufferSizeInBytes = builder.socketReadBufferSizeInBytes != null ? builder.socketReadBufferSizeInBytes : DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
+		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
-		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
+
+		if (this.maximumRequestSizeInBytes <= 0)
+			throw new IllegalArgumentException("Maximum request size must be > 0");
+
+		if (this.requestReadBufferSizeInBytes <= 0)
+			throw new IllegalArgumentException("Request read buffer size must be > 0");
 
 		// TODO: let clients specify initial capacity
 		this.broadcastersByResourcePath = new ConcurrentHashMap<>(1_024);
 		this.resourcePathDeclarationsByResourcePathCache = new ConcurrentHashMap<>(1_024);
 
-		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
-			String threadNamePrefix = "sse-handler-";
+		// Cowardly refuse to run on anything other than a runtime that supports Virtual threads.
+		if (!Utilities.virtualThreadsAvailable())
+			throw new IllegalStateException(format("Virtual threads are required for %s", getClass().getSimpleName()));
 
-			// Default implementation: cowardly refuse to run on anything other than a runtime that supports Virtual threads.
-			// Applications can override this by bringing their own ExecutorService via requestHandlerExecutorServiceSupplier, but it's not recommended.
-			if (!Utilities.virtualThreadsAvailable())
-				throw new IllegalStateException(format("Virtual threads are required for %s", getClass().getSimpleName()));
+		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
+			String threadNamePrefix = "sse-request-handler-";
 
 			return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 				try {
 					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event processing")
+							.throwable(throwable)
+							.build());
+				} catch (Throwable loggingThrowable) {
+					// We are in a bad state - the log operation in the uncaught exception handler failed.
+					// Not much else we can do here but dump to stderr and try to stop the server.
+					throwable.printStackTrace();
+					loggingThrowable.printStackTrace();
+				}
+			});
+		};
+
+		this.requestReaderExecutorServiceSupplier = () -> {
+			String threadNamePrefix = "sse-request-reader-";
+
+			return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
+				try {
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event request reading")
 							.throwable(throwable)
 							.build());
 				} catch (Throwable loggingThrowable) {
@@ -360,6 +385,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				throw new IllegalStateException(format("No %s was registered for %s", LifecycleInterceptor.class, getClass()));
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
+			this.requestReaderExecutorService = getRequestReaderExecutorServiceSupplier().get();
 			this.eventLoopThread = new Thread(this::startInternal, "sse-event-loop");
 			eventLoopThread.start();
 
@@ -472,7 +498,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			try {
 				rawRequest = readRequest(clientSocketChannel);
 			} catch (Exception e) {
-				// TODO: cleanup, send a 400?
+				// TODO: exit immediately if this is a timeout, should we log as well?
+				// TODO: send a 400 if not a timeout
+				// TODO: detect "maximum size exceeded" via SocketTimeoutException and write a special response
 				System.out.println("Unable to read raw request.");
 				e.printStackTrace();
 			}
@@ -888,39 +916,75 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	protected String readRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
 		requireNonNull(clientSocketChannel);
 
-		final int INITIAL_BUFFER_SIZE = 1_024;
+		// Because reads from the socket channel are blocking, there is no way to specify a timeout for it.
+		// We work around this by performing the read in a virtual thread, and use the timeout functionality
+		// built in to Futures to interrupt the thread if it doesn't finish in time.
+		Future<String> readFuture = null;
 
-		ByteBuffer buffer = ByteBuffer.allocate(INITIAL_BUFFER_SIZE);
-		StringBuilder requestBuilder = new StringBuilder();
-		boolean headersComplete = false;
+		try {
+			readFuture = getRequestReaderExecutorService().get().submit(() -> {
+				ByteBuffer buffer = ByteBuffer.allocate(getRequestReadBufferSizeInBytes());
+				StringBuilder requestBuilder = new StringBuilder();
+				boolean headersComplete = false;
+				int totalBytesRead = 0;
 
-		while (!headersComplete) {
-			// Read data from the SocketChannel
-			int bytesRead = clientSocketChannel.read(buffer);
+				while (!headersComplete) {
+					int bytesRead = clientSocketChannel.read(buffer);
 
-			if (bytesRead == -1) {
-				// End of stream (connection closed by client)
-				throw new IOException("Client closed the connection before request was complete");
-			}
+					// If the thread was interrupted while blocked in read(...),
+					// the read call should throw InterruptedIOException or similar.
+					if (Thread.interrupted())
+						throw new InterruptedIOException("Thread interrupted while reading request data");
 
-			// Flip the buffer to read mode
-			buffer.flip();
+					// End of stream (connection closed by client)
+					if (bytesRead == -1)
+						throw new IOException("Client closed the connection before request was complete");
 
-			// Decode the buffer content to a string and append to the request
-			byte[] bytes = new byte[buffer.remaining()];
-			buffer.get(bytes);
-			requestBuilder.append(new String(bytes, StandardCharsets.UTF_8));
+					// Flip the buffer to read mode
+					buffer.flip();
 
-			// Check if the headers are complete (look for the "\r\n\r\n" marker)
-			if (requestBuilder.indexOf("\r\n\r\n") != -1) {
-				headersComplete = true;
-			}
+					// Decode the buffer content to a string and append to the request
+					byte[] bytes = new byte[buffer.remaining()];
+					buffer.get(bytes);
 
-			// Clear the buffer for the next read
-			buffer.clear();
+					totalBytesRead += bytes.length;
+
+					// Check size limit
+					if (totalBytesRead > getMaximumRequestSizeInBytes())
+						throw new IOException(format("Request too large (exceeded %d bytes)", getMaximumRequestSizeInBytes()));
+
+					requestBuilder.append(new String(bytes, StandardCharsets.UTF_8));
+
+					// Check if the headers are complete (look for the "\r\n\r\n" marker)
+					if (requestBuilder.indexOf("\r\n\r\n") != -1)
+						headersComplete = true;
+
+					// Clear the buffer for the next read
+					buffer.clear();
+				}
+
+				return requestBuilder.toString();
+			});
+
+			// Wait up to the specified timeout for reading to complete
+			return readFuture.get(getRequestTimeout().getSeconds(), TimeUnit.SECONDS);
+		} catch (TimeoutException e) {
+			// Time's up; cancel the task so the blocking read is interrupted
+			if (readFuture != null)
+				readFuture.cancel(true);
+
+			throw new SocketTimeoutException(format("Reading request took longer than %d seconds", getRequestTimeout().getSeconds()));
+		} catch (InterruptedException e) {
+			// Current thread interrupted while waiting
+			Thread.currentThread().interrupt(); // restore interrupt status
+			throw new IOException("Interrupted while awaiting request data", e);
+		} catch (ExecutionException e) {
+			// The task itself threw an exception
+			if (e.getCause() instanceof IOException)
+				throw (IOException) e.getCause();
+
+			throw new IOException("Unexpected exception while reading request", e.getCause());
 		}
-
-		return requestBuilder.toString();
 	}
 
 	@Override
@@ -973,10 +1037,22 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 						.throwable(e)
 						.build());
 			}
+
+			try {
+				getRequestReaderExecutorService().get().shutdown();
+				getRequestReaderExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				interrupted = true;
+			} catch (Exception e) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event request reader")
+						.throwable(e)
+						.build());
+			}
 		} finally {
 			this.started = false;
 			this.eventLoopThread = null;
 			this.requestHandlerExecutorService = null;
+			this.requestReaderExecutorService = null;
 			this.connectionValidityExecutorService = null;
 			this.getBroadcastersByResourcePath().clear();
 			this.getResourcePathDeclarationsByResourcePathCache().clear();
@@ -1102,11 +1178,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected Duration getSocketSelectTimeout() {
-		return this.socketSelectTimeout;
-	}
-
-	@Nonnull
 	protected Duration getShutdownTimeout() {
 		return this.shutdownTimeout;
 	}
@@ -1117,8 +1188,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected Integer getSocketReadBufferSizeInBytes() {
-		return this.socketReadBufferSizeInBytes;
+	protected Integer getRequestReadBufferSizeInBytes() {
+		return this.requestReadBufferSizeInBytes;
 	}
 
 	@Nonnull
@@ -1142,6 +1213,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
+	protected Optional<ExecutorService> getRequestReaderExecutorService() {
+		return Optional.ofNullable(this.requestReaderExecutorService);
+	}
+
+	@Nonnull
 	protected ReentrantLock getLock() {
 		return this.lock;
 	}
@@ -1149,6 +1225,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Supplier<ExecutorService> getRequestHandlerExecutorServiceSupplier() {
 		return this.requestHandlerExecutorServiceSupplier;
+	}
+
+	@Nonnull
+	protected Supplier<ExecutorService> getRequestReaderExecutorServiceSupplier() {
+		return this.requestReaderExecutorServiceSupplier;
 	}
 
 	@Nonnull
@@ -1202,13 +1283,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nullable
 		private Duration requestTimeout;
 		@Nullable
-		private Duration socketSelectTimeout;
-		@Nullable
 		private Duration shutdownTimeout;
 		@Nullable
 		private Integer maximumRequestSizeInBytes;
 		@Nullable
-		private Integer socketReadBufferSizeInBytes;
+		private Integer requestReadBufferSizeInBytes;
 		@Nullable
 		private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 		@Nullable
@@ -1240,12 +1319,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public Builder socketSelectTimeout(@Nullable Duration socketSelectTimeout) {
-			this.socketSelectTimeout = socketSelectTimeout;
-			return this;
-		}
-
-		@Nonnull
 		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
 			this.shutdownTimeout = shutdownTimeout;
 			return this;
@@ -1258,8 +1331,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public Builder socketReadBufferSizeInBytes(@Nullable Integer socketReadBufferSizeInBytes) {
-			this.socketReadBufferSizeInBytes = socketReadBufferSizeInBytes;
+		public Builder requestReadBufferSizeInBytes(@Nullable Integer requestReadBufferSizeInBytes) {
+			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
 			return this;
 		}
 

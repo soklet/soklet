@@ -88,7 +88,7 @@ public class DefaultServer implements Server {
 	@Nonnull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 	@Nonnull
-	private static final Integer DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
+	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 	@Nonnull
 	private static final Integer DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 	@Nonnull
@@ -100,7 +100,7 @@ public class DefaultServer implements Server {
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024 * 10;
-		DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
+		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 	}
@@ -120,7 +120,7 @@ public class DefaultServer implements Server {
 	@Nonnull
 	private final Integer maximumRequestSizeInBytes;
 	@Nonnull
-	private final Integer socketReadBufferSizeInBytes;
+	private final Integer requestReadBufferSizeInBytes;
 	@Nonnull
 	private final Integer socketPendingConnectionLimit;
 	@Nonnull
@@ -153,7 +153,7 @@ public class DefaultServer implements Server {
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
 		this.concurrency = builder.concurrency != null ? builder.concurrency : DEFAULT_CONCURRENCY;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
-		this.socketReadBufferSizeInBytes = builder.socketReadBufferSizeInBytes != null ? builder.socketReadBufferSizeInBytes : DEFAULT_SOCKET_READ_BUFFER_SIZE_IN_BYTES;
+		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
@@ -187,7 +187,7 @@ public class DefaultServer implements Server {
 					.withConcurrency(getConcurrency())
 					.withRequestTimeout(getRequestTimeout())
 					.withResolution(getSocketSelectTimeout())
-					.withReadBufferSize(getSocketReadBufferSizeInBytes())
+					.withReadBufferSize(getRequestReadBufferSizeInBytes())
 					.withMaxRequestSize(getMaximumRequestSizeInBytes())
 					.withAcceptLength(getSocketPendingConnectionLimit())
 					.build();
@@ -502,8 +502,8 @@ public class DefaultServer implements Server {
 	}
 
 	@Nonnull
-	protected Integer getSocketReadBufferSizeInBytes() {
-		return this.socketReadBufferSizeInBytes;
+	protected Integer getRequestReadBufferSizeInBytes() {
+		return this.requestReadBufferSizeInBytes;
 	}
 
 	@Nonnull
@@ -607,7 +607,7 @@ public class DefaultServer implements Server {
 		@Nullable
 		private Integer maximumRequestSizeInBytes;
 		@Nullable
-		private Integer socketReadBufferSizeInBytes;
+		private Integer requestReadBufferSizeInBytes;
 		@Nullable
 		private Integer socketPendingConnectionLimit;
 		@Nullable
@@ -671,8 +671,8 @@ public class DefaultServer implements Server {
 		}
 
 		@Nonnull
-		public Builder socketReadBufferSizeInBytes(@Nullable Integer socketReadBufferSizeInBytes) {
-			this.socketReadBufferSizeInBytes = socketReadBufferSizeInBytes;
+		public Builder requestReadBufferSizeInBytes(@Nullable Integer requestReadBufferSizeInBytes) {
+			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
 			return this;
 		}
 

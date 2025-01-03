@@ -384,6 +384,9 @@ public class SokletTests {
 		SynchronousQueue<String> shutdownQueue = new SynchronousQueue<>();
 		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
 				.concurrentConnectionLimit(2)
+				.maximumRequestSizeInBytes(1_024 * 1_024)
+				.requestReadBufferSizeInBytes(10)
+				.requestTimeout(Duration.ofSeconds(60))
 				.build();
 
 		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
