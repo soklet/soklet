@@ -43,6 +43,7 @@ import java.io.InterruptedIOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -53,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
@@ -493,21 +495,21 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		Throwable throwable = null;
 
 		try (clientSocketChannel) {
-			String rawRequest = null;
+			// Use the socket's address as an identifier
+			String requestIdentifier = clientSocketChannel.getRemoteAddress().toString();
 
 			try {
-				rawRequest = readRequest(clientSocketChannel);
+				String rawRequest = readRequest(requestIdentifier, clientSocketChannel);
+				request = parseRequest(requestIdentifier, rawRequest);
+			} catch (RequestTooLargeIOException e) {
+				// Exception provides a "too large"-flagged request with whatever data we could pull out of it
+				request = e.getTooLargeRequest();
 			} catch (Exception e) {
 				// TODO: exit immediately if this is a timeout, should we log as well?
 				// TODO: send a 400 if not a timeout
-				// TODO: detect "maximum size exceeded" via SocketTimeoutException and write a special response
 				System.out.println("Unable to read raw request.");
 				e.printStackTrace();
 			}
-
-			// Use the socket's address as an identifier
-			String requestIdentifier = clientSocketChannel.getRemoteAddress().toString();
-			request = parseRequest(requestIdentifier, rawRequest);
 
 			System.out.println(format("Received SSE request on socket: %s", debuggingString(request)));
 
@@ -531,6 +533,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				try {
 					clientSocketChannel.write(ByteBuffer.wrap(handshakeResponse.getBytes(StandardCharsets.UTF_8)));
 				} catch (IOException e) {
+					// TODO: log out?
 					throw new UncheckedIOException("Unable to write initial SSE handshake response", e);
 				}
 			});
@@ -875,19 +878,27 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
 				String httpMethod = components[0];
-				String uri = components[1];
+				String rawUri = components[1];
+				URI uri = null;
 
 				if (!httpMethod.equals("GET"))
 					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
-				if (!uri.startsWith("/"))
+				if (rawUri != null) {
+					try {
+						uri = new URI(rawUri);
+					} catch (Exception ignored) {
+						// Malformed URI
+					}
+				}
+
+				if (uri == null)
 					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
-				requestBuilder = Request.with(HttpMethod.GET, uri);
+				requestBuilder = Request.with(HttpMethod.GET, rawUri);
 			} else {
 				// This is a header line.
 				// Example: Accept-Encoding: gzip, deflate, br, zstd
-
 				int indexOfFirstColon = line.indexOf(":");
 
 				if (indexOfFirstColon == -1)
@@ -913,7 +924,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected String readRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
+	protected String readRequest(@Nonnull String requestIdentifier,
+															 @Nonnull SocketChannel clientSocketChannel) throws IOException {
+		requireNonNull(requestIdentifier);
 		requireNonNull(clientSocketChannel);
 
 		// Because reads from the socket channel are blocking, there is no way to specify a timeout for it.
@@ -950,8 +963,20 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					totalBytesRead += bytes.length;
 
 					// Check size limit
-					if (totalBytesRead > getMaximumRequestSizeInBytes())
-						throw new IOException(format("Request too large (exceeded %d bytes)", getMaximumRequestSizeInBytes()));
+					// To test:
+					// echo -ne 'GET /example HTTP/1.1\r\nHost: example.com FILLER_UNTIL_WE_ARE_TOO_BIG\r\n\r\n' | netcat -v localhost 8081
+					if (totalBytesRead > getMaximumRequestSizeInBytes()) {
+						String rawRequest = requestBuilder.toString();
+
+						// Given our partial raw request, try to parse it into a request...
+						Request tooLargeRequest = parseTooLargeRequestForRawRequest(requestIdentifier, rawRequest).orElse(null);
+
+						// ...if unable to parse into a request (as in, we can't even make it through the first line), bail
+						if (tooLargeRequest == null)
+							throw new IOException(format("Request is too large (exceeded %d bytes) but we do not have enough data available to know its path", getMaximumRequestSizeInBytes()));
+
+						throw new RequestTooLargeIOException(format("Request too large (exceeded %d bytes)", getMaximumRequestSizeInBytes()), tooLargeRequest);
+					}
 
 					requestBuilder.append(new String(bytes, StandardCharsets.UTF_8));
 
@@ -984,6 +1009,87 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				throw (IOException) e.getCause();
 
 			throw new IOException("Unexpected exception while reading request", e.getCause());
+		}
+	}
+
+	/**
+	 * Given partial raw request data (once we hit max size threshold, we stop collecting it), parse out what we have as
+	 * best we can into a request that is marked "too large".
+	 * <p>
+	 * If there isn't sufficient data to parse into a request (or if the data is malformed), then return the empty value.
+	 */
+	@Nonnull
+	protected Optional<Request> parseTooLargeRequestForRawRequest(@Nonnull String requestIdentifier,
+																																@Nullable String rawRequest) {
+		requireNonNull(requestIdentifier);
+
+		// Supports both relative and absolute paths.
+		// e.g. "GET /index.html HTTP/1.1\r\n" would return "/index.html".
+		// e.g. "GET https://www.soklet.com/index.html HTTP/1.1\r\n" would return "/index.html".
+		String firstLine = null;
+
+		int crLfIndex = rawRequest.indexOf("\r\n");
+
+		if (crLfIndex != -1)
+			firstLine = rawRequest.substring(0, crLfIndex).trim();
+
+		// We don't even have a complete first line of the request
+		if (firstLine == null || firstLine.length() == 0)
+			return Optional.empty();
+
+		String[] parts = firstLine.split(" ");
+
+		// First line of the request is malformed
+		if (parts.length < 2)
+			return Optional.empty();
+
+		String rawHttpMethod = parts[0];
+
+		if (rawHttpMethod != null)
+			rawHttpMethod = rawHttpMethod.trim().toUpperCase(Locale.ENGLISH);
+
+		HttpMethod httpMethod = null;
+
+		try {
+			httpMethod = HttpMethod.valueOf(rawHttpMethod);
+		} catch (IllegalArgumentException e) {
+			// Malformed HTTP method specified
+			return Optional.empty();
+		}
+
+		String rawUri = parts[1];
+
+		// Validate URI
+		if (rawUri != null) {
+			try {
+				new URI(rawUri.trim());
+			} catch (Exception e) {
+				// Malformed URI specified
+				return Optional.empty();
+			}
+		}
+
+		// TODO: eventually would be nice to parse headers as best we can.  For now, we just parse the first request line
+		return Optional.of(Request.with(httpMethod, rawUri)
+				.id(requestIdentifier)
+				.contentTooLarge(true)
+				.build());
+	}
+
+	@NotThreadSafe
+	protected static class RequestTooLargeIOException extends IOException {
+		@Nonnull
+		private final Request tooLargeRequest;
+
+		public RequestTooLargeIOException(@Nullable String message,
+																			@Nonnull Request tooLargeRequest) {
+			super(message);
+			this.tooLargeRequest = requireNonNull(tooLargeRequest);
+		}
+
+		@Nonnull
+		public Request getTooLargeRequest() {
+			return this.tooLargeRequest;
 		}
 	}
 
