@@ -386,7 +386,7 @@ public class SokletTests {
 				.concurrentConnectionLimit(2)
 				.maximumRequestSizeInBytes(50 * 1_024)
 				.requestReadBufferSizeInBytes(10)
-				.requestTimeout(Duration.ofSeconds(60))
+				.requestTimeout(Duration.ofSeconds(10))
 				.build();
 
 		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
@@ -434,7 +434,7 @@ public class SokletTests {
 					@Override
 					public void didStartRequestHandling(@Nonnull Request request,
 																							@Nullable ResourceMethod resourceMethod) {
-						//System.out.println("XXX Did start request handling: " + request + ", resource method: " + resourceMethod);
+						System.out.println("XXX Did start request handling: " + request + ", resource method: " + resourceMethod);
 					}
 
 					@Override
@@ -443,14 +443,14 @@ public class SokletTests {
 																							 @Nonnull MarshaledResponse marshaledResponse,
 																							 @Nonnull Duration processingDuration,
 																							 @Nonnull List<Throwable> throwables) {
-						//System.out.println("XXX Did finish request handling: " + request + ", resource method: " + resourceMethod + ", marshaled response: " + marshaledResponse);
+						System.out.println("XXX Did finish request handling: " + request + ", resource method: " + resourceMethod + ", marshaled response: " + marshaledResponse);
 					}
 
 					@Override
 					public void willStartResponseWriting(@Nonnull Request request,
 																							 @Nullable ResourceMethod resourceMethod,
 																							 @Nonnull MarshaledResponse marshaledResponse) {
-						//System.out.println("XXX Will start response writing: " + request + ", resource method: " + resourceMethod);
+						System.out.println("XXX Will start response writing: " + request + ", resource method: " + resourceMethod);
 					}
 
 					@Override
@@ -459,7 +459,7 @@ public class SokletTests {
 																							 @Nonnull MarshaledResponse marshaledResponse,
 																							 @Nonnull Duration responseWriteDuration,
 																							 @Nullable Throwable throwable) {
-						//System.out.println("XXX Did finish response writing: " + request + ", resource method: " + resourceMethod);
+						System.out.println("XXX Did finish response writing: " + request + ", resource method: " + resourceMethod);
 					}
 
 					@Override

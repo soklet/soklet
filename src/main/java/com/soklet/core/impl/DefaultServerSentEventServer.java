@@ -490,8 +490,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		ClientSocketChannelRegistration clientSocketChannelRegistration = null;
 		Request request = null;
 		ResourceMethod resourceMethod = null;
-		ServerSentEvent serverSentEvent = null;
-		Instant writeStarted = null;
+		ServerSentEvent serverSentEvent;
+		Instant writeStarted;
 		Throwable throwable = null;
 
 		try (clientSocketChannel) {
@@ -499,16 +499,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			String requestIdentifier = clientSocketChannel.getRemoteAddress().toString();
 
 			try {
+				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "will/didInitiateConnection"
 				String rawRequest = readRequest(requestIdentifier, clientSocketChannel);
 				request = parseRequest(requestIdentifier, rawRequest);
 			} catch (RequestTooLargeIOException e) {
 				// Exception provides a "too large"-flagged request with whatever data we could pull out of it
 				request = e.getTooLargeRequest();
+			} catch (SocketTimeoutException e) {
+				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "request timed out"
+				throw e;
 			} catch (Exception e) {
-				// TODO: exit immediately if this is a timeout, should we log as well?
-				// TODO: send a 400 if not a timeout
-				System.out.println("Unable to read raw request.");
-				e.printStackTrace();
+				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "request parsing failed"
+				throw e;
 			}
 
 			System.out.println(format("Received SSE request on socket: %s", debuggingString(request)));
@@ -604,10 +606,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			throwable = t;
 			// System.out.println("Closing socket due to exception: " + t.getMessage());
 
-			if (t instanceof InterruptedException) {
-				// System.out.println("Socket thread was interrupted");
+			if (t instanceof InterruptedException)
 				Thread.currentThread().interrupt();  // Restore interrupt status
-			}
 		} finally {
 			// First, tell the event source to unregister the connection
 			if (clientSocketChannelRegistration != null) {
