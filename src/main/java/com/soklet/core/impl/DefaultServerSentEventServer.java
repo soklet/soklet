@@ -426,11 +426,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (broadcasters.size() > 0) {
 			for (DefaultServerSentEventBroadcaster broadcaster : broadcasters) {
 				++i;
-				System.out.println(format("Performing validity checks for broadcaster %d of %d (%s)...", i, broadcasters.size(), broadcaster.getResourcePath().getPath()));
+				//System.out.println(format("Performing validity checks for broadcaster %d of %d (%s)...", i, broadcasters.size(), broadcaster.getResourcePath().getPath()));
 
 				Set<ServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
 
-				System.out.println(format("This broadcaster has %d SSE connections", serverSentEventConnections.size()));
+				//System.out.println(format("This broadcaster has %d SSE connections", serverSentEventConnections.size()));
 
 				if (serverSentEventConnections.size() == 0) {
 					// This broadcaster can be entirely dealloced because it has no more connections.
@@ -443,7 +443,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					for (ServerSentEventConnection serverSentEventConnection : serverSentEventConnections) {
 						++j;
-						System.out.println(format("Enqueuing heartbeat for socket %d of %d...", j, serverSentEventConnections.size()));
+						//System.out.println(format("Enqueuing heartbeat for socket %d of %d...", j, serverSentEventConnections.size()));
 						// TODO: keep track of when the most recent validity check was done so we don't do it too frequently, e.g. with AtomicReference<Instant> on ServerSentEventConnection (nice-to-have)
 						serverSentEventConnection.writeQueue.add(SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK); // TODO: should this just be the heartbeat event?
 					}
@@ -456,7 +456,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Handle scenario where server is stopped immediately after starting (and before this thread is scheduled)
 		// TODO: clean this up
 		if (!isStarted() || isStopping()) {
-			System.out.println("Server is stopped or stopping, exiting SSE event loop...");
+			//System.out.println("Server is stopped or stopping, exiting SSE event loop...");
 			return;
 		}
 
@@ -466,7 +466,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Handle scenario where server is stopped immediately after starting (and before this thread is scheduled)
 			// TODO: clean this up
 			if (!isStarted() || isStopping()) {
-				System.out.println("Server is stopped or stopping, exiting SSE event loop...");
+				//System.out.println("Server is stopped or stopping, exiting SSE event loop...");
 				return;
 			}
 
@@ -513,7 +513,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				throw e;
 			}
 
-			System.out.println(format("Received SSE request on socket: %s", debuggingString(request)));
+			//System.out.println(format("Received SSE request on socket: %s", debuggingString(request)));
 
 			// Determine the resource path
 			ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(request.getResourcePath()).orElse(null);
@@ -551,7 +551,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
 
 				while (true) {
-					System.out.println(format("Waiting for SSE broadcasts on socket: %s", debuggingString(request)));
+					//System.out.println(format("Waiting for SSE broadcasts on socket: %s", debuggingString(request)));
 					serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
 
 					if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) {
@@ -600,7 +600,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				else if (marshaledResponseStatusCode.get() >= 300)
 					reason = format("SSE resource method status code is %d", marshaledResponseStatusCode.get());
 
-				System.out.println(format("Closing socket %s immediately after handshake instead of waiting for broadcasts. Reason: %s", debuggingString(request), reason));
+				//System.out.println(format("Closing socket %s immediately after handshake instead of waiting for broadcasts. Reason: %s", debuggingString(request), reason));
 			}
 		} catch (Throwable t) {
 			throwable = t;
