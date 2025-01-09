@@ -436,7 +436,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					// This broadcaster can be entirely dealloced because it has no more connections.
 					// TODO: this should be more of a failsafe, we should factor into its own method and call this at the end of a socket thread too for immediate cleanup
 					// TODO: broadcaster removes/adds be protected with a "broadcasterLock"
-					System.out.println("Because this broadcaster has no connections, removing it.");
+					//System.out.println("Because this broadcaster has no connections, removing it.");
 					getBroadcastersByResourcePath().remove(broadcaster.getResourcePath());
 				} else {
 					int j = 0;
