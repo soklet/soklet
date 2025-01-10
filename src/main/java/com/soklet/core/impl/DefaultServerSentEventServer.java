@@ -23,6 +23,7 @@ import com.soklet.core.LogEvent;
 import com.soklet.core.LogEventType;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
+import com.soklet.core.RequestResult;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourcePath;
 import com.soklet.core.ResourcePathDeclaration;
@@ -528,7 +529,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// To write this initial "handshake" response, we delegate to the Soklet instance, handing it the request we just parsed
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
 			// Subsequent writes to the open socket are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
-			getRequestHandler().get().handleRequest(request, (@Nonnull MarshaledResponse marshaledResponse) -> {
+			getRequestHandler().get().handleRequest(request, (@Nonnull RequestResult requestResult) -> {
+				MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
+
 				marshaledResponseStatusCode.set(marshaledResponse.getStatusCode());
 				String handshakeResponse = toHandshakeResponse(marshaledResponse);
 

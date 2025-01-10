@@ -84,7 +84,7 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 *
 	 * @param sokletConfiguration configuration for the Soklet instance that controls this server
-	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link ServerSentEventServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link ServerSentEventServer} to write back to the client
+	 * @param requestHandler      a {@link com.soklet.Soklet}-internal request handler which takes a {@link ServerSentEventServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link ServerSentEventServer} to write back to the client
 	 */
 	void initialize(@Nonnull SokletConfiguration sokletConfiguration,
 									@Nonnull RequestHandler requestHandler);
@@ -113,10 +113,10 @@ public interface ServerSentEventServer extends AutoCloseable {
 		 * <p>
 		 * The {@link com.soklet.Soklet} instance will generate a {@link MarshaledResponse} for the request, which it "hands back" to the {@link ServerSentEventServer} to be sent over the wire to the client.
 		 *
-		 * @param request                   a Soklet {@link Request} representation of the {@link ServerSentEventServer}'s internal HTTP request data
-		 * @param marshaledResponseConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link ServerSentEventServer} to write HTTP response data to the client
+		 * @param request               a Soklet {@link Request} representation of the {@link ServerSentEventServer}'s internal HTTP request data
+		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link ServerSentEventServer} to write HTTP response data to the client
 		 */
 		void handleRequest(@Nonnull Request request,
-											 @Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer);
+											 @Nonnull Consumer<RequestResult> requestResultConsumer);
 	}
 }

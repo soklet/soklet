@@ -251,9 +251,9 @@ public class DefaultServer implements Server {
 								.contentTooLarge(contentTooLarge)
 								.build();
 
-						requestHandler.handleRequest(request, (marshaledResponse -> {
+						requestHandler.handleRequest(request, (requestResult -> {
 							try {
-								MicrohttpResponse microhttpResponse = toMicrohttpResponse(marshaledResponse);
+								MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestResult.getMarshaledResponse());
 								shouldWriteFailsafeResponse.set(false);
 
 								try {
