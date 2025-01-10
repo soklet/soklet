@@ -59,7 +59,7 @@ import java.util.function.Consumer;
  */
 public interface Simulator {
 	/**
-	 * Given a request, process it and return a response ready to be written back over the wire.
+	 * Given a request, process it and return response data (both logical {@link Response}, if present, and the {@link MarshaledResponse} bytes to be sent over the wire) as well as the matching <em>Resource Method</em>, if available.
 	 *
 	 * @param request the request to process
 	 * @return the result (response, marshaled response, etc.) that corresponds to the request

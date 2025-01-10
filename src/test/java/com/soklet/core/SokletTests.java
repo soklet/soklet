@@ -39,6 +39,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -187,6 +188,32 @@ public class SokletTests {
 			Assert.assertArrayEquals("Response body doesn't match",
 					"0".getBytes(StandardCharsets.UTF_8), // 0 is understood to be the default value for uninitialized int
 					requestResult.getMarshaledResponse().getBody().get());
+		}));
+	}
+
+	@Test
+	public void requestResults() {
+		SokletConfiguration configuration = configurationForResourceClasses(Set.of(RequestHandlingBasicsResource.class));
+		Soklet.runSimulator(configuration, (simulator -> {
+			// Response body should be "hello world" as bytes
+			RequestResult requestResult = simulator.performRequest(
+					new Request.Builder(HttpMethod.GET, "/hello-world").build());
+
+			Response response = requestResult.getResponse().get();
+			Object responseBody = response.getBody().get();
+
+			Assert.assertEquals("Response body doesn't match", "hello world", responseBody);
+
+			ResourceMethod resourceMethod = requestResult.getResourceMethod().get();
+			Method expectedMethod;
+
+			try {
+				expectedMethod = RequestHandlingBasicsResource.class.getMethod("helloWorld");
+			} catch (NoSuchMethodException e) {
+				throw new RuntimeException(e);
+			}
+
+			Assert.assertEquals("Resource method doesn't match", expectedMethod, resourceMethod.getMethod());
 		}));
 	}
 
