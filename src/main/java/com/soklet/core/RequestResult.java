@@ -30,7 +30,8 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * TODO
+ * Encapsulates the results of a request (both logical response and bytes to be sent over the wire),
+ * useful for integration testing via {@link Simulator#performRequest(Request)}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -41,9 +42,9 @@ public class RequestResult {
 	@Nullable
 	private final Response response;
 	@Nullable
-	private CorsPreflightResponse corsPreflightResponse;
+	private final CorsPreflightResponse corsPreflightResponse;
 	@Nullable
-	private ResourceMethod resourceMethod;
+	private final ResourceMethod resourceMethod;
 
 	/**
 	 * Acquires a builder for {@link RequestResult} instances.
@@ -119,21 +120,41 @@ public class RequestResult {
 		return Objects.hash(getMarshaledResponse(), getResponse(), getCorsPreflightResponse(), getResourceMethod());
 	}
 
+	/**
+	 * The final representation of the response to be written over the wire.
+	 *
+	 * @return the response to be written over the wire
+	 */
 	@Nonnull
 	public MarshaledResponse getMarshaledResponse() {
 		return this.marshaledResponse;
 	}
 
+	/**
+	 * The logical response, determined by the return value of the <em>Resource Method</em> (if available).
+	 *
+	 * @return the logical response
+	 */
 	@Nonnull
 	public Optional<Response> getResponse() {
 		return Optional.ofNullable(this.response);
 	}
 
+	/**
+	 * The CORS preflight logical response, if applicable for the request.
+	 *
+	 * @return the CORS preflight logical response
+	 */
 	@Nonnull
 	public Optional<CorsPreflightResponse> getCorsPreflightResponse() {
 		return Optional.ofNullable(this.corsPreflightResponse);
 	}
 
+	/**
+	 * The <em>Resource Method</em> that handled the request, if available.
+	 *
+	 * @return the <em>Resource Method</em> that handled the request
+	 */
 	@Nonnull
 	public Optional<ResourceMethod> getResourceMethod() {
 		return Optional.ofNullable(this.resourceMethod);
