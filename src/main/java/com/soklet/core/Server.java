@@ -101,10 +101,10 @@ public interface Server extends AutoCloseable {
 		 * <p>
 		 * The {@link com.soklet.Soklet} instance will generate a {@link MarshaledResponse} for the request, which it "hands back" to the {@link Server} to be sent over the wire to the client.
 		 *
-		 * @param request                   a Soklet {@link Request} representation of the {@link Server}'s internal HTTP request data
-		 * @param marshaledResponseConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link Server} to write HTTP response data to the client
+		 * @param request               a Soklet {@link Request} representation of the {@link Server}'s internal HTTP request data
+		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link Server} to write HTTP response data to the client
 		 */
 		void handleRequest(@Nonnull Request request,
-											 @Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer);
+											 @Nonnull Consumer<RequestResult> requestResultConsumer);
 	}
 }

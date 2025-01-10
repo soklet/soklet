@@ -29,6 +29,7 @@ import com.soklet.core.LogEvent;
 import com.soklet.core.LogEventType;
 import com.soklet.core.MarshaledResponse;
 import com.soklet.core.Request;
+import com.soklet.core.RequestResult;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourceMethodResolver;
@@ -200,7 +201,7 @@ public class Soklet implements AutoCloseable {
 	 * provided by a {@link Server} or {@link ServerSentEventServer} implementation.
 	 */
 	protected void handleRequest(@Nonnull Request request,
-															 @Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer) {
+															 @Nonnull Consumer<RequestResult> requestResultConsumer) {
 		Instant processingStarted = Instant.now();
 
 		SokletConfiguration sokletConfiguration = getSokletConfiguration();
@@ -536,8 +537,8 @@ public class Soklet implements AutoCloseable {
 	}
 
 	@Nonnull
-	protected MarshaledResponse toMarshaledResponse(@Nonnull Request request,
-																									@Nullable ResourceMethod resourceMethod) throws Throwable {
+	protected RequestResult toRequestResult(@Nonnull Request request,
+																					@Nullable ResourceMethod resourceMethod) throws Throwable {
 		ResourceMethodParameterProvider resourceMethodParameterProvider = getSokletConfiguration().getResourceMethodParameterProvider();
 		InstanceProvider instanceProvider = getSokletConfiguration().getInstanceProvider();
 		CorsAuthorizer corsAuthorizer = getSokletConfiguration().getCorsAuthorizer();
