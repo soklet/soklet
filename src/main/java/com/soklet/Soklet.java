@@ -548,7 +548,7 @@ public class Soklet implements AutoCloseable {
 
 		// Special short-circuit for big requests
 		if (request.isContentTooLarge())
-			return responseMarshaler.forContentTooLarge(request, resourceMethodResolver.resourceMethodForRequest(request).orElse(null));
+			return RequestResult.withMarshaledResponse(responseMarshaler.forContentTooLarge(request, resourceMethodResolver.resourceMethodForRequest(request).orElse(null))).build();
 
 		// No resource method was found for this HTTP method and path.
 		if (resourceMethod == null) {
@@ -569,10 +569,17 @@ public class Soklet implements AutoCloseable {
 					CorsPreflightResponse corsPreflightResponse = corsAuthorizer.authorizePreflight(request, corsPreflight, nonOptionsMatchingResourceMethodsByHttpMethod).orElse(null);
 
 					// Allow or reject CORS depending on what the function said to do
-					if (corsPreflightResponse != null)
-						return responseMarshaler.forCorsPreflightAllowed(request, corsPreflight, corsPreflightResponse);
-					else
-						return responseMarshaler.forCorsPreflightRejected(request, corsPreflight);
+					if (corsPreflightResponse != null) {
+						// Allow
+						MarshaledResponse marshaledResponse = responseMarshaler.forCorsPreflightAllowed(request, corsPreflight, corsPreflightResponse);
+
+						return RequestResult.withMarshaledResponse(marshaledResponse)
+								.corsPreflightResponse(corsPreflightResponse)
+								.build();
+					}
+
+					// Reject
+					return RequestResult.withMarshaledResponse(responseMarshaler.forCorsPreflightRejected(request, corsPreflight)).build();
 				} else {
 					// Just a normal OPTIONS response (non-CORS-preflight).
 					// If there's a matching OPTIONS resource method for this OPTIONS request, then invoke it.
@@ -589,7 +596,7 @@ public class Soklet implements AutoCloseable {
 						if (!matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.HEAD))
 							matchingResourceMethodsByHttpMethod.put(HttpMethod.HEAD, null);
 
-						return responseMarshaler.forOptions(request, matchingResourceMethodsByHttpMethod.keySet());
+						return RequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, matchingResourceMethodsByHttpMethod.keySet())).build();
 					}
 				}
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
@@ -600,7 +607,7 @@ public class Soklet implements AutoCloseable {
 				if (headGetResourceMethod != null)
 					resourceMethod = headGetResourceMethod;
 				else
-					return responseMarshaler.forNotFound(request);
+					return RequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request)).build();
 			} else {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
 				Map<HttpMethod, ResourceMethod> otherMatchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver);
@@ -619,10 +626,10 @@ public class Soklet implements AutoCloseable {
 
 				if (matchingNonOptionsHttpMethods.size() > 0) {
 					// ...if some do, it's a 405
-					return responseMarshaler.forMethodNotAllowed(request, otherMatchingResourceMethodsByHttpMethod.keySet());
+					return RequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, otherMatchingResourceMethodsByHttpMethod.keySet())).build();
 				} else {
 					// no matching resource method found, it's a 404
-					return responseMarshaler.forNotFound(request);
+					return RequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request)).build();
 				}
 			}
 		}
@@ -666,13 +673,17 @@ public class Soklet implements AutoCloseable {
 		if (responseObject == null)
 			response = Response.withStatusCode(204).build();
 		else if (responseObject instanceof MarshaledResponse)
-			return (MarshaledResponse) responseObject;
+			return RequestResult.withMarshaledResponse((MarshaledResponse) responseObject).build();
 		else if (responseObject instanceof Response)
 			response = (Response) responseObject;
 		else
 			response = Response.withStatusCode(200).body(responseObject).build();
 
-		return responseMarshaler.forHappyPath(request, response, resourceMethod);
+		MarshaledResponse marshaledResponse = responseMarshaler.forHappyPath(request, response, resourceMethod);
+
+		return RequestResult.withMarshaledResponse(marshaledResponse)
+				.response(response)
+				.build();
 	}
 
 	@Nonnull

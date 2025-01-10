@@ -40,6 +40,8 @@ public class RequestResult {
 	private final MarshaledResponse marshaledResponse;
 	@Nullable
 	private final Response response;
+	@Nullable
+	private CorsPreflightResponse corsPreflightResponse;
 
 	/**
 	 * Acquires a builder for {@link RequestResult} instances.
@@ -68,6 +70,7 @@ public class RequestResult {
 
 		this.marshaledResponse = builder.marshaledResponse;
 		this.response = builder.response;
+		this.corsPreflightResponse = builder.corsPreflightResponse;
 	}
 
 	@Override
@@ -81,6 +84,11 @@ public class RequestResult {
 		if (response != null)
 			components.add(format("response=%s", response));
 
+		CorsPreflightResponse corsPreflightResponse = getCorsPreflightResponse().orElse(null);
+
+		if (corsPreflightResponse != null)
+			components.add(format("corsPreflightResponse=%s", corsPreflightResponse));
+
 		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
 	}
 
@@ -93,12 +101,13 @@ public class RequestResult {
 			return false;
 
 		return Objects.equals(getMarshaledResponse(), requestResult.getMarshaledResponse())
-				&& Objects.equals(getResponse(), requestResult.getResponse());
+				&& Objects.equals(getResponse(), requestResult.getResponse())
+				&& Objects.equals(getCorsPreflightResponse(), requestResult.getCorsPreflightResponse());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getMarshaledResponse(), getResponse());
+		return Objects.hash(getMarshaledResponse(), getResponse(), getCorsPreflightResponse());
 	}
 
 	@Nonnull
@@ -106,10 +115,14 @@ public class RequestResult {
 		return this.marshaledResponse;
 	}
 
-
 	@Nonnull
 	public Optional<Response> getResponse() {
 		return Optional.ofNullable(this.response);
+	}
+
+	@Nonnull
+	public Optional<CorsPreflightResponse> getCorsPreflightResponse() {
+		return Optional.ofNullable(this.corsPreflightResponse);
 	}
 
 	/**
@@ -125,6 +138,8 @@ public class RequestResult {
 		private MarshaledResponse marshaledResponse;
 		@Nullable
 		private Response response;
+		@Nullable
+		private CorsPreflightResponse corsPreflightResponse;
 
 		protected Builder(@Nonnull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
@@ -141,6 +156,12 @@ public class RequestResult {
 		@Nonnull
 		public Builder response(@Nullable Response response) {
 			this.response = response;
+			return this;
+		}
+
+		@Nonnull
+		public Builder corsPreflightResponse(@Nullable CorsPreflightResponse corsPreflightResponse) {
+			this.corsPreflightResponse = corsPreflightResponse;
 			return this;
 		}
 
@@ -166,7 +187,8 @@ public class RequestResult {
 			requireNonNull(requestResult);
 
 			this.builder = new Builder(requestResult.getMarshaledResponse())
-					.response(requestResult.getResponse().orElse(null));
+					.response(requestResult.getResponse().orElse(null))
+					.corsPreflightResponse(requestResult.getCorsPreflightResponse().orElse(null));
 		}
 
 		@Nonnull
@@ -177,8 +199,14 @@ public class RequestResult {
 		}
 
 		@Nonnull
-		public Copier accessControlAllowCredentials(@Nullable Response response) {
+		public Copier response(@Nullable Response response) {
 			this.builder.response(response);
+			return this;
+		}
+
+		@Nonnull
+		public Copier corsPreflightResponse(@Nullable CorsPreflightResponse corsPreflightResponse) {
+			this.builder.corsPreflightResponse(corsPreflightResponse);
 			return this;
 		}
 
