@@ -217,6 +217,7 @@ public class Soklet implements AutoCloseable {
 		AtomicReference<Throwable> resourceMethodResolutionExceptionHolder = new AtomicReference<>();
 		AtomicReference<Request> requestHolder = new AtomicReference<>(request);
 		AtomicReference<ResourceMethod> resourceMethodHolder = new AtomicReference<>();
+		AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
 
 		// Holders to permit mutable effectively-final state tracking
 		AtomicBoolean willStartResponseWritingCompleted = new AtomicBoolean(false);
@@ -277,21 +278,33 @@ public class Soklet implements AutoCloseable {
 							if (resourceMethodResolutionExceptionHolder.get() != null)
 								throw resourceMethodResolutionExceptionHolder.get();
 
-							MarshaledResponse marshaledResponse = toMarshaledResponse(requestHolder.get(), resourceMethodHolder.get());
+							RequestResult requestResult = toRequestResult(requestHolder.get(), resourceMethodHolder.get());
+							requestResultHolder.set(requestResult);
+
+							MarshaledResponse originalMarshaledResponse = requestResult.getMarshaledResponse();
+							MarshaledResponse updatedMarshaledResponse = requestResult.getMarshaledResponse();
 
 							// A few special cases that are "global" in that they can affect all requests and
 							// need to happen after marshaling the response...
 
 							// 1. Customize response for HEAD (e.g. remove body, set Content-Length header)
-							marshaledResponse = applyHeadResponseIfApplicable(request, marshaledResponse);
+							updatedMarshaledResponse = applyHeadResponseIfApplicable(request, updatedMarshaledResponse);
 
 							// 2. Write any CORS-related headers
-							marshaledResponse = applyCorsResponseIfApplicable(request, marshaledResponse);
+							updatedMarshaledResponse = applyCorsResponseIfApplicable(request, updatedMarshaledResponse);
 
 							// 3. If there is no Content-Length header already applied, apply it
-							marshaledResponse = applyContentLengthIfApplicable(request, marshaledResponse);
+							updatedMarshaledResponse = applyContentLengthIfApplicable(request, updatedMarshaledResponse);
 
-							return marshaledResponse;
+							// Update our result holder with the modified response if necessary
+							if (originalMarshaledResponse != updatedMarshaledResponse) {
+								marshaledResponseHolder.set(updatedMarshaledResponse);
+								requestResultHolder.set(requestResult.copy()
+										.marshaledResponse(updatedMarshaledResponse)
+										.finish());
+							}
+
+							return updatedMarshaledResponse;
 						} catch (Throwable t) {
 							if (!Objects.equals(t, resourceMethodResolutionExceptionHolder.get())) {
 								throwables.add(t);
@@ -360,7 +373,14 @@ public class Soklet implements AutoCloseable {
 						Instant responseWriteStarted = Instant.now();
 
 						try {
-							requestResultConsumer.accept(marshaledResponseHolder.get());
+							RequestResult requestResult = requestResultHolder.get();
+
+							if (requestResult != null)
+								requestResultConsumer.accept(requestResult);
+							else
+								requestResultConsumer.accept(RequestResult.withMarshaledResponse(marshaledResponseHolder.get())
+										.resourceMethod(resourceMethodHolder.get())
+										.build());
 
 							Instant responseWriteFinished = Instant.now();
 							Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
@@ -476,7 +496,14 @@ public class Soklet implements AutoCloseable {
 
 				if (!didFinishResponseWritingCompleted.get()) {
 					try {
-						requestResultConsumer.accept(marshaledResponseHolder.get());
+						RequestResult requestResult = requestResultHolder.get();
+
+						if (requestResult != null)
+							requestResultConsumer.accept(requestResult);
+						else
+							requestResultConsumer.accept(RequestResult.withMarshaledResponse(marshaledResponseHolder.get())
+									.resourceMethod(resourceMethodHolder.get())
+									.build());
 
 						Instant responseWriteFinished = Instant.now();
 						Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
@@ -551,7 +578,9 @@ public class Soklet implements AutoCloseable {
 
 		// Special short-circuit for big requests
 		if (request.isContentTooLarge())
-			return RequestResult.withMarshaledResponse(responseMarshaler.forContentTooLarge(request, resourceMethodResolver.resourceMethodForRequest(request).orElse(null))).build();
+			return RequestResult.withMarshaledResponse(responseMarshaler.forContentTooLarge(request, resourceMethodResolver.resourceMethodForRequest(request).orElse(null)))
+					.resourceMethod(resourceMethod)
+					.build();
 
 		// No resource method was found for this HTTP method and path.
 		if (resourceMethod == null) {
@@ -578,11 +607,14 @@ public class Soklet implements AutoCloseable {
 
 						return RequestResult.withMarshaledResponse(marshaledResponse)
 								.corsPreflightResponse(corsPreflightResponse)
+								.resourceMethod(resourceMethod)
 								.build();
 					}
 
 					// Reject
-					return RequestResult.withMarshaledResponse(responseMarshaler.forCorsPreflightRejected(request, corsPreflight)).build();
+					return RequestResult.withMarshaledResponse(responseMarshaler.forCorsPreflightRejected(request, corsPreflight))
+							.resourceMethod(resourceMethod)
+							.build();
 				} else {
 					// Just a normal OPTIONS response (non-CORS-preflight).
 					// If there's a matching OPTIONS resource method for this OPTIONS request, then invoke it.
@@ -599,7 +631,9 @@ public class Soklet implements AutoCloseable {
 						if (!matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.HEAD))
 							matchingResourceMethodsByHttpMethod.put(HttpMethod.HEAD, null);
 
-						return RequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, matchingResourceMethodsByHttpMethod.keySet())).build();
+						return RequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, matchingResourceMethodsByHttpMethod.keySet()))
+								.resourceMethod(resourceMethod)
+								.build();
 					}
 				}
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
@@ -610,7 +644,9 @@ public class Soklet implements AutoCloseable {
 				if (headGetResourceMethod != null)
 					resourceMethod = headGetResourceMethod;
 				else
-					return RequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request)).build();
+					return RequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
+							.resourceMethod(resourceMethod)
+							.build();
 			} else {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
 				Map<HttpMethod, ResourceMethod> otherMatchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver);
@@ -629,10 +665,14 @@ public class Soklet implements AutoCloseable {
 
 				if (matchingNonOptionsHttpMethods.size() > 0) {
 					// ...if some do, it's a 405
-					return RequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, otherMatchingResourceMethodsByHttpMethod.keySet())).build();
+					return RequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, otherMatchingResourceMethodsByHttpMethod.keySet()))
+							.resourceMethod(resourceMethod)
+							.build();
 				} else {
 					// no matching resource method found, it's a 404
-					return RequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request)).build();
+					return RequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
+							.resourceMethod(resourceMethod)
+							.build();
 				}
 			}
 		}
@@ -676,7 +716,9 @@ public class Soklet implements AutoCloseable {
 		if (responseObject == null)
 			response = Response.withStatusCode(204).build();
 		else if (responseObject instanceof MarshaledResponse)
-			return RequestResult.withMarshaledResponse((MarshaledResponse) responseObject).build();
+			return RequestResult.withMarshaledResponse((MarshaledResponse) responseObject)
+					.resourceMethod(resourceMethod)
+					.build();
 		else if (responseObject instanceof Response)
 			response = (Response) responseObject;
 		else
@@ -686,6 +728,7 @@ public class Soklet implements AutoCloseable {
 
 		return RequestResult.withMarshaledResponse(marshaledResponse)
 				.response(response)
+				.resourceMethod(resourceMethod)
 				.build();
 	}
 
@@ -868,18 +911,18 @@ public class Soklet implements AutoCloseable {
 
 		@Nonnull
 		@Override
-		public MarshaledResponse performRequest(@Nonnull Request request) {
-			AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
+		public RequestResult performRequest(@Nonnull Request request) {
+			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
 			Server.RequestHandler requestHandler = getServer().getRequestHandler().orElse(null);
 
 			if (requestHandler == null)
 				throw new IllegalStateException("You must register a request handler prior to simulating requests");
 
-			requestHandler.handleRequest(request, (marshaledResponse -> {
-				marshaledResponseHolder.set(marshaledResponse);
+			requestHandler.handleRequest(request, (requestResult -> {
+				requestResultHolder.set(requestResult);
 			}));
 
-			return marshaledResponseHolder.get();
+			return requestResultHolder.get();
 		}
 
 		@Override
