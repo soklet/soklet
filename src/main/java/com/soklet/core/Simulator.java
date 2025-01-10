@@ -45,12 +45,12 @@ import java.util.function.Consumer;
  *       .queryParameters(Map.of("name", Set.of("Mark")))
  *       .build();
  *
- *     // Perform the request and get a handle to the response
- *     MarshaledResponse marshaledResponse = simulator.performRequest(request);
+ *     // Perform the request and get a handle to the result
+ *     RequestResult result = simulator.performRequest(request);
  *
  *     // Verify status code
  *     Integer expectedCode = 200;
- *     Integer actualCode = response.getStatusCode();
+ *     Integer actualCode = result.getMarshaledResponse().getStatusCode();
  *     Assert.assertEquals("Bad status code", expectedCode, actualCode);
  *   }));
  * }}</pre>
@@ -62,10 +62,10 @@ public interface Simulator {
 	 * Given a request, process it and return a response ready to be written back over the wire.
 	 *
 	 * @param request the request to process
-	 * @return the response that corresponds to the request
+	 * @return the result (response, marshaled response, etc.) that corresponds to the request
 	 */
 	@Nonnull
-	MarshaledResponse performRequest(@Nonnull Request request);
+	RequestResult performRequest(@Nonnull Request request);
 
 	void registerServerSentEventConsumer(@Nonnull ResourcePath resourcePath,
 																			 @Nonnull Consumer<ServerSentEvent> serverSentEventConsumer);

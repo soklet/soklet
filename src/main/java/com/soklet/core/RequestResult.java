@@ -42,6 +42,8 @@ public class RequestResult {
 	private final Response response;
 	@Nullable
 	private CorsPreflightResponse corsPreflightResponse;
+	@Nullable
+	private ResourceMethod resourceMethod;
 
 	/**
 	 * Acquires a builder for {@link RequestResult} instances.
@@ -71,6 +73,7 @@ public class RequestResult {
 		this.marshaledResponse = builder.marshaledResponse;
 		this.response = builder.response;
 		this.corsPreflightResponse = builder.corsPreflightResponse;
+		this.resourceMethod = builder.resourceMethod;
 	}
 
 	@Override
@@ -89,6 +92,11 @@ public class RequestResult {
 		if (corsPreflightResponse != null)
 			components.add(format("corsPreflightResponse=%s", corsPreflightResponse));
 
+		ResourceMethod resourceMethod = getResourceMethod().orElse(null);
+
+		if (resourceMethod != null)
+			components.add(format("resourceMethod=%s", resourceMethod));
+
 		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
 	}
 
@@ -102,12 +110,13 @@ public class RequestResult {
 
 		return Objects.equals(getMarshaledResponse(), requestResult.getMarshaledResponse())
 				&& Objects.equals(getResponse(), requestResult.getResponse())
-				&& Objects.equals(getCorsPreflightResponse(), requestResult.getCorsPreflightResponse());
+				&& Objects.equals(getCorsPreflightResponse(), requestResult.getCorsPreflightResponse())
+				&& Objects.equals(getResourceMethod(), requestResult.getResourceMethod());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getMarshaledResponse(), getResponse(), getCorsPreflightResponse());
+		return Objects.hash(getMarshaledResponse(), getResponse(), getCorsPreflightResponse(), getResourceMethod());
 	}
 
 	@Nonnull
@@ -125,6 +134,11 @@ public class RequestResult {
 		return Optional.ofNullable(this.corsPreflightResponse);
 	}
 
+	@Nonnull
+	public Optional<ResourceMethod> getResourceMethod() {
+		return Optional.ofNullable(this.resourceMethod);
+	}
+
 	/**
 	 * Builder used to construct instances of {@link RequestResult} via {@link RequestResult#withMarshaledResponse(MarshaledResponse)}.
 	 * <p>
@@ -140,6 +154,8 @@ public class RequestResult {
 		private Response response;
 		@Nullable
 		private CorsPreflightResponse corsPreflightResponse;
+		@Nullable
+		private ResourceMethod resourceMethod;
 
 		protected Builder(@Nonnull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
@@ -166,6 +182,12 @@ public class RequestResult {
 		}
 
 		@Nonnull
+		public Builder resourceMethod(@Nullable ResourceMethod resourceMethod) {
+			this.resourceMethod = resourceMethod;
+			return this;
+		}
+
+		@Nonnull
 		public RequestResult build() {
 			return new RequestResult(this);
 		}
@@ -188,7 +210,8 @@ public class RequestResult {
 
 			this.builder = new Builder(requestResult.getMarshaledResponse())
 					.response(requestResult.getResponse().orElse(null))
-					.corsPreflightResponse(requestResult.getCorsPreflightResponse().orElse(null));
+					.corsPreflightResponse(requestResult.getCorsPreflightResponse().orElse(null))
+					.resourceMethod(requestResult.getResourceMethod().orElse(null));
 		}
 
 		@Nonnull
@@ -207,6 +230,12 @@ public class RequestResult {
 		@Nonnull
 		public Copier corsPreflightResponse(@Nullable CorsPreflightResponse corsPreflightResponse) {
 			this.builder.corsPreflightResponse(corsPreflightResponse);
+			return this;
+		}
+
+		@Nonnull
+		public Copier resourceMethod(@Nullable ResourceMethod resourceMethod) {
+			this.builder.resourceMethod(resourceMethod);
 			return this;
 		}
 
