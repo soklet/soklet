@@ -202,6 +202,9 @@ public class Soklet implements AutoCloseable {
 	 */
 	protected void handleRequest(@Nonnull Request request,
 															 @Nonnull Consumer<RequestResult> requestResultConsumer) {
+		requireNonNull(request);
+		requireNonNull(requestResultConsumer);
+
 		Instant processingStarted = Instant.now();
 
 		SokletConfiguration sokletConfiguration = getSokletConfiguration();
@@ -357,7 +360,7 @@ public class Soklet implements AutoCloseable {
 						Instant responseWriteStarted = Instant.now();
 
 						try {
-							marshaledResponseConsumer.accept(marshaledResponseHolder.get());
+							requestResultConsumer.accept(marshaledResponseHolder.get());
 
 							Instant responseWriteFinished = Instant.now();
 							Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
@@ -473,7 +476,7 @@ public class Soklet implements AutoCloseable {
 
 				if (!didFinishResponseWritingCompleted.get()) {
 					try {
-						marshaledResponseConsumer.accept(marshaledResponseHolder.get());
+						requestResultConsumer.accept(marshaledResponseHolder.get());
 
 						Instant responseWriteFinished = Instant.now();
 						Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
