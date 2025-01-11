@@ -367,7 +367,7 @@ public class SokletTests {
 
 	@Test
 	public void serverSentEventServerSimulator() throws InterruptedException {
-		SokletConfiguration configuration = SokletConfiguration.forIntegrationTesting()
+		SokletConfiguration configuration = SokletConfiguration.forTesting()
 				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
 
@@ -648,7 +648,7 @@ public class SokletTests {
 
 	@Nonnull
 	protected SokletConfiguration configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
-		return SokletConfiguration.forIntegrationTesting()
+		return SokletConfiguration.forTesting()
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(new DefaultResourceMethodResolver(resourceClasses))
 				// Quiet logging to keep the console clean

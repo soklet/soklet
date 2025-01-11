@@ -134,8 +134,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final Integer maximumRequestSizeInBytes;
 	@Nonnull
 	private final Integer requestReadBufferSizeInBytes;
+	// TODO: we probably want to convert to ConcurrentLruMap
 	@Nonnull
 	private final ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
+	// TODO: we probably want to convert to ConcurrentLruMap
 	@Nonnull
 	private final ConcurrentHashMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
 	@Nonnull
@@ -162,6 +164,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private volatile Boolean stopping;
 	@Nullable
 	private Thread eventLoopThread;
+	// Does not need to be concurrent because it's calculated just once at initialization time and is never modified after
 	@Nonnull
 	private Map<ResourcePathDeclaration, ResourceMethod> resourceMethodsByResourcePathDeclaration;
 	@Nullable
