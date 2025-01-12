@@ -37,6 +37,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * Starts the SSE server, which makes it able to accept requests from clients.
 	 * <p>
 	 * If the server is already started, no action is taken.
+	 * <p>
+	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 */
 	void start();
 
@@ -44,6 +46,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * Stops the SSE server, which makes it unable to accept requests from clients.
 	 * <p>
 	 * If the server is already stopped, no action is taken.
+	 * <p>
+	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 */
 	void stop();
 
@@ -57,6 +61,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 
 	/**
 	 * {@link AutoCloseable}-enabled synonym for {@link #stop()}.
+	 * <p>
+	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 *
 	 * @throws Exception if an exception occurs while stopping the server
 	 */
