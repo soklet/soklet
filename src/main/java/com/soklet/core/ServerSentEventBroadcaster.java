@@ -60,7 +60,7 @@ public interface ServerSentEventBroadcaster {
 	ResourcePath getResourcePath();
 
 	/**
-	 * How many clients are listening to this broadcaster's {@link ResourcePath}?
+	 * Approximately how many clients are listening to this broadcaster's {@link ResourcePath}?
 	 * <p>
 	 * For performance reasons, this number may be an estimate, or a snapshot of a recent moment-in-time.
 	 * It's possible for some clients to have already disconnected, but we won't know until we attempt to broadcast to them.

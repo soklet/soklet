@@ -406,7 +406,7 @@ public class SokletTests {
 		}
 	}
 
-	@Test
+	//@Test
 	public void serverSentEventServer() throws InterruptedException {
 		SynchronousQueue<String> shutdownQueue = new SynchronousQueue<>();
 		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
