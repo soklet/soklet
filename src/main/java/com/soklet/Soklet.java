@@ -1108,7 +1108,7 @@ public class Soklet implements AutoCloseable {
 			requireNonNull(serverSentEventConsumer);
 
 			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
-					.computeIfAbsent(resourcePath, rpi -> new MockServerSentEventBroadcaster(rpi));
+					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp));
 
 			broadcaster.registerServerSentEventConsumer(serverSentEventConsumer);
 		}
