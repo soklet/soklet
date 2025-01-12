@@ -16,6 +16,8 @@
 
 package com.soklet.core;
 
+import com.soklet.SokletConfiguration;
+
 import javax.annotation.Nonnull;
 import java.util.function.Consumer;
 
@@ -24,12 +26,12 @@ import java.util.function.Consumer;
  * <p>
  * <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Event</a> simulation is also supported.
  * <p>
- * Full documentation is available at <a href="https://www.soklet.com/docs/automated-testing">https://www.soklet.com/docs/automated-testing</a>.
+ * Instances of {@link Simulator} are made available via {@link com.soklet.Soklet#runSimulator(SokletConfiguration, Consumer)}.
  * <p>
- * For example:
+ * Usage example:
  * <pre>{@code  @Test
  * public void basicIntegrationTest() {
- *   // Build your app's configuration however you like
+ *   // Build your configuration however you like
  *   SokletConfiguration config = obtainMySokletConfig();
  *
  *   // Instead of running on a real HTTP server that listens on a port,
@@ -52,6 +54,8 @@ import java.util.function.Consumer;
  *     Assert.assertEquals("Bad status code", expectedCode, actualCode);
  *   }));
  * }}</pre>
+ * <p>
+ * Full documentation is available at <a href="https://www.soklet.com/docs/automated-testing">https://www.soklet.com/docs/automated-testing</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -77,12 +81,12 @@ public interface Simulator {
 																			 @Nonnull Consumer<ServerSentEvent> serverSentEventConsumer);
 
 	/**
-	 * TODO
+	 * Acquires a Server-Sent Event broadcaster for the given {@link ResourcePath}.
 	 * <p>
 	 * See documentation at <a href="https://www.soklet.com/docs/server-sent-events#testing">https://www.soklet.com/docs/server-sent-events#testing</a>.
 	 *
-	 * @param resourcePath
-	 * @return
+	 * @param resourcePath the Resource Path on which to broadcast Server-Sent Events
+	 * @return a Server-Sent Event broadcaster
 	 */
 	@Nonnull
 	ServerSentEventBroadcaster acquireServerSentEventBroadcaster(@Nonnull ResourcePath resourcePath);
