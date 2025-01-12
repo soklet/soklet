@@ -73,7 +73,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Soklet's main class - manages a {@link Server} using the provided system configuration.
+ * Soklet's main class - manages a {@link Server} (and optionally a {@link ServerSentEventServer}) using the provided system configuration.
  * <p>
  * <pre>{@code  // Use out-of-the-box defaults
  * SokletConfiguration config = SokletConfiguration.withServer(
@@ -130,9 +130,9 @@ public class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Starts the managed server instance.
+	 * Starts the managed server instance[s].
 	 * <p>
-	 * If the server is already started, this is a no-op.
+	 * If the managed server[s] are already started, this is a no-op.
 	 */
 	public void start() {
 		getLock().lock();
@@ -162,9 +162,9 @@ public class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Stops the managed server instance.
+	 * Stops the managed server instance[s].
 	 * <p>
-	 * If the server is already stopped, this is a no-op.
+	 * If the managed server[s] are already stopped, this is a no-op.
 	 */
 	public void stop() {
 		getLock().lock();
