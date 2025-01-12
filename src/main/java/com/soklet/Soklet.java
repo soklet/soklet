@@ -937,12 +937,12 @@ public class Soklet implements AutoCloseable {
 
 		@Nonnull
 		@Override
-		public Optional<? extends ServerSentEventBroadcaster> acquireServerSentEventBroadcaster(@Nullable ResourcePath resourcePath) {
-			if (resourcePath == null)
-				return Optional.empty();
+		public ServerSentEventBroadcaster acquireServerSentEventBroadcaster(@Nonnull ResourcePath resourcePath) {
+			requireNonNull(resourcePath);
 
-			// Delegate to the mock SSE server
-			return getServerSentEventServer().acquireBroadcaster(resourcePath);
+			// Delegate to the mock SSE server.
+			// We know the mock will always provide us with a broadcaster, so it's safe to immediately "get" the result
+			return getServerSentEventServer().acquireBroadcaster(resourcePath).get();
 		}
 
 		@Nullable
@@ -1099,7 +1099,10 @@ public class Soklet implements AutoCloseable {
 			if (resourcePath == null)
 				return Optional.empty();
 
-			return Optional.ofNullable(getBroadcastersByResourcePath().get(resourcePath));
+			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
+					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp));
+
+			return Optional.of(broadcaster);
 		}
 
 		public void registerServerSentEventConsumer(@Nonnull ResourcePath resourcePath,

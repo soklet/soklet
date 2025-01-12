@@ -17,8 +17,6 @@
 package com.soklet.core;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -87,5 +85,5 @@ public interface Simulator {
 	 * @return
 	 */
 	@Nonnull
-	Optional<? extends ServerSentEventBroadcaster> acquireServerSentEventBroadcaster(@Nullable ResourcePath resourcePath);
+	ServerSentEventBroadcaster acquireServerSentEventBroadcaster(@Nonnull ResourcePath resourcePath);
 }

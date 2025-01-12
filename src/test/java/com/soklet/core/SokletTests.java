@@ -391,7 +391,7 @@ public class SokletTests {
 					.build();
 
 			// ...and broadcast it to all /examples/abc listeners
-			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.of("/examples/abc")).get();
+			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.of("/examples/abc"));
 			broadcaster.broadcast(serverSentEvent);
 		}));
 	}
