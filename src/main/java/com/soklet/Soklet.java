@@ -290,11 +290,8 @@ public class Soklet implements AutoCloseable {
 							// 1. Customize response for HEAD (e.g. remove body, set Content-Length header)
 							updatedMarshaledResponse = applyHeadResponseIfApplicable(request, updatedMarshaledResponse);
 
-							// 2. Write any CORS-related headers
-							updatedMarshaledResponse = applyCorsResponseIfApplicable(request, updatedMarshaledResponse);
-
-							// 3. If there is no Content-Length header already applied, apply it
-							updatedMarshaledResponse = applyContentLengthIfApplicable(request, updatedMarshaledResponse);
+							// 2. Apply other standard response customizations (CORS, Content-Length)
+							updatedMarshaledResponse = applyCommonPropertiesToMarshaledResponse(request, updatedMarshaledResponse);
 
 							// Update our result holder with the modified response if necessary
 							if (originalMarshaledResponse != updatedMarshaledResponse) {
@@ -319,7 +316,11 @@ public class Soklet implements AutoCloseable {
 
 							// Unhappy path.  Try to use configuration's exception response marshaler...
 							try {
-								return responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
+								MarshaledResponse marshaledResponse = responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
+								marshaledResponse = applyCommonPropertiesToMarshaledResponse(request, marshaledResponse);
+								marshaledResponseHolder.set(marshaledResponse);
+
+								return marshaledResponse;
 							} catch (Throwable t2) {
 								throwables.add(t2);
 
@@ -349,7 +350,9 @@ public class Soklet implements AutoCloseable {
 								.resourceMethod(resourceMethodHolder.get())
 								.build());
 
-						marshaledResponseHolder.set(responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get()));
+						MarshaledResponse marshaledResponse = responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
+						marshaledResponse = applyCommonPropertiesToMarshaledResponse(request, marshaledResponse);
+						marshaledResponseHolder.set(marshaledResponse);
 					} catch (Throwable t2) {
 						throwables.add(t2);
 
@@ -459,7 +462,9 @@ public class Soklet implements AutoCloseable {
 			// If that fails, use the failsafe.
 			if (marshaledResponseHolder.get() == null) {
 				try {
-					marshaledResponseHolder.set(responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get()));
+					MarshaledResponse marshaledResponse = responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
+					marshaledResponse = applyCommonPropertiesToMarshaledResponse(request, marshaledResponse);
+					marshaledResponseHolder.set(marshaledResponse);
 				} catch (Throwable t2) {
 					throwables.add(t2);
 
@@ -739,6 +744,19 @@ public class Soklet implements AutoCloseable {
 			return marshaledResponse;
 
 		return getSokletConfiguration().getResponseMarshaler().forHead(request, marshaledResponse);
+	}
+
+	// Hat tip to Aslan Parçası and GrayStar
+	@Nonnull
+	protected MarshaledResponse applyCommonPropertiesToMarshaledResponse(@Nonnull Request request,
+																																			 @Nonnull MarshaledResponse marshaledResponse) {
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+
+		marshaledResponse = applyContentLengthIfApplicable(request, marshaledResponse);
+		marshaledResponse = applyCorsResponseIfApplicable(request, marshaledResponse);
+
+		return marshaledResponse;
 	}
 
 	@Nonnull
