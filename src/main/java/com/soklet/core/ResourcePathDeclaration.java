@@ -27,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -133,6 +134,24 @@ public class ResourcePathDeclaration {
 			throw new IllegalArgumentException(format("Only one varargs placeholder is allowed in the path declaration: %s", path));
 
 		this.components = unmodifiableList(components);
+	}
+
+	/**
+	 * Gets the {@link ComponentType#VARARGS} component in this declaration, if any.
+	 *
+	 * @return the {@link ComponentType#VARARGS} component in this declaration, or {@link Optional#empty()} if none exists.
+	 */
+	@Nonnull
+	public Optional<Component> getVarargsComponent() {
+		if (getComponents().size() == 0)
+			return Optional.empty();
+
+		Component lastComponent = getComponents().get(getComponents().size() - 1);
+
+		if (lastComponent.getType() == ComponentType.VARARGS)
+			return Optional.of(lastComponent);
+
+		return Optional.empty();
 	}
 
 	/**

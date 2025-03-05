@@ -333,6 +333,55 @@ public class SokletTests {
 	}
 
 	@Test
+	public void testVarargs() {
+		SokletConfiguration configuration = configurationForResourceClasses(Set.of(VarargsResource.class));
+		Soklet.runSimulator(configuration, (simulator -> {
+			RequestResult requestResult = simulator.performRequest(
+					new Request.Builder(HttpMethod.GET, "/static/js/some/file/example.js")
+							.build()
+			);
+
+			Assert.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assert.assertEquals("js/some/file/example.js", requestResult.getResponse().get().getBody().get());
+
+
+			requestResult = simulator.performRequest(
+					new Request.Builder(HttpMethod.GET, "/123/static/js/some/file/example.js")
+							.build()
+			);
+
+			Assert.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assert.assertEquals("123-js/some/file/example.js", requestResult.getResponse().get().getBody().get());
+
+			requestResult = simulator.performRequest(
+					new Request.Builder(HttpMethod.GET, "/static2/js/some/file/example.js")
+							.build()
+			);
+
+			Assert.assertEquals(Integer.valueOf(500), requestResult.getMarshaledResponse().getStatusCode());
+		}));
+	}
+
+	@ThreadSafe
+	public static class VarargsResource {
+		@GET("/static/{path*}")
+		public String basicVarargs(@PathParameter String path) {
+			return path;
+		}
+
+		@GET("/{something}/static/{path*}")
+		public String complexVarargs(@PathParameter Integer something,
+																 @PathParameter String path) {
+			return something + "-" + path;
+		}
+
+		@GET("/static2/{anotherPath*}")
+		public Integer illegalVarargsType(@PathParameter Integer anotherPath /* only String is supported */) {
+			return anotherPath;
+		}
+	}
+
+	@Test
 	public void httpHead() {
 		SokletConfiguration configuration = configurationForResourceClasses(Set.of(HttpHeadResource.class));
 		Soklet.runSimulator(configuration, (simulator -> {

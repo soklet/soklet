@@ -33,6 +33,7 @@ import com.soklet.core.RequestBodyMarshaler;
 import com.soklet.core.ResourceMethod;
 import com.soklet.core.ResourceMethodParameterProvider;
 import com.soklet.core.ResourcePath;
+import com.soklet.core.ResourcePathDeclaration;
 import com.soklet.exception.BadRequestException;
 import com.soklet.exception.IllegalFormParameterException;
 import com.soklet.exception.IllegalMultipartFieldException;
@@ -59,6 +60,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -168,6 +170,15 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			if (pathParameterValue == null)
 				throw new IllegalStateException(format("Missing value for path parameter '%s' for resource method %s",
 						pathParameterName, resourceMethod));
+
+			// Special check for varargs: it must be of type String
+			ResourcePathDeclaration.Component varargsComponent = resourceMethod.getResourcePathDeclaration().getVarargsComponent().orElse(null);
+
+			if (varargsComponent != null
+					&& Objects.equals(varargsComponent.getValue(), pathParameterName)
+					&& !parameter.getType().equals(String.class))
+				throw new IllegalStateException(format("Path parameter '%s' for resource method %s is defined as supporting varargs. Its type was declared as %s, but varargs path parameters must be of type %s.",
+						pathParameterName, resourceMethod, parameter.getType(), String.class));
 
 			ValueConverter<Object, Object> valueConverter = getValueConverterRegistry().get(String.class, parameter.getType()).orElse(null);
 
