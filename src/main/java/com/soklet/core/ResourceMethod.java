@@ -83,7 +83,7 @@ public class ResourceMethod {
 	@Override
 	public String toString() {
 		return format("%s{httpMethod=%s, resourcePathDeclaration=%s, method=%s, serverSentEventSource=%s}", getClass().getSimpleName(),
-				getHttpMethod(), getResourcePath(), getMethod(), isServerSentEventSource());
+				getHttpMethod(), getResourcePathDeclaration(), getMethod(), isServerSentEventSource());
 	}
 
 	@Override
@@ -95,14 +95,14 @@ public class ResourceMethod {
 			return false;
 
 		return Objects.equals(getHttpMethod(), resourceMethod.getHttpMethod())
-				&& Objects.equals(getResourcePath(), resourceMethod.getResourcePath())
+				&& Objects.equals(getResourcePathDeclaration(), resourceMethod.getResourcePathDeclaration())
 				&& Objects.equals(getMethod(), resourceMethod.getMethod())
 				&& Objects.equals(isServerSentEventSource(), resourceMethod.isServerSentEventSource());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getHttpMethod(), getResourcePath(), getMethod(), isServerSentEventSource());
+		return Objects.hash(getHttpMethod(), getResourcePathDeclaration(), getMethod(), isServerSentEventSource());
 	}
 
 	/**
@@ -121,7 +121,7 @@ public class ResourceMethod {
 	 * @return the HTTP path
 	 */
 	@Nonnull
-	public ResourcePathDeclaration getResourcePath() {
+	public ResourcePathDeclaration getResourcePathDeclaration() {
 		return this.resourcePathDeclaration;
 	}
 

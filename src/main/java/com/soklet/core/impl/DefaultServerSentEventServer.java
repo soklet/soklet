@@ -372,7 +372,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		// TODO: we should fail-fast if there are multiple @ServerSentEventSource annotations with the same resource path.  Should that happen here or at the Soklet level?
 		this.resourceMethodsByResourcePathDeclaration = sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
 				.filter(resourceMethod -> resourceMethod.isServerSentEventSource())
-				.collect(Collectors.toMap(ResourceMethod::getResourcePath, Function.identity()));
+				.collect(Collectors.toMap(ResourceMethod::getResourcePathDeclaration, Function.identity()));
 	}
 
 	@Override
