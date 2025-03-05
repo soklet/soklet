@@ -143,39 +143,50 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		requireNonNull(request);
 
 		Set<Method> methods = getMethodsByHttpMethod().get(request.getHttpMethod());
-
 		if (methods == null)
 			return Optional.empty();
 
 		ResourcePath resourcePath = request.getResourcePath();
-		Set<ResourceMethod> matchingResourceMethods = new HashSet<>(4); // Normally there are few (if any) potential matches
+		Set<ResourceMethod> matchingResourceMethods = new HashSet<>(4);
 
-		// TODO: faster matching via path component tree structure instead of linear scan
+		// Collect all resource methods matching the HTTP method and whose resource path declaration matches the request.
 		for (Entry<Method, Set<HttpMethodResourcePathDeclaration>> entry : getHttpMethodResourcePathDeclarationsByMethod().entrySet()) {
 			Method method = entry.getKey();
 			Set<HttpMethodResourcePathDeclaration> httpMethodResourcePathDeclarations = entry.getValue();
-
 			for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations)
 				if (httpMethodResourcePathDeclaration.getHttpMethod().equals(request.getHttpMethod())
 						&& resourcePath.matches(httpMethodResourcePathDeclaration.getResourcePathDeclaration()))
-					matchingResourceMethods.add(ResourceMethod.withComponents(request.getHttpMethod(), httpMethodResourcePathDeclaration.getResourcePathDeclaration(), method, httpMethodResourcePathDeclaration.isServerSentEventSource()));
+					matchingResourceMethods.add(ResourceMethod.withComponents(
+							request.getHttpMethod(),
+							httpMethodResourcePathDeclaration.getResourcePathDeclaration(),
+							method,
+							httpMethodResourcePathDeclaration.isServerSentEventSource()));
 		}
 
-		// Simple case - exact route match
+		// Varargs precedence: if any matching resource method is defined with a varargs placeholder, only consider those.
+		Set<ResourceMethod> varargsMatches = matchingResourceMethods.stream()
+				.filter(resourceMethod -> resourceMethod.getResourcePathDeclaration().getVarargsComponent().isPresent())
+				.collect(Collectors.toSet());
+
+		if (!varargsMatches.isEmpty())
+			matchingResourceMethods = varargsMatches;
+
+		// Simple case - if exactly one resource method remains, use it.
 		if (matchingResourceMethods.size() == 1)
 			return matchingResourceMethods.stream().findFirst();
 
-		// Multiple matches are OK so long as one is more specific than any others.
-		// If none are a match, we have a problem
+		// Multiple matches: narrow by specificity.
 		if (matchingResourceMethods.size() > 1) {
-			Set<ResourceMethod> mostSpecificResourceMethods = mostSpecificResourceMethods(request, matchingResourceMethods);
+			Set<ResourceMethod> mostSpecific = mostSpecificResourceMethods(request, matchingResourceMethods);
 
-			if (mostSpecificResourceMethods.size() == 1)
-				return mostSpecificResourceMethods.stream().findFirst();
+			if (mostSpecific.size() == 1)
+				return mostSpecific.stream().findFirst();
 
-			throw new RuntimeException(format("Multiple routes match '%s %s'. Ambiguous matches were:\n%s", request.getHttpMethod().name(), request.getResourcePath().getPath(),
+			throw new RuntimeException(format("Multiple routes match '%s %s'. Ambiguous matches were:\n%s",
+					request.getHttpMethod().name(),
+					request.getResourcePath().getPath(),
 					matchingResourceMethods.stream()
-							.map(matchingResourceMethod -> matchingResourceMethod.getMethod().toString())
+							.map(m -> m.getMethod().toString())
 							.collect(Collectors.joining("\n"))));
 		}
 
@@ -265,27 +276,41 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		requireNonNull(request);
 		requireNonNull(resourceMethods);
 
-		SortedMap<Long, Set<ResourceMethod>> resourceMethodsByPlaceholderComponentCount = new TreeMap<>();
+		// If any of the matching resource methods use a varargs placeholder, restrict to just those.
+		Set<ResourceMethod> varargsResourceMethods = resourceMethods.stream()
+				.filter(resourceMethod -> resourceMethod.getResourcePathDeclaration().getVarargsComponent().isPresent())
+				.collect(Collectors.toSet());
+
+		if (!varargsResourceMethods.isEmpty())
+			resourceMethods = varargsResourceMethods;
+
+		// Group by the count of placeholder components (non-literal) in the declaration.
+		// Fewer placeholders means the route is more specific.
+		SortedMap<Long, Set<ResourceMethod>> resourceMethodsByPlaceholderCount = new TreeMap<>();
 
 		for (ResourceMethod resourceMethod : resourceMethods) {
-			Set<HttpMethodResourcePathDeclaration> httpMethodResourcePathDeclarations = getHttpMethodResourcePathDeclarationsByMethod().get(resourceMethod.getMethod());
+			Set<HttpMethodResourcePathDeclaration> declarations = getHttpMethodResourcePathDeclarationsByMethod().get(resourceMethod.getMethod());
 
-			if (httpMethodResourcePathDeclarations == null || httpMethodResourcePathDeclarations.size() == 0)
+			if (declarations == null || declarations.isEmpty())
 				continue;
 
-			for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations) {
-				if (httpMethodResourcePathDeclaration.getHttpMethod() != request.getHttpMethod())
+			for (HttpMethodResourcePathDeclaration declaration : declarations) {
+				if (declaration.getHttpMethod() != request.getHttpMethod())
 					continue;
 
-				long literalComponentCount = httpMethodResourcePathDeclaration.getResourcePathDeclaration().getComponents().stream().filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.PLACEHOLDER).count();
-				Set<ResourceMethod> resourceMethodsWithEquivalentComponentCount = resourceMethodsByPlaceholderComponentCount.computeIfAbsent(literalComponentCount, k -> new HashSet<>());
+				long placeholderCount = declaration.getResourcePathDeclaration().getComponents().stream()
+						.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.PLACEHOLDER)
+						.count();
 
-				resourceMethodsWithEquivalentComponentCount.add(resourceMethod);
+				resourceMethodsByPlaceholderCount
+						.computeIfAbsent(placeholderCount, k -> new HashSet<>())
+						.add(resourceMethod);
 			}
 		}
 
-		return resourceMethodsByPlaceholderComponentCount.size() == 0 ? Collections.emptySet() :
-				resourceMethodsByPlaceholderComponentCount.get(resourceMethodsByPlaceholderComponentCount.keySet().stream().findFirst().get());
+		return resourceMethodsByPlaceholderCount.isEmpty()
+				? Collections.emptySet()
+				: resourceMethodsByPlaceholderCount.get(resourceMethodsByPlaceholderCount.firstKey());
 	}
 
 	@Nonnull
