@@ -424,8 +424,10 @@ public class ResourcePathDeclaration {
 		public boolean equals(@Nullable Object object) {
 			if (this == object)
 				return true;
+
 			if (!(object instanceof Component component))
 				return false;
+
 			return Objects.equals(getValue(), component.getValue())
 					&& Objects.equals(getType(), component.getType());
 		}

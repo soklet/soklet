@@ -60,7 +60,7 @@ public class ResourcePath {
 	 * This is in contrast to {@link ResourcePathDeclaration}, which represents compile-time path declarations
 	 * that may include placeholders, e.g. {@code /users/{userId}}.
 	 *
-	 * @param path a runtime path which may not include placeholders
+	 * @param path a runtime path (no placeholders) e.g. {@code /users/123}
 	 */
 	@Nonnull
 	public static ResourcePath of(@Nonnull String path) {
@@ -75,32 +75,47 @@ public class ResourcePath {
 	}
 
 	/**
-	 * Does this resource path match the given resource path (taking placeholders into account, if present)?
+	 * Does this resource path match the given resource path (taking placeholders/varargs into account, if present)?
 	 * <p>
 	 * For example, resource path {@code /users/123} would match the resource path declaration {@code /users/{userId}}.
 	 *
-	 * @param resourcePathDeclaration the resource path against which to match
-	 * @return {@code true} if the paths match, {@code false} otherwise
+	 * @param resourcePathDeclaration the compile-time declaration to match against
+	 * @return {@code true} if this resource path matches, {@code false} otherwise
 	 */
 	@Nonnull
 	public Boolean matches(@Nonnull ResourcePathDeclaration resourcePathDeclaration) {
 		requireNonNull(resourcePathDeclaration);
 
-		if (resourcePathDeclaration.getComponents().size() != getComponents().size())
-			return false;
+		List<Component> declarationComponents = resourcePathDeclaration.getComponents();
 
-		for (int i = 0; i < resourcePathDeclaration.getComponents().size(); ++i) {
-			Component resourcePathDeclarationComponent = resourcePathDeclaration.getComponents().get(i);
-			String resourcePathComponent = getComponents().get(i);
-
-			if (resourcePathDeclarationComponent.getType() == ComponentType.PLACEHOLDER)
-				continue;
-
-			if (!resourcePathDeclarationComponent.getValue().equals(resourcePathComponent))
+		if (!declarationComponents.isEmpty() && declarationComponents.get(declarationComponents.size() - 1).getType() == ComponentType.VARARGS) {
+			if (getComponents().size() < declarationComponents.size() - 1)
 				return false;
-		}
 
-		return true;
+			// Check prefix
+			for (int i = 0; i < declarationComponents.size() - 1; i++) {
+				Component comp = declarationComponents.get(i);
+				String pathComp = getComponents().get(i);
+
+				if (comp.getType() == ComponentType.LITERAL && !comp.getValue().equals(pathComp))
+					return false;
+			}
+
+			return true;
+		} else {
+			if (getComponents().size() != declarationComponents.size())
+				return false;
+
+			for (int i = 0; i < declarationComponents.size(); i++) {
+				Component comp = declarationComponents.get(i);
+				String pathComp = getComponents().get(i);
+
+				if (comp.getType() == ComponentType.LITERAL && !comp.getValue().equals(pathComp))
+					return false;
+			}
+
+			return true;
+		}
 	}
 
 	/**
@@ -111,6 +126,8 @@ public class ResourcePath {
 	 * <p>
 	 * Resource path placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path declaration {@code /users/{userId}}
 	 * and resource path {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
+	 * <p>
+	 * For varargs placeholders, the extra path components are joined with '/'.
 	 *
 	 * @param resourcePathDeclaration compile-time resource path, used to provide placeholder names
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
@@ -121,17 +138,29 @@ public class ResourcePath {
 		requireNonNull(resourcePathDeclaration);
 
 		if (!matches(resourcePathDeclaration))
-			throw new IllegalArgumentException(format("%s is not a match for %s so we cannot extract placeholders", this,
-					resourcePathDeclaration));
+			throw new IllegalArgumentException(format("%s is not a match for %s so we cannot extract placeholders", this, resourcePathDeclaration));
 
-		Map<String, String> placeholders = new LinkedHashMap<>(resourcePathDeclaration.getComponents().size());
+		Map<String, String> placeholders = new LinkedHashMap<>();
+		List<Component> declarationComponents = resourcePathDeclaration.getComponents();
 
-		for (int i = 0; i < resourcePathDeclaration.getComponents().size(); ++i) {
-			Component resourcePathDeclarationComponent = resourcePathDeclaration.getComponents().get(i);
-			String resourcePathComponent = getComponents().get(i);
+		if (!declarationComponents.isEmpty() && declarationComponents.get(declarationComponents.size() - 1).getType() == ComponentType.VARARGS) {
+			for (int i = 0; i < declarationComponents.size() - 1; i++) {
+				Component comp = declarationComponents.get(i);
 
-			if (resourcePathDeclarationComponent.getType() == ComponentType.PLACEHOLDER)
-				placeholders.put(resourcePathDeclarationComponent.getValue(), resourcePathComponent);
+				if (comp.getType() == ComponentType.PLACEHOLDER)
+					placeholders.put(comp.getValue(), getComponents().get(i));
+			}
+
+			// Join remaining components for varargs placeholder.
+			String varargsValue = String.join("/", getComponents().subList(declarationComponents.size() - 1, getComponents().size()));
+			placeholders.put(declarationComponents.get(declarationComponents.size() - 1).getValue(), varargsValue);
+		} else {
+			for (int i = 0; i < declarationComponents.size(); i++) {
+				Component comp = declarationComponents.get(i);
+
+				if (comp.getType() == ComponentType.PLACEHOLDER)
+					placeholders.put(comp.getValue(), getComponents().get(i));
+			}
 		}
 
 		return Collections.unmodifiableMap(placeholders);
@@ -172,7 +201,6 @@ public class ResourcePath {
 
 		// Strip off leading /
 		path = path.substring(1);
-
 		return Arrays.asList(path.split("/"));
 	}
 
