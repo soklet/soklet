@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static com.soklet.core.Utilities.trimAggressively;
 import static java.lang.String.format;
@@ -70,6 +71,10 @@ import static java.util.stream.Collectors.toList;
  *   <li>{@code /users/{userId}/details} is a valid resource path</li>
  *   <li>{@code /users/prefix{userId}} is an <em>invalid</em> resource path</li>
  * </ul>
+ * <p>
+ * In addition to simple placeholders, this version supports a special "varargs" placeholder indicated by a trailing {@code *}
+ * in the placeholder name. For example, {@code /static/{filePath*}}. When present, the varargs placeholder must appear only once
+ * and as the last component in the path.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -109,11 +114,29 @@ public class ResourcePathDeclaration {
 	protected ResourcePathDeclaration(@Nonnull String path) {
 		requireNonNull(path);
 		this.path = normalizePath(path);
-		this.components = unmodifiableList(extractComponents(this.path));
+
+		List<Component> components = extractComponents(this.path);
+
+		// Validate varargs: if any component is VARARGS then it must be the last one and only occur once.
+		int varargsCount = 0;
+
+		for (int i = 0; i < components.size(); i++) {
+			if (components.get(i).getType() == ComponentType.VARARGS) {
+				varargsCount++;
+
+				if (i != components.size() - 1)
+					throw new IllegalArgumentException(format("Varargs placeholder must be the last component in the path declaration: %s", path));
+			}
+		}
+
+		if (varargsCount > 1)
+			throw new IllegalArgumentException(format("Only one varargs placeholder is allowed in the path declaration: %s", path));
+
+		this.components = unmodifiableList(components);
 	}
 
 	/**
-	 * Does this resource path declaration match the given resource path (taking placeholders into account, if present)?
+	 * Does this resource path declaration match the given resource path (taking placeholders/varargs into account, if present)?
 	 * <p>
 	 * For example, resource path declaration {@code /users/{userId}} would match {@code /users/123}.
 	 *
@@ -124,21 +147,37 @@ public class ResourcePathDeclaration {
 	public Boolean matches(@Nonnull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
 
-		if (resourcePath.getComponents().size() != getComponents().size())
-			return false;
+		List<Component> declarationComponents = getComponents();
+		List<String> pathComponents = resourcePath.getComponents();
 
-		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
-			String resourcePathComponent = resourcePath.getComponents().get(i);
-			Component resourcePathDeclarationComponent = getComponents().get(i);
-
-			if (resourcePathDeclarationComponent.getType() == ComponentType.PLACEHOLDER)
-				continue;
-
-			if (!resourcePathDeclarationComponent.getValue().equals(resourcePathComponent))
+		// If the last declaration component is a varargs placeholder, allow extra path components.
+		if (!declarationComponents.isEmpty() && declarationComponents.get(declarationComponents.size() - 1).getType() == ComponentType.VARARGS) {
+			if (pathComponents.size() < declarationComponents.size() - 1)
 				return false;
-		}
 
-		return true;
+			// Check the prefix components
+			for (int i = 0; i < declarationComponents.size() - 1; i++) {
+				Component comp = declarationComponents.get(i);
+				String pathComp = pathComponents.get(i);
+				if (comp.getType() == ComponentType.LITERAL && !comp.getValue().equals(pathComp))
+					return false;
+			}
+
+			return true;
+		} else {
+			if (pathComponents.size() != declarationComponents.size())
+				return false;
+
+			for (int i = 0; i < declarationComponents.size(); i++) {
+				Component comp = declarationComponents.get(i);
+				String pathComp = pathComponents.get(i);
+
+				if (comp.getType() == ComponentType.LITERAL && !comp.getValue().equals(pathComp))
+					return false;
+			}
+
+			return true;
+		}
 	}
 
 	/**
@@ -149,6 +188,8 @@ public class ResourcePathDeclaration {
 	 * <p>
 	 * Resource path declaration placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path declaration {@code /users/{userId}}
 	 * and resource path {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
+	 * <p>
+	 * Varargs placeholders will combine all remaining path components (joined with @{code /}).
 	 *
 	 * @param resourcePath runtime version of this resource path declaration, used to provide placeholder values
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
@@ -159,21 +200,34 @@ public class ResourcePathDeclaration {
 		requireNonNull(resourcePath);
 
 		if (!matches(resourcePath))
-			throw new IllegalArgumentException(format("%s is not a match for %s so we cannot extract placeholders", this,
-					resourcePath));
+			throw new IllegalArgumentException(format("%s is not a match for %s so we cannot extract placeholders", this, resourcePath));
 
-		// No placeholders? Nothing to do
-		if (isLiteral())
-			return Map.of();
+		Map<String, String> placeholders = new LinkedHashMap<>();
+		List<Component> declarationComponents = getComponents();
+		List<String> pathComponents = resourcePath.getComponents();
 
-		Map<String, String> placeholders = new LinkedHashMap<>(resourcePath.getComponents().size());
+		// If varargs is present as the last component, process accordingly.
+		if (!declarationComponents.isEmpty() && declarationComponents.get(declarationComponents.size() - 1).getType() == ComponentType.VARARGS) {
+			// Process all but the last component normally.
+			for (int i = 0; i < declarationComponents.size() - 1; i++) {
+				Component comp = declarationComponents.get(i);
 
-		for (int i = 0; i < resourcePath.getComponents().size(); ++i) {
-			String resourcePathComponent = resourcePath.getComponents().get(i);
-			Component resourcePathDeclarationComponent = getComponents().get(i);
+				if (comp.getType() == ComponentType.PLACEHOLDER)
+					placeholders.put(comp.getValue(), URLDecoder.decode(pathComponents.get(i), StandardCharsets.UTF_8));
+			}
 
-			if (resourcePathDeclarationComponent.getType() == ComponentType.PLACEHOLDER)
-				placeholders.put(resourcePathDeclarationComponent.getValue(), URLDecoder.decode(resourcePathComponent, StandardCharsets.UTF_8));
+			// For varargs, join all remaining path components.
+			String varargsValue = pathComponents.subList(declarationComponents.size() - 1, pathComponents.size())
+					.stream().collect(Collectors.joining("/"));
+			placeholders.put(declarationComponents.get(declarationComponents.size() - 1).getValue(), URLDecoder.decode(varargsValue, StandardCharsets.UTF_8));
+		} else {
+			// Normal processing: one-to-one mapping.
+			for (int i = 0; i < declarationComponents.size(); i++) {
+				Component comp = declarationComponents.get(i);
+
+				if (comp.getType() == ComponentType.PLACEHOLDER)
+					placeholders.put(comp.getValue(), URLDecoder.decode(pathComponents.get(i), StandardCharsets.UTF_8));
+			}
 		}
 
 		return Collections.unmodifiableMap(placeholders);
@@ -239,9 +293,11 @@ public class ResourcePathDeclaration {
 
 	/**
 	 * Assumes {@code path} is already normalized via {@link #normalizePath(String)}.
+	 * <p>
+	 * If a component is a placeholder, determines whether it is a varargs placeholder (trailing {@code *}).
 	 *
-	 * @param path (nonnull) Path from which components are extracted
-	 * @return Logical components of the supplied {@code path}
+	 * @param path path from which components are extracted
+	 * @return logical components of the supplied {@code path}
 	 */
 	@Nonnull
 	protected List<Component> extractComponents(@Nonnull String path) {
@@ -253,17 +309,25 @@ public class ResourcePathDeclaration {
 		// Strip off leading /
 		path = path.substring(1);
 
-		List<String> values = asList(path.split("/"));
+		List<String> parts = asList(path.split("/"));
 
-		return values.stream().map(value -> {
-			ComponentType type = ComponentType.LITERAL;
+		return parts.stream().map(part -> {
+			if (COMPONENT_PLACEHOLDER_PATTERN.matcher(part).matches()) {
+				// Remove the enclosing '{' and '}'
+				String inner = part.substring(1, part.length() - 1);
+				ComponentType type;
 
-			if (COMPONENT_PLACEHOLDER_PATTERN.matcher(value).matches()) {
-				type = ComponentType.PLACEHOLDER;
-				value = value.substring(1, value.length() - 1);
+				if (inner.endsWith("*")) {
+					type = ComponentType.VARARGS;
+					inner = inner.substring(0, inner.length() - 1);
+				} else {
+					type = ComponentType.PLACEHOLDER;
+				}
+
+				return new Component(inner, type);
+			} else {
+				return new Component(part, ComponentType.LITERAL);
 			}
-
-			return new Component(value, type);
 		}).collect(toList());
 	}
 
@@ -276,11 +340,10 @@ public class ResourcePathDeclaration {
 	public boolean equals(@Nullable Object object) {
 		if (this == object)
 			return true;
-
 		if (!(object instanceof ResourcePathDeclaration resourcePathDeclaration))
 			return false;
-
-		return Objects.equals(getPath(), resourcePathDeclaration.getPath()) && Objects.equals(getComponents(), resourcePathDeclaration.getComponents());
+		return Objects.equals(getPath(), resourcePathDeclaration.getPath())
+				&& Objects.equals(getComponents(), resourcePathDeclaration.getComponents());
 	}
 
 	@Override
@@ -314,7 +377,13 @@ public class ResourcePathDeclaration {
 		 * <p>
 		 * For example, given resource path declaration {@code /users/{userId}}, the {@code userId} component would be of type {@code PLACEHOLDER}.
 		 */
-		PLACEHOLDER
+		PLACEHOLDER,
+		/**
+		 * A "varargs" placeholder component that may match multiple path segments.
+		 * <p>
+		 * For example, given resource path declaration {@code /static/{filepath*}}, the {@code filepath*} component would be of type {@code VARARGS}.
+		 */
+		VARARGS
 	}
 
 	/**
@@ -342,7 +411,6 @@ public class ResourcePathDeclaration {
 										 @Nonnull ComponentType type) {
 			requireNonNull(value);
 			requireNonNull(type);
-
 			this.value = value;
 			this.type = type;
 		}
@@ -356,11 +424,10 @@ public class ResourcePathDeclaration {
 		public boolean equals(@Nullable Object object) {
 			if (this == object)
 				return true;
-
 			if (!(object instanceof Component component))
 				return false;
-
-			return Objects.equals(getValue(), component.getValue()) && Objects.equals(getType(), component.getType());
+			return Objects.equals(getValue(), component.getValue())
+					&& Objects.equals(getType(), component.getType());
 		}
 
 		@Override
