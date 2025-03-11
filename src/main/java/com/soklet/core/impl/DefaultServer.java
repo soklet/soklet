@@ -45,6 +45,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -244,7 +245,9 @@ public class DefaultServer implements Server {
 							}
 						}
 
-						Request request = Request.with(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), microhttpRequest.uri())
+						String uri = URLDecoder.decode(microhttpRequest.uri(), StandardCharsets.UTF_8);
+
+						Request request = Request.with(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), uri)
 								.multipartParser(getMultipartParser())
 								.headers(headers)
 								.body(body)
