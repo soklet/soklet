@@ -45,6 +45,9 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -245,7 +248,7 @@ public class DefaultServer implements Server {
 							}
 						}
 
-						String uri = URLDecoder.decode(microhttpRequest.uri(), StandardCharsets.UTF_8);
+						String uri = decodeUrlPathOnly(microhttpRequest.uri());
 
 						Request request = Request.with(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), uri)
 								.multipartParser(getMultipartParser())
@@ -308,6 +311,28 @@ public class DefaultServer implements Server {
 			}
 		} finally {
 			getLock().unlock();
+		}
+	}
+
+	// URL-decodes the path but leaves query parameters URL-encoded
+	@Nonnull
+	protected String decodeUrlPathOnly(@Nonnull String url) {
+		try {
+			URI uri = new URI(url);
+			
+			// URL-decode the path component
+			String decodedPath = URLDecoder.decode(uri.getRawPath(), StandardCharsets.UTF_8.toString());
+
+			// Get the raw query component (if any) without decoding it
+			String rawQuery = uri.getRawQuery();
+
+			// Reassemble the URL: decoded path + original query (if exists)
+			if (rawQuery != null && !rawQuery.isEmpty())
+				return format("%s?%s", decodedPath, rawQuery);
+
+			return decodedPath;
+		} catch (URISyntaxException | UnsupportedEncodingException e) {
+			throw new RuntimeException(format("Unable to decode URL %s", url), e);
 		}
 	}
 
