@@ -45,6 +45,7 @@ import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -506,6 +507,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "will/didInitiateConnection"
 				String rawRequest = readRequest(requestIdentifier, clientSocketChannel);
 				request = parseRequest(requestIdentifier, rawRequest);
+			} catch (URISyntaxException e) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, format("Unable to parse server-sent event request URI: %s", e.getInput()))
+						.throwable(e)
+						.build());
+				throw e;
 			} catch (RequestTooLargeIOException e) {
 				// Exception provides a "too large"-flagged request with whatever data we could pull out of it
 				request = e.getTooLargeRequest();
@@ -513,7 +519,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "request timed out"
 				throw e;
 			} catch (Exception e) {
-				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "request parsing failed"
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, "Unable to parse server-sent event request")
+						.throwable(e)
+						.build());
 				throw e;
 			}
 
@@ -832,7 +840,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@Nonnull
 	protected Request parseRequest(@Nonnull String requestIdentifier,
-																 @Nonnull String rawRequest) {
+																 @Nonnull String rawRequest) throws URISyntaxException {
 		requireNonNull(requestIdentifier);
 		requireNonNull(rawRequest);
 
@@ -899,7 +907,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 
 				if (uri == null)
-					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
+					throw new URISyntaxException(rawUri, format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
 				requestBuilder = Request.with(HttpMethod.GET, rawUri);
 			} else {

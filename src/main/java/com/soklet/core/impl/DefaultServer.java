@@ -284,9 +284,15 @@ public class DefaultServer implements Server {
 							}
 						}));
 					} catch (Throwable t) {
-						safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
-								.throwable(t)
-								.build());
+						if (t instanceof URISyntaxException) {
+							safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, format("Unable to parse request URI: %s", microhttpRequest.uri()))
+									.throwable(t)
+									.build());
+						} else {
+							safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
+									.throwable(t)
+									.build());
+						}
 
 						if (shouldWriteFailsafeResponse.get()) {
 							try {
@@ -319,7 +325,7 @@ public class DefaultServer implements Server {
 	protected String decodeUrlPathOnly(@Nonnull String url) {
 		try {
 			URI uri = new URI(url);
-			
+
 			// URL-decode the path component
 			String decodedPath = URLDecoder.decode(uri.getRawPath(), StandardCharsets.UTF_8.toString());
 

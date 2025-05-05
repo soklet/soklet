@@ -88,9 +88,21 @@ public enum LogEventType {
 	 */
 	RESOURCE_METHOD_RESOLUTION_FAILED,
 	/**
+	 * Indicates that the {@link Server} received a request with an illegal structure, which generally indicates a bot searching for vulnerabilities.
+	 * <p>
+	 * Example: {@code "/\\\\\\%20.../%20.../%20.../%20.../%20.../%20.../etc/passwd"}.
+	 */
+	SERVER_UNPARSEABLE_REQUEST,
+	/**
 	 * Indicates an internal {@link Server} error occurred.
 	 */
 	SERVER_INTERNAL_ERROR,
+	/**
+	 * Indicates that the {@link ServerSentEventServer} received a request with an illegal structure, which generally indicates a bot searching for vulnerabilities.
+	 * <p>
+	 * Example: {@code "/\\\\\\%20.../%20.../%20.../%20.../%20.../%20.../etc/passwd"}.
+	 */
+	SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST,
 	/**
 	 * Indicates an internal {@link ServerSentEventServer} error occurred.
 	 */
