@@ -518,9 +518,10 @@ public class Request {
 	 * This method will lazily parse {@code Accept-Language} header values into to an ordered {@link List} of {@link Locale} when first invoked.  This representation is then cached and re-used for subsequent invocations.
 	 * <p>
 	 * This method is threadsafe.
+	 * <p>
+	 * See {@link #getLanguageRanges()} for a variant that pulls {@link LanguageRange} values.
 	 *
 	 * @return locale information for this request, or the empty list if none was specified
-	 * @see #getLanguageRanges() for a variant that pulls {@link LanguageRange} values
 	 */
 	@Nonnull
 	public List<Locale> getLocales() {
@@ -558,9 +559,10 @@ public class Request {
 	 * This method will lazily parse {@code Accept-Language} header values into to an ordered {@link List} of {@link LanguageRange} when first invoked.  This representation is then cached and re-used for subsequent invocations.
 	 * <p>
 	 * This method is threadsafe.
+	 * <p>
+	 * See {@link #getLocales()} for a variant that pulls {@link Locale} values.
 	 *
 	 * @return language range information for this request, or the empty list if none was specified
-	 * @see #getLocales() for a variant that pulls {@link Locale} values
 	 */
 	@Nonnull
 	public List<LanguageRange> getLanguageRanges() {
