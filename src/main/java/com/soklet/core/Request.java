@@ -33,6 +33,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Locale.LanguageRange;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -103,6 +104,8 @@ public class Request {
 	private volatile String bodyAsString = null;
 	@Nullable
 	private volatile List<Locale> locales = null;
+	@Nullable
+	private volatile List<LanguageRange> languageRanges = null;
 
 	/**
 	 * Acquires a builder for {@link Request} instances.
@@ -517,6 +520,7 @@ public class Request {
 	 * This method is threadsafe.
 	 *
 	 * @return locale information for this request, or the empty list if none was specified
+	 * @see #getLanguageRanges() for a variant that pulls {@link LanguageRange} values
 	 */
 	@Nonnull
 	public List<Locale> getLocales() {
@@ -527,10 +531,16 @@ public class Request {
 				if (this.locales == null) {
 					Set<String> acceptLanguageHeaderValue = getHeaders().get("Accept-Language");
 
-					if (acceptLanguageHeaderValue != null && acceptLanguageHeaderValue.size() > 0)
-						this.locales = unmodifiableList(Utilities.localesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue.stream().findFirst().get()));
-					else
+					if (acceptLanguageHeaderValue != null && acceptLanguageHeaderValue.size() > 0) {
+						try {
+							this.locales = unmodifiableList(Utilities.localesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue.stream().findFirst().get()));
+						} catch (Exception ignored) {
+							// Malformed accept-language header; ignore it
+							this.locales = List.of();
+						}
+					} else {
 						this.locales = List.of();
+					}
 				} else {
 					this.locales = List.of();
 				}
@@ -540,6 +550,46 @@ public class Request {
 		}
 
 		return this.locales;
+	}
+
+	/**
+	 * {@link LanguageRange} information for this request as specified by {@code Accept-Language} header value[s].
+	 * <p>
+	 * This method will lazily parse {@code Accept-Language} header values into to an ordered {@link List} of {@link LanguageRange} when first invoked.  This representation is then cached and re-used for subsequent invocations.
+	 * <p>
+	 * This method is threadsafe.
+	 *
+	 * @return language range information for this request, or the empty list if none was specified
+	 * @see #getLocales() for a variant that pulls {@link Locale} values
+	 */
+	@Nonnull
+	public List<LanguageRange> getLanguageRanges() {
+		// Lazily instantiate our parsed locales using double-checked locking
+		if (this.languageRanges == null) {
+			getLock().lock();
+			try {
+				if (this.languageRanges == null) {
+					Set<String> acceptLanguageHeaderValue = getHeaders().get("Accept-Language");
+
+					if (acceptLanguageHeaderValue != null && acceptLanguageHeaderValue.size() > 0) {
+						try {
+							this.languageRanges = Collections.unmodifiableList(LanguageRange.parse(acceptLanguageHeaderValue.stream().findFirst().get()));
+						} catch (Exception ignored) {
+							// Malformed accept-language header; ignore it
+							this.languageRanges = List.of();
+						}
+					} else {
+						this.languageRanges = List.of();
+					}
+				} else {
+					this.languageRanges = List.of();
+				}
+			} finally {
+				getLock().unlock();
+			}
+		}
+
+		return this.languageRanges;
 	}
 
 	/**
