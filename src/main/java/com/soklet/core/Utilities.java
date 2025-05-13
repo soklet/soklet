@@ -253,7 +253,7 @@ public final class Utilities {
 		Map<String, Set<String>> cookies = new LinkedCaseInsensitiveMap<>();
 
 		for (Map.Entry<String, Set<String>> entry : headers.entrySet()) {
-			if (entry.getKey().equals("Cookie")) {
+			if (entry.getKey().trim().toLowerCase(Locale.ENGLISH).equals("cookie")) {
 				Set<String> values = entry.getValue();
 
 				for (String value : values) {

@@ -144,8 +144,9 @@ public class Request {
 		this.httpMethod = builder.httpMethod;
 
 		// Header names are case-insensitive.  Enforce that here with a special map
-		this.headers = Collections.unmodifiableMap(new LinkedCaseInsensitiveMap<>(builder.headers));
-		this.cookies = Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(this.headers));
+		Map<String, Set<String>> caseInsensitiveHeaders = new LinkedCaseInsensitiveMap<>(builder.headers);
+		this.headers = Collections.unmodifiableMap(caseInsensitiveHeaders);
+		this.cookies = Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(caseInsensitiveHeaders));
 		this.corsPreflight = this.httpMethod == HttpMethod.OPTIONS ? CorsPreflight.fromHeaders(this.headers).orElse(null) : null;
 		this.cors = this.corsPreflight == null ? Cors.fromHeaders(this.httpMethod, this.headers).orElse(null) : null;
 		this.body = builder.body;
