@@ -30,8 +30,10 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
+import java.nio.charset.StandardCharsets;
 import java.nio.charset.UnsupportedCharsetException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -40,6 +42,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Locale.LanguageRange;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -252,17 +255,21 @@ public final class Utilities {
 
 		Map<String, Set<String>> cookies = new LinkedCaseInsensitiveMap<>();
 
-		for (Map.Entry<String, Set<String>> entry : headers.entrySet()) {
-			if (entry.getKey().trim().toLowerCase(Locale.ENGLISH).equals("cookie")) {
+		for (Entry<String, Set<String>> entry : headers.entrySet()) {
+			if ("cookie".equalsIgnoreCase(entry.getKey().trim())) {
 				Set<String> values = entry.getValue();
+				
+				if (values == null)
+					continue;
 
-				for (String value : values) {
-					value = trimAggressivelyToNull(value);
+				for (String headerValue : values) {
+					headerValue = trimAggressivelyToNull(headerValue);
 
-					if (value == null)
+					if (headerValue == null)
 						continue;
 
-					String[] cookieComponents = value.split(";");
+					// Each headerValue looks like "name1=val1; name2=val2"
+					String[] cookieComponents = headerValue.split(";");
 
 					for (String cookieComponent : cookieComponents) {
 						cookieComponent = trimAggressivelyToNull(cookieComponent);
@@ -270,32 +277,39 @@ public final class Utilities {
 						if (cookieComponent == null)
 							continue;
 
-						String[] cookiePair = cookieComponent.split("=");
+						String[] cookiePair = cookieComponent.split("=", 2);
+						String rawName = trimAggressivelyToNull(cookiePair[0]);
+						String rawValue = (cookiePair.length == 2 ? trimAggressivelyToNull(cookiePair[1]) : null);
 
-						if (cookiePair.length != 1 && cookiePair.length != 2)
+						if (rawName == null)
 							continue;
 
-						String cookieName = trimAggressivelyToNull(cookiePair[0]);
-						String cookieValue = cookiePair.length == 1 ? null : trimAggressivelyToNull(cookiePair[1]);
+						// URL-decode name & value
+						String cookieName = safelyUrlDecode(rawName);
+						String cookieValue = rawValue == null ? null : safelyUrlDecode(rawValue);
 
-						if (cookieName == null)
-							continue;
-
-						Set<String> cookieValues = cookies.get(cookieName);
-
-						if (cookieValues == null) {
-							cookieValues = new LinkedHashSet<>();
-							cookies.put(cookieName, cookieValues);
-						}
+						cookies.computeIfAbsent(cookieName, key -> new LinkedHashSet<>());
 
 						if (cookieValue != null)
-							cookieValues.add(cookieValue);
+							cookies.get(cookieName).add(cookieValue);
 					}
 				}
 			}
 		}
 
 		return cookies;
+	}
+
+	@Nonnull
+	private static String safelyUrlDecode(@Nonnull String string) {
+		requireNonNull(string);
+
+		try {
+			return URLDecoder.decode(string, StandardCharsets.UTF_8);
+		} catch (Exception e) {
+			// Shouldn't occur, but fall back to the raw string if there is some kind of decoding issue
+			return string;
+		}
 	}
 
 	@Nonnull
