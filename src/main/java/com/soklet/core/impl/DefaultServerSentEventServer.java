@@ -99,6 +99,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 	@Nonnull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
+	@Nonnull
+	private static final Integer DEFAULT_CONNECTION_QUEUE_CAPACITY;
 
 	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK;
@@ -111,6 +113,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
+		DEFAULT_CONNECTION_QUEUE_CAPACITY = 256;
 
 		// Make a unique "validity check" server-sent event used to wake a socket listener thread by injecting it into the relevant write queue.
 		// When this event is taken off of the queue, a validity check is performed on the socket to see if it's still active.
@@ -226,7 +229,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
-				serverSentEventConnection.getWriteQueue().add(serverSentEvent);
+				enqueueServerSentEvent(serverSentEventConnection, serverSentEvent);
 		}
 
 		@Nonnull
@@ -254,7 +257,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				// If requested, send a poison pill so the socket thread gets terminated
 				if (sendPoisonPill)
-					serverSentEventConnection.getWriteQueue().add(SERVER_SENT_EVENT_POISON_PILL);
+					enqueueServerSentEvent(serverSentEventConnection, SERVER_SENT_EVENT_POISON_PILL);
 			}
 
 			return unregistered;
@@ -425,6 +428,19 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
+	private static void enqueueServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																						 @Nonnull ServerSentEvent serverSentEvent) {
+		requireNonNull(serverSentEventConnection);
+		requireNonNull(serverSentEvent);
+
+		BlockingQueue<ServerSentEvent> writeQueue = serverSentEventConnection.getWriteQueue();
+
+		if (!writeQueue.offer(serverSentEvent)) {
+			writeQueue.poll();
+			writeQueue.offer(serverSentEvent);
+		}
+	}
+
 	protected void performConnectionValidityTask() {
 		Collection<DefaultServerSentEventBroadcaster> broadcasters = getBroadcastersByResourcePath().values();
 		int i = 0;
@@ -453,7 +469,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 						++j;
 						//System.out.println(format("Enqueuing heartbeat for socket %d of %d...", j, serverSentEventConnections.size()));
 						// TODO: keep track of when the most recent validity check was done so we don't do it too frequently, e.g. with AtomicReference<Instant> on ServerSentEventConnection (nice-to-have)
-						serverSentEventConnection.writeQueue.add(SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK); // TODO: should this just be the heartbeat event?
+						enqueueServerSentEvent(serverSentEventConnection, SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK); // TODO: should this just be the heartbeat event?
 					}
 				}
 			}
@@ -775,7 +791,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			this.request = request;
 			this.resourceMethod = resourceMethod;
-			this.writeQueue = new ArrayBlockingQueue<>(8);
+			this.writeQueue = new ArrayBlockingQueue<>(DEFAULT_CONNECTION_QUEUE_CAPACITY);
 			this.establishedAt = Instant.now(); // Don't use this for anything currently, but might later
 		}
 
