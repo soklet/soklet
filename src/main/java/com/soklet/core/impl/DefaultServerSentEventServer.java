@@ -43,6 +43,7 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -488,6 +489,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			while (!getStopPoisonPill().get()) {
 				SocketChannel clientSocketChannel = this.serverSocketChannel.accept();
+				Socket socket = clientSocketChannel.socket();
+				socket.setKeepAlive(true);
+				socket.setTcpNoDelay(true);
+				
 				executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
 			}
 		} catch (ClosedChannelException ignored) {
@@ -687,10 +692,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// TODO: make this a configurable value.  It's just here temporarily.
 		final Map<String, Set<String>> DEFAULT_HEADERS = Map.of(
-				"Content-Type", Set.of("text/event-stream"),
+				"Content-Type", Set.of("text/event-stream; charset=utf-8"),
 				"Cache-Control", Set.of("no-cache"),
 				"Connection", Set.of("keep-alive"),
-				"X-Accel-Buffering", Set.of("on")
+				"X-Accel-Buffering", Set.of("no")
 		);
 
 		final Set<String> ILLEGAL_HEADER_NAMES = Set.of("Content-Length");
@@ -1047,8 +1052,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	 */
 	@Nonnull
 	protected Optional<Request> parseTooLargeRequestForRawRequest(@Nonnull String requestIdentifier,
-																																@Nullable String rawRequest) {
+																																@Nonnull String rawRequest) {
 		requireNonNull(requestIdentifier);
+		requireNonNull(rawRequest);
 
 		// Supports both relative and absolute paths.
 		// e.g. "GET /index.html HTTP/1.1\r\n" would return "/index.html".
