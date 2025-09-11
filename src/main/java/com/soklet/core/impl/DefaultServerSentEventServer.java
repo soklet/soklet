@@ -17,6 +17,7 @@
 package com.soklet.core.impl;
 
 import com.soklet.SokletConfiguration;
+import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.core.HttpMethod;
 import com.soklet.core.LifecycleInterceptor;
 import com.soklet.core.LogEvent;
@@ -76,6 +77,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -99,6 +101,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 	@Nonnull
+	private static final Duration DEFAULT_HEARTBEAT_INTERVAL;
+	@Nonnull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 	@Nonnull
 	private static final Integer DEFAULT_CONNECTION_QUEUE_CAPACITY;
@@ -113,6 +117,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
+		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 		DEFAULT_CONNECTION_QUEUE_CAPACITY = 256;
 
@@ -136,6 +141,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final Duration requestTimeout;
 	@Nonnull
 	private final Duration shutdownTimeout;
+	@Nonnull
+	private final Duration heartbeatInterval;
 	@Nonnull
 	private final Integer maximumRequestSizeInBytes;
 	@Nonnull
@@ -303,6 +310,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
+		this.heartbeatInterval = builder.heartbeatInterval != null ? builder.heartbeatInterval : DEFAULT_HEARTBEAT_INTERVAL;
 		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
 		if (this.maximumRequestSizeInBytes <= 0)
@@ -310,6 +318,15 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		if (this.requestReadBufferSizeInBytes <= 0)
 			throw new IllegalArgumentException("Request read buffer size must be > 0");
+
+		if (this.requestTimeout.isNegative() || this.requestTimeout.isZero())
+			throw new IllegalArgumentException("Request timeout must be > 0");
+
+		if (this.shutdownTimeout.isNegative())
+			throw new IllegalArgumentException("Shutdown timeout must be >= 0");
+
+		if (this.heartbeatInterval.isNegative() || this.heartbeatInterval.isZero())
+			throw new IllegalArgumentException("Heartbeat interval must be > 0");
 
 		// TODO: let clients specify initial capacity
 		this.broadcastersByResourcePath = new ConcurrentHashMap<>(1_024);
@@ -377,10 +394,18 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// Pick out all the @ServerSentEventSource resource methods and store off keyed on resource path for ease of lookup.
 		// This is computed just once here and will never change.
-		// TODO: we should fail-fast if there are multiple @ServerSentEventSource annotations with the same resource path.  Should that happen here or at the Soklet level?
-		this.resourceMethodsByResourcePathDeclaration = sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
-				.filter(resourceMethod -> resourceMethod.isServerSentEventSource())
-				.collect(Collectors.toMap(ResourceMethod::getResourcePathDeclaration, Function.identity()));
+		// Fail fast if there are duplicates for the same declaration.
+		this.resourceMethodsByResourcePathDeclaration =
+				sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
+						.filter(ResourceMethod::isServerSentEventSource)
+						.collect(Collectors.toMap(
+								ResourceMethod::getResourcePathDeclaration,
+								Function.identity(),
+								(resourceMethod1, resourceMethod2) -> {
+									throw new IllegalStateException(format("Multiple @%s methods mapped to the same resource path: %s",
+											ServerSentEventSource.class.getSimpleName(), resourceMethod1.getResourcePathDeclaration()));
+								}
+						));
 	}
 
 	@Override
@@ -414,7 +439,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			});
 
-			// TODO: make durations configurable
+			int initialDelayInSeconds = (int) Math.max(1, Math.min(5, getHeartbeatInterval().getSeconds()));
+			long periodInSeconds = Math.max(1, getHeartbeatInterval().getSeconds());
+
 			this.connectionValidityExecutorService.scheduleWithFixedDelay(() -> {
 				try {
 					performConnectionValidityTask();
@@ -423,7 +450,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 							.throwable(throwable)
 							.build());
 				}
-			}, 5, 15, TimeUnit.SECONDS);
+			}, initialDelayInSeconds, periodInSeconds, TimeUnit.SECONDS);
 		} finally {
 			getLock().unlock();
 		}
@@ -444,33 +471,25 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	protected void performConnectionValidityTask() {
 		Collection<DefaultServerSentEventBroadcaster> broadcasters = getBroadcastersByResourcePath().values();
-		int i = 0;
-
-		//System.out.println("Global connections (" + getGlobalConnections().size() + "): " + getGlobalConnections());
 
 		if (broadcasters.size() > 0) {
+			final long nowInNanos = System.nanoTime();
+
 			for (DefaultServerSentEventBroadcaster broadcaster : broadcasters) {
-				++i;
-				//System.out.println(format("Performing validity checks for broadcaster %d of %d (%s)...", i, broadcasters.size(), broadcaster.getResourcePath().getPath()));
-
 				Set<ServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
-
-				//System.out.println(format("This broadcaster has %d SSE connections", serverSentEventConnections.size()));
 
 				if (serverSentEventConnections.size() == 0) {
 					// This broadcaster can be entirely dealloced because it has no more connections.
-					// TODO: this should be more of a failsafe, we should factor into its own method and call this at the end of a socket thread too for immediate cleanup
-					// TODO: broadcaster removes/adds be protected with a "broadcasterLock"
-					//System.out.println("Because this broadcaster has no connections, removing it.");
-					getBroadcastersByResourcePath().remove(broadcaster.getResourcePath());
+					// Remove empty broadcaster as a failsafe (also handled on connection teardown).
+					getBroadcastersByResourcePath().remove(broadcaster.getResourcePath(), broadcaster);
 				} else {
-					int j = 0;
-
 					for (ServerSentEventConnection serverSentEventConnection : serverSentEventConnections) {
-						++j;
-						//System.out.println(format("Enqueuing heartbeat for socket %d of %d...", j, serverSentEventConnections.size()));
-						// TODO: keep track of when the most recent validity check was done so we don't do it too frequently, e.g. with AtomicReference<Instant> on ServerSentEventConnection (nice-to-have)
-						enqueueServerSentEvent(serverSentEventConnection, SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK); // TODO: should this just be the heartbeat event?
+						// Throttle heartbeats per connection
+						AtomicLong lastValidityCheckInNanos = serverSentEventConnection.getLastValidityCheckInNanos();
+						long previousValidityCheckInNanos = lastValidityCheckInNanos.get();
+
+						if ((nowInNanos - previousValidityCheckInNanos) >= getHeartbeatInterval().toNanos() && lastValidityCheckInNanos.compareAndSet(previousValidityCheckInNanos, nowInNanos))
+							enqueueServerSentEvent(serverSentEventConnection, SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK);
 					}
 				}
 			}
@@ -492,7 +511,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				Socket socket = clientSocketChannel.socket();
 				socket.setKeepAlive(true);
 				socket.setTcpNoDelay(true);
-				
+
 				executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
 			}
 		} catch (ClosedChannelException ignored) {
@@ -563,7 +582,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				String handshakeResponse = toHandshakeResponse(marshaledResponse);
 
 				try {
-					clientSocketChannel.write(ByteBuffer.wrap(handshakeResponse.getBytes(StandardCharsets.UTF_8)));
+					ByteBuffer byteBuffer = ByteBuffer.wrap(handshakeResponse.getBytes(StandardCharsets.UTF_8));
+
+					while (byteBuffer.hasRemaining())
+						clientSocketChannel.write(byteBuffer);
 				} catch (IOException e) {
 					// TODO: log out?
 					throw new UncheckedIOException("Unable to write initial SSE handshake response", e);
@@ -667,6 +689,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 							.throwable(exception)
 							.build());
 				} finally {
+					// If that broadcaster is now empty, remove it promptly
+					if (clientSocketChannelRegistration != null)
+						maybeCleanupBroadcaster(clientSocketChannelRegistration.broadcaster());
+
 					if (clientSocketChannelRegistration != null && resourceMethod != null) {
 						Instant connectionFinished = Instant.now();
 						Duration connectionDuration = Duration.between(clientSocketChannelRegistration.serverSentEventConnection().getEstablishedAt(), connectionFinished);
@@ -690,15 +716,14 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		// "X-Accel-Buffering: no\r\n" +
 		// "Connection: keep-alive\r\n\r\n";
 
-		// TODO: make this a configurable value.  It's just here temporarily.
-		final Map<String, Set<String>> DEFAULT_HEADERS = Map.of(
-				"Content-Type", Set.of("text/event-stream; charset=utf-8"),
-				"Cache-Control", Set.of("no-cache"),
-				"Connection", Set.of("keep-alive"),
-				"X-Accel-Buffering", Set.of("no")
-		);
+		// Default SSE headers applied only on success (2xx). Case-insensitive map to avoid duplicates.
+		LinkedCaseInsensitiveMap<Set<String>> DEFAULT_HEADERS = new LinkedCaseInsensitiveMap<>(4);
+		DEFAULT_HEADERS.put("Content-Type", Set.of("text/event-stream; charset=utf-8"));
+		DEFAULT_HEADERS.put("Cache-Control", Set.of("no-cache"));
+		DEFAULT_HEADERS.put("Connection", Set.of("keep-alive"));
+		DEFAULT_HEADERS.put("X-Accel-Buffering", Set.of("no"));
 
-		final Set<String> ILLEGAL_HEADER_NAMES = Set.of("Content-Length");
+		final Set<String> ILLEGAL_HEADER_NAMES_LOWER = Set.of("content-length");
 
 		int statusCode = marshaledResponse.getStatusCode();
 		Map<String, Set<String>> headers = marshaledResponse.getHeaders();
@@ -706,27 +731,30 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		List<String> lines = new ArrayList<>(1 + headers.size());
 
 		// e.g. "HTTP/1.1 200 OK"
-		lines.add(format("HTTP/1.1 %d %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()));
+		String reason = StatusCode.fromStatusCode(statusCode).map(StatusCode::getReasonPhrase).orElse("");
+		lines.add(format("HTTP/1.1 %d %s", statusCode, reason));
 
 		// Write default headers
-		// TODO: do these apply for responses > HTTP 299?  Probably not.
-		for (Entry<String, Set<String>> entry : DEFAULT_HEADERS.entrySet()) {
-			String headerName = entry.getKey();
-			Set<String> headerValues = entry.getValue();
+		if (statusCode >= 200 && statusCode < 300) {
+			for (Entry<String, Set<String>> entry : DEFAULT_HEADERS.entrySet()) {
+				String headerName = entry.getKey();
+				Set<String> headerValues = entry.getValue();
 
-			if (headerValues != null)
-				for (String headerValue : headerValues)
-					lines.add(format("%s: %s", headerName, headerValue));
+				if (headerValues != null)
+					for (String headerValue : headerValues)
+						lines.add(format("%s: %s", headerName, headerValue));
+			}
 		}
 
 		// Write custom headers
 		for (Entry<String, Set<String>> entry : headers.entrySet()) {
-			// TODO: case-insensitive comparison
 			String headerName = entry.getKey();
 			Set<String> headerValues = entry.getValue();
 
 			// Only write headers that are not part of the default set
-			if (!DEFAULT_HEADERS.containsKey(headerName) && !ILLEGAL_HEADER_NAMES.contains(headerName))
+			if (!DEFAULT_HEADERS.containsKey(headerName)
+					&& !ILLEGAL_HEADER_NAMES_LOWER.contains(headerName.toLowerCase(Locale.ENGLISH)))
+
 				if (headerValues != null)
 					for (String headerValue : headerValues)
 						lines.add(format("%s: %s", headerName, headerValue));
@@ -788,6 +816,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final BlockingQueue<ServerSentEvent> writeQueue;
 		@Nonnull
 		private final Instant establishedAt;
+		@Nonnull
+		private final AtomicLong lastValidityCheckInNanos;
 
 		public ServerSentEventConnection(@Nonnull Request request,
 																		 @Nonnull ResourceMethod resourceMethod) {
@@ -797,7 +827,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.request = request;
 			this.resourceMethod = resourceMethod;
 			this.writeQueue = new ArrayBlockingQueue<>(DEFAULT_CONNECTION_QUEUE_CAPACITY);
-			this.establishedAt = Instant.now(); // Don't use this for anything currently, but might later
+			this.establishedAt = Instant.now();
+			this.lastValidityCheckInNanos = new AtomicLong(System.nanoTime());
 		}
 
 		@Nonnull
@@ -819,6 +850,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		public Instant getEstablishedAt() {
 			return this.establishedAt;
 		}
+
+		@Nonnull
+		public AtomicLong getLastValidityCheckInNanos() {
+			return this.lastValidityCheckInNanos;
+		}
 	}
 
 	protected record ClientSocketChannelRegistration(@Nonnull ServerSentEventConnection serverSentEventConnection,
@@ -834,6 +870,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 																																									@Nonnull Request request) {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
+
+		if (isStopping() || !isStarted())
+			return Optional.empty();
 
 		ResourcePath resourcePath = request.getResourcePath();
 
@@ -854,6 +893,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		getGlobalConnections().put(serverSentEventConnection, broadcaster);
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
+	}
+
+	protected void maybeCleanupBroadcaster(@Nonnull DefaultServerSentEventBroadcaster broadcaster) {
+		requireNonNull(broadcaster);
+
+		try {
+			if (broadcaster.getServerSentEventConnections().isEmpty())
+				getBroadcastersByResourcePath().remove(broadcaster.getResourcePath(), broadcaster);
+		} catch (Throwable ignored) {
+			// Nothing to do
+		}
 	}
 
 	@Nonnull
@@ -1012,8 +1062,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					requestBuilder.append(new String(bytes, StandardCharsets.UTF_8));
 
-					// Check if the headers are complete (look for the "\r\n\r\n" marker)
-					if (requestBuilder.indexOf("\r\n\r\n") != -1)
+					// Check if the headers are complete (CRLFCRLF or LFLF)
+					if (requestBuilder.indexOf("\r\n\r\n") != -1 || requestBuilder.indexOf("\n\n") != -1)
 						headersComplete = true;
 
 					// Clear the buffer for the next read
@@ -1062,6 +1112,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		String firstLine = null;
 
 		int crLfIndex = rawRequest.indexOf("\r\n");
+		if (crLfIndex == -1)
+			crLfIndex = rawRequest.indexOf('\n');
 
 		if (crLfIndex != -1)
 			firstLine = rawRequest.substring(0, crLfIndex).trim();
@@ -1151,8 +1203,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			try {
-				this.connectionValidityExecutorService.shutdown();
-				this.connectionValidityExecutorService.awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
+				if (this.connectionValidityExecutorService != null) {
+					this.connectionValidityExecutorService.shutdown();
+					this.connectionValidityExecutorService.awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
+				}
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
@@ -1185,8 +1239,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			getGlobalConnections().clear();
 
 			try {
-				getRequestHandlerExecutorService().get().shutdown();
-				getRequestHandlerExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
+				if (getRequestHandlerExecutorService().isPresent()) {
+					getRequestHandlerExecutorService().get().shutdown();
+					getRequestHandlerExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
+				}
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
@@ -1196,8 +1252,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			try {
-				getRequestReaderExecutorService().get().shutdown();
-				getRequestReaderExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
+				if (getRequestReaderExecutorService().isPresent()) {
+					getRequestReaderExecutorService().get().shutdown();
+					getRequestReaderExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
+				}
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
@@ -1252,6 +1310,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (resourcePath == null)
 			return Optional.empty();
 
+		if (isStopping() || !isStarted())
+			return Optional.empty();
+
 		return acquireBroadcasterInternal(resourcePath);
 	}
 
@@ -1267,7 +1328,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		ResourceMethod resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
 
-		// TODO: should this be sent as a LogEvent?
+		// Internal sanity guard
 		if (resourceMethod == null)
 			throw new IllegalStateException(format("Internal error: unable to find %s instance that matches %s", ResourceMethod.class, resourcePathDeclaration));
 
@@ -1338,6 +1399,11 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Duration getShutdownTimeout() {
 		return this.shutdownTimeout;
+	}
+
+	@Nonnull
+	protected Duration getHeartbeatInterval() {
+		return this.heartbeatInterval;
 	}
 
 	@Nonnull
@@ -1443,6 +1509,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nullable
 		private Duration shutdownTimeout;
 		@Nullable
+		private Duration heartbeatInterval;
+		@Nullable
 		private Integer maximumRequestSizeInBytes;
 		@Nullable
 		private Integer requestReadBufferSizeInBytes;
@@ -1479,6 +1547,12 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
 			this.shutdownTimeout = shutdownTimeout;
+			return this;
+		}
+
+		@Nonnull
+		public Builder heartbeatInterval(@Nullable Duration heartbeatInterval) {
+			this.heartbeatInterval = heartbeatInterval;
 			return this;
 		}
 
