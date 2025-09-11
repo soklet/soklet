@@ -47,6 +47,7 @@ import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
@@ -165,6 +166,8 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	private volatile Boolean stopping;
 	@Nullable
 	private Thread eventLoopThread;
+	@Nullable
+	private volatile ServerSocketChannel serverSocketChannel;
 	// Does not need to be concurrent because it's calculated just once at initialization time and is never modified after
 	@Nonnull
 	private Map<ResourcePathDeclaration, ResourceMethod> resourceMethodsByResourcePathDeclaration;
@@ -393,8 +396,10 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
 			this.requestReaderExecutorService = getRequestReaderExecutorServiceSupplier().get();
+			this.stopping = false;
+			this.started = true; // set before thread starts to avoid early exit races
 			this.eventLoopThread = new Thread(this::startInternal, "sse-event-loop");
-			eventLoopThread.start();
+			this.eventLoopThread.start();
 
 			this.connectionValidityExecutorService = Executors.newScheduledThreadPool(1, new ThreadFactory() {
 				@Override
@@ -415,8 +420,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 							.build());
 				}
 			}, 5, 15, TimeUnit.SECONDS);
-
-			this.started = true;
 		} finally {
 			getLock().unlock();
 		}
@@ -458,34 +461,26 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	protected void startInternal() {
-		// Handle scenario where server is stopped immediately after starting (and before this thread is scheduled)
-		// TODO: clean this up
-		if (!isStarted() || isStopping()) {
-			//System.out.println("Server is stopped or stopping, exiting SSE event loop...");
+		if (isStopping())
 			return;
-		}
 
-		try (ServerSocketChannel serverSocketChannel = ServerSocketChannel.open()) {
-			serverSocketChannel.bind(new InetSocketAddress(getPort()));
-
-			// Handle scenario where server is stopped immediately after starting (and before this thread is scheduled)
-			// TODO: clean this up
-			if (!isStarted() || isStopping()) {
-				//System.out.println("Server is stopped or stopping, exiting SSE event loop...");
-				return;
-			}
+		try {
+			this.serverSocketChannel = ServerSocketChannel.open();
+			this.serverSocketChannel.bind(new InetSocketAddress(getHost(), getPort()));
 
 			ExecutorService executorService = getRequestHandlerExecutorService().get();
 
 			while (!getStopPoisonPill().get()) {
-				SocketChannel clientSocketChannel = serverSocketChannel.accept();
+				SocketChannel clientSocketChannel = this.serverSocketChannel.accept();
 				executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
 			}
+		} catch (ClosedChannelException ignored) {
+			// expected during shutdown
 		} catch (IOException e) {
-			throw new UncheckedIOException(e);
+			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+					"SSE event loop encountered an IO error").throwable(e).build());
 		} finally {
-			// In case we are not already being stopped, force a stop
-			stop();
+			this.serverSocketChannel = null;
 		}
 	}
 
@@ -592,7 +587,9 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 					Throwable writeThrowable = null;
 
 					try {
-						clientSocketChannel.write(buffer);
+						while (buffer.hasRemaining()) {
+							clientSocketChannel.write(buffer);
+						}
 					} catch (Throwable t) {
 						writeThrowable = t;
 					} finally {
@@ -600,7 +597,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 						Duration writeDuration = Duration.between(writeStarted, writeFinished);
 
 						getLifecycleInterceptor().get().didFinishServerSentEventWriting(request,
-								clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, throwable);
+								clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, writeThrowable);
 
 						if (writeThrowable != null)
 							throw writeThrowable;
@@ -1119,6 +1116,17 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				return;
 
 			this.stopping = true;
+			getStopPoisonPill().set(true);
+
+			// Close server socket to unblock accept()
+			if (this.serverSocketChannel != null) {
+				try {
+					this.serverSocketChannel.close();
+				} catch (Exception e) {
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+							"Unable to close Server-Sent Event SocketChannel").throwable(e).build());
+				}
+			}
 
 			try {
 				this.connectionValidityExecutorService.shutdown();
@@ -1131,7 +1139,14 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 						.build());
 			}
 
-			getStopPoisonPill().set(true);
+			// Wait briefly for the event-loop thread to exit
+			if (this.eventLoopThread != null) {
+				try {
+					this.eventLoopThread.join(Math.max(1_000L, getShutdownTimeout().toMillis()));
+				} catch (InterruptedException e) {
+					interrupted = true;
+				}
+			}
 
 			// TODO: need an additional check/lock to prevent race condition where someone acquires an event source while we are shutting down
 			for (DefaultServerSentEventBroadcaster broadcaster : getBroadcastersByResourcePath().values()) {
@@ -1170,6 +1185,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 		} finally {
 			this.started = false;
+			this.stopping = false; // allow future restarts
 			this.eventLoopThread = null;
 			this.requestHandlerExecutorService = null;
 			this.requestReaderExecutorService = null;
