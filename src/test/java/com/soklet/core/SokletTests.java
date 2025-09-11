@@ -26,11 +26,9 @@ import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
 import com.soklet.annotation.ServerSentEventSource;
-import com.soklet.core.impl.DefaultInstanceProvider;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.DefaultServer;
 import com.soklet.core.impl.DefaultServerSentEventServer;
-import com.soklet.core.impl.WhitelistedOriginsCorsAuthorizer;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -41,6 +39,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -52,9 +51,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.SynchronousQueue;
-import java.util.function.Consumer;
-import java.util.function.Function;
 
 import static com.soklet.core.Utilities.emptyByteArray;
 import static java.util.Objects.requireNonNull;
@@ -414,6 +410,36 @@ public class SokletTests {
 		}));
 	}
 
+	@ThreadSafe
+	public static class HttpHeadResource {
+		@GET("/hello-world")
+		public String helloWorld() {
+			return "hello world";
+		}
+
+		@HEAD("/explicit-head-handling")
+		public Object explicitHeadHandling() {
+			return "violating spec by trying to return a HEAD response body";
+		}
+	}
+
+	@Nonnull
+	protected SokletConfiguration configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
+		return SokletConfiguration.forTesting()
+				// Use a resource method resolver that explicitly specifies resource classes
+				.resourceMethodResolver(new DefaultResourceMethodResolver(resourceClasses))
+				// Quiet logging to keep the console clean
+				.lifecycleInterceptor(new LifecycleInterceptor() {
+					@Override
+					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
+						// No-op
+					}
+				})
+				.build();
+	}
+
+	// SSE tests below
+
 	@Test
 	public void serverSentEventServerSimulator() throws InterruptedException {
 		SokletConfiguration configuration = SokletConfiguration.forTesting()
@@ -422,7 +448,6 @@ public class SokletTests {
 
 		Soklet.runSimulator(configuration, (simulator -> {
 			simulator.registerServerSentEventConsumer(ResourcePath.of("/examples/abc"), (serverSentEvent -> {
-				System.out.println("Received SSE: " + serverSentEvent);
 				Assert.assertEquals("SSE event mismatch", "example", serverSentEvent.getEvent().get());
 			}));
 
@@ -450,187 +475,7 @@ public class SokletTests {
 		@ServerSentEventSource("/examples/{exampleId}")
 		public Response exampleServerSentEventSource(@Nonnull Request request,
 																								 @Nonnull @PathParameter String exampleId) {
-			System.out.printf("Server-Sent Event Source connection initiated for %s with exampleId value %s\n", request.getId(), exampleId);
 			return Response.withStatusCode(200).build();
-		}
-	}
-
-	//@Test
-	public void serverSentEventServer() throws InterruptedException {
-		SynchronousQueue<String> shutdownQueue = new SynchronousQueue<>();
-		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(8081)
-				.concurrentConnectionLimit(2)
-				.maximumRequestSizeInBytes(50 * 1_024)
-				.requestReadBufferSizeInBytes(10)
-				.requestTimeout(Duration.ofSeconds(10))
-				.build();
-
-		SokletConfiguration configuration = SokletConfiguration.withServer(DefaultServer.withPort(8080).build())
-				.serverSentEventServer(serverSentEventServer)
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ServerSentEventResource.class)))
-				.corsAuthorizer(new WhitelistedOriginsCorsAuthorizer(Set.of("http://127.0.0.1:8082")))
-				.instanceProvider(new DefaultInstanceProvider() {
-					@Nonnull
-					@Override
-					public <T> T provide(@Nonnull Class<T> instanceClass) {
-						if (instanceClass.equals(ServerSentEventResource.class))
-							return (T) new ServerSentEventResource(serverSentEventServer, () -> {
-								try {
-									shutdownQueue.put("poison pill");
-								} catch (InterruptedException e) {
-									// Nothing to do
-									Thread.currentThread().interrupt();
-								}
-							});
-
-						return super.provide(instanceClass);
-					}
-				})
-				.lifecycleInterceptor(new LifecycleInterceptor() {
-					@Override
-					public void willStartServer(@Nonnull Server server) {
-						System.out.println("XXX Will start server");
-					}
-
-					@Override
-					public void didStartServer(@Nonnull Server server) {
-						System.out.println("XXX Did start server");
-					}
-
-					@Override
-					public void willStopServer(@Nonnull Server server) {
-						System.out.println("XXX Will stop server");
-					}
-
-					@Override
-					public void didStopServer(@Nonnull Server server) {
-						System.out.println("XXX Did stop server");
-					}
-
-					@Override
-					public void didStartRequestHandling(@Nonnull Request request,
-																							@Nullable ResourceMethod resourceMethod) {
-						System.out.println("XXX Did start request handling: " + request + ", resource method: " + resourceMethod);
-					}
-
-					@Override
-					public void didFinishRequestHandling(@Nonnull Request request,
-																							 @Nullable ResourceMethod resourceMethod,
-																							 @Nonnull MarshaledResponse marshaledResponse,
-																							 @Nonnull Duration processingDuration,
-																							 @Nonnull List<Throwable> throwables) {
-						System.out.println("XXX Did finish request handling: " + request + ", resource method: " + resourceMethod + ", marshaled response: " + marshaledResponse);
-					}
-
-					@Override
-					public void willStartResponseWriting(@Nonnull Request request,
-																							 @Nullable ResourceMethod resourceMethod,
-																							 @Nonnull MarshaledResponse marshaledResponse) {
-						System.out.println("XXX Will start response writing: " + request + ", resource method: " + resourceMethod);
-					}
-
-					@Override
-					public void didFinishResponseWriting(@Nonnull Request request,
-																							 @Nullable ResourceMethod resourceMethod,
-																							 @Nonnull MarshaledResponse marshaledResponse,
-																							 @Nonnull Duration responseWriteDuration,
-																							 @Nullable Throwable throwable) {
-						System.out.println("XXX Did finish response writing: " + request + ", resource method: " + resourceMethod);
-					}
-
-					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
-						System.out.println("XXX Did receive log event: " + logEvent);
-					}
-
-					@Override
-					public void interceptRequest(@Nonnull Request request,
-																			 @Nullable ResourceMethod resourceMethod,
-																			 @Nonnull Function<Request, MarshaledResponse> responseProducer,
-																			 @Nonnull Consumer<MarshaledResponse> responseWriter) {
-						//System.out.println("XXX Intercepting request: " + request);
-						MarshaledResponse response = responseProducer.apply(request);
-						responseWriter.accept(response);
-						//System.out.println("XXX Done intercepting request: " + request);
-					}
-
-					@Override
-					public void wrapRequest(@Nonnull Request request,
-																	@Nullable ResourceMethod resourceMethod,
-																	@Nonnull Consumer<Request> requestProcessor) {
-						//System.out.println("XXX Wrapping request: " + request);
-						requestProcessor.accept(request);
-						//System.out.println("XXX Done wrapping request: " + request);
-					}
-
-					@Override
-					public void willStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
-						System.out.println("XXX Will start server-sent event server");
-					}
-
-					@Override
-					public void didStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
-						System.out.println("XXX Did start server-sent event server");
-					}
-
-					@Override
-					public void willStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
-						System.out.println("XXX Will stop server-sent event server");
-					}
-
-					@Override
-					public void didStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
-						System.out.println("XXX Did stop server-sent event server");
-					}
-
-					@Override
-					public void willEstablishServerSentEventConnection(@Nonnull Request request,
-																														 @Nonnull ResourceMethod resourceMethod) {
-						System.out.println("XXX Will establish server-sent event connection");
-					}
-
-					@Override
-					public void didEstablishServerSentEventConnection(@Nonnull Request request,
-																														@Nonnull ResourceMethod resourceMethod) {
-						System.out.println("XXX Did establish server-sent event connection");
-					}
-
-					@Override
-					public void willStartServerSentEventWriting(@Nonnull Request request,
-																											@Nonnull ResourceMethod resourceMethod,
-																											@Nonnull ServerSentEvent serverSentEvent) {
-						System.out.println("XXX Starting server-sent event write for " + request.getPath() + ": " + serverSentEvent);
-					}
-
-					@Override
-					public void didFinishServerSentEventWriting(@Nonnull Request request,
-																											@Nonnull ResourceMethod resourceMethod,
-																											@Nonnull ServerSentEvent serverSentEvent,
-																											@Nonnull Duration writeDuration,
-																											@Nullable Throwable throwable) {
-						System.out.println("XXX Finished server-sent event write for " + request.getPath() + ": " + serverSentEvent);
-					}
-
-					@Override
-					public void willTerminateServerSentEventConnection(@Nonnull Request request,
-																														 @Nonnull ResourceMethod resourceMethod,
-																														 @Nullable Throwable throwable) {
-						System.out.println("XXX Will terminate server-sent event connection for " + request.getPath() + ": " + throwable);
-					}
-
-					@Override
-					public void didTerminateServerSentEventConnection(@Nonnull Request request,
-																														@Nonnull ResourceMethod resourceMethod,
-																														@Nonnull Duration connectionDuration,
-																														@Nullable Throwable throwable) {
-						System.out.println("XXX Did terminate server-sent event connection for " + request.getPath() + ": " + throwable);
-					}
-				})
-				.build();
-
-		try (Soklet soklet = new Soklet(configuration)) {
-			soklet.start();
-			shutdownQueue.take(); // Wait for someone to tell us to stop
 		}
 	}
 
@@ -682,31 +527,329 @@ public class SokletTests {
 		}
 	}
 
-	@ThreadSafe
-	public static class HttpHeadResource {
-		@GET("/hello-world")
-		public String helloWorld() {
-			return "hello world";
-		}
+	@Test(timeout = 5000)
+	public void sse_startStop_doesNotHang() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
 
-		@HEAD("/explicit-head-handling")
-		public Object explicitHeadHandling() {
-			return "violating spec by trying to return a HEAD response body";
+		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestTimeout(Duration.ofSeconds(5))
+				.build();
+
+		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle()) // no noise in test logs
+				.build();
+
+		try (Soklet app = new Soklet(cfg)) {
+			app.start();
+			// if stop hangs due to accept(), this test times out
+		} // try-with-resources stops both HTTP and SSE servers
+	}
+
+	@Test(timeout = 10000)
+	public void sse_handshakeHeaders_and_basicDelivery() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestTimeout(Duration.ofSeconds(5))
+				.build();
+
+		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = new Soklet(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+
+				// Handshake
+				writeHttpGet(socket, "/tests/abc", ssePort);
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+
+				Assert.assertNotNull("Did not receive HTTP response headers", rawHeaders);
+				String[] headerLines = rawHeaders.split("\r?\n");
+				Assert.assertTrue("Non-200 handshake", headerLines[0].startsWith("HTTP/1.1 200"));
+
+				Map<String, String> headers = parseHeaders(headerLines);
+				Assert.assertTrue("Missing text/event-stream",
+						headers.getOrDefault("content-type", "").toLowerCase().contains("text/event-stream"));
+				Assert.assertEquals("no", headers.getOrDefault("x-accel-buffering", "").toLowerCase());
+				Assert.assertEquals("keep-alive", headers.getOrDefault("connection", "").toLowerCase());
+				Assert.assertEquals("no-cache", headers.getOrDefault("cache-control", "").toLowerCase());
+
+				// Broadcast one event and verify frame formatting
+				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.of("/tests/abc")).get();
+				ServerSentEvent ev = ServerSentEvent.withEvent("test")
+						.data("hello\nworld")
+						.id("e1")
+						.retry(Duration.ofSeconds(10))
+						.build();
+				b.broadcast(ev);
+
+				String block = readUntil(socket.getInputStream(), "\n\n", 8192);
+				Assert.assertNotNull("Did not receive first SSE event", block);
+				List<String> lines = block.lines().map(String::trim).filter(s -> !s.isEmpty()).toList();
+
+				Assert.assertTrue(lines.stream().anyMatch(s -> s.equals("event: test")));
+				Assert.assertTrue(lines.stream().anyMatch(s -> s.equals("id: e1")));
+				Assert.assertTrue(lines.stream().anyMatch(s -> s.equals("retry: 10000")));
+				Assert.assertTrue(lines.stream().anyMatch(s -> s.equals("data: hello")));
+				Assert.assertTrue(lines.stream().anyMatch(s -> s.equals("data: world")));
+			}
 		}
 	}
 
-	@Nonnull
-	protected SokletConfiguration configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
-		return SokletConfiguration.forTesting()
-				// Use a resource method resolver that explicitly specifies resource classes
-				.resourceMethodResolver(new DefaultResourceMethodResolver(resourceClasses))
-				// Quiet logging to keep the console clean
-				.lifecycleInterceptor(new LifecycleInterceptor() {
-					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
-						// No-op
-					}
-				})
+	@Test(timeout = 20000)
+	public void sse_largeEvent_isFullyWritten() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestTimeout(Duration.ofSeconds(5))
 				.build();
+
+		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = new Soklet(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(12000);
+
+				writeHttpGet(socket, "/tests/large", ssePort);
+				// consume headers
+				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assert.assertNotNull(hdr);
+
+				// Build a ~128KiB payload split across many lines
+				String line = "A".repeat(64);
+				int linesCount = 2048; // 2048 * 64 ~= 131072
+				String bigData = java.util.stream.Stream.generate(() -> line).limit(linesCount).collect(java.util.stream.Collectors.joining("\n"));
+
+				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.of("/tests/large")).get();
+				ServerSentEvent ev = ServerSentEvent.withEvent("big").id("big-1").data(bigData).build();
+				b.broadcast(ev);
+
+				// Read exactly one event block
+				String block = readUntil(socket.getInputStream(), "\n\n", (64 + 8) * linesCount + 8192);
+				Assert.assertNotNull("Did not receive large event", block);
+
+				// Reconstruct data lines
+				String reconstructed = block.lines()
+						.filter(l -> l.startsWith("data: "))
+						.map(l -> l.substring("data: ".length()))
+						.collect(java.util.stream.Collectors.joining("\n"));
+
+				Assert.assertEquals("Large SSE payload corrupted or truncated", bigData.length(), reconstructed.length());
+				Assert.assertEquals("Large SSE payload mismatch", bigData, reconstructed);
+			}
+		}
+	}
+
+	@Test(timeout = 20000)
+	public void sse_broadcastMany_doesNotThrow_andEventuallyDeliversLast() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestTimeout(Duration.ofSeconds(5))
+				.build();
+
+		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = new Soklet(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(12000);
+
+				writeHttpGet(socket, "/tests/backpressure", ssePort);
+				// consume headers
+				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assert.assertNotNull(hdr);
+
+				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.of("/tests/backpressure")).get();
+
+				// Rapidly broadcast a bunch of small events (some will be dropped under pressure, but last should survive)
+				final int N = 1500;
+				for (int i = 0; i < N; i++) {
+					b.broadcast(ServerSentEvent.withEvent("bp").id(String.valueOf(i)).data("x").build());
+				}
+
+				// Now read until we observe the last id (or time out)
+				long deadline = System.currentTimeMillis() + 12000;
+				boolean sawLast = false;
+				while (System.currentTimeMillis() < deadline) {
+					String block = readUntil(socket.getInputStream(), "\n\n", 4096);
+					if (block == null) continue;
+					String idLine = block.lines().filter(l -> l.startsWith("id: ")).reduce((a, b2) -> b2).orElse(null);
+					if (idLine != null && idLine.trim().equals("id: " + (N - 1))) {
+						sawLast = true;
+						break;
+					}
+				}
+
+				Assert.assertTrue("Did not observe the last broadcast id under backpressure", sawLast);
+			}
+		}
+	}
+
+	@Test(timeout = 15000)
+	public void sse_stopClosesConnection() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestTimeout(Duration.ofSeconds(5))
+				.build();
+
+		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = new Soklet(cfg)) {
+			app.start();
+
+			Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000);
+			socket.setSoTimeout(6000);
+
+			writeHttpGet(socket, "/tests/closeme", ssePort);
+			String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+			if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+			Assert.assertNotNull(hdr);
+
+			// Kick one message through so the writer loop is active
+			sse.acquireBroadcaster(ResourcePath.of("/tests/closeme")).get()
+					.broadcast(ServerSentEvent.withEvent("one").id("1").data("a").build());
+			readUntil(socket.getInputStream(), "\n\n", 4096); // consume it
+
+			// Now stop the server; this should enqueue poison pills and close the channel
+			app.close(); // stops both servers
+
+			// Attempt to read again; we expect EOF (-1) within timeout
+			boolean sawEof = waitForEof(socket, 6000);
+			socket.close();
+			Assert.assertTrue("Connection did not close after server stop", sawEof);
+		}
+	}
+
+	// ---------- Helpers & mini resource ----------
+
+	@ThreadSafe
+	public static class SseNetworkResource {
+		@ServerSentEventSource("/tests/{id}")
+		public Response sseSource(@Nonnull Request request, @Nonnull @PathParameter String id) {
+			return Response.withStatusCode(200).build();
+		}
+	}
+
+	private static class QuietLifecycle implements LifecycleInterceptor {
+		@Override
+		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
+	}
+
+	private static void writeHttpGet(Socket socket, String path, int port) throws IOException {
+		String req = "GET " + path + " HTTP/1.1\r\n"
+				+ "Host: 127.0.0.1:" + port + "\r\n"
+				+ "Accept: text/event-stream\r\n"
+				+ "Connection: keep-alive\r\n"
+				+ "\r\n";
+		socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
+		socket.getOutputStream().flush();
+	}
+
+	private static Socket connectWithRetry(String host, int port, int timeoutMs) throws IOException, InterruptedException {
+		long deadline = System.currentTimeMillis() + timeoutMs;
+		IOException last = null;
+		while (System.currentTimeMillis() < deadline) {
+			try {
+				Socket s = new Socket();
+				s.connect(new java.net.InetSocketAddress(host, port), Math.max(250, timeoutMs / 2));
+				return s;
+			} catch (IOException e) {
+				last = e;
+				Thread.sleep(30);
+			}
+		}
+		throw (last != null ? last : new IOException("Unable to connect to " + host + ":" + port));
+	}
+
+	private static String readUntil(java.io.InputStream in, String terminator, int maxBytes) throws IOException {
+		byte[] term = terminator.getBytes(StandardCharsets.UTF_8);
+		java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+		int b;
+		int match = 0;
+		while (buf.size() < maxBytes && (b = in.read()) != -1) {
+			buf.write(b);
+			if (b == term[match]) {
+				match++;
+				if (match == term.length) {
+					return buf.toString(StandardCharsets.UTF_8);
+				}
+			} else {
+				match = (b == term[0]) ? 1 : 0;
+			}
+		}
+		return null;
+	}
+
+	private static boolean waitForEof(Socket socket, int timeoutMs) throws IOException {
+		long deadline = System.currentTimeMillis() + timeoutMs;
+		java.io.InputStream in = socket.getInputStream();
+		byte[] tmp = new byte[1];
+		while (System.currentTimeMillis() < deadline) {
+			try {
+				int n = in.read(tmp);
+				if (n == -1) return true;
+			} catch (java.net.SocketTimeoutException e) {
+				// keep trying until deadline
+			}
+		}
+		return false;
+	}
+
+	private static Map<String, String> parseHeaders(String[] headerLines) {
+		java.util.HashMap<String, String> m = new java.util.HashMap<>();
+		for (int i = 1; i < headerLines.length; i++) {
+			String line = headerLines[i];
+			int idx = line.indexOf(':');
+			if (idx <= 0) continue;
+			String k = line.substring(0, idx).trim().toLowerCase(java.util.Locale.ROOT);
+			String v = line.substring(idx + 1).trim();
+			m.put(k, v);
+		}
+		return m;
+	}
+
+	private static int findFreePort() throws IOException {
+		try (java.net.ServerSocket ss = new java.net.ServerSocket(0)) {
+			ss.setReuseAddress(true);
+			return ss.getLocalPort();
+		}
 	}
 }
