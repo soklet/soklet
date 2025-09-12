@@ -20,8 +20,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -232,20 +230,20 @@ public class ResourcePathDeclaration {
 				Component comp = declarationComponents.get(i);
 
 				if (comp.getType() == ComponentType.PLACEHOLDER)
-					placeholders.put(comp.getValue(), URLDecoder.decode(pathComponents.get(i), StandardCharsets.UTF_8));
+					placeholders.put(comp.getValue(), pathComponents.get(i));
 			}
 
 			// For varargs, join all remaining path components.
 			String varargsValue = pathComponents.subList(declarationComponents.size() - 1, pathComponents.size())
 					.stream().collect(Collectors.joining("/"));
-			placeholders.put(declarationComponents.get(declarationComponents.size() - 1).getValue(), URLDecoder.decode(varargsValue, StandardCharsets.UTF_8));
+			placeholders.put(declarationComponents.get(declarationComponents.size() - 1).getValue(), varargsValue);
 		} else {
 			// Normal processing: one-to-one mapping.
 			for (int i = 0; i < declarationComponents.size(); i++) {
 				Component comp = declarationComponents.get(i);
 
 				if (comp.getType() == ComponentType.PLACEHOLDER)
-					placeholders.put(comp.getValue(), URLDecoder.decode(pathComponents.get(i), StandardCharsets.UTF_8));
+					placeholders.put(comp.getValue(), pathComponents.get(i));
 			}
 		}
 

@@ -89,7 +89,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class Soklet implements AutoCloseable {
+public final class Soklet implements AutoCloseable {
 	@Nonnull
 	private final SokletConfiguration sokletConfiguration;
 	@Nonnull

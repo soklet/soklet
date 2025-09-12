@@ -16,11 +16,10 @@
 
 package com.soklet.core;
 
-import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
-
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ByteArrayOutputStream;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -205,7 +204,7 @@ public final class Utilities {
 		requireNonNull(query);
 
 		// For form parameters, body will look like "One=Two&Three=Four" ...a query string.
-		String syntheticUrl = format("https://www.soklet.com?%s", query);
+		String syntheticUrl = format("https://soklet.invalid?%s", query); // avoid referencing real domain
 		return extractQueryParametersFromUrl(syntheticUrl);
 	}
 
@@ -221,29 +220,27 @@ public final class Utilities {
 			return Map.of();
 		}
 
-		String query = trimAggressivelyToNull(uri.getQuery());
+		String query = trimAggressivelyToNull(uri.getRawQuery());
 
 		if (query == null)
 			return Map.of();
 
-		String[] queryParameterComponents = query.split("&");
 		Map<String, Set<String>> queryParameters = new LinkedHashMap<>();
-
-		for (String queryParameterComponent : queryParameterComponents) {
-			String[] queryParameterNameAndValue = queryParameterComponent.split("=");
-			String name = queryParameterNameAndValue.length > 0 ? trimAggressivelyToNull(queryParameterNameAndValue[0]) : null;
-
-			if (name == null)
+		for (String pair : query.split("&")) {
+			if (pair.isEmpty())
 				continue;
 
-			String value = queryParameterNameAndValue.length > 1 ? trimAggressivelyToNull(queryParameterNameAndValue[1]) : null;
+			String[] nv = pair.split("=", 2);
+			String rawName = trimAggressivelyToNull(nv.length > 0 ? nv[0] : null);
+			String rawValue = trimAggressivelyToNull(nv.length > 1 ? nv[1] : null);
 
-			if (value == null)
+			if (rawName == null || rawValue == null)
 				continue;
 
-			Set<String> values = queryParameters.computeIfAbsent(name, k -> new LinkedHashSet<>());
+			String name = URLDecoder.decode(rawName, StandardCharsets.UTF_8);
+			String value = URLDecoder.decode(rawValue, StandardCharsets.UTF_8);
 
-			values.add(value);
+			queryParameters.computeIfAbsent(name, k -> new LinkedHashSet<>()).add(value);
 		}
 
 		return queryParameters;
@@ -253,46 +250,47 @@ public final class Utilities {
 	public static Map<String, Set<String>> extractCookiesFromHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 
-		Map<String, Set<String>> cookies = new LinkedCaseInsensitiveMap<>();
+		// Cookie *names* must be case-sensitive; keep LinkedHashMap (NOT case-insensitive)
+		Map<String, Set<String>> cookies = new LinkedHashMap<>();
 
 		for (Entry<String, Set<String>> entry : headers.entrySet()) {
-			if ("cookie".equalsIgnoreCase(entry.getKey().trim())) {
-				Set<String> values = entry.getValue();
-				
-				if (values == null)
-					continue;
+			if (!"cookie".equalsIgnoreCase(entry.getKey().trim()))
+				continue;
 
-				for (String headerValue : values) {
-					headerValue = trimAggressivelyToNull(headerValue);
+			Set<String> values = entry.getValue();
 
-					if (headerValue == null)
+			if (values == null)
+				continue;
+
+			for (String headerValue : values) {
+				headerValue = trimAggressivelyToNull(headerValue);
+				if (headerValue == null) continue;
+
+				// "name1=val1; name2=val2"
+				String[] cookieComponents = headerValue.split(";");
+				for (String cookieComponent : cookieComponents) {
+					cookieComponent = trimAggressivelyToNull(cookieComponent);
+
+					if (cookieComponent == null)
 						continue;
 
-					// Each headerValue looks like "name1=val1; name2=val2"
-					String[] cookieComponents = headerValue.split(";");
+					String[] cookiePair = cookieComponent.split("=", 2);
+					String rawName = trimAggressivelyToNull(cookiePair[0]);
+					String rawValue = (cookiePair.length == 2 ? trimAggressivelyToNull(cookiePair[1]) : null);
 
-					for (String cookieComponent : cookieComponents) {
-						cookieComponent = trimAggressivelyToNull(cookieComponent);
+					if (rawName == null)
+						continue;
 
-						if (cookieComponent == null)
-							continue;
+					// DO NOT decode the name; cookie names are case-sensitive and rarely encoded
+					String cookieName = rawName;
 
-						String[] cookiePair = cookieComponent.split("=", 2);
-						String rawName = trimAggressivelyToNull(cookiePair[0]);
-						String rawValue = (cookiePair.length == 2 ? trimAggressivelyToNull(cookiePair[1]) : null);
+					// For values, avoid URLDecoder (+ -> space). Either keep raw, or percent-decode only.
+					String cookieValue = rawValue == null ? null : percentDecodeCookieValue(rawValue);
 
-						if (rawName == null)
-							continue;
+					cookies.computeIfAbsent(cookieName, key -> new LinkedHashSet<>());
 
-						// URL-decode name & value
-						String cookieName = safelyUrlDecode(rawName);
-						String cookieValue = rawValue == null ? null : safelyUrlDecode(rawValue);
-
-						cookies.computeIfAbsent(cookieName, key -> new LinkedHashSet<>());
-
-						if (cookieValue != null)
-							cookies.get(cookieName).add(cookieValue);
-					}
+					if (cookieValue != null)
+						cookies.get(cookieName).add(cookieValue);
 				}
 			}
 		}
@@ -300,16 +298,32 @@ public final class Utilities {
 		return cookies;
 	}
 
+	/**
+	 * Percent-decodes %HH to bytes->UTF-8. Does NOT treat '+' specially.
+	 */
 	@Nonnull
-	private static String safelyUrlDecode(@Nonnull String string) {
-		requireNonNull(string);
+	private static String percentDecodeCookieValue(@Nonnull String cookieValue) {
+		requireNonNull(cookieValue);
 
-		try {
-			return URLDecoder.decode(string, StandardCharsets.UTF_8);
-		} catch (Exception e) {
-			// Shouldn't occur, but fall back to the raw string if there is some kind of decoding issue
-			return string;
+		ByteArrayOutputStream out = new ByteArrayOutputStream(cookieValue.length());
+
+		for (int i = 0; i < cookieValue.length(); ) {
+			char c = cookieValue.charAt(i);
+			if (c == '%' && i + 2 < cookieValue.length()) {
+				int hi = Character.digit(cookieValue.charAt(i + 1), 16);
+				int lo = Character.digit(cookieValue.charAt(i + 2), 16);
+				if (hi >= 0 && lo >= 0) {
+					out.write((hi << 4) + lo);
+					i += 3;
+					continue;
+				}
+			}
+
+			out.write((byte) c);
+			i++;
 		}
+
+		return out.toString(StandardCharsets.UTF_8);
 	}
 
 	@Nonnull
