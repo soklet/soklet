@@ -7,7 +7,7 @@
 
 ### What Is It?
 
-A small [HTTP 1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs.<br/><br/>
+A small [HTTP 1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs and broadcasting [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).<br/><br/>
 Zero dependencies.  Dependency Injection friendly.<br/>
 Optionally powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
 
