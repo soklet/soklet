@@ -34,6 +34,7 @@ Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/do
 * Small, comprehensible codebase
 * Support for automated unit and integration testing
 * Emphasis on configurability
+* Support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
 
 ### Design Non-Goals
 
@@ -47,8 +48,8 @@ Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/do
 
 Similarly-flavored commercially-friendly OSS libraries are available.
 
-* [Lokalized](https://www.lokalized.com) - natural-sounding translations (i18n) via expression language 
 * [Pyranid](https://www.pyranid.com) - makes working with JDBC pleasant
+* [Lokalized](https://www.lokalized.com) - natural-sounding translations (i18n) via expression language
 
 ### License
 
