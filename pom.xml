@@ -107,8 +107,9 @@
                     <linksource>true</linksource>
                     <show>public</show>
                     <bottom><![CDATA[Copyright 2015-2022 <a href="https://www.xmog.com" target="_blank">Transmogrify LLC<a>, 2022-2025 <a href="https://www.revetware.com" target="_blank">Revetware LLC<a>.]]></bottom>
-                    <source>16</source>
+                    <source>17</source>
                     <failOnError>true</failOnError>
+                    <overview>${basedir}/src/main/javadoc/overview.html</overview>
                 </configuration>
                 <executions>
                     <execution>
