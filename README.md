@@ -58,7 +58,7 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 Soklet is a single JAR, available on Maven Central.
 
-Java 16+ is required.
+Java 17+ is required.
 
 #### Maven
 
@@ -154,7 +154,7 @@ public class App {
 
 Here we use raw `javac` to build and `java` to run.
 
-This example requires JDK 16+ to be installed on your machine ([or see this example of using Docker for Soklet apps](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)).  If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
+This example requires JDK 17+ to be installed on your machine ([or see this example of using Docker for Soklet apps](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)).  If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
 
 #### Build
 
