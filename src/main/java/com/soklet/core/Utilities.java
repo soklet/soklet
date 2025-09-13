@@ -195,11 +195,28 @@ public final class Utilities {
 		}
 	}
 
+	/**
+	 * Returns a shared zero-length {@code byte[]} instance.
+	 * <p>
+	 * Useful as a sentinel when you need a non-{@code null} byte array but have no content.
+	 *
+	 * @return a zero-length byte array (never {@code null})
+	 */
 	@Nonnull
 	public static byte[] emptyByteArray() {
 		return EMPTY_BYTE_ARRAY;
 	}
 
+	/**
+	 * Parses an {@code application/x-www-form-urlencoded} query string into a multimap of names to values.
+	 * <p>
+	 * Decodes percent-escapes and {@code '+'} as space using UTF-8. Pairs missing a name or value are ignored.
+	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
+	 *
+	 * @param query a raw query string such as {@code "a=1&b=2&b=3"} (must be non-{@code null})
+	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
+	 * @see #extractQueryParametersFromUrl(String)
+	 */
 	@Nonnull
 	public static Map<String, Set<String>> extractQueryParametersFromQuery(@Nonnull String query) {
 		requireNonNull(query);
@@ -209,6 +226,17 @@ public final class Utilities {
 		return extractQueryParametersFromUrl(syntheticUrl);
 	}
 
+	/**
+	 * Extracts query parameters from a URL (or URI string) into a multimap of names to values.
+	 * <p>
+	 * If the input is not a valid {@link URI}, an empty map is returned. The raw query is split on {@code '&'} into
+	 * name/value pairs, values are split on the first {@code '='}, and both name and value are UTF-8 decoded
+	 * (percent-escapes and {@code '+'} → space). Blank pairs and pairs missing either name or value are ignored.
+	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
+	 *
+	 * @param url an absolute or relative URL/URI string (must be non-{@code null})
+	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none/invalid
+	 */
 	@Nonnull
 	public static Map<String, Set<String>> extractQueryParametersFromUrl(@Nonnull String url) {
 		requireNonNull(url);
@@ -247,6 +275,21 @@ public final class Utilities {
 		return queryParameters;
 	}
 
+	/**
+	 * Parses {@code Cookie} request headers into a map of cookie names to values.
+	 * <p>
+	 * Header name matching is case-insensitive ({@code "Cookie"} vs {@code "cookie"}), but <em>cookie names are case-sensitive</em>.
+	 * Values are parsed per the following liberal rules:
+	 * <ul>
+	 *   <li>Components are split on {@code ';'} unless inside a quoted string.</li>
+	 *   <li>Quoted values have surrounding quotes removed and common backslash escapes unescaped.</li>
+	 *   <li>Percent-escapes are decoded as UTF-8. {@code '+'} is <strong>not</strong> treated specially.</li>
+	 * </ul>
+	 * Multiple occurrences of the same cookie name are collected into a {@link Set} in insertion order.
+	 *
+	 * @param headers request headers as a multimap of header name to values (must be non-{@code null})
+	 * @return a map of cookie name to distinct values; empty if no valid cookies are present
+	 */
 	@Nonnull
 	public static Map<String, Set<String>> extractCookiesFromHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
@@ -419,6 +462,21 @@ public final class Utilities {
 		return rawValue;
 	}
 
+	/**
+	 * Normalizes a URL or path into a canonical request path.
+	 * <p>
+	 * Behavior:
+	 * <ul>
+	 *   <li>If input starts with {@code http://} or {@code https://}, the path portion is extracted.</li>
+	 *   <li>Ensures the result begins with {@code '/'}.</li>
+	 *   <li>Removes any trailing {@code '/'} (except for the root path {@code '/'}).</li>
+	 *   <li>Strips any query string.</li>
+	 *   <li>Applies aggressive trimming of Unicode whitespace.</li>
+	 * </ul>
+	 *
+	 * @param url a URL or path to normalize (must be non-{@code null})
+	 * @return the normalized path (never {@code null}); {@code "/"} for empty input
+	 */
 	@Nonnull
 	public static String normalizedPathForUrl(@Nonnull String url) {
 		requireNonNull(url);
@@ -454,6 +512,15 @@ public final class Utilities {
 		return url;
 	}
 
+	/**
+	 * Parses an {@code Accept-Language} header value into a best-effort ordered list of {@link Locale}s.
+	 * <p>
+	 * Quality weights are honored by {@link Locale.LanguageRange#parse(String)}; results are then mapped to available
+	 * JVM locales. Unknown or unavailable language ranges are skipped. On parse failure, an empty list is returned.
+	 *
+	 * @param acceptLanguageHeaderValue the raw header value (must be non-{@code null})
+	 * @return locales in descending preference order; empty if none could be resolved
+	 */
 	@Nonnull
 	public static List<Locale> localesFromAcceptLanguageHeaderValue(@Nonnull String acceptLanguageHeaderValue) {
 		requireNonNull(acceptLanguageHeaderValue);
@@ -717,6 +784,15 @@ public final class Utilities {
 		return Optional.empty();
 	}
 
+	/**
+	 * Extracts the media type (without parameters) from the first {@code Content-Type} header.
+	 * <p>
+	 * For example, {@code "text/html; charset=utf-8"} → {@code "text/html"}.
+	 *
+	 * @param headers request/response headers (must be non-{@code null})
+	 * @return the media type if present; otherwise {@link Optional#empty()}
+	 * @see #extractContentTypeFromHeaderValue(String)
+	 */
 	@Nonnull
 	public static Optional<String> extractContentTypeFromHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
@@ -729,6 +805,14 @@ public final class Utilities {
 		return extractContentTypeFromHeaderValue(contentTypeHeaderValues.stream().findFirst().get());
 	}
 
+	/**
+	 * Extracts the media type (without parameters) from a {@code Content-Type} header value.
+	 * <p>
+	 * For example, {@code "application/json; charset=utf-8"} → {@code "application/json"}.
+	 *
+	 * @param contentTypeHeaderValue the raw header value; may be {@code null} or blank
+	 * @return the media type if present; otherwise {@link Optional#empty()}
+	 */
 	@Nonnull
 	public static Optional<String> extractContentTypeFromHeaderValue(@Nullable String contentTypeHeaderValue) {
 		contentTypeHeaderValue = trimAggressivelyToNull(contentTypeHeaderValue);
@@ -750,6 +834,15 @@ public final class Utilities {
 		return Optional.ofNullable(trimAggressivelyToNull(contentTypeHeaderValue.substring(0, indexOfSemicolon)));
 	}
 
+	/**
+	 * Extracts the {@link Charset} from the first {@code Content-Type} header, if present and valid.
+	 * <p>
+	 * Tolerates additional parameters and arbitrary whitespace. Invalid or unknown charset tokens yield {@link Optional#empty()}.
+	 *
+	 * @param headers request/response headers (must be non-{@code null})
+	 * @return the charset declared by the header; otherwise {@link Optional#empty()}
+	 * @see #extractCharsetFromHeaderValue(String)
+	 */
 	@Nonnull
 	public static Optional<Charset> extractCharsetFromHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
@@ -762,6 +855,15 @@ public final class Utilities {
 		return extractCharsetFromHeaderValue(contentTypeHeaderValues.stream().findFirst().get());
 	}
 
+	/**
+	 * Extracts the {@code charset=...} parameter from a {@code Content-Type} header value.
+	 * <p>
+	 * Parsing is forgiving: parameters may appear in any order and with arbitrary spacing. If a charset is found,
+	 * it is validated via {@link Charset#forName(String)}; invalid names result in {@link Optional#empty()}.
+	 *
+	 * @param contentTypeHeaderValue the raw header value; may be {@code null} or blank
+	 * @return the resolved charset if present and valid; otherwise {@link Optional#empty()}
+	 */
 	@Nonnull
 	public static Optional<Charset> extractCharsetFromHeaderValue(@Nullable String contentTypeHeaderValue) {
 		contentTypeHeaderValue = trimAggressivelyToNull(contentTypeHeaderValue);
@@ -860,6 +962,14 @@ public final class Utilities {
 		return string;
 	}
 
+	/**
+	 * Aggressively trims Unicode whitespace from the given string and returns {@code null} if the result is empty.
+	 * <p>
+	 * See {@link #trimAggressively(String)} for details on which code points are removed.
+	 *
+	 * @param string the input string; may be {@code null}
+	 * @return a trimmed, non-empty string; or {@code null} if input was {@code null} or trimmed to empty
+	 */
 	@Nullable
 	public static String trimAggressivelyToNull(@Nullable String string) {
 		if (string == null)
@@ -869,6 +979,14 @@ public final class Utilities {
 		return string.length() == 0 ? null : string;
 	}
 
+	/**
+	 * Aggressively trims Unicode whitespace from the given string and returns {@code ""} if the input is {@code null}.
+	 * <p>
+	 * See {@link #trimAggressively(String)} for details on which code points are removed.
+	 *
+	 * @param string the input string; may be {@code null}
+	 * @return a trimmed string (never {@code null}); {@code ""} if input was {@code null}
+	 */
 	@Nonnull
 	public static String trimAggressivelyToEmpty(@Nullable String string) {
 		if (string == null)
