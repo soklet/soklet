@@ -19,6 +19,7 @@ package com.soklet.core;
 import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
+import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
@@ -31,12 +32,17 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -110,9 +116,9 @@ public class IntegrationTests {
 		}
 	}
 
-	private static Soklet startApp(int port) {
+	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
 		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(port).requestTimeout(Duration.ofSeconds(5)).build())
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(EchoResource.class)))
+				.resourceMethodResolver(new DefaultResourceMethodResolver(resourceClasses))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 		Soklet app = new Soklet(cfg);
@@ -123,7 +129,7 @@ public class IntegrationTests {
 	@Test
 	public void varargs_pathRoundTrip_overNetwork() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port)) {
+		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
 			// Basic varargs round-trip (no decoding assertions here)
 			URL url = new URL("http://127.0.0.1:" + port + "/files/js/some/file/example.js");
 			HttpURLConnection c = open("GET", url, Map.of("Accept", "text/plain"));
@@ -136,7 +142,7 @@ public class IntegrationTests {
 	@Test
 	public void queryDecoding_plusAndPercent() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port)) {
+		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
 			// q=hello+world -> "hello world"
 			URL u1 = new URL("http://127.0.0.1:" + port + "/q?q=hello+world");
 			HttpURLConnection c1 = open("GET", u1, Map.of("Accept", "text/plain"));
@@ -154,7 +160,7 @@ public class IntegrationTests {
 	@Test
 	public void pathDecoding_plusIsLiteral_andPercentPlusDecodes() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port)) {
+		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
 			// Literal '+' must be preserved in PATH
 			URL u1 = new URL("http://127.0.0.1:" + port + "/files/foo+bar");
 			HttpURLConnection c1 = open("GET", u1, Map.of("Accept", "text/plain"));
@@ -172,7 +178,7 @@ public class IntegrationTests {
 	@Test
 	public void pathNormalization_dotSegments() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port)) {
+		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
 			// We expect /files/a/b/../c -> "a/c" after normalization
 			URL u = new URL("http://127.0.0.1:" + port + "/files/a/b/../c");
 			HttpURLConnection c = open("GET", u, Map.of("Accept", "text/plain"));
@@ -184,7 +190,7 @@ public class IntegrationTests {
 	@Test
 	public void cookies_caseSensitiveNames() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port)) {
+		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
 			URL u = new URL("http://127.0.0.1:" + port + "/cookie-echo");
 			HttpURLConnection c = open("GET", u, Map.of(
 					"Accept", "text/plain",
@@ -196,6 +202,123 @@ public class IntegrationTests {
 			Set<String> set = Arrays.stream(names.split(",")).map(String::trim).collect(Collectors.toSet());
 			Assert.assertTrue(set.contains("SID"));
 			Assert.assertTrue(set.contains("sid"));
+		}
+	}
+
+
+	@ThreadSafe
+	public static class Echo2Resource {
+		@GET("/hello")
+		public String hello() {return "hello";}
+
+		@GET("/q")
+		public String echoQuery(@Nonnull @QueryParameter String q) {return q;}
+
+		@GET("/files/{path*}")
+		public String echoVarargs(@Nonnull @PathParameter String path) {return path;}
+
+		@POST("/len")
+		public String len(@Nonnull Request request) {
+			byte[] b = request.getBody().orElse(new byte[0]);
+			return Integer.toString(b.length);
+		}
+
+		@GET("/cookie-value")
+		public String cookieValue(@Nonnull Request request, @Nonnull @QueryParameter String name) {
+			Map<String, Set<String>> cookies = request.getCookies();
+			Set<String> values = cookies.getOrDefault(name, Collections.emptySet());
+			return values.stream().sorted().collect(Collectors.joining("|"));
+		}
+	}
+
+	@ThreadSafe
+	public static class UsersResource {
+		@GET("/users/me")
+		public String me() {return "literal";}
+
+		@GET("/users/{id}")
+		public String byId(@Nonnull @PathParameter String id) {return "param:" + id;}
+	}
+
+	@Test
+	public void routing_literalBeatsParam() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(UsersResource.class))) {
+			var u1 = new URL("http://127.0.0.1:" + port + "/users/me");
+			var c1 = open("GET", u1, Map.of("Accept", "text/plain"));
+			Assert.assertEquals(200, c1.getResponseCode());
+			Assert.assertEquals("literal", new String(readAll(c1.getInputStream()), StandardCharsets.UTF_8));
+
+			var u2 = new URL("http://127.0.0.1:" + port + "/users/123");
+			var c2 = open("GET", u2, Map.of("Accept", "text/plain"));
+			Assert.assertEquals(200, c2.getResponseCode());
+			Assert.assertEquals("param:123", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
+		}
+	}
+
+	@Test
+	public void headSemantics_noBody_contentLengthPresent() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+			URL u = new URL("http://127.0.0.1:" + port + "/hello");
+			HttpURLConnection c = open("HEAD", u, Map.of("Accept", "text/plain"));
+			Assert.assertEquals(200, c.getResponseCode());
+			String cl = c.getHeaderField("Content-Length");
+			Assert.assertEquals("5", cl); // "hello"
+			byte[] b = readAll(c.getInputStream());
+			Assert.assertEquals(0, b.length);
+		}
+	}
+
+	@Test
+	public void methodNotAllowed_405_includesAllow() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(UsersResource.class))) {
+			URL u = new URL("http://127.0.0.1:" + port + "/users/123");
+			HttpURLConnection c = open("POST", u, Map.of("Accept", "text/plain"));
+			c.getOutputStream().write("x".getBytes(StandardCharsets.UTF_8));
+			int code = c.getResponseCode();
+			Assert.assertEquals(405, code);
+			String allow = c.getHeaderField("Allow");
+			Assert.assertNotNull(allow);
+			Assert.assertTrue(allow.contains("GET"));
+		}
+	}
+
+	@Test
+	public void cookies_quotedValueAndMultipleHeaders() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+			URL u = new URL("http://127.0.0.1:" + port + "/cookie-value?name=flavor");
+			Map<String, String> headers = new LinkedHashMap<>();
+			headers.put("Accept", "text/plain");
+			// Send two Cookie headers; include a quoted value with a space
+			headers.put("Cookie", "flavor=\"choc chip\"");
+			HttpURLConnection c = open("GET", u, headers);
+			// And a second Cookie header with another value of same name
+			c.addRequestProperty("Cookie", "flavor=vanilla");
+			Assert.assertEquals(200, c.getResponseCode());
+			String body = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
+			// Order is not guaranteed; ensure both values are visible
+			Set<String> vals = Arrays.stream(body.split("\\|")).collect(Collectors.toSet());
+			Assert.assertTrue(vals.contains("choc chip"));
+			Assert.assertTrue(vals.contains("vanilla"));
+		}
+	}
+
+	@Test
+	public void pathDecoding_plusLiteral_queryPlusIsSpace() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+			URL upath = new URL("http://127.0.0.1:" + port + "/files/a+b");
+			HttpURLConnection cp = open("GET", upath, Map.of("Accept", "text/plain"));
+			Assert.assertEquals(200, cp.getResponseCode());
+			Assert.assertEquals("a+b", new String(readAll(cp.getInputStream()), StandardCharsets.UTF_8));
+
+			URL uquery = new URL("http://127.0.0.1:" + port + "/q?q=a+b");
+			HttpURLConnection cq = open("GET", uquery, Map.of("Accept", "text/plain"));
+			Assert.assertEquals(200, cq.getResponseCode());
+			Assert.assertEquals("a b", new String(readAll(cq.getInputStream()), StandardCharsets.UTF_8));
 		}
 	}
 }

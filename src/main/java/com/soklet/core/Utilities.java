@@ -34,6 +34,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
 import java.nio.charset.UnsupportedCharsetException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -254,41 +255,41 @@ public final class Utilities {
 		Map<String, Set<String>> cookies = new LinkedHashMap<>();
 
 		for (Entry<String, Set<String>> entry : headers.entrySet()) {
-			if (!"cookie".equalsIgnoreCase(entry.getKey().trim()))
+			String headerName = entry.getKey();
+			if (headerName == null || !"cookie".equalsIgnoreCase(headerName.trim()))
 				continue;
 
 			Set<String> values = entry.getValue();
-
-			if (values == null)
-				continue;
+			if (values == null) continue;
 
 			for (String headerValue : values) {
 				headerValue = trimAggressivelyToNull(headerValue);
 				if (headerValue == null) continue;
 
-				// "name1=val1; name2=val2"
-				String[] cookieComponents = headerValue.split(";");
+				// Split on ';' only when NOT inside a quoted string
+				List<String> cookieComponents = splitCookieHeaderRespectingQuotes(headerValue);
+
 				for (String cookieComponent : cookieComponents) {
 					cookieComponent = trimAggressivelyToNull(cookieComponent);
-
-					if (cookieComponent == null)
-						continue;
+					if (cookieComponent == null) continue;
 
 					String[] cookiePair = cookieComponent.split("=", 2);
 					String rawName = trimAggressivelyToNull(cookiePair[0]);
 					String rawValue = (cookiePair.length == 2 ? trimAggressivelyToNull(cookiePair[1]) : null);
 
-					if (rawName == null)
-						continue;
+					if (rawName == null) continue;
 
 					// DO NOT decode the name; cookie names are case-sensitive and rarely encoded
 					String cookieName = rawName;
 
-					// For values, avoid URLDecoder (+ -> space). Either keep raw, or percent-decode only.
-					String cookieValue = rawValue == null ? null : percentDecodeCookieValue(rawValue);
+					String cookieValue = null;
+					if (rawValue != null) {
+						// If it's quoted, unquote+unescape first, then percent-decode (still no '+' -> space)
+						String unquoted = unquoteCookieValueIfNeeded(rawValue);
+						cookieValue = percentDecodeCookieValue(unquoted);
+					}
 
 					cookies.computeIfAbsent(cookieName, key -> new LinkedHashSet<>());
-
 					if (cookieValue != null)
 						cookies.get(cookieName).add(cookieValue);
 				}
@@ -324,6 +325,98 @@ public final class Utilities {
 		}
 
 		return out.toString(StandardCharsets.UTF_8);
+	}
+
+	/**
+	 * Splits a Cookie header string into components on ';' but ONLY when not inside a quoted value.
+	 * Supports backslash-escaped quotes within quoted strings.
+	 */
+	private static List<String> splitCookieHeaderRespectingQuotes(@Nonnull String headerValue) {
+		List<String> parts = new ArrayList<>();
+		StringBuilder cur = new StringBuilder(headerValue.length());
+		boolean inQuotes = false;
+		boolean escape = false;
+
+		for (int i = 0; i < headerValue.length(); i++) {
+			char c = headerValue.charAt(i);
+
+			if (escape) {
+				// keep escaped char literally (e.g., \" \; \\)
+				cur.append(c);
+				escape = false;
+				continue;
+			}
+
+			if (c == '\\') {
+				escape = true;
+				// keep the backslash for now; unquote step will handle unescaping
+				cur.append(c);
+				continue;
+			}
+
+			if (c == '"') {
+				inQuotes = !inQuotes;
+				cur.append(c);
+				continue;
+			}
+
+			if (c == ';' && !inQuotes) {
+				parts.add(cur.toString());
+				cur.setLength(0);
+				continue;
+			}
+
+			cur.append(c);
+		}
+
+		if (cur.length() > 0)
+			parts.add(cur.toString());
+
+		return parts;
+	}
+
+	/**
+	 * If the cookie value is a quoted-string, remove surrounding quotes and unescape \" \\ and \; .
+	 * Otherwise returns the input as-is.
+	 */
+	@Nonnull
+	private static String unquoteCookieValueIfNeeded(@Nonnull String rawValue) {
+		requireNonNull(rawValue);
+
+		if (rawValue.length() >= 2 && rawValue.charAt(0) == '"' && rawValue.charAt(rawValue.length() - 1) == '"') {
+			// Strip the surrounding quotes
+			String inner = rawValue.substring(1, rawValue.length() - 1);
+
+			// Unescape \" \\ and \; (common patterns seen in the wild)
+			// Order matters: unescape backslash-escape sequences, then leave other chars intact.
+			StringBuilder sb = new StringBuilder(inner.length());
+			boolean escape = false;
+
+			for (int i = 0; i < inner.length(); i++) {
+				char c = inner.charAt(i);
+				if (escape) {
+					// Only special-case a few common escapes; otherwise keep the char
+					if (c == '"' || c == '\\' || c == ';')
+						sb.append(c);
+					else
+						sb.append(c); // unknown escape -> keep literally (liberal in what we accept)
+
+					escape = false;
+				} else if (c == '\\') {
+					escape = true;
+				} else {
+					sb.append(c);
+				}
+			}
+
+			// If string ended with a dangling backslash, keep it literally
+			if (escape)
+				sb.append('\\');
+
+			return sb.toString();
+		}
+
+		return rawValue;
 	}
 
 	@Nonnull
