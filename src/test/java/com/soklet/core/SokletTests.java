@@ -25,12 +25,9 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
-import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
-import com.soklet.core.impl.DefaultServer;
-import com.soklet.core.impl.DefaultServerSentEventServer;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -39,18 +36,15 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
-import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 
 import static com.soklet.core.Utilities.emptyByteArray;
 import static java.util.Objects.requireNonNull;
@@ -68,63 +62,58 @@ public class SokletTests {
 			RequestResult requestResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/hello-world").build());
 
-			Assert.assertArrayEquals("Response body doesn't match",
-					"hello world".getBytes(StandardCharsets.UTF_8),
-					requestResult.getMarshaledResponse().getBody().get());
+			Assertions.assertArrayEquals("hello world".getBytes(StandardCharsets.UTF_8), requestResult.getMarshaledResponse().getBody().get(),
+					"Response body doesn't match");
 
 			// Missing query param?  It should be a 400
 			requestResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/integer-query-param")
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
 
 			// Have the query param?  It's a 204
 			requestResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/integer-query-param?intQueryParam=123")
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertArrayEquals("Received a response body but didn't expect one",
-					emptyByteArray(),
-					requestResult.getMarshaledResponse().getBody().orElse(emptyByteArray()));
+			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertArrayEquals(emptyByteArray(), requestResult.getMarshaledResponse().getBody().orElse(emptyByteArray()),
+					"Received a response body but didn't expect one");
 
 			// Have the custom-named query param?  It's a 200 and echoes back the param as a string
 			requestResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/query-param-custom-name?local_date=2023-09-30")
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertArrayEquals("Response body doesn't match",
-					"2023-09-30".getBytes(StandardCharsets.UTF_8),
-					requestResult.getMarshaledResponse().getBody().get());
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertArrayEquals("2023-09-30".getBytes(StandardCharsets.UTF_8), requestResult.getMarshaledResponse().getBody().get(),
+					"Response body doesn't match");
 
 			// Optional query param, no param provided
 			requestResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/optional-query-param")
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertArrayEquals("Received a response body but didn't expect one",
-					emptyByteArray(),
-					requestResult.getMarshaledResponse().getBody().orElse(emptyByteArray()));
+			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertArrayEquals(emptyByteArray(), requestResult.getMarshaledResponse().getBody().orElse(emptyByteArray()),
+					"Received a response body but didn't expect one");
 
 			// Optional query param, param provided
 			requestResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/optional-query-param?optionalQueryParam=123.456789")
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertArrayEquals("Response body doesn't match",
-					"123.456789".getBytes(StandardCharsets.UTF_8),
-					requestResult.getMarshaledResponse().getBody().get());
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertArrayEquals("123.456789".getBytes(StandardCharsets.UTF_8), requestResult.getMarshaledResponse().getBody().get(),
+					"Response body doesn't match");
 
 			// Integer (nonprimitive) request body, integer is required but not provided
 			requestResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/echo-integer-request-body")
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
 
 			// Integer (nonprimitive) request body, integer is required and provided
 			requestResult = simulator.performRequest(
@@ -132,10 +121,9 @@ public class SokletTests {
 							.body("123".getBytes(StandardCharsets.UTF_8))
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertArrayEquals("Response body doesn't match",
-					"123".getBytes(StandardCharsets.UTF_8),
-					requestResult.getMarshaledResponse().getBody().get());
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertArrayEquals("123".getBytes(StandardCharsets.UTF_8), requestResult.getMarshaledResponse().getBody().get(),
+					"Response body doesn't match");
 
 			// Integer (nonprimitive) request body, integer is not required and not provided.
 			// This exercises Optional<T> as opposed to @RequestBody(optional=true)
@@ -143,9 +131,9 @@ public class SokletTests {
 					new Request.Builder(HttpMethod.POST, "/echo-integer-optional-request-body-1")
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertArrayEquals("Response body doesn't match",
-					null, requestResult.getMarshaledResponse().getBody().orElse(null));
+			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertArrayEquals(null, requestResult.getMarshaledResponse().getBody().orElse(null),
+					"Response body doesn't match");
 
 			// Integer (nonprimitive) request body, integer is not required and not provided.
 			// This exercises @RequestBody(optional=true) as opposed to Optional<T>
@@ -153,9 +141,9 @@ public class SokletTests {
 					new Request.Builder(HttpMethod.POST, "/echo-integer-optional-request-body-2")
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertArrayEquals("Response body doesn't match",
-					null, requestResult.getMarshaledResponse().getBody().orElse(null));
+			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertArrayEquals(null, requestResult.getMarshaledResponse().getBody().orElse(null),
+					"Response body doesn't match");
 
 			// Integer (primitive) request body, integer is required and provided
 			requestResult = simulator.performRequest(
@@ -163,27 +151,26 @@ public class SokletTests {
 							.body("123".getBytes(StandardCharsets.UTF_8))
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertArrayEquals("Response body doesn't match",
-					"123".getBytes(StandardCharsets.UTF_8),
-					requestResult.getMarshaledResponse().getBody().get());
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertArrayEquals("123".getBytes(StandardCharsets.UTF_8), requestResult.getMarshaledResponse().getBody().get(),
+					"Response body doesn't match");
 
 			// Integer (primitive) request body, integer is required but not provided
 			requestResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/echo-int-request-body")
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
 
 			// Integer (primitive) request body, integer is not required and not provided
 			requestResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.POST, "/echo-int-optional-request-body")
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertArrayEquals("Response body doesn't match",
-					"0".getBytes(StandardCharsets.UTF_8), // 0 is understood to be the default value for uninitialized int
-					requestResult.getMarshaledResponse().getBody().get());
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertArrayEquals("0".getBytes(StandardCharsets.UTF_8), // 0 is understood to be the default value for uninitialized int
+					requestResult.getMarshaledResponse().getBody().get(),
+					"Response body doesn't match");
 		}));
 	}
 
@@ -198,7 +185,7 @@ public class SokletTests {
 			Response response = requestResult.getResponse().get();
 			Object responseBody = response.getBody().get();
 
-			Assert.assertEquals("Response body doesn't match", "hello world", responseBody);
+			Assertions.assertEquals("hello world", responseBody, "Response body doesn't match");
 
 			ResourceMethod resourceMethod = requestResult.getResourceMethod().get();
 			Method expectedMethod;
@@ -209,7 +196,7 @@ public class SokletTests {
 				throw new RuntimeException(e);
 			}
 
-			Assert.assertEquals("Resource method doesn't match", expectedMethod, resourceMethod.getMethod());
+			Assertions.assertEquals(expectedMethod, resourceMethod.getMethod(), "Resource method doesn't match");
 		}));
 	}
 
@@ -234,7 +221,7 @@ public class SokletTests {
 							.body(requestBody)
 							.build());
 
-			Assert.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
 		}));
 	}
 
@@ -252,18 +239,18 @@ public class SokletTests {
 																@Multipart(name = "another") byte[] anotherAsBytes,
 																@Multipart(name = "another") Optional<Double> anotherAsOptionalDouble,
 																@Multipart(name = "another") Optional<byte[]> anotherAsOptionalBytes) {
-			Assert.assertEquals("3x", notReallyAnInt);
-			Assert.assertEquals(Optional.of("3x"), optionalNotReallyAnInt);
-			Assert.assertEquals(2, oneAsList.size());
-			Assert.assertEquals("1", oneAsList.get(0).getDataAsString().get());
-			Assert.assertEquals("2", oneAsList.get(1).getDataAsString().get());
-			Assert.assertEquals("3", another.getDataAsString().get());
-			Assert.assertEquals("3", anotherAsString);
-			Assert.assertEquals("3", new String(anotherAsBytes, StandardCharsets.UTF_8));
-			Assert.assertEquals("3", new String(anotherAsOptionalListOfBytes.get().get(0), StandardCharsets.UTF_8));
-			Assert.assertEquals(3, anotherAsOptionalListOfInteger.get().get(0), 0);
-			Assert.assertEquals("3", new String(anotherAsOptionalBytes.get(), StandardCharsets.UTF_8));
-			Assert.assertEquals(3D, anotherAsOptionalDouble.get(), 0);
+			Assertions.assertEquals("3x", notReallyAnInt);
+			Assertions.assertEquals(Optional.of("3x"), optionalNotReallyAnInt);
+			Assertions.assertEquals(2, oneAsList.size());
+			Assertions.assertEquals("1", oneAsList.get(0).getDataAsString().get());
+			Assertions.assertEquals("2", oneAsList.get(1).getDataAsString().get());
+			Assertions.assertEquals("3", another.getDataAsString().get());
+			Assertions.assertEquals("3", anotherAsString);
+			Assertions.assertEquals("3", new String(anotherAsBytes, StandardCharsets.UTF_8));
+			Assertions.assertEquals("3", new String(anotherAsOptionalListOfBytes.get().get(0), StandardCharsets.UTF_8));
+			Assertions.assertEquals(3, anotherAsOptionalListOfInteger.get().get(0), 0);
+			Assertions.assertEquals("3", new String(anotherAsOptionalBytes.get(), StandardCharsets.UTF_8));
+			Assertions.assertEquals(3D, anotherAsOptionalDouble.get(), 0);
 		}
 	}
 
@@ -337,8 +324,8 @@ public class SokletTests {
 							.build()
 			);
 
-			Assert.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertEquals("js/some/file/example.js", requestResult.getResponse().get().getBody().get());
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals("js/some/file/example.js", requestResult.getResponse().get().getBody().get());
 
 
 			requestResult = simulator.performRequest(
@@ -346,15 +333,15 @@ public class SokletTests {
 							.build()
 			);
 
-			Assert.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
-			Assert.assertEquals("123-js/some/file/example.js", requestResult.getResponse().get().getBody().get());
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals("123-js/some/file/example.js", requestResult.getResponse().get().getBody().get());
 
 			requestResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/static2/js/some/file/example.js")
 							.build()
 			);
 
-			Assert.assertEquals(Integer.valueOf(500), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(500), requestResult.getMarshaledResponse().getStatusCode());
 		}));
 	}
 
@@ -385,28 +372,25 @@ public class SokletTests {
 			RequestResult getMethodResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.GET, "/hello-world").build());
 
-			Assert.assertArrayEquals("Response body doesn't match",
-					"hello world".getBytes(StandardCharsets.UTF_8),
-					getMethodResult.getMarshaledResponse().getBody().get());
+			Assertions.assertArrayEquals("hello world".getBytes(StandardCharsets.UTF_8), getMethodResult.getMarshaledResponse().getBody().get(),
+					"Response body doesn't match");
 
 			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
 			RequestResult headMethodResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.HEAD, "/hello-world").build());
 
-			Assert.assertEquals(Integer.valueOf(200), headMethodResult.getMarshaledResponse().getStatusCode());
-			Assert.assertEquals("GET and HEAD headers don't match",
-					getMethodResult.getMarshaledResponse().getHeaders(), headMethodResult.getMarshaledResponse().getHeaders());
-			Assert.assertArrayEquals("Received a response body but didn't expect one",
-					emptyByteArray(),
-					headMethodResult.getMarshaledResponse().getBody().orElse(emptyByteArray()));
+			Assertions.assertEquals(Integer.valueOf(200), headMethodResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(getMethodResult.getMarshaledResponse().getHeaders(), headMethodResult.getMarshaledResponse().getHeaders(),
+					"GET and HEAD headers don't match");
+			Assertions.assertArrayEquals(emptyByteArray(), headMethodResult.getMarshaledResponse().getBody().orElse(emptyByteArray()),
+					"Received a response body but didn't expect one");
 
 			// If you want to handle your own HEAD requests, we still prevent you from trying to send a response body
 			RequestResult explicitHeadMethodResult = simulator.performRequest(
 					new Request.Builder(HttpMethod.HEAD, "/explicit-head-handling").build());
 
-			Assert.assertArrayEquals("Received a response body but didn't expect one",
-					emptyByteArray(),
-					explicitHeadMethodResult.getMarshaledResponse().getBody().orElse(emptyByteArray()));
+			Assertions.assertArrayEquals(emptyByteArray(), explicitHeadMethodResult.getMarshaledResponse().getBody().orElse(emptyByteArray()),
+					"Received a response body but didn't expect one");
 		}));
 	}
 

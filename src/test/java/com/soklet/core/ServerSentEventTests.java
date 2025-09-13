@@ -24,8 +24,9 @@ import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.DefaultServer;
 import com.soklet.core.impl.DefaultServerSentEventServer;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
@@ -37,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static java.util.Objects.requireNonNull;
 
@@ -53,14 +55,14 @@ public class ServerSentEventTests {
 
 		Soklet.runSimulator(configuration, (simulator -> {
 			simulator.registerServerSentEventConsumer(ResourcePath.of("/examples/abc"), (serverSentEvent -> {
-				Assert.assertEquals("SSE event mismatch", "example", serverSentEvent.getEvent().get());
+				Assertions.assertEquals("example", serverSentEvent.getEvent().get(), "SSE event mismatch");
 			}));
 
 			// Perform initial handshake with /examples/abc and verify 200 response
 			Request request = Request.with(HttpMethod.GET, "/examples/abc").build();
 			RequestResult requestResult = simulator.performRequest(request);
 
-			Assert.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
 
 			// Create a server-sent event...
 			ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
@@ -132,7 +134,8 @@ public class ServerSentEventTests {
 		}
 	}
 
-	@Test(timeout = 5000)
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	public void sse_startStop_doesNotHang() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -154,7 +157,8 @@ public class ServerSentEventTests {
 		} // try-with-resources stops both HTTP and SSE servers
 	}
 
-	@Test(timeout = 10000)
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	public void sse_handshakeHeaders_and_basicDelivery() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -181,16 +185,16 @@ public class ServerSentEventTests {
 				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
 				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
 
-				Assert.assertNotNull("Did not receive HTTP response headers", rawHeaders);
+				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				String[] headerLines = rawHeaders.split("\r?\n");
-				Assert.assertTrue("Non-200 handshake", headerLines[0].startsWith("HTTP/1.1 200"));
+				Assertions.assertTrue(headerLines[0].startsWith("HTTP/1.1 200"), "Non-200 handshake");
 
 				Map<String, String> headers = parseHeaders(headerLines);
-				Assert.assertTrue("Missing text/event-stream",
-						headers.getOrDefault("content-type", "").toLowerCase().contains("text/event-stream"));
-				Assert.assertEquals("no", headers.getOrDefault("x-accel-buffering", "").toLowerCase());
-				Assert.assertEquals("keep-alive", headers.getOrDefault("connection", "").toLowerCase());
-				Assert.assertEquals("no-cache", headers.getOrDefault("cache-control", "").toLowerCase());
+				Assertions.assertTrue(headers.getOrDefault("content-type", "").toLowerCase().contains("text/event-stream"),
+						"Missing text/event-stream");
+				Assertions.assertEquals("no", headers.getOrDefault("x-accel-buffering", "").toLowerCase());
+				Assertions.assertEquals("keep-alive", headers.getOrDefault("connection", "").toLowerCase());
+				Assertions.assertEquals("no-cache", headers.getOrDefault("cache-control", "").toLowerCase());
 
 				// Broadcast one event and verify frame formatting
 				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.of("/tests/abc")).get();
@@ -202,19 +206,20 @@ public class ServerSentEventTests {
 				b.broadcast(ev);
 
 				String block = readUntil(socket.getInputStream(), "\n\n", 8192);
-				Assert.assertNotNull("Did not receive first SSE event", block);
+				Assertions.assertNotNull(block, "Did not receive first SSE event");
 				List<String> lines = block.lines().map(String::trim).filter(s -> !s.isEmpty()).toList();
 
-				Assert.assertTrue(lines.stream().anyMatch(s -> s.equals("event: test")));
-				Assert.assertTrue(lines.stream().anyMatch(s -> s.equals("id: e1")));
-				Assert.assertTrue(lines.stream().anyMatch(s -> s.equals("retry: 10000")));
-				Assert.assertTrue(lines.stream().anyMatch(s -> s.equals("data: hello")));
-				Assert.assertTrue(lines.stream().anyMatch(s -> s.equals("data: world")));
+				Assertions.assertTrue(lines.stream().anyMatch(s -> s.equals("event: test")));
+				Assertions.assertTrue(lines.stream().anyMatch(s -> s.equals("id: e1")));
+				Assertions.assertTrue(lines.stream().anyMatch(s -> s.equals("retry: 10000")));
+				Assertions.assertTrue(lines.stream().anyMatch(s -> s.equals("data: hello")));
+				Assertions.assertTrue(lines.stream().anyMatch(s -> s.equals("data: world")));
 			}
 		}
 	}
 
-	@Test(timeout = 20000)
+	@Test
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
 	public void sse_largeEvent_isFullyWritten() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -240,7 +245,7 @@ public class ServerSentEventTests {
 				// consume headers
 				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
 				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
-				Assert.assertNotNull(hdr);
+				Assertions.assertNotNull(hdr);
 
 				// Build a ~128KiB payload split across many lines
 				String line = "A".repeat(64);
@@ -253,7 +258,7 @@ public class ServerSentEventTests {
 
 				// Read exactly one event block
 				String block = readUntil(socket.getInputStream(), "\n\n", (64 + 8) * linesCount + 8192);
-				Assert.assertNotNull("Did not receive large event", block);
+				Assertions.assertNotNull(block, "Did not receive large event");
 
 				// Reconstruct data lines
 				String reconstructed = block.lines()
@@ -261,13 +266,14 @@ public class ServerSentEventTests {
 						.map(l -> l.substring("data: ".length()))
 						.collect(java.util.stream.Collectors.joining("\n"));
 
-				Assert.assertEquals("Large SSE payload corrupted or truncated", bigData.length(), reconstructed.length());
-				Assert.assertEquals("Large SSE payload mismatch", bigData, reconstructed);
+				Assertions.assertEquals(bigData.length(), reconstructed.length(), "Large SSE payload corrupted or truncated");
+				Assertions.assertEquals(bigData, reconstructed, "Large SSE payload mismatch");
 			}
 		}
 	}
 
-	@Test(timeout = 20000)
+	@Test
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
 	public void sse_broadcastMany_doesNotThrow_andEventuallyDeliversLast() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -293,7 +299,7 @@ public class ServerSentEventTests {
 				// consume headers
 				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
 				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
-				Assert.assertNotNull(hdr);
+				Assertions.assertNotNull(hdr);
 
 				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.of("/tests/backpressure")).get();
 
@@ -316,12 +322,13 @@ public class ServerSentEventTests {
 					}
 				}
 
-				Assert.assertTrue("Did not observe the last broadcast id under backpressure", sawLast);
+				Assertions.assertTrue(sawLast, "Did not observe the last broadcast id under backpressure");
 			}
 		}
 	}
 
-	@Test(timeout = 15000)
+	@Test
+	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	public void sse_stopClosesConnection() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -346,7 +353,7 @@ public class ServerSentEventTests {
 			writeHttpGet(socket, "/tests/closeme", ssePort);
 			String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
 			if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
-			Assert.assertNotNull(hdr);
+			Assertions.assertNotNull(hdr);
 
 			// Kick one message through so the writer loop is active
 			sse.acquireBroadcaster(ResourcePath.of("/tests/closeme")).get()
@@ -359,7 +366,7 @@ public class ServerSentEventTests {
 			// Attempt to read again; we expect EOF (-1) within timeout
 			boolean sawEof = waitForEof(socket, 6000);
 			socket.close();
-			Assert.assertTrue("Connection did not close after server stop", sawEof);
+			Assertions.assertTrue(sawEof, "Connection did not close after server stop");
 		}
 	}
 

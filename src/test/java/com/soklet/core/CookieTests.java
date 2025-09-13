@@ -17,8 +17,8 @@
 package com.soklet.core;
 
 import com.soklet.core.ResponseCookie.SameSite;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
@@ -36,35 +36,35 @@ public class CookieTests {
 				"Cookie", Set.of("a=1")
 		));
 
-		Assert.assertEquals(Set.of("1"), happyPath.get("a"));
+		Assertions.assertEquals(Set.of("1"), happyPath.get("a"));
 
 		Map<String, Set<String>> multipleValues = Utilities.extractCookiesFromHeaders(Map.of(
 				"Cookie", Set.of("a=1; b=2; a=2;")
 		));
 
-		Assert.assertEquals(Set.of("1", "2"), multipleValues.get("a"));
-		Assert.assertEquals(Set.of("2"), multipleValues.get("b"));
+		Assertions.assertEquals(Set.of("1", "2"), multipleValues.get("a"));
+		Assertions.assertEquals(Set.of("2"), multipleValues.get("b"));
 
 		Map<String, Set<String>> blank = Utilities.extractCookiesFromHeaders(Map.of(
 				"Cookie", Set.of()
 		));
 
-		Assert.assertEquals(Set.of(), blank.keySet());
+		Assertions.assertEquals(Set.of(), blank.keySet());
 
 		Map<String, Set<String>> missingValue = Utilities.extractCookiesFromHeaders(Map.of(
 				"Cookie", Set.of("a=")
 		));
 
-		Assert.assertEquals(Set.of(), missingValue.get("a"));
+		Assertions.assertEquals(Set.of(), missingValue.get("a"));
 	}
 
 	@Test
 	public void setCookieHeaderRepresentationTests() {
 		ResponseCookie basicResponseCookie = ResponseCookie.with("name", "value").build();
-		Assert.assertEquals("name=value", basicResponseCookie.toSetCookieHeaderRepresentation());
+		Assertions.assertEquals("name=value", basicResponseCookie.toSetCookieHeaderRepresentation());
 
 		ResponseCookie valuelessResponseCookie = ResponseCookie.withName("name").build();
-		Assert.assertEquals("name=", valuelessResponseCookie.toSetCookieHeaderRepresentation());
+		Assertions.assertEquals("name=", valuelessResponseCookie.toSetCookieHeaderRepresentation());
 
 		ResponseCookie everythingResponseCookie = ResponseCookie.with("name", "value")
 				.domain("www.soklet.com")
@@ -75,7 +75,7 @@ public class CookieTests {
 				.sameSite(SameSite.STRICT)
 				.build();
 
-		Assert.assertEquals("name=value; Path=/; Domain=www.soklet.com; Max-Age=3600; Secure; HttpOnly; SameSite=Strict",
+		Assertions.assertEquals("name=value; Path=/; Domain=www.soklet.com; Max-Age=3600; Secure; HttpOnly; SameSite=Strict",
 				everythingResponseCookie.toSetCookieHeaderRepresentation());
 	}
 }

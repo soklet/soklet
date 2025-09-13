@@ -24,19 +24,16 @@ import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.core.impl.DefaultServer;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.InetAddress;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -133,9 +130,9 @@ public class IntegrationTests {
 			// Basic varargs round-trip (no decoding assertions here)
 			URL url = new URL("http://127.0.0.1:" + port + "/files/js/some/file/example.js");
 			HttpURLConnection c = open("GET", url, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, c.getResponseCode());
+			Assertions.assertEquals(200, c.getResponseCode());
 			String body = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
-			Assert.assertEquals("js/some/file/example.js", body);
+			Assertions.assertEquals("js/some/file/example.js", body);
 		}
 	}
 
@@ -146,14 +143,14 @@ public class IntegrationTests {
 			// q=hello+world -> "hello world"
 			URL u1 = new URL("http://127.0.0.1:" + port + "/q?q=hello+world");
 			HttpURLConnection c1 = open("GET", u1, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, c1.getResponseCode());
-			Assert.assertEquals("hello world", new String(readAll(c1.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals(200, c1.getResponseCode());
+			Assertions.assertEquals("hello world", new String(readAll(c1.getInputStream()), StandardCharsets.UTF_8));
 
 			// q=a%2Bb -> "a+b"
 			URL u2 = new URL("http://127.0.0.1:" + port + "/q?q=a%2Bb");
 			HttpURLConnection c2 = open("GET", u2, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, c2.getResponseCode());
-			Assert.assertEquals("a+b", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals(200, c2.getResponseCode());
+			Assertions.assertEquals("a+b", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
 		}
 	}
 
@@ -164,14 +161,14 @@ public class IntegrationTests {
 			// Literal '+' must be preserved in PATH
 			URL u1 = new URL("http://127.0.0.1:" + port + "/files/foo+bar");
 			HttpURLConnection c1 = open("GET", u1, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, c1.getResponseCode());
-			Assert.assertEquals("foo+bar", new String(readAll(c1.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals(200, c1.getResponseCode());
+			Assertions.assertEquals("foo+bar", new String(readAll(c1.getInputStream()), StandardCharsets.UTF_8));
 
 			// Percent-encoded '+' should decode to '+'
 			URL u2 = new URL("http://127.0.0.1:" + port + "/files/a%2Bb");
 			HttpURLConnection c2 = open("GET", u2, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, c2.getResponseCode());
-			Assert.assertEquals("a+b", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals(200, c2.getResponseCode());
+			Assertions.assertEquals("a+b", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
 		}
 	}
 
@@ -182,8 +179,8 @@ public class IntegrationTests {
 			// We expect /files/a/b/../c -> "a/c" after normalization
 			URL u = new URL("http://127.0.0.1:" + port + "/files/a/b/../c");
 			HttpURLConnection c = open("GET", u, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, c.getResponseCode());
-			Assert.assertEquals("a/c", new String(readAll(c.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals(200, c.getResponseCode());
+			Assertions.assertEquals("a/c", new String(readAll(c.getInputStream()), StandardCharsets.UTF_8));
 		}
 	}
 
@@ -196,12 +193,12 @@ public class IntegrationTests {
 					"Accept", "text/plain",
 					"Cookie", "SID=1; sid=2"
 			));
-			Assert.assertEquals(200, c.getResponseCode());
+			Assertions.assertEquals(200, c.getResponseCode());
 			String names = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
 			// Expect both names to be distinct and preserved
 			Set<String> set = Arrays.stream(names.split(",")).map(String::trim).collect(Collectors.toSet());
-			Assert.assertTrue(set.contains("SID"));
-			Assert.assertTrue(set.contains("sid"));
+			Assertions.assertTrue(set.contains("SID"));
+			Assertions.assertTrue(set.contains("sid"));
 		}
 	}
 
@@ -246,13 +243,13 @@ public class IntegrationTests {
 		try (Soklet app = startApp(port, Set.of(UsersResource.class))) {
 			var u1 = new URL("http://127.0.0.1:" + port + "/users/me");
 			var c1 = open("GET", u1, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, c1.getResponseCode());
-			Assert.assertEquals("literal", new String(readAll(c1.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals(200, c1.getResponseCode());
+			Assertions.assertEquals("literal", new String(readAll(c1.getInputStream()), StandardCharsets.UTF_8));
 
 			var u2 = new URL("http://127.0.0.1:" + port + "/users/123");
 			var c2 = open("GET", u2, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, c2.getResponseCode());
-			Assert.assertEquals("param:123", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals(200, c2.getResponseCode());
+			Assertions.assertEquals("param:123", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
 		}
 	}
 
@@ -262,11 +259,11 @@ public class IntegrationTests {
 		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
 			URL u = new URL("http://127.0.0.1:" + port + "/hello");
 			HttpURLConnection c = open("HEAD", u, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, c.getResponseCode());
+			Assertions.assertEquals(200, c.getResponseCode());
 			String cl = c.getHeaderField("Content-Length");
-			Assert.assertEquals("5", cl); // "hello"
+			Assertions.assertEquals("5", cl); // "hello"
 			byte[] b = readAll(c.getInputStream());
-			Assert.assertEquals(0, b.length);
+			Assertions.assertEquals(0, b.length);
 		}
 	}
 
@@ -278,10 +275,10 @@ public class IntegrationTests {
 			HttpURLConnection c = open("POST", u, Map.of("Accept", "text/plain"));
 			c.getOutputStream().write("x".getBytes(StandardCharsets.UTF_8));
 			int code = c.getResponseCode();
-			Assert.assertEquals(405, code);
+			Assertions.assertEquals(405, code);
 			String allow = c.getHeaderField("Allow");
-			Assert.assertNotNull(allow);
-			Assert.assertTrue(allow.contains("GET"));
+			Assertions.assertNotNull(allow);
+			Assertions.assertTrue(allow.contains("GET"));
 		}
 	}
 
@@ -297,12 +294,12 @@ public class IntegrationTests {
 			HttpURLConnection c = open("GET", u, headers);
 			// And a second Cookie header with another value of same name
 			c.addRequestProperty("Cookie", "flavor=vanilla");
-			Assert.assertEquals(200, c.getResponseCode());
+			Assertions.assertEquals(200, c.getResponseCode());
 			String body = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
 			// Order is not guaranteed; ensure both values are visible
 			Set<String> vals = Arrays.stream(body.split("\\|")).collect(Collectors.toSet());
-			Assert.assertTrue(vals.contains("choc chip"));
-			Assert.assertTrue(vals.contains("vanilla"));
+			Assertions.assertTrue(vals.contains("choc chip"));
+			Assertions.assertTrue(vals.contains("vanilla"));
 		}
 	}
 
@@ -312,13 +309,13 @@ public class IntegrationTests {
 		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
 			URL upath = new URL("http://127.0.0.1:" + port + "/files/a+b");
 			HttpURLConnection cp = open("GET", upath, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, cp.getResponseCode());
-			Assert.assertEquals("a+b", new String(readAll(cp.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals(200, cp.getResponseCode());
+			Assertions.assertEquals("a+b", new String(readAll(cp.getInputStream()), StandardCharsets.UTF_8));
 
 			URL uquery = new URL("http://127.0.0.1:" + port + "/q?q=a+b");
 			HttpURLConnection cq = open("GET", uquery, Map.of("Accept", "text/plain"));
-			Assert.assertEquals(200, cq.getResponseCode());
-			Assert.assertEquals("a b", new String(readAll(cq.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals(200, cq.getResponseCode());
+			Assertions.assertEquals("a b", new String(readAll(cq.getInputStream()), StandardCharsets.UTF_8));
 		}
 	}
 }
