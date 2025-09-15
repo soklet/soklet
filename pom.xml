@@ -7,7 +7,7 @@
     <version>2.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Soklet</name>
-    <description>A minimal HTTP 1.1 server and routing library for Java, well-suited for building RESTful APIs.</description>
+    <description>A zero-dependency HTTP 1.1 server and routing library for Java, well-suited for building RESTful APIs and broadcasting Server-Sent Events.</description>
     <url>https://www.soklet.com</url>
 
     <licenses>
