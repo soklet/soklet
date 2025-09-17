@@ -80,7 +80,7 @@ import static java.util.Objects.requireNonNull;
  *   DefaultServer.withPort(8080).build()
  * ).build();
  *
- * try (Soklet soklet = new Soklet(config)) {
+ * try (Soklet soklet = Soklet.withConfiguration(config)) {
  *   soklet.start();
  *   System.out.println("Soklet started, press [enter] to exit");
  *   System.in.read(); // or Thread.currentThread().join() in containers
@@ -96,11 +96,23 @@ public final class Soklet implements AutoCloseable {
 	private final ReentrantLock lock;
 
 	/**
+	 * Acquires a Soklet instance with the given configuration.
+	 *
+	 * @param sokletConfiguration configuration that drives the Soklet system
+	 * @return a Soklet instance
+	 */
+	@Nonnull
+	public static Soklet withConfiguration(@Nonnull SokletConfiguration sokletConfiguration) {
+		requireNonNull(sokletConfiguration);
+		return new Soklet(sokletConfiguration);
+	}
+
+	/**
 	 * Creates a Soklet instance with the given configuration.
 	 *
 	 * @param sokletConfiguration configuration that drives the Soklet system
 	 */
-	public Soklet(@Nonnull SokletConfiguration sokletConfiguration) {
+	private Soklet(@Nonnull SokletConfiguration sokletConfiguration) {
 		requireNonNull(sokletConfiguration);
 
 		this.sokletConfiguration = sokletConfiguration;
@@ -891,7 +903,7 @@ public final class Soklet implements AutoCloseable {
 
 		Simulator simulator = new DefaultSimulator(server, serverSentEventServer);
 
-		try (Soklet soklet = new Soklet(mockConfiguration)) {
+		try (Soklet soklet = Soklet.withConfiguration(mockConfiguration)) {
 			soklet.start();
 			simulatorConsumer.accept(simulator);
 		} catch (RuntimeException e) {

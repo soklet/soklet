@@ -118,7 +118,7 @@ public class IntegrationTests {
 				.resourceMethodResolver(new DefaultResourceMethodResolver(resourceClasses))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
-		Soklet app = new Soklet(cfg);
+		Soklet app = Soklet.withConfiguration(cfg);
 		app.start();
 		return app;
 	}

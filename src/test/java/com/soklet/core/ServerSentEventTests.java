@@ -151,7 +151,7 @@ public class ServerSentEventTests {
 				.lifecycleInterceptor(new QuietLifecycle()) // no noise in test logs
 				.build();
 
-		try (Soklet app = new Soklet(cfg)) {
+		try (Soklet app = Soklet.withConfiguration(cfg)) {
 			app.start();
 			// if stop hangs due to accept(), this test times out
 		} // try-with-resources stops both HTTP and SSE servers
@@ -174,7 +174,7 @@ public class ServerSentEventTests {
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = new Soklet(cfg)) {
+		try (Soklet app = Soklet.withConfiguration(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -235,7 +235,7 @@ public class ServerSentEventTests {
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = new Soklet(cfg)) {
+		try (Soklet app = Soklet.withConfiguration(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -289,7 +289,7 @@ public class ServerSentEventTests {
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = new Soklet(cfg)) {
+		try (Soklet app = Soklet.withConfiguration(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -344,7 +344,7 @@ public class ServerSentEventTests {
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = new Soklet(cfg)) {
+		try (Soklet app = Soklet.withConfiguration(cfg)) {
 			app.start();
 
 			Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000);

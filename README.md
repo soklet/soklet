@@ -144,7 +144,7 @@ public class App {
       DefaultServer.withPort(8080).build()
     ).build();
 
-    try (Soklet soklet = new Soklet(config)) {
+    try (Soklet soklet = Soklet.withConfiguration(config)) {
       soklet.start();
       System.out.println("Soklet started, press [enter] to exit");
       System.in.read(); // or Thread.currentThread().join() in containers
