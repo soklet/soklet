@@ -68,7 +68,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
@@ -90,7 +89,6 @@ import static java.util.Objects.requireNonNull;
  * try (Soklet soklet = Soklet.withConfiguration(config)) {
  *   soklet.start();
  *   System.out.println("Soklet started, press [enter] to exit");
- *   // ...or ShutdownTrigger.JVM_SHUTDOWN in containers
  *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
  * }}</pre>
  *
@@ -224,119 +222,55 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Blocks the current thread until one of the {@code shutdownTriggers} occurs, at which point {@link #stop()} is automatically invoked.
+	 * Blocks the current thread until JVM shutdown ({@code SIGTERM/SIGINT/System.exit()}), or if one of the {@code shutdownTriggers} occurs.
+	 * <p>
+	 * This method will automatically invoke this instance's {@link #stop()} method once it becomes unblocked.
 	 * <p>
 	 * Note: {@link ShutdownTrigger#ENTER_KEY} will invoke {@link #stop()} on <i>all</i> Soklet instances, as stdin is process-wide.
 	 *
-	 * @param shutdownTriggers
-	 * @throws InterruptedException If the current thread has its interrupted status set on entry to this method, or is interrupted while waiting
+	 * @param shutdownTriggers additional trigger[s] which signal that shutdown should occur, e.g. {@link ShutdownTrigger#ENTER_KEY} for "enter key pressed"
+	 * @throws IllegalStateException if {@link ShutdownTrigger#ENTER_KEY} is used in an environment that does not have a readable stdin, e.g. when deployed in a container
+	 * @throws InterruptedException  if the current thread has its interrupted status set on entry to this method, or is interrupted while waiting
 	 */
-	public void awaitShutdown(@Nonnull ShutdownTrigger... shutdownTriggers) throws InterruptedException {
-		if (shutdownTriggers == null || shutdownTriggers.length == 0)
-			throw new IllegalArgumentException(format("You must supply at least one %s when invoking %s#awaitShutdown.", getClass().getSimpleName()));
-
-		Set<ShutdownTrigger> shutdownTriggersAsSet = EnumSet.copyOf(Set.of(shutdownTriggers));
-
-		Thread hook = null;
-		boolean installedHook = false;
-
-		try {
-			if (shutdownTriggersAsSet.contains(ShutdownTrigger.JVM_SHUTDOWN)) {
-				hook = new Thread(() -> {
-					try {
-						stop();
-					} catch (Throwable ignored) {
-						// Nothing to do
-					}
-				}, "soklet-shutdown-hook");
-
-				Runtime.getRuntime().addShutdownHook(hook);
-				installedHook = true;
-			}
-
-			if (shutdownTriggersAsSet.contains(ShutdownTrigger.ENTER_KEY))
-				KeypressManager.register(this); // no-op if no console / already running
-
-			awaitShutdownInternal();
-		} finally {
-			KeypressManager.unregister(this);
-
-			if (installedHook) {
-				try {
-					Runtime.getRuntime().removeShutdownHook(hook);
-				} catch (IllegalStateException ignored) {
-					// JVM is shutting down
-				}
-			}
-		}
-	}
-
-	/**
-	 * Blocks the current thread until one of the {@code shutdownTriggers} occurs, at which point {@link #stop()} is automatically invoked.
-	 * <p>
-	 * Note: {@link ShutdownTrigger#ENTER_KEY} will invoke {@link #stop()} on <i>all</i> Soklet instances, as stdin is process-wide.
-	 *
-	 * @param gracePeriod
-	 * @param shutdownTriggers
-	 * @return {@code true} if shutdown
-	 * @throws InterruptedException If the current thread has its interrupted status set on entry to this method, or is interrupted while waiting
-	 */
-	@Nonnull
-	public Boolean awaitShutdown(@Nonnull Duration gracePeriod,
-															 @Nullable ShutdownTrigger... shutdownTriggers) throws InterruptedException {
-		requireNonNull(gracePeriod);
-
-		if (shutdownTriggers == null || shutdownTriggers.length == 0)
-			throw new IllegalArgumentException(format("You must supply at least one %s when invoking %s#awaitShutdown.", getClass().getSimpleName()));
-
-		Set<ShutdownTrigger> shutdownTriggersAsSet = EnumSet.copyOf(Set.of(shutdownTriggers));
-
+	public void awaitShutdown(@Nullable ShutdownTrigger... shutdownTriggers) throws InterruptedException {
 		Thread shutdownHook = null;
-		boolean installedShutdownHook = false;
+		boolean registeredEnterKeyShutdownTrigger = false;
+		Set<ShutdownTrigger> shutdownTriggersAsSet = shutdownTriggers == null ? Set.of() : EnumSet.copyOf(Set.of(shutdownTriggers));
 
 		try {
-			if (shutdownTriggersAsSet.contains(ShutdownTrigger.JVM_SHUTDOWN)) {
-				shutdownHook = new Thread(() -> {
-					try {
-						stop();
-					} catch (Throwable ignored) {
-						// Nothing to do
-					}
-				}, "soklet-shutdown-hook");
+			// Optionally listen for enter key
+			if (shutdownTriggersAsSet.contains(ShutdownTrigger.ENTER_KEY)) {
+				registeredEnterKeyShutdownTrigger = KeypressManager.register(this); // returns false if stdin unusable/disabled
 
-				Runtime.getRuntime().addShutdownHook(shutdownHook);
-				installedShutdownHook = true;
-			}
-
-			if (shutdownTriggersAsSet.contains(ShutdownTrigger.ENTER_KEY))
-				KeypressManager.register(this);
-
-			return awaitShutdownInternal(gracePeriod);
-		} finally {
-			KeypressManager.unregister(this);
-
-			if (installedShutdownHook) {
-				try {
-					Runtime.getRuntime().removeShutdownHook(shutdownHook);
-				} catch (IllegalStateException ignored) {
-					// JVM is shutting down
+				if (!registeredEnterKeyShutdownTrigger) {
+					throw new IllegalStateException(format("Cannot use %s.%s in an environment without readable stdin",
+							ShutdownTrigger.class.getSimpleName(), ShutdownTrigger.ENTER_KEY.name()));
 				}
 			}
+
+			// Always register a shutdown hook
+			shutdownHook = new Thread(() -> {
+				try {
+					stop();
+				} catch (Throwable ignored) {
+					// Nothing to do
+				}
+			}, "soklet-shutdown-hook");
+
+			Runtime.getRuntime().addShutdownHook(shutdownHook);
+
+			// Wait until "close" finishes
+			getAwaitShutdownLatchReference().get().await();
+		} finally {
+			if (registeredEnterKeyShutdownTrigger)
+				KeypressManager.unregister(this);
+
+			try {
+				Runtime.getRuntime().removeShutdownHook(shutdownHook);
+			} catch (IllegalStateException ignored) {
+				// JVM shutting down
+			}
 		}
-	}
-
-	@Nonnull
-	protected Boolean awaitShutdownInternal() throws InterruptedException {
-		return awaitShutdownInternal(null);
-	}
-
-	@Nonnull
-	protected Boolean awaitShutdownInternal(@Nullable Duration timeoutDuration) throws InterruptedException {
-		if (timeoutDuration != null)
-			return getAwaitShutdownLatchReference().get().await(timeoutDuration.toMillis(), TimeUnit.MILLISECONDS);
-
-		getAwaitShutdownLatchReference().get().await();
-		return true;
 	}
 
 	/**
@@ -345,14 +279,11 @@ public final class Soklet implements AutoCloseable {
 	@ThreadSafe
 	private static final class KeypressManager {
 		@Nonnull
-		private static final String STDIN_DISABLED_PROPERTY;
-		@Nonnull
 		private static final Set<Soklet> SOKLET_REGISTRY;
 		@Nonnull
 		private static final AtomicBoolean LISTENER_STARTED;
 
 		static {
-			STDIN_DISABLED_PROPERTY = "soklet.stdin.disabled";
 			SOKLET_REGISTRY = new CopyOnWriteArraySet<>();
 			LISTENER_STARTED = new AtomicBoolean(false);
 		}
@@ -366,7 +297,7 @@ public final class Soklet implements AutoCloseable {
 			requireNonNull(soklet);
 
 			// If stdin is not readable (e.g., container with no TTY), don't start a listener.
-			if (isStdinDisabled() || !canReadFromStdin())
+			if (!canReadFromStdin())
 				return false;
 
 			SOKLET_REGISTRY.add(soklet);
@@ -387,13 +318,8 @@ public final class Soklet implements AutoCloseable {
 			// If stdin hits EOF, the listener exits on its own.
 		}
 
-		@Nonnull
-		private static Boolean isStdinDisabled() {
-			return Boolean.parseBoolean(System.getProperty(STDIN_DISABLED_PROPERTY, "false"));
-		}
-
 		/**
-		 * Heuristic: if System.in is present and calling available() doesn’t throw,
+		 * Heuristic: if System.in is present and calling available() doesn't throw,
 		 * treat it as readable. Works even in IDEs where System.console() is null.
 		 */
 		@Nonnull
@@ -415,7 +341,7 @@ public final class Soklet implements AutoCloseable {
 		private static void runLoop() {
 			try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
 				// Blocks until newline or EOF; EOF (null) happens with /dev/null or closed pipe.
-				String line = bufferedReader.readLine();
+				bufferedReader.readLine();
 
 				// Either a line or EOF → stop everything that’s currently registered.
 				for (Soklet soklet : SOKLET_REGISTRY) {

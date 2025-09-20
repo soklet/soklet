@@ -147,7 +147,6 @@ public class App {
     try (Soklet soklet = Soklet.withConfiguration(config)) {
       soklet.start();
       System.out.println("Soklet started, press [enter] to exit");
-      // ...or ShutdownTrigger.JVM_SHUTDOWN in containers
       soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
     }
   }

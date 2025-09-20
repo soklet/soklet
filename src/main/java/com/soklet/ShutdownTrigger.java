@@ -16,22 +16,15 @@
 
 package com.soklet;
 
-import java.time.Duration;
-
 /**
  * Events that might trigger a {@link Soklet} instance to shut down.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @see Soklet#awaitShutdown(ShutdownTrigger...)
- * @see Soklet#awaitShutdown(Duration, ShutdownTrigger...)
  */
 public enum ShutdownTrigger {
 	/**
 	 * When the user presses 'Enter' in the console.
 	 */
-	ENTER_KEY,
-	/**
-	 * When the JVM is shutting down: {@code SIGTERM}, CTRL-C, {@code System.exit}, and others.
-	 */
-	JVM_SHUTDOWN
+	ENTER_KEY
 }
