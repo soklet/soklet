@@ -138,7 +138,7 @@ public class App {
   }
 
   // Start the server and listen on :8080
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws Exception {
     // Use out-of-the-box defaults
     SokletConfiguration config = SokletConfiguration.withServer(
       DefaultServer.withPort(8080).build()
