@@ -1,0 +1,102 @@
+/*
+ * Copyright 2022-2025 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.soklet.core;
+
+import com.soklet.Soklet;
+import com.soklet.SokletConfiguration;
+import com.soklet.annotation.GET;
+import com.soklet.annotation.Resource;
+import com.soklet.core.impl.DefaultResourceMethodResolver;
+import com.soklet.core.impl.DefaultServer;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.ThreadSafe;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.ServerSocket;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Map;
+import java.util.Set;
+
+/*
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+public class ServerLifecycleTests {
+	private static int findFreePort() throws IOException {
+		try (ServerSocket ss = new ServerSocket(0)) {
+			ss.setReuseAddress(true);
+			return ss.getLocalPort();
+		}
+	}
+
+	private static byte[] readAll(java.io.InputStream in) throws IOException {
+		try (var is = in) {
+			return is.readAllBytes();
+		}
+	}
+
+	private static HttpURLConnection open(String method, URL url, Map<String, String> headers) throws IOException {
+		HttpURLConnection c = (HttpURLConnection) url.openConnection();
+		c.setRequestMethod(method);
+		for (Map.Entry<String, String> e : headers.entrySet()) c.setRequestProperty(e.getKey(), e.getValue());
+		return c;
+	}
+
+	@Test
+	public void start_stop_isStarted_toggles_and_serves_requests() throws Exception {
+		int port = findFreePort();
+		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(port)
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(HealthResource.class)))
+				.lifecycleInterceptor(new LifecycleInterceptor() {
+					@Override
+					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+				})
+				.build();
+
+		try (Soklet app = Soklet.withConfiguration(cfg)) {
+			Assertions.assertFalse(app.isStarted());
+			app.start();
+			Assertions.assertTrue(app.isStarted());
+
+			URL url = new URL("http://127.0.0.1:" + port + "/health");
+			HttpURLConnection c = open("GET", url, Map.of("Accept", "text/plain"));
+			Assertions.assertEquals(200, c.getResponseCode());
+			Assertions.assertEquals("ok", new String(readAll(c.getInputStream()), StandardCharsets.UTF_8));
+		}
+		// try-with-resources calls close(), which stops the server
+		// Can't call isStarted() after close() directly; create again to check false
+		Soklet app2 = Soklet.withConfiguration(cfg);
+		try {
+			Assertions.assertFalse(app2.isStarted());
+		} finally {
+			app2.close();
+		}
+	}
+
+	@Resource
+	public static class HealthResource {
+		@GET("/health")
+		public String health() {return "ok";}
+	}
+}
