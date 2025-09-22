@@ -222,7 +222,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Blocks the current thread until JVM shutdown ({@code SIGTERM/SIGINT/System.exit()}), or if one of the provided {@code shutdownTriggers} occurs.
+	 * Blocks the current thread until JVM shutdown ({@code SIGTERM/SIGINT/System.exit(...)} and so forth), or if one of the provided {@code shutdownTriggers} occurs.
 	 * <p>
 	 * This method will automatically invoke this instance's {@link #stop()} method once it becomes unblocked.
 	 * <p>
