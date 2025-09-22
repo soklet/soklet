@@ -222,15 +222,18 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Blocks the current thread until JVM shutdown ({@code SIGTERM/SIGINT/System.exit()}), or if one of the {@code shutdownTriggers} occurs.
+	 * Blocks the current thread until JVM shutdown ({@code SIGTERM/SIGINT/System.exit()}), or if one of the provided {@code shutdownTriggers} occurs.
 	 * <p>
 	 * This method will automatically invoke this instance's {@link #stop()} method once it becomes unblocked.
 	 * <p>
-	 * Note: {@link ShutdownTrigger#ENTER_KEY} will invoke {@link #stop()} on <i>all</i> Soklet instances, as stdin is process-wide.
+	 * <strong>Notes regarding {@link ShutdownTrigger#ENTER_KEY}:</strong>
+	 * <ul>
+	 *   <li>It will invoke {@link #stop()} on <i>all</i> Soklet instances, as stdin is process-wide</li>
+	 *   <li>It is only supported for environments with an interactive TTY and will be ignored if none exists (e.g. running in a Docker container) - Soklet will detect this and fire {@link LifecycleInterceptor#didReceiveLogEvent(LogEvent)} with an event of type {@link LogEventType#CONFIGURATION_UNSUPPORTED}</li>
+	 * </ul>
 	 *
 	 * @param shutdownTriggers additional trigger[s] which signal that shutdown should occur, e.g. {@link ShutdownTrigger#ENTER_KEY} for "enter key pressed"
-	 * @throws IllegalStateException if {@link ShutdownTrigger#ENTER_KEY} is used in an environment that does not have a readable stdin, e.g. when deployed in a container
-	 * @throws InterruptedException  if the current thread has its interrupted status set on entry to this method, or is interrupted while waiting
+	 * @throws InterruptedException if the current thread has its interrupted status set on entry to this method, or is interrupted while waiting
 	 */
 	public void awaitShutdown(@Nullable ShutdownTrigger... shutdownTriggers) throws InterruptedException {
 		Thread shutdownHook = null;
@@ -243,8 +246,12 @@ public final class Soklet implements AutoCloseable {
 				registeredEnterKeyShutdownTrigger = KeypressManager.register(this); // returns false if stdin unusable/disabled
 
 				if (!registeredEnterKeyShutdownTrigger) {
-					throw new IllegalStateException(format("Cannot use %s.%s in an environment without readable stdin",
-							ShutdownTrigger.class.getSimpleName(), ShutdownTrigger.ENTER_KEY.name()));
+					LogEvent logEvent = LogEvent.with(
+							LogEventType.CONFIGURATION_UNSUPPORTED,
+							format("Ignoring request for %s.%s - it is unsupported in this environment (no interactive TTY detected)", ShutdownTrigger.class.getSimpleName(), ShutdownTrigger.ENTER_KEY.name())
+					).build();
+
+					getSokletConfiguration().getLifecycleInterceptor().didReceiveLogEvent(logEvent);
 				}
 			}
 

@@ -28,6 +28,10 @@ import java.util.function.Function;
  */
 public enum LogEventType {
 	/**
+	 * Indicates that a Soklet configuration option was requested but isn't supported in the current runtime/environment; behavior may differ (perhaps ignored or degraded).
+	 */
+	CONFIGURATION_UNSUPPORTED,
+	/**
 	 * Indicates that an exception was thrown during core request processing operations.
 	 */
 	REQUEST_PROCESSING_FAILED,
