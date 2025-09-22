@@ -66,6 +66,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -1202,29 +1203,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			}
 
-			try {
-				if (this.connectionValidityExecutorService != null) {
-					this.connectionValidityExecutorService.shutdown();
-					this.connectionValidityExecutorService.awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
-				}
-			} catch (InterruptedException e) {
-				interrupted = true;
-			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event connection validity checker")
-						.throwable(e)
-						.build());
-			}
-
-			// Wait briefly for the event-loop thread to exit
-			if (this.eventLoopThread != null) {
-				try {
-					this.eventLoopThread.join(Math.max(1_000L, getShutdownTimeout().toMillis()));
-				} catch (InterruptedException e) {
-					interrupted = true;
-				}
-			}
-
-			// TODO: need an additional check/lock to prevent race condition where someone acquires an event source while we are shutting down
+			// Close client connections
 			for (DefaultServerSentEventBroadcaster broadcaster : getBroadcastersByResourcePath().values()) {
 				try {
 					broadcaster.unregisterAllServerSentEventConnections(true);
@@ -1238,31 +1217,59 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Clear global connections map for sanity (though it should be empty by this point)
 			getGlobalConnections().clear();
 
+			// Initiate shutdowns quickly (no blocking here beyond close() above)
+			if (this.connectionValidityExecutorService != null)
+				this.connectionValidityExecutorService.shutdown();
+
+			if (this.requestHandlerExecutorService != null)
+				this.requestHandlerExecutorService.shutdown();
+
+			if (this.requestReaderExecutorService != null)
+				this.requestReaderExecutorService.shutdown();
+
+			// Shared wall-clock deadline
+			final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
+
+			// Await the accept-loop thread and all executors **in parallel**
+			List<CompletableFuture<Boolean>> waits = new ArrayList<>(4);
+
+			waits.add(joinAsync(this.eventLoopThread, remainingMillis(deadlineNanos)));
+
+			if (this.connectionValidityExecutorService != null)
+				waits.add(awaitTerminationAsync(this.connectionValidityExecutorService, remainingMillis(deadlineNanos)));
+
+			if (this.requestHandlerExecutorService != null)
+				waits.add(awaitTerminationAsync(this.requestHandlerExecutorService, remainingMillis(deadlineNanos)));
+
+			if (this.requestReaderExecutorService != null)
+				waits.add(awaitTerminationAsync(this.requestReaderExecutorService, remainingMillis(deadlineNanos)));
+
+			// Wait for all, but no longer than the single budget
 			try {
-				if (getRequestHandlerExecutorService().isPresent()) {
-					getRequestHandlerExecutorService().get().shutdown();
-					getRequestHandlerExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
-				}
+				CompletableFuture
+						.allOf(waits.toArray(CompletableFuture[]::new))
+						.get(Math.max(0L, remainingMillis(deadlineNanos)), TimeUnit.MILLISECONDS);
+			} catch (TimeoutException te) {
+				// Budget exhausted; escalate below
 			} catch (InterruptedException e) {
 				interrupted = true;
-			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event request handler")
-						.throwable(e)
-						.build());
+				Thread.currentThread().interrupt();
+			} catch (ExecutionException e) {
+				// Log and continue shutdown
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Exception while awaiting SSE shutdown").throwable(e).build());
 			}
 
-			try {
-				if (getRequestReaderExecutorService().isPresent()) {
-					getRequestReaderExecutorService().get().shutdown();
-					getRequestReaderExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
-				}
-			} catch (InterruptedException e) {
-				interrupted = true;
-			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to shut down Server-Sent Event request reader")
-						.throwable(e)
-						.build());
-			}
+			// Escalate for any stragglers using remaining time
+			hardenJoin(this.eventLoopThread, remainingMillis(deadlineNanos));
+
+			if (this.connectionValidityExecutorService != null)
+				hardenPool(this.connectionValidityExecutorService, remainingMillis(deadlineNanos));
+
+			if (this.requestHandlerExecutorService != null)
+				hardenPool(this.requestHandlerExecutorService, remainingMillis(deadlineNanos));
+
+			if (this.requestReaderExecutorService != null)
+				hardenPool(this.requestReaderExecutorService, remainingMillis(deadlineNanos));
 		} finally {
 			this.started = false;
 			this.stopping = false; // allow future restarts
@@ -1279,6 +1286,85 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			getLock().unlock();
 		}
+	}
+
+	@Nonnull
+	protected CompletableFuture<Boolean> awaitTerminationAsync(@Nullable ExecutorService executorService,
+																														 @Nonnull Long millis) {
+		requireNonNull(millis);
+
+		if (executorService == null || millis <= 0)
+			return CompletableFuture.completedFuture(false);
+
+		return CompletableFuture.supplyAsync(() -> {
+			try {
+				return executorService.awaitTermination(millis, TimeUnit.MILLISECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+		});
+	}
+
+	@Nonnull
+	protected CompletableFuture<Boolean> joinAsync(@Nullable Thread thread,
+																								 @Nonnull Long millis) {
+		requireNonNull(millis);
+
+		if (thread == null || millis <= 0)
+			return CompletableFuture.completedFuture(true);
+
+		return CompletableFuture.supplyAsync(() -> {
+			try {
+				thread.join(millis);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+
+			return !thread.isAlive();
+		});
+	}
+
+	protected void hardenPool(@Nullable ExecutorService executorService,
+														@Nonnull Long millis) {
+		requireNonNull(millis);
+
+		if (executorService == null || executorService.isTerminated())
+			return;
+
+		// Interrupt stuck tasks
+		executorService.shutdownNow();
+
+		try {
+			executorService.awaitTermination(Math.max(100L, millis), TimeUnit.MILLISECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	protected void hardenJoin(@Nullable Thread thread,
+														@Nonnull Long millis) {
+		requireNonNull(millis);
+
+		if (thread == null || !thread.isAlive())
+			return;
+
+		thread.interrupt();
+
+		try {
+			thread.join(Math.max(100L, millis));
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	@Nonnull
+	protected Long remainingMillis(@Nonnull Long deadlineNanos) {
+		requireNonNull(deadlineNanos);
+
+		long rem = TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
+		return Math.max(0L, rem);
 	}
 
 	@Nonnull

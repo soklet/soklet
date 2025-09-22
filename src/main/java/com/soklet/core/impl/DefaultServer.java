@@ -400,12 +400,33 @@ public class DefaultServer implements Server {
 			boolean interrupted = false;
 
 			try {
-				getRequestHandlerExecutorService().get().shutdown();
-				getRequestHandlerExecutorService().get().awaitTermination(getShutdownTimeout().getSeconds(), TimeUnit.SECONDS);
+				ExecutorService requestHandlerExecutorService = getRequestHandlerExecutorService().orElse(null);
+
+				if (requestHandlerExecutorService != null) {
+					// Start graceful shutdown (no new tasks)
+					requestHandlerExecutorService.shutdown();
+
+					// Single wall-clock budget for the whole server shutdown
+					final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
+
+					// First: wait gracefully up to the remaining budget
+					long remMillis = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+					boolean done = remMillis == 0L || requestHandlerExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
+
+					if (!done) {
+						// Escalate: interrupt running tasks
+						requestHandlerExecutorService.shutdownNow();
+
+						// Small best-effort wait with whatever time remains
+						remMillis = Math.max(100L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+						requestHandlerExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
+					}
+				}
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server request handler executor service")
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
+								"Unable to shut down server request handler executor service")
 						.throwable(e)
 						.build());
 			} finally {
