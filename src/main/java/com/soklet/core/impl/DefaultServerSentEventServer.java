@@ -1271,20 +1271,22 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (this.requestReaderExecutorService != null)
 				hardenPool(this.requestReaderExecutorService, remainingMillis(deadlineNanos));
 		} finally {
-			this.started = false;
-			this.stopping = false; // allow future restarts
-			this.eventLoopThread = null;
-			this.requestHandlerExecutorService = null;
-			this.requestReaderExecutorService = null;
-			this.connectionValidityExecutorService = null;
-			this.getBroadcastersByResourcePath().clear();
-			this.getResourcePathDeclarationsByResourcePathCache().clear();
-			getStopPoisonPill().set(false);
+			try {
+				this.started = false;
+				this.stopping = false; // allow future restarts
+				this.eventLoopThread = null;
+				this.requestHandlerExecutorService = null;
+				this.requestReaderExecutorService = null;
+				this.connectionValidityExecutorService = null;
+				this.getBroadcastersByResourcePath().clear();
+				this.getResourcePathDeclarationsByResourcePathCache().clear();
+				getStopPoisonPill().set(false);
 
-			if (interrupted)
-				Thread.currentThread().interrupt();
-
-			getLock().unlock();
+				if (interrupted)
+					Thread.currentThread().interrupt();
+			} finally {
+				getLock().unlock();
+			}
 		}
 	}
 
