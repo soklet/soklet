@@ -39,6 +39,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -230,13 +231,23 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 		Integer statusCode = 204;
 		Map<String, Set<String>> headers = new LinkedHashMap<>();
 
-		headers.put("Access-Control-Allow-Origin", Set.of(corsPreflightResponse.getAccessControlAllowOrigin()));
-
 		Boolean accessControlAllowCredentials = corsPreflightResponse.getAccessControlAllowCredentials().orElse(null);
+
+		String normalizedAccessControlAllowOrigin = normalizedAccessControlAllowOrigin(
+				corsPreflight.getOrigin(),
+				corsPreflightResponse.getAccessControlAllowOrigin(),
+				accessControlAllowCredentials
+		);
+
+		headers.put("Access-Control-Allow-Origin", Set.of(normalizedAccessControlAllowOrigin));
 
 		// Either "true" or omit entirely
 		if (accessControlAllowCredentials != null && accessControlAllowCredentials)
 			headers.put("Access-Control-Allow-Credentials", Set.of("true"));
+
+		// If we turned "*" into the full origin, add Vary: Origin
+		if (!normalizedAccessControlAllowOrigin.equals(corsPreflightResponse.getAccessControlAllowOrigin()))
+			headers.put("Vary", Set.of("Origin"));
 
 		Set<String> accessControlAllowHeaders = corsPreflightResponse.getAccessControlAllowHeaders();
 
@@ -290,19 +301,47 @@ public class DefaultResponseMarshaler implements ResponseMarshaler {
 
 		return marshaledResponse.copy()
 				.headers((mutableHeaders) -> {
-					mutableHeaders.put("Access-Control-Allow-Origin", Set.of(corsResponse.getAccessControlAllowOrigin()));
-
 					Boolean accessControlAllowCredentials = corsResponse.getAccessControlAllowCredentials().orElse(null);
+
+					String normalizedAccessControlAllowOrigin = normalizedAccessControlAllowOrigin(
+							cors.getOrigin(),
+							corsResponse.getAccessControlAllowOrigin(),
+							accessControlAllowCredentials
+					);
+
+					mutableHeaders.put("Access-Control-Allow-Origin", Set.of(normalizedAccessControlAllowOrigin));
 
 					// Either "true" or omit entirely
 					if (accessControlAllowCredentials != null && accessControlAllowCredentials)
 						mutableHeaders.put("Access-Control-Allow-Credentials", Set.of("true"));
+
+					// If we turned "*" into the full origin, add Vary: Origin...
+					if (!normalizedAccessControlAllowOrigin.equals(corsResponse.getAccessControlAllowOrigin())) {
+						// ...and preserve any existing Vary values
+						Set<String> vary = new LinkedHashSet<>(mutableHeaders.getOrDefault("Vary", Set.of()));
+						vary.add("Origin");
+						mutableHeaders.put("Vary", vary);
+					}
 
 					Set<String> accessControlExposeHeaders = corsResponse.getAccessControlExposeHeaders();
 
 					if (accessControlExposeHeaders.size() > 0)
 						mutableHeaders.put("Access-Control-Expose-Headers", new LinkedHashSet<>(accessControlExposeHeaders));
 				}).finish();
+	}
+
+	@Nonnull
+	private String normalizedAccessControlAllowOrigin(@Nonnull String origin,
+																										@Nonnull String accessControlAllowOrigin,
+																										@Nullable Boolean accessControlAllowCredentials) {
+		requireNonNull(origin);
+		requireNonNull(accessControlAllowOrigin);
+
+		// If credentials are allowed, "*" is forbidden and must echo the request Origin
+		if (Objects.equals(Boolean.TRUE, accessControlAllowCredentials) && "*".equals(accessControlAllowOrigin.trim()))
+			return origin;
+
+		return accessControlAllowOrigin;
 	}
 
 	@Nonnull
