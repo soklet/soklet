@@ -50,7 +50,8 @@ public class DefaultInstanceProvider implements InstanceProvider {
 		try {
 			return instanceClass.getDeclaredConstructor().newInstance();
 		} catch (NoSuchMethodException e) {
-			throw new RuntimeException(format("Unable to create an instance of %s because no default constructor was found.", instanceClass), e);
+			throw new RuntimeException(format("Unable to create an instance of %s because no default constructor was found. " +
+					"Consider supplying your own %s implementation to Soklet - see https://www.soklet.com/docs/instance-creation for details", instanceClass, InstanceProvider.class.getSimpleName()), e);
 		} catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
 			throw new RuntimeException(format("Unable to create an instance of %s", instanceClass), e);
 		}
