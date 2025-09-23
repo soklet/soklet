@@ -498,7 +498,7 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	protected void startInternal() {
-		if (isStopping())
+		if (!isStarted() || isStopping())
 			return;
 
 		try {

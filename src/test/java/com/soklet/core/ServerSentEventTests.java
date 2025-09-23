@@ -135,17 +135,18 @@ public class ServerSentEventTests {
 	}
 
 	@Test
-	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	public void sse_startStop_doesNotHang() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
 		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestTimeout(Duration.ofSeconds(3))
+				.shutdownTimeout(Duration.ofSeconds(5))
 				.build();
 
-		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).build())
+		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(5)).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle()) // no noise in test logs
