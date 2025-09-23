@@ -78,4 +78,16 @@ public class CookieTests {
 		Assertions.assertEquals("name=value; Path=/; Domain=www.soklet.com; Max-Age=3600; Secure; HttpOnly; SameSite=Strict",
 				everythingResponseCookie.toSetCookieHeaderRepresentation());
 	}
+
+	@Test
+	public void cookieRejectsCrLfInName() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ResponseCookie.with("bad\r\nName", "v").build());
+	}
+
+	@Test
+	public void cookieRejectsCrLfInValue() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ResponseCookie.with("name", "v\r\nInjected: evil").build());
+	}
 }
