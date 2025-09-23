@@ -234,9 +234,9 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 			return extractRequestMultipartValue(request, resourceMethod, parameter, multipart, parameterType);
 
 		RequestBody requestBody = parameter.getAnnotation(RequestBody.class);
-		boolean requestBodyOptional = requestBody.optional() || parameterType.isWrappedInOptional();
 
 		if (requestBody != null) {
+			boolean requestBodyOptional = requestBody.optional() || parameterType.isWrappedInOptional();
 			boolean requestBodyExpectsString = String.class.equals(parameterType.getNormalizedType());
 			boolean requestBodyExpectsByteArray = byte[].class.equals(parameterType.getNormalizedType());
 
