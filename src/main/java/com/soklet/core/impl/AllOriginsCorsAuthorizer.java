@@ -34,6 +34,12 @@ import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * {@link CorsAuthorizer} implementation which whitelists all origins and headers, useful for local development and experimentation.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/cors#authorize-all-origins" target="_blank">https://www.soklet.com/docs/cors#authorize-all-origins</a> for documentation.
+ * <p>
+ * <strong>Note: this implementation is generally unsafe for production - prefer {@link WhitelistedOriginsCorsAuthorizer} for a more secure option.</strong>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

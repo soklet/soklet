@@ -33,6 +33,10 @@ import java.util.Optional;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * {@link CorsAuthorizer} implementation which rejects all CORS authorization attempts.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/cors#authorize-no-origins" target="_blank">https://www.soklet.com/docs/cors#authorize-no-origins</a> for documentation.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

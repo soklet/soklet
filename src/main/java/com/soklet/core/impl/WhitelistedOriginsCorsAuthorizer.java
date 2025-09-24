@@ -40,6 +40,10 @@ import static com.soklet.core.Utilities.trimAggressively;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * {@link CorsAuthorizer} implementation which whitelists specific origins (normally what you want in production).
+ * <p>
+ * See <a href="https://www.soklet.com/docs/cors#authorize-whitelisted-origins" target="_blank">https://www.soklet.com/docs/cors#authorize-whitelisted-origins</a> for documentation.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -47,6 +51,13 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	private final Function<String, Boolean> authorizer;
 
+	/**
+	 * Creates an authorizer with a fixed set of whitelisted origins.
+	 * <p>
+	 * For dynamic authorization, see {@link WhitelistedOriginsCorsAuthorizer#WhitelistedOriginsCorsAuthorizer(Function)}.
+	 *
+	 * @param whitelistedOrigins the set of whitelisted origins
+	 */
 	public WhitelistedOriginsCorsAuthorizer(@Nonnull Set<String> whitelistedOrigins) {
 		requireNonNull(whitelistedOrigins);
 
@@ -57,6 +68,11 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 		this.authorizer = (origin -> normalizedWhitelistedOrigins.contains(origin));
 	}
 
+	/**
+	 * Creates an authorizer with an authorization function which supports runtime authorization decisions.
+	 *
+	 * @param authorizer a function that returns {@code true} if the input is a whitelisted origin and {@code false} otherwise
+	 */
 	public WhitelistedOriginsCorsAuthorizer(@Nonnull Function<String, Boolean> authorizer) {
 		requireNonNull(authorizer);
 		this.authorizer = authorizer;
