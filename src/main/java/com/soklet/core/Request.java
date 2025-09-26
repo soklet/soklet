@@ -63,7 +63,7 @@ public class Request {
 
 	static {
 		DEFAULT_CHARSET = StandardCharsets.UTF_8;
-		DEFAULT_ID_GENERATOR = new DefaultIdGenerator();
+		DEFAULT_ID_GENERATOR = DefaultIdGenerator.withDefaults();
 	}
 
 	@Nonnull

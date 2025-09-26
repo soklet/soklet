@@ -28,10 +28,12 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * {@link IdGenerator} implementation which includes a wraparound-enabled sequence number and a best-effort attempt to extract local IP address.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultIdGenerator implements IdGenerator {
+public class DefaultIdGenerator implements IdGenerator<String> {
 	@Nonnull
 	private static final String DEFAULT_ID_PREFIX;
 
@@ -64,18 +66,73 @@ public class DefaultIdGenerator implements IdGenerator {
 	@Nonnull
 	private final String idPrefix;
 
-	public DefaultIdGenerator() {
-		this(1L, 9_999_999L);
+	/**
+	 * Returns a {@link DefaultIdGenerator} with the default ID range
+	 * (1 through 9,999,999) and a best-effort local IP prefix.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may
+	 * return a new or cached instance.
+	 *
+	 * @return a {@code DefaultIdGenerator} with default settings
+	 */
+	@Nonnull
+	public static DefaultIdGenerator withDefaults() {
+		return new DefaultIdGenerator(1L, 9_999_999L, null);
 	}
 
-	public DefaultIdGenerator(@Nonnull Long minimumId,
-														@Nonnull Long maximumId) {
-		this(minimumId, maximumId, null);
+	/**
+	 * Returns a {@link DefaultIdGenerator} with the given minimum and maximum ID values, and a best-effort local IP prefix.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 *
+	 * @param minimumId the lowest ID that may be generated (inclusive)
+	 * @param maximumId the highest ID that may be generated (inclusive)
+	 * @return a {@code DefaultIdGenerator} configured with the given range
+	 * @throws IllegalArgumentException if the range is invalid
+	 */
+	@Nonnull
+	public static DefaultIdGenerator withRange(@Nonnull Long minimumId,
+																						 @Nonnull Long maximumId) {
+		return new DefaultIdGenerator(requireNonNull(minimumId), requireNonNull(maximumId), null);
 	}
 
-	public DefaultIdGenerator(@Nonnull Long minimumId,
-														@Nonnull Long maximumId,
-														@Nullable String idPrefix) {
+	/**
+	 * Returns a {@link DefaultIdGenerator} with the given minimum and maximum ID values, and the specified prefix.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 *
+	 * @param minimumId the lowest ID that may be generated (inclusive)
+	 * @param maximumId the highest ID that may be generated (inclusive)
+	 * @param prefix    an optional string to prepend to generated IDs, or {@code null} to use the default host-based prefix
+	 * @return a {@code DefaultIdGenerator} configured with the given range and prefix
+	 * @throws IllegalArgumentException if the range is invalid
+	 */
+	@Nonnull
+	public static DefaultIdGenerator withRangeAndPrefix(@Nonnull Long minimumId,
+																											@Nonnull Long maximumId,
+																											@Nullable String prefix) {
+		return new DefaultIdGenerator(requireNonNull(minimumId), requireNonNull(maximumId), prefix);
+	}
+
+	/**
+	 * Returns a {@link DefaultIdGenerator} with the default ID range
+	 * (1 through 9,999,999) and the given prefix.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may
+	 * return a new or cached instance.
+	 *
+	 * @param prefix an optional string to prepend to generated IDs,
+	 *               or {@code null} to use the default host-based prefix
+	 * @return a {@code DefaultIdGenerator} configured with the given prefix
+	 */
+	@Nonnull
+	public static DefaultIdGenerator withPrefix(@Nullable String prefix) {
+		return new DefaultIdGenerator(1L, 9_999_999L, prefix);
+	}
+
+	protected DefaultIdGenerator(@Nonnull Long minimumId,
+															 @Nonnull Long maximumId,
+															 @Nullable String idPrefix) {
 		requireNonNull(minimumId);
 		requireNonNull(maximumId);
 
@@ -99,7 +156,7 @@ public class DefaultIdGenerator implements IdGenerator {
 
 	@Nonnull
 	@Override
-	public Object generateId() {
+	public String generateId() {
 		return format("%s%s", getIdPrefix(), getIdGenerator().getAndAccumulate(getMaximumId(),
 				(currentId, ignored) -> currentId < getMaximumId() ? ++currentId : getMinimumId()));
 	}
