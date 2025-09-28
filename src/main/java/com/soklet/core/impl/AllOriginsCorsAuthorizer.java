@@ -43,7 +43,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class AllOriginsCorsAuthorizer implements CorsAuthorizer {
+public final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	@Override
 	public Optional<CorsResponse> authorize(@Nonnull Request request,

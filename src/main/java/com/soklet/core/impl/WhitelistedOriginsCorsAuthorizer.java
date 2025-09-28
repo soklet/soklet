@@ -42,38 +42,51 @@ import static java.util.Objects.requireNonNull;
 /**
  * {@link CorsAuthorizer} implementation which whitelists specific origins (normally what you want in production).
  * <p>
+ * Use {@link #withOrigins(Set)} or {@link #withAuthorizer(Function)} to acquire instances of this class.
+ * <p>
  * See <a href="https://www.soklet.com/docs/cors#authorize-whitelisted-origins" target="_blank">https://www.soklet.com/docs/cors#authorize-whitelisted-origins</a> for documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
+public final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	private final Function<String, Boolean> authorizer;
 
 	/**
 	 * Creates an authorizer with a fixed set of whitelisted origins.
 	 * <p>
-	 * For dynamic authorization, see {@link WhitelistedOriginsCorsAuthorizer#WhitelistedOriginsCorsAuthorizer(Function)}.
+	 * For dynamic authorization, see {@link WhitelistedOriginsCorsAuthorizer#withAuthorizer(Function)}.
 	 *
-	 * @param whitelistedOrigins the set of whitelisted origins
+	 * @param origins the set of whitelisted origins
+	 * @return an instance of {@link WhitelistedOriginsCorsAuthorizer}
 	 */
-	public WhitelistedOriginsCorsAuthorizer(@Nonnull Set<String> whitelistedOrigins) {
-		requireNonNull(whitelistedOrigins);
+	@Nonnull
+	public static WhitelistedOriginsCorsAuthorizer withOrigins(@Nonnull Set<String> origins) {
+		requireNonNull(origins);
 
-		Set<String> normalizedWhitelistedOrigins = Collections.unmodifiableSet(new TreeSet<>(whitelistedOrigins.stream()
-				.map(whitelistedOrigin -> normalizeOrigin(whitelistedOrigin))
+		Set<String> normalizedOrigins = Collections.unmodifiableSet(new TreeSet<>(origins.stream()
+				.map(origin -> normalizeOrigin(origin))
 				.collect(Collectors.toSet())));
 
-		this.authorizer = (origin -> normalizedWhitelistedOrigins.contains(origin));
+		return new WhitelistedOriginsCorsAuthorizer(origin -> normalizedOrigins.contains(origin));
 	}
 
 	/**
-	 * Creates an authorizer with an authorization function which supports runtime authorization decisions.
+	 * Acquires a {@link WhitelistedOriginsCorsAuthorizer} instance backed by an authorization function which supports runtime authorization decisions.
+	 * <p>
+	 * For static "build time" authorization, see {@link WhitelistedOriginsCorsAuthorizer#withOrigins(Set)}.
 	 *
 	 * @param authorizer a function that returns {@code true} if the input is a whitelisted origin and {@code false} otherwise
+	 * @return an instance of {@link WhitelistedOriginsCorsAuthorizer}
 	 */
-	public WhitelistedOriginsCorsAuthorizer(@Nonnull Function<String, Boolean> authorizer) {
+	@Nonnull
+	public static WhitelistedOriginsCorsAuthorizer withAuthorizer(@Nonnull Function<String, Boolean> authorizer) {
+		requireNonNull(authorizer);
+		return new WhitelistedOriginsCorsAuthorizer(authorizer);
+	}
+
+	private WhitelistedOriginsCorsAuthorizer(@Nonnull Function<String, Boolean> authorizer) {
 		requireNonNull(authorizer);
 		this.authorizer = authorizer;
 	}
@@ -114,13 +127,13 @@ public class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	}
 
 	@Nonnull
-	protected String normalizeOrigin(@Nonnull String origin) {
+	private static String normalizeOrigin(@Nonnull String origin) {
 		requireNonNull(origin);
 		return trimAggressively(origin).toLowerCase(Locale.ROOT);
 	}
 
 	@Nonnull
-	protected Function<String, Boolean> getAuthorizer() {
+	private Function<String, Boolean> getAuthorizer() {
 		return this.authorizer;
 	}
 }

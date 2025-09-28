@@ -35,22 +35,33 @@ import static java.util.Objects.requireNonNull;
 /**
  * {@link CorsAuthorizer} implementation which rejects all CORS authorization attempts.
  * <p>
+ * Use {@link #defaultInstance()} to acquire the singleton instance of this class.
+ * <p>
  * See <a href="https://www.soklet.com/docs/cors#authorize-no-origins" target="_blank">https://www.soklet.com/docs/cors#authorize-no-origins</a> for documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class NoOriginsCorsAuthorizer implements CorsAuthorizer {
+public final class NoOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
-	private static final NoOriginsCorsAuthorizer SHARED_INSTANCE;
+	private static final NoOriginsCorsAuthorizer DEFAULT_INSTANCE;
 
 	static {
-		SHARED_INSTANCE = new NoOriginsCorsAuthorizer();
+		DEFAULT_INSTANCE = new NoOriginsCorsAuthorizer();
 	}
 
+	/**
+	 * Acquires a {@link NoOriginsCorsAuthorizer} instance.
+	 *
+	 * @return an instance of {@link NoOriginsCorsAuthorizer}
+	 */
 	@Nonnull
-	public static NoOriginsCorsAuthorizer sharedInstance() {
-		return SHARED_INSTANCE;
+	public static NoOriginsCorsAuthorizer defaultInstance() {
+		return DEFAULT_INSTANCE;
+	}
+
+	private NoOriginsCorsAuthorizer() {
+		// Nothing to do
 	}
 
 	@Nonnull
