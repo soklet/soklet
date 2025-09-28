@@ -841,7 +841,7 @@ Authorize All Origins:
 ```java
 SokletConfiguration config = SokletConfiguration.withServer(server)
   // "Wildcard" (*) CORS authorization. Don't use this in production!
-  .corsAuthorizer(new AllOriginsCorsAuthorizer())
+  .corsAuthorizer(AllOriginsCorsAuthorizer.sharedInstance())
   .build();
 ```
 
@@ -851,7 +851,7 @@ Authorize Whitelisted Origins:
 Set<String> allowedOrigins = Set.of("https://www.revetware.com");
 
 SokletConfiguration config = SokletConfiguration.withServer(server)
-  .corsAuthorizer(new WhitelistedOriginsCorsAuthorizer(allowedOrigins))
+  .corsAuthorizer(WhitelistedOriginsCorsAuthorizer.withOrigins(allowedOrigins))
   .build();
 ```
 
@@ -859,7 +859,7 @@ SokletConfiguration config = SokletConfiguration.withServer(server)
 
 ```java
 SokletConfiguration config = SokletConfiguration.withServer(server)
-  .corsAuthorizer(new WhitelistedOriginsCorsAuthorizer(
+  .corsAuthorizer(WhitelistedOriginsCorsAuthorizer.withAuthorizer(
     (origin) -> origin.equals("https://www.revetware.com")
   ))
   .build();
