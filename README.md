@@ -59,7 +59,7 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 Soklet is a single JAR, available on Maven Central.
 
-Java 17+ is required.
+JDK 17+ is required.
 
 #### Maven
 
@@ -160,7 +160,7 @@ This example requires JDK 17+ to be installed on your machine ([or see this exam
 #### Build
 
 ```shell
-javac -parameters -cp soklet-2.0.0-SNAPSHOT.jar -d build src/com/soklet/example/App.java 
+javac -parameters -cp soklet-2.0.0-SNAPSHOT.jar -processor com.soklet.annotation.SokletProcessor -d build src/com/soklet/example/App.java 
 ```
 
 #### Run
@@ -334,104 +334,99 @@ public void createEmployee(@RequestBody Employee employee) {
 
 #### Response Writing
 
-"Happy Path": a non-exceptional, non-OPTIONS, non-404 request.
+For full control over all aspects of response writing, you might bring your own implementation of [`ResponseMarshaler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.html).
+
+But for most systems, it's more convenient to provide handler functions to Soklet's default [`ResponseMarshaler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.html) implementation as shown below.
 
 ```java
-SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
-).responseMarshaler(new DefaultResponseMarshaler() {
-  // Let's use Gson to write response body data
-  // See https://github.com/google/gson
-  static final Gson GSON = new Gson();
+// Let's use Gson to write response body data
+// See https://github.com/google/gson
+final Gson GSON = new Gson();
 
-  @Nonnull
-  @Override
-  public MarshaledResponse forHappyPath(
-    @Nonnull Request request,
-    @Nonnull Response response,
-    @Nonnull ResourceMethod resourceMethod
-  ) {
-    // Turn response body into JSON bytes with Gson
-    Object bodyObject = response.getBody().orElse(null);
-    byte[] body = bodyObject == null 
-      ? null 
-      : GSON.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
+// "Happy Path": a non-exceptional, non-OPTIONS, non-404 request
+HappyPathHandler happyPathHandler = (
+  @Nonnull Request request,
+  @Nonnull Response response,
+  @Nonnull ResourceMethod resourceMethod		
+) -> {
+  // Turn response body into JSON bytes with Gson
+  Object bodyObject = response.getBody().orElse(null);
+  byte[] body = bodyObject == null
+    ? null
+    : GSON.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
 
-    // To be a good citizen, set the Content-Type header
-    Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
-    headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+  // To be a good citizen, set the Content-Type header
+  Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
+  headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
 
-    // Tell Soklet: "OK - here is the final response data to send"
-    return MarshaledResponse.withStatusCode(response.getStatusCode())
-      .headers(headers)
-      .cookies(response.getCookies())
-      .body(body)
-      .build();
-  }
-}).build();
-```
+  // Tell Soklet: "OK - here is the final response data to send"
+  return MarshaledResponse.withStatusCode(response.getStatusCode())
+    .headers(headers)
+    .cookies(response.getCookies())
+    .body(body)
+    .build();
+};
 
-Exceptions:
+// Function to create responses for exceptions that bubble out
+ThrowableHandler throwableHandler = (
+  @Nonnull Request request,
+  @Nonnull Throwable throwable,
+  @Nullable ResourceMethod resourceMethod
+) -> {
+  // Keep track of what to write to the response
+  String message;
+  int statusCode;
 
-```java
-SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
-).responseMarshaler(new DefaultResponseMarshaler() {
-  // Let's use Gson to write response body data
-  // See https://github.com/google/gson
-  static final Gson GSON = new Gson();
-
-  @Nonnull
-  @Override
-  public MarshaledResponse forThrowable(
-    @Nonnull Request request,
-    @Nonnull Throwable throwable,
-    @Nullable ResourceMethod resourceMethod
-  ) {
-    // Keep track of what to write to the response
-    String message;
-    int statusCode;
-
-    // Examine the exception that bubbled out and determine what 
-    // the HTTP status and a user-facing message should be.
-    // Note: real systems should localize these messages
-    switch (throwable) {
-      // Soklet throws this exception, a specific subclass
-      // of BadRequestException
-      case IllegalQueryParameterException ex -> {
-        message = String.format("Illegal value '%s' for parameter '%s'",
-          ex.getQueryParameterValue().orElse("[not provided]"),
-          ex.getQueryParameterName());
-        statusCode = 400;
-      }
-      // Generically handle other BadRequestExceptions
-      case BadRequestException ignored -> {
-        message = "Your request was improperly formatted.";
-        statusCode = 400;
-      }
-      // Something else?  Fall back to a 500
-      default -> {
-        message = "An unexpected error occurred.";
-        statusCode = 500;
-      }
+  // Examine the exception that bubbled out and determine what 
+  // the HTTP status and a user-facing message should be.
+  // Note: real systems should localize these messages
+  switch (throwable) {
+    // Soklet throws this exception, a specific subclass
+    // of BadRequestException
+    case IllegalQueryParameterException ex -> {
+      message = String.format("Illegal value '%s' for parameter '%s'",
+        ex.getQueryParameterValue().orElse("[not provided]"),
+        ex.getQueryParameterName());
+      statusCode = 400;
     }
-
-    // Turn response body into JSON bytes with Gson.
-    // Note: real systems should expose richer error constructs
-    // than an object with a single message field
-    byte[] body = GSON.toJson(Map.of("message", message))
-      .getBytes(StandardCharsets.UTF_8);
-
-    // Specify our headers
-    Map<String, Set<String>> headers = new HashMap<>();
-    headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
-
-    return MarshaledResponse.withStatusCode(statusCode)
-      .headers(headers)
-      .body(body)
-      .build();
+    
+    // Generically handle other BadRequestExceptions
+    case BadRequestException ignored -> {
+      message = "Your request was improperly formatted.";
+      statusCode = 400;
+    }
+    
+    // Something else?  Fall back to a 500
+    default -> {
+      message = "An unexpected error occurred.";
+      statusCode = 500;
+    }
   }
-}).build();
+
+  // Turn response body into JSON bytes with Gson.
+  // Note: real systems should expose richer error constructs
+  // than an object with a single message field
+  byte[] body = GSON.toJson(Map.of("message", message))
+    .getBytes(StandardCharsets.UTF_8);
+
+  // Specify our headers
+  Map<String, Set<String>> headers = new HashMap<>();
+  headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+
+  return MarshaledResponse.withStatusCode(statusCode)
+    .headers(headers)
+    .body(body)
+    .build();
+};
+
+// Supply our custom handlers to the default response marshaler
+SokletConfig config = SokletConfig.withServer(
+  Server.withPort(8080).build()
+).responseMarshaler(ResponseMarshaler.withCharset(StandardCharsets.UTF_8)
+  .happyPath(happyPathHandler)
+  .throwable(throwableHandler)
+  .build()
+).build();
 ```
 
 Writing bytes to the response:
