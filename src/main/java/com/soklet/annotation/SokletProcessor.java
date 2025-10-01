@@ -21,13 +21,11 @@ import com.soklet.internal.classindex.processor.ClassIndexProcessor;
 /**
  * Soklet's standard Annotation Processor which is used to generate lookup tables of <em>Resource Method</em> definitions at compile time.
  * <p>
- * Soklet applications should not need to reference this class directly - the compiler should automatically detect this Annotation Processor and apply it.
- * <p>
- * However, future versions of Java might require explicit configuration of Annotation Processors at compile time.  Should this become necessary, follow the instructions below to make your application conformant:
+ * Your build system should ensure this Annotation Processor is available at compile time. Follow the instructions below to make your application conformant:
  * <p>
  * Using {@code javac} directly:
  * <pre>javac -processor com.soklet.annotation.SokletProcessor ...[rest of javac parameters elided]</pre>
- * Using <a href="https://maven.apache.org">Maven</a>:
+ * Using <a href="https://maven.apache.org" target="_blank">Maven</a>:
  * <pre>{@code <plugin>
  *     <groupId>org.apache.maven.plugins</groupId>
  *     <artifactId>maven-compiler-plugin</artifactId>
@@ -35,11 +33,25 @@ import com.soklet.internal.classindex.processor.ClassIndexProcessor;
  *     <configuration>
  *         <release>...</release>
  *         <compilerArgs>
+ *             <!-- Rest of args elided -->
  *             <arg>-processor</arg>
  *             <arg>com.soklet.annotation.SokletProcessor</arg>
  *         </compilerArgs>
  *     </configuration>
  * </plugin>}</pre>
+ * Using <a href="https://gradle.org" target="_blank">Gradle</a>:
+ * <pre>{@code def sokletVersion = "2.0.0" // (use your actual version)
+ *
+ * dependencies {
+ *   // Soklet used by your code at compile/run time
+ *   implementation "com.soklet:soklet:${sokletVersion}"
+ *
+ *   // Same artifact also provides the annotation processor
+ *   annotationProcessor "com.soklet:soklet:${sokletVersion}"
+ *
+ *   // If tests also need processing (optional)
+ *   testAnnotationProcessor "com.soklet:soklet:${sokletVersion}"
+ * }}</pre>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
