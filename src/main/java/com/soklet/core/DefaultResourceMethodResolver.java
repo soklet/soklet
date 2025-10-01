@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.core.impl;
+package com.soklet.core;
 
 import com.soklet.annotation.DELETE;
 import com.soklet.annotation.DELETEs;
@@ -33,12 +33,6 @@ import com.soklet.annotation.PUTs;
 import com.soklet.annotation.Resource;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.annotation.ServerSentEventSources;
-import com.soklet.core.HttpMethod;
-import com.soklet.core.Request;
-import com.soklet.core.ResourceMethod;
-import com.soklet.core.ResourceMethodResolver;
-import com.soklet.core.ResourcePath;
-import com.soklet.core.ResourcePathDeclaration;
 import com.soklet.internal.classindex.ClassIndex;
 
 import javax.annotation.Nonnull;
@@ -65,12 +59,29 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultResourceMethodResolver implements ResourceMethodResolver {
+final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	@Nonnull
-	private static final DefaultResourceMethodResolver SHARED_INSTANCE;
+	private static final DefaultResourceMethodResolver DEFAULT_INSTANCE;
 
 	static {
-		SHARED_INSTANCE = new DefaultResourceMethodResolver();
+		DEFAULT_INSTANCE = new DefaultResourceMethodResolver();
+	}
+
+	@Nonnull
+	public static DefaultResourceMethodResolver defaultInstance() {
+		return DEFAULT_INSTANCE;
+	}
+
+	@Nonnull
+	public static ResourceMethodResolver withResourceClasses(@Nullable Set<Class<?>> resourceClasses) {
+		requireNonNull(resourceClasses);
+		return new DefaultResourceMethodResolver(resourceClasses, null);
+	}
+
+	@Nonnull
+	public static ResourceMethodResolver withMethods(@Nonnull Set<Method> methods) {
+		requireNonNull(methods);
+		return new DefaultResourceMethodResolver(null, methods);
 	}
 
 	@Nonnull
@@ -82,21 +93,12 @@ public class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	@Nonnull
 	private final Set<ResourceMethod> resourceMethods;
 
-	@Nonnull
-	public static DefaultResourceMethodResolver sharedInstance() {
-		return SHARED_INSTANCE;
-	}
-
-	public DefaultResourceMethodResolver() {
+	private DefaultResourceMethodResolver() {
 		this(ClassIndex.getAnnotated(Resource.class).parallelStream().collect(Collectors.toSet()), null);
 	}
 
-	public DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses) {
-		this(resourceClasses, null);
-	}
-
-	public DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,
-																			 @Nullable Set<Method> methods) {
+	private DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,
+																				@Nullable Set<Method> methods) {
 		Set<Method> allMethods = new HashSet<>();
 
 		if (resourceClasses != null)

@@ -22,8 +22,6 @@ import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
-import com.soklet.core.impl.DefaultServer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -114,8 +112,8 @@ public class IntegrationTests {
 	}
 
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
-		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(port).requestTimeout(Duration.ofSeconds(5)).build())
-				.resourceMethodResolver(new DefaultResourceMethodResolver(resourceClasses))
+		SokletConfiguration cfg = SokletConfiguration.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(5)).build())
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(resourceClasses))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 		Soklet app = Soklet.withConfiguration(cfg);

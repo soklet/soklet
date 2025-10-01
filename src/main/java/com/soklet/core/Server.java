@@ -19,12 +19,19 @@ package com.soklet.core;
 import com.soklet.SokletConfiguration;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
+import java.time.Duration;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Contract for HTTP server implementations that are designed to be managed by a {@link com.soklet.Soklet} instance.
  * <p>
- * <strong>Most Soklet applications will use {@link com.soklet.core.impl.DefaultServer} and therefore do not need to implement this interface directly.</strong>
+ * <strong>Most Soklet applications will use {@link DefaultServer} and therefore do not need to implement this interface directly.</strong>
  * <p>
  * For example:
  * <pre>{@code  SokletConfiguration config = SokletConfiguration.withServer(
@@ -94,7 +101,7 @@ public interface Server extends AutoCloseable {
 	 * <p>
 	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server} via {@link Server#initialize(SokletConfiguration, RequestHandler)}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
-	 * <strong>Most Soklet applications will use {@link com.soklet.core.impl.DefaultServer} and therefore do not need to implement this interface directly.</strong>
+	 * <strong>Most Soklet applications will use {@link DefaultServer} and therefore do not need to implement this interface directly.</strong>
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -112,5 +119,122 @@ public interface Server extends AutoCloseable {
 		 */
 		void handleRequest(@Nonnull Request request,
 											 @Nonnull Consumer<RequestResult> requestResultConsumer);
+	}
+
+	@Nonnull
+	static Builder withPort(@Nonnull Integer port) {
+		requireNonNull(port);
+		return new Builder(port);
+	}
+
+	/**
+	 * Builder used to construct a standard implementation of {@link Server}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	final class Builder {
+		@Nonnull
+		Integer port;
+		@Nullable
+		String host;
+		@Nullable
+		Integer concurrency;
+		@Nullable
+		Duration requestTimeout;
+		@Nullable
+		Duration socketSelectTimeout;
+		@Nullable
+		Duration shutdownTimeout;
+		@Nullable
+		Integer maximumRequestSizeInBytes;
+		@Nullable
+		Integer requestReadBufferSizeInBytes;
+		@Nullable
+		Integer socketPendingConnectionLimit;
+		@Nullable
+		MultipartParser multipartParser;
+		@Nullable
+		Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+
+		@Nonnull
+		private Builder(@Nonnull Integer port) {
+			requireNonNull(port);
+			this.port = port;
+		}
+
+		@Nonnull
+		public Builder port(@Nonnull Integer port) {
+			requireNonNull(port);
+			this.port = port;
+			return this;
+		}
+
+		@Nonnull
+		public Builder host(@Nullable String host) {
+			this.host = host;
+			return this;
+		}
+
+		@Nonnull
+		public Builder concurrency(@Nullable Integer concurrency) {
+			this.concurrency = concurrency;
+			return this;
+		}
+
+		@Nonnull
+		public Builder requestTimeout(@Nullable Duration requestTimeout) {
+			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		@Nonnull
+		public Builder socketSelectTimeout(@Nullable Duration socketSelectTimeout) {
+			this.socketSelectTimeout = socketSelectTimeout;
+			return this;
+		}
+
+		@Nonnull
+		public Builder socketPendingConnectionLimit(@Nullable Integer socketPendingConnectionLimit) {
+			this.socketPendingConnectionLimit = socketPendingConnectionLimit;
+			return this;
+		}
+
+		@Nonnull
+		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
+			this.shutdownTimeout = shutdownTimeout;
+			return this;
+		}
+
+		@Nonnull
+		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
+			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
+			return this;
+		}
+
+		@Nonnull
+		public Builder requestReadBufferSizeInBytes(@Nullable Integer requestReadBufferSizeInBytes) {
+			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
+			return this;
+		}
+
+		@Nonnull
+		public Builder multipartParser(@Nullable MultipartParser multipartParser) {
+			this.multipartParser = multipartParser;
+			return this;
+		}
+
+		@Nonnull
+		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
+			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
+			return this;
+		}
+
+		@Nonnull
+		public Server build() {
+			return new DefaultServer(this);
+		}
 	}
 }

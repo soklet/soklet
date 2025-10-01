@@ -25,7 +25,6 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -411,7 +410,7 @@ public class SokletTests {
 	protected SokletConfiguration configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
 		return SokletConfiguration.forTesting()
 				// Use a resource method resolver that explicitly specifies resource classes
-				.resourceMethodResolver(new DefaultResourceMethodResolver(resourceClasses))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(resourceClasses))
 				// Quiet logging to keep the console clean
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

@@ -14,15 +14,12 @@
  * limitations under the License.
  */
 
-package com.soklet.core.impl;
+package com.soklet.core;
 
 import com.soklet.annotation.RequestBody;
 import com.soklet.converter.ValueConversionException;
 import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
-import com.soklet.core.Request;
-import com.soklet.core.RequestBodyMarshaler;
-import com.soklet.core.ResourceMethod;
 import com.soklet.exception.IllegalRequestBodyException;
 
 import javax.annotation.Nonnull;
@@ -38,21 +35,21 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
+final class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 	@Nonnull
-	private static final DefaultRequestBodyMarshaler SHARED_INSTANCE;
+	private static final DefaultRequestBodyMarshaler DEFAULT_INSTANCE;
 
 	static {
-		SHARED_INSTANCE = new DefaultRequestBodyMarshaler();
+		DEFAULT_INSTANCE = new DefaultRequestBodyMarshaler();
+	}
+
+	@Nonnull
+	public static DefaultRequestBodyMarshaler defaultInstance() {
+		return DEFAULT_INSTANCE;
 	}
 
 	@Nonnull
 	private final ValueConverterRegistry valueConverterRegistry;
-
-	@Nonnull
-	public static DefaultRequestBodyMarshaler sharedInstance() {
-		return SHARED_INSTANCE;
-	}
 
 	public DefaultRequestBodyMarshaler() {
 		this(ValueConverterRegistry.sharedInstance());

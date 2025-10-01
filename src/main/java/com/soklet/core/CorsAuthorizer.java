@@ -19,10 +19,21 @@ package com.soklet.core;
 import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Contract for types that authorize <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">CORS</a> requests.
  * <p>
+ * Standard implementations can be acquired via these factory methods:
+ * <ul>
+ *   <li>{@link #withRejectAllPolicy()} (don't permit CORS requests)</li>
+ *   <li>{@link #withAcceptAllPolicy()} (permit all CORS requests, not recommended for production)</li>
+ *   <li>{@link #withWhitelistedOrigins(Set)} (permit whitelisted origins only)</li>
+ *   <li>{@link #withWhitelistAuthorizer(Function)} (permit origins via function)</li>
+ * </ul>
  * See <a href="https://www.soklet.com/docs/cors#authorizing-cors-requests">https://www.soklet.com/docs/cors#authorizing-cors-requests</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -51,4 +62,26 @@ public interface CorsAuthorizer {
 	Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
 																										 @Nonnull CorsPreflight corsPreflight,
 																										 @Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod);
+
+	@Nonnull
+	static CorsAuthorizer withAcceptAllPolicy() {
+		return AllOriginsCorsAuthorizer.defaultInstance();
+	}
+
+	@Nonnull
+	static CorsAuthorizer withRejectAllPolicy() {
+		return NoOriginsCorsAuthorizer.defaultInstance();
+	}
+
+	@Nonnull
+	static CorsAuthorizer withWhitelistedOrigins(@Nonnull Set<String> whitelistedOrigins) {
+		requireNonNull(whitelistedOrigins);
+		return WhitelistedOriginsCorsAuthorizer.withOrigins(whitelistedOrigins);
+	}
+
+	@Nonnull
+	static CorsAuthorizer withWhitelistAuthorizer(@Nonnull Function<String, Boolean> whitelistAuthorizer) {
+		requireNonNull(whitelistAuthorizer);
+		return WhitelistedOriginsCorsAuthorizer.withAuthorizer(whitelistAuthorizer);
+	}
 }

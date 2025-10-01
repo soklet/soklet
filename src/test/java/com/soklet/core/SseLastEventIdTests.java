@@ -20,10 +20,6 @@ import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.Resource;
 import com.soklet.annotation.ServerSentEventSource;
-import com.soklet.core.impl.DefaultInstanceProvider;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
-import com.soklet.core.impl.DefaultServer;
-import com.soklet.core.impl.DefaultServerSentEventServer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -50,12 +46,12 @@ public class SseLastEventIdTests {
 		int port = findFreePort();
 		int ssePort = findFreePort();
 
-		ServerSentEventServer serverSentEventServer = DefaultServerSentEventServer.withPort(ssePort).build();
+		ServerSentEventServer serverSentEventServer = ServerSentEventServer.withPort(ssePort).build();
 
-		SokletConfiguration config = SokletConfiguration.withServer(DefaultServer.withPort(port).build())
+		SokletConfiguration config = SokletConfiguration.withServer(Server.withPort(port).build())
 				.serverSentEventServer(serverSentEventServer)
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseResource.class)))
-				.instanceProvider(new DefaultInstanceProvider() {
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseResource.class)))
+				.instanceProvider(new InstanceProvider() {
 					@Nonnull
 					@Override
 					public <T> T provide(@Nonnull Class<T> instanceClass) {
@@ -63,7 +59,7 @@ public class SseLastEventIdTests {
 						if (instanceClass.equals(ServerSentEventServer.class)) {
 							return (T) serverSentEventServer;
 						} else {
-							return super.provide(instanceClass);
+							return InstanceProvider.withDefaults().provide(instanceClass);
 						}
 					}
 				})

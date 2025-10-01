@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.core.impl;
+package com.soklet.core;
 
 import com.soklet.annotation.FormParameter;
 import com.soklet.annotation.Multipart;
@@ -26,14 +26,6 @@ import com.soklet.annotation.RequestHeader;
 import com.soklet.converter.ValueConversionException;
 import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
-import com.soklet.core.InstanceProvider;
-import com.soklet.core.MultipartField;
-import com.soklet.core.Request;
-import com.soklet.core.RequestBodyMarshaler;
-import com.soklet.core.ResourceMethod;
-import com.soklet.core.ResourceMethodParameterProvider;
-import com.soklet.core.ResourcePath;
-import com.soklet.core.ResourcePathDeclaration;
 import com.soklet.exception.BadRequestException;
 import com.soklet.exception.IllegalFormParameterException;
 import com.soklet.exception.IllegalMultipartFieldException;
@@ -73,18 +65,15 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultResourceMethodParameterProvider implements ResourceMethodParameterProvider {
+final class DefaultResourceMethodParameterProvider implements ResourceMethodParameterProvider {
 	@Nonnull
 	private static final Map<Type, Object> DEFAULT_VALUES_BY_PRIMITIVE_TYPE;
-
 	@Nonnull
-	private final InstanceProvider instanceProvider;
-	@Nonnull
-	private final ValueConverterRegistry valueConverterRegistry;
-	@Nonnull
-	private final RequestBodyMarshaler requestBodyMarshaler;
+	private static final DefaultResourceMethodParameterProvider DEFAULT_INSTANCE;
 
 	static {
+		DEFAULT_INSTANCE = new DefaultResourceMethodParameterProvider();
+
 		// See https://docs.oracle.com/javase/tutorial/java/nutsandbolts/datatypes.html
 		DEFAULT_VALUES_BY_PRIMITIVE_TYPE = Map.of(
 				byte.class, (byte) 0,
@@ -98,10 +87,22 @@ public class DefaultResourceMethodParameterProvider implements ResourceMethodPar
 		);
 	}
 
+	@Nonnull
+	public static DefaultResourceMethodParameterProvider defaultInstance() {
+		return DEFAULT_INSTANCE;
+	}
+
+	@Nonnull
+	private final InstanceProvider instanceProvider;
+	@Nonnull
+	private final ValueConverterRegistry valueConverterRegistry;
+	@Nonnull
+	private final RequestBodyMarshaler requestBodyMarshaler;
+
 	public DefaultResourceMethodParameterProvider() {
-		this(DefaultInstanceProvider.sharedInstance(),
+		this(DefaultInstanceProvider.defaultInstance(),
 				ValueConverterRegistry.sharedInstance(),
-				DefaultRequestBodyMarshaler.sharedInstance());
+				DefaultRequestBodyMarshaler.defaultInstance());
 	}
 
 	public DefaultResourceMethodParameterProvider(@Nonnull InstanceProvider instanceProvider,

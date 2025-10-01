@@ -26,13 +26,6 @@ import com.soklet.core.ResourceMethodResolver;
 import com.soklet.core.ResponseMarshaler;
 import com.soklet.core.Server;
 import com.soklet.core.ServerSentEventServer;
-import com.soklet.core.impl.DefaultInstanceProvider;
-import com.soklet.core.impl.DefaultLifecycleInterceptor;
-import com.soklet.core.impl.DefaultRequestBodyMarshaler;
-import com.soklet.core.impl.DefaultResourceMethodParameterProvider;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
-import com.soklet.core.impl.DefaultResponseMarshaler;
-import com.soklet.core.impl.NoOriginsCorsAuthorizer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -97,14 +90,14 @@ public class SokletConfiguration {
 
 		this.server = builder.server;
 		this.serverSentEventServer = builder.serverSentEventServer;
-		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : DefaultInstanceProvider.sharedInstance();
+		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.withDefaults();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.sharedInstance();
-		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : new DefaultRequestBodyMarshaler(getValueConverterRegistry());
-		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : DefaultResourceMethodResolver.sharedInstance();
-		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(getInstanceProvider(), getValueConverterRegistry(), getRequestBodyMarshaler());
-		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : DefaultResponseMarshaler.sharedInstance();
-		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : DefaultLifecycleInterceptor.sharedInstance();
-		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : NoOriginsCorsAuthorizer.defaultInstance();
+		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.withValueConverterRegistry(getValueConverterRegistry());
+		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : ResourceMethodResolver.withDefaults();
+		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : ResourceMethodParameterProvider.with(getInstanceProvider(), getValueConverterRegistry(), getRequestBodyMarshaler());
+		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : ResponseMarshaler.withDefaults();
+		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : LifecycleInterceptor.withDefaults();
+		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : CorsAuthorizer.withRejectAllPolicy();
 	}
 
 	/**

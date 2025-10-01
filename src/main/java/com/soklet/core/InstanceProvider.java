@@ -21,6 +21,8 @@ import javax.annotation.Nonnull;
 /**
  * Contract for concrete instance generation given type information.
  * <p>
+ * A standard implementation can be acquired via the {@link #withDefaults()} factory method.
+ * <p>
  * See <a href="https://www.soklet.com/docs/instance-creation">https://www.soklet.com/docs/instance-creation</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -38,4 +40,16 @@ public interface InstanceProvider {
 	 */
 	@Nonnull
 	<T> T provide(@Nonnull Class<T> instanceClass);
+
+	/**
+	 * Acquires an {@link InstanceProvider} with a default "{@code newInstance()}" instantiation strategy.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 *
+	 * @return an {@code InstanceProvider} with default settings
+	 */
+	@Nonnull
+	static InstanceProvider withDefaults() {
+		return DefaultInstanceProvider.defaultInstance();
+	}
 }

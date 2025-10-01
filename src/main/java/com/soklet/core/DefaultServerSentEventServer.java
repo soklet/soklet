@@ -14,25 +14,10 @@
  * limitations under the License.
  */
 
-package com.soklet.core.impl;
+package com.soklet.core;
 
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.ServerSentEventSource;
-import com.soklet.core.HttpMethod;
-import com.soklet.core.LifecycleInterceptor;
-import com.soklet.core.LogEvent;
-import com.soklet.core.LogEventType;
-import com.soklet.core.MarshaledResponse;
-import com.soklet.core.Request;
-import com.soklet.core.RequestResult;
-import com.soklet.core.ResourceMethod;
-import com.soklet.core.ResourcePath;
-import com.soklet.core.ResourcePathDeclaration;
-import com.soklet.core.ServerSentEvent;
-import com.soklet.core.ServerSentEventBroadcaster;
-import com.soklet.core.ServerSentEventServer;
-import com.soklet.core.StatusCode;
-import com.soklet.core.Utilities;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import com.soklet.internal.util.ConcurrentLruMap;
 
@@ -92,7 +77,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultServerSentEventServer implements ServerSentEventServer {
+final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final String DEFAULT_HOST;
 	@Nonnull
@@ -290,12 +275,6 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 		protected Consumer<ServerSentEventConnection> getConnectionUnregisteredListener() {
 			return this.connectionUnregisteredListener;
 		}
-	}
-
-	@Nonnull
-	public static Builder withPort(@Nonnull Integer port) {
-		requireNonNull(port);
-		return new Builder(port);
 	}
 
 	protected DefaultServerSentEventServer(@Nonnull Builder builder) {
@@ -1577,100 +1556,5 @@ public class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Optional<LifecycleInterceptor> getLifecycleInterceptor() {
 		return Optional.ofNullable(this.lifecycleInterceptor);
-	}
-
-	/**
-	 * Builder used to construct instances of {@link DefaultServerSentEventServer}.
-	 * <p>
-	 * This class is intended for use by a single thread.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
-	@NotThreadSafe
-	public static class Builder {
-		@Nonnull
-		private Integer port;
-		@Nullable
-		private String host;
-		@Nullable
-		private Duration requestTimeout;
-		@Nullable
-		private Duration shutdownTimeout;
-		@Nullable
-		private Duration heartbeatInterval;
-		@Nullable
-		private Integer maximumRequestSizeInBytes;
-		@Nullable
-		private Integer requestReadBufferSizeInBytes;
-		@Nullable
-		private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
-		@Nullable
-		private Integer concurrentConnectionLimit;
-
-		@Nonnull
-		protected Builder(@Nonnull Integer port) {
-			requireNonNull(port);
-			this.port = port;
-		}
-
-		@Nonnull
-		public Builder port(@Nonnull Integer port) {
-			requireNonNull(port);
-			this.port = port;
-			return this;
-		}
-
-		@Nonnull
-		public Builder host(@Nullable String host) {
-			this.host = host;
-			return this;
-		}
-
-		@Nonnull
-		public Builder requestTimeout(@Nullable Duration requestTimeout) {
-			this.requestTimeout = requestTimeout;
-			return this;
-		}
-
-		@Nonnull
-		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
-			this.shutdownTimeout = shutdownTimeout;
-			return this;
-		}
-
-		@Nonnull
-		public Builder heartbeatInterval(@Nullable Duration heartbeatInterval) {
-			this.heartbeatInterval = heartbeatInterval;
-			return this;
-		}
-
-		@Nonnull
-		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
-			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
-			return this;
-		}
-
-		@Nonnull
-		public Builder requestReadBufferSizeInBytes(@Nullable Integer requestReadBufferSizeInBytes) {
-			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
-			return this;
-		}
-
-		@Nonnull
-		public Builder concurrentConnectionLimit(@Nullable Integer concurrentConnectionLimit) {
-			this.concurrentConnectionLimit = concurrentConnectionLimit;
-			return this;
-		}
-
-		@Nonnull
-		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
-			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
-			return this;
-		}
-
-		@Nonnull
-		public DefaultServerSentEventServer build() {
-			return new DefaultServerSentEventServer(this);
-		}
 	}
 }

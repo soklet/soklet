@@ -14,16 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.core.impl;
-
-import com.soklet.core.Cors;
-import com.soklet.core.CorsAuthorizer;
-import com.soklet.core.CorsPreflight;
-import com.soklet.core.CorsPreflightResponse;
-import com.soklet.core.CorsResponse;
-import com.soklet.core.HttpMethod;
-import com.soklet.core.Request;
-import com.soklet.core.ResourceMethod;
+package com.soklet.core;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
@@ -43,7 +34,28 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
+final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
+	@Nonnull
+	private static final AllOriginsCorsAuthorizer DEFAULT_INSTANCE;
+
+	static {
+		DEFAULT_INSTANCE = new AllOriginsCorsAuthorizer();
+	}
+
+	/**
+	 * Acquires an {@link AllOriginsCorsAuthorizer} instance.
+	 *
+	 * @return an instance of {@link AllOriginsCorsAuthorizer}
+	 */
+	@Nonnull
+	public static AllOriginsCorsAuthorizer defaultInstance() {
+		return DEFAULT_INSTANCE;
+	}
+
+	private AllOriginsCorsAuthorizer() {
+		// Nothing to do
+	}
+
 	@Nonnull
 	@Override
 	public Optional<CorsResponse> authorize(@Nonnull Request request,

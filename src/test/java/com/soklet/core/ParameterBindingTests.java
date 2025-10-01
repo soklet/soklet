@@ -26,7 +26,6 @@ import com.soklet.annotation.RequestBody;
 import com.soklet.annotation.RequestCookie;
 import com.soklet.annotation.RequestHeader;
 import com.soklet.annotation.Resource;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -46,7 +45,7 @@ public class ParameterBindingTests {
 	@Test
 	public void required_and_optional_query_parameters() {
 		SokletConfiguration cfg = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ParamResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ParamResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
@@ -77,7 +76,7 @@ public class ParameterBindingTests {
 	@Test
 	public void headers_cookies_path_and_body_conversions() {
 		SokletConfiguration cfg = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ParamResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ParamResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }

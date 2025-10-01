@@ -17,13 +17,21 @@
 package com.soklet.core;
 
 import javax.annotation.Nonnull;
+import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Contract for matching incoming HTTP requests with appropriate <em>Resource Methods</em> (Java methods to invoke to handle requests).
  * <p>
- * Soklet's default implementation of this type, {@link com.soklet.core.impl.DefaultResourceMethodResolver}, is sufficient for most applications.
+ * Standard implementations can be acquired via these factory methods:
+ * <ul>
+ *   <li>{@link #withDefaults()}</li>
+ *   <li>{@link #withResourceClasses(Set)}</li>
+ *   <li>{@link #withMethods(Set)}</li>
+ * </ul>
  * <p>
  * However, should a custom implementation be necessary for your application, documentation is available at <a href="https://www.soklet.com/docs/request-handling#resource-method-resolution">https://www.soklet.com/docs/request-handling#resource-method-resolution</a>.
  *
@@ -48,4 +56,22 @@ public interface ResourceMethodResolver {
 	 */
 	@Nonnull
 	Set<ResourceMethod> getResourceMethods();
+
+
+	@Nonnull
+	static ResourceMethodResolver withDefaults() {
+		return DefaultResourceMethodResolver.defaultInstance();
+	}
+
+	@Nonnull
+	static ResourceMethodResolver withResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
+		requireNonNull(resourceClasses);
+		return DefaultResourceMethodResolver.withResourceClasses(resourceClasses);
+	}
+
+	@Nonnull
+	static ResourceMethodResolver withMethods(@Nonnull Set<Method> methods) {
+		requireNonNull(methods);
+		return DefaultResourceMethodResolver.withMethods(methods);
+	}
 }

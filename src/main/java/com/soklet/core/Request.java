@@ -16,8 +16,6 @@
 
 package com.soklet.core;
 
-import com.soklet.core.impl.DefaultIdGenerator;
-import com.soklet.core.impl.DefaultMultipartParser;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
@@ -55,7 +53,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class Request {
+public final class Request {
 	@Nonnull
 	private static final Charset DEFAULT_CHARSET;
 	@Nonnull
@@ -425,7 +423,7 @@ public class Request {
 	 * <p>
 	 * Use {@link #getMultipartField(String)} for a convenience method to access a multipart parameter field value when only one is expected.
 	 * <p>
-	 * When using {@link com.soklet.core.impl.DefaultServer}, multipart fields are parsed using the {@link MultipartParser} as configured by {@link com.soklet.core.impl.DefaultServer.Builder#multipartParser(MultipartParser)}.
+	 * When using {@link DefaultServer}, multipart fields are parsed using the {@link MultipartParser} as configured by {@link DefaultServer.Builder#multipartParser(MultipartParser)}.
 	 *
 	 * @return the request's multipart fields, or the empty map if none are present
 	 */
@@ -453,7 +451,7 @@ public class Request {
 	 * <p>
 	 * Soklet is designed to power systems that exchange small "transactional" payloads that live entirely in memory. It is not appropriate for handling multipart files at scale, buffering uploads to disk, streaming, etc.
 	 * <p>
-	 * When using {@link com.soklet.core.impl.DefaultServer}, maximum request size is configured by {@link com.soklet.core.impl.DefaultServer.Builder#maximumRequestSizeInBytes(Integer)}.
+	 * When using {@link DefaultServer}, maximum request size is configured by {@link DefaultServer.Builder#maximumRequestSizeInBytes(Integer)}.
 	 *
 	 * @return {@code true} if this request is larger than the server is able to handle, {@code false} otherwise
 	 */

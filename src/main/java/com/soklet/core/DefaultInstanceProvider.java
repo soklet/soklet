@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.core.impl;
-
-import com.soklet.core.InstanceProvider;
+package com.soklet.core;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
@@ -29,17 +27,17 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultInstanceProvider implements InstanceProvider {
+final class DefaultInstanceProvider implements InstanceProvider {
 	@Nonnull
-	private static final DefaultInstanceProvider SHARED_INSTANCE;
+	private static final DefaultInstanceProvider DEFAULT_INSTANCE;
 
 	static {
-		SHARED_INSTANCE = new DefaultInstanceProvider();
+		DEFAULT_INSTANCE = new DefaultInstanceProvider();
 	}
 
 	@Nonnull
-	public static DefaultInstanceProvider sharedInstance() {
-		return SHARED_INSTANCE;
+	public static DefaultInstanceProvider defaultInstance() {
+		return DEFAULT_INSTANCE;
 	}
 
 	@Nonnull

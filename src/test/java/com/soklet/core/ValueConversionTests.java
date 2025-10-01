@@ -21,7 +21,6 @@ import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.Resource;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -46,7 +45,7 @@ public class ValueConversionTests {
 	@Test
 	public void converts_common_types_from_query_params() {
 		SokletConfiguration cfg = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ConversionResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ConversionResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }

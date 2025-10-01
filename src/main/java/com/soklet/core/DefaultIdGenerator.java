@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.core.impl;
-
-import com.soklet.core.IdGenerator;
+package com.soklet.core;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -33,7 +31,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultIdGenerator implements IdGenerator<String> {
+final class DefaultIdGenerator implements IdGenerator<String> {
 	@Nonnull
 	private static final String DEFAULT_ID_PREFIX;
 

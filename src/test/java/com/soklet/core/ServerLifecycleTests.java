@@ -20,8 +20,6 @@ import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.Resource;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
-import com.soklet.core.impl.DefaultServer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -64,10 +62,10 @@ public class ServerLifecycleTests {
 	@Test
 	public void start_stop_isStarted_toggles_and_serves_requests() throws Exception {
 		int port = findFreePort();
-		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(port)
+		SokletConfiguration cfg = SokletConfiguration.withServer(Server.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(HealthResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(HealthResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }

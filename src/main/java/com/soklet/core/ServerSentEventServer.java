@@ -20,8 +20,14 @@ import com.soklet.SokletConfiguration;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
+import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * A special HTTP server whose only purpose is to provide <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> functionality.
@@ -101,7 +107,7 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link ServerSentEventServer} via {@link ServerSentEventServer#initialize(SokletConfiguration, RequestHandler)}.
 	 * It's the responsibility of the {@link ServerSentEventServer} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
-	 * <strong>Most Soklet applications will use {@link com.soklet.core.impl.DefaultServerSentEventServer} and therefore do not need to implement this interface directly.</strong>
+	 * <strong>Most Soklet applications will use {@link DefaultServerSentEventServer} and therefore do not need to implement this interface directly.</strong>
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -124,5 +130,106 @@ public interface ServerSentEventServer extends AutoCloseable {
 		 */
 		void handleRequest(@Nonnull Request request,
 											 @Nonnull Consumer<RequestResult> requestResultConsumer);
+	}
+
+	@Nonnull
+	static Builder withPort(@Nonnull Integer port) {
+		requireNonNull(port);
+		return new Builder(port);
+	}
+
+	/**
+	 * Builder used to construct a standard implementation of {@link ServerSentEventServer}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	final class Builder {
+		@Nonnull
+		Integer port;
+		@Nullable
+		String host;
+		@Nullable
+		Duration requestTimeout;
+		@Nullable
+		Duration shutdownTimeout;
+		@Nullable
+		Duration heartbeatInterval;
+		@Nullable
+		Integer maximumRequestSizeInBytes;
+		@Nullable
+		Integer requestReadBufferSizeInBytes;
+		@Nullable
+		Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+		@Nullable
+		Integer concurrentConnectionLimit;
+
+		@Nonnull
+		protected Builder(@Nonnull Integer port) {
+			requireNonNull(port);
+			this.port = port;
+		}
+
+		@Nonnull
+		public Builder port(@Nonnull Integer port) {
+			requireNonNull(port);
+			this.port = port;
+			return this;
+		}
+
+		@Nonnull
+		public Builder host(@Nullable String host) {
+			this.host = host;
+			return this;
+		}
+
+		@Nonnull
+		public Builder requestTimeout(@Nullable Duration requestTimeout) {
+			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		@Nonnull
+		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
+			this.shutdownTimeout = shutdownTimeout;
+			return this;
+		}
+
+		@Nonnull
+		public Builder heartbeatInterval(@Nullable Duration heartbeatInterval) {
+			this.heartbeatInterval = heartbeatInterval;
+			return this;
+		}
+
+		@Nonnull
+		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
+			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
+			return this;
+		}
+
+		@Nonnull
+		public Builder requestReadBufferSizeInBytes(@Nullable Integer requestReadBufferSizeInBytes) {
+			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
+			return this;
+		}
+
+		@Nonnull
+		public Builder concurrentConnectionLimit(@Nullable Integer concurrentConnectionLimit) {
+			this.concurrentConnectionLimit = concurrentConnectionLimit;
+			return this;
+		}
+
+		@Nonnull
+		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
+			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
+			return this;
+		}
+
+		@Nonnull
+		public ServerSentEventServer build() {
+			return new DefaultServerSentEventServer(this);
+		}
 	}
 }

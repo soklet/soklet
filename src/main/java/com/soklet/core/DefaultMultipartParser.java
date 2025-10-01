@@ -18,12 +18,8 @@
  * It is also licensed under the terms of the Apache License, Version 2.0.
  */
 
-package com.soklet.core.impl;
+package com.soklet.core;
 
-import com.soklet.core.MultipartField;
-import com.soklet.core.MultipartParser;
-import com.soklet.core.Request;
-import com.soklet.core.Utilities;
 import com.soklet.exception.MissingRequestHeaderException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
@@ -55,7 +51,7 @@ import static com.soklet.core.Utilities.trimAggressivelyToNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultMultipartParser implements MultipartParser {
+final class DefaultMultipartParser implements MultipartParser {
 	@Nonnull
 	private static final DefaultMultipartParser SHARED_INSTANCE;
 

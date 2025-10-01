@@ -14,16 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.core.impl;
-
-import com.soklet.core.Cors;
-import com.soklet.core.CorsAuthorizer;
-import com.soklet.core.CorsPreflight;
-import com.soklet.core.CorsPreflightResponse;
-import com.soklet.core.CorsResponse;
-import com.soklet.core.HttpMethod;
-import com.soklet.core.Request;
-import com.soklet.core.ResourceMethod;
+package com.soklet.core;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
@@ -49,7 +40,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
+final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	private final Function<String, Boolean> authorizer;
 

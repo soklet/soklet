@@ -18,13 +18,23 @@ package com.soklet.core;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
+import java.nio.charset.Charset;
 import java.util.Set;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Prepares responses for each request scenario Soklet supports (happy path, exception, CORS preflight, etc.)
  * <p>
  * The {@link MarshaledResponse} value returned from these methods is what is ultimately sent back to
  * clients as bytes over the wire.
+ * <p>
+ * Standard implementations can be acquired via these factory methods:
+ * <ul>
+ *   <li>{@link #withDefaults()}</li>
+ *   <li>{@link #withCharset(Charset)}</li>
+ * </ul>
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
@@ -181,4 +191,251 @@ public interface ResponseMarshaler {
 																	 @Nonnull Cors cors,
 																	 @Nonnull CorsResponse corsResponse,
 																	 @Nonnull MarshaledResponse marshaledResponse);
+
+	/**
+	 * Acquires a {@link ResponseMarshaler} with a reasonable "out of the box" configuration.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 *
+	 * @return a {@code ResponseMarshaler} with default settings
+	 */
+	@Nonnull
+	static ResponseMarshaler withDefaults() {
+		return DefaultResponseMarshaler.defaultInstance();
+	}
+
+	/**
+	 * Acquires a builder for a default {@link ResponseMarshaler} implementation.
+	 *
+	 * @param charset the default charset to use when writing response data
+	 * @return a {@code ResponseMarshaler} builder
+	 */
+	@Nonnull
+	static Builder withCharset(@Nonnull Charset charset) {
+		requireNonNull(charset);
+		return new Builder(charset);
+	}
+
+	/**
+	 * Builder used to construct a standard implementation of {@link ResponseMarshaler}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	class Builder {
+		@FunctionalInterface
+		public interface HappyPathHandler {
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request,
+															 @Nonnull Response response,
+															 @Nonnull ResourceMethod method);
+		}
+
+		@FunctionalInterface
+		public interface NotFoundHandler {
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request);
+		}
+
+		@FunctionalInterface
+		public interface MethodNotAllowedHandler {
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request,
+															 @Nonnull Set<HttpMethod> allowedHttpMethods);
+		}
+
+		@FunctionalInterface
+		public interface ContentTooLargeHandler {
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request,
+															 @Nullable ResourceMethod resourceMethod);
+		}
+
+		@FunctionalInterface
+		public interface OptionsHandler {
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request,
+															 @Nonnull Set<HttpMethod> allowedHttpMethods);
+		}
+
+		@FunctionalInterface
+		public interface ThrowableHandler {
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request,
+															 @Nonnull Throwable throwable,
+															 @Nullable ResourceMethod resourceMethod);
+		}
+
+		@FunctionalInterface
+		public interface HeadHandler {
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request,
+															 @Nonnull MarshaledResponse getMethodMarshaledResponse);
+		}
+
+		@FunctionalInterface
+		public interface CorsPreflightAllowedHandler {
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request,
+															 @Nonnull CorsPreflight corsPreflight,
+															 @Nonnull CorsPreflightResponse corsPreflightResponse);
+		}
+
+		@FunctionalInterface
+		public interface CorsPreflightRejectedHandler {
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request,
+															 @Nonnull CorsPreflight corsPreflight);
+		}
+
+		@FunctionalInterface
+		public interface CorsAllowedHandler {
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request,
+															 @Nonnull Cors cors,
+															 @Nonnull CorsResponse corsResponse,
+															 @Nonnull MarshaledResponse marshaledResponse);
+		}
+
+		@FunctionalInterface
+		public interface PostProcessor {
+			@Nonnull
+			MarshaledResponse postProcess(@Nonnull MarshaledResponse marshaledResponse);
+		}
+
+		@Nonnull
+		Charset charset;
+		@Nullable
+		HappyPathHandler happyPathHandler;
+		@Nullable
+		NotFoundHandler notFoundHandler;
+		@Nullable
+		MethodNotAllowedHandler methodNotAllowedHandler;
+		@Nullable
+		ContentTooLargeHandler contentTooLargeHandler;
+		@Nullable
+		OptionsHandler optionsHandler;
+		@Nullable
+		ThrowableHandler throwableHandler;
+		@Nullable
+		HeadHandler headHandler;
+		@Nullable
+		CorsPreflightAllowedHandler corsPreflightAllowedHandler;
+		@Nullable
+		CorsPreflightRejectedHandler corsPreflightRejectedHandler;
+		@Nullable
+		CorsAllowedHandler corsAllowedHandler;
+		@Nullable
+		PostProcessor postProcessor;
+
+		private Builder(@Nonnull Charset charset) {
+			requireNonNull(charset);
+			this.charset = charset;
+		}
+
+		/**
+		 * Specifies the default charset to use for encoding character data.
+		 *
+		 * @param charset the charset to use for encoding character data
+		 * @return this {@code Builder}, for chaining
+		 */
+		@Nonnull
+		public Builder charset(@Nonnull Charset charset) {
+			requireNonNull(charset);
+			this.charset = charset;
+			return this;
+		}
+
+		/**
+		 * Specifies a custom "happy path" handler for requests.
+		 *
+		 * @param happyPathHandler an optional "happy path" handler
+		 * @return this {@code Builder}, for chaining
+		 */
+		@Nonnull
+		public Builder happyPath(@Nullable HappyPathHandler happyPathHandler) {
+			this.happyPathHandler = happyPathHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder notFound(@Nullable NotFoundHandler notFoundHandler) {
+			this.notFoundHandler = notFoundHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder methodNotAllowed(@Nullable MethodNotAllowedHandler methodNotAllowedHandler) {
+			this.methodNotAllowedHandler = methodNotAllowedHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder contentTooLarge(@Nullable ContentTooLargeHandler contentTooLargeHandler) {
+			this.contentTooLargeHandler = contentTooLargeHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder options(@Nullable OptionsHandler optionsHandler) {
+			this.optionsHandler = optionsHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder throwable(@Nullable ThrowableHandler throwableHandler) {
+			this.throwableHandler = throwableHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder head(@Nullable HeadHandler headHandler) {
+			this.headHandler = headHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder corsPreflightAllowed(@Nullable CorsPreflightAllowedHandler corsPreflightAllowedHandler) {
+			this.corsPreflightAllowedHandler = corsPreflightAllowedHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder corsPreflightRejected(@Nullable CorsPreflightRejectedHandler corsPreflightRejectedHandler) {
+			this.corsPreflightRejectedHandler = corsPreflightRejectedHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder corsAllowed(@Nullable CorsAllowedHandler corsAllowedHandler) {
+			this.corsAllowedHandler = corsAllowedHandler;
+			return this;
+		}
+
+		/**
+		 * Specifies an optional "post-process" hook for any final customization or processing before data goes over the wire.
+		 *
+		 * @param postProcessor an optional "post-process" hook
+		 * @return this {@code Builder}, for chaining
+		 */
+		@Nonnull
+		public Builder postProcessor(@Nullable PostProcessor postProcessor) {
+			this.postProcessor = postProcessor;
+			return this;
+		}
+
+		/**
+		 * Constructs a default {@code ResponseMarshaler} instance.
+		 * <p>
+		 * The constructed instance is thread-safe.
+		 *
+		 * @return a {@code ResponseMarshaler} instance
+		 */
+		@Nonnull
+		public ResponseMarshaler build() {
+			return new DefaultResponseMarshaler(this);
+		}
+	}
 }

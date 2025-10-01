@@ -21,9 +21,6 @@ import com.soklet.SokletConfiguration;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.ServerSentEventSource;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
-import com.soklet.core.impl.DefaultServer;
-import com.soklet.core.impl.DefaultServerSentEventServer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -50,7 +47,7 @@ public class ServerSentEventTests {
 	@Test
 	public void serverSentEventServerSimulator() throws InterruptedException {
 		SokletConfiguration configuration = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ServerSentEventSimulatorResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
 
 		Soklet.runSimulator(configuration, (simulator -> {
@@ -140,15 +137,15 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestTimeout(Duration.ofSeconds(3))
 				.shutdownTimeout(Duration.ofSeconds(5))
 				.build();
 
-		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(5)).build())
+		SokletConfiguration cfg = SokletConfiguration.withServer(Server.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(5)).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle()) // no noise in test logs
 				.build();
 
@@ -164,14 +161,14 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestTimeout(Duration.ofSeconds(5))
 				.build();
 
-		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).build())
+		SokletConfiguration cfg = SokletConfiguration.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
@@ -225,14 +222,14 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestTimeout(Duration.ofSeconds(5))
 				.build();
 
-		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).build())
+		SokletConfiguration cfg = SokletConfiguration.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
@@ -279,14 +276,14 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestTimeout(Duration.ofSeconds(5))
 				.build();
 
-		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).build())
+		SokletConfiguration cfg = SokletConfiguration.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
@@ -334,14 +331,14 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		DefaultServerSentEventServer sse = DefaultServerSentEventServer.withPort(ssePort)
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestTimeout(Duration.ofSeconds(5))
 				.build();
 
-		SokletConfiguration cfg = SokletConfiguration.withServer(DefaultServer.withPort(httpPort).build())
+		SokletConfiguration cfg = SokletConfiguration.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 

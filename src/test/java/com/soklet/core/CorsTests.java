@@ -20,10 +20,6 @@ import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.Resource;
-import com.soklet.core.impl.AllOriginsCorsAuthorizer;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
-import com.soklet.core.impl.NoOriginsCorsAuthorizer;
-import com.soklet.core.impl.WhitelistedOriginsCorsAuthorizer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -41,8 +37,8 @@ public class CorsTests {
 	@Test
 	public void preflight_allOrigins_allowed() {
 		SokletConfiguration configuration = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(CorsResource.class)))
-				.corsAuthorizer(new AllOriginsCorsAuthorizer())
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
@@ -73,7 +69,7 @@ public class CorsTests {
 	@Test
 	public void preflight_rejected_without_authorizer() {
 		SokletConfiguration configuration = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(CorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(NoOriginsCorsAuthorizer.defaultInstance())
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -98,8 +94,8 @@ public class CorsTests {
 	@Test
 	public void actual_request_includes_cors_headers_when_allowed() {
 		SokletConfiguration configuration = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(CorsResource.class)))
-				.corsAuthorizer(new AllOriginsCorsAuthorizer())
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
@@ -126,7 +122,7 @@ public class CorsTests {
 	@Test
 	public void preflight_whitelist_allows_only_listed_origin() {
 		SokletConfiguration configuration = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(CorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(WhitelistedOriginsCorsAuthorizer.withOrigins(Set.of("https://good.example")))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

@@ -16,10 +16,14 @@
 
 package com.soklet.core;
 
+import com.soklet.converter.ValueConverterRegistry;
+
 import javax.annotation.Nonnull;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.Optional;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Contract for converting request body bytes into a corresponding Java type.
@@ -60,6 +64,12 @@ import java.util.Optional;
  *   }
  * }).build();}</pre>
  * <p>
+ * Standard implementations can also be acquired via these factory methods:
+ * <ul>
+ *   <li>{@link #withDefaults()}</li>
+ *   <li>{@link #withValueConverterRegistry(ValueConverterRegistry)}</li>
+ * </ul>
+ * <p>
  * See <a href="https://www.soklet.com/docs/request-handling#request-body">https://www.soklet.com/docs/request-handling#request-body</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -82,4 +92,34 @@ public interface RequestBodyMarshaler {
 																			@Nonnull ResourceMethod resourceMethod,
 																			@Nonnull Parameter parameter,
 																			@Nonnull Type requestBodyType);
+
+	/**
+	 * Acquires a basic {@link RequestBodyMarshaler} which knows how to convert request body data using {@link ValueConverterRegistry#sharedInstance()}.
+	 * <p>
+	 * You will likely want to provide your own implementation of {@link RequestBodyMarshaler} instead if your system accepts, for example, JSON request bodies.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 *
+	 * @return a {@code RequestBodyMarshaler} with default settings
+	 */
+	@Nonnull
+	static RequestBodyMarshaler withDefaults() {
+		return DefaultRequestBodyMarshaler.defaultInstance();
+	}
+
+	/**
+	 * Acquires a basic {@link RequestBodyMarshaler} which knows how to convert request body data using the provided {@link ValueConverterRegistry}.
+	 * <p>
+	 * You will likely want to provide your own implementation of {@link RequestBodyMarshaler} instead if your system accepts, for example, JSON request bodies.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 *
+	 * @param valueConverterRegistry a registry of converters that can transform {@link String} types to arbitrary Java types
+	 * @return a default {@code RequestBodyMarshaler} backed by the given {@link ValueConverterRegistry}
+	 */
+	@Nonnull
+	static RequestBodyMarshaler withValueConverterRegistry(@Nonnull ValueConverterRegistry valueConverterRegistry) {
+		requireNonNull(valueConverterRegistry);
+		return new DefaultRequestBodyMarshaler(valueConverterRegistry);
+	}
 }

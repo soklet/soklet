@@ -14,20 +14,9 @@
  * limitations under the License.
  */
 
-package com.soklet.core.impl;
+package com.soklet.core;
 
 import com.soklet.SokletConfiguration;
-import com.soklet.core.HttpMethod;
-import com.soklet.core.LifecycleInterceptor;
-import com.soklet.core.LogEvent;
-import com.soklet.core.LogEventType;
-import com.soklet.core.MarshaledResponse;
-import com.soklet.core.MultipartParser;
-import com.soklet.core.Request;
-import com.soklet.core.ResponseCookie;
-import com.soklet.core.Server;
-import com.soklet.core.StatusCode;
-import com.soklet.core.Utilities;
 import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.Handler;
 import com.soklet.internal.microhttp.Header;
@@ -41,7 +30,6 @@ import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -81,7 +69,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class DefaultServer implements Server {
+final class DefaultServer implements Server {
 	@Nonnull
 	private static final String DEFAULT_HOST;
 	@Nonnull
@@ -142,12 +130,6 @@ public class DefaultServer implements Server {
 	private volatile LifecycleInterceptor lifecycleInterceptor;
 	@Nullable
 	private volatile EventLoop eventLoop;
-
-	@Nonnull
-	public static Builder withPort(@Nonnull Integer port) {
-		requireNonNull(port);
-		return new Builder(port);
-	}
 
 	protected DefaultServer(@Nonnull Builder builder) {
 		requireNonNull(builder);
@@ -674,117 +656,6 @@ public class DefaultServer implements Server {
 		@Nonnull
 		protected AtomicInteger getIdGenerator() {
 			return this.idGenerator;
-		}
-	}
-
-	/**
-	 * Builder used to construct instances of {@link DefaultServer}.
-	 * <p>
-	 * This class is intended for use by a single thread.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
-	@NotThreadSafe
-	public static class Builder {
-		@Nonnull
-		private Integer port;
-		@Nullable
-		private String host;
-		@Nullable
-		private Integer concurrency;
-		@Nullable
-		private Duration requestTimeout;
-		@Nullable
-		private Duration socketSelectTimeout;
-		@Nullable
-		private Duration shutdownTimeout;
-		@Nullable
-		private Integer maximumRequestSizeInBytes;
-		@Nullable
-		private Integer requestReadBufferSizeInBytes;
-		@Nullable
-		private Integer socketPendingConnectionLimit;
-		@Nullable
-		private MultipartParser multipartParser;
-		@Nullable
-		private Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
-
-		@Nonnull
-		protected Builder(@Nonnull Integer port) {
-			requireNonNull(port);
-			this.port = port;
-		}
-
-		@Nonnull
-		public Builder port(@Nonnull Integer port) {
-			requireNonNull(port);
-			this.port = port;
-			return this;
-		}
-
-		@Nonnull
-		public Builder host(@Nullable String host) {
-			this.host = host;
-			return this;
-		}
-
-		@Nonnull
-		public Builder concurrency(@Nullable Integer concurrency) {
-			this.concurrency = concurrency;
-			return this;
-		}
-
-		@Nonnull
-		public Builder requestTimeout(@Nullable Duration requestTimeout) {
-			this.requestTimeout = requestTimeout;
-			return this;
-		}
-
-		@Nonnull
-		public Builder socketSelectTimeout(@Nullable Duration socketSelectTimeout) {
-			this.socketSelectTimeout = socketSelectTimeout;
-			return this;
-		}
-
-		@Nonnull
-		public Builder socketPendingConnectionLimit(@Nullable Integer socketPendingConnectionLimit) {
-			this.socketPendingConnectionLimit = socketPendingConnectionLimit;
-			return this;
-		}
-
-		@Nonnull
-		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
-			this.shutdownTimeout = shutdownTimeout;
-			return this;
-		}
-
-		@Nonnull
-		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
-			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
-			return this;
-		}
-
-		@Nonnull
-		public Builder requestReadBufferSizeInBytes(@Nullable Integer requestReadBufferSizeInBytes) {
-			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
-			return this;
-		}
-
-		@Nonnull
-		public Builder multipartParser(@Nullable MultipartParser multipartParser) {
-			this.multipartParser = multipartParser;
-			return this;
-		}
-
-		@Nonnull
-		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
-			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
-			return this;
-		}
-
-		@Nonnull
-		public DefaultServer build() {
-			return new DefaultServer(this);
 		}
 	}
 }

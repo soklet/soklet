@@ -21,7 +21,6 @@ import com.soklet.SokletConfiguration;
 import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.Resource;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -52,7 +51,7 @@ public class MultipartEdgeCaseTests {
 	@Test
 	public void missing_required_field_yields_400() {
 		SokletConfiguration cfg = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(UploadResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(UploadResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
@@ -76,7 +75,7 @@ public class MultipartEdgeCaseTests {
 	@Test
 	public void missing_optional_field_is_ok() {
 		SokletConfiguration cfg = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(UploadResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(UploadResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }

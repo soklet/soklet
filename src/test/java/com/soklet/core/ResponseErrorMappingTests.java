@@ -20,7 +20,6 @@ import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.Resource;
-import com.soklet.core.impl.DefaultResourceMethodResolver;
 import com.soklet.exception.IllegalRequestBodyException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -37,7 +36,7 @@ public class ResponseErrorMappingTests {
 	@Test
 	public void runtime_exception_maps_to_500() {
 		SokletConfiguration cfg = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ExplodeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ExplodeResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
@@ -53,7 +52,7 @@ public class ResponseErrorMappingTests {
 	@Test
 	public void bad_request_exception_maps_to_400() {
 		SokletConfiguration cfg = SokletConfiguration.forTesting()
-				.resourceMethodResolver(new DefaultResourceMethodResolver(Set.of(ExplodeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ExplodeResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }

@@ -16,13 +16,19 @@
 
 package com.soklet.core;
 
+import com.soklet.converter.ValueConverterRegistry;
+
 import javax.annotation.Nonnull;
 import java.util.List;
 
 /**
  * Contract for determining parameter values to inject when invoking <em>Resource Methods</em>.
  * <p>
- * Soklet's default implementation of this type, {@link com.soklet.core.impl.DefaultResourceMethodParameterProvider}, is sufficient for most applications.
+ * Standard implementations can also be acquired via these factory methods:
+ * <ul>
+ *   <li>{@link #withDefaults()} (sufficient for most applications)</li>
+ *   <li>{@link #with(InstanceProvider, ValueConverterRegistry, RequestBodyMarshaler)} </li>
+ * </ul>
  * <p>
  * However, should a custom implementation be necessary for your application, documentation is available at <a href="https://www.soklet.com/docs/request-handling#resource-method-parameter-injection">https://www.soklet.com/docs/request-handling#resource-method-parameter-injection</a>.
  *
@@ -43,4 +49,33 @@ public interface ResourceMethodParameterProvider {
 	@Nonnull
 	List<Object> parameterValuesForResourceMethod(@Nonnull Request request,
 																								@Nonnull ResourceMethod resourceMethod);
+
+	/**
+	 * Acquires a basic {@link ResourceMethodParameterProvider} with sensible defaults.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 *
+	 * @return a {@code ResourceMethodParameterProvider} with default settings
+	 */
+	@Nonnull
+	static ResourceMethodParameterProvider withDefaults() {
+		return DefaultResourceMethodParameterProvider.defaultInstance();
+	}
+
+	/**
+	 * Acquires a basic {@link ResourceMethodParameterProvider} with sensible defaults.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 *
+	 * @param instanceProvider       controls how the parameter provider creates instances of objects
+	 * @param valueConverterRegistry controls how the parameter provider converts values from strings to Java types expected by the <em>Resource Method</em>
+	 * @param requestBodyMarshaler   controls how parameters annotated with {@link com.soklet.annotation.RequestBody} are converted to the Java type expected by the <em>Resource Method</em>
+	 * @return a {@code ResourceMethodParameterProvider} with default settings
+	 */
+	@Nonnull
+	static ResourceMethodParameterProvider with(@Nonnull InstanceProvider instanceProvider,
+																							@Nonnull ValueConverterRegistry valueConverterRegistry,
+																							@Nonnull RequestBodyMarshaler requestBodyMarshaler) {
+		return new DefaultResourceMethodParameterProvider(instanceProvider, valueConverterRegistry, requestBodyMarshaler);
+	}
 }
