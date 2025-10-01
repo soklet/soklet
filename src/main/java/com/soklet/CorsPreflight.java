@@ -41,7 +41,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class CorsPreflight {
+public final class CorsPreflight {
 	@Nonnull
 	private final String origin;
 	@Nullable
@@ -50,21 +50,26 @@ public class CorsPreflight {
 	private final Set<String> accessControlRequestHeaders;
 
 	/**
-	 * Constructs a CORS <strong>preflight</strong> request representation for the given HTTP request data.
+	 * Acquires a CORS <strong>preflight</strong> request representation for the given HTTP request data.
 	 * <p>
 	 * CORS preflight requests always have method {@code OPTIONS} and specify their target method via
 	 * the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> header value.
 	 *
 	 * @param origin                     HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> request header value
 	 * @param accessControlRequestMethod HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> request header value
+	 * @return a {@link CorsPreflight} instance
 	 */
-	public CorsPreflight(@Nonnull String origin,
-											 @Nonnull HttpMethod accessControlRequestMethod) {
-		this(requireNonNull(origin), requireNonNull(accessControlRequestMethod), null);
+	@Nonnull
+	public static CorsPreflight with(@Nonnull String origin,
+																	 @Nonnull HttpMethod accessControlRequestMethod) {
+		requireNonNull(origin);
+		requireNonNull(accessControlRequestMethod);
+
+		return new CorsPreflight(origin, accessControlRequestMethod, null);
 	}
 
 	/**
-	 * Constructs a CORS <strong>preflight</strong> request representation for the given HTTP request data.
+	 * Acquires a CORS <strong>preflight</strong> request representation for the given HTTP request data.
 	 * <p>
 	 * CORS preflight requests always have method {@code OPTIONS} and specify their target method via
 	 * the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> request value.
@@ -72,17 +77,16 @@ public class CorsPreflight {
 	 * @param origin                      HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> request header value
 	 * @param accessControlRequestMethod  HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> request header value
 	 * @param accessControlRequestHeaders the optional set of HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Headers">{@code Access-Control-Request-Headers}</a> request header values
+	 * @return a {@link CorsPreflight} instance
 	 */
-	public CorsPreflight(@Nonnull String origin,
-											 @Nonnull HttpMethod accessControlRequestMethod,
-											 @Nullable Set<String> accessControlRequestHeaders) {
+	@Nonnull
+	public static CorsPreflight with(@Nonnull String origin,
+																	 @Nonnull HttpMethod accessControlRequestMethod,
+																	 @Nullable Set<String> accessControlRequestHeaders) {
 		requireNonNull(origin);
 		requireNonNull(accessControlRequestMethod);
 
-		this.origin = origin;
-		this.accessControlRequestMethod = accessControlRequestMethod;
-		this.accessControlRequestHeaders = accessControlRequestHeaders == null ?
-				Set.of() : Set.copyOf(accessControlRequestHeaders);
+		return new CorsPreflight(origin, accessControlRequestMethod, accessControlRequestHeaders);
 	}
 
 	/**
@@ -134,6 +138,18 @@ public class CorsPreflight {
 		return Optional.of(new CorsPreflight(originHeaderValue,
 				accessControlRequestMethods.size() > 0 ? accessControlRequestMethods.get(0) : null,
 				accessControlRequestHeaderValues));
+	}
+
+	private CorsPreflight(@Nonnull String origin,
+												@Nonnull HttpMethod accessControlRequestMethod,
+												@Nullable Set<String> accessControlRequestHeaders) {
+		requireNonNull(origin);
+		requireNonNull(accessControlRequestMethod);
+
+		this.origin = origin;
+		this.accessControlRequestMethod = accessControlRequestMethod;
+		this.accessControlRequestHeaders = accessControlRequestHeaders == null ?
+				Set.of() : Set.copyOf(accessControlRequestHeaders);
 	}
 
 	@Override

@@ -38,7 +38,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class CorsPreflightResponse {
+public final class CorsPreflightResponse {
 	@Nonnull
 	private final String accessControlAllowOrigin;
 	@Nullable

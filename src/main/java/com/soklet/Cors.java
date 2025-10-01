@@ -37,25 +37,26 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class Cors {
+public final class Cors {
 	@Nullable
 	private final HttpMethod httpMethod;
 	@Nonnull
 	private final String origin;
 
 	/**
-	 * Constructs a CORS <strong>non-preflight</strong> request representation for the given HTTP request data.
+	 * Acquires a CORS <strong>non-preflight</strong> request representation for the given HTTP request data.
 	 *
 	 * @param httpMethod the request's HTTP method
 	 * @param origin     HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> request header value
+	 * @return a {@link Cors} instance
 	 */
-	public Cors(@Nonnull HttpMethod httpMethod,
-							@Nonnull String origin) {
+	@Nonnull
+	public static Cors with(@Nonnull HttpMethod httpMethod,
+													@Nonnull String origin) {
 		requireNonNull(httpMethod);
 		requireNonNull(origin);
 
-		this.httpMethod = httpMethod;
-		this.origin = origin;
+		return new Cors(httpMethod, origin);
 	}
 
 	/**
@@ -82,6 +83,15 @@ public class Cors {
 			return Optional.empty();
 
 		return Optional.of(new Cors(httpMethod, originHeaderValue));
+	}
+
+	private Cors(@Nonnull HttpMethod httpMethod,
+							 @Nonnull String origin) {
+		requireNonNull(httpMethod);
+		requireNonNull(origin);
+
+		this.httpMethod = httpMethod;
+		this.origin = origin;
 	}
 
 	@Override
