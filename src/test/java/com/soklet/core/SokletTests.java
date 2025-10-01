@@ -16,6 +16,15 @@
 
 package com.soklet.core;
 
+import com.soklet.HttpMethod;
+import com.soklet.LifecycleInterceptor;
+import com.soklet.LogEvent;
+import com.soklet.MultipartField;
+import com.soklet.Request;
+import com.soklet.RequestResult;
+import com.soklet.ResourceMethod;
+import com.soklet.ResourceMethodResolver;
+import com.soklet.Response;
 import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
@@ -45,7 +54,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.soklet.core.Utilities.emptyByteArray;
+import static com.soklet.Utilities.emptyByteArray;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -59,21 +68,21 @@ public class SokletTests {
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Response body should be "hello world" as bytes
 			RequestResult requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.GET, "/hello-world").build());
+					Request.with(HttpMethod.GET, "/hello-world").build());
 
 			Assertions.assertArrayEquals("hello world".getBytes(StandardCharsets.UTF_8), requestResult.getMarshaledResponse().getBody().get(),
 					"Response body doesn't match");
 
 			// Missing query param?  It should be a 400
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.GET, "/integer-query-param")
+					Request.with(HttpMethod.GET, "/integer-query-param")
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
 
 			// Have the query param?  It's a 204
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.GET, "/integer-query-param?intQueryParam=123")
+					Request.with(HttpMethod.GET, "/integer-query-param?intQueryParam=123")
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
@@ -82,7 +91,7 @@ public class SokletTests {
 
 			// Have the custom-named query param?  It's a 200 and echoes back the param as a string
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.GET, "/query-param-custom-name?local_date=2023-09-30")
+					Request.with(HttpMethod.GET, "/query-param-custom-name?local_date=2023-09-30")
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
@@ -91,7 +100,7 @@ public class SokletTests {
 
 			// Optional query param, no param provided
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/optional-query-param")
+					Request.with(HttpMethod.POST, "/optional-query-param")
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
@@ -100,7 +109,7 @@ public class SokletTests {
 
 			// Optional query param, param provided
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/optional-query-param?optionalQueryParam=123.456789")
+					Request.with(HttpMethod.POST, "/optional-query-param?optionalQueryParam=123.456789")
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
@@ -109,14 +118,14 @@ public class SokletTests {
 
 			// Integer (nonprimitive) request body, integer is required but not provided
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/echo-integer-request-body")
+					Request.with(HttpMethod.POST, "/echo-integer-request-body")
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
 
 			// Integer (nonprimitive) request body, integer is required and provided
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/echo-integer-request-body")
+					Request.with(HttpMethod.POST, "/echo-integer-request-body")
 							.body("123".getBytes(StandardCharsets.UTF_8))
 							.build());
 
@@ -127,7 +136,7 @@ public class SokletTests {
 			// Integer (nonprimitive) request body, integer is not required and not provided.
 			// This exercises Optional<T> as opposed to @RequestBody(optional=true)
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/echo-integer-optional-request-body-1")
+					Request.with(HttpMethod.POST, "/echo-integer-optional-request-body-1")
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
@@ -137,7 +146,7 @@ public class SokletTests {
 			// Integer (nonprimitive) request body, integer is not required and not provided.
 			// This exercises @RequestBody(optional=true) as opposed to Optional<T>
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/echo-integer-optional-request-body-2")
+					Request.with(HttpMethod.POST, "/echo-integer-optional-request-body-2")
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
@@ -146,7 +155,7 @@ public class SokletTests {
 
 			// Integer (primitive) request body, integer is required and provided
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/echo-int-request-body")
+					Request.with(HttpMethod.POST, "/echo-int-request-body")
 							.body("123".getBytes(StandardCharsets.UTF_8))
 							.build());
 
@@ -156,14 +165,14 @@ public class SokletTests {
 
 			// Integer (primitive) request body, integer is required but not provided
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/echo-int-request-body")
+					Request.with(HttpMethod.POST, "/echo-int-request-body")
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
 
 			// Integer (primitive) request body, integer is not required and not provided
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/echo-int-optional-request-body")
+					Request.with(HttpMethod.POST, "/echo-int-optional-request-body")
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
@@ -179,7 +188,7 @@ public class SokletTests {
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Response body should be "hello world" as bytes
 			RequestResult requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.GET, "/hello-world").build());
+					Request.with(HttpMethod.GET, "/hello-world").build());
 
 			Response response = requestResult.getResponse().get();
 			Object responseBody = response.getBody().get();
@@ -212,7 +221,7 @@ public class SokletTests {
 			}
 
 			RequestResult requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/multipart-upload?upload_progress_id=12344")
+					Request.with(HttpMethod.POST, "/multipart-upload?upload_progress_id=12344")
 							.headers(Map.of(
 									"Content-Type", Set.of("multipart/form-data; boundary=----WebKitFormBoundary59MIY6fOE42AL48U"),
 									"Content-Length", Set.of(String.valueOf(requestBody.length))
@@ -263,14 +272,14 @@ public class SokletTests {
 		@GET("/integer-query-param")
 		public Response integerQueryParam(@Nonnull @QueryParameter Integer intQueryParam) {
 			requireNonNull(intQueryParam);
-			return new Response.Builder(204).build();
+			return Response.withStatusCode(204).build();
 		}
 
 		@GET("/query-param-custom-name")
 		public Response queryParamCustomName(@Nonnull @QueryParameter(name = "local_date") LocalDate localDate) {
 			requireNonNull(localDate);
 			// Echoes back date in ISO yyyy-MM-dd format
-			return new Response.Builder(200).body(DateTimeFormatter.ISO_DATE.format(localDate)).build();
+			return Response.withStatusCode(200).body(DateTimeFormatter.ISO_DATE.format(localDate)).build();
 		}
 
 		@POST("/optional-query-param")
@@ -278,11 +287,11 @@ public class SokletTests {
 			requireNonNull(optionalQueryParam);
 
 			if (optionalQueryParam.isPresent())
-				return new Response.Builder(200)
+				return Response.withStatusCode(200)
 						.body(optionalQueryParam.get())
 						.build();
 
-			return new Response.Builder(204).build();
+			return Response.withStatusCode(204).build();
 		}
 
 		@POST("/echo-integer-request-body")
@@ -319,7 +328,7 @@ public class SokletTests {
 		SokletConfiguration configuration = configurationForResourceClasses(Set.of(VarargsResource.class));
 		Soklet.runSimulator(configuration, (simulator -> {
 			RequestResult requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.GET, "/static/js/some/file/example.js")
+					Request.with(HttpMethod.GET, "/static/js/some/file/example.js")
 							.build()
 			);
 
@@ -328,7 +337,7 @@ public class SokletTests {
 
 
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.GET, "/123/static/js/some/file/example.js")
+					Request.with(HttpMethod.GET, "/123/static/js/some/file/example.js")
 							.build()
 			);
 
@@ -336,7 +345,7 @@ public class SokletTests {
 			Assertions.assertEquals("123-js/some/file/example.js", requestResult.getResponse().get().getBody().get());
 
 			requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.GET, "/static2/js/some/file/example.js")
+					Request.with(HttpMethod.GET, "/static2/js/some/file/example.js")
 							.build()
 			);
 
@@ -369,14 +378,14 @@ public class SokletTests {
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
 			RequestResult getMethodResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.GET, "/hello-world").build());
+					Request.with(HttpMethod.GET, "/hello-world").build());
 
 			Assertions.assertArrayEquals("hello world".getBytes(StandardCharsets.UTF_8), getMethodResult.getMarshaledResponse().getBody().get(),
 					"Response body doesn't match");
 
 			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
 			RequestResult headMethodResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.HEAD, "/hello-world").build());
+					Request.with(HttpMethod.HEAD, "/hello-world").build());
 
 			Assertions.assertEquals(Integer.valueOf(200), headMethodResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals(getMethodResult.getMarshaledResponse().getHeaders(), headMethodResult.getMarshaledResponse().getHeaders(),
@@ -386,7 +395,7 @@ public class SokletTests {
 
 			// If you want to handle your own HEAD requests, we still prevent you from trying to send a response body
 			RequestResult explicitHeadMethodResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.HEAD, "/explicit-head-handling").build());
+					Request.with(HttpMethod.HEAD, "/explicit-head-handling").build());
 
 			Assertions.assertArrayEquals(emptyByteArray(), explicitHeadMethodResult.getMarshaledResponse().getBody().orElse(emptyByteArray()),
 					"Received a response body but didn't expect one");

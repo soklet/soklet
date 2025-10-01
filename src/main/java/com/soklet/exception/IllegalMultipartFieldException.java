@@ -16,7 +16,7 @@
 
 package com.soklet.exception;
 
-import com.soklet.core.MultipartField;
+import com.soklet.MultipartField;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;

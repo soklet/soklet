@@ -16,6 +16,12 @@
 
 package com.soklet.core;
 
+import com.soklet.HttpMethod;
+import com.soklet.LifecycleInterceptor;
+import com.soklet.LogEvent;
+import com.soklet.Request;
+import com.soklet.RequestResult;
+import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.Multipart;
@@ -61,7 +67,7 @@ public class MultipartEdgeCaseTests {
 		Soklet.runSimulator(cfg, simulator -> {
 			byte[] body = simpleMultipartBody();
 			RequestResult r = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/upload")
+					Request.with(HttpMethod.POST, "/upload")
 							.headers(Map.of(
 									"Content-Type", Set.of("multipart/form-data; boundary=----AaB03x"),
 									"Content-Length", Set.of(String.valueOf(body.length))
@@ -85,7 +91,7 @@ public class MultipartEdgeCaseTests {
 		Soklet.runSimulator(cfg, simulator -> {
 			byte[] body = simpleMultipartBody();
 			RequestResult r = simulator.performRequest(
-					new Request.Builder(HttpMethod.POST, "/upload-optional")
+					Request.with(HttpMethod.POST, "/upload-optional")
 							.headers(Map.of(
 									"Content-Type", Set.of("multipart/form-data; boundary=----AaB03x"),
 									"Content-Length", Set.of(String.valueOf(body.length))

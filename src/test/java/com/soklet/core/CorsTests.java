@@ -16,6 +16,13 @@
 
 package com.soklet.core;
 
+import com.soklet.CorsAuthorizer;
+import com.soklet.HttpMethod;
+import com.soklet.LifecycleInterceptor;
+import com.soklet.LogEvent;
+import com.soklet.Request;
+import com.soklet.RequestResult;
+import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
@@ -47,7 +54,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.OPTIONS, "/api/hello")
+					Request.with(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://example.com"),
 									"Access-Control-Request-Method", Set.of("GET"),
@@ -70,7 +77,7 @@ public class CorsTests {
 	public void preflight_rejected_without_authorizer() {
 		SokletConfiguration configuration = SokletConfiguration.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
-				.corsAuthorizer(NoOriginsCorsAuthorizer.defaultInstance())
+				.corsAuthorizer(CorsAuthorizer.withRejectAllPolicy())
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
@@ -79,7 +86,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult requestResult = simulator.performRequest(
-					new Request.Builder(HttpMethod.OPTIONS, "/api/hello")
+					Request.with(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://malicious.net"),
 									"Access-Control-Request-Method", Set.of("POST")
@@ -104,7 +111,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult result = simulator.performRequest(
-					new Request.Builder(HttpMethod.GET, "/api/hello")
+					Request.with(HttpMethod.GET, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://app.example")
 							))
@@ -123,7 +130,7 @@ public class CorsTests {
 	public void preflight_whitelist_allows_only_listed_origin() {
 		SokletConfiguration configuration = SokletConfiguration.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
-				.corsAuthorizer(WhitelistedOriginsCorsAuthorizer.withOrigins(Set.of("https://good.example")))
+				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://good.example")))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
@@ -132,7 +139,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult allowed = simulator.performRequest(
-					new Request.Builder(HttpMethod.OPTIONS, "/api/hello")
+					Request.with(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://good.example"),
 									"Access-Control-Request-Method", Set.of("GET")
@@ -141,7 +148,7 @@ public class CorsTests {
 			Assertions.assertEquals(204, allowed.getMarshaledResponse().getStatusCode());
 
 			RequestResult denied = simulator.performRequest(
-					new Request.Builder(HttpMethod.OPTIONS, "/api/hello")
+					Request.with(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://evil.example"),
 									"Access-Control-Request-Method", Set.of("GET")

@@ -36,7 +36,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.UUID;
 
-import static com.soklet.core.Utilities.trimAggressivelyToNull;
+import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 
 /**

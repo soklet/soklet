@@ -14,11 +14,27 @@
  * limitations under the License.
  */
 
+package com.soklet;
+
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
- * Core Soklet contracts and functionality.
- * <p>
- * Full documentation is available at <a href="https://www.soklet.com">https://www.soklet.com</a>.
- *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-package com.soklet;
+@ThreadSafe
+final class DefaultLifecycleInterceptor implements LifecycleInterceptor {
+	@Nonnull
+	private static final DefaultLifecycleInterceptor DEFAULT_INSTANCE;
+
+	static {
+		DEFAULT_INSTANCE = new DefaultLifecycleInterceptor();
+	}
+
+	@Nonnull
+	public static DefaultLifecycleInterceptor defaultInstance() {
+		return DEFAULT_INSTANCE;
+	}
+
+	// No method overrides
+}

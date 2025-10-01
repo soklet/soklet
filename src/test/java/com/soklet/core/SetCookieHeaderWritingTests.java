@@ -16,6 +16,10 @@
 
 package com.soklet.core;
 
+import com.soklet.ResourceMethodResolver;
+import com.soklet.Response;
+import com.soklet.ResponseCookie;
+import com.soklet.Server;
 import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;

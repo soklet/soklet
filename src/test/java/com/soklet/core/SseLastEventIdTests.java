@@ -16,6 +16,15 @@
 
 package com.soklet.core;
 
+import com.soklet.InstanceProvider;
+import com.soklet.Request;
+import com.soklet.ResourceMethodResolver;
+import com.soklet.ResourcePath;
+import com.soklet.Response;
+import com.soklet.Server;
+import com.soklet.ServerSentEvent;
+import com.soklet.ServerSentEventBroadcaster;
+import com.soklet.ServerSentEventServer;
 import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.Resource;
@@ -54,6 +63,7 @@ public class SseLastEventIdTests {
 				.instanceProvider(new InstanceProvider() {
 					@Nonnull
 					@Override
+					@SuppressWarnings("unchecked")
 					public <T> T provide(@Nonnull Class<T> instanceClass) {
 						// Hack to expose SSE server to resource methods
 						if (instanceClass.equals(ServerSentEventServer.class)) {

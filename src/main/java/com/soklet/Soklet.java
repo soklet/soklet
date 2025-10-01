@@ -17,31 +17,6 @@
 package com.soklet;
 
 import com.soklet.annotation.Resource;
-import com.soklet.core.Cors;
-import com.soklet.core.CorsAuthorizer;
-import com.soklet.core.CorsPreflight;
-import com.soklet.core.CorsPreflightResponse;
-import com.soklet.core.CorsResponse;
-import com.soklet.core.HttpMethod;
-import com.soklet.core.InstanceProvider;
-import com.soklet.core.LifecycleInterceptor;
-import com.soklet.core.LogEvent;
-import com.soklet.core.LogEventType;
-import com.soklet.core.MarshaledResponse;
-import com.soklet.core.Request;
-import com.soklet.core.RequestResult;
-import com.soklet.core.ResourceMethod;
-import com.soklet.core.ResourceMethodParameterProvider;
-import com.soklet.core.ResourceMethodResolver;
-import com.soklet.core.ResourcePath;
-import com.soklet.core.Response;
-import com.soklet.core.ResponseMarshaler;
-import com.soklet.core.Server;
-import com.soklet.core.ServerSentEvent;
-import com.soklet.core.ServerSentEventBroadcaster;
-import com.soklet.core.ServerSentEventServer;
-import com.soklet.core.Simulator;
-import com.soklet.core.StatusCode;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -74,7 +49,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import static com.soklet.core.Utilities.emptyByteArray;
+import static com.soklet.Utilities.emptyByteArray;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -222,7 +197,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Blocks the current thread until JVM shutdown ({@code SIGTERM/SIGINT/System.exit(...)} and so forth), or if one of the provided {@code shutdownTriggers} occurs.
+	 * Blocks the current thread until JVM shutdown ({@code SIGTERM/SIGINT/System.exit(...)} and so forth), <strong>or</strong> if one of the provided {@code shutdownTriggers} occurs.
 	 * <p>
 	 * This method will automatically invoke this instance's {@link #stop()} method once it becomes unblocked.
 	 * <p>
@@ -367,7 +342,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Nonpublic "informal" implementation of {@link com.soklet.core.Server.RequestHandler} so Soklet does not need to expose {@code handleRequest} publicly.
+	 * Nonpublic "informal" implementation of {@link com.soklet.Server.RequestHandler} so Soklet does not need to expose {@code handleRequest} publicly.
 	 * Reasoning: users of this library should never call {@code handleRequest} directly - it should only be invoked in response to events
 	 * provided by a {@link Server} or {@link ServerSentEventServer} implementation.
 	 */

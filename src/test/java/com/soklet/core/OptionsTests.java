@@ -16,6 +16,12 @@
 
 package com.soklet.core;
 
+import com.soklet.HttpMethod;
+import com.soklet.LifecycleInterceptor;
+import com.soklet.LogEvent;
+import com.soklet.Request;
+import com.soklet.RequestResult;
+import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
@@ -44,7 +50,7 @@ public class OptionsTests {
 				.build();
 
 		Soklet.runSimulator(cfg, simulator -> {
-			RequestResult result = simulator.performRequest(new Request.Builder(HttpMethod.OPTIONS, "/echo").build());
+			RequestResult result = simulator.performRequest(Request.with(HttpMethod.OPTIONS, "/echo").build());
 			Assertions.assertEquals(204, result.getMarshaledResponse().getStatusCode());
 			Map<String, Set<String>> headers = result.getMarshaledResponse().getHeaders();
 			Assertions.assertTrue(headers.containsKey("Allow"), "missing Allow header");

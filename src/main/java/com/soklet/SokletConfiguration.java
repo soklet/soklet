@@ -17,15 +17,6 @@
 package com.soklet;
 
 import com.soklet.converter.ValueConverterRegistry;
-import com.soklet.core.CorsAuthorizer;
-import com.soklet.core.InstanceProvider;
-import com.soklet.core.LifecycleInterceptor;
-import com.soklet.core.RequestBodyMarshaler;
-import com.soklet.core.ResourceMethodParameterProvider;
-import com.soklet.core.ResourceMethodResolver;
-import com.soklet.core.ResponseMarshaler;
-import com.soklet.core.Server;
-import com.soklet.core.ServerSentEventServer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;

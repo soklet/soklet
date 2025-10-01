@@ -16,6 +16,12 @@
 
 package com.soklet.core;
 
+import com.soklet.HttpMethod;
+import com.soklet.LifecycleInterceptor;
+import com.soklet.LogEvent;
+import com.soklet.Request;
+import com.soklet.RequestResult;
+import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
 import com.soklet.SokletConfiguration;
 import com.soklet.annotation.GET;
@@ -44,7 +50,7 @@ public class ResponseErrorMappingTests {
 				.build();
 
 		Soklet.runSimulator(cfg, simulator -> {
-			RequestResult result = simulator.performRequest(new Request.Builder(HttpMethod.GET, "/explode").build());
+			RequestResult result = simulator.performRequest(Request.with(HttpMethod.GET, "/explode").build());
 			Assertions.assertEquals(500, result.getMarshaledResponse().getStatusCode());
 		});
 	}
@@ -60,7 +66,7 @@ public class ResponseErrorMappingTests {
 				.build();
 
 		Soklet.runSimulator(cfg, simulator -> {
-			RequestResult result = simulator.performRequest(new Request.Builder(HttpMethod.GET, "/bad-request").build());
+			RequestResult result = simulator.performRequest(Request.with(HttpMethod.GET, "/bad-request").build());
 			Assertions.assertEquals(400, result.getMarshaledResponse().getStatusCode());
 		});
 	}
