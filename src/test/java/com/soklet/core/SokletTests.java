@@ -26,7 +26,7 @@ import com.soklet.ResourceMethod;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Response;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
 import com.soklet.annotation.Multipart;
@@ -64,7 +64,7 @@ import static java.util.Objects.requireNonNull;
 public class SokletTests {
 	@Test
 	public void requestHandlingBasics() {
-		SokletConfiguration configuration = configurationForResourceClasses(Set.of(RequestHandlingBasicsResource.class));
+		SokletConfig configuration = configurationForResourceClasses(Set.of(RequestHandlingBasicsResource.class));
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Response body should be "hello world" as bytes
 			RequestResult requestResult = simulator.performRequest(
@@ -184,7 +184,7 @@ public class SokletTests {
 
 	@Test
 	public void requestResults() {
-		SokletConfiguration configuration = configurationForResourceClasses(Set.of(RequestHandlingBasicsResource.class));
+		SokletConfig configuration = configurationForResourceClasses(Set.of(RequestHandlingBasicsResource.class));
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Response body should be "hello world" as bytes
 			RequestResult requestResult = simulator.performRequest(
@@ -210,7 +210,7 @@ public class SokletTests {
 
 	@Test
 	public void testMultipart() {
-		SokletConfiguration configuration = configurationForResourceClasses(Set.of(MultipartResource.class));
+		SokletConfig configuration = configurationForResourceClasses(Set.of(MultipartResource.class));
 		Soklet.runSimulator(configuration, (simulator -> {
 			byte[] requestBody;
 
@@ -325,7 +325,7 @@ public class SokletTests {
 
 	@Test
 	public void testVarargs() {
-		SokletConfiguration configuration = configurationForResourceClasses(Set.of(VarargsResource.class));
+		SokletConfig configuration = configurationForResourceClasses(Set.of(VarargsResource.class));
 		Soklet.runSimulator(configuration, (simulator -> {
 			RequestResult requestResult = simulator.performRequest(
 					Request.with(HttpMethod.GET, "/static/js/some/file/example.js")
@@ -374,7 +374,7 @@ public class SokletTests {
 
 	@Test
 	public void httpHead() {
-		SokletConfiguration configuration = configurationForResourceClasses(Set.of(HttpHeadResource.class));
+		SokletConfig configuration = configurationForResourceClasses(Set.of(HttpHeadResource.class));
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
 			RequestResult getMethodResult = simulator.performRequest(
@@ -416,8 +416,8 @@ public class SokletTests {
 	}
 
 	@Nonnull
-	protected SokletConfiguration configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
-		return SokletConfiguration.forTesting()
+	protected SokletConfig configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
+		return SokletConfig.forTesting()
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(resourceClasses))
 				// Quiet logging to keep the console clean

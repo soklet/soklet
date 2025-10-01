@@ -23,7 +23,7 @@ import com.soklet.Request;
 import com.soklet.RequestResult;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.Resource;
 import com.soklet.exception.IllegalRequestBodyException;
@@ -41,7 +41,7 @@ import java.util.Set;
 public class ResponseErrorMappingTests {
 	@Test
 	public void runtime_exception_maps_to_500() {
-		SokletConfiguration cfg = SokletConfiguration.forTesting()
+		SokletConfig cfg = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ExplodeResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -57,7 +57,7 @@ public class ResponseErrorMappingTests {
 
 	@Test
 	public void bad_request_exception_maps_to_400() {
-		SokletConfiguration cfg = SokletConfiguration.forTesting()
+		SokletConfig cfg = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ExplodeResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

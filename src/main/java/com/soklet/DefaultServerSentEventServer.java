@@ -363,19 +363,19 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Override
-	public void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+	public void initialize(@Nonnull SokletConfig sokletConfig,
 												 @Nonnull RequestHandler requestHandler) {
-		requireNonNull(sokletConfiguration);
+		requireNonNull(sokletConfig);
 		requireNonNull(requestHandler);
 
-		this.lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
+		this.lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
 		this.requestHandler = requestHandler;
 
 		// Pick out all the @ServerSentEventSource resource methods and store off keyed on resource path for ease of lookup.
 		// This is computed just once here and will never change.
 		// Fail fast if there are duplicates for the same declaration.
 		this.resourceMethodsByResourcePathDeclaration =
-				sokletConfiguration.getResourceMethodResolver().getResourceMethods().stream()
+				sokletConfig.getResourceMethodResolver().getResourceMethods().stream()
 						.filter(ResourceMethod::isServerSentEventSource)
 						.collect(Collectors.toMap(
 								ResourceMethod::getResourcePathDeclaration,

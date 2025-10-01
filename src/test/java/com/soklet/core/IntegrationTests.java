@@ -22,7 +22,7 @@ import com.soklet.Request;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Server;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
@@ -117,11 +117,11 @@ public class IntegrationTests {
 	}
 
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
-		SokletConfiguration cfg = SokletConfiguration.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(5)).build())
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(5)).build())
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(resourceClasses))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
-		Soklet app = Soklet.withConfiguration(cfg);
+		Soklet app = Soklet.withConfig(cfg);
 		app.start();
 		return app;
 	}

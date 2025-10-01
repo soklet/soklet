@@ -24,13 +24,13 @@ import java.util.function.Consumer;
  * <p>
  * <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Event</a> simulation is also supported.
  * <p>
- * Instances of {@link Simulator} are made available via {@link com.soklet.Soklet#runSimulator(SokletConfiguration, Consumer)}.
+ * Instances of {@link Simulator} are made available via {@link com.soklet.Soklet#runSimulator(SokletConfig, Consumer)}.
  * <p>
  * Usage example:
  * <pre>{@code  @Test
  * public void basicIntegrationTest() {
  *   // Build your configuration however you like
- *   SokletConfiguration config = obtainMySokletConfig();
+ *   SokletConfig config = obtainMySokletConfig();
  *
  *   // Instead of running on a real HTTP server that listens on a port,
  *   // a simulator is provided against which you can issue requests

@@ -23,7 +23,7 @@ import com.soklet.Request;
 import com.soklet.RequestResult;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.Resource;
@@ -50,7 +50,7 @@ public class ValueConversionTests {
 
 	@Test
 	public void converts_common_types_from_query_params() {
-		SokletConfiguration cfg = SokletConfiguration.forTesting()
+		SokletConfig cfg = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ConversionResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

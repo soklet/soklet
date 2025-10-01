@@ -29,14 +29,14 @@ import static java.util.Objects.requireNonNull;
 /**
  * Contract for HTTP server implementations that are designed to be managed by a {@link com.soklet.Soklet} instance.
  * <p>
- * <strong>Most Soklet applications will use {@link DefaultServer} and therefore do not need to implement this interface directly.</strong>
+ * <strong>Most Soklet applications will use the default {@link Server} (constructed via the {@link #withPort(Integer)} builder) and therefore do not need to implement this interface directly.</strong>
  * <p>
  * For example:
- * <pre>{@code  SokletConfiguration config = SokletConfiguration.withServer(
- *   DefaultServer.withPort(8080).build()
+ * <pre>{@code  SokletConfig config = SokletConfig.withServer(
+ *   Server.withPort(8080).build()
  * ).build();
  *
- * try (Soklet soklet = Soklet.withConfiguration(config)) {
+ * try (Soklet soklet = Soklet.withConfig(config)) {
  *   soklet.start();
  *   System.out.println("Soklet started, press [enter] to exit");
  *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
@@ -76,10 +76,10 @@ public interface Server extends AutoCloseable {
 	 * <p>
 	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 *
-	 * @param sokletConfiguration configuration for the Soklet instance that controls this server
-	 * @param requestHandler      a {@link com.soklet.Soklet}-internal request handler which takes a {@link Server}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link Server} to write back to the client
+	 * @param sokletConfig   configuration for the Soklet instance that controls this server
+	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link Server}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link Server} to write back to the client
 	 */
-	void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+	void initialize(@Nonnull SokletConfig sokletConfig,
 									@Nonnull RequestHandler requestHandler);
 
 	/**
@@ -97,9 +97,9 @@ public interface Server extends AutoCloseable {
 	/**
 	 * Request/response processing contract for {@link Server} implementations.
 	 * <p>
-	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server} via {@link Server#initialize(SokletConfiguration, RequestHandler)}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server} via {@link Server#initialize(SokletConfig, RequestHandler)}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
-	 * <strong>Most Soklet applications will use {@link DefaultServer} and therefore do not need to implement this interface directly.</strong>
+	 * <strong>Most Soklet applications will use Soklet's default {@link Server} implementation and therefore do not need to implement this interface directly.</strong>
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */

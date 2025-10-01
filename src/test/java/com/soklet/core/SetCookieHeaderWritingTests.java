@@ -21,7 +21,7 @@ import com.soklet.Response;
 import com.soklet.ResponseCookie;
 import com.soklet.Server;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
@@ -77,10 +77,10 @@ public class SetCookieHeaderWritingTests {
 	}
 
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
-		SokletConfiguration cfg = SokletConfiguration.withServer(Server.withPort(port).build())
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port).build())
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(resourceClasses))
 				.build();
-		Soklet app = Soklet.withConfiguration(cfg);
+		Soklet app = Soklet.withConfig(cfg);
 		app.start();
 		return app;
 	}

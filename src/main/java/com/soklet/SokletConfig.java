@@ -32,7 +32,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class SokletConfiguration {
+public class SokletConfig {
 	@Nonnull
 	private final InstanceProvider instanceProvider;
 	@Nonnull
@@ -58,7 +58,7 @@ public class SokletConfiguration {
 	 * Vends a configuration builder for the given server.
 	 *
 	 * @param server the server necessary for construction
-	 * @return a builder for {@link SokletConfiguration} instances
+	 * @return a builder for {@link SokletConfig} instances
 	 */
 	@Nonnull
 	public static Builder withServer(@Nonnull Server server) {
@@ -69,14 +69,14 @@ public class SokletConfiguration {
 	/**
 	 * Vends a configuration builder with mock servers, suitable for unit and integration testing.
 	 *
-	 * @return a builder for {@link SokletConfiguration} instances
+	 * @return a builder for {@link SokletConfig} instances
 	 */
 	@Nonnull
 	public static Builder forTesting() {
 		return new Builder(new Soklet.MockServer()).serverSentEventServer(new Soklet.MockServerSentEventServer());
 	}
 
-	protected SokletConfiguration(@Nonnull Builder builder) {
+	protected SokletConfig(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
 		this.server = builder.server;
@@ -202,9 +202,9 @@ public class SokletConfiguration {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link SokletConfiguration}.
+	 * Builder used to construct instances of {@link SokletConfig}.
 	 * <p>
-	 * Instances are created by invoking {@link SokletConfiguration#withServer(Server)} or {@link SokletConfiguration#forTesting()}.
+	 * Instances are created by invoking {@link SokletConfig#withServer(Server)} or {@link SokletConfig#forTesting()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -301,15 +301,15 @@ public class SokletConfiguration {
 		}
 
 		@Nonnull
-		public SokletConfiguration build() {
-			return new SokletConfiguration(this);
+		public SokletConfig build() {
+			return new SokletConfig(this);
 		}
 	}
 
 	/**
-	 * Builder used to copy instances of {@link SokletConfiguration}.
+	 * Builder used to copy instances of {@link SokletConfig}.
 	 * <p>
-	 * Instances are created by invoking {@link SokletConfiguration#copy()}.
+	 * Instances are created by invoking {@link SokletConfig#copy()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -320,19 +320,19 @@ public class SokletConfiguration {
 		@Nonnull
 		private final Builder builder;
 
-		Copier(@Nonnull SokletConfiguration sokletConfiguration) {
-			requireNonNull(sokletConfiguration);
+		Copier(@Nonnull SokletConfig sokletConfig) {
+			requireNonNull(sokletConfig);
 
-			this.builder = new Builder(sokletConfiguration.getServer())
-					.serverSentEventServer(sokletConfiguration.getServerSentEventServer().orElse(null))
-					.instanceProvider(sokletConfiguration.getInstanceProvider())
-					.valueConverterRegistry(sokletConfiguration.valueConverterRegistry)
-					.requestBodyMarshaler(sokletConfiguration.requestBodyMarshaler)
-					.resourceMethodResolver(sokletConfiguration.resourceMethodResolver)
-					.resourceMethodParameterProvider(sokletConfiguration.resourceMethodParameterProvider)
-					.responseMarshaler(sokletConfiguration.responseMarshaler)
-					.lifecycleInterceptor(sokletConfiguration.lifecycleInterceptor)
-					.corsAuthorizer(sokletConfiguration.corsAuthorizer);
+			this.builder = new Builder(sokletConfig.getServer())
+					.serverSentEventServer(sokletConfig.getServerSentEventServer().orElse(null))
+					.instanceProvider(sokletConfig.getInstanceProvider())
+					.valueConverterRegistry(sokletConfig.valueConverterRegistry)
+					.requestBodyMarshaler(sokletConfig.requestBodyMarshaler)
+					.resourceMethodResolver(sokletConfig.resourceMethodResolver)
+					.resourceMethodParameterProvider(sokletConfig.resourceMethodParameterProvider)
+					.responseMarshaler(sokletConfig.responseMarshaler)
+					.lifecycleInterceptor(sokletConfig.lifecycleInterceptor)
+					.corsAuthorizer(sokletConfig.corsAuthorizer);
 		}
 
 		@Nonnull
@@ -397,7 +397,7 @@ public class SokletConfiguration {
 		}
 
 		@Nonnull
-		public SokletConfiguration finish() {
+		public SokletConfig finish() {
 			return this.builder.build();
 		}
 	}

@@ -23,7 +23,7 @@ import com.soklet.Request;
 import com.soklet.RequestResult;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.Resource;
@@ -56,7 +56,7 @@ public class MultipartEdgeCaseTests {
 
 	@Test
 	public void missing_required_field_yields_400() {
-		SokletConfiguration cfg = SokletConfiguration.forTesting()
+		SokletConfig cfg = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(UploadResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -80,7 +80,7 @@ public class MultipartEdgeCaseTests {
 
 	@Test
 	public void missing_optional_field_is_ok() {
-		SokletConfiguration cfg = SokletConfiguration.forTesting()
+		SokletConfig cfg = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(UploadResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

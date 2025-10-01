@@ -24,7 +24,7 @@ import com.soklet.Request;
 import com.soklet.RequestResult;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
@@ -43,7 +43,7 @@ import java.util.Set;
 public class CorsTests {
 	@Test
 	public void preflight_allOrigins_allowed() {
-		SokletConfiguration configuration = SokletConfiguration.forTesting()
+		SokletConfig configuration = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
 				.lifecycleInterceptor(new LifecycleInterceptor() {
@@ -75,7 +75,7 @@ public class CorsTests {
 
 	@Test
 	public void preflight_rejected_without_authorizer() {
-		SokletConfiguration configuration = SokletConfiguration.forTesting()
+		SokletConfig configuration = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withRejectAllPolicy())
 				.lifecycleInterceptor(new LifecycleInterceptor() {
@@ -100,7 +100,7 @@ public class CorsTests {
 
 	@Test
 	public void actual_request_includes_cors_headers_when_allowed() {
-		SokletConfiguration configuration = SokletConfiguration.forTesting()
+		SokletConfig configuration = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
 				.lifecycleInterceptor(new LifecycleInterceptor() {
@@ -128,7 +128,7 @@ public class CorsTests {
 
 	@Test
 	public void preflight_whitelist_allows_only_listed_origin() {
-		SokletConfiguration configuration = SokletConfiguration.forTesting()
+		SokletConfig configuration = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://good.example")))
 				.lifecycleInterceptor(new LifecycleInterceptor() {

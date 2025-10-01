@@ -21,7 +21,7 @@ import com.soklet.LogEvent;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Server;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
@@ -66,7 +66,7 @@ public class ServerLifecycleTests {
 	@Test
 	public void start_stop_isStarted_toggles_and_serves_requests() throws Exception {
 		int port = findFreePort();
-		SokletConfiguration cfg = SokletConfiguration.withServer(Server.withPort(port)
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(HealthResource.class)))
@@ -76,7 +76,7 @@ public class ServerLifecycleTests {
 				})
 				.build();
 
-		try (Soklet app = Soklet.withConfiguration(cfg)) {
+		try (Soklet app = Soklet.withConfig(cfg)) {
 			Assertions.assertFalse(app.isStarted());
 			app.start();
 			Assertions.assertTrue(app.isStarted());
@@ -88,7 +88,7 @@ public class ServerLifecycleTests {
 		}
 		// try-with-resources calls close(), which stops the server
 		// Can't call isStarted() after close() directly; create again to check false
-		Soklet app2 = Soklet.withConfiguration(cfg);
+		Soklet app2 = Soklet.withConfig(cfg);
 		try {
 			Assertions.assertFalse(app2.isStarted());
 		} finally {

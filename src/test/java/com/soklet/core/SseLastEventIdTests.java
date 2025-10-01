@@ -26,7 +26,7 @@ import com.soklet.ServerSentEvent;
 import com.soklet.ServerSentEventBroadcaster;
 import com.soklet.ServerSentEventServer;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.Resource;
 import com.soklet.annotation.ServerSentEventSource;
 import org.junit.jupiter.api.Assertions;
@@ -57,7 +57,7 @@ public class SseLastEventIdTests {
 
 		ServerSentEventServer serverSentEventServer = ServerSentEventServer.withPort(ssePort).build();
 
-		SokletConfiguration config = SokletConfiguration.withServer(Server.withPort(port).build())
+		SokletConfig config = SokletConfig.withServer(Server.withPort(port).build())
 				.serverSentEventServer(serverSentEventServer)
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseResource.class)))
 				.instanceProvider(new InstanceProvider() {
@@ -75,7 +75,7 @@ public class SseLastEventIdTests {
 				})
 				.build();
 
-		try (Soklet soklet = Soklet.withConfiguration(config)) {
+		try (Soklet soklet = Soklet.withConfig(config)) {
 			soklet.start();
 
 			try (Socket socket = new Socket("127.0.0.1", ssePort)) {

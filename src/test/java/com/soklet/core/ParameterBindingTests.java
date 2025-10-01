@@ -24,7 +24,7 @@ import com.soklet.RequestResult;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Response;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
@@ -51,7 +51,7 @@ import java.util.Set;
 public class ParameterBindingTests {
 	@Test
 	public void required_and_optional_query_parameters() {
-		SokletConfiguration cfg = SokletConfiguration.forTesting()
+		SokletConfig cfg = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ParamResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -82,7 +82,7 @@ public class ParameterBindingTests {
 
 	@Test
 	public void headers_cookies_path_and_body_conversions() {
-		SokletConfiguration cfg = SokletConfiguration.forTesting()
+		SokletConfig cfg = SokletConfig.forTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ParamResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

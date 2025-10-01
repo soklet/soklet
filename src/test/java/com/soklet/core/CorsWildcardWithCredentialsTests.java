@@ -27,7 +27,7 @@ import com.soklet.ResourceMethod;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Server;
 import com.soklet.Soklet;
-import com.soklet.SokletConfiguration;
+import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
@@ -76,13 +76,13 @@ public class CorsWildcardWithCredentialsTests {
 			}
 		};
 
-		SokletConfiguration cfg = SokletConfiguration.withServer(
+		SokletConfig cfg = SokletConfig.withServer(
 						Server.withPort(port).build())
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(authorizer)
 				.build();
 
-		try (Soklet app = Soklet.withConfiguration(cfg)) {
+		try (Soklet app = Soklet.withConfig(cfg)) {
 			app.start();
 
 			HttpClient client = HttpClient.newHttpClient();

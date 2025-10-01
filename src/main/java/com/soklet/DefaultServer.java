@@ -450,13 +450,13 @@ final class DefaultServer implements Server {
 	}
 
 	@Override
-	public void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+	public void initialize(@Nonnull SokletConfig sokletConfig,
 												 @Nonnull RequestHandler requestHandler) {
 		requireNonNull(requestHandler);
-		requireNonNull(sokletConfiguration);
+		requireNonNull(sokletConfig);
 
 		this.requestHandler = requestHandler;
-		this.lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
+		this.lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
 	}
 
 	@Nonnull

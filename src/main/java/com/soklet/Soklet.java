@@ -57,11 +57,11 @@ import static java.util.Objects.requireNonNull;
  * Soklet's main class - manages a {@link Server} (and optionally a {@link ServerSentEventServer}) using the provided system configuration.
  * <p>
  * <pre>{@code  // Use out-of-the-box defaults
- * SokletConfiguration config = SokletConfiguration.withServer(
- *   DefaultServer.withPort(8080).build()
+ * SokletConfig config = SokletConfig.withServer(
+ *   Server.withPort(8080).build()
  * ).build();
  *
- * try (Soklet soklet = Soklet.withConfiguration(config)) {
+ * try (Soklet soklet = Soklet.withConfig(config)) {
  *   soklet.start();
  *   System.out.println("Soklet started, press [enter] to exit");
  *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
@@ -72,7 +72,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class Soklet implements AutoCloseable {
 	@Nonnull
-	private final SokletConfiguration sokletConfiguration;
+	private final SokletConfig sokletConfig;
 	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
@@ -81,29 +81,29 @@ public final class Soklet implements AutoCloseable {
 	/**
 	 * Acquires a Soklet instance with the given configuration.
 	 *
-	 * @param sokletConfiguration configuration that drives the Soklet system
+	 * @param sokletConfig configuration that drives the Soklet system
 	 * @return a Soklet instance
 	 */
 	@Nonnull
-	public static Soklet withConfiguration(@Nonnull SokletConfiguration sokletConfiguration) {
-		requireNonNull(sokletConfiguration);
-		return new Soklet(sokletConfiguration);
+	public static Soklet withConfig(@Nonnull SokletConfig sokletConfig) {
+		requireNonNull(sokletConfig);
+		return new Soklet(sokletConfig);
 	}
 
 	/**
 	 * Creates a Soklet instance with the given configuration.
 	 *
-	 * @param sokletConfiguration configuration that drives the Soklet system
+	 * @param sokletConfig configuration that drives the Soklet system
 	 */
-	private Soklet(@Nonnull SokletConfiguration sokletConfiguration) {
-		requireNonNull(sokletConfiguration);
+	private Soklet(@Nonnull SokletConfig sokletConfig) {
+		requireNonNull(sokletConfig);
 
-		this.sokletConfiguration = sokletConfiguration;
+		this.sokletConfig = sokletConfig;
 		this.lock = new ReentrantLock();
 		this.awaitShutdownLatchReference = new AtomicReference<>(new CountDownLatch(1));
 
 		// Fail fast in the event that Soklet appears misconfigured
-		if (sokletConfiguration.getResourceMethodResolver().getResourceMethods().size() == 0)
+		if (sokletConfig.getResourceMethodResolver().getResourceMethods().size() == 0)
 			throw new IllegalArgumentException(format("No classes annotated with @%s were found.", Resource.class.getSimpleName()));
 
 		// Use a layer of indirection here so the Soklet type does not need to directly implement the `RequestHandler` interface.
@@ -111,15 +111,15 @@ public final class Soklet implements AutoCloseable {
 		// That method should only be called by the managed `Server` instance.
 		Soklet soklet = this;
 
-		sokletConfiguration.getServer().initialize(getSokletConfiguration(), (request, marshaledResponseConsumer) -> {
+		sokletConfig.getServer().initialize(getSokletConfig(), (request, marshaledResponseConsumer) -> {
 			// Delegate to Soklet's internal request handling method
 			soklet.handleRequest(request, marshaledResponseConsumer);
 		});
 
-		ServerSentEventServer serverSentEventServer = sokletConfiguration.getServerSentEventServer().orElse(null);
+		ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
 
 		if (serverSentEventServer != null)
-			serverSentEventServer.initialize(sokletConfiguration, (request, marshaledResponseConsumer) -> {
+			serverSentEventServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
 				// Delegate to Soklet's internal request handling method
 				soklet.handleRequest(request, marshaledResponseConsumer);
 			});
@@ -139,15 +139,15 @@ public final class Soklet implements AutoCloseable {
 
 			getAwaitShutdownLatchReference().set(new CountDownLatch(1));
 
-			SokletConfiguration sokletConfiguration = getSokletConfiguration();
-			LifecycleInterceptor lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
-			Server server = sokletConfiguration.getServer();
+			SokletConfig sokletConfig = getSokletConfig();
+			LifecycleInterceptor lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
+			Server server = sokletConfig.getServer();
 
 			lifecycleInterceptor.willStartServer(server);
 			server.start();
 			lifecycleInterceptor.didStartServer(server);
 
-			ServerSentEventServer serverSentEventServer = sokletConfiguration.getServerSentEventServer().orElse(null);
+			ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
 
 			if (serverSentEventServer != null) {
 				lifecycleInterceptor.willStartServerSentEventServer(serverSentEventServer);
@@ -169,9 +169,9 @@ public final class Soklet implements AutoCloseable {
 
 		try {
 			if (isStarted()) {
-				SokletConfiguration sokletConfiguration = getSokletConfiguration();
-				LifecycleInterceptor lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
-				Server server = sokletConfiguration.getServer();
+				SokletConfig sokletConfig = getSokletConfig();
+				LifecycleInterceptor lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
+				Server server = sokletConfig.getServer();
 
 				if (server.isStarted()) {
 					lifecycleInterceptor.willStopServer(server);
@@ -179,7 +179,7 @@ public final class Soklet implements AutoCloseable {
 					lifecycleInterceptor.didStopServer(server);
 				}
 
-				ServerSentEventServer serverSentEventServer = sokletConfiguration.getServerSentEventServer().orElse(null);
+				ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
 
 				if (serverSentEventServer != null && serverSentEventServer.isStarted()) {
 					lifecycleInterceptor.willStopServerSentEventServer(serverSentEventServer);
@@ -226,7 +226,7 @@ public final class Soklet implements AutoCloseable {
 							format("Ignoring request for %s.%s - it is unsupported in this environment (no interactive TTY detected)", ShutdownTrigger.class.getSimpleName(), ShutdownTrigger.ENTER_KEY.name())
 					).build();
 
-					getSokletConfiguration().getLifecycleInterceptor().didReceiveLogEvent(logEvent);
+					getSokletConfig().getLifecycleInterceptor().didReceiveLogEvent(logEvent);
 				}
 			}
 
@@ -353,10 +353,10 @@ public final class Soklet implements AutoCloseable {
 
 		Instant processingStarted = Instant.now();
 
-		SokletConfiguration sokletConfiguration = getSokletConfiguration();
-		ResourceMethodResolver resourceMethodResolver = sokletConfiguration.getResourceMethodResolver();
-		ResponseMarshaler responseMarshaler = sokletConfiguration.getResponseMarshaler();
-		LifecycleInterceptor lifecycleInterceptor = sokletConfiguration.getLifecycleInterceptor();
+		SokletConfig sokletConfig = getSokletConfig();
+		ResourceMethodResolver resourceMethodResolver = sokletConfig.getResourceMethodResolver();
+		ResponseMarshaler responseMarshaler = sokletConfig.getResponseMarshaler();
+		LifecycleInterceptor lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
 
 		// Holders to permit mutable effectively-final variables
 		AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
@@ -720,11 +720,11 @@ public final class Soklet implements AutoCloseable {
 	@Nonnull
 	protected RequestResult toRequestResult(@Nonnull Request request,
 																					@Nullable ResourceMethod resourceMethod) throws Throwable {
-		ResourceMethodParameterProvider resourceMethodParameterProvider = getSokletConfiguration().getResourceMethodParameterProvider();
-		InstanceProvider instanceProvider = getSokletConfiguration().getInstanceProvider();
-		CorsAuthorizer corsAuthorizer = getSokletConfiguration().getCorsAuthorizer();
-		ResourceMethodResolver resourceMethodResolver = getSokletConfiguration().getResourceMethodResolver();
-		ResponseMarshaler responseMarshaler = getSokletConfiguration().getResponseMarshaler();
+		ResourceMethodParameterProvider resourceMethodParameterProvider = getSokletConfig().getResourceMethodParameterProvider();
+		InstanceProvider instanceProvider = getSokletConfig().getInstanceProvider();
+		CorsAuthorizer corsAuthorizer = getSokletConfig().getCorsAuthorizer();
+		ResourceMethodResolver resourceMethodResolver = getSokletConfig().getResourceMethodResolver();
+		ResponseMarshaler responseMarshaler = getSokletConfig().getResponseMarshaler();
 		CorsPreflight corsPreflight = request.getCorsPreflight().orElse(null);
 
 		// Special short-circuit for big requests
@@ -889,7 +889,7 @@ public final class Soklet implements AutoCloseable {
 		if (request.getHttpMethod() != HttpMethod.HEAD)
 			return marshaledResponse;
 
-		return getSokletConfiguration().getResponseMarshaler().forHead(request, marshaledResponse);
+		return getSokletConfig().getResponseMarshaler().forHead(request, marshaledResponse);
 	}
 
 	// Hat tip to Aslan Parçası and GrayStar
@@ -939,7 +939,7 @@ public final class Soklet implements AutoCloseable {
 		if (cors == null)
 			return marshaledResponse;
 
-		CorsAuthorizer corsAuthorizer = getSokletConfiguration().getCorsAuthorizer();
+		CorsAuthorizer corsAuthorizer = getSokletConfig().getCorsAuthorizer();
 
 		// Does the authorizer say we are authorized?
 		CorsResponse corsResponse = corsAuthorizer.authorize(request, cors).orElse(null);
@@ -949,7 +949,7 @@ public final class Soklet implements AutoCloseable {
 			return marshaledResponse;
 
 		// Authorized - OK, let's apply the headers to the response
-		return getSokletConfiguration().getResponseMarshaler().forCorsAllowed(request, cors, corsResponse, marshaledResponse);
+		return getSokletConfig().getResponseMarshaler().forCorsAllowed(request, cors, corsResponse, marshaledResponse);
 	}
 
 	@Nonnull
@@ -1004,10 +1004,10 @@ public final class Soklet implements AutoCloseable {
 		getLock().lock();
 
 		try {
-			if (getSokletConfiguration().getServer().isStarted())
+			if (getSokletConfig().getServer().isStarted())
 				return true;
 
-			ServerSentEventServer serverSentEventServer = getSokletConfiguration().getServerSentEventServer().orElse(null);
+			ServerSentEventServer serverSentEventServer = getSokletConfig().getServerSentEventServer().orElse(null);
 			return serverSentEventServer != null && serverSentEventServer.isStarted();
 		} finally {
 			getLock().unlock();
@@ -1019,25 +1019,25 @@ public final class Soklet implements AutoCloseable {
 	 * <p>
 	 * See <a href="https://www.soklet.com/docs/automated-testing">https://www.soklet.com/docs/automated-testing</a> for how to write these tests.
 	 *
-	 * @param sokletConfiguration configuration that drives the Soklet system
-	 * @param simulatorConsumer   code to execute within the context of the simulator
+	 * @param sokletConfig      configuration that drives the Soklet system
+	 * @param simulatorConsumer code to execute within the context of the simulator
 	 */
-	public static void runSimulator(@Nonnull SokletConfiguration sokletConfiguration,
+	public static void runSimulator(@Nonnull SokletConfig sokletConfig,
 																	@Nonnull Consumer<Simulator> simulatorConsumer) {
-		requireNonNull(sokletConfiguration);
+		requireNonNull(sokletConfig);
 		requireNonNull(simulatorConsumer);
 
 		MockServer server = new MockServer();
 		MockServerSentEventServer serverSentEventServer = new MockServerSentEventServer();
 
-		SokletConfiguration mockConfiguration = sokletConfiguration.copy()
+		SokletConfig mockConfiguration = sokletConfig.copy()
 				.server(server)
 				.serverSentEventServer(serverSentEventServer)
 				.finish();
 
 		Simulator simulator = new DefaultSimulator(server, serverSentEventServer);
 
-		try (Soklet soklet = Soklet.withConfiguration(mockConfiguration)) {
+		try (Soklet soklet = Soklet.withConfig(mockConfiguration)) {
 			soklet.start();
 			simulatorConsumer.accept(simulator);
 		} catch (RuntimeException e) {
@@ -1048,8 +1048,8 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@Nonnull
-	protected SokletConfiguration getSokletConfiguration() {
-		return this.sokletConfiguration;
+	protected SokletConfig getSokletConfig() {
+		return this.sokletConfig;
 	}
 
 	@Nonnull
@@ -1133,7 +1133,7 @@ public final class Soklet implements AutoCloseable {
 	@ThreadSafe
 	static class MockServer implements Server {
 		@Nullable
-		private SokletConfiguration sokletConfiguration;
+		private SokletConfig sokletConfig;
 		@Nullable
 		private Server.RequestHandler requestHandler;
 
@@ -1154,17 +1154,17 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		public void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+		public void initialize(@Nonnull SokletConfig sokletConfig,
 													 @Nonnull RequestHandler requestHandler) {
-			requireNonNull(sokletConfiguration);
+			requireNonNull(sokletConfig);
 			requireNonNull(requestHandler);
 
 			this.requestHandler = requestHandler;
 		}
 
 		@Nonnull
-		protected Optional<SokletConfiguration> getSokletConfiguration() {
-			return Optional.ofNullable(this.sokletConfiguration);
+		protected Optional<SokletConfig> getSokletConfig() {
+			return Optional.ofNullable(this.sokletConfig);
 		}
 
 		@Nonnull
@@ -1236,7 +1236,7 @@ public final class Soklet implements AutoCloseable {
 	@ThreadSafe
 	static class MockServerSentEventServer implements ServerSentEventServer {
 		@Nullable
-		private SokletConfiguration sokletConfiguration;
+		private SokletConfig sokletConfig;
 		@Nullable
 		private ServerSentEventServer.RequestHandler requestHandler;
 		@Nonnull
@@ -1286,18 +1286,18 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		public void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+		public void initialize(@Nonnull SokletConfig sokletConfig,
 													 @Nonnull ServerSentEventServer.RequestHandler requestHandler) {
-			requireNonNull(sokletConfiguration);
+			requireNonNull(sokletConfig);
 			requireNonNull(requestHandler);
 
-			this.sokletConfiguration = sokletConfiguration;
+			this.sokletConfig = sokletConfig;
 			this.requestHandler = requestHandler;
 		}
 
 		@Nullable
-		protected Optional<SokletConfiguration> getSokletConfiguration() {
-			return Optional.ofNullable(this.sokletConfiguration);
+		protected Optional<SokletConfig> getSokletConfig() {
+			return Optional.ofNullable(this.sokletConfig);
 		}
 
 		@Nullable

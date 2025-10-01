@@ -93,19 +93,19 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * <p>
 	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 *
-	 * @param sokletConfiguration configuration for the Soklet instance that controls this server
+	 * @param sokletConfig configuration for the Soklet instance that controls this server
 	 * @param requestHandler      a {@link com.soklet.Soklet}-internal request handler which takes a {@link ServerSentEventServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link ServerSentEventServer} to write back to the client
 	 */
-	void initialize(@Nonnull SokletConfiguration sokletConfiguration,
+	void initialize(@Nonnull SokletConfig sokletConfig,
 									@Nonnull RequestHandler requestHandler);
 
 	/**
 	 * Request/response processing contract for {@link ServerSentEventServer} implementations.
 	 * <p>
-	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link ServerSentEventServer} via {@link ServerSentEventServer#initialize(SokletConfiguration, RequestHandler)}.
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link ServerSentEventServer} via {@link ServerSentEventServer#initialize(SokletConfig, RequestHandler)}.
 	 * It's the responsibility of the {@link ServerSentEventServer} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
-	 * <strong>Most Soklet applications will use {@link DefaultServerSentEventServer} and therefore do not need to implement this interface directly.</strong>
+	 * <strong>Most Soklet applications will use Soklet's default {@link ServerSentEventServer} implementation and therefore do not need to implement this interface directly.</strong>
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
