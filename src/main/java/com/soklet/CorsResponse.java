@@ -140,7 +140,7 @@ public final class CorsResponse {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static class Builder {
+	public static final class Builder {
 		@Nonnull
 		private String accessControlAllowOrigin;
 		@Nullable

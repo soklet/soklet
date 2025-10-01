@@ -744,7 +744,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		}
 
 		@NotThreadSafe
-		protected static class Builder<T> {
+		protected static final class Builder<T> {
 			@Nonnull
 			private final ResourceMethod resourceMethod;
 			@Nonnull

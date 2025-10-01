@@ -224,7 +224,7 @@ public interface ResponseMarshaler {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	class Builder {
+	final class Builder {
 		@FunctionalInterface
 		public interface HappyPathHandler {
 			@Nonnull
