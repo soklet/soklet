@@ -334,9 +334,9 @@ public void createEmployee(@RequestBody Employee employee) {
 
 #### Response Writing
 
-For full control over all aspects of response writing, you might bring your own implementation of [`ResponseMarshaler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.html).
+To control how response data is surfaced to clients (e.g. JSON), provide handler functions to Soklet as shown below.
 
-But for most systems, it's more convenient to provide handler functions to Soklet's default [`ResponseMarshaler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.html) implementation as shown below.
+Alternatively, you can provide your own implementation of [`ResponseMarshaler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.html) for full control.
 
 ```java
 // Let's use Gson to write response body data
@@ -419,7 +419,7 @@ ThrowableHandler throwableHandler = (
     .build();
 };
 
-// Supply our custom handlers to the default response marshaler
+// Supply our custom handlers to the standard response marshaler
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
 ).responseMarshaler(ResponseMarshaler.withCharset(StandardCharsets.UTF_8)
