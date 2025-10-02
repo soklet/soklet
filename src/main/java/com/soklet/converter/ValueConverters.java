@@ -27,6 +27,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
@@ -285,7 +286,11 @@ public final class ValueConverters {
 			if (from == null)
 				return Optional.empty();
 
-			return Optional.of(new Date(Long.parseLong(from)));
+			try {
+				return Optional.of(Date.from(Instant.parse(from)));
+			} catch (DateTimeParseException ignored) {
+				return Optional.of(new Date(Long.parseLong(from)));
+			}
 		}
 	}
 
@@ -297,7 +302,11 @@ public final class ValueConverters {
 			if (from == null)
 				return Optional.empty();
 
-			return Optional.of(Instant.ofEpochMilli(Long.parseLong(from)));
+			try {
+				return Optional.of(Instant.parse(from));
+			} catch (Exception ignored) {
+				return Optional.of(Instant.ofEpochMilli(Long.parseLong(from)));
+			}
 		}
 	}
 
