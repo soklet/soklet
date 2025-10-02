@@ -191,7 +191,7 @@ public class ValueConverterRegistry {
 					@Nonnull
 					public Optional<T> convert(@Nullable Object from) throws ValueConversionException {
 						if (from == null)
-							return null;
+							return Optional.empty();
 
 						try {
 							return Optional.ofNullable((T) Enum.valueOf(toClass, from.toString()));
