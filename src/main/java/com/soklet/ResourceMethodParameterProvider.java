@@ -24,11 +24,7 @@ import java.util.List;
 /**
  * Contract for determining parameter values to inject when invoking <em>Resource Methods</em>.
  * <p>
- * Standard implementations can also be acquired via these factory methods:
- * <ul>
- *   <li>{@link #withDefaults()} (sufficient for most applications)</li>
- *   <li>{@link #with(InstanceProvider, ValueConverterRegistry, RequestBodyMarshaler)} </li>
- * </ul>
+ * A standard threadsafe implementation can be acquired via the {@link #with(InstanceProvider, ValueConverterRegistry, RequestBodyMarshaler)} factory method.
  * <p>
  * However, should a custom implementation be necessary for your application, documentation is available at <a href="https://www.soklet.com/docs/request-handling#resource-method-parameter-injection">https://www.soklet.com/docs/request-handling#resource-method-parameter-injection</a>.
  *
@@ -51,7 +47,7 @@ public interface ResourceMethodParameterProvider {
 																								@Nonnull ResourceMethod resourceMethod);
 
 	/**
-	 * Acquires a basic {@link ResourceMethodParameterProvider} with sensible defaults.
+	 * Acquires a threadsafe basic {@link ResourceMethodParameterProvider} with sensible defaults.
 	 * <p>
 	 * Callers should not rely on reference identity; this method may return a new or cached instance.
 	 *

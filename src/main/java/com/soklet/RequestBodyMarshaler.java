@@ -64,7 +64,7 @@ import static java.util.Objects.requireNonNull;
  *   }
  * }).build();}</pre>
  * <p>
- * A standard implementation can be acquired via the {@link #withValueConverterRegistry(ValueConverterRegistry)} factory method.
+ * A standard threadsafe implementation can be acquired via the {@link #withValueConverterRegistry(ValueConverterRegistry)} factory method.
  * <p>
  * See <a href="https://www.soklet.com/docs/request-handling#request-body">https://www.soklet.com/docs/request-handling#request-body</a> for detailed documentation.
  *
@@ -90,7 +90,7 @@ public interface RequestBodyMarshaler {
 																			@Nonnull Type requestBodyType);
 
 	/**
-	 * Acquires a basic {@link RequestBodyMarshaler} which knows how to convert request body data using the provided {@link ValueConverterRegistry}.
+	 * Acquires a threadsafe {@link RequestBodyMarshaler} implementation which converts request body data using the provided {@link ValueConverterRegistry}.
 	 * <p>
 	 * You will likely want to provide your own implementation of {@link RequestBodyMarshaler} instead if your system accepts, for example, JSON request bodies.
 	 * <p>
