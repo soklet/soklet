@@ -81,10 +81,10 @@ public class SokletConfig {
 
 		this.server = builder.server;
 		this.serverSentEventServer = builder.serverSentEventServer;
-		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.withDefaults();
-		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.sharedInstance();
+		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.defaultInstance();
+		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.withDefaults();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.withValueConverterRegistry(getValueConverterRegistry());
-		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : ResourceMethodResolver.withDefaults();
+		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : ResourceMethodResolver.withClasspathIntrospection();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : ResourceMethodParameterProvider.with(getInstanceProvider(), getValueConverterRegistry(), getRequestBodyMarshaler());
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : ResponseMarshaler.withDefaults();
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : LifecycleInterceptor.withDefaults();

@@ -68,18 +68,18 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	public static DefaultResourceMethodResolver defaultInstance() {
+	public static DefaultResourceMethodResolver withClasspathIntrospection() {
 		return DEFAULT_INSTANCE;
 	}
 
 	@Nonnull
-	public static ResourceMethodResolver withResourceClasses(@Nullable Set<Class<?>> resourceClasses) {
+	public static DefaultResourceMethodResolver withResourceClasses(@Nullable Set<Class<?>> resourceClasses) {
 		requireNonNull(resourceClasses);
 		return new DefaultResourceMethodResolver(resourceClasses, null);
 	}
 
 	@Nonnull
-	public static ResourceMethodResolver withMethods(@Nonnull Set<Method> methods) {
+	public static DefaultResourceMethodResolver withMethods(@Nonnull Set<Method> methods) {
 		requireNonNull(methods);
 		return new DefaultResourceMethodResolver(null, methods);
 	}

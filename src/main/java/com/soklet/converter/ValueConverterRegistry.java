@@ -46,9 +46,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class ValueConverterRegistry {
-	@Nonnull
-	private static final ValueConverterRegistry SHARED_INSTANCE;
+public final class ValueConverterRegistry {
 	@Nonnull
 	private static final ValueConverter<?, ?> REFLEXIVE_VALUE_CONVERTER;
 	@Nonnull
@@ -56,7 +54,6 @@ public class ValueConverterRegistry {
 
 	static {
 		REFLEXIVE_VALUE_CONVERTER = new ReflexiveValueConverter<>();
-		SHARED_INSTANCE = new ValueConverterRegistry();
 
 		// See https://docs.oracle.com/javase/tutorial/java/nutsandbolts/datatypes.html
 		PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS = Map.of(
@@ -81,32 +78,27 @@ public class ValueConverterRegistry {
 	private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey;
 
 	/**
-	 * The system's default shared registry instance.
+	 * Acquires a registry with a sensible default set of converters as specified by {@link ValueConverters#defaultValueConverters()}.
 	 *
-	 * @return the shared registry instance
+	 * @return a registry instance with sensible defaults
 	 */
 	@Nonnull
-	public static ValueConverterRegistry sharedInstance() {
-		return SHARED_INSTANCE;
+	public static ValueConverterRegistry withDefaults() {
+		return withDefaultsSupplementedBy(Set.of());
 	}
 
 	/**
-	 * Creates a registry with a sensible default set of converters as specified by {@link ValueConverters#defaultValueConverters()}.
-	 */
-	public ValueConverterRegistry() {
-		this(Set.of());
-	}
-
-	/**
-	 * Creates a registry with a sensible default set of converters as specified by {@link ValueConverters#defaultValueConverters()}, optionally supplemented with custom converters.
+	 * Acquires a registry with a sensible default set of converters as specified by {@link ValueConverters#defaultValueConverters()}, supplemented with custom converters.
 	 *
 	 * @param customValueConverters the custom value converters to include in the registry
+	 * @return a registry instance with sensible defaults, supplemented with custom converters
 	 */
-	public ValueConverterRegistry(@Nullable Set<ValueConverter<?, ?>> customValueConverters) {
-		if (customValueConverters == null)
-			customValueConverters = Set.of();
+	@Nonnull
+	public static ValueConverterRegistry withDefaultsSupplementedBy(@Nonnull Set<ValueConverter<?, ?>> customValueConverters) {
+		requireNonNull(customValueConverters);
 
 		Set<ValueConverter<?, ?>> defaultValueConverters = ValueConverters.defaultValueConverters();
+
 		ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey = new ConcurrentHashMap<>(
 				defaultValueConverters.size()
 						+ customValueConverters.size()
@@ -122,9 +114,22 @@ public class ValueConverterRegistry {
 		valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(REFLEXIVE_VALUE_CONVERTER), REFLEXIVE_VALUE_CONVERTER);
 
 		// Finally, register any additional converters that were provided
-		for (ValueConverter<?, ?> valueConverter : customValueConverters)
-			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(valueConverter), valueConverter);
+		for (ValueConverter<?, ?> customValueConverter : customValueConverters)
+			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(customValueConverter), customValueConverter);
 
+		return new ValueConverterRegistry(valueConvertersByCacheKey);
+	}
+
+	// TODO: we might add a factory method in the future that creates a totally-blank-slate registry that doesn't use defaults at all, doesn't create new ones for enums automatically, etc.
+
+	@Nonnull
+	private static CacheKey extractCacheKeyFromValueConverter(@Nonnull ValueConverter<?, ?> valueConverter) {
+		requireNonNull(valueConverter);
+		return new CacheKey(valueConverter.getFromType(), valueConverter.getToType());
+	}
+
+	private ValueConverterRegistry(@Nonnull ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey) {
+		requireNonNull(valueConvertersByCacheKey);
 		this.valueConvertersByCacheKey = valueConvertersByCacheKey;
 	}
 
@@ -233,12 +238,6 @@ public class ValueConverterRegistry {
 
 		Type nonprimitiveEquivalent = PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS.get(type);
 		return nonprimitiveEquivalent == null ? type : nonprimitiveEquivalent;
-	}
-
-	@Nonnull
-	protected CacheKey extractCacheKeyFromValueConverter(@Nonnull ValueConverter<?, ?> valueConverter) {
-		requireNonNull(valueConverter);
-		return new CacheKey(valueConverter.getFromType(), valueConverter.getToType());
 	}
 
 	@Nonnull

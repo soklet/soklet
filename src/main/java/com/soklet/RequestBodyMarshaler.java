@@ -64,11 +64,7 @@ import static java.util.Objects.requireNonNull;
  *   }
  * }).build();}</pre>
  * <p>
- * Standard implementations can also be acquired via these factory methods:
- * <ul>
- *   <li>{@link #withDefaults()}</li>
- *   <li>{@link #withValueConverterRegistry(ValueConverterRegistry)}</li>
- * </ul>
+ * A standard implementation can be acquired via the {@link #withValueConverterRegistry(ValueConverterRegistry)} factory method.
  * <p>
  * See <a href="https://www.soklet.com/docs/request-handling#request-body">https://www.soklet.com/docs/request-handling#request-body</a> for detailed documentation.
  *
@@ -92,20 +88,6 @@ public interface RequestBodyMarshaler {
 																			@Nonnull ResourceMethod resourceMethod,
 																			@Nonnull Parameter parameter,
 																			@Nonnull Type requestBodyType);
-
-	/**
-	 * Acquires a basic {@link RequestBodyMarshaler} which knows how to convert request body data using {@link ValueConverterRegistry#sharedInstance()}.
-	 * <p>
-	 * You will likely want to provide your own implementation of {@link RequestBodyMarshaler} instead if your system accepts, for example, JSON request bodies.
-	 * <p>
-	 * Callers should not rely on reference identity; this method may return a new or cached instance.
-	 *
-	 * @return a {@code RequestBodyMarshaler} with default settings
-	 */
-	@Nonnull
-	static RequestBodyMarshaler withDefaults() {
-		return DefaultRequestBodyMarshaler.defaultInstance();
-	}
 
 	/**
 	 * Acquires a basic {@link RequestBodyMarshaler} which knows how to convert request body data using the provided {@link ValueConverterRegistry}.

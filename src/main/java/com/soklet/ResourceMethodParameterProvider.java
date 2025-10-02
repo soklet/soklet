@@ -55,18 +55,6 @@ public interface ResourceMethodParameterProvider {
 	 * <p>
 	 * Callers should not rely on reference identity; this method may return a new or cached instance.
 	 *
-	 * @return a {@code ResourceMethodParameterProvider} with default settings
-	 */
-	@Nonnull
-	static ResourceMethodParameterProvider withDefaults() {
-		return DefaultResourceMethodParameterProvider.defaultInstance();
-	}
-
-	/**
-	 * Acquires a basic {@link ResourceMethodParameterProvider} with sensible defaults.
-	 * <p>
-	 * Callers should not rely on reference identity; this method may return a new or cached instance.
-	 *
 	 * @param instanceProvider       controls how the parameter provider creates instances of objects
 	 * @param valueConverterRegistry controls how the parameter provider converts values from strings to Java types expected by the <em>Resource Method</em>
 	 * @param requestBodyMarshaler   controls how parameters annotated with {@link com.soklet.annotation.RequestBody} are converted to the Java type expected by the <em>Resource Method</em>

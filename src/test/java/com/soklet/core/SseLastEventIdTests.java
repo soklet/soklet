@@ -69,7 +69,7 @@ public class SseLastEventIdTests {
 						if (instanceClass.equals(ServerSentEventServer.class)) {
 							return (T) serverSentEventServer;
 						} else {
-							return InstanceProvider.withDefaults().provide(instanceClass);
+							return InstanceProvider.defaultInstance().provide(instanceClass);
 						}
 					}
 				})

@@ -37,23 +37,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 	@Nonnull
-	private static final DefaultRequestBodyMarshaler DEFAULT_INSTANCE;
-
-	static {
-		DEFAULT_INSTANCE = new DefaultRequestBodyMarshaler();
-	}
-
-	@Nonnull
-	public static DefaultRequestBodyMarshaler defaultInstance() {
-		return DEFAULT_INSTANCE;
-	}
-
-	@Nonnull
 	private final ValueConverterRegistry valueConverterRegistry;
-
-	public DefaultRequestBodyMarshaler() {
-		this(ValueConverterRegistry.sharedInstance());
-	}
 
 	public DefaultRequestBodyMarshaler(@Nonnull ValueConverterRegistry valueConverterRegistry) {
 		requireNonNull(valueConverterRegistry);

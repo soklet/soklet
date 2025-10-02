@@ -68,12 +68,8 @@ import static java.util.Objects.requireNonNull;
 final class DefaultResourceMethodParameterProvider implements ResourceMethodParameterProvider {
 	@Nonnull
 	private static final Map<Type, Object> DEFAULT_VALUES_BY_PRIMITIVE_TYPE;
-	@Nonnull
-	private static final DefaultResourceMethodParameterProvider DEFAULT_INSTANCE;
 
 	static {
-		DEFAULT_INSTANCE = new DefaultResourceMethodParameterProvider();
-
 		// See https://docs.oracle.com/javase/tutorial/java/nutsandbolts/datatypes.html
 		DEFAULT_VALUES_BY_PRIMITIVE_TYPE = Map.of(
 				byte.class, (byte) 0,
@@ -88,22 +84,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	}
 
 	@Nonnull
-	public static DefaultResourceMethodParameterProvider defaultInstance() {
-		return DEFAULT_INSTANCE;
-	}
-
-	@Nonnull
 	private final InstanceProvider instanceProvider;
 	@Nonnull
 	private final ValueConverterRegistry valueConverterRegistry;
 	@Nonnull
 	private final RequestBodyMarshaler requestBodyMarshaler;
-
-	public DefaultResourceMethodParameterProvider() {
-		this(DefaultInstanceProvider.defaultInstance(),
-				ValueConverterRegistry.sharedInstance(),
-				DefaultRequestBodyMarshaler.defaultInstance());
-	}
 
 	public DefaultResourceMethodParameterProvider(@Nonnull InstanceProvider instanceProvider,
 																								@Nonnull ValueConverterRegistry valueConverterRegistry,

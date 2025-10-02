@@ -28,7 +28,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Standard implementations can be acquired via these factory methods:
  * <ul>
- *   <li>{@link #withDefaults()}</li>
+ *   <li>{@link #withClasspathIntrospection()}</li>
  *   <li>{@link #withResourceClasses(Set)}</li>
  *   <li>{@link #withMethods(Set)}</li>
  * </ul>
@@ -56,11 +56,10 @@ public interface ResourceMethodResolver {
 	 */
 	@Nonnull
 	Set<ResourceMethod> getResourceMethods();
-
-
+	
 	@Nonnull
-	static ResourceMethodResolver withDefaults() {
-		return DefaultResourceMethodResolver.defaultInstance();
+	static ResourceMethodResolver withClasspathIntrospection() {
+		return DefaultResourceMethodResolver.withClasspathIntrospection();
 	}
 
 	@Nonnull
