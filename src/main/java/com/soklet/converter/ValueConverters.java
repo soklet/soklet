@@ -29,6 +29,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
+import java.util.Currency;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Locale;
@@ -95,6 +96,7 @@ public final class ValueConverters {
 		defaultValueConverters.add(new StringToZoneIdValueConverter());
 		defaultValueConverters.add(new StringToTimeZoneValueConverter());
 		defaultValueConverters.add(new StringToLocaleValueConverter());
+		defaultValueConverters.add(new StringToCurrencyValueConverter());
 
 		return defaultValueConverters;
 	}
@@ -381,6 +383,18 @@ public final class ValueConverters {
 				return Optional.empty();
 
 			return Optional.of(new Locale.Builder().setLanguageTag(from).build());
+		}
+	}
+
+	@ThreadSafe
+	private static final class StringToCurrencyValueConverter extends FromStringValueConverter<Currency> {
+		@Override
+		@Nonnull
+		public Optional<Currency> performConversion(@Nullable String from) throws Exception {
+			if (from == null)
+				return Optional.empty();
+
+			return Optional.of(Currency.getInstance(from));
 		}
 	}
 }
