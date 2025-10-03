@@ -302,7 +302,7 @@ public class ResponseCookie {
 	}
 
 	/**
-	 * Values which control whether or not a response cookie is sent with cross-site requests, providing some protection against cross-site request forgery attacks (CSRF).
+	 * Values which control whether a response cookie is sent with cross-site requests, providing some protection against cross-site request forgery attacks (CSRF).
 	 * <p>
 	 * See <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value</a> for details.
 	 *

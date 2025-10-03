@@ -495,8 +495,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		String getFieldName();
 
 		/**
-		 * Determines whether or not a {@code FileItem} instance represents
-		 * a simple form field.
+		 * Determines whether a {@code FileItem} instance represents a simple form field.
 		 *
 		 * @return {@code true} if the instance represents a simple form
 		 * field; {@code false} if it represents an uploaded file.
