@@ -87,7 +87,7 @@ public class SokletConfig {
 		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : ResourceMethodResolver.withClasspathIntrospection();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : ResourceMethodParameterProvider.with(getInstanceProvider(), getValueConverterRegistry(), getRequestBodyMarshaler());
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : ResponseMarshaler.withDefaults();
-		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : LifecycleInterceptor.withDefaults();
+		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : LifecycleInterceptor.defaultInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : CorsAuthorizer.withRejectAllPolicy();
 	}
 

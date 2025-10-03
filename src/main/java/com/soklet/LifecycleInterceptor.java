@@ -39,7 +39,7 @@ import static java.util.Objects.requireNonNull;
  * at the server level (e.g. {@link #willStartServer(Server)}) will fail-fast and events that are scoped at the request level
  * (e.g. {@link #didStartRequestHandling(Request, ResourceMethod)}) will not fail-fast.
  * <p>
- * A standard implementation can be acquired via the {@link #withDefaults()} factory method.
+ * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/request-lifecycle">https://www.soklet.com/docs/request-lifecycle</a>.
  *
@@ -385,14 +385,14 @@ public interface LifecycleInterceptor {
 	}
 
 	/**
-	 * Acquires a {@link LifecycleInterceptor} instance with sensible defaults.
+	 * Acquires a threadsafe {@link LifecycleInterceptor} instance with sensible defaults.
 	 * <p>
-	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 * The returned instance is guaranteed to be a JVM-wide singleton.
 	 *
 	 * @return a {@code LifecycleInterceptor} with default settings
 	 */
 	@Nonnull
-	static LifecycleInterceptor withDefaults() {
+	static LifecycleInterceptor defaultInstance() {
 		return DefaultLifecycleInterceptor.defaultInstance();
 	}
 }

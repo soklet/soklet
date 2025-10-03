@@ -31,12 +31,14 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * These events are exposed via {@link LifecycleInterceptor#didReceiveLogEvent(LogEvent)}.
  * <p>
+ * Instances can be acquired via the {@link #with(LogEventType, String)} builder factory method.
+ * <p>
  * Documentation is available at <a href="https://www.soklet.com/docs/request-lifecycle#event-logging">https://www.soklet.com/docs/request-lifecycle#event-logging</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class LogEvent {
+public final class LogEvent {
 	@Nonnull
 	private final LogEventType logEventType;
 	@Nonnull
