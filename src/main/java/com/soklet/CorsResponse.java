@@ -32,6 +32,8 @@ import static java.util.Objects.requireNonNull;
 /**
  * Response headers to send over the wire for <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">non-preflight CORS</a> requests.
  * <p>
+ * Instances can be acquired via the {@link #withAccessControlAllowOrigin(String)} builder factory method.
+ * <p>
  * See <a href="https://www.soklet.com/docs/cors#writing-cors-responses">https://www.soklet.com/docs/cors#writing-cors-responses</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
