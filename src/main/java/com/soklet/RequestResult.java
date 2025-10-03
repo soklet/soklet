@@ -30,13 +30,16 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Encapsulates the results of a request (both logical response and bytes to be sent over the wire),
- * useful for integration testing via {@link Simulator#performRequest(Request)}.
+ * Encapsulates the results of a request (both logical response and bytes to be sent over the wire), useful for integration testing via {@link Simulator#performRequest(Request)}.
+ * <p>
+ * Instances can be acquired via the {@link #withMarshaledResponse(MarshaledResponse)} factory method.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/automated-testing#integration-testing">https://www.soklet.com/docs/automated-testing#integration-testing</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class RequestResult {
+public final class RequestResult {
 	@Nonnull
 	private final MarshaledResponse marshaledResponse;
 	@Nullable
