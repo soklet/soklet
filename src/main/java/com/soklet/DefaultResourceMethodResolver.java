@@ -68,7 +68,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	public static DefaultResourceMethodResolver withClasspathIntrospection() {
+	public static DefaultResourceMethodResolver fromClasspathIntrospection() {
 		return DEFAULT_INSTANCE;
 	}
 
