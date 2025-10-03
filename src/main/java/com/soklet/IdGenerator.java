@@ -25,7 +25,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Implementations may or may not guarantee uniqueness, ordering, or repeatability of generated identifiers. Callers should not assume any such guarantees unless documented by the implementation.
  * <p>
- * Standard implementations can be acquired via these factory methods:
+ * Standard threadsafe implementations can be acquired via these factory methods:
  * <ul>
  *   <li>{@link #withDefaults()}</li>
  *   <li>{@link #withPrefix(String)}</li>
@@ -49,9 +49,9 @@ public interface IdGenerator<T> {
 	T generateId();
 
 	/**
-	 * Acquires an {@link IdGenerator} with a default numeric ID range (values will wrap once maximum is reached) and a best-effort local IP prefix.
+	 * Acquires a threadsafe {@link IdGenerator} with a default numeric ID range (values will wrap once maximum is reached) and a best-effort local IP prefix.
 	 * <p>
-	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 * This method is guaranteed to return a new instance.
 	 *
 	 * @return an {@code IdGenerator} with default settings
 	 */
@@ -61,9 +61,9 @@ public interface IdGenerator<T> {
 	}
 
 	/**
-	 * Acquires an {@link IdGenerator} with the given minimum and maximum ID values (values will wrap once maximum is reached), and a best-effort local IP prefix.
+	 * Acquires a threadsafe {@link IdGenerator} with the given minimum and maximum ID values (values will wrap once maximum is reached), and a best-effort local IP prefix.
 	 * <p>
-	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 * This method is guaranteed to return a new instance.
 	 *
 	 * @param minimumId the lowest ID that may be generated (inclusive)
 	 * @param maximumId the highest ID that may be generated (inclusive)
@@ -78,9 +78,9 @@ public interface IdGenerator<T> {
 	}
 
 	/**
-	 * Returns a {@link DefaultIdGenerator} with the given minimum and maximum ID values (values will wrap once maximum is reached), and the specified prefix.
+	 * Returns a threadsafe {@link IdGenerator} with the given minimum and maximum ID values (values will wrap once maximum is reached), and the specified prefix.
 	 * <p>
-	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 * This method is guaranteed to return a new instance.
 	 *
 	 * @param minimumId the lowest ID that may be generated (inclusive)
 	 * @param maximumId the highest ID that may be generated (inclusive)
@@ -98,9 +98,9 @@ public interface IdGenerator<T> {
 	}
 
 	/**
-	 * Acquires an {@link IdGenerator} with a default numeric ID range (values will wrap once maximum is reached) and the given prefix.
+	 * Acquires a threadsafe {@link IdGenerator} with a default numeric ID range (values will wrap once maximum is reached) and the given prefix.
 	 * <p>
-	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 * This method is guaranteed to return a new instance.
 	 *
 	 * @param prefix a string to prepend to the generated numeric ID
 	 * @return an {@code IdGenerator} configured with the given prefix
