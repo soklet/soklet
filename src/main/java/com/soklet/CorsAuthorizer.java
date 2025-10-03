@@ -27,7 +27,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Contract for types that authorize <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">CORS</a> requests.
  * <p>
- * Standard implementations can be acquired via these factory methods:
+ * Standard threadsafe implementations can be acquired via these factory methods:
  * <ul>
  *   <li>{@link #withRejectAllPolicy()} (don't permit CORS requests)</li>
  *   <li>{@link #withAcceptAllPolicy()} (permit all CORS requests, not recommended for production)</li>
@@ -63,22 +63,54 @@ public interface CorsAuthorizer {
 																										 @Nonnull CorsPreflight corsPreflight,
 																										 @Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod);
 
+	/**
+	 * Acquires a threadsafe {@link CorsAuthorizer} configured to permit all cross-domain requests <strong>regardless of {@code Origin}</strong>.
+	 * <p>
+	 * The returned instance is guaranteed to be a JVM-wide singleton.
+	 * <p>
+	 * <strong>Note: the returned instance is generally unsafe for production - prefer {@link #withWhitelistedOrigins(Set)} or {@link #withWhitelistAuthorizer(Function)} for production systems.</strong>
+	 *
+	 * @return a {@code CorsAuthorizer} configured to permit all cross-domain requests
+	 */
 	@Nonnull
 	static CorsAuthorizer withAcceptAllPolicy() {
 		return AllOriginsCorsAuthorizer.defaultInstance();
 	}
 
+	/**
+	 * Acquires a threadsafe {@link CorsAuthorizer} configured to reject all cross-domain requests <strong>regardless of {@code Origin}</strong>.
+	 * <p>
+	 * The returned instance is guaranteed to be a JVM-wide singleton.
+	 *
+	 * @return a {@code CorsAuthorizer} configured to reject all cross-domain requests
+	 */
 	@Nonnull
 	static CorsAuthorizer withRejectAllPolicy() {
 		return NoOriginsCorsAuthorizer.defaultInstance();
 	}
 
+	/**
+	 * Acquires a threadsafe {@link CorsAuthorizer} configured to accept only those cross-domain requests whose {@code Origin} matches a value in the provided set of {@code whitelistedOrigins}.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 *
+	 * @return a {@code CorsAuthorizer} configured to accept only the specified {@code whitelistedOrigins}
+	 */
 	@Nonnull
 	static CorsAuthorizer withWhitelistedOrigins(@Nonnull Set<String> whitelistedOrigins) {
 		requireNonNull(whitelistedOrigins);
 		return WhitelistedOriginsCorsAuthorizer.withOrigins(whitelistedOrigins);
 	}
 
+	/**
+	 * Acquires a threadsafe {@link CorsAuthorizer} configured to accept only those cross-domain requests whose {@code Origin} is allowed by the provided {@code whitelistAuthorizer} function.
+	 * <p>
+	 * The {@code whitelistAuthorizer} function should return {@code true} if the supplied {@code Origin} is acceptable and {@code false} otherwise.
+	 * <p>
+	 * Callers should not rely on reference identity; this method may return a new or cached instance.
+	 *
+	 * @return a {@code CorsAuthorizer} configured to accept only the specified {@code whitelistedOrigins}
+	 */
 	@Nonnull
 	static CorsAuthorizer withWhitelistAuthorizer(@Nonnull Function<String, Boolean> whitelistAuthorizer) {
 		requireNonNull(whitelistAuthorizer);

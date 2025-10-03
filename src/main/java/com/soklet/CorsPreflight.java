@@ -34,6 +34,12 @@ import static java.util.Objects.requireNonNull;
 /**
  * Encapsulates <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">CORS preflight</a>-related HTTP request data.
  * <p>
+ * Instances can be acquired via these factory methods:
+ * <ul>
+ *   <li>{@link #with(String, HttpMethod)} (uses {@code Origin} and {@code Access-Control-Request-Method} header values)</li>
+ *   <li>{@link #with(String, HttpMethod, Set)} (uses {@code Origin}, {@code Access-Control-Request-Method}, and {@code Access-Control-Request-Headers} header values)</li>
+ *   <li>{@link #fromHeaders(Map)} (parses raw headers)</li>
+ * </ul>
  * Data for <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">non-preflight CORS</a> requests is represented by {@link Cors}.
  * <p>
  * See <a href="https://www.soklet.com/docs/cors">https://www.soklet.com/docs/cors</a> for detailed documentation.
@@ -95,7 +101,7 @@ public final class CorsPreflight {
 	 * Note that only HTTP {@code OPTIONS} requests qualify to be CORS preflight requests.
 	 *
 	 * @param headers the request headers
-	 * @return the CORS preflight data for this request, or {@link Optional#empty()} if insufficent data is present
+	 * @return the CORS preflight data for this request, or {@link Optional#empty()} if insufficient data is present
 	 */
 	@Nonnull
 	public static Optional<CorsPreflight> fromHeaders(@Nonnull Map<String, Set<String>> headers) {

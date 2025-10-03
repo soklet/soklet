@@ -32,6 +32,12 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Data for <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">preflight</a> requests is represented by {@link CorsPreflight}.
  * <p>
+ * Instances can be acquired via these factory methods:
+ * <ul>
+ *   <li>{@link #withOrigin(HttpMethod, String)} (uses {@code Origin} header value)</li>
+ *   <li>{@link #fromHeaders(HttpMethod, Map)} (parses raw headers)</li>
+ * </ul>
+ * <p>
  * See <a href="https://www.soklet.com/docs/cors">https://www.soklet.com/docs/cors</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -51,8 +57,8 @@ public final class Cors {
 	 * @return a {@link Cors} instance
 	 */
 	@Nonnull
-	public static Cors with(@Nonnull HttpMethod httpMethod,
-													@Nonnull String origin) {
+	public static Cors withOrigin(@Nonnull HttpMethod httpMethod,
+																@Nonnull String origin) {
 		requireNonNull(httpMethod);
 		requireNonNull(origin);
 

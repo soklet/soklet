@@ -89,7 +89,9 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 		requireNonNull(request);
 		requireNonNull(cors);
 
-		if (getAuthorizer().apply(normalizeOrigin(cors.getOrigin())))
+		Boolean authorized = getAuthorizer().apply(normalizeOrigin(cors.getOrigin()));
+
+		if (authorized != null && authorized)
 			return Optional.of(CorsResponse.withAccessControlAllowOrigin(cors.getOrigin())
 					.accessControlExposeHeaders(Set.of("*"))
 					.accessControlAllowCredentials(true)
@@ -107,7 +109,9 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);
 
-		if (getAuthorizer().apply(normalizeOrigin(corsPreflight.getOrigin())))
+		Boolean authorized = getAuthorizer().apply(normalizeOrigin(corsPreflight.getOrigin()));
+
+		if (authorized != null && authorized)
 			return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(corsPreflight.getOrigin())
 					.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
 					.accessControlAllowHeaders(Set.of("*"))
