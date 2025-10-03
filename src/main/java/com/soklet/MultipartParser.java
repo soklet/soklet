@@ -22,6 +22,10 @@ import java.util.Set;
 
 /**
  * Contract for parsing HTML form fields encoded according to the <a href="https://datatracker.ietf.org/doc/html/rfc7578">{@code multipart/form-data}</a> specification.
+ * <p>
+ * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
+ * <p>
+ * See <a href="https://www.soklet.com/docs/request-handling#multipart-form-data">https://www.soklet.com/docs/request-handling#multipart-form-data</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -35,4 +39,16 @@ public interface MultipartParser {
 	 */
 	@Nonnull
 	Map<String, Set<MultipartField>> extractMultipartFields(@Nonnull Request request);
+
+	/**
+	 * Acquires a threadsafe {@link MultipartParser}.
+	 * <p>
+	 * The returned instance is guaranteed to be a JVM-wide singleton.
+	 *
+	 * @return a {@code MultipartParser} instance
+	 */
+	@Nonnull
+	static MultipartParser defaultInstance() {
+		return DefaultMultipartParser.defaultInstance();
+	}
 }

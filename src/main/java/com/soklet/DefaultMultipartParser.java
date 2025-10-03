@@ -53,15 +53,15 @@ import static com.soklet.Utilities.trimAggressivelyToNull;
 @ThreadSafe
 final class DefaultMultipartParser implements MultipartParser {
 	@Nonnull
-	private static final DefaultMultipartParser SHARED_INSTANCE;
+	private static final DefaultMultipartParser DEFAULT_INSTANCE;
 
 	static {
-		SHARED_INSTANCE = new DefaultMultipartParser();
+		DEFAULT_INSTANCE = new DefaultMultipartParser();
 	}
 
 	@Nonnull
-	public static DefaultMultipartParser sharedInstance() {
-		return SHARED_INSTANCE;
+	public static DefaultMultipartParser defaultInstance() {
+		return DEFAULT_INSTANCE;
 	}
 
 	@Override

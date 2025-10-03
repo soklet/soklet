@@ -33,12 +33,18 @@ import static java.util.Objects.requireNonNull;
 /**
  * Encapsulates an HTML form element name, binary and {@link String} representations of its value, and other attributes as encoded according to the <a href="https://datatracker.ietf.org/doc/html/rfc7578">{@code multipart/form-data}</a> specification.
  * <p>
+ * Instances can be acquired via these builder factory methods:
+ * <ul>
+ *   <li>{@link #withName(String)} (with form element name)</li>
+ *   <li>{@link #with(String, byte[])} (with form element name and value)</li>
+ * </ul>
+ * </p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/request-handling#multipart-form-data">https://www.soklet.com/docs/request-handling#multipart-form-data</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class MultipartField {
+public final class MultipartField {
 	@Nonnull
 	private static final Charset DEFAULT_CHARSET;
 
@@ -226,7 +232,7 @@ public class MultipartField {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static class Copier {
+	public static final class Copier {
 		@Nonnull
 		private final Builder builder;
 

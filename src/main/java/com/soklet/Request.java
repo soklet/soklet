@@ -48,6 +48,8 @@ import static java.util.Objects.requireNonNull;
 /**
  * Encapsulates information specified in an HTTP request.
  * <p>
+ * Instances can be acquired via the {@link #with(HttpMethod, String)} builder factory method.
+ * <p>
  * Detailed documentation available at <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -134,7 +136,6 @@ public final class Request {
 	protected Request(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
-		// TODO: should we use InstanceProvider to vend IdGenerator type instead of explicitly specifying?
 		IdGenerator idGenerator = builder.idGenerator == null ? getDefaultIdGenerator() : builder.idGenerator;
 
 		this.lock = new ReentrantLock();
@@ -223,8 +224,7 @@ public final class Request {
 		if (this.contentType != null && this.contentType.toLowerCase(Locale.ENGLISH).startsWith("multipart/")) {
 			multipart = true;
 
-			// TODO: should we use InstanceProvider to vend MultipartParser type instead of explicitly specifying?
-			MultipartParser multipartParser = builder.multipartParser == null ? DefaultMultipartParser.sharedInstance() : builder.multipartParser;
+			MultipartParser multipartParser = builder.multipartParser == null ? DefaultMultipartParser.defaultInstance() : builder.multipartParser;
 			multipartFields = Collections.unmodifiableMap(multipartParser.extractMultipartFields(this));
 		}
 
@@ -817,7 +817,7 @@ public final class Request {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static class Copier {
+	public static final class Copier {
 		@Nonnull
 		private final Builder builder;
 

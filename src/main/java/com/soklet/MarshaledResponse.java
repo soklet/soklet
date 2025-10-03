@@ -40,12 +40,14 @@ import static java.util.Objects.requireNonNull;
  * For example, if a {@link Response} were to specify a body of {@code List.of("one", "two")}, a {@link ResponseMarshaler} might
  * convert it to the JSON string {@code ["one", "two"]} and provide as output a corresponding {@link MarshaledResponse} with a body of UTF-8 bytes that represent {@code ["one", "two"]}.
  * <p>
+ * Instances can be acquired via the {@link #withStatusCode(Integer)} builder factory method.
+ * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class MarshaledResponse {
+public final class MarshaledResponse {
 	@Nonnull
 	private final Integer statusCode;
 	@Nonnull
@@ -195,7 +197,7 @@ public class MarshaledResponse {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static class Copier {
+	public static final class Copier {
 		@Nonnull
 		private final Builder builder;
 
