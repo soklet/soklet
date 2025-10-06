@@ -39,12 +39,18 @@ import static java.util.Objects.requireNonNull;
  * Your application's {@link ResponseMarshaler} is responsible for taking the {@link Response} returned by a <em>Resource Method</em> as input
  * and creating a finalized binary representation ({@link MarshaledResponse}), suitable for sending to clients over the wire.
  * <p>
+ * Instances can be acquired via these builder factory methods:
+ * <ul>
+ *   <li>{@link #withStatusCode(Integer)} (builder primed with status code)</li>
+ *   <li>{@link #withRedirect(RedirectType, String)} (builder primed with redirect info)</li>
+ * </ul>
+ * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class Response {
+public final class Response {
 	@Nonnull
 	private final Integer statusCode;
 	@Nonnull
@@ -81,7 +87,7 @@ public class Response {
 		return new Builder(redirectType, location);
 	}
 
-	protected Response(@Nonnull Builder builder) {
+	private Response(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
 		Map<String, Set<String>> headers = builder.headers == null

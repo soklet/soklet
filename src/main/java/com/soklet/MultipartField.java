@@ -38,7 +38,7 @@ import static java.util.Objects.requireNonNull;
  *   <li>{@link #withName(String)} (with form element name)</li>
  *   <li>{@link #with(String, byte[])} (with form element name and value)</li>
  * </ul>
- * </p>
+ * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/request-handling#multipart-form-data">https://www.soklet.com/docs/request-handling#multipart-form-data</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
