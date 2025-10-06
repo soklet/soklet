@@ -40,7 +40,7 @@ import static java.util.stream.Collectors.toList;
 /**
  * A compile-time HTTP URL path declaration associated with an annotated <em>Resource Method</em>, such as {@code /users/{userId}}.
  * <p>
- * You may obtain instances via the {@link #of(String)} factory method.
+ * You may obtain instances via the {@link #withPath(String)} factory method.
  * <p>
  * <strong>Note: this type is not normally used by Soklet applications unless they support <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Events</a> or choose to implement a custom {@link ResourceMethodResolver}.</strong>
  * <p>
@@ -78,7 +78,7 @@ import static java.util.stream.Collectors.toList;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class ResourcePathDeclaration {
+public final class ResourcePathDeclaration {
 	/**
 	 * Pattern which matches a placeholder in a path component.
 	 * <p>
@@ -105,12 +105,12 @@ public class ResourcePathDeclaration {
 	 * @param path a compile-time path declaration that may include placeholders
 	 */
 	@Nonnull
-	public static ResourcePathDeclaration of(@Nonnull String path) {
+	public static ResourcePathDeclaration withPath(@Nonnull String path) {
 		requireNonNull(path);
 		return new ResourcePathDeclaration(path);
 	}
 
-	protected ResourcePathDeclaration(@Nonnull String path) {
+	private ResourcePathDeclaration(@Nonnull String path) {
 		requireNonNull(path);
 		this.path = normalizePath(path);
 
@@ -341,9 +341,9 @@ public class ResourcePathDeclaration {
 					type = ComponentType.PLACEHOLDER;
 				}
 
-				return new Component(inner, type);
+				return Component.with(inner, type);
 			} else {
-				return new Component(part, ComponentType.LITERAL);
+				return Component.with(part, ComponentType.LITERAL);
 			}
 		}).collect(toList());
 	}
@@ -408,9 +408,11 @@ public class ResourcePathDeclaration {
 	 * <p>
 	 * For example, given the path declaration <code>/languages/&#123;languageId&#125;</code>:
 	 * <ul>
-	 * <li>{@code Component} 0 would have type {@code LITERAL} and value {@code languages}
-	 * <li>{@code Component} 1 would have type {@code PLACEHOLDER} and value {@code languageId}
+	 *   <li>{@code Component} 0 would have type {@code LITERAL} and value {@code languages}
+	 *   <li>{@code Component} 1 would have type {@code PLACEHOLDER} and value {@code languageId}
 	 * </ul>
+	 * <p>
+	 * You may obtain instances via the {@link #with(String, ComponentType)} factory method.
 	 * <p>
 	 * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
 	 *
@@ -418,16 +420,33 @@ public class ResourcePathDeclaration {
 	 * @see ResourcePathDeclaration
 	 */
 	@Immutable
-	public static class Component {
+	public static final class Component {
 		@Nonnull
 		private final String value;
 		@Nonnull
 		private final ComponentType type;
 
-		public Component(@Nonnull String value,
-										 @Nonnull ComponentType type) {
+		/**
+		 * Acquires a {@link Component} instance given a {@code value} and {@code type}.
+		 *
+		 * @param value the value of this component
+		 * @param type  the type of this component (literal or placeholder)
+		 * @return a {@link Component} instance
+		 */
+		@Nonnull
+		public static Component with(@Nonnull String value,
+																 @Nonnull ComponentType type) {
 			requireNonNull(value);
 			requireNonNull(type);
+
+			return new Component(value, type);
+		}
+
+		private Component(@Nonnull String value,
+											@Nonnull ComponentType type) {
+			requireNonNull(value);
+			requireNonNull(type);
+
 			this.value = value;
 			this.type = type;
 		}

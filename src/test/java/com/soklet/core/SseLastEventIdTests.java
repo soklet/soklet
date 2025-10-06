@@ -121,7 +121,7 @@ public class SseLastEventIdTests {
 					throw new RuntimeException(e);
 				}
 
-				ServerSentEventBroadcaster broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.of("/sse/abc")).get();
+				ServerSentEventBroadcaster broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.withPath("/sse/abc")).get();
 				broadcaster.broadcast(ServerSentEvent.withData("lastEventId=" + last).build());
 			}).start();
 

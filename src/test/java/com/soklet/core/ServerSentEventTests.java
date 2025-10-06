@@ -63,7 +63,7 @@ public class ServerSentEventTests {
 				.build();
 
 		Soklet.runSimulator(configuration, (simulator -> {
-			simulator.registerServerSentEventConsumer(ResourcePath.of("/examples/abc"), (serverSentEvent -> {
+			simulator.registerServerSentEventConsumer(ResourcePath.withPath("/examples/abc"), (serverSentEvent -> {
 				Assertions.assertEquals("example", serverSentEvent.getEvent().get(), "SSE event mismatch");
 			}));
 
@@ -81,7 +81,7 @@ public class ServerSentEventTests {
 					.build();
 
 			// ...and broadcast it to all /examples/abc listeners
-			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.of("/examples/abc"));
+			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.withPath("/examples/abc"));
 			broadcaster.broadcast(serverSentEvent);
 		}));
 	}
@@ -120,7 +120,7 @@ public class ServerSentEventTests {
 
 		@POST("/fire-server-sent-event")
 		public void fireServerSentEvent() {
-			ResourcePath resourcePath = ResourcePath.of("/examples/abc"); // Matches /examples/{exampleId}
+			ResourcePath resourcePath = ResourcePath.withPath("/examples/abc"); // Matches /examples/{exampleId}
 			ServerSentEventBroadcaster broadcaster = this.serverSentEventServer.acquireBroadcaster(resourcePath).get();
 
 			ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
@@ -207,7 +207,7 @@ public class ServerSentEventTests {
 				Assertions.assertEquals("no-cache", headers.getOrDefault("cache-control", "").toLowerCase());
 
 				// Broadcast one event and verify frame formatting
-				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.of("/tests/abc")).get();
+				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.withPath("/tests/abc")).get();
 				ServerSentEvent ev = ServerSentEvent.withEvent("test")
 						.data("hello\nworld")
 						.id("e1")
@@ -262,7 +262,7 @@ public class ServerSentEventTests {
 				int linesCount = 2048; // 2048 * 64 ~= 131072
 				String bigData = java.util.stream.Stream.generate(() -> line).limit(linesCount).collect(java.util.stream.Collectors.joining("\n"));
 
-				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.of("/tests/large")).get();
+				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.withPath("/tests/large")).get();
 				ServerSentEvent ev = ServerSentEvent.withEvent("big").id("big-1").data(bigData).build();
 				b.broadcast(ev);
 
@@ -311,7 +311,7 @@ public class ServerSentEventTests {
 				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
 				Assertions.assertNotNull(hdr);
 
-				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.of("/tests/backpressure")).get();
+				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.withPath("/tests/backpressure")).get();
 
 				// Rapidly broadcast a bunch of small events (some will be dropped under pressure, but last should survive)
 				final int N = 1500;
@@ -366,7 +366,7 @@ public class ServerSentEventTests {
 			Assertions.assertNotNull(hdr);
 
 			// Kick one message through so the writer loop is active
-			sse.acquireBroadcaster(ResourcePath.of("/tests/closeme")).get()
+			sse.acquireBroadcaster(ResourcePath.withPath("/tests/closeme")).get()
 					.broadcast(ServerSentEvent.withEvent("one").id("1").data("a").build());
 			readUntil(socket.getInputStream(), "\n\n", 4096); // consume it
 

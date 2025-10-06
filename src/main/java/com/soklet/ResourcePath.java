@@ -37,7 +37,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * An HTTP URL path used to resolve a <em>Resource Method</em> at runtime, such as {@code /users/123}.
  * <p>
- * You may obtain instances via the {@link #of(String)} factory method.
+ * You may obtain instances via the {@link #withPath(String)} factory method.
  * <p>
  * <strong>Note: this type is not normally used by Soklet applications unless they support <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Events</a> or choose to implement a custom {@link ResourceMethodResolver}.</strong>
  * <p>
@@ -48,7 +48,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class ResourcePath {
+public final class ResourcePath {
 	@Nonnull
 	private final String path;
 	@Nonnull
@@ -63,12 +63,12 @@ public class ResourcePath {
 	 * @param path a runtime path (no placeholders) e.g. {@code /users/123}
 	 */
 	@Nonnull
-	public static ResourcePath of(@Nonnull String path) {
+	public static ResourcePath withPath(@Nonnull String path) {
 		requireNonNull(path);
 		return new ResourcePath(path);
 	}
 
-	protected ResourcePath(@Nonnull String path) {
+	private ResourcePath(@Nonnull String path) {
 		requireNonNull(path);
 		this.path = ResourcePathDeclaration.normalizePath(path);
 		this.components = unmodifiableList(extractComponents(this.path));
