@@ -33,11 +33,17 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * HTTP "response" Cookie representation which supports {@code Set-Cookie} header encoding.
+ * <p>
+ * Instances can be acquired via these builder factory methods:
+ * <ul>
+ *   <li>{@link #with(String, String)} (builder primed with name and value)</li>
+ *   <li>{@link #withName(String)} (builder primed with name only)</li>
+ * </ul>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class ResponseCookie {
+public final class ResponseCookie {
 	@Nonnull
 	private final String name;
 	@Nullable
@@ -129,7 +135,7 @@ public class ResponseCookie {
 				.build());
 	}
 
-	protected ResponseCookie(@Nonnull Builder builder) {
+	private ResponseCookie(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
 		this.name = builder.name;
