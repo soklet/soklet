@@ -343,7 +343,7 @@ Alternatively, you can provide your own implementation of [`ResponseMarshaler`](
 // See https://github.com/google/gson
 final Gson GSON = new Gson();
 
-// "Happy Path": a non-exceptional, non-OPTIONS, non-404 request
+// "Happy Path": a non-exceptional, non-OPTIONS, non-"not found" request
 HappyPathHandler happyPathHandler = (
   @Nonnull Request request,
   @Nonnull Response response,
