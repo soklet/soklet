@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * HTTP "response" Cookie representation which supports {@code Set-Cookie} header encoding.
  * <p>
- * Instances can be acquired via these builder factory methods:
+ * Threadsafe instances can be acquired via these builder factory methods:
  * <ul>
  *   <li>{@link #with(String, String)} (builder primed with name and value)</li>
  *   <li>{@link #withName(String)} (builder primed with name only)</li>

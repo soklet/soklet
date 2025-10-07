@@ -91,11 +91,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 	@Nonnull
 	private static final Integer DEFAULT_CONNECTION_QUEUE_CAPACITY;
-
 	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK;
 	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_POISON_PILL;
+	@Nonnull
+	private static final ServerSentEvent SERVER_SENT_EVENT_HEARTBEAT;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -116,6 +117,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// When this event is taken off of the queue, the socket is torn down and the thread finishes running.
 		// The contents don't matter; the object reference is used to determine if it's poison.
 		SERVER_SENT_EVENT_POISON_PILL = ServerSentEvent.withEvent("poison").build();
+
+		// This would be an event like ":\n\n"
+		SERVER_SENT_EVENT_HEARTBEAT = new ServerSentEvent(new ServerSentEvent.Builder());
 	}
 
 	@Nonnull
@@ -594,7 +598,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK) {
 						//System.out.println("Performing socket validity check by writing a heartbeat message...");
-						String message = formatForResponse(ServerSentEvent.forHeartbeat());
+						String message = formatForResponse(SERVER_SENT_EVENT_HEARTBEAT);
 						buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
 					} else {
 						//System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
@@ -746,7 +750,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	protected String formatForResponse(@Nonnull ServerSentEvent serverSentEvent) {
 		requireNonNull(serverSentEvent);
 
-		if (serverSentEvent.isHeartbeat())
+		if (serverSentEvent == SERVER_SENT_EVENT_HEARTBEAT)
 			return ":\n\n";
 
 		String event = serverSentEvent.getEvent().orElse(null);

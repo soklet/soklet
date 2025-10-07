@@ -29,7 +29,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Contract for HTTP server implementations that are designed to be managed by a {@link com.soklet.Soklet} instance.
  * <p>
- * <strong>Most Soklet applications will use the default {@link Server} (constructed via the {@link #withPort(Integer)} builder) and therefore do not need to implement this interface directly.</strong>
+ * <strong>Most Soklet applications will use the default {@link Server} (constructed via the {@link #withPort(Integer)} builder factory method) and therefore do not need to implement this interface directly.</strong>
  * <p>
  * For example:
  * <pre>{@code  SokletConfig config = SokletConfig.withServer(

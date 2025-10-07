@@ -44,7 +44,11 @@ import static java.util.Objects.requireNonNull;
  *   .retry(Duration.ofSeconds(5))
  *   .build();}</pre>
  * <p>
- * To acquire an event suitable for heartbeats, use the {@link #forHeartbeat()} factory method.
+ * Threadsafe instances can be acquired via these builder factory methods:
+ * <ul>
+ *   <li>{@link #withEvent(String)} (builder primed with an event value)</li>
+ *   <li>{@link #withData(String)} (builder primed with a data value)</li>
+ * </ul>
  * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  * <p>
@@ -53,10 +57,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class ServerSentEvent {
-	@Nonnull
-	private static final ServerSentEvent HEARTBEAT;
-
+public final class ServerSentEvent {
 	@Nullable
 	private final String id;
 	@Nullable
@@ -65,21 +66,6 @@ public class ServerSentEvent {
 	private final String data;
 	@Nullable
 	private final Duration retry;
-
-	static {
-		// This would be an event like ":\n\n"
-		HEARTBEAT = new ServerSentEvent(new ServerSentEvent.Builder());
-	}
-
-	/**
-	 * Acquires a reference to the shared "heartbeat" event.
-	 *
-	 * @return the shared "heartbeat" event
-	 */
-	@Nonnull
-	public static ServerSentEvent forHeartbeat() {
-		return HEARTBEAT;
-	}
 
 	/**
 	 * Acquires a builder for {@link ServerSentEvent} instances, seeded with an {@code event} value.
@@ -104,7 +90,7 @@ public class ServerSentEvent {
 	}
 
 	/**
-	 * Acquires an "empty" builder for {@link ServerSentEvent} instances.
+	 * Acquires an "empty" builder for {@link ServerSentEvent} instances, useful for creating special events like a connection heartbeat.
 	 *
 	 * @return the builder
 	 */
@@ -189,16 +175,6 @@ public class ServerSentEvent {
 			components.add(format("data=%s", this.data.trim()));
 
 		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
-	}
-
-	/**
-	 * Is this instance the shared "heartbeat" event (as provided via {@link ServerSentEvent#forHeartbeat()})?
-	 *
-	 * @return {@code true} if this instance is the shared "heartbeat" event, {@code false} otherwise
-	 */
-	@Nonnull
-	public Boolean isHeartbeat() {
-		return this == HEARTBEAT;
 	}
 
 	/**
