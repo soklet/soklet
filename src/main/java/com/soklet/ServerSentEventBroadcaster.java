@@ -24,7 +24,7 @@ import javax.annotation.Nonnull;
  * For example:
  * <pre>{@code  // Acquire our SSE broadcaster (sends to anyone listening to "/examples/123")
  * ServerSentEventServer server = ...;
- * ServerSentEventBroadcaster broadcaster = server.acquireBroadcaster(ResourcePath.of("/examples/123")).get();
+ * ServerSentEventBroadcaster broadcaster = server.acquireBroadcaster(ResourcePath.withPath("/examples/123")).get();
  *
  * // Create our SSE payload
  * ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
@@ -34,7 +34,7 @@ import javax.annotation.Nonnull;
  * // Publish SSE payload to all listening clients
  * broadcaster.broadcast(serverSentEvent);}</pre>
  * <p>
- * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath}.  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
+ * Soklet's default {@link ServerSentEventServer} implementation guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath}. That implementation is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
  * <p>
  * You may acquire a broadcaster via {@link ServerSentEventServer#acquireBroadcaster(ResourcePath)}.
  * <p>
