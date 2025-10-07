@@ -48,6 +48,7 @@ import static java.util.Objects.requireNonNull;
  * <ul>
  *   <li>{@link #withEvent(String)} (builder primed with an event value)</li>
  *   <li>{@link #withData(String)} (builder primed with a data value)</li>
+ *   <li>{@link #builder()} ("empty" builder suitable for constructing special instances, e.g. heartbeats)</li>
  * </ul>
  * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
@@ -109,7 +110,7 @@ public final class ServerSentEvent {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link ServerSentEvent} via {@link ServerSentEvent#withEvent(String)} or {@link ServerSentEvent#withData(String)}.
+	 * Builder used to construct instances of {@link ServerSentEvent} via {@link ServerSentEvent#withEvent(String)}, {@link ServerSentEvent#withData(String)}, or {@link ServerSentEvent#builder()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
