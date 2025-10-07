@@ -36,6 +36,96 @@ import static java.util.Objects.requireNonNull;
  * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
  * This is generally not needed unless your implementation requires dynamic "fall back to default" behavior that is not otherwise accessible.
  * <p>
+ * Example implementation using {@link #withCharset(Charset)}:
+ * <pre>{@code // Let's use Gson to write response body data
+ * // See https://github.com/google/gson
+ * final Gson GSON = new Gson();
+ *
+ * // "Happy Path": a non-exceptional, non-OPTIONS, non-404 request
+ * HappyPathHandler happyPathHandler = (
+ *   @Nonnull Request request,
+ *   @Nonnull Response response,
+ *   @Nonnull ResourceMethod resourceMethod
+ * ) -> {
+ *   // Turn response body into JSON bytes with Gson
+ *   Object bodyObject = response.getBody().orElse(null);
+ *   byte[] body = bodyObject == null
+ *     ? null
+ *     : GSON.toJson(bodyObject).getBytes(StandardCharsets.UTF_8);
+ *
+ *   // To be a good citizen, set the Content-Type header
+ *   Map<String, Set<String>> headers = new HashMap<>(response.getHeaders());
+ *   headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+ *
+ *   // Tell Soklet: "OK - here is the final response data to send"
+ *   return MarshaledResponse.withStatusCode(response.getStatusCode())
+ *     .headers(headers)
+ *     .cookies(response.getCookies())
+ *     .body(body)
+ *     .build();
+ * };
+ *
+ * // Function to create responses for exceptions that bubble out
+ * ThrowableHandler throwableHandler = (
+ *   @Nonnull Request request,
+ *   @Nonnull Throwable throwable,
+ *   @Nullable ResourceMethod resourceMethod
+ * ) -> {
+ *   // Keep track of what to write to the response
+ *   String message;
+ *   int statusCode;
+ *
+ *   // Examine the exception that bubbled out and determine what
+ *   // the HTTP status and a user-facing message should be.
+ *   // Note: real systems should localize these messages
+ *   switch (throwable) {
+ *     // Soklet throws this exception, a specific subclass
+ *     // of BadRequestException
+ *     case IllegalQueryParameterException ex -> {
+ *       message = String.format("Illegal value '%s' for parameter '%s'",
+ *         ex.getQueryParameterValue().orElse("[not provided]"),
+ *         ex.getQueryParameterName());
+ *       statusCode = 400;
+ *     }
+ *
+ *     // Generically handle other BadRequestExceptions
+ *     case BadRequestException ignored -> {
+ *       message = "Your request was improperly formatted.";
+ *       statusCode = 400;
+ *     }
+ *
+ *     // Something else?  Fall back to a 500
+ *     default -> {
+ *       message = "An unexpected error occurred.";
+ *       statusCode = 500;
+ *     }
+ *   }
+ *
+ *   // Turn response body into JSON bytes with Gson.
+ *   // Note: real systems should expose richer error constructs
+ *   // than an object with a single message field
+ *   byte[] body = GSON.toJson(Map.of("message", message))
+ *     .getBytes(StandardCharsets.UTF_8);
+ *
+ *   // Specify our headers
+ *   Map<String, Set<String>> headers = new HashMap<>();
+ *   headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
+ *
+ *   return MarshaledResponse.withStatusCode(statusCode)
+ *     .headers(headers)
+ *     .body(body)
+ *     .build();
+ * };
+ *
+ * // Supply our custom handlers to the standard response marshaler
+ * SokletConfig config = SokletConfig.withServer(
+ *   Server.withPort(8080).build()
+ * ).responseMarshaler(ResponseMarshaler.withCharset(StandardCharsets.UTF_8)
+ *   .happyPath(happyPathHandler)
+ *   .throwable(throwableHandler)
+ *   .build()
+ * ).build();}</pre>
+ * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -480,7 +570,7 @@ public interface ResponseMarshaler {
 			requireNonNull(charset);
 			this.charset = charset;
 		}
-		
+
 		@Nonnull
 		public Builder charset(@Nonnull Charset charset) {
 			requireNonNull(charset);
