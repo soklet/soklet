@@ -68,9 +68,6 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		return new Rejected(response);
 	}
 
-	@Nonnull
-	Response getResponse();
-
 	@ThreadSafe
 	final class Accepted implements HandshakeResult {
 		@Nonnull
@@ -92,7 +89,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		}
 
 		@Nonnull
-		private final Response response;
+		private final MarshaledResponse marshaledResponse;
 
 		private Accepted(@Nonnull Map<String, Set<String>> headers,
 										 @Nonnull Set<ResponseCookie> cookies) {
@@ -112,21 +109,20 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 				finalHeaders.put(e.getKey(), values);
 			}
 
-			this.response = Response.withStatusCode(200)
+			this.marshaledResponse = MarshaledResponse.withStatusCode(200)
 					.headers(finalHeaders)
 					.cookies(cookies)
 					.build();
 		}
 
 		@Nonnull
-		@Override
-		public Response getResponse() {
-			return this.response;
+		public MarshaledResponse getMarshaledResponse() {
+			return this.marshaledResponse;
 		}
 
 		@Override
 		public String toString() {
-			return format("%s{response=%s}", Accepted.class.getSimpleName(), getResponse());
+			return format("%s{marshaledResponse=%s}", Accepted.class.getSimpleName(), getMarshaledResponse());
 		}
 
 		@Override
@@ -137,12 +133,12 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			if (!(object instanceof Accepted accepted))
 				return false;
 
-			return Objects.equals(getResponse(), accepted.getResponse());
+			return Objects.equals(getMarshaledResponse(), accepted.getMarshaledResponse());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getResponse());
+			return Objects.hash(getMarshaledResponse());
 		}
 	}
 
@@ -157,7 +153,6 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		}
 
 		@Nonnull
-		@Override
 		public Response getResponse() {
 			return this.response;
 		}

@@ -41,7 +41,7 @@ import static java.util.Objects.requireNonNull;
  * // See https://github.com/google/gson
  * final Gson GSON = new Gson();
  *
- * // "Happy Path": a non-exceptional, non-OPTIONS, non-"not found" request
+ * // "Happy Path": the request was matched to a Resource Method and executed non-exceptionally
  * HappyPathHandler happyPathHandler = (
  *   @Nonnull Request request,
  *   @Nonnull Response response,
@@ -147,8 +147,7 @@ public interface ResponseMarshaler {
 																 @Nonnull ResourceMethod resourceMethod);
 
 	/**
-	 * Prepares a response for a request that triggers an
-	 * <a href="https://httpwg.org/specs/rfc9110.html#status.404">HTTP 404 Not Found</a>.
+	 * Prepares a response for a request that does not have a matching <em>Resource Method</em>, which triggers an <a href="https://httpwg.org/specs/rfc9110.html#status.404">HTTP 404 Not Found</a>.
 	 * <p>
 	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#404-not-found">https://www.soklet.com/docs/response-writing#404-not-found</a>.
 	 *

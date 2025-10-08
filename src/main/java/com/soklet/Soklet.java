@@ -872,6 +872,12 @@ public final class Soklet implements AutoCloseable {
 					.build();
 		else if (responseObject instanceof Response)
 			response = (Response) responseObject;
+		else if (responseObject instanceof HandshakeResult.Accepted accepted) // SSE "accepted" handshake
+			return RequestResult.withMarshaledResponse(accepted.getMarshaledResponse())
+					.resourceMethod(resourceMethod)
+					.build();
+		else if (responseObject instanceof HandshakeResult.Rejected rejected) // SSE "rejected" handshake
+			response = rejected.getResponse();
 		else
 			response = Response.withStatusCode(200).body(responseObject).build();
 
