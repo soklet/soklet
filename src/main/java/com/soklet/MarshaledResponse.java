@@ -40,8 +40,8 @@ import static java.util.Objects.requireNonNull;
  * For example, if a {@link Response} were to specify a body of {@code List.of("one", "two")}, a {@link ResponseMarshaler} might
  * convert it to the JSON string {@code ["one", "two"]} and provide as output a corresponding {@link MarshaledResponse} with a body of UTF-8 bytes that represent {@code ["one", "two"]}.
  * <p>
- * Alternatively, your <em>Resource Method</em> might want to directly serve bytes to clients (e.g. an image or PDF report) and skip the {@link ResponseMarshaler} entirely.
- * To accomplish this, just have your <em>Resource Method</em> return a {@link MarshaledResponse} instance directly.
+ * Alternatively, your <em>Resource Method</em> might want to directly serve bytes to clients (e.g. an image or PDF) and skip the {@link ResponseMarshaler} entirely.
+ * To accomplish this, just have your <em>Resource Method</em> return a {@link MarshaledResponse} instance: this tells Soklet "I already know exactly what bytes I want to send; don't go through the normal marshaling process".
  * <p>
  * Instances can be acquired via the {@link #withStatusCode(Integer)} builder factory method.
  * <p>
