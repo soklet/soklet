@@ -381,8 +381,7 @@ ThrowableHandler throwableHandler = (
   // the HTTP status and a user-facing message should be.
   // Note: real systems should localize these messages
   switch (throwable) {
-    // Soklet throws this exception, a specific subclass
-    // of BadRequestException
+    // Soklet throws this exception, a specific subclass of BadRequestException
     case IllegalQueryParameterException ex -> {
       message = String.format("Illegal value '%s' for parameter '%s'",
         ex.getQueryParameterValue().orElse("[not provided]"),
