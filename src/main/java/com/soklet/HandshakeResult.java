@@ -16,12 +16,18 @@
 
 package com.soklet;
 
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
+
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
+import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -33,32 +39,32 @@ import static java.util.Objects.requireNonNull;
  */
 public sealed interface HandshakeResult permits HandshakeResult.Accepted, HandshakeResult.Rejected {
 	@Nonnull
-	static Accepted accept() {
+	static Accepted accepted() {
 		return Accepted.DEFAULT_INSTANCE;
 	}
 
 	@Nonnull
-	static Accepted acceptWithHeaders(@Nonnull Map<String, Set<String>> headers) {
+	static Accepted acceptedWithHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 		return new Accepted(headers, Set.of());
 	}
 
 	@Nonnull
-	static Accepted acceptWithCookies(@Nonnull Set<ResponseCookie> cookies) {
+	static Accepted acceptedWithCookies(@Nonnull Set<ResponseCookie> cookies) {
 		requireNonNull(cookies);
 		return new Accepted(Map.of(), cookies);
 	}
 
 	@Nonnull
-	static Accepted acceptWith(@Nonnull Map<String, Set<String>> headers,
-														 @Nonnull Set<ResponseCookie> cookies) {
+	static Accepted acceptedWith(@Nonnull Map<String, Set<String>> headers,
+															 @Nonnull Set<ResponseCookie> cookies) {
 		requireNonNull(headers);
 		requireNonNull(cookies);
 		return new Accepted(headers, cookies);
 	}
 
 	@Nonnull
-	static Rejected rejectWithResponse(@Nonnull Response response) {
+	static Rejected rejectedWithResponse(@Nonnull Response response) {
 		requireNonNull(response);
 		return new Rejected(response);
 	}
@@ -82,8 +88,8 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			requireNonNull(headers);
 			requireNonNull(cookies);
 
-			this.headers = Collections.unmodifiableMap(headers);
-			this.cookies = Collections.unmodifiableSet(cookies);
+			this.headers = Collections.unmodifiableMap(new LinkedCaseInsensitiveMap<>(headers));
+			this.cookies = Collections.unmodifiableSet(new LinkedHashSet<>(cookies));
 		}
 
 		@Nonnull
@@ -94,6 +100,28 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		@Nonnull
 		public Set<ResponseCookie> getCookies() {
 			return this.cookies;
+		}
+
+		@Override
+		public String toString() {
+			return format("%s{headers=%s, cookies=%s}", Accepted.class.getSimpleName(), getHeaders(), getCookies());
+		}
+
+		@Override
+		public boolean equals(@Nullable Object object) {
+			if (this == object)
+				return true;
+
+			if (!(object instanceof Accepted accepted))
+				return false;
+
+			return Objects.equals(getHeaders(), accepted.getHeaders())
+					&& Objects.equals(getCookies(), accepted.getCookies());
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(getHeaders(), getCookies());
 		}
 	}
 
@@ -110,6 +138,27 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		@Nonnull
 		public Response getResponse() {
 			return this.response;
+		}
+
+		@Override
+		public String toString() {
+			return format("%s{response=%s}", Rejected.class.getSimpleName(), getResponse());
+		}
+
+		@Override
+		public boolean equals(@Nullable Object object) {
+			if (this == object)
+				return true;
+
+			if (!(object instanceof Rejected rejected))
+				return false;
+
+			return Objects.equals(getResponse(), rejected.getResponse());
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(getResponse());
 		}
 	}
 }
