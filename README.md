@@ -428,7 +428,7 @@ SokletConfig config = SokletConfig.withServer(
 ).build();
 ```
 
-Writing bytes to the response:
+Already know exactly what bytes you want to send over the wire? Use [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) to skip additional processing.
 
 ```java
 @GET("/example-image.png")
@@ -436,7 +436,7 @@ public MarshaledResponse exampleImage() throws IOException {
   Path imageFile = Path.of("/home/user/test.png");
   byte[] image = Files.readAllBytes(imageFile);
   
-  // Use MarshaledResponse to serve "final" bytes over the wire
+  // Serve "final" bytes over the wire
   return MarshaledResponse.withStatusCode(200)
     .headers(Map.of(
       "Content-Type", Set.of("image/png"),
