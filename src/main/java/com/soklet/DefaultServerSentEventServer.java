@@ -554,7 +554,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			AtomicInteger marshaledResponseStatusCode = new AtomicInteger(500);
 
 			// OK, we have a request.
-			// First thing to do is write an HTTP response (status, headers) - and then we keep the socket open for subsequent writes.
+			// First thing to do is write an HTTP response (status, headers) - and then we keep the socket open for subsequent writes if HTTP status < 300 (otherwise we write the body and close).
 			// To write this initial "handshake" response, we delegate to the Soklet instance, handing it the request we just parsed
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
 			// Subsequent writes to the open socket are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.

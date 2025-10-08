@@ -22,7 +22,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -69,42 +68,65 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		return new Rejected(response);
 	}
 
+	@Nonnull
+	Response getResponse();
+
 	@ThreadSafe
 	final class Accepted implements HandshakeResult {
 		@Nonnull
 		static final Accepted DEFAULT_INSTANCE;
+		@Nonnull
+		static final Map<String, Set<String>> DEFAULT_HEADERS;
 
 		static {
+			// Generally speaking, we always want these headers for SSE streaming responses.
+			// Users can override if they think necessary
+			LinkedCaseInsensitiveMap<Set<String>> defaultHeaders = new LinkedCaseInsensitiveMap<>(4);
+			defaultHeaders.put("Content-Type", Set.of("text/event-stream; charset=utf-8"));
+			defaultHeaders.put("Cache-Control", Set.of("no-cache"));
+			defaultHeaders.put("Connection", Set.of("keep-alive"));
+			defaultHeaders.put("X-Accel-Buffering", Set.of("no"));
+
+			DEFAULT_HEADERS = Collections.unmodifiableMap(defaultHeaders);
 			DEFAULT_INSTANCE = new Accepted(Map.of(), Set.of());
 		}
 
 		@Nonnull
-		private final Map<String, Set<String>> headers;
-		@Nonnull
-		private final Set<ResponseCookie> cookies;
+		private final Response response;
 
 		private Accepted(@Nonnull Map<String, Set<String>> headers,
 										 @Nonnull Set<ResponseCookie> cookies) {
 			requireNonNull(headers);
 			requireNonNull(cookies);
 
-			this.headers = Collections.unmodifiableMap(new LinkedCaseInsensitiveMap<>(headers));
-			this.cookies = Collections.unmodifiableSet(new LinkedHashSet<>(cookies));
+			LinkedCaseInsensitiveMap<Set<String>> finalHeaders = new LinkedCaseInsensitiveMap<>(DEFAULT_HEADERS.size() + headers.size());
+
+			// Start with defaults
+			for (Map.Entry<String, Set<String>> e : DEFAULT_HEADERS.entrySet())
+				finalHeaders.put(e.getKey(), e.getValue()); // values already unmodifiable
+
+			// Overlay user-supplied headers (prefer user values on key collision)
+			for (Map.Entry<String, Set<String>> e : headers.entrySet()) {
+				// Defensively copy so callers can't mutate after construction
+				Set<String> values = e.getValue() == null ? Set.of() : Set.copyOf(e.getValue());
+				finalHeaders.put(e.getKey(), values);
+			}
+
+			this.response = Response.withStatusCode(200)
+					.headers(finalHeaders)
+					.cookies(cookies)
+					.build();
 		}
 
 		@Nonnull
-		public Map<String, Set<String>> getHeaders() {
-			return this.headers;
-		}
-
-		@Nonnull
-		public Set<ResponseCookie> getCookies() {
-			return this.cookies;
+		@Override
+		public Response getResponse() {
+			return this.response;
 		}
 
 		@Override
 		public String toString() {
-			return format("%s{headers=%s, cookies=%s}", Accepted.class.getSimpleName(), getHeaders(), getCookies());
+			return format("%s{response=%s}", Accepted.class.getSimpleName(), getResponse());
 		}
 
 		@Override
@@ -115,13 +137,12 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			if (!(object instanceof Accepted accepted))
 				return false;
 
-			return Objects.equals(getHeaders(), accepted.getHeaders())
-					&& Objects.equals(getCookies(), accepted.getCookies());
+			return Objects.equals(getResponse(), accepted.getResponse());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getHeaders(), getCookies());
+			return Objects.hash(getResponse());
 		}
 	}
 
@@ -136,6 +157,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		}
 
 		@Nonnull
+		@Override
 		public Response getResponse() {
 			return this.response;
 		}

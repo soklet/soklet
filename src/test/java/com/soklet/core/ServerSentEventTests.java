@@ -16,6 +16,7 @@
 
 package com.soklet.core;
 
+import com.soklet.HandshakeResult;
 import com.soklet.HttpMethod;
 import com.soklet.LifecycleInterceptor;
 import com.soklet.LogEvent;
@@ -23,7 +24,6 @@ import com.soklet.Request;
 import com.soklet.RequestResult;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.ResourcePath;
-import com.soklet.Response;
 import com.soklet.Server;
 import com.soklet.ServerSentEvent;
 import com.soklet.ServerSentEventBroadcaster;
@@ -89,9 +89,9 @@ public class ServerSentEventTests {
 	@ThreadSafe
 	public static class ServerSentEventSimulatorResource {
 		@ServerSentEventSource("/examples/{exampleId}")
-		public Response exampleServerSentEventSource(@Nonnull Request request,
-																								 @Nonnull @PathParameter String exampleId) {
-			return Response.withStatusCode(200).build();
+		public HandshakeResult exampleServerSentEventSource(@Nonnull Request request,
+																												@Nonnull @PathParameter String exampleId) {
+			return HandshakeResult.accepted();
 		}
 	}
 
@@ -112,10 +112,10 @@ public class ServerSentEventTests {
 		}
 
 		@ServerSentEventSource("/examples/{exampleId}")
-		public Response exampleServerSentEventSource(@Nonnull Request request,
-																								 @Nonnull @PathParameter String exampleId) {
+		public HandshakeResult exampleServerSentEventSource(@Nonnull Request request,
+																												@Nonnull @PathParameter String exampleId) {
 			System.out.printf("Server-Sent Event Source connection initiated for %s with exampleId value %s\n", request.getId(), exampleId);
-			return Response.withStatusCode(200).build();
+			return HandshakeResult.accepted();
 		}
 
 		@POST("/fire-server-sent-event")
@@ -385,8 +385,8 @@ public class ServerSentEventTests {
 	@ThreadSafe
 	public static class SseNetworkResource {
 		@ServerSentEventSource("/tests/{id}")
-		public Response sseSource(@Nonnull Request request, @Nonnull @PathParameter String id) {
-			return Response.withStatusCode(200).build();
+		public HandshakeResult sseSource(@Nonnull Request request, @Nonnull @PathParameter String id) {
+			return HandshakeResult.accepted();
 		}
 	}
 

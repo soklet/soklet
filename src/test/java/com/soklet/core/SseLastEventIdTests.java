@@ -16,11 +16,11 @@
 
 package com.soklet.core;
 
+import com.soklet.HandshakeResult;
 import com.soklet.InstanceProvider;
 import com.soklet.Request;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.ResourcePath;
-import com.soklet.Response;
 import com.soklet.Server;
 import com.soklet.ServerSentEvent;
 import com.soklet.ServerSentEventBroadcaster;
@@ -109,8 +109,8 @@ public class SseLastEventIdTests {
 	@Resource
 	public static class SseResource {
 		@ServerSentEventSource("/sse/{id}")
-		public Response sse(@Nonnull Request request,
-												@Nonnull ServerSentEventServer serverSentEventServer) {
+		public HandshakeResult sse(@Nonnull Request request,
+															 @Nonnull ServerSentEventServer serverSentEventServer) {
 			String last = request.getHeaders().getOrDefault("Last-Event-ID", Set.of()).stream().findFirst().orElse("none");
 
 			// Wait a bit and then broadcast
@@ -125,7 +125,7 @@ public class SseLastEventIdTests {
 				broadcaster.broadcast(ServerSentEvent.withData("lastEventId=" + last).build());
 			}).start();
 
-			return Response.withStatusCode(200).build();
+			return HandshakeResult.accepted();
 		}
 	}
 
