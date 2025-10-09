@@ -102,11 +102,15 @@ public enum LogEventType {
 	 */
 	SERVER_INTERNAL_ERROR,
 	/**
-	 * Indicates that the {@link ServerSentEventServer} received a request with an illegal structure, which generally indicates a bot searching for vulnerabilities.
+	 * Indicates that the {@link ServerSentEventServer} received a handshake request with an illegal structure, which generally indicates a bot searching for vulnerabilities.
 	 * <p>
 	 * Example: {@code "/\\\\\\%20.../%20.../%20.../%20.../%20.../%20.../etc/passwd"}.
 	 */
-	SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST,
+	SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST,
+	/**
+	 * Indicates that the {@link ServerSentEventServer} was unable to successfully write a handshake response.
+	 */
+	SERVER_SENT_EVENT_SERVER_FAILED_WRITING_HANDSHAKE_RESPONSE,
 	/**
 	 * Indicates an internal {@link ServerSentEventServer} error occurred.
 	 */

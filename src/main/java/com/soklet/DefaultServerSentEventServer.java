@@ -29,7 +29,6 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
-import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -64,7 +63,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -99,6 +97,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private static final ServerSentEvent SERVER_SENT_EVENT_POISON_PILL;
 	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_HEARTBEAT;
+	@Nonnull
+	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -122,6 +122,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// This would be an event like ":\n\n"
 		SERVER_SENT_EVENT_HEARTBEAT = new ServerSentEvent(new ServerSentEvent.Builder());
+
+		// Cache off a special failsafe response
+		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttp500Response();
 	}
 
 	@Nonnull
@@ -528,7 +531,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				String rawRequest = readRequest(requestIdentifier, clientSocketChannel);
 				request = parseRequest(requestIdentifier, rawRequest);
 			} catch (URISyntaxException e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, format("Unable to parse server-sent event request URI: %s", e.getInput()))
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST, format("Unable to parse server-sent event request URI: %s", e.getInput()))
 						.throwable(e)
 						.build());
 				throw e;
@@ -539,37 +542,42 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "request timed out"
 				throw e;
 			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, "Unable to parse server-sent event request")
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST, "Unable to parse server-sent event request")
 						.throwable(e)
 						.build());
 				throw e;
 			}
 
-			//System.out.println(format("Received SSE request on socket: %s", debuggingString(request)));
-
-			// Determine the resource path
+			// OK, we've successfully parsed the SSE handshake request - now, determine the resource path
 			ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(request.getResourcePath()).orElse(null);
 
 			if (resourcePathDeclaration != null)
 				resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
 
-			AtomicReference<RequestResult> requestResultReference = new AtomicReference<>();
+			// Keep track of whether or not we should go through the "handshake accepted" flow.
+			// Might change from "accepted" to "rejected" if an error occurs
+			AtomicBoolean performHandshakeAcceptedFlow = new AtomicBoolean(false);
 
-			// OK, we have a request.
-			// First thing to do is write an HTTP response (status, headers) - and then we keep the socket open for subsequent writes if HTTP status < 300 (otherwise we write the body and close).
-			// To write this initial "handshake" response, we delegate to the Soklet instance, handing it the request we just parsed
+			// We're now ready to write the handshake response - and then we keep the socket open for subsequent writes if handshake was accepted (otherwise we write the body and close).
+			// To write the handshake response, we delegate to the Soklet instance, handing it the request we just parsed
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
-			// Subsequent writes to the open socket are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
+			// Subsequent writes to the open socket (those following successful transmission of the "accepted" handshake response) are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
 			getRequestHandler().get().handleRequest(request, (@Nonnull RequestResult requestResult) -> {
-				requestResultReference.set(requestResult);
+				// Set to the value Soklet processing gives us
+				performHandshakeAcceptedFlow.set(requestResult.getHandshakeResult().get() instanceof HandshakeResult.Accepted);
 
-				byte[] handshakeHttpResponse = null;
+				byte[] handshakeHttpResponse;
 
 				try {
 					handshakeHttpResponse = createHandshakeHttpResponse(requestResult);
-				} catch (IOException e) {
-					// TODO: log out, fall back to failsafe 500 response
-					throw new UncheckedIOException("Unable to generate initial SSE handshake response", e);
+				} catch (Throwable t) {
+					// Should not happen, but if it does, we fall back to "rejected" handshake mode and write a failsafe 500 response
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to generate SSE handshake response")
+							.throwable(t)
+							.build());
+
+					performHandshakeAcceptedFlow.set(false);
+					handshakeHttpResponse = FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
 				}
 
 				try {
@@ -577,41 +585,45 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					while (byteBuffer.hasRemaining())
 						clientSocketChannel.write(byteBuffer);
-				} catch (IOException e) {
-					// TODO: log out, shut down connection
-					throw new UncheckedIOException("Unable to write initial SSE handshake response", e);
+				} catch (Throwable t) {
+					// We couldn't write a response to the client (maybe they disconnected).
+					// Go through the rejected flow and close out the connection
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_FAILED_WRITING_HANDSHAKE_RESPONSE, "Unable to write SSE handshake response")
+							.throwable(t)
+							.build());
+
+					performHandshakeAcceptedFlow.set(false);
 				}
 			});
 
-			// Happy path? Register the channel for future ServerSentEvent writes.
-			// If no socket channel registration (404) or >= 300 HTTP status, we're done immediately now that initial data has been written.
-			if (resourceMethod != null && marshaledResponseStatusCode.get() < 300) {
+			// Happy path: register the channel for future ServerSentEvent writes and keep it open.
+			// Otherwise, we're done immediately now that initial data has been written - shut it all down.
+			if (performHandshakeAcceptedFlow.get()) {
 				getLifecycleInterceptor().get().willEstablishServerSentEventConnection(request, resourceMethod);
 
 				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).get();
 
-				// TODO: is this the right spot?  Should it be lower down?
 				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
 
 				while (true) {
-					//System.out.println(format("Waiting for SSE broadcasts on socket: %s", debuggingString(request)));
+					// Wait for SSE broadcasts on socket
 					serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
 
 					if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) {
-						//System.out.println("Encountered poison pill, exiting...");
+						// Encountered poison pill, exiting...
 						break;
 					}
 
-					ByteBuffer buffer = null;
+					ByteBuffer byteBuffer;
 
 					if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK) {
-						//System.out.println("Performing socket validity check by writing a heartbeat message...");
+						// Perform socket validity check by writing a heartbeat
 						String message = formatForResponse(SERVER_SENT_EVENT_HEARTBEAT);
-						buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+						byteBuffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
 					} else {
-						//System.out.println(format("Writing %s to %s...", serverSentEvent, debuggingString(request)));
+						// It's a normal server-sent event, write it
 						String message = formatForResponse(serverSentEvent);
-						buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+						byteBuffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
 					}
 
 					getLifecycleInterceptor().get().willStartServerSentEventWriting(request,
@@ -621,8 +633,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					Throwable writeThrowable = null;
 
 					try {
-						while (buffer.hasRemaining()) {
-							clientSocketChannel.write(buffer);
+						while (byteBuffer.hasRemaining()) {
+							clientSocketChannel.write(byteBuffer);
 						}
 					} catch (Throwable t) {
 						writeThrowable = t;
@@ -638,21 +650,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					}
 				}
 			} else {
-				String reason = "unknown";
-
-				if (resourceMethod == null)
-					reason = format("no SSE resource method exists for %s", request.getUri());
-				else if (marshaledResponseStatusCode.get() >= 300)
-					reason = format("SSE resource method status code is %d", marshaledResponseStatusCode.get());
-
-				//System.out.println(format("Closing socket %s immediately after handshake instead of waiting for broadcasts. Reason: %s", debuggingString(request), reason));
+				// Nothing to do for the moment - handshake was rejected, we're not keeping the socket open - shut it down!
 			}
 		} catch (Throwable t) {
 			throwable = t;
-			// System.out.println("Closing socket due to exception: " + t.getMessage());
+
+			// TODO: log out exception that caused the socket to close?
 
 			if (t instanceof InterruptedException)
-				Thread.currentThread().interrupt();  // Restore interrupt status
+				Thread.currentThread().interrupt();
 		} finally {
 			// First, tell the event source to unregister the connection
 			if (clientSocketChannelRegistration != null) {
@@ -661,8 +667,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				try {
 					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
-
-					// System.out.println(format("SSE socket thread completed for request: %s", debuggingString(clientSocketChannelRegistration.serverSentEventConnection().getRequest())));
 				} catch (Exception exception) {
 					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
 							.throwable(exception)
@@ -794,6 +798,27 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						handshakeResult));
 			}
 		}
+	}
+
+	@Nonnull
+	private static byte[] createFailsafeHandshakeHttp500Response() {
+		String body = "HTTP 500: Internal Server Error";
+		byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+
+		String response =
+				"HTTP/1.1 500 Internal Server Error\r\n" +
+						"Content-Type: text/plain; charset=utf-8\r\n" +
+						"Content-Length: " + bodyBytes.length + "\r\n" +
+						"Connection: close\r\n" +
+						"\r\n";
+
+		byte[] headerBytes = response.getBytes(StandardCharsets.UTF_8);
+
+		// Combine headers + body into a single byte array
+		byte[] combined = new byte[headerBytes.length + bodyBytes.length];
+		System.arraycopy(headerBytes, 0, combined, 0, headerBytes.length);
+		System.arraycopy(bodyBytes, 0, combined, headerBytes.length, bodyBytes.length);
+		return combined;
 	}
 
 	@Nonnull
