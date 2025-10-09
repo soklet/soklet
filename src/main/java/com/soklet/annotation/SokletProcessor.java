@@ -16,6 +16,7 @@
 
 package com.soklet.annotation;
 
+import com.soklet.HandshakeResult;
 import com.soklet.internal.classindex.processor.ClassIndexProcessor;
 
 import javax.annotation.Nonnull;
@@ -103,7 +104,8 @@ public class SokletProcessor extends ClassIndexProcessor {
 			// If the type isn't on the annotation‐processing path, we can still proceed
 			// but will skip the check (and warn once).
 			this.messager.printMessage(Diagnostic.Kind.WARNING,
-					"SokletProcessor: com.soklet.HandshakeResult not found on processor classpath; SSE return-type validation will be skipped.");
+					format("%s: %s not found on processor classpath; SSE return-type validation will be skipped.",
+							getClass().getSimpleName(), HandshakeResult.class.getName()));
 		}
 	}
 
@@ -121,7 +123,8 @@ public class SokletProcessor extends ClassIndexProcessor {
 
 		for (Element element : roundEnvironment.getElementsAnnotatedWith(ServerSentEventSource.class)) {
 			if (element.getKind() != ElementKind.METHOD) {
-				messager.printMessage(Diagnostic.Kind.ERROR, "@ServerSentEventSource can only be applied to methods.", element);
+				messager.printMessage(Diagnostic.Kind.ERROR, format("@%s can only be applied to methods.",
+						ServerSentEventSource.class.getSimpleName()), element);
 				continue;
 			}
 
@@ -134,8 +137,9 @@ public class SokletProcessor extends ClassIndexProcessor {
 			if (!ok) {
 				messager.printMessage(
 						Diagnostic.Kind.ERROR,
-						format("Soklet Resource Methods annotated with @ServerSentEventSource must return an instance of HandshakeResult (found: %s). " +
-								"See documentation at https://www.soklet.com/docs/server-sent-events", prettyType(returnType)),
+						format("Soklet Resource Methods annotated with @%s must specify a return type of %s (found: %s). " +
+										"See documentation at https://www.soklet.com/docs/server-sent-events",
+								ServerSentEventSource.class.getSimpleName(), HandshakeResult.class.getSimpleName(), prettyType(returnType)),
 						element
 				);
 			}
