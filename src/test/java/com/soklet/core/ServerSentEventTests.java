@@ -16,6 +16,7 @@
 
 package com.soklet.core;
 
+import com.soklet.CorsAuthorizer;
 import com.soklet.HandshakeResult;
 import com.soklet.HttpMethod;
 import com.soklet.LifecycleInterceptor;
@@ -24,6 +25,8 @@ import com.soklet.Request;
 import com.soklet.RequestResult;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.ResourcePath;
+import com.soklet.Response;
+import com.soklet.ResponseCookie;
 import com.soklet.Server;
 import com.soklet.ServerSentEvent;
 import com.soklet.ServerSentEventBroadcaster;
@@ -39,17 +42,22 @@ import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import static java.util.Objects.requireNonNull;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -144,7 +152,7 @@ public class ServerSentEventTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = SECONDS)
 	public void sse_startStop_doesNotHang() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -168,7 +176,7 @@ public class ServerSentEventTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 10, unit = SECONDS)
 	public void sse_handshakeHeaders_and_basicDelivery() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -229,7 +237,7 @@ public class ServerSentEventTests {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 20, unit = SECONDS)
 	public void sse_largeEvent_isFullyWritten() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -283,7 +291,7 @@ public class ServerSentEventTests {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	@Timeout(value = 20, unit = SECONDS)
 	public void sse_broadcastMany_doesNotThrow_andEventuallyDeliversLast() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -338,7 +346,7 @@ public class ServerSentEventTests {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = TimeUnit.SECONDS)
+	@Timeout(value = 15, unit = SECONDS)
 	public void sse_stopClosesConnection() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -380,7 +388,315 @@ public class ServerSentEventTests {
 		}
 	}
 
-	// ---------- Helpers & mini resource ----------
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void handshake_rejected_writes_status_body_and_cookies() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		// Resource returns a REJECTED handshake with 403, a body, a header, and a Set-Cookie
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(RejectingSseResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+				writeHttpGet(socket, "/sse/reject", ssePort);
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
+
+				String[] headerLines = rawHeaders.split("\r?\n");
+				Assertions.assertTrue(headerLines[0].startsWith("HTTP/1.1 403"), "Expected 403 for rejected handshake");
+
+				Map<String, List<String>> headers = parseHeadersMulti(headerLines);
+				// Body should be present and connection closed
+				Assertions.assertEquals("close", firstOrEmpty(headers, "connection").toLowerCase(Locale.ROOT));
+				// Our custom header survived
+				Assertions.assertEquals("nope", firstOrEmpty(headers, "x-why"));
+
+				// Body length is set (either by server or by our explicit header)
+				int contentLength = Integer.parseInt(firstOrEmpty(headers, "content-length"));
+				Assertions.assertTrue(contentLength > 0, "Missing/invalid Content-Length");
+
+				// Cookies should be emitted — this is currently missing in the SSE code path and will FAIL until fixed
+				boolean sawSetCookie = headers.containsKey("set-cookie") && headers.get("set-cookie").stream().anyMatch(v -> v.contains("session=sse-reject"));
+				Assertions.assertTrue(sawSetCookie, "Missing Set-Cookie in SSE rejected handshake");
+
+				// Read the body and ensure it matches
+				byte[] body = readN(socket.getInputStream(), contentLength, 4000);
+				Assertions.assertEquals("denied", new String(body, StandardCharsets.UTF_8));
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void handshake_unknown_path_returns_404_and_closes() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(AcceptingSseResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+
+				// Path isn't mapped by @ServerSentEventSource -> should return 404 (currently the server can throw internally)
+				writeHttpGet(socket, "/sse-does-not-exist", ssePort);
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
+
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 404"), "Expected 404 on unknown SSE path");
+				// Connection should close after rejected/normal response
+				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 404 response");
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void handshake_rejected_respects_explicit_content_length() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(RejectWithExplicitContentLength.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+				writeHttpGet(socket, "/sse/reject-explicit-cl", ssePort);
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(rawHeaders);
+
+				String[] lines = rawHeaders.split("\r?\n");
+				Map<String, List<String>> headers = parseHeadersMulti(lines);
+
+				List<String> cls = headers.getOrDefault("content-length", List.of());
+				Assertions.assertEquals(1, cls.size(), "Expected exactly one Content-Length header");
+				Assertions.assertEquals("3", cls.get(0));
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sseAccepted_includesCorsHeaders_whenAllOriginsAuthorizer() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		String origin = "https://app.example";
+
+		// Accepts any Origin; credentials=true implies ACAO "*" -> normalized to request Origin + "Vary: Origin"
+		CorsAuthorizer cors = CorsAuthorizer.withAcceptAllPolicy();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.corsAuthorizer(cors)
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(AcceptingSseCorsResource.class)))
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
+				socket.setSoTimeout(4000);
+				writeHttpGet(socket, "/sse/cors-ok", ssePort, origin);
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(rawHeaders, "No HTTP response received");
+				String[] lines = rawHeaders.split("\r?\n");
+
+				// 200 OK handshake
+				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
+
+				Map<String, List<String>> headers = parseHeadersMulti(lines);
+				// Should echo Origin (because credentials=true)
+				Assertions.assertEquals(origin, firstOrEmpty(headers, "access-control-allow-origin"));
+				Assertions.assertEquals("true", firstOrEmpty(headers, "access-control-allow-credentials").toLowerCase(Locale.ROOT));
+
+				// Since "*" was normalized to the concrete Origin, Vary: Origin must be present
+				String vary = firstOrEmpty(headers, "vary").toLowerCase(Locale.ROOT);
+				Assertions.assertTrue(vary.contains("origin"), "Missing 'Vary: Origin' header");
+
+				// SSE accepted handshakes should keep the connection open; do not wait for EOF.
+				// We deliberately don't read further (heartbeats may arrive later).
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sseRejected_includesCorsHeaders_whenAllOriginsAuthorizer() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		String origin = "https://app.example";
+
+		CorsAuthorizer cors = CorsAuthorizer.withAcceptAllPolicy();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.corsAuthorizer(cors)
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(RejectingSseCorsResource.class)))
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
+				socket.setSoTimeout(4000);
+				writeHttpGet(socket, "/sse/cors-reject", ssePort, origin);
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(rawHeaders, "No HTTP response received");
+				String[] lines = rawHeaders.split("\r?\n");
+
+				// Rejected handshake returns a non-200 status (we use 403 in the resource)
+				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 403"), "Expected 403 for rejected handshake");
+
+				Map<String, List<String>> headers = parseHeadersMulti(lines);
+				// CORS must still be applied to the error response
+				Assertions.assertEquals(origin, firstOrEmpty(headers, "access-control-allow-origin"));
+				Assertions.assertEquals("true", firstOrEmpty(headers, "access-control-allow-credentials").toLowerCase(Locale.ROOT));
+
+				String vary = firstOrEmpty(headers, "vary").toLowerCase(Locale.ROOT);
+				Assertions.assertTrue(vary.contains("origin"), "Missing 'Vary: Origin' header on rejected handshake");
+
+				// Body may be present; we don't need to read/validate it for CORS, so we stop here.
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sseAccepted_omitsCorsHeaders_whenOriginNotWhitelisted() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		String origin = "https://not-allowed.example";
+
+		// Only allow https://ok.example
+		CorsAuthorizer cors = CorsAuthorizer.withWhitelistAuthorizer(o -> "https://ok.example".equalsIgnoreCase(o));
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.corsAuthorizer(cors)
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(AcceptingSseCorsResource.class)))
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
+				socket.setSoTimeout(4000);
+				writeHttpGet(socket, "/sse/cors-ok", ssePort, origin);
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(rawHeaders, "No HTTP response received");
+				String[] lines = rawHeaders.split("\r?\n");
+
+				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
+
+				Map<String, List<String>> headers = parseHeadersMulti(lines);
+				// Origin not authorized => no CORS headers
+				Assertions.assertEquals("", firstOrEmpty(headers, "access-control-allow-origin"));
+				Assertions.assertEquals("", firstOrEmpty(headers, "access-control-allow-credentials"));
+				Assertions.assertEquals("", firstOrEmpty(headers, "vary"));
+			}
+		}
+	}
+
+	public static class AcceptingSseCorsResource {
+		@ServerSentEventSource("/sse/cors-ok")
+		public HandshakeResult ok(@Nonnull Request request) {
+			// Standard SSE accepted handshake
+			return HandshakeResult.accepted();
+		}
+	}
+
+	public static class RejectingSseCorsResource {
+		@ServerSentEventSource("/sse/cors-reject")
+		public HandshakeResult reject(@Nonnull Request request) {
+			// Reject with a simple body; CORS should still be applied
+			return HandshakeResult.rejectedWithResponse(
+					Response.withStatusCode(403)
+							.headers(Map.of("Content-Type", Set.of("text/plain; charset=utf-8")))
+							.body("denied")
+							.build()
+			);
+		}
+	}
+
+	public static class RejectingSseResource {
+		@ServerSentEventSource("/sse/reject")
+		public HandshakeResult handshake(@Nonnull Request request) {
+			// Rejected SSE handshake with a body, header, and a cookie
+			ResponseCookie cookie = ResponseCookie.with("session", "sse-reject").path("/").build();
+			Response response = Response.withStatusCode(403)
+					.headers(Map.of("X-Why", Set.of("nope"),
+							"Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.cookies(Set.of(cookie))
+					.body("denied")
+					.build();
+			return HandshakeResult.rejectedWithResponse(response);
+		}
+	}
+
+	public static class AcceptingSseResource {
+		@ServerSentEventSource("/sse/{id}")
+		public HandshakeResult ok(@Nonnull Request request, @Nonnull @PathParameter String id) {
+			return HandshakeResult.accepted();
+		}
+	}
+
+	public static class RejectWithExplicitContentLength {
+		@ServerSentEventSource("/sse/reject-explicit-cl")
+		public HandshakeResult reject(@Nonnull Request request) {
+			Response response = Response.withStatusCode(418)
+					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8"),
+							"Content-Length", Set.of("3")))
+					.body("abc")
+					.build();
+			return HandshakeResult.rejectedWithResponse(response);
+		}
+	}
 
 	@ThreadSafe
 	public static class SseNetworkResource {
@@ -395,11 +711,53 @@ public class ServerSentEventTests {
 		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
 	}
 
+	private static byte[] readN(InputStream in, int n, int timeoutMs) throws IOException {
+		long deadline = System.currentTimeMillis() + timeoutMs;
+		byte[] out = new byte[n];
+		int off = 0;
+		while (off < n && System.currentTimeMillis() < deadline) {
+			int r = in.read(out, off, n - off);
+			if (r == -1) break;
+			off += r;
+		}
+		if (off != n) throw new EOFException("short read");
+		return out;
+	}
+
+	private static Map<String, List<String>> parseHeadersMulti(String[] headerLines) {
+		Map<String, List<String>> m = new HashMap<>();
+		for (int i = 1; i < headerLines.length; i++) {
+			String line = headerLines[i];
+			int idx = line.indexOf(':');
+			if (idx <= 0) continue;
+			String k = line.substring(0, idx).trim().toLowerCase(Locale.ROOT);
+			String v = line.substring(idx + 1).trim();
+			m.computeIfAbsent(k, __ -> new ArrayList<>()).add(v);
+		}
+		return m;
+	}
+
+	private static String firstOrEmpty(Map<String, List<String>> headers, String key) {
+		List<String> v = headers.getOrDefault(key.toLowerCase(Locale.ROOT), List.of());
+		return v.isEmpty() ? "" : v.get(0);
+	}
+
 	private static void writeHttpGet(Socket socket, String path, int port) throws IOException {
 		String req = "GET " + path + " HTTP/1.1\r\n"
 				+ "Host: 127.0.0.1:" + port + "\r\n"
 				+ "Accept: text/event-stream\r\n"
 				+ "Connection: keep-alive\r\n"
+				+ "\r\n";
+		socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
+		socket.getOutputStream().flush();
+	}
+
+	private static void writeHttpGet(Socket socket, String path, int port, String origin) throws IOException {
+		String req = "GET " + path + " HTTP/1.1\r\n"
+				+ "Host: 127.0.0.1:" + port + "\r\n"
+				+ "Accept: text/event-stream\r\n"
+				+ "Connection: keep-alive\r\n"
+				+ "Origin: " + origin + "\r\n"
 				+ "\r\n";
 		socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
 		socket.getOutputStream().flush();

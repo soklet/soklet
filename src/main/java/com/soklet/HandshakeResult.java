@@ -79,7 +79,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			// Generally speaking, we always want these headers for SSE streaming responses.
 			// Users can override if they think necessary
 			LinkedCaseInsensitiveMap<Set<String>> defaultHeaders = new LinkedCaseInsensitiveMap<>(4);
-			defaultHeaders.put("Content-Type", Set.of("text/event-stream; charset=utf-8"));
+			defaultHeaders.put("Content-Type", Set.of("text/event-stream; charset=UTF-8"));
 			defaultHeaders.put("Cache-Control", Set.of("no-cache"));
 			defaultHeaders.put("Connection", Set.of("keep-alive"));
 			defaultHeaders.put("X-Accel-Buffering", Set.of("no"));

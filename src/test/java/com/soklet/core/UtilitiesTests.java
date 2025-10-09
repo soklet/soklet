@@ -115,19 +115,19 @@ public class UtilitiesTests {
 		contentType = Utilities.extractContentTypeFromHeaderValue(null).orElse(null);
 		Assertions.assertEquals(null, contentType, "Absence of content type was not correctly detected");
 
-		contentType = Utilities.extractContentTypeFromHeaderValue("text/html; charset=utf-8").orElse(null);
+		contentType = Utilities.extractContentTypeFromHeaderValue("text/html; charset=UTF-8").orElse(null);
 		Assertions.assertEquals("text/html", contentType, "Content type was not correctly detected");
 
-		contentType = Utilities.extractContentTypeFromHeaderValue("text/html   ; charset=utf-8").orElse(null);
+		contentType = Utilities.extractContentTypeFromHeaderValue("text/html   ; charset=UTF-8").orElse(null);
 		Assertions.assertEquals("text/html", contentType, "Content type was not correctly detected");
 
-		contentType = Utilities.extractContentTypeFromHeaderValue("text/html;charset=utf-8").orElse(null);
+		contentType = Utilities.extractContentTypeFromHeaderValue("text/html;charset=UTF-8").orElse(null);
 		Assertions.assertEquals("text/html", contentType, "Content type was not correctly detected");
 	}
 
 	@Test
 	public void charsetFromHeaders() {
-		Charset charset = Utilities.extractCharsetFromHeaderValue("text/html; charset=utf-8").orElse(null);
+		Charset charset = Utilities.extractCharsetFromHeaderValue("text/html; charset=UTF-8").orElse(null);
 		Assertions.assertEquals(StandardCharsets.UTF_8, charset, "Charset was not correctly detected");
 
 		charset = Utilities.extractCharsetFromHeaderValue("text/html").orElse(null);
@@ -136,16 +136,16 @@ public class UtilitiesTests {
 		charset = Utilities.extractCharsetFromHeaderValue("text/html;").orElse(null);
 		Assertions.assertEquals(null, charset, "Absence of charset was not correctly detected");
 
-		charset = Utilities.extractCharsetFromHeaderValue(";charset=utf-8;").orElse(null);
+		charset = Utilities.extractCharsetFromHeaderValue(";charset=UTF-8;").orElse(null);
 		Assertions.assertEquals(StandardCharsets.UTF_8, charset, "Charset was not correctly detected");
 
-		charset = Utilities.extractCharsetFromHeaderValue(";charset=utf-8   ;  ").orElse(null);
+		charset = Utilities.extractCharsetFromHeaderValue(";charset=UTF-8   ;  ").orElse(null);
 		Assertions.assertEquals(StandardCharsets.UTF_8, charset, "Charset was not correctly detected");
 
 		charset = Utilities.extractCharsetFromHeaderValue("multipart/form-data; boundary=something").orElse(null);
 		Assertions.assertEquals(null, charset, "Absence of charset was not correctly detected");
 
-		charset = Utilities.extractCharsetFromHeaderValue("multipart/form-data; charset=utf-8; boundary=something").orElse(null);
+		charset = Utilities.extractCharsetFromHeaderValue("multipart/form-data; charset=UTF-8; boundary=something").orElse(null);
 		Assertions.assertEquals(StandardCharsets.UTF_8, charset, "Charset was not correctly detected");
 
 		charset = Utilities.extractCharsetFromHeaderValue("text/html; charset=ISO-8859-1").orElse(null);

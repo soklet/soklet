@@ -563,8 +563,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
 			// Subsequent writes to the open socket (those following successful transmission of the "accepted" handshake response) are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
 			getRequestHandler().get().handleRequest(request, (@Nonnull RequestResult requestResult) -> {
-				// Set to the value Soklet processing gives us
-				performHandshakeAcceptedFlow.set(requestResult.getHandshakeResult().get() instanceof HandshakeResult.Accepted);
+				// Set to the value Soklet processing gives us. Will be the empty Optional if no resource method was matched
+				HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
+				performHandshakeAcceptedFlow.set(handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted);
 
 				byte[] handshakeHttpResponse;
 
@@ -704,14 +705,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(requestResult);
 
 		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
-		HandshakeResult handshakeResult = requestResult.getHandshakeResult().get();
+		HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
 
 		// Shared buffer for building the header section
 		try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream(1024);
 				 OutputStreamWriter outputStreamWriter = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8);
 				 PrintWriter printWriter = new PrintWriter(outputStreamWriter, false)) {
 
-			if (handshakeResult instanceof HandshakeResult.Accepted) {
+			if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted) {
 				final Set<String> ILLEGAL_LOWERCASE_HEADER_NAMES = Set.of("content-length");
 
 				// HTTP status line
@@ -731,13 +732,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							printWriter.printf("%s: %s\r\n", headerName, value);
 				}
 
+				// Emit cookies (one header per cookie)
+				for (ResponseCookie cookie : marshaledResponse.getCookies())
+					printWriter.printf("Set-Cookie: %s\r\n", cookie.toSetCookieHeaderRepresentation());
+
 				// Terminate header section
 				printWriter.print("\r\n");
 				printWriter.flush();
 
 				// No body for SSE handshakes
 				return outputStream.toByteArray();
-			} else if (handshakeResult instanceof HandshakeResult.Rejected) {
+			} else if (handshakeResult == null || handshakeResult instanceof HandshakeResult.Rejected) {
 				// Status line
 				int statusCode = marshaledResponse.getStatusCode();
 				String reasonPhrase = StatusCode.fromStatusCode(statusCode).map(StatusCode::getReasonPhrase).orElse("");
@@ -772,6 +777,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							printWriter.printf("%s: %s\r\n", headerName, headerValue);
 				}
 
+				// Emit cookies (one header per cookie)
+				for (ResponseCookie cookie : marshaledResponse.getCookies())
+					printWriter.printf("Set-Cookie: %s\r\n", cookie.toSetCookieHeaderRepresentation());
+
 				byte[] body = marshaledResponse.getBody().orElse(null);
 				int bodyLength = (body == null ? 0 : body.length);
 
@@ -792,10 +801,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				return outputStream.toByteArray();
 			} else {
-				throw new IllegalStateException(String.format(
-						"Unsupported %s: %s",
-						HandshakeResult.class.getSimpleName(),
-						handshakeResult));
+				throw new IllegalStateException(String.format("Unsupported %s: %s", HandshakeResult.class.getSimpleName(), handshakeResult));
 			}
 		}
 	}
@@ -807,7 +813,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		String response =
 				"HTTP/1.1 500 Internal Server Error\r\n" +
-						"Content-Type: text/plain; charset=utf-8\r\n" +
+						"Content-Type: text/plain; charset=UTF-8\r\n" +
 						"Content-Length: " + bodyBytes.length + "\r\n" +
 						"Connection: close\r\n" +
 						"\r\n";

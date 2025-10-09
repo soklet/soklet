@@ -787,7 +787,7 @@ public final class Utilities {
 	/**
 	 * Extracts the media type (without parameters) from the first {@code Content-Type} header.
 	 * <p>
-	 * For example, {@code "text/html; charset=utf-8"} → {@code "text/html"}.
+	 * For example, {@code "text/html; charset=UTF-8"} → {@code "text/html"}.
 	 *
 	 * @param headers request/response headers (must be non-{@code null})
 	 * @return the media type if present; otherwise {@link Optional#empty()}
@@ -808,7 +808,7 @@ public final class Utilities {
 	/**
 	 * Extracts the media type (without parameters) from a {@code Content-Type} header value.
 	 * <p>
-	 * For example, {@code "application/json; charset=utf-8"} → {@code "application/json"}.
+	 * For example, {@code "application/json; charset=UTF-8"} → {@code "application/json"}.
 	 *
 	 * @param contentTypeHeaderValue the raw header value; may be {@code null} or blank
 	 * @return the media type if present; otherwise {@link Optional#empty()}
@@ -821,7 +821,7 @@ public final class Utilities {
 			return Optional.empty();
 
 		// Examples
-		// Content-Type: text/html; charset=utf-8
+		// Content-Type: text/html; charset=UTF-8
 		// Content-Type: multipart/form-data; boundary=something
 
 		int indexOfSemicolon = contentTypeHeaderValue.indexOf(";");
@@ -830,7 +830,7 @@ public final class Utilities {
 		if (indexOfSemicolon == -1)
 			return Optional.ofNullable(trimAggressivelyToNull(contentTypeHeaderValue));
 
-		// More complex case, e.g. "text/html; charset=utf-8"
+		// More complex case, e.g. "text/html; charset=UTF-8"
 		return Optional.ofNullable(trimAggressivelyToNull(contentTypeHeaderValue.substring(0, indexOfSemicolon)));
 	}
 
@@ -872,7 +872,7 @@ public final class Utilities {
 			return Optional.empty();
 
 		// Examples
-		// Content-Type: text/html; charset=utf-8
+		// Content-Type: text/html; charset=UTF-8
 		// Content-Type: multipart/form-data; boundary=something
 
 		int indexOfSemicolon = contentTypeHeaderValue.indexOf(";");
@@ -881,7 +881,7 @@ public final class Utilities {
 		if (indexOfSemicolon == -1)
 			return Optional.empty();
 
-		// More complex case, e.g. "text/html; charset=utf-8" or "multipart/form-data; charset=utf-8; boundary=something"
+		// More complex case, e.g. "text/html; charset=UTF-8" or "multipart/form-data; charset=UTF-8; boundary=something"
 		boolean finishedContentType = false;
 		boolean finishedCharsetName = false;
 		StringBuilder buffer = new StringBuilder();
@@ -910,7 +910,7 @@ public final class Utilities {
 			}
 		}
 
-		// Handle case where charset is the end of the string, e.g. "whatever;charset=utf-8"
+		// Handle case where charset is the end of the string, e.g. "whatever;charset=UTF-8"
 		if (!finishedCharsetName) {
 			String potentialCharset = trimAggressivelyToNull(buffer.toString());
 			if (potentialCharset != null && potentialCharset.startsWith("charset=")) {
@@ -920,7 +920,7 @@ public final class Utilities {
 		}
 
 		if (finishedCharsetName) {
-			// e.g. "charset=utf-8" -> "utf-8"
+			// e.g. "charset=UTF-8" -> "UTF-8"
 			charsetName = trimAggressivelyToNull(charsetName.replace("charset=", ""));
 
 			if (charsetName != null) {
