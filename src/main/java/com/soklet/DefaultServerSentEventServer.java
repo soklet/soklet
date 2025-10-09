@@ -24,8 +24,11 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -45,7 +48,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -61,8 +63,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -551,7 +553,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (resourcePathDeclaration != null)
 				resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
 
-			AtomicInteger marshaledResponseStatusCode = new AtomicInteger(500);
+			AtomicReference<RequestResult> requestResultReference = new AtomicReference<>();
 
 			// OK, we have a request.
 			// First thing to do is write an HTTP response (status, headers) - and then we keep the socket open for subsequent writes if HTTP status < 300 (otherwise we write the body and close).
@@ -559,18 +561,24 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
 			// Subsequent writes to the open socket are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
 			getRequestHandler().get().handleRequest(request, (@Nonnull RequestResult requestResult) -> {
-				MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
+				requestResultReference.set(requestResult);
 
-				marshaledResponseStatusCode.set(marshaledResponse.getStatusCode());
-				String handshakeResponse = toHandshakeResponse(marshaledResponse);
+				byte[] handshakeHttpResponse = null;
 
 				try {
-					ByteBuffer byteBuffer = ByteBuffer.wrap(handshakeResponse.getBytes(StandardCharsets.UTF_8));
+					handshakeHttpResponse = createHandshakeHttpResponse(requestResult);
+				} catch (IOException e) {
+					// TODO: log out, fall back to failsafe 500 response
+					throw new UncheckedIOException("Unable to generate initial SSE handshake response", e);
+				}
+
+				try {
+					ByteBuffer byteBuffer = ByteBuffer.wrap(handshakeHttpResponse);
 
 					while (byteBuffer.hasRemaining())
 						clientSocketChannel.write(byteBuffer);
 				} catch (IOException e) {
-					// TODO: log out?
+					// TODO: log out, shut down connection
 					throw new UncheckedIOException("Unable to write initial SSE handshake response", e);
 				}
 			});
@@ -688,62 +696,104 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected String toHandshakeResponse(@Nonnull MarshaledResponse marshaledResponse) {
-		requireNonNull(marshaledResponse);
+	protected byte[] createHandshakeHttpResponse(@Nonnull RequestResult requestResult) throws IOException {
+		requireNonNull(requestResult);
 
-		// For example:
-		//
-		// "HTTP/1.1 200 OK\r\n" +
-		// "Content-Type: text/event-stream\r\n" +
-		// "Cache-Control: no-cache\r\n" +
-		// "X-Accel-Buffering: no\r\n" +
-		// "Connection: keep-alive\r\n\r\n";
+		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
+		HandshakeResult handshakeResult = requestResult.getHandshakeResult().get();
 
-		// Default SSE headers applied only on success (2xx). Case-insensitive map to avoid duplicates.
-		LinkedCaseInsensitiveMap<Set<String>> DEFAULT_HEADERS = new LinkedCaseInsensitiveMap<>(4);
-		DEFAULT_HEADERS.put("Content-Type", Set.of("text/event-stream; charset=utf-8"));
-		DEFAULT_HEADERS.put("Cache-Control", Set.of("no-cache"));
-		DEFAULT_HEADERS.put("Connection", Set.of("keep-alive"));
-		DEFAULT_HEADERS.put("X-Accel-Buffering", Set.of("no"));
+		// Shared buffer for building the header section
+		try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream(1024);
+				 OutputStreamWriter outputStreamWriter = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8);
+				 PrintWriter printWriter = new PrintWriter(outputStreamWriter, false)) {
 
-		final Set<String> ILLEGAL_HEADER_NAMES_LOWER = Set.of("content-length");
+			if (handshakeResult instanceof HandshakeResult.Accepted) {
+				final Set<String> ILLEGAL_LOWERCASE_HEADER_NAMES = Set.of("content-length");
 
-		int statusCode = marshaledResponse.getStatusCode();
-		Map<String, Set<String>> headers = marshaledResponse.getHeaders();
+				// HTTP status line
+				printWriter.print("HTTP/1.1 200 OK\r\n");
 
-		List<String> lines = new ArrayList<>(1 + headers.size());
+				// Write headers, ignoring illegal ones
+				for (Map.Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
+					String headerName = entry.getKey();
 
-		// e.g. "HTTP/1.1 200 OK"
-		String reason = StatusCode.fromStatusCode(statusCode).map(StatusCode::getReasonPhrase).orElse("");
-		lines.add(format("HTTP/1.1 %d %s", statusCode, reason));
+					if (headerName == null || ILLEGAL_LOWERCASE_HEADER_NAMES.contains(headerName.toLowerCase(Locale.ENGLISH)))
+						continue;
 
-		// Write default headers
-		if (statusCode >= 200 && statusCode < 300) {
-			for (Entry<String, Set<String>> entry : DEFAULT_HEADERS.entrySet()) {
-				String headerName = entry.getKey();
-				Set<String> headerValues = entry.getValue();
+					Set<String> values = entry.getValue();
 
-				if (headerValues != null)
-					for (String headerValue : headerValues)
-						lines.add(format("%s: %s", headerName, headerValue));
+					if (values != null)
+						for (String value : values)
+							printWriter.printf("%s: %s\r\n", headerName, value);
+				}
+
+				// Terminate header section
+				printWriter.print("\r\n");
+				printWriter.flush();
+
+				// No body for SSE handshakes
+				return outputStream.toByteArray();
+			} else if (handshakeResult instanceof HandshakeResult.Rejected) {
+				// Status line
+				int statusCode = marshaledResponse.getStatusCode();
+				String reasonPhrase = StatusCode.fromStatusCode(statusCode).map(StatusCode::getReasonPhrase).orElse("");
+
+				if (reasonPhrase.length() > 0)
+					printWriter.printf("HTTP/1.1 %d %s\r\n", statusCode, reasonPhrase);
+				else
+					printWriter.printf("HTTP/1.1 %d\r\n", statusCode);
+
+				// Write headers
+				boolean hasContentLength = false;
+				boolean hasTransferEncoding = false;
+
+				for (Map.Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
+					String headerName = entry.getKey();
+
+					if (headerName == null)
+						continue;
+
+					String lowercaseHeaderName = headerName.toLowerCase(Locale.ENGLISH);
+
+					if (lowercaseHeaderName.equals("content-length"))
+						hasContentLength = true;
+
+					if (lowercaseHeaderName.equals("transfer-encoding"))
+						hasTransferEncoding = true;
+
+					Set<String> headerValues = entry.getValue();
+
+					if (headerValues != null)
+						for (String headerValue : headerValues)
+							printWriter.printf("%s: %s\r\n", headerName, headerValue);
+				}
+
+				byte[] body = marshaledResponse.getBody().orElse(null);
+				int bodyLength = (body == null ? 0 : body.length);
+
+				// Add Content-Length if body is present and user didn’t set it
+				if (bodyLength > 0 && !hasContentLength && !hasTransferEncoding)
+					printWriter.printf("Content-Length: %d\r\n", bodyLength);
+
+				// Default Connection: close (rejected handshakes do not remain open)
+				printWriter.print("Connection: close\r\n");
+
+				// End headers
+				printWriter.print("\r\n");
+				printWriter.flush();
+
+				// Write headers + body
+				if (body != null && body.length > 0)
+					outputStream.write(body);
+
+				return outputStream.toByteArray();
+			} else {
+				throw new IllegalStateException(String.format(
+						"Unsupported %s: %s",
+						HandshakeResult.class.getSimpleName(),
+						handshakeResult));
 			}
 		}
-
-		// Write custom headers
-		for (Entry<String, Set<String>> entry : headers.entrySet()) {
-			String headerName = entry.getKey();
-			Set<String> headerValues = entry.getValue();
-
-			// Only write headers that are not part of the default set
-			if (!DEFAULT_HEADERS.containsKey(headerName)
-					&& !ILLEGAL_HEADER_NAMES_LOWER.contains(headerName.toLowerCase(Locale.ENGLISH)))
-
-				if (headerValues != null)
-					for (String headerValue : headerValues)
-						lines.add(format("%s: %s", headerName, headerValue));
-		}
-
-		return lines.stream().collect(Collectors.joining("\r\n")) + "\r\n\r\n";
 	}
 
 	@Nonnull

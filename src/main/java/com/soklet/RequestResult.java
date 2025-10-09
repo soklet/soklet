@@ -48,6 +48,8 @@ public final class RequestResult {
 	private final CorsPreflightResponse corsPreflightResponse;
 	@Nullable
 	private final ResourceMethod resourceMethod;
+	@Nullable
+	private final HandshakeResult handshakeResult;
 
 	/**
 	 * Acquires a builder for {@link RequestResult} instances.
@@ -78,11 +80,12 @@ public final class RequestResult {
 		this.response = builder.response;
 		this.corsPreflightResponse = builder.corsPreflightResponse;
 		this.resourceMethod = builder.resourceMethod;
+		this.handshakeResult = builder.handshakeResult;
 	}
 
 	@Override
 	public String toString() {
-		List<String> components = new ArrayList<>(4);
+		List<String> components = new ArrayList<>(5);
 
 		components.add(format("marshaledResponse=%s", getMarshaledResponse()));
 
@@ -101,6 +104,11 @@ public final class RequestResult {
 		if (resourceMethod != null)
 			components.add(format("resourceMethod=%s", resourceMethod));
 
+		HandshakeResult handshakeResult = getHandshakeResult().orElse(null);
+
+		if (handshakeResult != null)
+			components.add(format("handshakeResult=%s", handshakeResult));
+
 		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
 	}
 
@@ -115,12 +123,13 @@ public final class RequestResult {
 		return Objects.equals(getMarshaledResponse(), requestResult.getMarshaledResponse())
 				&& Objects.equals(getResponse(), requestResult.getResponse())
 				&& Objects.equals(getCorsPreflightResponse(), requestResult.getCorsPreflightResponse())
-				&& Objects.equals(getResourceMethod(), requestResult.getResourceMethod());
+				&& Objects.equals(getResourceMethod(), requestResult.getResourceMethod())
+				&& Objects.equals(getHandshakeResult(), requestResult.getHandshakeResult());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getMarshaledResponse(), getResponse(), getCorsPreflightResponse(), getResourceMethod());
+		return Objects.hash(getMarshaledResponse(), getResponse(), getCorsPreflightResponse(), getResourceMethod(), getHandshakeResult());
 	}
 
 	/**
@@ -163,6 +172,17 @@ public final class RequestResult {
 		return Optional.ofNullable(this.resourceMethod);
 	}
 
+
+	/**
+	 * The SSE handshake result, if available.
+	 *
+	 * @return the SSE handshake result
+	 */
+	@Nonnull
+	public Optional<HandshakeResult> getHandshakeResult() {
+		return Optional.ofNullable(this.handshakeResult);
+	}
+
 	/**
 	 * Builder used to construct instances of {@link RequestResult} via {@link RequestResult#withMarshaledResponse(MarshaledResponse)}.
 	 * <p>
@@ -180,6 +200,8 @@ public final class RequestResult {
 		private CorsPreflightResponse corsPreflightResponse;
 		@Nullable
 		private ResourceMethod resourceMethod;
+		@Nullable
+		private HandshakeResult handshakeResult;
 
 		protected Builder(@Nonnull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
@@ -212,6 +234,12 @@ public final class RequestResult {
 		}
 
 		@Nonnull
+		public Builder handshakeResult(@Nullable HandshakeResult handshakeResult) {
+			this.handshakeResult = handshakeResult;
+			return this;
+		}
+
+		@Nonnull
 		public RequestResult build() {
 			return new RequestResult(this);
 		}
@@ -235,7 +263,8 @@ public final class RequestResult {
 			this.builder = new Builder(requestResult.getMarshaledResponse())
 					.response(requestResult.getResponse().orElse(null))
 					.corsPreflightResponse(requestResult.getCorsPreflightResponse().orElse(null))
-					.resourceMethod(requestResult.getResourceMethod().orElse(null));
+					.resourceMethod(requestResult.getResourceMethod().orElse(null))
+					.handshakeResult(requestResult.getHandshakeResult().orElse(null));
 		}
 
 		@Nonnull
@@ -260,6 +289,12 @@ public final class RequestResult {
 		@Nonnull
 		public Copier resourceMethod(@Nullable ResourceMethod resourceMethod) {
 			this.builder.resourceMethod(resourceMethod);
+			return this;
+		}
+
+		@Nonnull
+		public Copier handshakeResult(@Nullable HandshakeResult handshakeResult) {
+			this.builder.handshakeResult(handshakeResult);
 			return this;
 		}
 

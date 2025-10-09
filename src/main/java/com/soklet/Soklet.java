@@ -859,33 +859,38 @@ public final class Soklet implements AutoCloseable {
 			responseObject = ((Optional<?>) responseObject).orElse(null);
 
 		Response response;
+		HandshakeResult handshakeResult = null;
 
 		// If null/void return, it's a 204
 		// If it's a MarshaledResponse object, no marshaling + return it immediately - caller knows exactly what it wants to write.
 		// If it's a Response object, use as is.
 		// If it's a non-Response type of object, assume it's the response body and wrap in a Response.
-		if (responseObject == null)
+		if (responseObject == null) {
 			response = Response.withStatusCode(204).build();
-		else if (responseObject instanceof MarshaledResponse)
+		} else if (responseObject instanceof MarshaledResponse) {
 			return RequestResult.withMarshaledResponse((MarshaledResponse) responseObject)
 					.resourceMethod(resourceMethod)
 					.build();
-		else if (responseObject instanceof Response)
+		} else if (responseObject instanceof Response) {
 			response = (Response) responseObject;
-		else if (responseObject instanceof HandshakeResult.Accepted accepted) // SSE "accepted" handshake
+		} else if (responseObject instanceof HandshakeResult.Accepted accepted) { // SSE "accepted" handshake
 			return RequestResult.withMarshaledResponse(accepted.getMarshaledResponse())
 					.resourceMethod(resourceMethod)
+					.handshakeResult(accepted)
 					.build();
-		else if (responseObject instanceof HandshakeResult.Rejected rejected) // SSE "rejected" handshake
+		} else if (responseObject instanceof HandshakeResult.Rejected rejected) { // SSE "rejected" handshake
 			response = rejected.getResponse();
-		else
+			handshakeResult = rejected;
+		} else {
 			response = Response.withStatusCode(200).body(responseObject).build();
+		}
 
 		MarshaledResponse marshaledResponse = responseMarshaler.forHappyPath(request, response, resourceMethod);
 
 		return RequestResult.withMarshaledResponse(marshaledResponse)
 				.response(response)
 				.resourceMethod(resourceMethod)
+				.handshakeResult(handshakeResult)
 				.build();
 	}
 
