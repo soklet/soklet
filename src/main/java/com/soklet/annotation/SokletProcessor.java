@@ -18,6 +18,28 @@ package com.soklet.annotation;
 
 import com.soklet.internal.classindex.processor.ClassIndexProcessor;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.processing.Messager;
+import javax.annotation.processing.ProcessingEnvironment;
+import javax.annotation.processing.RoundEnvironment;
+import javax.annotation.processing.SupportedAnnotationTypes;
+import javax.annotation.processing.SupportedSourceVersion;
+import javax.lang.model.SourceVersion;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
+import javax.tools.Diagnostic;
+import java.util.Objects;
+import java.util.Set;
+
+import static java.lang.String.format;
+
 /**
  * Soklet's standard Annotation Processor which is used to generate lookup tables of <em>Resource Method</em> definitions at compile time.
  * <p>
@@ -55,6 +77,83 @@ import com.soklet.internal.classindex.processor.ClassIndexProcessor;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@SupportedSourceVersion(SourceVersion.RELEASE_17)
+@SupportedAnnotationTypes({"com.soklet.annotation.ServerSentEventSource"})
 public class SokletProcessor extends ClassIndexProcessor {
-	// No extra functionality
+	private Types types;
+	private Elements elements;
+	private Messager messager;
+	private TypeMirror handshakeResultType; // com.soklet.HandshakeResult
+
+	@Override
+	public synchronized void init(@Nonnull ProcessingEnvironment processingEnvironment) {
+		Objects.requireNonNull(processingEnvironment);
+
+		super.init(processingEnvironment);
+
+		this.types = processingEnvironment.getTypeUtils();
+		this.elements = processingEnvironment.getElementUtils();
+		this.messager = processingEnvironment.getMessager();
+
+		TypeElement handshakeResultTypeElement = elements.getTypeElement("com.soklet.HandshakeResult");
+
+		if (handshakeResultTypeElement != null) {
+			this.handshakeResultType = handshakeResultTypeElement.asType();
+		} else {
+			// If the type isn't on the annotation‐processing path, we can still proceed
+			// but will skip the check (and warn once).
+			this.messager.printMessage(Diagnostic.Kind.WARNING,
+					"SokletProcessor: com.soklet.HandshakeResult not found on processor classpath; SSE return-type validation will be skipped.");
+		}
+	}
+
+	@Override
+	public boolean process(@Nonnull Set<? extends TypeElement> annotations,
+												 @Nonnull RoundEnvironment roundEnvironment) {
+		super.process(annotations, roundEnvironment);
+		enforceSseReturnTypes(roundEnvironment);
+		return false; // let others process too, if needed
+	}
+
+	private void enforceSseReturnTypes(@Nonnull RoundEnvironment roundEnvironment) {
+		if (handshakeResultType == null)
+			return; // nothing to validate
+
+		for (Element element : roundEnvironment.getElementsAnnotatedWith(ServerSentEventSource.class)) {
+			if (element.getKind() != ElementKind.METHOD) {
+				messager.printMessage(Diagnostic.Kind.ERROR, "@ServerSentEventSource can only be applied to methods.", element);
+				continue;
+			}
+
+			ExecutableElement method = (ExecutableElement) element;
+			TypeMirror returnType = method.getReturnType();
+
+			// Must be: HandshakeResult or any subclass thereof (i.e., types.isAssignable(sub, super))
+			boolean ok = isReturnTypeHandshakeResultOrSubtype(returnType);
+
+			if (!ok) {
+				messager.printMessage(
+						Diagnostic.Kind.ERROR,
+						format("Soklet Resource Methods annotated with @ServerSentEventSource must return an instance of HandshakeResult (found: %s). " +
+								"See documentation at https://www.soklet.com/docs/server-sent-events", prettyType(returnType)),
+						element
+				);
+			}
+		}
+	}
+
+	private boolean isReturnTypeHandshakeResultOrSubtype(@Nonnull TypeMirror returnType) {
+		// Disallow void/primitive outright
+		if (returnType.getKind().isPrimitive() || returnType.getKind() == TypeKind.VOID)
+			return false;
+
+		// Allow exact type or subclass
+		// (sub -> super) assignable must be true
+		return types.isAssignable(returnType, handshakeResultType);
+	}
+
+	private String prettyType(@Nullable TypeMirror typeMirror) {
+		// Produces user-friendly names (handles e.g. generics if they appear)
+		return typeMirror == null ? "null" : types.erasure(typeMirror).toString();
+	}
 }
