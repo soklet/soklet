@@ -25,6 +25,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Exception thrown when an HTTP multipart field value does not match the expected Java type.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe

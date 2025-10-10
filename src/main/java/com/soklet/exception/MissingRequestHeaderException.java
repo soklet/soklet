@@ -23,6 +23,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * Exception thrown when a required request header is missing from the HTTP request.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
