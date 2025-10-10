@@ -27,12 +27,12 @@ import javax.annotation.Nonnull;
  * ServerSentEventBroadcaster broadcaster = server.acquireBroadcaster(ResourcePath.withPath("/examples/123")).get();
  *
  * // Create our SSE payload
- * ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
+ * ServerSentEvent event = ServerSentEvent.withEvent("test")
  *   .data("example")
  *   .build();
  *
  * // Publish SSE payload to all listening clients
- * broadcaster.broadcast(serverSentEvent);}</pre>
+ * broadcaster.broadcast(event);}</pre>
  * <p>
  * Soklet's default {@link ServerSentEventServer} implementation guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath}. That implementation is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
  * <p>

@@ -42,12 +42,14 @@ import java.util.Set;
 import static java.lang.String.format;
 
 /**
- * Soklet's standard Annotation Processor which is used to generate lookup tables of <em>Resource Method</em> definitions at compile time.
+ * Soklet's standard Annotation Processor which is used to generate lookup tables of <em>Resource Method</em> definitions at compile time as well as prevent usage errors that are detectable by static analysis.
+ * <p>
+ * This Annotation Processor ensures <em>Resource Methods</em> annotated with {@link ServerSentEventSource} are declared as returning an instance of {@link HandshakeResult}.
  * <p>
  * Your build system should ensure this Annotation Processor is available at compile time. Follow the instructions below to make your application conformant:
  * <p>
  * Using {@code javac} directly:
- * <pre>javac -processor com.soklet.annotation.SokletProcessor ...[rest of javac parameters elided]</pre>
+ * <pre>javac -parameters -processor com.soklet.annotation.SokletProcessor ...[rest of javac command elided]</pre>
  * Using <a href="https://maven.apache.org" target="_blank">Maven</a>:
  * <pre>{@code <plugin>
  *     <groupId>org.apache.maven.plugins</groupId>
@@ -57,6 +59,7 @@ import static java.lang.String.format;
  *         <release>...</release>
  *         <compilerArgs>
  *             <!-- Rest of args elided -->
+ *             <arg>-parameters</arg>
  *             <arg>-processor</arg>
  *             <arg>com.soklet.annotation.SokletProcessor</arg>
  *         </compilerArgs>
@@ -80,7 +83,7 @@ import static java.lang.String.format;
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
 @SupportedAnnotationTypes({"com.soklet.annotation.ServerSentEventSource"})
-public class SokletProcessor extends ClassIndexProcessor {
+public final class SokletProcessor extends ClassIndexProcessor {
 	private Types types;
 	private Elements elements;
 	private Messager messager;
