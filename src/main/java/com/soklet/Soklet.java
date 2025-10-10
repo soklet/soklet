@@ -56,7 +56,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Soklet's main class - manages a {@link Server} (and optionally a {@link ServerSentEventServer}) using the provided system configuration.
  * <p>
- * <pre>{@code  // Use out-of-the-box defaults
+ * <pre>{@code // Use out-of-the-box defaults
  * SokletConfig config = SokletConfig.withServer(
  *   Server.withPort(8080).build()
  * ).build();

@@ -33,7 +33,7 @@ import static java.util.Objects.requireNonNull;
  * A Soklet application which supports Server-Sent Events will be configured with both a {@link Server} and a {@link ServerSentEventServer}.
  * <p>
  * For example:
- * <pre>{@code  // Set up our HTTP and SSE servers
+ * <pre>{@code // Set up our HTTP and SSE servers
  * Server server = Server.withPort(8080).build;
  * ServerSentEventServer sseServer = ServerSentEventServer.withPort(8081).build();
  *

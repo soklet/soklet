@@ -129,7 +129,7 @@ public final class Utilities {
 	 * we compile Soklet with a source level &lt; 19 and avoid any hard references to virtual threads by dynamically creating our executor service via {@link MethodHandle} references.
 	 * <p>
 	 * <strong>You should not call this method if {@link Utilities#virtualThreadsAvailable()} is {@code false}.</strong>
-	 * <pre>{@code  // This method is effectively equivalent to this code
+	 * <pre>{@code // This method is effectively equivalent to this code
 	 * return Executors.newThreadPerTaskExecutor(
 	 *   Thread.ofVirtual()
 	 *    .name(threadNamePrefix)

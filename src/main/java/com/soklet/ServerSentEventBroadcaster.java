@@ -22,7 +22,7 @@ import javax.annotation.Nonnull;
  * Broadcasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> payload to all clients listening on a {@link ResourcePath}.
  * <p>
  * For example:
- * <pre>{@code  // Acquire our SSE broadcaster (sends to anyone listening to "/examples/123")
+ * <pre>{@code // Acquire our SSE broadcaster (sends to anyone listening to "/examples/123")
  * ServerSentEventServer server = ...;
  * ServerSentEventBroadcaster broadcaster = server.acquireBroadcaster(ResourcePath.withPath("/examples/123")).get();
  *
