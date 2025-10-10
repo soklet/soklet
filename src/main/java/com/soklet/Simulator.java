@@ -27,7 +27,7 @@ import java.util.function.Consumer;
  * Instances of {@link Simulator} are made available via {@link com.soklet.Soklet#runSimulator(SokletConfig, Consumer)}.
  * <p>
  * Usage example:
- * <pre>{@code  @Test
+ * <pre>{@code @Test
  * public void basicIntegrationTest() {
  *   // Build your configuration however you like
  *   SokletConfig config = obtainMySokletConfig();

@@ -119,6 +119,12 @@ public interface Server extends AutoCloseable {
 											 @Nonnull Consumer<RequestResult> requestResultConsumer);
 	}
 
+	/**
+	 * Acquires a builder for {@link Server} instances.
+	 *
+	 * @param port the port number on which the server should listen
+	 * @return the builder
+	 */
 	@Nonnull
 	static Builder withPort(@Nonnull Integer port) {
 		requireNonNull(port);

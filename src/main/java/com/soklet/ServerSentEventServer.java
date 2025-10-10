@@ -32,6 +32,23 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * A Soklet application which supports Server-Sent Events will be configured with both a {@link Server} and a {@link ServerSentEventServer}.
  * <p>
+ * For example:
+ * <pre>{@code  // Set up our HTTP and SSE servers
+ * Server server = Server.withPort(8080).build;
+ * ServerSentEventServer sseServer = ServerSentEventServer.withPort(8081).build();
+ *
+ * // Wire servers into our config
+ * SokletConfig config = SokletConfig.withServer(server)
+ *   .serverSentEventServer(sseServer)
+ *   .build();
+ *
+ * // Run the app
+ * try (Soklet soklet = Soklet.withConfig(config)) {
+ *   soklet.start();
+ *   System.out.println("Soklet started, press [enter] to exit");
+ *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
+ * }}</pre>
+ * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -78,7 +95,9 @@ public interface ServerSentEventServer extends AutoCloseable {
 	/**
 	 * Given a {@link ResourcePath} that corresponds to a <em>Resource Method</em> annotated with {@link com.soklet.annotation.ServerSentEventSource}, acquire a {@link ServerSentEventBroadcaster} which is capable of "pushing" messages to all connected Server-Sent Event clients.
 	 * <p>
-	 * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath}.  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
+	 * When using the default {@link ServerSentEventServer}, Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath} (within the same JVM process).  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
+	 * <p>
+	 * Your code should not hold long-lived references to {@link ServerSentEventBroadcaster} instances (e.g. in a cache or instance variables) - the preferred usage pattern is to invoke {@link #acquireBroadcaster(ResourcePath)} every time you need a broadcaster reference.
 	 * <p>
 	 * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
 	 *
@@ -93,8 +112,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * <p>
 	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 *
-	 * @param sokletConfig configuration for the Soklet instance that controls this server
-	 * @param requestHandler      a {@link com.soklet.Soklet}-internal request handler which takes a {@link ServerSentEventServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link ServerSentEventServer} to write back to the client
+	 * @param sokletConfig   configuration for the Soklet instance that controls this server
+	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link ServerSentEventServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link ServerSentEventServer} to write back to the client
 	 */
 	void initialize(@Nonnull SokletConfig sokletConfig,
 									@Nonnull RequestHandler requestHandler);
@@ -130,6 +149,12 @@ public interface ServerSentEventServer extends AutoCloseable {
 											 @Nonnull Consumer<RequestResult> requestResultConsumer);
 	}
 
+	/**
+	 * Acquires a builder for {@link ServerSentEventServer} instances.
+	 *
+	 * @param port the port number on which the server should listen
+	 * @return the builder
+	 */
 	@Nonnull
 	static Builder withPort(@Nonnull Integer port) {
 		requireNonNull(port);

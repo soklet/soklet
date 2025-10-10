@@ -33,7 +33,7 @@ import static java.util.Objects.requireNonNull;
  * Encapsulates a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> payload that can be sent across the wire to a client.
  * <p>
  * For example:
- * <pre>{@code  ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
+ * <pre>{@code  ServerSentEvent event = ServerSentEvent.withEvent("example")
  *   .data("""
  *     {
  *       "testing": 123,

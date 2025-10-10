@@ -32,7 +32,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class SokletConfig {
+public final class SokletConfig {
 	@Nonnull
 	private final InstanceProvider instanceProvider;
 	@Nonnull
@@ -55,7 +55,7 @@ public class SokletConfig {
 	private final ServerSentEventServer serverSentEventServer;
 
 	/**
-	 * Vends a configuration builder for the given server.
+	 * Vends a configuration builder, primed with the given {@link Server}.
 	 *
 	 * @param server the server necessary for construction
 	 * @return a builder for {@link SokletConfig} instances
