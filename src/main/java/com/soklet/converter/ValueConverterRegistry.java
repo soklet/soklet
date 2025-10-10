@@ -79,6 +79,8 @@ public final class ValueConverterRegistry {
 
 	/**
 	 * Acquires a registry with a sensible default set of converters as specified by {@link ValueConverters#defaultValueConverters()}.
+	 * <p>
+	 * This method is guaranteed to return a new instance.
 	 *
 	 * @return a registry instance with sensible defaults
 	 */
@@ -89,6 +91,8 @@ public final class ValueConverterRegistry {
 
 	/**
 	 * Acquires a registry with a sensible default set of converters as specified by {@link ValueConverters#defaultValueConverters()}, supplemented with custom converters.
+	 * <p>
+	 * This method is guaranteed to return a new instance.
 	 *
 	 * @param customValueConverters the custom value converters to include in the registry
 	 * @return a registry instance with sensible defaults, supplemented with custom converters

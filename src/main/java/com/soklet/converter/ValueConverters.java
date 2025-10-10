@@ -62,7 +62,9 @@ public final class ValueConverters {
 	}
 
 	/**
-	 * Vends the system default set of {@link ValueConverter} instances.
+	 * Vends the immutable system-default set of {@link ValueConverter} instances.
+	 * <p>
+	 * The returned set is guaranteed to be a JVM-wide singleton.
 	 *
 	 * @return the default set of converters
 	 */
