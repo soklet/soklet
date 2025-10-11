@@ -160,10 +160,10 @@ public class ServerSentEventTests {
 		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestTimeout(Duration.ofSeconds(3))
-				.shutdownTimeout(Duration.ofSeconds(5))
+				.shutdownTimeout(Duration.ofSeconds(1))
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(5)).build())
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(1)).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle()) // no noise in test logs

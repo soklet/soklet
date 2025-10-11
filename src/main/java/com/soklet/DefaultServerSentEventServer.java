@@ -57,7 +57,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -106,7 +108,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
 		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
-		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
+		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(1);
 		DEFAULT_CONNECTION_QUEUE_CAPACITY = 256;
 
 		// Make a unique "validity check" server-sent event used to wake a socket listener thread by injecting it into the relevant write queue.
@@ -427,6 +429,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			});
 
+			if (this.connectionValidityExecutorService instanceof ScheduledThreadPoolExecutor scheduledThreadPoolExecutor) {
+				// Do not run existing delayed or periodic tasks after shutdown
+				scheduledThreadPoolExecutor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+				scheduledThreadPoolExecutor.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+				// Clean up canceled tasks quickly
+				scheduledThreadPoolExecutor.setRemoveOnCancelPolicy(true);
+			}
+
 			int initialDelayInSeconds = (int) Math.max(1, Math.min(5, getHeartbeatInterval().getSeconds()));
 			long periodInSeconds = Math.max(1, getHeartbeatInterval().getSeconds());
 
@@ -488,11 +498,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (!isStarted() || isStopping())
 			return;
 
-		try {
-			this.serverSocketChannel = ServerSocketChannel.open();
-			this.serverSocketChannel.bind(new InetSocketAddress(getHost(), getPort()));
+		ServerSocketChannel serverSocketChannel = null;
 
-			ExecutorService executorService = getRequestHandlerExecutorService().get();
+		try {
+			serverSocketChannel = ServerSocketChannel.open();
+			serverSocketChannel.bind(new InetSocketAddress(getHost(), getPort()));
+			this.serverSocketChannel = serverSocketChannel;
+
+			ExecutorService executorService = getRequestHandlerExecutorService().orElse(null);
+
+			if (executorService == null || executorService.isShutdown() || isStopping())
+				// We started while a stop was underway; exit quietly
+				return;
 
 			while (!getStopPoisonPill().get()) {
 				SocketChannel clientSocketChannel = this.serverSocketChannel.accept();
@@ -500,7 +517,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				socket.setKeepAlive(true);
 				socket.setTcpNoDelay(true);
 
-				executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
+				try {
+					executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
+				} catch (RejectedExecutionException e) {
+					// Pool is shutting down; close channel and exit the loop
+					try {
+						clientSocketChannel.close();
+					} catch (IOException ignored) {
+						// Nothing to do
+					}
+
+					break;
+				}
 			}
 		} catch (ClosedChannelException ignored) {
 			// expected during shutdown
@@ -508,7 +536,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
 					"SSE event loop encountered an IO error").throwable(e).build());
 		} finally {
+			// Close the server socket if we opened it
+			ServerSocketChannel serverSocketChannelToClose = this.serverSocketChannel;
 			this.serverSocketChannel = null;
+
+			if (serverSocketChannelToClose != null) {
+				try {
+					serverSocketChannelToClose.close();
+				} catch (IOException ignored) {
+					// Nothing to do
+				}
+			}
 		}
 	}
 
@@ -1081,7 +1119,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		Future<String> readFuture = null;
 
 		try {
-			readFuture = getRequestReaderExecutorService().get().submit(() -> {
+			ExecutorService requestReaderExecutorService = getRequestReaderExecutorService().orElse(null);
+
+			if (requestReaderExecutorService == null || requestReaderExecutorService.isShutdown())
+				throw new IOException("Server is shutting down");
+
+			readFuture = requestReaderExecutorService.submit(() -> {
 				ByteBuffer buffer = ByteBuffer.allocate(getRequestReadBufferSizeInBytes());
 				StringBuilder requestBuilder = new StringBuilder();
 				boolean headersComplete = false;
@@ -1247,7 +1290,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		getLock().lock();
 
 		boolean interrupted = false;
-		this.stopping = false;
 
 		try {
 			if (!isStarted())
@@ -1282,7 +1324,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// Initiate shutdowns quickly (no blocking here beyond close() above)
 			if (this.connectionValidityExecutorService != null)
-				this.connectionValidityExecutorService.shutdown();
+				this.connectionValidityExecutorService.shutdownNow();
 
 			if (this.requestHandlerExecutorService != null)
 				this.requestHandlerExecutorService.shutdown();
@@ -1294,24 +1336,21 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
 
 			// Await the accept-loop thread and all executors **in parallel**
-			List<CompletableFuture<Boolean>> waits = new ArrayList<>(4);
+			// Give a short grace period to the remaining components
+			long grace = Math.min(250L, remainingMillis(deadlineNanos));
 
-			waits.add(joinAsync(this.eventLoopThread, remainingMillis(deadlineNanos)));
-
-			if (this.connectionValidityExecutorService != null)
-				waits.add(awaitTerminationAsync(this.connectionValidityExecutorService, remainingMillis(deadlineNanos)));
+			List<CompletableFuture<Boolean>> waits = new ArrayList<>(3);
+			waits.add(joinAsync(this.eventLoopThread, grace));
 
 			if (this.requestHandlerExecutorService != null)
-				waits.add(awaitTerminationAsync(this.requestHandlerExecutorService, remainingMillis(deadlineNanos)));
+				waits.add(awaitTerminationAsync(this.requestHandlerExecutorService, grace));
 
 			if (this.requestReaderExecutorService != null)
-				waits.add(awaitTerminationAsync(this.requestReaderExecutorService, remainingMillis(deadlineNanos)));
+				waits.add(awaitTerminationAsync(this.requestReaderExecutorService, grace));
 
 			// Wait for all, but no longer than the single budget
 			try {
-				CompletableFuture
-						.allOf(waits.toArray(CompletableFuture[]::new))
-						.get(Math.max(0L, remainingMillis(deadlineNanos)), TimeUnit.MILLISECONDS);
+				CompletableFuture.allOf(waits.toArray(CompletableFuture[]::new)).get(grace, TimeUnit.MILLISECONDS);
 			} catch (TimeoutException te) {
 				// Budget exhausted; escalate below
 			} catch (InterruptedException e) {
@@ -1324,9 +1363,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// Escalate for any stragglers using remaining time
 			hardenJoin(this.eventLoopThread, remainingMillis(deadlineNanos));
-
-			if (this.connectionValidityExecutorService != null)
-				hardenPool(this.connectionValidityExecutorService, remainingMillis(deadlineNanos));
 
 			if (this.requestHandlerExecutorService != null)
 				hardenPool(this.requestHandlerExecutorService, remainingMillis(deadlineNanos));
