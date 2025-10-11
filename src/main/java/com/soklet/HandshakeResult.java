@@ -37,7 +37,7 @@ import static java.util.Objects.requireNonNull;
  * You might have a JavaScript Server-Sent Event client that looks like this:
  * <pre>{@code // Register an event source
  * let eventSourceUrl =
- *   'https://events.example.com/chats/123/event-source?signingToken=xxx';
+ *   'https://sse.example.com/chats/123/event-source?signingToken=xxx';
  *
  * let eventSource = new EventSource(eventSourceUrl, {
  *   withCredentials: true
