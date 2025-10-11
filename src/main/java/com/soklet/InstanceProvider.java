@@ -17,6 +17,9 @@
 package com.soklet;
 
 import javax.annotation.Nonnull;
+import java.lang.reflect.Parameter;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Contract for concrete instance generation given type information.
@@ -40,6 +43,57 @@ public interface InstanceProvider {
 	 */
 	@Nonnull
 	<T> T provide(@Nonnull Class<T> instanceClass);
+
+	/**
+	 * Vends an instance appropriate for the supplied {@link Parameter}.
+	 * <p>
+	 * This is useful for solving the "robot legs" problem, where you might examine a qualifying annotation on a parameter to disambiguate vended instances.
+	 * <p>
+	 * For example, given this <em>Resource Method</em>:
+	 * <pre>{@code @GET("/robot-generator")
+	 * public Robot robotGenerator(
+	 *   @Left LegFactory leftLegFactory,   // Custom annotation
+	 *   @Right LegFactory rightLegFactory, // Custom annotation
+	 *   BodyFactory bodyFactory
+	 * ) {
+	 *   // Build a robot
+	 *   LeftLeg leftLeg = leftLegFactory.buildLeg();
+	 *   LeftLeg rightLeg = rightLegFactory.buildLeg();
+	 *   Body body = bodyFactory.build();
+	 *   return new Robot(leftLeg, rightLeg, body);
+	 * }}</pre>
+	 * <p>
+	 * Your implementation might look like this:
+	 * <pre>{@code @Override
+	 * @SuppressWarnings("unchecked")
+	 * public <T> T provide(@Nonnull Parameter parameter) {
+	 *   Class<T> type = (Class<T>) parameter.getType();
+	 *
+	 *   if (type == LegFactory.class) {
+	 *     if (parameter.isAnnotationPresent(Left.class))
+	 *       return (T) LEFT_INSTANCE; // a reference to your left instance
+	 *     if (parameter.isAnnotationPresent(Right.class))
+	 *       return (T) RIGHT_INSTANCE; // a reference to your right instance
+	 *
+	 *     throw new IllegalArgumentException("LegFactory requires @Left or @Right");
+	 *   }
+	 *
+	 *   // No qualifier logic needed - use the class-based path
+	 *   return provide(type);
+	 * }}</pre>
+	 * <p>
+	 * The default implementation delegates to {@link #provide(Class)} using the parameter's raw type.
+	 *
+	 * @param parameter the parameter instance to instantiate
+	 * @param <T>       the type of class to instantiate (by default, the value of {@link Parameter#getType()})
+	 * @return an instance of {@code T}
+	 */
+	@Nonnull
+	@SuppressWarnings("unchecked")
+	default <T> T provide(@Nonnull Parameter parameter) {
+		requireNonNull(parameter);
+		return provide((Class<T>) parameter.getType());
+	}
 
 	/**
 	 * Acquires a threadsafe {@link InstanceProvider} with a reflection-based {@code instanceClass.getDeclaredConstructor().newInstance()} instantiation strategy.

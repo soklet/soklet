@@ -284,9 +284,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		// Don't recognize what's being asked for? Have the InstanceProvider try to vend something
 		if (parameterType.isWrappedInOptional())
-			return Optional.ofNullable(getInstanceProvider().provide(parameter.getType()));
+			return Optional.ofNullable(getInstanceProvider().provide(parameter));
 		else
-			return getInstanceProvider().provide(parameter.getType());
+			return getInstanceProvider().provide(parameter);
 	}
 
 	/**
