@@ -20,12 +20,12 @@ import com.soklet.ResponseMarshaler.Builder.ContentTooLargeHandler;
 import com.soklet.ResponseMarshaler.Builder.CorsAllowedHandler;
 import com.soklet.ResponseMarshaler.Builder.CorsPreflightAllowedHandler;
 import com.soklet.ResponseMarshaler.Builder.CorsPreflightRejectedHandler;
-import com.soklet.ResponseMarshaler.Builder.HappyPathHandler;
 import com.soklet.ResponseMarshaler.Builder.HeadHandler;
 import com.soklet.ResponseMarshaler.Builder.MethodNotAllowedHandler;
 import com.soklet.ResponseMarshaler.Builder.NotFoundHandler;
 import com.soklet.ResponseMarshaler.Builder.OptionsHandler;
 import com.soklet.ResponseMarshaler.Builder.PostProcessor;
+import com.soklet.ResponseMarshaler.Builder.ResourceMethodHandler;
 import com.soklet.ResponseMarshaler.Builder.ThrowableHandler;
 import com.soklet.exception.BadRequestException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
@@ -70,7 +70,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
 	private final Charset charset;
 	@Nullable
-	private final HappyPathHandler happyPathHandler;
+	private final ResourceMethodHandler resourceMethodHandler;
 	@Nullable
 	private final NotFoundHandler notFoundHandler;
 	@Nullable
@@ -96,7 +96,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(builder);
 
 		this.charset = builder.charset;
-		this.happyPathHandler = builder.happyPathHandler;
+		this.resourceMethodHandler = builder.resourceMethodHandler;
 		this.notFoundHandler = builder.notFoundHandler;
 		this.methodNotAllowedHandler = builder.methodNotAllowedHandler;
 		this.contentTooLargeHandler = builder.contentTooLargeHandler;
@@ -111,19 +111,19 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 	@Nonnull
 	@Override
-	public MarshaledResponse forHappyPath(@Nonnull Request request,
-																				@Nonnull Response response,
-																				@Nonnull ResourceMethod resourceMethod) {
+	public MarshaledResponse forResourceMethod(@Nonnull Request request,
+																						 @Nonnull Response response,
+																						 @Nonnull ResourceMethod resourceMethod) {
 		requireNonNull(request);
 		requireNonNull(response);
 		requireNonNull(resourceMethod);
 
-		HappyPathHandler happyPathHandler = getHappyPathHandler().orElse(null);
+		ResourceMethodHandler resourceMethodHandler = getResourceMethodHandler().orElse(null);
 		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
-		if (happyPathHandler != null) {
-			marshaledResponse = happyPathHandler.handle(request, response, resourceMethod);
+		if (resourceMethodHandler != null) {
+			marshaledResponse = resourceMethodHandler.handle(request, response, resourceMethod);
 		} else {
 			byte[] body = null;
 			Object bodyAsObject = response.getBody().orElse(null);
@@ -509,8 +509,8 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	}
 
 	@Nonnull
-	protected Optional<HappyPathHandler> getHappyPathHandler() {
-		return Optional.ofNullable(this.happyPathHandler);
+	protected Optional<ResourceMethodHandler> getResourceMethodHandler() {
+		return Optional.ofNullable(this.resourceMethodHandler);
 	}
 
 	@Nonnull

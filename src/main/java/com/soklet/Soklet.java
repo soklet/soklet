@@ -885,7 +885,7 @@ public final class Soklet implements AutoCloseable {
 			response = Response.withStatusCode(200).body(responseObject).build();
 		}
 
-		MarshaledResponse marshaledResponse = responseMarshaler.forHappyPath(request, response, resourceMethod);
+		MarshaledResponse marshaledResponse = responseMarshaler.forResourceMethod(request, response, resourceMethod);
 
 		return RequestResult.withMarshaledResponse(marshaledResponse)
 				.response(response)

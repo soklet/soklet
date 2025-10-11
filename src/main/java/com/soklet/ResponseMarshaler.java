@@ -25,13 +25,13 @@ import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Prepares responses for each request scenario Soklet supports (happy path, exception, CORS preflight, etc.)
+ * Prepares responses for each request scenario Soklet supports (<em>Resource Method</em>, exception, CORS preflight, etc.)
  * <p>
  * The {@link MarshaledResponse} value returned from these methods is what is ultimately sent back to
  * clients as bytes over the wire.
  * <p>
  * A standard threadsafe implementation builder can be acquired via the {@link #withCharset(Charset)} method.
- * This builder allows you to specify, for example, how to turn a "happy path" response object into a wire format (e.g. JSON) and is generally what you want.
+ * This builder allows you to specify, for example, how to turn a <em>Resource Method</em> response object into a wire format (e.g. JSON) and is generally what you want.
  * <p>
  * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
  * This is generally not needed unless your implementation requires dynamic "fall back to default" behavior that is not otherwise accessible.
@@ -41,8 +41,8 @@ import static java.util.Objects.requireNonNull;
  * // See https://github.com/google/gson
  * final Gson GSON = new Gson();
  *
- * // "Happy Path": the request was matched to a Resource Method and executed non-exceptionally
- * HappyPathHandler happyPathHandler = (
+ * // The request was matched to a Resource Method and executed non-exceptionally
+ * ResourceMethodHandler resourceMethodHandler = (
  *   @Nonnull Request request,
  *   @Nonnull Response response,
  *   @Nonnull ResourceMethod resourceMethod
@@ -120,7 +120,7 @@ import static java.util.Objects.requireNonNull;
  * SokletConfig config = SokletConfig.withServer(
  *   Server.withPort(8080).build()
  * ).responseMarshaler(ResponseMarshaler.withCharset(StandardCharsets.UTF_8)
- *   .happyPath(happyPathHandler)
+ *   .resourceMethod(resourceMethodHandler)
  *   .throwable(throwableHandler)
  *   .build()
  * ).build();}</pre>
@@ -131,9 +131,11 @@ import static java.util.Objects.requireNonNull;
  */
 public interface ResponseMarshaler {
 	/**
-	 * Prepares a "happy path" response - the request was matched to a <em>Resource Method</em> and executed non-exceptionally.
+	 * Prepares a response for a request that was matched to a <em>Resource Method</em> and returned normally (i.e., without throwing an exception).
 	 * <p>
-	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#happy-path">https://www.soklet.com/docs/response-writing#happy-path</a>.
+	 * <strong>Note that the returned {@link Response} may represent any HTTP status (e.g., 200, 403, 404), and is not restricted to "successful" outcomes.</strong>
+	 * <p>
+	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#resource-method">https://www.soklet.com/docs/response-writing#resource-method</a>.
 	 *
 	 * @param request        the HTTP request
 	 * @param response       the response provided by the <em>Resource Method</em> that handled the request
@@ -141,9 +143,9 @@ public interface ResponseMarshaler {
 	 * @return the response to be sent over the wire
 	 */
 	@Nonnull
-	MarshaledResponse forHappyPath(@Nonnull Request request,
-																 @Nonnull Response response,
-																 @Nonnull ResourceMethod resourceMethod);
+	MarshaledResponse forResourceMethod(@Nonnull Request request,
+																			@Nonnull Response response,
+																			@Nonnull ResourceMethod resourceMethod);
 
 	/**
 	 * Prepares a response for a request that does not have a matching <em>Resource Method</em>, which triggers an <a href="https://httpwg.org/specs/rfc9110.html#status.404">HTTP 404 Not Found</a>.
@@ -314,14 +316,14 @@ public interface ResponseMarshaler {
 	@NotThreadSafe
 	final class Builder {
 		/**
-		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forHappyPath(Request, Response, ResourceMethod)}.
+		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forResourceMethod(Request, Response, ResourceMethod)}.
 		 */
 		@FunctionalInterface
-		public interface HappyPathHandler {
+		public interface ResourceMethodHandler {
 			/**
-			 * Prepares a "happy path" response - the request was matched to a <em>Resource Method</em> and executed non-exceptionally.
+			 * Prepares a response for the scenario in which the request was matched to a <em>Resource Method</em> and executed non-exceptionally.
 			 * <p>
-			 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#happy-path">https://www.soklet.com/docs/response-writing#happy-path</a>.
+			 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#resource-method">https://www.soklet.com/docs/response-writing#resource-method</a>.
 			 *
 			 * @param request        the HTTP request
 			 * @param response       the response provided by the <em>Resource Method</em> that handled the request
@@ -542,7 +544,7 @@ public interface ResponseMarshaler {
 		@Nonnull
 		Charset charset;
 		@Nullable
-		HappyPathHandler happyPathHandler;
+		ResourceMethodHandler resourceMethodHandler;
 		@Nullable
 		NotFoundHandler notFoundHandler;
 		@Nullable
@@ -577,8 +579,8 @@ public interface ResponseMarshaler {
 		}
 
 		@Nonnull
-		public Builder happyPath(@Nullable HappyPathHandler happyPathHandler) {
-			this.happyPathHandler = happyPathHandler;
+		public Builder resourceMethod(@Nullable ResourceMethodHandler resourceMethodHandler) {
+			this.resourceMethodHandler = resourceMethodHandler;
 			return this;
 		}
 

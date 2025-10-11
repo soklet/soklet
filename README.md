@@ -343,8 +343,8 @@ Alternatively, you can provide your own implementation of [`ResponseMarshaler`](
 // See https://github.com/google/gson
 final Gson GSON = new Gson();
 
-// "Happy Path": the request was matched to a Resource Method and executed non-exceptionally
-HappyPathHandler happyPathHandler = (
+// The request was matched to a Resource Method and executed non-exceptionally
+ResourceMethodHandler resourceMethodHandler = (
   @Nonnull Request request,
   @Nonnull Response response,
   @Nonnull ResourceMethod resourceMethod		
@@ -422,7 +422,7 @@ ThrowableHandler throwableHandler = (
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
 ).responseMarshaler(ResponseMarshaler.withCharset(StandardCharsets.UTF_8)
-  .happyPath(happyPathHandler)
+  .resourceMethod(resourceMethodHandler)
   .throwable(throwableHandler)
   .build()
 ).build();
