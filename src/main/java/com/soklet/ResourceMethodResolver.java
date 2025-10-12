@@ -26,11 +26,11 @@ import static java.util.Objects.requireNonNull;
 /**
  * Contract for matching incoming HTTP requests with appropriate <em>Resource Methods</em> (Java methods to invoke to handle requests).
  * <p>
- * A <em>Resource Method</em> is a Java method with an HTTP method annotation applied, e.g. {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, ...
+ * A <em>Resource Method</em> is a Java {@link Method} with an HTTP method annotation applied, e.g. {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, {@link com.soklet.annotation.ServerSentEventSource}, ...
  * <p>
  * Standard threadsafe implementations can be acquired via these factory methods:
  * <ul>
- *   <li>{@link #fromClasspathIntrospection()} (examines methods within classes on which the {@link com.soklet.annotation.Resource} annotation is applied)</li>
+ *   <li>{@link #fromClasspathIntrospection()} (examines an annotation-processor-generated lookup table of Java {@link Method} declarations with corresponding HTTP method annotations)</li>
  *   <li>{@link #withResourceClasses(Set)} (examines methods within the hardcoded set of classes)</li>
  *   <li>{@link #withMethods(Set)} (examines the hardcoded set of methods)</li>
  * </ul>
@@ -62,11 +62,11 @@ public interface ResourceMethodResolver {
 	Set<ResourceMethod> getResourceMethods();
 
 	/**
-	 * Acquires a threadsafe {@link ResourceMethodResolver} implementation which locates <em>Resource Methods</em> by examining methods of all classes annotated with {@link com.soklet.annotation.Resource}.
+	 * Acquires a threadsafe {@link ResourceMethodResolver} implementation which locates <em>Resource Methods</em> by examining a lookup table of Java {@link Method} declarations that are annotated with {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, {@link com.soklet.annotation.ServerSentEventSource}, etc.
 	 * <p>
 	 * This implementation requires that your application be compiled with the {@link com.soklet.annotation.SokletProcessor} annotation processor, as shown below:
 	 * <p>
-	 * <pre>javac -processor com.soklet.annotation.SokletProcessor ...[rest of javac parameters elided]</pre>
+	 * <pre>javac -parameters -processor com.soklet.annotation.SokletProcessor ...[rest of javac command elided]</pre>
 	 * <p>
 	 * The returned instance is guaranteed to be a JVM-wide singleton.
 	 *

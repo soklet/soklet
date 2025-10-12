@@ -25,7 +25,6 @@ import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
-import com.soklet.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -61,7 +60,6 @@ public class OptionsTests {
 		});
 	}
 
-	@Resource
 	public static class EchoResource {
 		@GET("/echo")
 		public String echo() {return "ok";}

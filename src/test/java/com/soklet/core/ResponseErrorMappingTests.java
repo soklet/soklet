@@ -25,7 +25,6 @@ import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
-import com.soklet.annotation.Resource;
 import com.soklet.exception.IllegalRequestBodyException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -71,7 +70,6 @@ public class ResponseErrorMappingTests {
 		});
 	}
 
-	@Resource
 	public static class ExplodeResource {
 		@GET("/explode")
 		public String explode() {

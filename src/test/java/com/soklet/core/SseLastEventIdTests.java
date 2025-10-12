@@ -27,7 +27,6 @@ import com.soklet.ServerSentEventBroadcaster;
 import com.soklet.ServerSentEventServer;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
-import com.soklet.annotation.Resource;
 import com.soklet.annotation.ServerSentEventSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -106,7 +105,6 @@ public class SseLastEventIdTests {
 		}
 	}
 
-	@Resource
 	public static class SseResource {
 		@ServerSentEventSource("/sse/{id}")
 		public HandshakeResult sse(@Nonnull Request request,

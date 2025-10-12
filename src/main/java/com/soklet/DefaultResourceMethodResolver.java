@@ -30,10 +30,8 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.POSTs;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.PUTs;
-import com.soklet.annotation.Resource;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.annotation.ServerSentEventSources;
-import com.soklet.internal.classindex.ClassIndex;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -94,7 +92,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	private final Set<ResourceMethod> resourceMethods;
 
 	private DefaultResourceMethodResolver() {
-		this(ClassIndex.getAnnotated(Resource.class).parallelStream().collect(Collectors.toSet()), null);
+		//this(ClassIndex.getAnnotated(Resource.class).parallelStream().collect(Collectors.toSet()), null);
+		throw new UnsupportedOperationException();
 	}
 
 	private DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,

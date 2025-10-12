@@ -17,10 +17,10 @@
 package com.soklet.annotation;
 
 import com.soklet.HandshakeResult;
-import com.soklet.internal.classindex.processor.ClassIndexProcessor;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -83,7 +83,7 @@ import static java.lang.String.format;
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
 @SupportedAnnotationTypes({"com.soklet.annotation.ServerSentEventSource"})
-public final class SokletProcessor extends ClassIndexProcessor {
+public final class SokletProcessor extends AbstractProcessor {
 	private Types types;
 	private Elements elements;
 	private Messager messager;
@@ -115,7 +115,6 @@ public final class SokletProcessor extends ClassIndexProcessor {
 	@Override
 	public boolean process(@Nonnull Set<? extends TypeElement> annotations,
 												 @Nonnull RoundEnvironment roundEnvironment) {
-		super.process(annotations, roundEnvironment);
 		enforceSseReturnTypes(roundEnvironment);
 		return false; // let others process too, if needed
 	}

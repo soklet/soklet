@@ -23,7 +23,6 @@ import com.soklet.Server;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
-import com.soklet.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -96,7 +95,6 @@ public class ServerLifecycleTests {
 		}
 	}
 
-	@Resource
 	public static class HealthResource {
 		@GET("/health")
 		public String health() {return "ok";}

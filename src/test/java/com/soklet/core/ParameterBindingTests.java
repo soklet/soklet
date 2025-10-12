@@ -32,7 +32,6 @@ import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
 import com.soklet.annotation.RequestCookie;
 import com.soklet.annotation.RequestHeader;
-import com.soklet.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -131,7 +130,6 @@ public class ParameterBindingTests {
 		});
 	}
 
-	@Resource
 	public static class ParamResource {
 		@GET("/param/required")
 		public String required(@QueryParameter Long id) { // required by default

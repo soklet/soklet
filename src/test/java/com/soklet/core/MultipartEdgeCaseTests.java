@@ -26,7 +26,6 @@ import com.soklet.Soklet;
 import com.soklet.SokletConfig;
 import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
-import com.soklet.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -102,7 +101,6 @@ public class MultipartEdgeCaseTests {
 		});
 	}
 
-	@Resource
 	public static class UploadResource {
 		@POST("/upload")
 		public void upload(@Multipart(name = "b") String requiredB) { /* missing -> 400 */ }

@@ -26,7 +26,6 @@ import com.soklet.Soklet;
 import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.QueryParameter;
-import com.soklet.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -78,7 +77,6 @@ public class ValueConversionTests {
 		});
 	}
 
-	@Resource
 	public static class ConversionResource {
 		@GET("/conv/date")
 		public String date(@QueryParameter(name = "d") LocalDate d) {return d.toString();}

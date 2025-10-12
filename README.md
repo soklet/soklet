@@ -100,8 +100,7 @@ While a real production system will have more moving parts, this demonstrates th
 package com.soklet.example;
 
 public class App {
-  // Handle HTTP requests
-  @Resource
+  // Handles HTTP requests
   public static class ExampleResource {
     // Canonical example
     @GET("/")
@@ -615,7 +614,6 @@ SokletConfig config = SokletConfig.withServer(
 Now, your Resources are dependency-injected just like the rest of your application is:
 
 ```java
-@Resource
 public class WidgetResource {
   private WidgetService widgetService;
 
@@ -917,7 +915,6 @@ SokletConfig config = SokletConfig.withServer(server)
 First, define something to test:
 
 ```java
-@Resource
 public class ReverseResource {
   // Reverse the input
   @POST("/reverse")
@@ -1001,7 +998,6 @@ public void reverseAgainUnitTest() {
 First, define something to test:
 
 ```java
-@Resource
 public class HelloResource {
   // Hypothetical service that performs business logic
   private HelloService helloService;
@@ -1072,7 +1068,6 @@ Please refer to the official Soklet website [https://www.soklet.com](https://www
 Soklet stands on the shoulders of giants.  Internally, it embeds code from the following OSS projects:
 
 * [Microhttp](https://github.com/ebarlas/microhttp) by [Elliot Barlas](https://github.com/ebarlas) - MIT License
-* [ClassIndex](https://github.com/atteo/classindex) by [Sławek Piotrowski](https://github.com/sentinelt) - Apache 2.0 License
 * [Selenium](https://github.com/SeleniumHQ/selenium) - Apache 2.0 License
 * [Apache Commons FileUpload](https://commons.apache.org/proper/commons-fileupload/) - Apache 2.0 License
 * [The Spring Framework](https://spring.io/) - Apache 2.0 License
