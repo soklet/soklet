@@ -159,7 +159,7 @@ This example requires JDK 17+ to be installed on your machine ([or see this exam
 #### Build
 
 ```shell
-javac -parameters -cp soklet-2.0.0-SNAPSHOT.jar -processor com.soklet.annotation.SokletProcessor -d build src/com/soklet/example/App.java 
+javac -parameters -cp soklet-2.0.0-SNAPSHOT.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java 
 ```
 
 #### Run

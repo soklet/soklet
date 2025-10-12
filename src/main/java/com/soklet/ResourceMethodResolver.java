@@ -64,9 +64,9 @@ public interface ResourceMethodResolver {
 	/**
 	 * Acquires a threadsafe {@link ResourceMethodResolver} implementation which locates <em>Resource Methods</em> by examining a lookup table of Java {@link Method} declarations that are annotated with {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, {@link com.soklet.annotation.ServerSentEventSource}, etc.
 	 * <p>
-	 * This implementation requires that your application be compiled with the {@link com.soklet.annotation.SokletProcessor} annotation processor, as shown below:
+	 * This implementation requires that your application be compiled with the {@link SokletProcessor} annotation processor, as shown below:
 	 * <p>
-	 * <pre>javac -parameters -processor com.soklet.annotation.SokletProcessor ...[rest of javac command elided]</pre>
+	 * <pre>javac -parameters -processor com.soklet.SokletProcessor ...[rest of javac command elided]</pre>
 	 * <p>
 	 * The returned instance is guaranteed to be a JVM-wide singleton.
 	 *

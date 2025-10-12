@@ -36,11 +36,16 @@ import com.soklet.annotation.ServerSentEventSources;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
@@ -92,8 +97,82 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	private final Set<ResourceMethod> resourceMethods;
 
 	private DefaultResourceMethodResolver() {
-		//this(ClassIndex.getAnnotated(Resource.class).parallelStream().collect(Collectors.toSet()), null);
-		throw new UnsupportedOperationException();
+		List<ResourceMethodDeclaration> resourceMethodDeclarations = ResourceMethodDeclarationLoader.loadAll(Thread.currentThread().getContextClassLoader());
+
+		// Resolve Methods once
+		Set<Method> allMethods = new HashSet<>();
+		Map<Method, Set<HttpMethodResourcePathDeclaration>> byMethod = new HashMap<>();
+		Map<HttpMethod, Set<Method>> byHttp = new HashMap<>();
+		Set<ResourceMethod> resourceMethods = new HashSet<>();
+
+		for (ResourceMethodDeclaration resourceMethodDeclaration : resourceMethodDeclarations) {
+			Method method = resolveMethod(resourceMethodDeclaration.className(), resourceMethodDeclaration.methodName(), resourceMethodDeclaration.parameterTypes());
+			allMethods.add(method);
+
+			// Declarations for this method
+			var decls = byMethod.computeIfAbsent(method, __ -> new HashSet<>());
+			var rpd = ResourcePathDeclaration.withPath(resourceMethodDeclaration.path());
+			boolean sse = resourceMethodDeclaration.serverSentEventSource();
+			decls.add(new HttpMethodResourcePathDeclaration(resourceMethodDeclaration.httpMethod(), rpd, sse));
+
+			// Index by http method
+			byHttp.computeIfAbsent(resourceMethodDeclaration.httpMethod(), __ -> new HashSet<>()).add(method);
+
+			// Build ResourceMethod entry (mirrors your old construction)
+			resourceMethods.add(ResourceMethod.withComponents(resourceMethodDeclaration.httpMethod(), rpd, method, sse));
+		}
+
+		this.methods = Collections.unmodifiableSet(allMethods);
+		this.methodsByHttpMethod = Collections.unmodifiableMap(byHttp);
+		this.httpMethodResourcePathDeclarationsByMethod = Collections.unmodifiableMap(byMethod);
+		this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
+	}
+
+	private static Method resolveMethod(String className, String methodName, String[] paramTypeNames) {
+		try {
+			Class<?> owner = Class.forName(className);
+			Class<?>[] paramTypes = new Class<?>[paramTypeNames.length];
+			for (int i = 0; i < paramTypeNames.length; i++)
+				paramTypes[i] = Class.forName(paramTypeNames[i]);
+			Method m = owner.getMethod(methodName, paramTypes);
+			m.setAccessible(true);
+			return m;
+		} catch (ReflectiveOperationException e) {
+			throw new IllegalStateException(
+					format("Unable to resolve method %s#%s(%s)",
+							className, methodName, String.join(",", paramTypeNames)), e);
+		}
+	}
+
+	final static class ResourceMethodDeclarationLoader {
+		private ResourceMethodDeclarationLoader() {}
+
+		@SuppressWarnings("unchecked")
+		public static List<ResourceMethodDeclaration> loadAll(ClassLoader cl) {
+			List<String> classes = new ArrayList<>();
+			try {
+				var resources = cl.getResources("com/soklet/soklet-route-index.list");
+				while (resources.hasMoreElements()) {
+					try (var in = resources.nextElement().openStream();
+							 var br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+						for (String line; (line = br.readLine()) != null; )
+							if (!line.isBlank()) classes.add(line.trim());
+					}
+				}
+
+				List<ResourceMethodDeclaration> out = new ArrayList<>();
+
+				for (String cn : classes) {
+					Class<?> c = Class.forName(cn, true, cl);
+					var m = c.getMethod("getResourceMethodDeclarations");
+					out.addAll((List<ResourceMethodDeclaration>) m.invoke(null));
+				}
+
+				return out;
+			} catch (Exception e) {
+				throw new IllegalStateException("Unable to load Soklet Resource Method Declarations", e);
+			}
+		}
 	}
 
 	private DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,
