@@ -25,39 +25,36 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.ServerSentEventSource;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
-import javax.annotation.processing.SupportedAnnotationTypes;
-import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
-import javax.tools.JavaFileObject;
+import javax.tools.FileObject;
 import javax.tools.StandardLocation;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.io.Writer;
+import java.lang.annotation.Annotation;
+import java.lang.annotation.Repeatable;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-
-import static java.lang.String.format;
-import static java.util.Objects.requireNonNull;
 
 /**
  * Soklet's standard Annotation Processor which is used to generate lookup tables of <em>Resource Method</em> definitions at compile time as well as prevent usage errors that are detectable by static analysis.
@@ -99,277 +96,263 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@SupportedSourceVersion(SourceVersion.RELEASE_17)
-@SupportedAnnotationTypes({
-		"com.soklet.annotation.ServerSentEventSource",
-		"com.soklet.annotation.GET",
-		"com.soklet.annotation.POST",
-		"com.soklet.annotation.PUT",
-		"com.soklet.annotation.PATCH",
-		"com.soklet.annotation.DELETE",
-		"com.soklet.annotation.HEAD",
-		"com.soklet.annotation.OPTIONS"
-})
 public final class SokletProcessor extends AbstractProcessor {
-	// For Resource Method indexing
-	@Nonnull
-	private final List<ResourceMethodDeclaration> resourceMethodDeclarations = new ArrayList<>();
-	@Nonnull
-	private Boolean warnedMissingHandshakeResult = false;
-
-	// The below fields are initialized in `init`, not ctor
-	@Nonnull
 	private Types types;
-	@Nonnull
 	private Elements elements;
-	@Nonnull
 	private Messager messager;
-	@Nonnull
 	private Filer filer;
-	// For SSE return-type validation
-	@Nullable
+
+	// Cached for SSE validation (resolved in init)
 	private TypeMirror handshakeResultType; // com.soklet.HandshakeResult
 
 	@Override
-	public synchronized void init(@Nonnull ProcessingEnvironment processingEnvironment) {
-		requireNonNull(processingEnvironment);
+	public synchronized void init(ProcessingEnvironment processingEnv) {
+		super.init(processingEnv);
+		this.types = processingEnv.getTypeUtils();
+		this.elements = processingEnv.getElementUtils();
+		this.messager = processingEnv.getMessager();
+		this.filer = processingEnv.getFiler();
 
-		super.init(processingEnvironment);
-
-		this.types = processingEnvironment.getTypeUtils();
-		this.elements = processingEnvironment.getElementUtils();
-		this.messager = processingEnvironment.getMessager();
-		this.filer = processingEnvironment.getFiler();
-
-		TypeElement handshakeResultTypeElement = elements.getTypeElement("com.soklet.HandshakeResult");
-
-		if (handshakeResultTypeElement != null) {
-			this.handshakeResultType = handshakeResultTypeElement.asType();
-			this.warnedMissingHandshakeResult = false;
-		} else {
-			this.handshakeResultType = null;
-			this.warnedMissingHandshakeResult = true;
-			// If the type isn't on the annotation‐processing path, we can still proceed
-			// but will skip the check (and warn once).
-			this.messager.printMessage(Diagnostic.Kind.WARNING,
-					format("%s: %s not found on processor classpath; SSE return-type validation will be skipped.",
-							getClass().getSimpleName(), HandshakeResult.class.getName()));
-		}
+		TypeElement hr = elements.getTypeElement("com.soklet.HandshakeResult");
+		this.handshakeResultType = (hr == null ? null : hr.asType());
 	}
 
+	/**
+	 * Dynamically declare supported annotation types: both each base repeatable annotation
+	 * and (if present) its container discovered via @Repeatable.
+	 */
 	@Override
-	public boolean process(@Nonnull Set<? extends TypeElement> annotations,
-												 @Nonnull RoundEnvironment roundEnvironment) {
-		// 1) Enforce @ServerSentEventSource return type
-		enforceSseReturnTypes(roundEnvironment);
+	public Set<String> getSupportedAnnotationTypes() {
+		Set<String> out = new LinkedHashSet<>();
+		for (Class<? extends Annotation> c : HTTP_AND_SSE_ANNOTATIONS) {
+			out.add(c.getCanonicalName());
+			Class<? extends Annotation> container = findRepeatableContainer(c);
+			if (container != null) {
+				out.add(container.getCanonicalName());
+			}
+		}
+		return out;
+	}
 
-		// 2) Collect method-level HTTP routes
-		collectResourceMethodDeclarations(roundEnvironment, HttpMethod.GET, GET.class, "com.soklet.annotation.GET");
-		collectResourceMethodDeclarations(roundEnvironment, HttpMethod.POST, POST.class, "com.soklet.annotation.POST");
-		collectResourceMethodDeclarations(roundEnvironment, HttpMethod.PUT, PUT.class, "com.soklet.annotation.PUT");
-		collectResourceMethodDeclarations(roundEnvironment, HttpMethod.PATCH, PATCH.class, "com.soklet.annotation.PATCH");
-		collectResourceMethodDeclarations(roundEnvironment, HttpMethod.DELETE, DELETE.class, "com.soklet.annotation.DELETE");
-		collectResourceMethodDeclarations(roundEnvironment, HttpMethod.HEAD, HEAD.class, "com.soklet.annotation.HEAD");
-		collectResourceMethodDeclarations(roundEnvironment, HttpMethod.OPTIONS, OPTIONS.class, "com.soklet.annotation.OPTIONS");
-		collectResourceMethodDeclarations(roundEnvironment, HttpMethod.GET, ServerSentEventSource.class, "com.soklet.annotation.ServerSentEventSource");
+	/**
+	 * Avoid warnings like:
+	 * "Supported source version 'RELEASE_17' from annotation processor ... less than -source '25'"
+	 */
+	@Override
+	public SourceVersion getSupportedSourceVersion() {
+		return SourceVersion.latestSupported();
+	}
 
-		// 3) Generate on last round (aggregating processor)
-		if (roundEnvironment.processingOver() && !resourceMethodDeclarations.isEmpty()) {
-			// sort for deterministic bytecode
-			resourceMethodDeclarations.sort(Comparator
-					.comparing((ResourceMethodDeclaration r) -> r.httpMethod())
-					.thenComparing(r -> r.path())
-					.thenComparing(r -> r.className())
-					.thenComparing(r -> r.methodName()));
+	// ---- Processing -----------------------------------------------------------
 
-			writeIndexClassAndList();
+	private final List<ResourceMethodDeclaration> collected = new ArrayList<>();
+
+	@Override
+	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+		// 1) Validate SSE method return types (if we can resolve HandshakeResult)
+		enforceSseReturnTypes(roundEnv);
+
+		// 2) Collect routes for all HTTP verbs (repeatable-aware)
+		collect(roundEnv, HttpMethod.GET, GET.class, false);
+		collect(roundEnv, HttpMethod.POST, POST.class, false);
+		collect(roundEnv, HttpMethod.PUT, PUT.class, false);
+		collect(roundEnv, HttpMethod.PATCH, PATCH.class, false);
+		collect(roundEnv, HttpMethod.DELETE, DELETE.class, false);
+		collect(roundEnv, HttpMethod.HEAD, HEAD.class, false);
+		collect(roundEnv, HttpMethod.OPTIONS, OPTIONS.class, false);
+		// Treat SSE as GET with the SSE flag
+		collect(roundEnv, HttpMethod.GET, ServerSentEventSource.class, true);
+
+		// 3) On the final round, write the resource index once
+		if (roundEnv.processingOver() && !collected.isEmpty()) {
+			List<ResourceMethodDeclaration> routes = dedupeAndOrder(collected);
+			writeRoutesIndexResource(routes);
 		}
 
-		// Let others process too, if needed
+		// Return false so other processors can still run on these annotations if they like
 		return false;
 	}
 
-	// Resource Method Declaration caching
+	// ---- Collection helpers ---------------------------------------------------
 
-	private void collectResourceMethodDeclarations(RoundEnvironment round,
-																								 HttpMethod httpMethod,
-																								 Class<?> annClass,
-																								 String annFqcn) {
-		boolean serverSentEventSource = annClass == ServerSentEventSource.class;
+	private static final List<Class<? extends Annotation>> HTTP_AND_SSE_ANNOTATIONS = List.of(
+			GET.class, POST.class, PUT.class, PATCH.class, DELETE.class, HEAD.class, OPTIONS.class,
+			ServerSentEventSource.class
+	);
 
-		TypeElement ann = elements.getTypeElement(annFqcn);
-		if (ann == null) return;
+	/**
+	 * Collects all occurrences of a repeatable annotation on methods, including through its container.
+	 */
+	private void collect(RoundEnvironment roundEnv,
+											 HttpMethod httpMethod,
+											 Class<? extends Annotation> baseAnnotation,
+											 boolean serverSentEventSource) {
 
-		for (Element e : round.getElementsAnnotatedWith(ann)) {
+		// Gather candidates annotated with either the base or its container
+		Set<Element> candidates = new LinkedHashSet<>();
+
+		TypeElement base = elements.getTypeElement(baseAnnotation.getCanonicalName());
+		if (base != null) {
+			candidates.addAll(roundEnv.getElementsAnnotatedWith(base));
+		}
+
+		Class<? extends Annotation> containerAnn = findRepeatableContainer(baseAnnotation);
+		if (containerAnn != null) {
+			TypeElement container = elements.getTypeElement(containerAnn.getCanonicalName());
+			if (container != null) {
+				candidates.addAll(roundEnv.getElementsAnnotatedWith(container));
+			}
+		}
+
+		for (Element e : candidates) {
 			if (e.getKind() != ElementKind.METHOD) {
-				messager.printMessage(Diagnostic.Kind.ERROR,
-						format("@%s can only be applied to methods.", annClass.getSimpleName()), e);
+				error(e, "@%s can only be applied to methods.", baseAnnotation.getSimpleName());
 				continue;
 			}
+			ExecutableElement method = (ExecutableElement) e;
+			TypeElement owner = (TypeElement) method.getEnclosingElement();
 
-			ExecutableElement m = (ExecutableElement) e;
-			TypeElement owner = (TypeElement) m.getEnclosingElement();
+			// Repeatable-aware read: returns ALL occurrences on the element
+			Annotation[] anns = method.getAnnotationsByType(cast(baseAnnotation));
+			for (Annotation a : anns) {
+				String rawPath = readAnnotationStringMember(a, "value");
+				if (rawPath == null || rawPath.isBlank()) {
+					error(e, "@%s must have a non-empty path value", baseAnnotation.getSimpleName());
+					continue;
+				}
 
-			String path = readSingleStringValue(m, ann);
-			if (path == null || path.isBlank()) {
-				messager.printMessage(Diagnostic.Kind.ERROR,
-						format("@%s must have a non-empty path value", annClass.getSimpleName()), e);
-				continue;
+				String path = normalizePath(rawPath);
+				String className = owner.getQualifiedName().toString();
+				String methodName = method.getSimpleName().toString();
+
+				String[] paramTypes = method.getParameters().stream()
+						.map(p -> types.erasure(p.asType()).toString())
+						.toArray(String[]::new);
+
+				collected.add(new ResourceMethodDeclaration(
+						httpMethod, path, className, methodName, paramTypes, serverSentEventSource
+				));
 			}
-
-			// parameter type erasures, in declaration order
-			String[] paramTypes = m.getParameters().stream()
-					.map(p -> types.erasure(p.asType()).toString())
-					.toArray(String[]::new);
-
-			this.resourceMethodDeclarations.add(new ResourceMethodDeclaration(
-					httpMethod,
-					normalizePath(path),
-					owner.getQualifiedName().toString(),
-					m.getSimpleName().toString(),
-					paramTypes,
-					serverSentEventSource
-			));
 		}
 	}
 
-	private String normalizePath(String p) {
-		if (p == null || p.isEmpty())
-			return "/";
+	@SuppressWarnings({"rawtypes", "unchecked"})
+	private static Class<? extends Annotation> cast(Class<? extends Annotation> c) {
+		return (Class) c;
+	}
 
-		// Make deterministic but don't alter semantics
-		if (!p.startsWith("/"))
-			p = "/" + p;
-
-		// No trailing slash unless root
-		if (p.length() > 1 && p.endsWith("/"))
-			p = p.substring(0, p.length() - 1);
-
+	private static String normalizePath(String p) {
+		if (p == null || p.isEmpty()) return "/";
+		if (p.charAt(0) != '/') return "/" + p;
 		return p;
 	}
 
-	private @Nullable String readSingleStringValue(Element e, TypeElement annType) {
-		for (AnnotationMirror am : e.getAnnotationMirrors()) {
-			if (!Objects.equals(((TypeElement) am.getAnnotationType().asElement()).getQualifiedName(),
-					annType.getQualifiedName()))
-				continue;
-
-			Map<? extends ExecutableElement, ? extends AnnotationValue> values = am.getElementValues();
-			// support @GET("/x") where member is "value"
-			for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> ent : values.entrySet()) {
-				if (ent.getKey().getSimpleName().contentEquals("value"))
-					return ent.getValue().getValue().toString();
-			}
-
-			// if no "value" found but annotation has default, ElementValues will be empty; try defaults
-			for (ExecutableElement member : annType.getEnclosedElements().stream()
-					.filter(el -> el.getKind() == ElementKind.METHOD)
-					.map(ExecutableElement.class::cast)
-					.toList()) {
-				if (member.getSimpleName().contentEquals("value") && member.getDefaultValue() != null)
-					return member.getDefaultValue().getValue().toString();
-			}
-		}
-		return null;
+	private static Class<? extends Annotation> findRepeatableContainer(Class<? extends Annotation> base) {
+		Repeatable repeatable = base.getAnnotation(Repeatable.class);
+		return (repeatable == null) ? null : repeatable.value();
 	}
 
-	private void writeIndexClassAndList() {
-		String pkg = "com.soklet";
-		String cls = "SokletRouteIndex"; // stable name to avoid rebuild churn
-
+	private static String readAnnotationStringMember(Annotation a, String memberName) {
 		try {
-			// Generate class
-			JavaFileObject jfo = filer.createSourceFile(pkg + "." + cls);
-			try (Writer w = jfo.openWriter()) {
-				w.write("package " + pkg + ";\n");
-				w.write("import com.soklet.ResourceMethodDeclaration;\n");
-				w.write("import com.soklet.HttpMethod;\n");
-				w.write("import java.util.List;\n");
-				w.write("public final class " + cls + " {\n");
-				w.write("  private " + cls + "() {}\n");
-				w.write("  public static List<ResourceMethodDeclaration> getResourceMethodDeclarations() {\n");
-				w.write("    java.util.List<ResourceMethodDeclaration> list = new java.util.ArrayList<>(" + resourceMethodDeclarations.size() + 1 + ");\n");
-				for (int i = 0; i < resourceMethodDeclarations.size(); i++) {
-					ResourceMethodDeclaration r = resourceMethodDeclarations.get(i);
-					w.write("      list.add(new ResourceMethodDeclaration(HttpMethod." + r.httpMethod() + ", ");
-					w.write(quote(r.path()) + ", ");
-					w.write(quote(r.className()) + ", ");
-					w.write(quote(r.methodName()) + ", ");
-					w.write("new String[]{");
-					for (int j = 0; j < r.parameterTypes().length; j++) {
-						if (j > 0) w.write(",");
-						w.write(quote(r.parameterTypes()[j]));
-					}
-					w.write("}, ");
-					w.write(r.serverSentEventSource() + "));");
-					w.write("\n");
-				}
-				w.write("    return list;\n");
-				w.write("  }\n");
-				w.write("}\n");
-			}
-
-			// Generate list resource to allow multi-module aggregation later if you want
-			// (Even if only one class is generated, keeping this file is harmless and future-proof.)
-			var resource = filer.createResource(
-					StandardLocation.CLASS_OUTPUT, pkg, "soklet-route-index.list");
-
-			try (Writer w = resource.openWriter()) {
-				w.write(pkg + "." + cls + "\n");
-			}
-		} catch (Exception ex) {
-			messager.printMessage(Diagnostic.Kind.ERROR, "Failed to store Soklet Resource Method index: " + ex);
-			throw new RuntimeException(ex);
+			Object v = a.annotationType().getMethod(memberName).invoke(a);
+			return (v == null) ? null : v.toString();
+		} catch (ReflectiveOperationException ex) {
+			return null;
 		}
 	}
 
-	private static String quote(String s) {
-		return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+	private static List<ResourceMethodDeclaration> dedupeAndOrder(List<ResourceMethodDeclaration> in) {
+		// De-dupe by (method, path, class, methodName, params, sse)
+		Map<String, ResourceMethodDeclaration> byKey = new LinkedHashMap<>();
+		for (ResourceMethodDeclaration r : in) {
+			String key = r.httpMethod().name() + "|" + r.path() + "|" + r.className() + "|" +
+					r.methodName() + "|" + String.join(";", r.parameterTypes()) + "|" +
+					r.serverSentEventSource();
+			byKey.putIfAbsent(key, r);
+		}
+		List<ResourceMethodDeclaration> out = new ArrayList<>(byKey.values());
+		out.sort(Comparator
+				.comparing((ResourceMethodDeclaration r) -> r.httpMethod().name())
+				.thenComparing(ResourceMethodDeclaration::path)
+				.thenComparing(ResourceMethodDeclaration::className)
+				.thenComparing(ResourceMethodDeclaration::methodName));
+		return out;
 	}
 
-	// SSE enforcement
+	// ---- SSE validation -------------------------------------------------------
 
-	private void enforceSseReturnTypes(@Nonnull RoundEnvironment roundEnvironment) {
-		if (handshakeResultType == null)
-			return; // nothing to validate
+	private void enforceSseReturnTypes(RoundEnvironment roundEnv) {
+		if (handshakeResultType == null) {
+			// HandshakeResult not on the AP classpath: skip validation quietly (keeps processor usable in partial builds)
+			return;
+		}
+		TypeElement sseAnn = elements.getTypeElement(ServerSentEventSource.class.getCanonicalName());
+		if (sseAnn == null) return;
 
-		for (Element element : roundEnvironment.getElementsAnnotatedWith(ServerSentEventSource.class)) {
-			if (element.getKind() != ElementKind.METHOD) {
-				messager.printMessage(Diagnostic.Kind.ERROR, format("@%s can only be applied to methods.",
-						ServerSentEventSource.class.getSimpleName()), element);
+		for (Element e : roundEnv.getElementsAnnotatedWith(sseAnn)) {
+			if (e.getKind() != ElementKind.METHOD) {
+				error(e, "@%s can only be applied to methods.", ServerSentEventSource.class.getSimpleName());
 				continue;
 			}
-
-			ExecutableElement method = (ExecutableElement) element;
+			ExecutableElement method = (ExecutableElement) e;
 			TypeMirror returnType = method.getReturnType();
 
-			// Must be: HandshakeResult or any subclass thereof (i.e., types.isAssignable(sub, super))
-			boolean ok = isReturnTypeHandshakeResultOrSubtype(returnType);
-
-			if (!ok) {
-				messager.printMessage(
-						Diagnostic.Kind.ERROR,
-						format("Soklet Resource Methods annotated with @%s must specify a return type of %s (found: %s). " +
-										"See documentation at https://www.soklet.com/docs/server-sent-events",
-								ServerSentEventSource.class.getSimpleName(), HandshakeResult.class.getSimpleName(), prettyType(returnType)),
-						element
-				);
+			// Return type must be HandshakeResult or a subtype thereof.
+			boolean assignable = types.isAssignable(returnType, handshakeResultType);
+			if (!assignable) {
+				error(e,
+						"Soklet Resource Methods annotated with @%s must specify a return type of %s (found: %s).",
+						ServerSentEventSource.class.getSimpleName(),
+						"HandshakeResult",
+						prettyType(returnType));
 			}
 		}
 	}
 
-	private boolean isReturnTypeHandshakeResultOrSubtype(@Nonnull TypeMirror returnType) {
-		// Disallow void/primitive outright
-		if (returnType.getKind().isPrimitive() || returnType.getKind() == TypeKind.VOID)
-			return false;
-
-		// Allow exact type or subclass
-		// (sub -> super) assignable must be true
-		return types.isAssignable(returnType, handshakeResultType);
+	private static String prettyType(TypeMirror t) {
+		return (t == null ? "null" : t.toString());
 	}
 
-	private String prettyType(@Nullable TypeMirror typeMirror) {
-		// Produces user-friendly names (handles e.g. generics if they appear)
-		return typeMirror == null ? "null" : types.erasure(typeMirror).toString();
+	// ---- Resource emission ----------------------------------------------------
+
+	static String RESOURCE_METHOD_LOOKUP_TABLE_PATH = "META-INF/soklet/resource-method-lookup-table";
+
+	/**
+	 * Emit a single resource per module. Each line has:
+	 * METHOD|b64(path)|b64(class)|b64(method)|b64(param1;param2;...)|true|false
+	 */
+	private void writeRoutesIndexResource(List<ResourceMethodDeclaration> routes) {
+		try {
+			FileObject fo = filer.createResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE_METHOD_LOOKUP_TABLE_PATH);
+			try (Writer w = fo.openWriter()) {
+				Base64.Encoder b64 = Base64.getEncoder();
+				for (ResourceMethodDeclaration r : routes) {
+					String params = String.join(";", r.parameterTypes());
+					String line = String.join("|",
+							r.httpMethod().name(),
+							b64encode(b64, r.path()),
+							b64encode(b64, r.className()),
+							b64encode(b64, r.methodName()),
+							b64encode(b64, params),
+							Boolean.toString(r.serverSentEventSource())
+					);
+					w.write(line);
+					w.write('\n');
+				}
+			}
+		} catch (IOException e) {
+			throw new UncheckedIOException("Failed to write META-INF/soklet/routes.index", e);
+		}
+	}
+
+	private static String b64encode(Base64.Encoder enc, String s) {
+		byte[] bytes = (s == null ? new byte[0] : s.getBytes(StandardCharsets.UTF_8));
+		return enc.encodeToString(bytes);
+	}
+
+	// ---- Messaging ------------------------------------------------------------
+
+	private void error(Element e, String fmt, Object... args) {
+		messager.printMessage(Diagnostic.Kind.ERROR, String.format(fmt, args), e);
 	}
 }
