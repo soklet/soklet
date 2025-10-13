@@ -222,17 +222,86 @@ public final class SokletProcessor extends AbstractProcessor {
 				}
 
 				String path = normalizePath(rawPath);
-				String className = owner.getQualifiedName().toString();
+				String className = elements.getBinaryName(owner).toString();
 				String methodName = method.getSimpleName().toString();
 
 				String[] paramTypes = method.getParameters().stream()
-						.map(p -> types.erasure(p.asType()).toString())
+						.map(p -> jvmTypeName(p.asType()))   // <- new helper below
 						.toArray(String[]::new);
 
 				collected.add(new ResourceMethodDeclaration(
 						httpMethod, path, className, methodName, paramTypes, serverSentEventSource
 				));
 			}
+		}
+	}
+
+	private String jvmTypeName(TypeMirror t) {
+		// Return a name that Class.forName(..) or resolver can handle.
+		switch (t.getKind()) {
+			case BOOLEAN:
+				return "boolean";
+			case BYTE:
+				return "byte";
+			case SHORT:
+				return "short";
+			case CHAR:
+				return "char";
+			case INT:
+				return "int";
+			case LONG:
+				return "long";
+			case FLOAT:
+				return "float";
+			case DOUBLE:
+				return "double";
+			case VOID:
+				return "void";
+			case ARRAY:
+				return "[" + jvmTypeDescriptor(((javax.lang.model.type.ArrayType) t).getComponentType());
+			case DECLARED:
+			default:
+				TypeMirror erasure = processingEnv.getTypeUtils().erasure(t);
+				Element el = processingEnv.getTypeUtils().asElement(erasure);
+				if (el instanceof TypeElement te) {
+					return processingEnv.getElementUtils().getBinaryName(te).toString();
+				}
+				// Fallback — should be rare
+				return erasure.toString();
+		}
+	}
+
+	// For arrays, emit proper JVM descriptor pieces
+	private String jvmTypeDescriptor(TypeMirror t) {
+		switch (t.getKind()) {
+			case BOOLEAN:
+				return "Z";
+			case BYTE:
+				return "B";
+			case SHORT:
+				return "S";
+			case CHAR:
+				return "C";
+			case INT:
+				return "I";
+			case LONG:
+				return "J";
+			case FLOAT:
+				return "F";
+			case DOUBLE:
+				return "D";
+			case ARRAY:
+				return "[" + jvmTypeDescriptor(((javax.lang.model.type.ArrayType) t).getComponentType());
+			case DECLARED:
+			default:
+				TypeMirror erasure = processingEnv.getTypeUtils().erasure(t);
+				Element el = processingEnv.getTypeUtils().asElement(erasure);
+				if (el instanceof TypeElement te) {
+					String bin = processingEnv.getElementUtils().getBinaryName(te).toString();
+					return "L" + bin + ";";
+				}
+				// Fallback
+				return "Ljava/lang/Object;";
 		}
 	}
 
