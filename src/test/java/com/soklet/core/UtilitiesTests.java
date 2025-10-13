@@ -17,6 +17,7 @@
 package com.soklet.core;
 
 import com.soklet.Utilities;
+import com.soklet.Utilities.QueryDecodingStrategy;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -47,7 +48,7 @@ public class UtilitiesTests {
 	@Test
 	public void acceptLanguages() {
 		String acceptLanguageHeaderValue = "fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5";
-		List<Locale> locales = Utilities.localesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue);
+		List<Locale> locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue);
 
 		Assertions.assertEquals(List.of(
 				Locale.forLanguageTag("fr-CH"),
@@ -56,11 +57,11 @@ public class UtilitiesTests {
 				Locale.forLanguageTag("de")
 		), locales, "Locales don't match");
 
-		locales = Utilities.localesFromAcceptLanguageHeaderValue("");
+		locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("");
 
 		Assertions.assertEquals(List.of(), locales, "Blank locale string mishandled");
 
-		locales = Utilities.localesFromAcceptLanguageHeaderValue("xxxx");
+		locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("xxxx");
 
 		Assertions.assertEquals(List.of(), locales, "Junk locale string mishandled");
 	}
@@ -162,5 +163,54 @@ public class UtilitiesTests {
 
 		charset = Utilities.extractCharsetFromHeaderValue("text/html; charset=KOI8-R").orElse(null);
 		Assertions.assertEquals(Charset.forName("koi8-r"), charset, "Charset was not correctly detected");
+	}
+
+	@Test
+	public void plusIsPreservedInRfc3986Queries() {
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?q=C++", QueryDecodingStrategy.RFC_3986_STRICT);
+		// Desired (URL semantics): "+" is literal, not a space
+		Assertions.assertEquals(Set.of("C++"), qp.get("q"));
+	}
+
+	@Test
+	public void percentEncodedPlusIsPreservedInRfc3986Queries() {
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?q=C%2B%2B", QueryDecodingStrategy.RFC_3986_STRICT);
+		Assertions.assertEquals(Set.of("C++"), qp.get("q"));
+	}
+
+	@Test
+	public void plusInFormBodyIsSpace() {
+		// Form semantics (x-www-form-urlencoded) *do* translate '+' to space:
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromQuery("q=C+Sharp", QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+		Assertions.assertEquals(Set.of("C Sharp"), qp.get("q"));
+	}
+
+	@Test
+	public void emptyValueInRfc3986QueryIsPreserved() {
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?a=", QueryDecodingStrategy.RFC_3986_STRICT);
+		Assertions.assertTrue(qp.containsKey("a"), "Parameter name should exist");
+		Assertions.assertEquals(Set.of(""), qp.get("a"), "Empty value should be preserved");
+	}
+
+	@Test
+	public void emptyValueInFormIsPreserved() {
+		Map<String, Set<String>> form = Utilities.extractQueryParametersFromQuery("x=", QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+		Assertions.assertTrue(form.containsKey("x"));
+		Assertions.assertEquals(Set.of(""), form.get("x"));
+	}
+
+	@Test
+	public void invalidEscapeDoesNotThrow() {
+		Assertions.assertDoesNotThrow(() -> Utilities.extractQueryParametersFromUrl("/?a=%ZZ", QueryDecodingStrategy.X_WWW_FORM_URLENCODED));
+	}
+
+	@Test
+	public void invalidEscapeIsLeftLiteralOrSkipped() {
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?a=%ZZ", QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+		// Implementation choice: either literal "%ZZ" or skip parameter entirely.
+		// For literal behavior:
+		// Assertions.assertEquals(Set.of("%ZZ"), qp.get("a"));
+		// For skip behavior:
+		Assertions.assertTrue(qp.isEmpty() || qp.get("a").contains("%ZZ"));
 	}
 }

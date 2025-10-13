@@ -29,7 +29,6 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
@@ -208,38 +207,119 @@ public final class Utilities {
 	}
 
 	/**
-	 * Parses an {@code application/x-www-form-urlencoded} query string into a multimap of names to values.
-	 * <p>
-	 * Decodes percent-escapes and {@code '+'} as space using UTF-8. Pairs missing a name or value are ignored.
-	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
+	 * Strategies for decoding query strings - {@code application/x-www-form-urlencoded} (supports {@code "+"} for spaces) or "strict" RFC 3986 (percent-decoding only).
 	 *
-	 * @param query a raw query string such as {@code "a=1&b=2&b=3"} (must be non-{@code null})
-	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
-	 * @see #extractQueryParametersFromUrl(String)
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @see Utilities#extractQueryParametersFromQuery(String, QueryDecodingStrategy)
+	 * @see Utilities#extractQueryParametersFromQuery(String, QueryDecodingStrategy, Charset)
+	 * @see Utilities#extractQueryParametersFromUrl(String, QueryDecodingStrategy)
+	 * @see Utilities#extractQueryParametersFromUrl(String, QueryDecodingStrategy, Charset)
 	 */
-	@Nonnull
-	public static Map<String, Set<String>> extractQueryParametersFromQuery(@Nonnull String query) {
-		requireNonNull(query);
-
-		// For form parameters, body will look like "One=Two&Three=Four" ...a query string.
-		String syntheticUrl = format("https://soklet.invalid?%s", query); // avoid referencing real domain
-		return extractQueryParametersFromUrl(syntheticUrl);
+	public enum QueryDecodingStrategy {
+		/**
+		 * Follow RFC 1866 (the {@code application/x-www-form-urlencoded} content type), where keys and values are percent-encoded but prefer {@code "+"} for spaces.
+		 * <p>
+		 * Note that {@code "%20"} values are still decoded as spaces, but any {@code "+"} values are decoded as spaces first.
+		 */
+		X_WWW_FORM_URLENCODED,
+		/**
+		 * Follow RFC 3986, where keys and values are percent-encoded and {@code "+"} values are never decoded as spaces.
+		 */
+		RFC_3986_STRICT
 	}
 
 	/**
-	 * Extracts query parameters from a URL (or URI string) into a multimap of names to values.
+	 * Parses a query string such as {@code "a=1&b=2&c=%20"} into a multimap of names to values.
 	 * <p>
-	 * If the input is not a valid {@link URI}, an empty map is returned. The raw query is split on {@code '&'} into
-	 * name/value pairs, values are split on the first {@code '='}, and both name and value are UTF-8 decoded
-	 * (percent-escapes and {@code '+'} → space). Blank pairs and pairs missing either name or value are ignored.
+	 * Decodes percent-escapes using UTF-8, which is usually what you want (see {@link #extractQueryParametersFromQuery(String, QueryDecodingStrategy, Charset)} if you need to specify a different charset).
+	 * <p>
+	 * Pairs missing a name are ignored.
+	 * <p>
 	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
 	 *
-	 * @param url an absolute or relative URL/URI string (must be non-{@code null})
+	 * @param query                 a raw query string such as {@code "a=1&b=2&c=%20"}
+	 * @param queryDecodingStrategy how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
+	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
+	 */
+	@Nonnull
+	public static Map<String, Set<String>> extractQueryParametersFromQuery(@Nonnull String query,
+																																				 @Nonnull QueryDecodingStrategy queryDecodingStrategy) {
+		requireNonNull(query);
+		requireNonNull(queryDecodingStrategy);
+
+		return extractQueryParametersFromQuery(query, queryDecodingStrategy, StandardCharsets.UTF_8);
+	}
+
+	/**
+	 * Parses a query string such as {@code "a=1&b=2&c=%20"} into a multimap of names to values.
+	 * <p>
+	 * Decodes percent-escapes using the specified charset.
+	 * <p>
+	 * Pairs missing a name are ignored.
+	 * <p>
+	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
+	 *
+	 * @param query                 a raw query string such as {@code "a=1&b=2&c=%20"}
+	 * @param queryDecodingStrategy how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
+	 * @param charset               the charset to use when decoding percent-escapes
+	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
+	 */
+	@Nonnull
+	public static Map<String, Set<String>> extractQueryParametersFromQuery(@Nonnull String query,
+																																				 @Nonnull QueryDecodingStrategy queryDecodingStrategy,
+																																				 @Nonnull Charset charset) {
+		requireNonNull(query);
+		requireNonNull(queryDecodingStrategy);
+		requireNonNull(charset);
+
+		// For form parameters, body will look like "One=Two&Three=Four" ...a query string.
+		String syntheticUrl = format("https://soklet.invalid?%s", query); // avoid referencing real domain
+		return extractQueryParametersFromUrl(syntheticUrl, queryDecodingStrategy, charset);
+	}
+
+	/**
+	 * Parses query strings from relative or absolute URLs such as {@code "/example?a=a=1&b=2&c=%20"} or {@code "https://www.soklet.com/example?a=1&b=2&c=%20"} into a multimap of names to values.
+	 * <p>
+	 * Decodes percent-escapes using UTF-8, which is usually what you want (see {@link #extractQueryParametersFromUrl(String, QueryDecodingStrategy, Charset)} if you need to specify a different charset).
+	 * <p>
+	 * Pairs missing a name are ignored.
+	 * <p>
+	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
+	 *
+	 * @param url                   a relative or absolute URL/URI string
+	 * @param queryDecodingStrategy how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none/invalid
 	 */
 	@Nonnull
-	public static Map<String, Set<String>> extractQueryParametersFromUrl(@Nonnull String url) {
+	public static Map<String, Set<String>> extractQueryParametersFromUrl(@Nonnull String url,
+																																			 @Nonnull QueryDecodingStrategy queryDecodingStrategy) {
 		requireNonNull(url);
+		requireNonNull(queryDecodingStrategy);
+
+		return extractQueryParametersFromUrl(url, queryDecodingStrategy, StandardCharsets.UTF_8);
+	}
+
+	/**
+	 * Parses query strings from relative or absolute URLs such as {@code "/example?a=a=1&b=2&c=%20"} or {@code "https://www.soklet.com/example?a=1&b=2&c=%20"} into a multimap of names to values.
+	 * <p>
+	 * Decodes percent-escapes using the specified charset.
+	 * <p>
+	 * Pairs missing a name are ignored.
+	 * <p>
+	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
+	 *
+	 * @param url                   a relative or absolute URL/URI string
+	 * @param queryDecodingStrategy how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
+	 * @param charset               the charset to use when decoding percent-escapes
+	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none/invalid
+	 */
+	@Nonnull
+	public static Map<String, Set<String>> extractQueryParametersFromUrl(@Nonnull String url,
+																																			 @Nonnull QueryDecodingStrategy queryDecodingStrategy,
+																																			 @Nonnull Charset charset) {
+		requireNonNull(url);
+		requireNonNull(queryDecodingStrategy);
+		requireNonNull(charset);
 
 		URI uri;
 
@@ -263,16 +343,81 @@ public final class Utilities {
 			String rawName = trimAggressivelyToNull(nv.length > 0 ? nv[0] : null);
 			String rawValue = trimAggressivelyToNull(nv.length > 1 ? nv[1] : null);
 
-			if (rawName == null || rawValue == null)
+			if (rawName == null)
 				continue;
 
-			String name = URLDecoder.decode(rawName, StandardCharsets.UTF_8);
-			String value = URLDecoder.decode(rawValue, StandardCharsets.UTF_8);
+			// Preserve empty values; it's what users probably expect
+			if (rawValue == null)
+				rawValue = "";
+
+			String name = decodeQueryComponent(rawName, queryDecodingStrategy, charset);
+			String value = decodeQueryComponent(rawValue, queryDecodingStrategy, charset);
 
 			queryParameters.computeIfAbsent(name, k -> new LinkedHashSet<>()).add(value);
 		}
 
 		return queryParameters;
+	}
+
+	/**
+	 * Decodes a single key or value using the given mode and charset.
+	 */
+	@Nonnull
+	private static String decodeQueryComponent(@Nonnull String string,
+																						 @Nonnull QueryDecodingStrategy queryDecodingStrategy,
+																						 @Nonnull Charset charset) {
+		requireNonNull(string);
+		requireNonNull(queryDecodingStrategy);
+		requireNonNull(charset);
+
+		if (string.isEmpty())
+			return "";
+
+		// Step 1: in form mode, '+' means space
+		String prepped = (queryDecodingStrategy == QueryDecodingStrategy.X_WWW_FORM_URLENCODED) ? string.replace('+', ' ') : string;
+		// Step 2: percent-decode bytes, then interpret bytes with the provided charset
+		return percentDecode(prepped, charset);
+	}
+
+	/**
+	 * Percent-decodes a string into bytes, then constructs a String using the provided charset.
+	 * One pass only: invalid %xy sequences are left as literal '%' + chars.
+	 */
+	@Nonnull
+	private static String percentDecode(@Nonnull String string,
+																			@Nonnull Charset charset) {
+		requireNonNull(string);
+		requireNonNull(charset);
+
+		if (string.isEmpty())
+			return "";
+
+		ByteArrayOutputStream out = new ByteArrayOutputStream(string.length());
+		for (int i = 0; i < string.length(); i++) {
+			char c = string.charAt(i);
+			if (c == '%' && i + 2 < string.length()) {
+				int hi = hex(string.charAt(i + 1));
+				int lo = hex(string.charAt(i + 2));
+				if (hi >= 0 && lo >= 0) {
+					out.write((hi << 4) | lo);
+					i += 2;
+					continue;
+				}
+				// fall through: invalid percent triplet, treat '%' literally
+			}
+			// Write this character's bytes in the given charset (ASCII-fast path is fine too)
+			byte[] bs = String.valueOf(c).getBytes(charset);
+			out.write(bs, 0, bs.length);
+		}
+
+		return new String(out.toByteArray(), charset);
+	}
+
+	private static int hex(char c) {
+		if (c >= '0' && c <= '9') return c - '0';
+		if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+		if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+		return -1;
 	}
 
 	/**
@@ -522,7 +667,7 @@ public final class Utilities {
 	 * @return locales in descending preference order; empty if none could be resolved
 	 */
 	@Nonnull
-	public static List<Locale> localesFromAcceptLanguageHeaderValue(@Nonnull String acceptLanguageHeaderValue) {
+	public static List<Locale> extractLocalesFromAcceptLanguageHeaderValue(@Nonnull String acceptLanguageHeaderValue) {
 		requireNonNull(acceptLanguageHeaderValue);
 
 		try {

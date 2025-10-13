@@ -92,4 +92,14 @@ public class CookieTests {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				ResponseCookie.with("name", "v\r\nInjected: evil").build());
 	}
+
+	@Test
+	public void sameSiteNoneRequiresSecure() {
+		Assertions.assertThrows(IllegalArgumentException.class, () -> {
+			ResponseCookie ignored = ResponseCookie.with("sid", "v")
+					.sameSite(SameSite.NONE)
+					// .secure(true) // omitted on purpose
+					.build();
+		}, "SameSite=None must also set Secure");
+	}
 }

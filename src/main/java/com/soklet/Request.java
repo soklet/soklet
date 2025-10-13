@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.Utilities.QueryDecodingStrategy;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
@@ -163,7 +164,10 @@ public final class Request {
 		// If the URI contains a query string, parse query parameters (if present) from it
 		if (uri.contains("?")) {
 			this.uri = uri;
-			this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(uri));
+			// We always assume x-www-form-urlencoded, because it's possible for browsers to submit GETs with no content-type and we just have to guess.
+			// This means we decode "+" as " " and then apply any percent-decoding rules.
+			// In the future, we might expose a way to let applications prefer QueryDecodingStrategy.RFC_3986_STRICT instead, which treats "+" as literal
+			this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(uri, QueryDecodingStrategy.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET)));
 
 			// Cannot have 2 different ways of specifying query parameters
 			if (builder.queryParameters != null && builder.queryParameters.size() > 0)
@@ -211,7 +215,7 @@ public final class Request {
 
 		if (this.body != null && this.contentType != null && this.contentType.equalsIgnoreCase("application/x-www-form-urlencoded")) {
 			String bodyAsString = getBodyAsString().orElse(null);
-			formParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromQuery(bodyAsString));
+			formParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromQuery(bodyAsString, QueryDecodingStrategy.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET)));
 		}
 
 		this.formParameters = formParameters;
@@ -533,7 +537,7 @@ public final class Request {
 
 					if (acceptLanguageHeaderValue != null && acceptLanguageHeaderValue.size() > 0) {
 						try {
-							this.locales = unmodifiableList(Utilities.localesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue.stream().findFirst().get()));
+							this.locales = unmodifiableList(Utilities.extractLocalesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue.stream().findFirst().get()));
 						} catch (Exception ignored) {
 							// Malformed accept-language header; ignore it
 							this.locales = List.of();
