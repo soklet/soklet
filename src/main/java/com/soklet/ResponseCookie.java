@@ -147,10 +147,16 @@ public final class ResponseCookie {
 		this.httpOnly = builder.httpOnly == null ? false : builder.httpOnly;
 		this.sameSite = builder.sameSite;
 
+		// Extra validation to ensure we are not creating cookies that are illegal according to the spec
+
 		Rfc6265Utils.validateCookieName(getName());
 		Rfc6265Utils.validateCookieValue(getValue().orElse(null));
 		Rfc6265Utils.validateDomain(getDomain().orElse(null));
 		Rfc6265Utils.validatePath(getPath().orElse(null));
+
+		if (this.sameSite == SameSite.NONE && (this.secure == null || !this.secure))
+			throw new IllegalArgumentException(format("Specifying %s value %s.%s requires that you also set secure=true, otherwise browsers will likely discard the cookie",
+					ResponseCookie.class.getSimpleName(), SameSite.class.getSimpleName(), SameSite.NONE.name()));
 	}
 
 	/**
