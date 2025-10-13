@@ -102,6 +102,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	private final Set<ResourceMethod> resourceMethods;
 
 	private DefaultResourceMethodResolver() {
+		// Read declarations from SokletProcessor's compile-time lookup table
 		List<ResourceMethodDeclaration> resourceMethodDeclarations = ResourceMethodDeclarationLoader.loadAll(Thread.currentThread().getContextClassLoader());
 
 		// Resolve Methods once
@@ -133,31 +134,10 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
 	}
 
-	private static Method resolveMethod(String className, String methodName, String[] paramTypeNames) {
-		try {
-			Class<?> owner = Class.forName(className);
-			Class<?>[] paramTypes = new Class<?>[paramTypeNames.length];
-			for (int i = 0; i < paramTypeNames.length; i++)
-				paramTypes[i] = Class.forName(paramTypeNames[i]);
-			Method m = owner.getMethod(methodName, paramTypes);
-			m.setAccessible(true);
-			return m;
-		} catch (ReflectiveOperationException e) {
-			throw new IllegalStateException(
-					format("Unable to resolve method %s#%s(%s)",
-							className, methodName, String.join(",", paramTypeNames)), e);
-		}
-	}
-
 	@ThreadSafe
 	static final class ResourceMethodDeclarationLoader {
 		private ResourceMethodDeclarationLoader() {}
 
-		/**
-		 * Load all ResourceMethodDeclarations from:
-		 * 1) New resource index:  META-INF/soklet/routes.index
-		 * 2) Legacy class index:  com/soklet/soklet-route-index.list  (fallback)
-		 */
 		@SuppressWarnings("unchecked")
 		static List<ResourceMethodDeclaration> loadAll(ClassLoader cl) {
 			List<ResourceMethodDeclaration> out = new ArrayList<>();
@@ -185,8 +165,6 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				throw new RuntimeException(format("Unable to process Soklet's Resource Method lookup table. Is '%s' on the classpath and well-formed?", SokletProcessor.RESOURCE_METHOD_LOOKUP_TABLE_PATH), e);
 			}
 		}
-
-		// -------------------------------------------------------------------------
 
 		// Line format written by SokletProcessor:
 		// METHOD|b64(path)|b64(class)|b64(method)|b64(param1;param2;...)|true|false
@@ -222,6 +200,27 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 					.thenComparing(ResourceMethodDeclaration::className)
 					.thenComparing(ResourceMethodDeclaration::methodName));
 			return out;
+		}
+	}
+
+	@Nonnull
+	private Method resolveMethod(@Nonnull String className,
+															 @Nonnull String methodName,
+															 @Nonnull String[] paramTypeNames) {
+		requireNonNull(className);
+		requireNonNull(methodName);
+		requireNonNull(paramTypeNames);
+
+		try {
+			Class<?> owner = Class.forName(className);
+			Class<?>[] paramTypes = new Class<?>[paramTypeNames.length];
+			for (int i = 0; i < paramTypeNames.length; i++)
+				paramTypes[i] = Class.forName(paramTypeNames[i]);
+			Method m = owner.getMethod(methodName, paramTypes);
+			m.setAccessible(true);
+			return m;
+		} catch (Exception e) {
+			throw new IllegalStateException(format("Unable to resolve Soklet Resource Method %s#%s(%s).", className, methodName, String.join(",", paramTypeNames)), e);
 		}
 	}
 
