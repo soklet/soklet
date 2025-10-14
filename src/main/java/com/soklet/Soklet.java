@@ -212,7 +212,7 @@ public final class Soklet implements AutoCloseable {
 	public void awaitShutdown(@Nullable ShutdownTrigger... shutdownTriggers) throws InterruptedException {
 		Thread shutdownHook = null;
 		boolean registeredEnterKeyShutdownTrigger = false;
-		Set<ShutdownTrigger> shutdownTriggersAsSet = shutdownTriggers == null ? Set.of() : EnumSet.copyOf(Set.of(shutdownTriggers));
+		Set<ShutdownTrigger> shutdownTriggersAsSet = shutdownTriggers == null || shutdownTriggers.length == 0 ? Set.of() : EnumSet.copyOf(Set.of(shutdownTriggers));
 
 		try {
 			// Optionally listen for enter key
