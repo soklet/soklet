@@ -38,6 +38,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -344,7 +345,7 @@ public class IntegrationTests {
 			c.getOutputStream().write("x".getBytes(StandardCharsets.UTF_8));
 			int code = c.getResponseCode();
 			Assertions.assertEquals(405, code);
-			String allow = c.getHeaderField("Allow");
+			List<String> allow = c.getHeaderFields().get("Allow");
 			Assertions.assertNotNull(allow);
 			Assertions.assertTrue(allow.contains("GET"));
 		}
