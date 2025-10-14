@@ -40,11 +40,13 @@ public interface ResourceMethodParameterProvider {
 	 *
 	 * @param request        the HTTP request
 	 * @param resourceMethod the <em>Resource Method</em> associated with the HTTP request
+	 * @param sokletConfig   sokletConfig configuration for the Soklet instance using this {@link ResourceMethodParameterProvider}
 	 * @return the list of parameters to use when performing Java method invocation, or the empty list if no parameters are necessary
 	 */
 	@Nonnull
 	List<Object> parameterValuesForResourceMethod(@Nonnull Request request,
-																								@Nonnull ResourceMethod resourceMethod);
+																								@Nonnull ResourceMethod resourceMethod,
+																								@Nonnull SokletConfig sokletConfig);
 
 	/**
 	 * Acquires a threadsafe basic {@link ResourceMethodParameterProvider} with sensible defaults.

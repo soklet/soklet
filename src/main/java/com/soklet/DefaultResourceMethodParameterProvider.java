@@ -105,9 +105,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	@Nonnull
 	@Override
 	public List<Object> parameterValuesForResourceMethod(@Nonnull Request request,
-																											 @Nonnull ResourceMethod resourceMethod) {
+																											 @Nonnull ResourceMethod resourceMethod,
+																											 @Nonnull SokletConfig sokletConfig) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
+		requireNonNull(sokletConfig);
 
 		Parameter[] parameters = resourceMethod.getMethod().getParameters();
 		List<Object> parametersToPass = new ArrayList<>(parameters.length);
@@ -116,7 +118,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			Parameter parameter = parameters[i];
 
 			try {
-				parametersToPass.add(extractParameterValueToPassToResourceMethod(request, resourceMethod, parameter));
+				parametersToPass.add(extractParameterValueToPassToResourceMethod(request, resourceMethod, parameter, sokletConfig));
 			} catch (BadRequestException e) {
 				throw e;
 			} catch (Exception e) {
@@ -131,21 +133,69 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	@Nullable
 	protected Object extractParameterValueToPassToResourceMethod(@Nonnull Request request,
 																															 @Nonnull ResourceMethod resourceMethod,
-																															 @Nonnull Parameter parameter) {
+																															 @Nonnull Parameter parameter,
+																															 @Nonnull SokletConfig sokletConfig) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
+		requireNonNull(sokletConfig);
 
-		if (parameter.getType().isAssignableFrom(Request.class))
+		// First, support a few special injections based on type.
+		Class<?> basicParameterType = parameter.getType();
+
+		if (basicParameterType.isAssignableFrom(Request.class))
 			return request;
+
+		if (basicParameterType.isAssignableFrom(ResourceMethod.class))
+			return resourceMethod;
+
+		if (basicParameterType.isAssignableFrom(InstanceProvider.class))
+			return sokletConfig.getInstanceProvider();
+
+		if (basicParameterType.isAssignableFrom(RequestBodyMarshaler.class))
+			return sokletConfig.getRequestBodyMarshaler();
+
+		if (basicParameterType.isAssignableFrom(ResponseMarshaler.class))
+			return sokletConfig.getResponseMarshaler();
+
+		if (basicParameterType.isAssignableFrom(ValueConverterRegistry.class))
+			return sokletConfig.getValueConverterRegistry();
+
+		if (basicParameterType.isAssignableFrom(ResourceMethodResolver.class))
+			return sokletConfig.getResourceMethodResolver();
+
+		if (basicParameterType.isAssignableFrom(ResourceMethodParameterProvider.class))
+			return sokletConfig.getResourceMethodParameterProvider();
+
+		if (basicParameterType.isAssignableFrom(LifecycleInterceptor.class))
+			return sokletConfig.getLifecycleInterceptor();
+
+		if (basicParameterType.isAssignableFrom(CorsAuthorizer.class))
+			return sokletConfig.getCorsAuthorizer();
+
+		if (basicParameterType.isAssignableFrom(Server.class))
+			return sokletConfig.getServer();
+
+		if (basicParameterType.isAssignableFrom(ServerSentEventServer.class)) {
+			ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
+
+			if (serverSentEventServer == null)
+				throw new IllegalStateException(format("You cannot inject a parameter of type %s because your %s instance is not configured with one. Offending resource method: %s",
+						ServerSentEventServer.class.getSimpleName(), Soklet.class.getSimpleName(), resourceMethod));
+
+			return serverSentEventServer;
+		}
+
+		// Ok, we're done with the basic by-type injections.
+		// Now, examine annotation data to determine special injections (e.g. query parameter value, request body, ...)
 
 		ParameterType parameterType = new ParameterType(parameter);
 		PathParameter pathParameter = parameter.getAnnotation(PathParameter.class);
 
 		if (pathParameter != null) {
 			if (parameterType.isWrappedInOptional())
-				throw new IllegalStateException(format("@%s-annotated parameters cannot be marked %s",
-						PathParameter.class.getSimpleName(), Optional.class.getSimpleName()));
+				throw new IllegalStateException(format("@%s-annotated parameters cannot be marked %s. Offending resource method: %s",
+						PathParameter.class.getSimpleName(), Optional.class.getSimpleName(), resourceMethod));
 
 			String pathParameterName = extractParameterName(resourceMethod, parameter, pathParameter, pathParameter.name());
 			ResourcePath resourcePath = request.getResourcePath();
