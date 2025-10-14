@@ -16,23 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.CorsAuthorizer;
-import com.soklet.HandshakeResult;
-import com.soklet.HttpMethod;
-import com.soklet.LifecycleInterceptor;
-import com.soklet.LogEvent;
-import com.soklet.Request;
-import com.soklet.RequestResult;
-import com.soklet.ResourceMethodResolver;
-import com.soklet.ResourcePath;
-import com.soklet.Response;
-import com.soklet.ResponseCookie;
-import com.soklet.Server;
-import com.soklet.ServerSentEvent;
-import com.soklet.ServerSentEventBroadcaster;
-import com.soklet.ServerSentEventServer;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.ServerSentEventSource;
@@ -42,9 +25,11 @@ import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -55,6 +40,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -703,6 +689,122 @@ public class ServerSentEventTests {
 		@ServerSentEventSource("/tests/{id}")
 		public HandshakeResult sseSource(@Nonnull Request request, @Nonnull @PathParameter String id) {
 			return HandshakeResult.accepted();
+		}
+	}
+
+	@ThreadSafe
+	public static class SseBasicHandshakeResource {
+		@ServerSentEventSource("/sse")
+		public HandshakeResult sse() {
+			// accept and later broadcast from the test thread
+			return HandshakeResult.accepted();
+		}
+	}
+
+	@Test
+	public void ssePreservesBlankLines() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		SokletConfig config = SokletConfig
+				.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).build())
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseBasicHandshakeResource.class)))
+				.build();
+
+		try (Soklet soklet = Soklet.withConfig(config)) {
+			soklet.start();
+
+			// handshake
+			try (Socket socket = new Socket("127.0.0.1", ssePort)) {
+				socket.setSoTimeout(3000);
+				OutputStream out = socket.getOutputStream();
+				InputStream in = socket.getInputStream();
+				out.write((
+						"GET /sse HTTP/1.1\r\n" +
+								"Host: 127.0.0.1:" + ssePort + "\r\n" +
+								"Accept: text/event-stream\r\n" +
+								"\r\n").getBytes());
+				out.flush();
+
+				// read headers
+				readHeadersCRLF(in);
+
+				// broadcast an event with a blank line in the middle and trailing newline
+				ServerSentEvent evt = ServerSentEvent.withEvent("demo")
+						.data("L1\n\nL3\n") // inner blank line + trailing newline
+						.id("abc")
+						.retry(Duration.ofSeconds(5))
+						.build();
+
+				ServerSentEventServer serverSentEventServer = soklet.getSokletConfig().getServerSentEventServer().get();
+
+				// Wait until the broadcaster exists and has at least one connection
+				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+				ServerSentEventBroadcaster broadcaster;
+
+				while (true) {
+					broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.withPath("/sse")).get();
+					if (broadcaster.getClientCount() > 0) break;
+					if (System.nanoTime() > deadline) throw new AssertionError("SSE connection not registered in time");
+					Thread.sleep(10);
+				}
+
+				broadcaster.broadcast(evt);
+
+				// read lines on the wire
+				List<String> block = new ArrayList<>();
+				while (true) {
+					String line = readLineLF(in);
+					if (line == null) throw new IOException("stream closed");
+					if (line.isEmpty()) break;        // event terminator
+					block.add(line);
+				}
+
+				// Must have the metadata lines
+				Assertions.assertTrue(block.contains("event: demo"));
+				Assertions.assertTrue(block.contains("id: abc"));
+				Assertions.assertTrue(block.contains("retry: 5000"));
+
+				// Exactly four data lines, including blanks
+				List<String> dataLines = block.stream()
+						.filter(s -> s.startsWith("data:"))
+						.toList();
+
+				Assertions.assertEquals(4, dataLines.size());
+				Assertions.assertEquals("data: L1", dataLines.get(0));
+				Assertions.assertEquals("data: ", dataLines.get(1)); // blank line
+				Assertions.assertEquals("data: L3", dataLines.get(2));
+				Assertions.assertEquals("data: ", dataLines.get(3)); // trailing newline
+			}
+		}
+	}
+
+	private static String readLineCRLF(InputStream in) throws IOException {
+		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
+		int prev = -1, cur;
+		while ((cur = in.read()) != -1) {
+			if (prev == '\r' && cur == '\n') break;
+			if (cur != '\r') buf.write(cur);
+			prev = cur;
+		}
+		return buf.toString("UTF-8");
+	}
+
+	private static String readLineLF(InputStream in) throws IOException {
+		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
+		int b;
+		while ((b = in.read()) != -1) {
+			if (b == '\n') break;       // LF ends the line
+			if (b != '\r') buf.write(b); // drop any stray CR
+		}
+		return buf.toString(java.nio.charset.StandardCharsets.UTF_8);
+	}
+
+	private static void readHeadersCRLF(InputStream in) throws IOException {
+		while (true) {
+			String line = readLineCRLF(in);
+			if (line.isEmpty()) return;
 		}
 	}
 

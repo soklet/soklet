@@ -165,11 +165,9 @@ public class IntegrationTests {
 
 				// Read raw response
 				try (InputStream in = socket.getInputStream()) {
-					ByteArrayOutputStream baos = new ByteArrayOutputStream();
 					// Read status line
 					String status = readLineCRLF(in);
 					Assertions.assertNotNull(status);
-					System.out.println(status);
 
 					// Read headers until blank line
 					StringBuilder rawHeaders = new StringBuilder();

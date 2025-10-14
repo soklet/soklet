@@ -42,6 +42,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -875,9 +876,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		String event = serverSentEvent.getEvent().orElse(null);
 
 		String data = serverSentEvent.getData().orElse(null);
-		List<String> dataLines = data == null ? List.of() : data.lines()
+		List<String> dataLines = data == null
+				? List.of()
+				: Arrays.stream(data.split("\\R", -1)) // preserve trailing empties
 				.map(line -> format("data: %s", line))
-				.toList();
+				.collect(Collectors.toList());
 
 		String id = serverSentEvent.getId().orElse(null);
 		Duration retry = serverSentEvent.getRetry().orElse(null);
