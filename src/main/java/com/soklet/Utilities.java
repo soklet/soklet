@@ -117,7 +117,7 @@ public final class Utilities {
 	 * @return {@code true} if the runtime supports virtual threads, {@code false} otherwise
 	 */
 	@Nonnull
-	public static Boolean virtualThreadsAvailable() {
+	static Boolean virtualThreadsAvailable() {
 		return VIRTUAL_THREADS_AVAILABLE;
 	}
 
@@ -142,8 +142,8 @@ public final class Utilities {
 	 * @throws IllegalStateException if the runtime environment does not support virtual threads
 	 */
 	@Nonnull
-	public static ExecutorService createVirtualThreadsNewThreadPerTaskExecutor(@Nonnull String threadNamePrefix,
-																																						 @Nonnull UncaughtExceptionHandler uncaughtExceptionHandler) {
+	static ExecutorService createVirtualThreadsNewThreadPerTaskExecutor(@Nonnull String threadNamePrefix,
+																																			@Nonnull UncaughtExceptionHandler uncaughtExceptionHandler) {
 		requireNonNull(threadNamePrefix);
 		requireNonNull(uncaughtExceptionHandler);
 
@@ -202,7 +202,7 @@ public final class Utilities {
 	 * @return a zero-length byte array (never {@code null})
 	 */
 	@Nonnull
-	public static byte[] emptyByteArray() {
+	static byte[] emptyByteArray() {
 		return EMPTY_BYTE_ARRAY;
 	}
 

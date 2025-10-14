@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.core;
+package com.soklet;
 
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Response;

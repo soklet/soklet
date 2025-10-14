@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.core;
+package com.soklet;
 
 import com.soklet.HandshakeResult;
 import com.soklet.InstanceProvider;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.soklet.core;
+package com.soklet;
 
 import com.soklet.HttpMethod;
 import com.soklet.LifecycleInterceptor;
@@ -25,23 +25,23 @@ import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
+import com.soklet.exception.IllegalRequestBodyException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.Map;
 import java.util.Set;
 
 /*
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class OptionsTests {
+public class ResponseErrorMappingTests {
 	@Test
-	public void options_includes_allow_header() {
+	public void runtime_exception_maps_to_500() {
 		SokletConfig cfg = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(EchoResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ExplodeResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
@@ -49,19 +49,36 @@ public class OptionsTests {
 				.build();
 
 		Soklet.runSimulator(cfg, simulator -> {
-			RequestResult result = simulator.performRequest(Request.with(HttpMethod.OPTIONS, "/echo").build());
-			Assertions.assertEquals(204, result.getMarshaledResponse().getStatusCode());
-			Map<String, Set<String>> headers = result.getMarshaledResponse().getHeaders();
-			Assertions.assertTrue(headers.containsKey("Allow"), "missing Allow header");
-			String allow = String.join(",", headers.get("Allow"));
-			Assertions.assertTrue(allow.contains("GET"));
-			Assertions.assertTrue(allow.contains("HEAD"));
-			Assertions.assertTrue(allow.contains("OPTIONS"));
+			RequestResult result = simulator.performRequest(Request.with(HttpMethod.GET, "/explode").build());
+			Assertions.assertEquals(500, result.getMarshaledResponse().getStatusCode());
 		});
 	}
 
-	public static class EchoResource {
-		@GET("/echo")
-		public String echo() {return "ok";}
+	@Test
+	public void bad_request_exception_maps_to_400() {
+		SokletConfig cfg = SokletConfig.forTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ExplodeResource.class)))
+				.lifecycleInterceptor(new LifecycleInterceptor() {
+					@Override
+					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+				})
+				.build();
+
+		Soklet.runSimulator(cfg, simulator -> {
+			RequestResult result = simulator.performRequest(Request.with(HttpMethod.GET, "/bad-request").build());
+			Assertions.assertEquals(400, result.getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	public static class ExplodeResource {
+		@GET("/explode")
+		public String explode() {
+			throw new RuntimeException("boom");
+		}
+
+		@GET("/bad-request")
+		public String badRequest() {
+			throw new IllegalRequestBodyException("nope");
+		}
 	}
 }
