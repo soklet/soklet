@@ -16,15 +16,19 @@
 
 package com.soklet;
 
+import com.soklet.HandshakeResult.Accepted.Builder;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -101,42 +105,39 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	}
 
 	/**
-	 * Vends an instance that indicates a successful handshake, including custom response headers to send to the server-sent event client.
+	 * Vends a builder for an instance that indicates a successful handshake, including custom response headers to send to the server-sent event client.
 	 *
 	 * @param headers the response headers to include in the successful handshake response
-	 * @return an instance that indicates a successful handshake
+	 * @return a builder for an instance that indicates a successful handshake
 	 */
 	@Nonnull
-	static Accepted acceptWithHeaders(@Nonnull Map<String, Set<String>> headers) {
+	static Builder acceptWithHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
-		return new Accepted(headers, Set.of());
+		return new Builder().headers(headers);
 	}
 
 	/**
-	 * Vends an instance that indicates a successful handshake, including custom response cookies to send to the server-sent event client.
+	 * Vends a builder for an instance that indicates a successful handshake, including custom response cookies to send to the server-sent event client.
 	 *
 	 * @param cookies the response cookies to include in the successful handshake response
-	 * @return an instance that indicates a successful handshake
+	 * @return a builder for an instance that indicates a successful handshake
 	 */
 	@Nonnull
-	static Accepted acceptWithCookies(@Nonnull Set<ResponseCookie> cookies) {
+	static Builder acceptWithCookies(@Nonnull Set<ResponseCookie> cookies) {
 		requireNonNull(cookies);
-		return new Accepted(Map.of(), cookies);
+		return new Builder().cookies(cookies);
 	}
 
 	/**
-	 * Vends an instance that indicates a successful handshake, including custom response headers and cookies to send to the server-sent event client.
+	 * Vends a builder for an instance that indicates a successful handshake, including a custom hook to initialize the server-sent event client.
 	 *
-	 * @param headers the response headers to include in the successful handshake response
-	 * @param cookies the response cookies to include in the successful handshake response
-	 * @return an instance that indicates a successful handshake
+	 * @param clientInitializer a custom hook to initialize the server-sent event client, to be invoked immediately after writing successful handshake response
+	 * @return a builder for an instance that indicates a successful handshake
 	 */
 	@Nonnull
-	static Accepted acceptWith(@Nonnull Map<String, Set<String>> headers,
-														 @Nonnull Set<ResponseCookie> cookies) {
-		requireNonNull(headers);
-		requireNonNull(cookies);
-		return new Accepted(headers, cookies);
+	static Builder acceptWithClientInitializer(@Nonnull Consumer<ServerSentEventUnicaster> clientInitializer) {
+		requireNonNull(clientInitializer);
+		return new Builder().clientInitializer(clientInitializer);
 	}
 
 	/**
@@ -154,12 +155,13 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	/**
 	 * Type which indicates a successful server-sent event handshake.
 	 * <p>
-	 * Instances can be acquired via these factory methods:
+	 * A default, no-customization instance can be acquired via {@link HandshakeResult#accept()}.
+	 * <p>
+	 * Customized instances can be acquired via these builder factory methods:
 	 * <ul>
-	 *   <li>{@link HandshakeResult#accept()}</li>
 	 *   <li>{@link HandshakeResult#acceptWithHeaders(Map)}</li>
 	 *   <li>{@link HandshakeResult#acceptWithCookies(Set)}</li>
-	 *   <li>{@link HandshakeResult#acceptWith(Map, Set)}</li>
+	 *   <li>{@link HandshakeResult#acceptWithClientInitializer(Consumer)}</li>
 	 * </ul>
 	 */
 	@ThreadSafe
@@ -179,16 +181,64 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			defaultHeaders.put("X-Accel-Buffering", Set.of("no"));
 
 			DEFAULT_HEADERS = Collections.unmodifiableMap(defaultHeaders);
-			DEFAULT_INSTANCE = new Accepted(Map.of(), Set.of());
+			DEFAULT_INSTANCE = new Builder().build();
 		}
 
+		/**
+		 * Builder used to construct instances of {@link Accepted}.
+		 * <p>
+		 * This class is intended for use by a single thread.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		@NotThreadSafe
+		public static final class Builder {
+			@Nullable
+			private Map<String, Set<String>> headers;
+			@Nullable
+			private Set<ResponseCookie> cookies;
+			@Nullable
+			private Consumer<ServerSentEventUnicaster> clientInitializer;
+
+			private Builder() {
+				// Only permit construction through Handshake builder methods
+			}
+
+			@Nonnull
+			public Builder headers(@Nullable Map<String, Set<String>> headers) {
+				this.headers = headers;
+				return this;
+			}
+
+			@Nonnull
+			public Builder cookies(@Nullable Set<ResponseCookie> cookies) {
+				this.cookies = cookies;
+				return this;
+			}
+
+			@Nonnull
+			public Builder clientInitializer(@Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
+				this.clientInitializer = clientInitializer;
+				return this;
+			}
+
+			@Nonnull
+			public Accepted build() {
+				return new Accepted(this);
+			}
+		}
+
+		@Nullable
+		private final Consumer<ServerSentEventUnicaster> clientInitializer;
 		@Nonnull
 		private final MarshaledResponse marshaledResponse;
 
-		private Accepted(@Nonnull Map<String, Set<String>> headers,
-										 @Nonnull Set<ResponseCookie> cookies) {
-			requireNonNull(headers);
-			requireNonNull(cookies);
+		private Accepted(@Nonnull Builder builder) {
+			requireNonNull(builder);
+
+			// Don't need defensive copies b/c those happen downstream
+			Map<String, Set<String>> headers = builder.headers == null ? Map.of() : builder.headers;
+			Set<ResponseCookie> cookies = builder.cookies == null ? Set.of() : builder.cookies;
 
 			LinkedCaseInsensitiveMap<Set<String>> finalHeaders = new LinkedCaseInsensitiveMap<>(DEFAULT_HEADERS.size() + headers.size());
 
@@ -207,6 +257,8 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 					.headers(finalHeaders)
 					.cookies(cookies)
 					.build();
+
+			this.clientInitializer = builder.clientInitializer;
 		}
 
 		/**
@@ -219,9 +271,20 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			return this.marshaledResponse;
 		}
 
+		/**
+		 * The client initialization function, if specified, for this accepted server-sent event handshake.
+		 *
+		 * @return the client initialization function, or {@link Optional#empty()} if none was specified
+		 */
+		@Nonnull
+		public Optional<Consumer<ServerSentEventUnicaster>> getClientInitializer() {
+			return Optional.ofNullable(this.clientInitializer);
+		}
+
 		@Override
 		public String toString() {
-			return format("%s{marshaledResponse=%s}", Accepted.class.getSimpleName(), getMarshaledResponse());
+			return format("%s{marshaledResponse=%s, clientInitializer=%s}",
+					Accepted.class.getSimpleName(), getMarshaledResponse(), getClientInitializer().isPresent() ? "[specified]" : "[not specified]");
 		}
 
 		@Override
@@ -232,12 +295,13 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			if (!(object instanceof Accepted accepted))
 				return false;
 
-			return Objects.equals(getMarshaledResponse(), accepted.getMarshaledResponse());
+			return Objects.equals(getMarshaledResponse(), accepted.getMarshaledResponse())
+					&& Objects.equals(getClientInitializer(), accepted.getClientInitializer());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getMarshaledResponse());
+			return Objects.hash(getMarshaledResponse(), getClientInitializer());
 		}
 	}
 
