@@ -97,7 +97,7 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * <p>
 	 * When using the default {@link ServerSentEventServer}, Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath} (within the same JVM process).  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
 	 * <p>
-	 * Your code should not hold long-lived references to {@link ServerSentEventBroadcaster} instances (e.g. in a cache or instance variables) - the preferred usage pattern is to invoke {@link #acquireBroadcaster(ResourcePath)} every time you need a broadcaster reference.
+	 * Your code should not hold long-lived references to {@link ServerSentEventBroadcaster} instances (e.g. in a cache or instance variables) - the recommended usage pattern is to invoke {@link #acquireBroadcaster(ResourcePath)} every time you need a broadcaster reference.
 	 * <p>
 	 * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
 	 *
