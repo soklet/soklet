@@ -16,13 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.LifecycleInterceptor;
-import com.soklet.LogEvent;
-import com.soklet.Request;
-import com.soklet.ResourceMethodResolver;
-import com.soklet.Server;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
@@ -35,8 +28,10 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -75,6 +70,17 @@ public class IntegrationTests {
 		public String cookieEcho(@Nonnull Request request) {
 			Map<String, Set<String>> cookies = request.getCookies();
 			return cookies.keySet().stream().sorted().collect(Collectors.joining(","));
+		}
+
+		@GET("/multivalued-headers")
+		public Response multivaluedHeaders(@Nonnull Request request) {
+			return Response.withStatusCode(200)
+					.headers(Map.of("multi", Set.of("one", "two")))
+					.cookies(Set.of(
+							ResponseCookie.with("a", "b").build(),
+							ResponseCookie.with("a", "c").build()
+					))
+					.build();
 		}
 	}
 
@@ -137,6 +143,68 @@ public class IntegrationTests {
 			String body = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
 			Assertions.assertEquals("js/some/file/example.js", body);
 		}
+	}
+
+	@Test
+	public void multivalueHeadersAreSplitCorrectly() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+			URL url = new URL("http://127.0.0.1:" + port + "/multivalued-headers");
+
+			String host = "127.0.0.1";
+			String path = "/multivalued-headers";
+
+			try (Socket socket = new Socket(host, port);
+					 OutputStream out = socket.getOutputStream()) {
+				// Send raw HTTP request
+				out.write(("GET " + path + " HTTP/1.1\r\n").getBytes(StandardCharsets.UTF_8));
+				out.write(("Host: " + host + "\r\n").getBytes(StandardCharsets.UTF_8));
+				out.write("Connection: close\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				// Read raw response
+				try (InputStream in = socket.getInputStream()) {
+					ByteArrayOutputStream baos = new ByteArrayOutputStream();
+					// Read status line
+					String status = readLineCRLF(in);
+					Assertions.assertNotNull(status);
+					System.out.println(status);
+
+					// Read headers until blank line
+					StringBuilder rawHeaders = new StringBuilder();
+					String line;
+					while ((line = readLineCRLF(in)) != null && !line.isEmpty()) {
+						rawHeaders.append(line).append("\r\n");
+					}
+					System.out.println("=== RAW HEADERS ===");
+					System.out.println(rawHeaders);
+
+					// Now parse/verify
+					String headers = rawHeaders.toString();
+					Assertions.assertTrue(headers.contains("Content-Length: 0"));
+					Assertions.assertTrue(headers.contains("Content-Type: text/plain; charset=UTF-8"));
+					// Multi-valued headers preserved on the wire:
+					Assertions.assertTrue(headers.contains("Set-Cookie: a=b"));
+					Assertions.assertTrue(headers.contains("Set-Cookie: a=c"));
+					Assertions.assertTrue(headers.contains("multi: one"));
+					Assertions.assertTrue(headers.contains("multi: two"));
+
+					// Since we don't need the body, just stop here.  If we do need the body later, read content-length bytes
+				}
+			}
+		}
+	}
+
+	private static String readLineCRLF(InputStream in) throws IOException {
+		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
+		int prev = -1, cur;
+		while ((cur = in.read()) != -1) {
+			if (prev == '\r' && cur == '\n') break;
+			if (prev != -1) buf.write(prev);
+			prev = cur;
+		}
+		if (cur == -1 && prev == -1) return null; // EOF before any bytes
+		return buf.toString(StandardCharsets.US_ASCII);
 	}
 
 	@Test
@@ -204,7 +272,6 @@ public class IntegrationTests {
 			Assertions.assertTrue(set.contains("sid"));
 		}
 	}
-
 
 	@ThreadSafe
 	public static class Echo2Resource {

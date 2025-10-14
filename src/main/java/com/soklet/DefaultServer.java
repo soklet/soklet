@@ -492,7 +492,8 @@ final class DefaultServer implements Server {
 			if (!isAlreadySorted(values))
 				values = new TreeSet<>(entry.getValue());
 
-			headers.add(new Header(name, String.join(", ", values)));
+			for (String value : values)
+				headers.add(new Header(name, value == null ? "" : value));
 		}
 
 		// ResponseCookie headers are split into multiple instances of Set-Cookie.
