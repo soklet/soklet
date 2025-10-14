@@ -33,10 +33,9 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@FunctionalInterface
 public interface ServerSentEventUnicaster {
 	/**
-	 * Unicasts a single Server-Sent Event payload to a specific client listening to this broadcaster's {@link ResourcePath}.
+	 * Unicasts a single Server-Sent Event payload to a specific client listening to this unicaster's {@link ResourcePath}.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and unicast operation[s] will occur on separate threads of execution.
 	 * <p>
@@ -50,7 +49,7 @@ public interface ServerSentEventUnicaster {
 	}
 
 	/**
-	 * Unicasts a list of Server-Sent Event payload to a specific client listening to this broadcaster's {@link ResourcePath}.
+	 * Unicasts a list of Server-Sent Event payload to a specific client listening to this unicaster's {@link ResourcePath}.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and unicast operation[s] will occur on separate threads of execution.
 	 * <p>
@@ -59,4 +58,16 @@ public interface ServerSentEventUnicaster {
 	 * @param serverSentEvents the Server-Sent Event payloads to unicast
 	 */
 	void unicast(@Nonnull List<ServerSentEvent> serverSentEvents);
+
+	/**
+	 * The runtime Resource Path with which this unicaster is associated.
+	 * <p>
+	 * For example, a client may successfully complete a Server-Sent Event handshake for <em>Resource Method</em> {@code @ServerSentEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}. The server, immediately after accepting the handshake, might then acquire a unicaster to "catch up" the client according to the {@code Last-Event-ID} header value (for example).
+	 * <p>
+	 * A unicaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to that specific client via {@link #unicast(ServerSentEvent)} or {@link #unicast(List)}.
+	 *
+	 * @return the runtime Resource Path instance with which this unicaster is associated
+	 */
+	@Nonnull
+	ResourcePath getResourcePath();
 }
