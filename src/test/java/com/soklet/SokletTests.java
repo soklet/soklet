@@ -16,17 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.HttpMethod;
-import com.soklet.LifecycleInterceptor;
-import com.soklet.LogEvent;
-import com.soklet.MultipartField;
-import com.soklet.Request;
-import com.soklet.RequestResult;
-import com.soklet.ResourceMethod;
-import com.soklet.ResourceMethodResolver;
-import com.soklet.Response;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
 import com.soklet.annotation.Multipart;
@@ -49,6 +38,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -428,5 +418,28 @@ public class SokletTests {
 					}
 				})
 				.build();
+	}
+
+	@Test
+	public void verifyHeaderValidation() {
+		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		headers.put("X-Test", Set.of("ok\r\nInjected-Header: yes"));
+
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				Response.withStatusCode(200)
+						.headers(headers)
+						.build());
+
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				MarshaledResponse.withStatusCode(200)
+						.headers(headers)
+						.build());
+	}
+
+	@Test
+	void plusBecomesSpace_percent2BBecomesPlus() {
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromQuery(
+				"q=a+b%2B", Utilities.QueryDecodingStrategy.X_WWW_FORM_URLENCODED, StandardCharsets.UTF_8);
+		Assertions.assertEquals(Set.of("a b+"), qp.get("q"));
 	}
 }

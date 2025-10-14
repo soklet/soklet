@@ -25,6 +25,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -96,6 +97,15 @@ public final class Response {
 
 		if (builder.location != null && !headers.containsKey("Location"))
 			headers.put("Location", Set.of(builder.location));
+
+		// Verify headers are legal
+		for (Entry<String, Set<String>> entry : headers.entrySet()) {
+			String headerName = entry.getKey();
+			Set<String> headerValues = entry.getValue();
+
+			for (String headerValue : headerValues)
+				Utilities.validateHeaderNameAndValue(headerName, headerValue);
+		}
 
 		Set<ResponseCookie> cookies = builder.cookies == null
 				? Collections.emptySet()

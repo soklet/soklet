@@ -24,6 +24,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -89,6 +90,15 @@ public final class MarshaledResponse {
 		this.headers = builder.headers == null ? Map.of() : new LinkedCaseInsensitiveMap<>(builder.headers);
 		this.cookies = builder.cookies == null ? Set.of() : new LinkedHashSet<>(builder.cookies);
 		this.body = builder.body;
+
+		// Verify headers are legal
+		for (Entry<String, Set<String>> entry : this.headers.entrySet()) {
+			String headerName = entry.getKey();
+			Set<String> headerValues = entry.getValue();
+
+			for (String headerValue : headerValues)
+				Utilities.validateHeaderNameAndValue(headerName, headerValue);
+		}
 	}
 
 	@Override

@@ -1139,4 +1139,50 @@ public final class Utilities {
 
 		return trimAggressively(string);
 	}
+
+	static void validateHeaderNameAndValue(@Nullable String name,
+																				 @Nullable String value) {
+		// First, validate name:
+		name = trimAggressivelyToNull(name);
+
+		if (name == null)
+			throw new IllegalArgumentException("Header name is blank");
+
+		for (int i = 0; i < name.length(); i++) {
+			char c = name.charAt(i);
+			// RFC 9110 tchar: "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+			if (!(c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
+					c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~' ||
+					Character.isLetterOrDigit(c))) {
+				throw new IllegalArgumentException(format("Illegal header name '%s'. Offending character: '%s'", name, printableChar(c)));
+			}
+		}
+
+		// Then, validate value:
+		if (value == null)
+			return;
+
+		for (int i = 0; i < value.length(); i++) {
+			char c = value.charAt(i);
+			if (c == '\r' || c == '\n' || c == 0x00 || (c >= 0x00 && c < 0x20 && c != '\t')) {
+				throw new IllegalArgumentException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", value, name, printableChar(c)));
+			}
+		}
+	}
+
+	@Nonnull
+	static String printableChar(char c) {
+		if (c == '\r') return "\\r";
+		if (c == '\n') return "\\n";
+		if (c == '\t') return "\\t";
+		if (c == '\f') return "\\f";
+		if (c == '\b') return "\\b";
+		if (c == '\\') return "\\\\";
+		if (c == '\'') return "\\'";
+		if (c == '\"') return "\\\"";
+		if (c == 0) return "\\0";
+		if (c < 0x20 || c == 0x7F)  // control chars
+			return String.format("\\u%04X", (int) c);
+		return String.valueOf(c);
+	}
 }
