@@ -16,17 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.HandshakeResult;
-import com.soklet.InstanceProvider;
-import com.soklet.Request;
-import com.soklet.ResourceMethodResolver;
-import com.soklet.ResourcePath;
-import com.soklet.Server;
-import com.soklet.ServerSentEvent;
-import com.soklet.ServerSentEventBroadcaster;
-import com.soklet.ServerSentEventServer;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
 import com.soklet.annotation.ServerSentEventSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -123,7 +112,7 @@ public class SseLastEventIdTests {
 				broadcaster.broadcast(ServerSentEvent.withData("lastEventId=" + last).build());
 			}).start();
 
-			return HandshakeResult.accepted();
+			return HandshakeResult.accept();
 		}
 	}
 

@@ -85,7 +85,7 @@ public class ServerSentEventTests {
 		@ServerSentEventSource("/examples/{exampleId}")
 		public HandshakeResult exampleServerSentEventSource(@Nonnull Request request,
 																												@Nonnull @PathParameter String exampleId) {
-			return HandshakeResult.accepted();
+			return HandshakeResult.accept();
 		}
 	}
 
@@ -109,7 +109,7 @@ public class ServerSentEventTests {
 		public HandshakeResult exampleServerSentEventSource(@Nonnull Request request,
 																												@Nonnull @PathParameter String exampleId) {
 			System.out.printf("Server-Sent Event Source connection initiated for %s with exampleId value %s\n", request.getId(), exampleId);
-			return HandshakeResult.accepted();
+			return HandshakeResult.accept();
 		}
 
 		@POST("/fire-server-sent-event")
@@ -633,7 +633,7 @@ public class ServerSentEventTests {
 		@ServerSentEventSource("/sse/cors-ok")
 		public HandshakeResult ok(@Nonnull Request request) {
 			// Standard SSE accepted handshake
-			return HandshakeResult.accepted();
+			return HandshakeResult.accept();
 		}
 	}
 
@@ -641,7 +641,7 @@ public class ServerSentEventTests {
 		@ServerSentEventSource("/sse/cors-reject")
 		public HandshakeResult reject(@Nonnull Request request) {
 			// Reject with a simple body; CORS should still be applied
-			return HandshakeResult.rejectedWithResponse(
+			return HandshakeResult.rejectWithResponse(
 					Response.withStatusCode(403)
 							.headers(Map.of("Content-Type", Set.of("text/plain; charset=utf-8")))
 							.body("denied")
@@ -661,14 +661,14 @@ public class ServerSentEventTests {
 					.cookies(Set.of(cookie))
 					.body("denied")
 					.build();
-			return HandshakeResult.rejectedWithResponse(response);
+			return HandshakeResult.rejectWithResponse(response);
 		}
 	}
 
 	public static class AcceptingSseResource {
 		@ServerSentEventSource("/sse/{id}")
 		public HandshakeResult ok(@Nonnull Request request, @Nonnull @PathParameter String id) {
-			return HandshakeResult.accepted();
+			return HandshakeResult.accept();
 		}
 	}
 
@@ -680,7 +680,7 @@ public class ServerSentEventTests {
 							"Content-Length", Set.of("3")))
 					.body("abc")
 					.build();
-			return HandshakeResult.rejectedWithResponse(response);
+			return HandshakeResult.rejectWithResponse(response);
 		}
 	}
 
@@ -688,7 +688,7 @@ public class ServerSentEventTests {
 	public static class SseNetworkResource {
 		@ServerSentEventSource("/tests/{id}")
 		public HandshakeResult sseSource(@Nonnull Request request, @Nonnull @PathParameter String id) {
-			return HandshakeResult.accepted();
+			return HandshakeResult.accept();
 		}
 	}
 
@@ -697,7 +697,7 @@ public class ServerSentEventTests {
 		@ServerSentEventSource("/sse")
 		public HandshakeResult sse() {
 			// accept and later broadcast from the test thread
-			return HandshakeResult.accepted();
+			return HandshakeResult.accept();
 		}
 	}
 

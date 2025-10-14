@@ -271,7 +271,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 					// Enforce that @ServerSentEventSource methods have a return type of HandshakeResult
 					if (serverSentEventSource && !HandshakeResult.class.isAssignableFrom(method.getReturnType()))
-						throw new IllegalStateException(format("Resource Methods annotated with @%s must be declared to return an instance of %s (e.g. %s.accepted()). Incorrect Resource Method was %s",
+						throw new IllegalStateException(format("Resource Methods annotated with @%s must be declared to return an instance of %s (e.g. %s.accept()). Incorrect Resource Method was %s",
 								ServerSentEventSource.class.getSimpleName(), HandshakeResult.class.getSimpleName(), HandshakeResult.class.getSimpleName(), method));
 
 					ResourceMethod resourceMethod = ResourceMethod.withComponents(httpMethod, resourcePathDeclaration, method, serverSentEventSource);

@@ -67,8 +67,8 @@ import static java.util.Objects.requireNonNull;
  *
  *   // Accept the handshake with no additional data
  *   // (or use a variant to send headers/cookies).
- *   // Can also reject via HandshakeResult.rejectedWithResponse(...)
- *   return HandshakeResult.accepted();
+ *   // Can also reject via HandshakeResult.rejectWithResponse(...)
+ *   return HandshakeResult.accept();
  * }}</pre>
  * <p>
  * Finally, broadcast to all clients who had their handshakes accepted:
@@ -96,7 +96,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 * @return an instance that indicates a successful handshake
 	 */
 	@Nonnull
-	static Accepted accepted() {
+	static Accepted accept() {
 		return Accepted.DEFAULT_INSTANCE;
 	}
 
@@ -107,7 +107,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 * @return an instance that indicates a successful handshake
 	 */
 	@Nonnull
-	static Accepted acceptedWithHeaders(@Nonnull Map<String, Set<String>> headers) {
+	static Accepted acceptWithHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 		return new Accepted(headers, Set.of());
 	}
@@ -119,7 +119,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 * @return an instance that indicates a successful handshake
 	 */
 	@Nonnull
-	static Accepted acceptedWithCookies(@Nonnull Set<ResponseCookie> cookies) {
+	static Accepted acceptWithCookies(@Nonnull Set<ResponseCookie> cookies) {
 		requireNonNull(cookies);
 		return new Accepted(Map.of(), cookies);
 	}
@@ -132,8 +132,8 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 * @return an instance that indicates a successful handshake
 	 */
 	@Nonnull
-	static Accepted acceptedWith(@Nonnull Map<String, Set<String>> headers,
-															 @Nonnull Set<ResponseCookie> cookies) {
+	static Accepted acceptWith(@Nonnull Map<String, Set<String>> headers,
+														 @Nonnull Set<ResponseCookie> cookies) {
 		requireNonNull(headers);
 		requireNonNull(cookies);
 		return new Accepted(headers, cookies);
@@ -146,7 +146,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 * @return an instance that indicates a rejected handshake
 	 */
 	@Nonnull
-	static Rejected rejectedWithResponse(@Nonnull Response response) {
+	static Rejected rejectWithResponse(@Nonnull Response response) {
 		requireNonNull(response);
 		return new Rejected(response);
 	}
@@ -156,10 +156,10 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 * <p>
 	 * Instances can be acquired via these factory methods:
 	 * <ul>
-	 *   <li>{@link HandshakeResult#accepted()}</li>
-	 *   <li>{@link HandshakeResult#acceptedWithHeaders(Map)}</li>
-	 *   <li>{@link HandshakeResult#acceptedWithCookies(Set)}</li>
-	 *   <li>{@link HandshakeResult#acceptedWith(Map, Set)}</li>
+	 *   <li>{@link HandshakeResult#accept()}</li>
+	 *   <li>{@link HandshakeResult#acceptWithHeaders(Map)}</li>
+	 *   <li>{@link HandshakeResult#acceptWithCookies(Set)}</li>
+	 *   <li>{@link HandshakeResult#acceptWith(Map, Set)}</li>
 	 * </ul>
 	 */
 	@ThreadSafe
@@ -244,7 +244,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	/**
 	 * Type which indicates a rejected server-sent event handshake.
 	 * <p>
-	 * Instances can be acquired via the {@link HandshakeResult#rejectedWithResponse(Response)} factory method.
+	 * Instances can be acquired via the {@link HandshakeResult#rejectWithResponse(Response)} factory method.
 	 */
 	@ThreadSafe
 	final class Rejected implements HandshakeResult {
