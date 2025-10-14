@@ -176,8 +176,6 @@ public class IntegrationTests {
 					while ((line = readLineCRLF(in)) != null && !line.isEmpty()) {
 						rawHeaders.append(line).append("\r\n");
 					}
-					System.out.println("=== RAW HEADERS ===");
-					System.out.println(rawHeaders);
 
 					// Now parse/verify
 					String headers = rawHeaders.toString();
