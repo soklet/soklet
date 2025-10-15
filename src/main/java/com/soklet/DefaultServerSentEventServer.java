@@ -571,7 +571,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				String rawRequest = readRequest(requestIdentifier, clientSocketChannel);
 				request = parseRequest(requestIdentifier, rawRequest);
 			} catch (URISyntaxException e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST, format("Unable to parse server-sent event request URI: %s", e.getInput()))
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST, format("Unable to parse Server-Sent Event request URI: %s", e.getInput()))
 						.throwable(e)
 						.build());
 				throw e;
@@ -582,7 +582,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "request timed out"
 				throw e;
 			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST, "Unable to parse server-sent event request")
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST, "Unable to parse Server-Sent Event request")
 						.throwable(e)
 						.build());
 				throw e;
