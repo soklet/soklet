@@ -1122,12 +1122,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (components.length != 3)
 					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
-				String httpMethod = components[0];
+				String rawHttpMethod = components[0];
 				String rawUri = components[1];
+				HttpMethod httpMethod = null;
 				URI uri = null;
-
-				if (!httpMethod.equals("GET"))
-					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
 				if (rawUri != null) {
 					try {
@@ -1137,10 +1135,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					}
 				}
 
-				if (uri == null)
+				try {
+					httpMethod = HttpMethod.valueOf(rawHttpMethod);
+				} catch (IllegalArgumentException e) {
+					// Malformed HTTP method
+				}
+
+				if (uri == null || httpMethod == null)
 					throw new URISyntaxException(rawUri, format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
-				requestBuilder = Request.with(HttpMethod.GET, rawUri);
+				requestBuilder = Request.with(httpMethod, rawUri);
 			} else {
 				// This is a header line.
 				// Example: Accept-Encoding: gzip, deflate, br, zstd

@@ -786,6 +786,38 @@ public class ServerSentEventTests {
 				ServerSentEvent.withDefaults().id("abc\u0000def").build());
 	}
 
+	@Test
+	public void sseHandlesNonGetsCorrectly() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		SokletConfig config = SokletConfig
+				.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).build())
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseBasicHandshakeResource.class)))
+				.build();
+
+		try (Soklet soklet = Soklet.withConfig(config)) {
+			soklet.start();
+
+			// handshake
+			try (Socket socket = new Socket("127.0.0.1", ssePort)) {
+				socket.setSoTimeout(3000);
+				OutputStream out = socket.getOutputStream();
+				out.write((
+						"POST /sse HTTP/1.1\r\n" +
+								"Host: 127.0.0.1:" + ssePort + "\r\n" +
+								"Accept: text/event-stream\r\n" +
+								"\r\n").getBytes());
+				out.flush();
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 405"), "Not a 405 response");
+			}
+		}
+	}
+
 	private static String readLineCRLF(InputStream in) throws IOException {
 		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
 		int prev = -1, cur;

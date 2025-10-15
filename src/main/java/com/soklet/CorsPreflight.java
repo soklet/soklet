@@ -136,14 +136,16 @@ public final class CorsPreflight {
 				.map((headerValue -> HttpMethod.valueOf(trimAggressively(headerValue))))
 				.toList();
 
+		// Preflights are required to have Access-Control-Request-Method defined
+		if (accessControlRequestMethods.size() == 0)
+			return Optional.empty();
+
 		Set<String> accessControlRequestHeaderValues = headers.get("Access-Control-Request-Header");
 
 		if (accessControlRequestHeaderValues == null)
 			accessControlRequestHeaderValues = Set.of();
 
-		return Optional.of(new CorsPreflight(originHeaderValue,
-				accessControlRequestMethods.size() > 0 ? accessControlRequestMethods.get(0) : null,
-				accessControlRequestHeaderValues));
+		return Optional.of(new CorsPreflight(originHeaderValue, accessControlRequestMethods.get(0), accessControlRequestHeaderValues));
 	}
 
 	private CorsPreflight(@Nonnull String origin,
