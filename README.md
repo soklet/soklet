@@ -420,7 +420,7 @@ ThrowableHandler throwableHandler = (
 // Supply our custom handlers to the standard response marshaler
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
-).responseMarshaler(ResponseMarshaler.withCharset(StandardCharsets.UTF_8)
+).responseMarshaler(ResponseMarshaler.withDefaults()
   .resourceMethod(resourceMethodHandler)
   .throwable(throwableHandler)
   .build()

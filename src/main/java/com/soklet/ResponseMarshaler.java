@@ -20,6 +20,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
@@ -119,9 +120,9 @@ import static java.util.Objects.requireNonNull;
  * // Supply our custom handlers to the standard response marshaler
  * SokletConfig config = SokletConfig.withServer(
  *   Server.withPort(8080).build()
- * ).responseMarshaler(ResponseMarshaler.withCharset(StandardCharsets.UTF_8)
- *   .resourceMethod(resourceMethodHandler)
- *   .throwable(throwableHandler)
+ * ).responseMarshaler(ResponseMarshaler.withDefaults()
+ *   .resourceMethodHandler(resourceMethodHandler)
+ *   .throwableHandler(throwableHandler)
  *   .build()
  * ).build();}</pre>
  * <p>
@@ -292,6 +293,16 @@ public interface ResponseMarshaler {
 	@Nonnull
 	static ResponseMarshaler defaultInstance() {
 		return DefaultResponseMarshaler.defaultInstance();
+	}
+
+	/**
+	 * Acquires a builder for a default {@link ResponseMarshaler} implementation that uses {@link java.nio.charset.StandardCharsets#UTF_8} encoding.
+	 *
+	 * @return a {@code ResponseMarshaler} builder
+	 */
+	@Nonnull
+	static Builder withDefaults() {
+		return new Builder(StandardCharsets.UTF_8);
 	}
 
 	/**
@@ -579,61 +590,61 @@ public interface ResponseMarshaler {
 		}
 
 		@Nonnull
-		public Builder resourceMethod(@Nullable ResourceMethodHandler resourceMethodHandler) {
+		public Builder resourceMethodHandler(@Nullable ResourceMethodHandler resourceMethodHandler) {
 			this.resourceMethodHandler = resourceMethodHandler;
 			return this;
 		}
 
 		@Nonnull
-		public Builder notFound(@Nullable NotFoundHandler notFoundHandler) {
+		public Builder notFoundHandler(@Nullable NotFoundHandler notFoundHandler) {
 			this.notFoundHandler = notFoundHandler;
 			return this;
 		}
 
 		@Nonnull
-		public Builder methodNotAllowed(@Nullable MethodNotAllowedHandler methodNotAllowedHandler) {
+		public Builder methodNotAllowedHandler(@Nullable MethodNotAllowedHandler methodNotAllowedHandler) {
 			this.methodNotAllowedHandler = methodNotAllowedHandler;
 			return this;
 		}
 
 		@Nonnull
-		public Builder contentTooLarge(@Nullable ContentTooLargeHandler contentTooLargeHandler) {
+		public Builder contentTooLargeHandler(@Nullable ContentTooLargeHandler contentTooLargeHandler) {
 			this.contentTooLargeHandler = contentTooLargeHandler;
 			return this;
 		}
 
 		@Nonnull
-		public Builder options(@Nullable OptionsHandler optionsHandler) {
+		public Builder optionsHandler(@Nullable OptionsHandler optionsHandler) {
 			this.optionsHandler = optionsHandler;
 			return this;
 		}
 
 		@Nonnull
-		public Builder throwable(@Nullable ThrowableHandler throwableHandler) {
+		public Builder throwableHandler(@Nullable ThrowableHandler throwableHandler) {
 			this.throwableHandler = throwableHandler;
 			return this;
 		}
 
 		@Nonnull
-		public Builder head(@Nullable HeadHandler headHandler) {
+		public Builder headHandler(@Nullable HeadHandler headHandler) {
 			this.headHandler = headHandler;
 			return this;
 		}
 
 		@Nonnull
-		public Builder corsPreflightAllowed(@Nullable CorsPreflightAllowedHandler corsPreflightAllowedHandler) {
+		public Builder corsPreflightAllowedHandler(@Nullable CorsPreflightAllowedHandler corsPreflightAllowedHandler) {
 			this.corsPreflightAllowedHandler = corsPreflightAllowedHandler;
 			return this;
 		}
 
 		@Nonnull
-		public Builder corsPreflightRejected(@Nullable CorsPreflightRejectedHandler corsPreflightRejectedHandler) {
+		public Builder corsPreflightRejectedHandler(@Nullable CorsPreflightRejectedHandler corsPreflightRejectedHandler) {
 			this.corsPreflightRejectedHandler = corsPreflightRejectedHandler;
 			return this;
 		}
 
 		@Nonnull
-		public Builder corsAllowed(@Nullable CorsAllowedHandler corsAllowedHandler) {
+		public Builder corsAllowedHandler(@Nullable CorsAllowedHandler corsAllowedHandler) {
 			this.corsAllowedHandler = corsAllowedHandler;
 			return this;
 		}
