@@ -66,6 +66,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -595,7 +596,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// Keep track of whether or not we should go through the "handshake accepted" flow.
 			// Might change from "accepted" to "rejected" if an error occurs
-			AtomicBoolean performHandshakeAcceptedFlow = new AtomicBoolean(false);
+			AtomicReference<HandshakeResult.Accepted> handshakeAcceptedReference = new AtomicReference<>();
 
 			// We're now ready to write the handshake response - and then we keep the socket open for subsequent writes if handshake was accepted (otherwise we write the body and close).
 			// To write the handshake response, we delegate to the Soklet instance, handing it the request we just parsed
@@ -604,7 +605,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			getRequestHandler().get().handleRequest(request, (@Nonnull RequestResult requestResult) -> {
 				// Set to the value Soklet processing gives us. Will be the empty Optional if no resource method was matched
 				HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
-				performHandshakeAcceptedFlow.set(handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted);
+
+				// Store a reference to the accepted handshake if we have it
+				if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted accepted)
+					handshakeAcceptedReference.set(accepted);
 
 				byte[] handshakeHttpResponse;
 
@@ -616,7 +620,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.throwable(t)
 							.build());
 
-					performHandshakeAcceptedFlow.set(false);
+					// Clear the accepted handshake reference in case it was set
+					handshakeAcceptedReference.set(null);
 					handshakeHttpResponse = FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
 				}
 
@@ -632,16 +637,21 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.throwable(t)
 							.build());
 
-					performHandshakeAcceptedFlow.set(false);
+
+					// Clear the accepted handshake reference in case it was set
+					handshakeAcceptedReference.set(null);
 				}
 			});
 
 			// Happy path: register the channel for future ServerSentEvent writes and keep it open.
 			// Otherwise, we're done immediately now that initial data has been written - shut it all down.
-			if (performHandshakeAcceptedFlow.get()) {
+			HandshakeResult.Accepted handshakeAccepted = handshakeAcceptedReference.get();
+			if (handshakeAccepted != null) {
 				getLifecycleInterceptor().get().willEstablishServerSentEventConnection(request, resourceMethod);
 
-				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request).get();
+				// If there is a client initializer, invoke it immediately prior to finalizing the SSE connection
+				Consumer<ServerSentEventUnicaster> clientInitializer = handshakeAccepted.getClientInitializer().orElse(null);
+				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, clientInitializer).get();
 
 				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
 
@@ -972,7 +982,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@Nonnull
 	protected Optional<ClientSocketChannelRegistration> registerClientSocketChannel(@Nonnull SocketChannel clientSocketChannel,
-																																									@Nonnull Request request) {
+																																									@Nonnull Request request,
+																																									@Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
 
@@ -984,11 +995,22 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (!matchingResourcePath(resourcePath).isPresent())
 			return Optional.empty();
 
-		// Get a handle to the event source (it will be created if necessary)
-		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath).get();
+		ResourceMethod resourceMethod = resourceMethodForResourcePath(resourcePath).orElse(null);
+
+		if (resourceMethod == null)
+			return Optional.empty();
 
 		// Create the connection and register it with the EventSource
-		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, broadcaster.getResourceMethod());
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, resourceMethod);
+
+		// If a client initializer exists, create a unicaster and expose it to support Last-Event-ID "catch up" scenarios
+		if (clientInitializer != null) {
+			ServerSentEventUnicaster serverSentEventUnicaster = new DefaultServerSentEventUnicaster(resourcePath, serverSentEventConnection.getWriteQueue());
+			clientInitializer.accept(serverSentEventUnicaster);
+		}
+
+		// Get a handle to the event source (it will be created if necessary)
+		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath, resourceMethod).get();
 
 		if (!broadcaster.registerServerSentEventConnection(serverSentEventConnection))
 			return Optional.empty();
@@ -998,6 +1020,42 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		getGlobalConnections().put(serverSentEventConnection, broadcaster);
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
+	}
+
+	@ThreadSafe
+	protected static class DefaultServerSentEventUnicaster implements ServerSentEventUnicaster {
+		@Nonnull
+		private final ResourcePath resourcePath;
+		@Nonnull
+		private final BlockingQueue<ServerSentEvent> writeQueue;
+
+		public DefaultServerSentEventUnicaster(@Nonnull ResourcePath resourcePath,
+																					 @Nonnull BlockingQueue<ServerSentEvent> writeQueue) {
+			requireNonNull(resourcePath);
+			requireNonNull(writeQueue);
+
+			this.resourcePath = resourcePath;
+			this.writeQueue = writeQueue;
+		}
+
+		@Override
+		public void unicast(@Nonnull List<ServerSentEvent> serverSentEvents) {
+			requireNonNull(serverSentEvents);
+
+			for (ServerSentEvent serverSentEvent : serverSentEvents)
+				getWriteQueue().add(serverSentEvent);
+		}
+
+		@Nonnull
+		@Override
+		public ResourcePath getResourcePath() {
+			return this.resourcePath;
+		}
+
+		@Nonnull
+		public BlockingQueue<ServerSentEvent> getWriteQueue() {
+			return this.writeQueue;
+		}
 	}
 
 	protected void maybeCleanupBroadcaster(@Nonnull DefaultServerSentEventBroadcaster broadcaster) {
@@ -1503,13 +1561,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (isStopping() || !isStarted())
 			return Optional.empty();
 
-		return acquireBroadcasterInternal(resourcePath);
+		ResourceMethod resourceMethod = resourceMethodForResourcePath(resourcePath).orElse(null);
+
+		if (resourceMethod == null)
+			return Optional.empty();
+
+		return acquireBroadcasterInternal(resourcePath, resourceMethod);
 	}
 
 	@Nonnull
-	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@Nullable ResourcePath resourcePath) {
-		if (resourcePath == null)
-			return Optional.empty();
+	protected Optional<ResourceMethod> resourceMethodForResourcePath(@Nonnull ResourcePath resourcePath) {
+		requireNonNull(resourcePath);
 
 		ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(resourcePath).orElse(null);
 
@@ -1521,6 +1583,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Internal sanity guard
 		if (resourceMethod == null)
 			throw new IllegalStateException(format("Internal error: unable to find %s instance that matches %s", ResourceMethod.class, resourcePathDeclaration));
+
+		return Optional.of(resourceMethod);
+	}
+
+	@Nonnull
+	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@Nonnull ResourcePath resourcePath,
+																																									 @Nonnull ResourceMethod resourceMethod) {
+		requireNonNull(resourcePath);
+		requireNonNull(resourceMethod);
 
 		// Create the event source if it does not already exist
 		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
