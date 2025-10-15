@@ -49,7 +49,7 @@ public interface ServerSentEventUnicaster {
 	}
 
 	/**
-	 * Unicasts a list of Server-Sent Event payload to a specific client listening to this unicaster's {@link ResourcePath}.
+	 * Unicasts a list of Server-Sent Event payload to a specific client listening to this unicaster's {@link ResourcePath}, e.g. to "catch up" in a {@code Last-Event-ID} handshake scenario.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and unicast operation[s] will occur on separate threads of execution.
 	 * <p>

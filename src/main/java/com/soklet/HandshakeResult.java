@@ -105,39 +105,15 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	}
 
 	/**
-	 * Vends a builder for an instance that indicates a successful handshake, including custom response headers to send to the server-sent event client.
+	 * Vends a builder for an instance that indicates a successful handshake.
+	 * <p>
+	 * The builder supports specifying optional response headers, cookies, and a post-handshake client initialization hook, which is useful to "catch up" in a {@code Last-Event-ID} handshake scenario.
 	 *
-	 * @param headers the response headers to include in the successful handshake response
 	 * @return a builder for an instance that indicates a successful handshake
 	 */
 	@Nonnull
-	static Builder acceptWithHeaders(@Nonnull Map<String, Set<String>> headers) {
-		requireNonNull(headers);
-		return new Builder().headers(headers);
-	}
-
-	/**
-	 * Vends a builder for an instance that indicates a successful handshake, including custom response cookies to send to the server-sent event client.
-	 *
-	 * @param cookies the response cookies to include in the successful handshake response
-	 * @return a builder for an instance that indicates a successful handshake
-	 */
-	@Nonnull
-	static Builder acceptWithCookies(@Nonnull Set<ResponseCookie> cookies) {
-		requireNonNull(cookies);
-		return new Builder().cookies(cookies);
-	}
-
-	/**
-	 * Vends a builder for an instance that indicates a successful handshake, including a custom hook to initialize the server-sent event client.
-	 *
-	 * @param clientInitializer a custom hook to initialize the server-sent event client, to be invoked immediately after writing successful handshake response
-	 * @return a builder for an instance that indicates a successful handshake
-	 */
-	@Nonnull
-	static Builder acceptWithClientInitializer(@Nonnull Consumer<ServerSentEventUnicaster> clientInitializer) {
-		requireNonNull(clientInitializer);
-		return new Builder().clientInitializer(clientInitializer);
+	static Builder acceptWithDefaults() {
+		return new Builder();
 	}
 
 	/**
@@ -155,14 +131,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	/**
 	 * Type which indicates a successful server-sent event handshake.
 	 * <p>
-	 * A default, no-customization instance can be acquired via {@link HandshakeResult#accept()}.
-	 * <p>
-	 * Customized instances can be acquired via these builder factory methods:
-	 * <ul>
-	 *   <li>{@link HandshakeResult#acceptWithHeaders(Map)}</li>
-	 *   <li>{@link HandshakeResult#acceptWithCookies(Set)}</li>
-	 *   <li>{@link HandshakeResult#acceptWithClientInitializer(Consumer)}</li>
-	 * </ul>
+	 * A default, no-customization instance can be acquired via {@link #accept()} and a builder can be acquired via {@link #acceptWithDefaults()}.
 	 */
 	@ThreadSafe
 	final class Accepted implements HandshakeResult {
