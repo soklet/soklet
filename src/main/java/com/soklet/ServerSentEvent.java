@@ -48,7 +48,7 @@ import static java.util.Objects.requireNonNull;
  * <ul>
  *   <li>{@link #withEvent(String)} (builder primed with an event value)</li>
  *   <li>{@link #withData(String)} (builder primed with a data value)</li>
- *   <li>{@link #builder()} ("empty" builder suitable for constructing special instances, e.g. heartbeats)</li>
+ *   <li>{@link #withDefaults()} ("empty" builder suitable for constructing special cases like {@code retry}-only or {@code id}-only events.)</li>
  * </ul>
  * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
@@ -75,7 +75,7 @@ public final class ServerSentEvent {
 	 * @return the builder
 	 */
 	@Nonnull
-	public static ServerSentEvent.Builder withEvent(@Nullable String event) {
+	public static Builder withEvent(@Nullable String event) {
 		return new Builder().event(event);
 	}
 
@@ -86,31 +86,51 @@ public final class ServerSentEvent {
 	 * @return the builder
 	 */
 	@Nonnull
-	public static ServerSentEvent.Builder withData(@Nullable String data) {
+	public static Builder withData(@Nullable String data) {
 		return new Builder().data(data);
 	}
 
 	/**
-	 * Acquires an "empty" builder for {@link ServerSentEvent} instances, useful for creating special events like a connection heartbeat.
+	 * Acquires an "empty" builder for {@link ServerSentEvent} instances, useful for creating special cases like {@code retry}-only or {@code id}-only events.
 	 *
 	 * @return the builder
 	 */
 	@Nonnull
-	public static ServerSentEvent.Builder builder() {
+	public static Builder withDefaults() {
 		return new Builder();
 	}
 
-	protected ServerSentEvent(@Nonnull ServerSentEvent.Builder builder) {
+	protected ServerSentEvent(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
 		this.id = builder.id;
 		this.event = builder.event;
 		this.data = builder.data;
 		this.retry = builder.retry;
+
+		// Ensure legal construction
+
+		if (this.retry != null && this.retry.isNegative())
+			throw new IllegalArgumentException(format("%s 'retry' values must be non-negative. You supplied '%s'",
+					ServerSentEvent.class.getSimpleName(), this.retry));
+
+		if (this.event != null && containsLineBreaks(this.event))
+			throw new IllegalArgumentException(format("%s 'event' values must not contain CR or LF characters. You supplied '%s'",
+					ServerSentEvent.class.getSimpleName(), Utilities.printableString(this.event)));
+
+		if (this.id != null && containsLineBreaks(this.id))
+			throw new IllegalArgumentException(format("%s 'id' values must not contain CR or LF characters. You supplied '%s'",
+					ServerSentEvent.class.getSimpleName(), Utilities.printableString(this.id)));
+	}
+
+	@Nonnull
+	private Boolean containsLineBreaks(@Nonnull String string) {
+		requireNonNull(string);
+		return string.indexOf('\n') >= 0 || string.indexOf('\r') >= 0;
 	}
 
 	/**
-	 * Builder used to construct instances of {@link ServerSentEvent} via {@link ServerSentEvent#withEvent(String)}, {@link ServerSentEvent#withData(String)}, or {@link ServerSentEvent#builder()}.
+	 * Builder used to construct instances of {@link ServerSentEvent} via {@link ServerSentEvent#withEvent(String)}, {@link ServerSentEvent#withData(String)}, or {@link ServerSentEvent#withDefaults()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *

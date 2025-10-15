@@ -1171,6 +1171,18 @@ public final class Utilities {
 	}
 
 	@Nonnull
+	static String printableString(@Nonnull String input) {
+		requireNonNull(input);
+
+		StringBuilder out = new StringBuilder(input.length() + 16);
+
+		for (int i = 0; i < input.length(); i++)
+			out.append(printableChar(input.charAt(i)));
+
+		return out.toString();
+	}
+
+	@Nonnull
 	static String printableChar(char c) {
 		if (c == '\r') return "\\r";
 		if (c == '\n') return "\\n";
@@ -1181,8 +1193,13 @@ public final class Utilities {
 		if (c == '\'') return "\\'";
 		if (c == '\"') return "\\\"";
 		if (c == 0) return "\\0";
+
 		if (c < 0x20 || c == 0x7F)  // control chars
 			return String.format("\\u%04X", (int) c);
+
+		if (Character.isISOControl(c) || Character.getType(c) == Character.FORMAT)
+			return String.format("\\u%04X", (int) c);
+
 		return String.valueOf(c);
 	}
 }

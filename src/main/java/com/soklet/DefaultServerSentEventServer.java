@@ -124,7 +124,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		SERVER_SENT_EVENT_POISON_PILL = ServerSentEvent.withEvent("poison").build();
 
 		// This would be an event like ":\n\n"
-		SERVER_SENT_EVENT_HEARTBEAT = new ServerSentEvent(new ServerSentEvent.Builder());
+		SERVER_SENT_EVENT_HEARTBEAT = ServerSentEvent.withDefaults().build();
 
 		// Cache off a special failsafe response
 		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttp500Response();
