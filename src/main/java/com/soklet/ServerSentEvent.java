@@ -118,8 +118,8 @@ public final class ServerSentEvent {
 			throw new IllegalArgumentException(format("%s 'event' values must not contain CR or LF characters. You supplied '%s'",
 					ServerSentEvent.class.getSimpleName(), Utilities.printableString(this.event)));
 
-		if (this.id != null && containsLineBreaks(this.id))
-			throw new IllegalArgumentException(format("%s 'id' values must not contain CR or LF characters. You supplied '%s'",
+		if (this.id != null && (containsLineBreaks(this.id) || this.id.contains("\u0000")))
+			throw new IllegalArgumentException(format("%s 'id' values must not contain NUL (\\u0000), CR, or LF characters. You supplied '%s'",
 					ServerSentEvent.class.getSimpleName(), Utilities.printableString(this.id)));
 	}
 

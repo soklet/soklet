@@ -780,6 +780,12 @@ public class ServerSentEventTests {
 		}
 	}
 
+	@Test
+	public void idContainingNull_isRejected() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ServerSentEvent.withDefaults().id("abc\u0000def").build());
+	}
+
 	private static String readLineCRLF(InputStream in) throws IOException {
 		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
 		int prev = -1, cur;
