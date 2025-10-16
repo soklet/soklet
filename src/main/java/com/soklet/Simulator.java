@@ -72,11 +72,13 @@ public interface Simulator {
 	 * <p>
 	 * See documentation at <a href="https://www.soklet.com/docs/server-sent-events#testing">https://www.soklet.com/docs/server-sent-events#testing</a>.
 	 *
-	 * @param resourcePath            the Resource Path on which to listen for Server-Sent Events
-	 * @param serverSentEventConsumer function to be invoked when a Server-Sent Event has been broadcast on the Resource Path
+	 * @param resourcePath    the Resource Path on which to listen for Server-Sent Events
+	 * @param eventConsumer   function to be invoked when a Server-Sent Event has been unicast/broadcast on the Resource Path
+	 * @param commentConsumer function to be invoked when a Server-Sent Event comment has been unicast/broadcast on the Resource Path
 	 */
-	void registerServerSentEventConsumer(@Nonnull ResourcePath resourcePath,
-																			 @Nonnull Consumer<ServerSentEvent> serverSentEventConsumer);
+	void registerServerSentEventConsumers(@Nonnull ResourcePath resourcePath,
+																				@Nonnull Consumer<ServerSentEvent> eventConsumer,
+																				@Nonnull Consumer<String> commentConsumer);
 
 	/**
 	 * Acquires a Server-Sent Event broadcaster for the given {@link ResourcePath}.

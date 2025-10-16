@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Represents the result of a {@link com.soklet.annotation.ServerSentEventSource} "handshake".
  * <p>
- * Once a handshake has been accepted, you may acquire a broadcaster via {@link ServerSentEventServer#acquireBroadcaster(ResourcePath)} - the client whose handshake was accepted will then receive Server-Sent Events broadcast via {@link ServerSentEventBroadcaster#broadcast(ServerSentEvent)}.
+ * Once a handshake has been accepted, you may acquire a broadcaster via {@link ServerSentEventServer#acquireBroadcaster(ResourcePath)} - the client whose handshake was accepted will then receive Server-Sent Events broadcast via {@link ServerSentEventBroadcaster#broadcastEvent(ServerSentEvent)}.
  * <p>
  * You might have a JavaScript Server-Sent Event client that looks like this:
  * <pre>{@code // Register an event source

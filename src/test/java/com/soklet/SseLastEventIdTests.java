@@ -109,7 +109,7 @@ public class SseLastEventIdTests {
 				}
 
 				ServerSentEventBroadcaster broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.withPath("/sse/abc")).get();
-				broadcaster.broadcast(ServerSentEvent.withData("lastEventId=" + last).build());
+				broadcaster.broadcastEvent(ServerSentEvent.withData("lastEventId=" + last).build());
 			}).start();
 
 			return HandshakeResult.accept();

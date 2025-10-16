@@ -17,12 +17,9 @@
 package com.soklet;
 
 import javax.annotation.Nonnull;
-import java.util.List;
-
-import static java.util.Objects.requireNonNull;
 
 /**
- * Unicasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> payload to a specific client listening on a {@link ResourcePath}.
+ * Unicasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> or comment payload to a specific client listening on a {@link ResourcePath}.
  * <p>
  * For example:
  * <pre>{@code TODO}</pre>
@@ -43,28 +40,27 @@ public interface ServerSentEventUnicaster {
 	 *
 	 * @param serverSentEvent the Server-Sent Event payload to unicast
 	 */
-	default void unicast(@Nonnull ServerSentEvent serverSentEvent) {
-		requireNonNull(serverSentEvent);
-		unicast(List.of(serverSentEvent));
-	}
+	void unicastEvent(@Nonnull ServerSentEvent serverSentEvent);
 
 	/**
-	 * Unicasts a list of Server-Sent Event payload to a specific client listening to this unicaster's {@link ResourcePath}, e.g. to "catch up" in a {@code Last-Event-ID} handshake scenario.
+	 * Unicasts a single Server-Sent Event comment to a specific client listening to this unicaster's {@link ResourcePath}.
+	 * <p>
+	 * Specify a blank string to generate a bare {@code ":"} Server-Sent Event comment line.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and unicast operation[s] will occur on separate threads of execution.
 	 * <p>
-	 * However, mock implementations may wish to block until the unicasts have completed - for example, to simplify automated testing.
+	 * However, mock implementations may wish to block until the unicast has completed - for example, to simplify automated testing.
 	 *
-	 * @param serverSentEvents the Server-Sent Event payloads to unicast
+	 * @param comment the comment payload to unicast
 	 */
-	void unicast(@Nonnull List<ServerSentEvent> serverSentEvents);
+	void unicastComment(@Nonnull String comment);
 
 	/**
 	 * The runtime Resource Path with which this unicaster is associated.
 	 * <p>
 	 * For example, a client may successfully complete a Server-Sent Event handshake for <em>Resource Method</em> {@code @ServerSentEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}. The server, immediately after accepting the handshake, might then acquire a unicaster to "catch up" the client according to the {@code Last-Event-ID} header value (for example).
 	 * <p>
-	 * A unicaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to that specific client via {@link #unicast(ServerSentEvent)} or {@link #unicast(List)}.
+	 * A unicaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to that specific client via {@link #unicastEvent(ServerSentEvent)}.
 	 *
 	 * @return the runtime Resource Path instance with which this unicaster is associated
 	 */

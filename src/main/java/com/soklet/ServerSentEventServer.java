@@ -133,10 +133,10 @@ public interface ServerSentEventServer extends AutoCloseable {
 		/**
 		 * Callback to be invoked by a {@link ServerSentEventServer} implementation after it has received a Server-Sent Event Source HTTP request but prior to writing initial data to the HTTP response.
 		 * <p>
-		 * <strong>Note: this method is only invoked during the initial request "handshake" - it is not called for subsequent Server-Sent Event stream writes performed via {@link ServerSentEventBroadcaster#broadcast(ServerSentEvent)} invocations.</strong>
+		 * <strong>Note: this method is only invoked during the initial request "handshake" - it is not called for subsequent Server-Sent Event stream writes performed via {@link ServerSentEventBroadcaster#broadcastEvent(ServerSentEvent)} invocations.</strong>
 		 * <p>
 		 * For example, when a Server-Sent Event Source HTTP request is received, you might immediately write an HTTP 200 OK response if all looks good, or reject with a 401 due to invalid credentials.
-		 * That is the extent of the request-handling logic performed here.  The Server-Sent Event stream then remains open and can be written to via {@link ServerSentEventBroadcaster#broadcast(ServerSentEvent)}.
+		 * That is the extent of the request-handling logic performed here.  The Server-Sent Event stream then remains open and can be written to via {@link ServerSentEventBroadcaster#broadcastEvent(ServerSentEvent)}.
 		 * <p>
 		 * The {@link ServerSentEventServer} is responsible for converting its internal request representation into a {@link Request}, which a {@link com.soklet.Soklet} instance consumes and performs Soklet application request processing logic.
 		 * <p>

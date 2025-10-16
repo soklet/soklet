@@ -1105,13 +1105,15 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		public void registerServerSentEventConsumer(@Nonnull ResourcePath resourcePath,
-																								@Nonnull Consumer<ServerSentEvent> serverSentEventConsumer) {
+		public void registerServerSentEventConsumers(@Nonnull ResourcePath resourcePath,
+																								 @Nonnull Consumer<ServerSentEvent> eventConsumer,
+																								 @Nonnull Consumer<String> commentConsumer) {
 			requireNonNull(resourcePath);
-			requireNonNull(serverSentEventConsumer);
+			requireNonNull(eventConsumer);
+			requireNonNull(commentConsumer);
 
 			// Delegate to the mock SSE server
-			getServerSentEventServer().registerServerSentEventConsumer(resourcePath, serverSentEventConsumer);
+			getServerSentEventServer().registerServerSentEventConsumers(resourcePath, eventConsumer, commentConsumer);
 		}
 
 		@Nonnull
@@ -1191,13 +1193,16 @@ public final class Soklet implements AutoCloseable {
 		@Nonnull
 		private final ResourcePath resourcePath;
 		@Nonnull
-		private final Set<Consumer<ServerSentEvent>> serverSentEventConsumers;
+		private final Set<Consumer<ServerSentEvent>> eventConsumers;
+		@Nonnull
+		private final Set<Consumer<String>> commentConsumers;
 
 		public MockServerSentEventBroadcaster(@Nonnull ResourcePath resourcePath) {
 			requireNonNull(resourcePath);
 
 			this.resourcePath = resourcePath;
-			this.serverSentEventConsumers = ConcurrentHashMap.newKeySet();
+			this.eventConsumers = ConcurrentHashMap.newKeySet();
+			this.commentConsumers = ConcurrentHashMap.newKeySet();
 		}
 
 		@Nonnull
@@ -1209,16 +1214,30 @@ public final class Soklet implements AutoCloseable {
 		@Nonnull
 		@Override
 		public Long getClientCount() {
-			return Long.valueOf(getServerSentEventConsumers().size());
+			return Long.valueOf(getEventConsumers().size() + getCommentConsumers().size());
 		}
 
 		@Override
-		public void broadcast(@Nonnull ServerSentEvent serverSentEvent) {
+		public void broadcastEvent(@Nonnull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
 
-			for (Consumer<ServerSentEvent> serverSentEventConsumer : getServerSentEventConsumers()) {
+			for (Consumer<ServerSentEvent> eventConsumer : getEventConsumers()) {
 				try {
-					serverSentEventConsumer.accept(serverSentEvent);
+					eventConsumer.accept(serverSentEvent);
+				} catch (Throwable throwable) {
+					// TODO: revisit this - should we communicate back exceptions, and should we fire these on separate threads for "realism" (probably not)?
+					throwable.printStackTrace();
+				}
+			}
+		}
+
+		@Override
+		public void broadcastComment(@Nonnull String comment) {
+			requireNonNull(comment);
+
+			for (Consumer<String> commentConsumer : getCommentConsumers()) {
+				try {
+					commentConsumer.accept(comment);
 				} catch (Throwable throwable) {
 					// TODO: revisit this - should we communicate back exceptions, and should we fire these on separate threads for "realism" (probably not)?
 					throwable.printStackTrace();
@@ -1227,14 +1246,25 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Nonnull
-		public Boolean registerServerSentEventConsumer(@Nonnull Consumer<ServerSentEvent> serverSentEventConsumer) {
-			requireNonNull(serverSentEventConsumer);
-			return getServerSentEventConsumers().add(serverSentEventConsumer);
+		public Boolean registerServerSentEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer) {
+			requireNonNull(eventConsumer);
+			return getEventConsumers().add(eventConsumer);
 		}
 
 		@Nonnull
-		protected Set<Consumer<ServerSentEvent>> getServerSentEventConsumers() {
-			return this.serverSentEventConsumers;
+		public Boolean registerCommentConsumer(@Nonnull Consumer<String> commentConsumer) {
+			requireNonNull(commentConsumer);
+			return getCommentConsumers().add(commentConsumer);
+		}
+
+		@Nonnull
+		protected Set<Consumer<ServerSentEvent>> getEventConsumers() {
+			return this.eventConsumers;
+		}
+
+		@Nonnull
+		protected Set<Consumer<String>> getCommentConsumers() {
+			return this.commentConsumers;
 		}
 	}
 
@@ -1284,15 +1314,18 @@ public final class Soklet implements AutoCloseable {
 			return Optional.of(broadcaster);
 		}
 
-		public void registerServerSentEventConsumer(@Nonnull ResourcePath resourcePath,
-																								@Nonnull Consumer<ServerSentEvent> serverSentEventConsumer) {
+		public void registerServerSentEventConsumers(@Nonnull ResourcePath resourcePath,
+																								 @Nonnull Consumer<ServerSentEvent> eventConsumer,
+																								 @Nonnull Consumer<String> commentConsumer) {
 			requireNonNull(resourcePath);
-			requireNonNull(serverSentEventConsumer);
+			requireNonNull(eventConsumer);
+			requireNonNull(commentConsumer);
 
 			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
 					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp));
 
-			broadcaster.registerServerSentEventConsumer(serverSentEventConsumer);
+			broadcaster.registerServerSentEventConsumer(eventConsumer);
+			broadcaster.registerCommentConsumer(commentConsumer);
 		}
 
 		@Override

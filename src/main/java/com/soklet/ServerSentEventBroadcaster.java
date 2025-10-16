@@ -52,7 +52,7 @@ public interface ServerSentEventBroadcaster {
 	 * <p>
 	 * For example, a client may register for SSE broadcasts for <em>Resource Method</em> {@code @ServerSentEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}.
 	 * <p>
-	 * A broadcaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to all clients via {@link #broadcast(ServerSentEvent)}.
+	 * A broadcaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to all clients via {@link #broadcastEvent(ServerSentEvent)}.
 	 *
 	 * @return the runtime Resource Path instance with which this broadcaster is associated
 	 */
@@ -79,5 +79,18 @@ public interface ServerSentEventBroadcaster {
 	 *
 	 * @param serverSentEvent the Server-Sent Event payload to broadcast
 	 */
-	void broadcast(@Nonnull ServerSentEvent serverSentEvent);
+	void broadcastEvent(@Nonnull ServerSentEvent serverSentEvent);
+
+	/**
+	 * Broadcasts a single Server-Sent Event comment to all clients listening to this broadcaster's {@link ResourcePath}.
+	 * <p>
+	 * Specify a blank string to generate a bare {@code ":"} Server-Sent Event comment line.
+	 * <p>
+	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
+	 * <p>
+	 * However, mock implementations may wish to block until broadcasts have completed - for example, to simplify automated testing.
+	 *
+	 * @param comment the comment payload to broadcast
+	 */
+	void broadcastComment(@Nonnull String comment);
 }

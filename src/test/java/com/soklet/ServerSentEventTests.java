@@ -57,9 +57,13 @@ public class ServerSentEventTests {
 				.build();
 
 		Soklet.runSimulator(configuration, (simulator -> {
-			simulator.registerServerSentEventConsumer(ResourcePath.withPath("/examples/abc"), (serverSentEvent -> {
-				Assertions.assertEquals("example", serverSentEvent.getEvent().get(), "SSE event mismatch");
-			}));
+			simulator.registerServerSentEventConsumers(ResourcePath.withPath("/examples/abc"),
+					(serverSentEvent) -> {
+						Assertions.assertEquals("example", serverSentEvent.getEvent().get(), "SSE event mismatch");
+					},
+					(comment) -> {
+						// Nothing to do for now
+					});
 
 			// Perform initial handshake with /examples/abc and verify 200 response
 			Request request = Request.with(HttpMethod.GET, "/examples/abc").build();
@@ -76,7 +80,7 @@ public class ServerSentEventTests {
 
 			// ...and broadcast it to all /examples/abc listeners
 			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.withPath("/examples/abc"));
-			broadcaster.broadcast(serverSentEvent);
+			broadcaster.broadcastEvent(serverSentEvent);
 		}));
 	}
 
@@ -128,7 +132,7 @@ public class ServerSentEventTests {
 					.retry(Duration.ofSeconds(5))
 					.build();
 
-			broadcaster.broadcast(serverSentEvent);
+			broadcaster.broadcastEvent(serverSentEvent);
 		}
 
 		@POST("/shutdown")
@@ -207,7 +211,7 @@ public class ServerSentEventTests {
 						.id("e1")
 						.retry(Duration.ofSeconds(10))
 						.build();
-				b.broadcast(ev);
+				b.broadcastEvent(ev);
 
 				String block = readUntil(socket.getInputStream(), "\n\n", 8192);
 				Assertions.assertNotNull(block, "Did not receive first SSE event");
@@ -258,7 +262,7 @@ public class ServerSentEventTests {
 
 				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.withPath("/tests/large")).get();
 				ServerSentEvent ev = ServerSentEvent.withEvent("big").id("big-1").data(bigData).build();
-				b.broadcast(ev);
+				b.broadcastEvent(ev);
 
 				// Read exactly one event block
 				String block = readUntil(socket.getInputStream(), "\n\n", (64 + 8) * linesCount + 8192);
@@ -310,7 +314,7 @@ public class ServerSentEventTests {
 				// Rapidly broadcast a bunch of small events (some will be dropped under pressure, but last should survive)
 				final int N = 1500;
 				for (int i = 0; i < N; i++) {
-					b.broadcast(ServerSentEvent.withEvent("bp").id(String.valueOf(i)).data("x").build());
+					b.broadcastEvent(ServerSentEvent.withEvent("bp").id(String.valueOf(i)).data("x").build());
 				}
 
 				// Now read until we observe the last id (or time out)
@@ -361,7 +365,7 @@ public class ServerSentEventTests {
 
 			// Kick one message through so the writer loop is active
 			sse.acquireBroadcaster(ResourcePath.withPath("/tests/closeme")).get()
-					.broadcast(ServerSentEvent.withEvent("one").id("1").data("a").build());
+					.broadcastEvent(ServerSentEvent.withEvent("one").id("1").data("a").build());
 			readUntil(socket.getInputStream(), "\n\n", 4096); // consume it
 
 			// Now stop the server; this should enqueue poison pills and close the channel
@@ -750,7 +754,7 @@ public class ServerSentEventTests {
 					Thread.sleep(10);
 				}
 
-				broadcaster.broadcast(evt);
+				broadcaster.broadcastEvent(evt);
 
 				// read lines on the wire
 				List<String> block = new ArrayList<>();

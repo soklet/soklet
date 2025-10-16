@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.DefaultServerSentEventServer.ServerSentEventConnection.WriteQueueElement;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import com.soklet.internal.util.ConcurrentLruMap;
@@ -100,8 +101,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_POISON_PILL;
 	@Nonnull
-	private static final ServerSentEvent SERVER_SENT_EVENT_HEARTBEAT;
-	@Nonnull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
 
 	static {
@@ -123,9 +122,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// When this event is taken off of the queue, the socket is torn down and the thread finishes running.
 		// The contents don't matter; the object reference is used to determine if it's poison.
 		SERVER_SENT_EVENT_POISON_PILL = ServerSentEvent.withEvent("poison").build();
-
-		// This would be an event like ":\n\n"
-		SERVER_SENT_EVENT_HEARTBEAT = ServerSentEvent.withDefaults().build();
 
 		// Cache off a special failsafe response
 		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttp500Response();
@@ -229,13 +225,23 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void broadcast(@Nonnull ServerSentEvent serverSentEvent) {
+		public void broadcastEvent(@Nonnull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
 				enqueueServerSentEvent(serverSentEventConnection, serverSentEvent);
+		}
+
+		@Override
+		public void broadcastComment(@Nonnull String comment) {
+			requireNonNull(comment);
+
+			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
+			// The blocking queues are consumed by separate per-socket-channel threads
+			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
+				enqueueComment(serverSentEventConnection, comment);
 		}
 
 		@Nonnull
@@ -461,11 +467,26 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(serverSentEvent);
 
-		BlockingQueue<ServerSentEvent> writeQueue = serverSentEventConnection.getWriteQueue();
+		BlockingQueue<WriteQueueElement> writeQueue = serverSentEventConnection.getWriteQueue();
+		WriteQueueElement writeQueueElement = WriteQueueElement.withServerSentEvent(serverSentEvent);
 
-		if (!writeQueue.offer(serverSentEvent)) {
+		if (!writeQueue.offer(writeQueueElement)) {
 			writeQueue.poll();
-			writeQueue.offer(serverSentEvent);
+			writeQueue.offer(writeQueueElement);
+		}
+	}
+
+	private static void enqueueComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																		 @Nonnull String comment) {
+		requireNonNull(serverSentEventConnection);
+		requireNonNull(comment);
+
+		BlockingQueue<WriteQueueElement> writeQueue = serverSentEventConnection.getWriteQueue();
+		WriteQueueElement writeQueueElement = WriteQueueElement.withComment(comment);
+
+		if (!writeQueue.offer(writeQueueElement)) {
+			writeQueue.poll();
+			writeQueue.offer(writeQueueElement);
 		}
 	}
 
@@ -558,7 +579,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		ClientSocketChannelRegistration clientSocketChannelRegistration = null;
 		Request request = null;
 		ResourceMethod resourceMethod = null;
-		ServerSentEvent serverSentEvent;
 		Instant writeStarted;
 		Throwable throwable = null;
 
@@ -657,27 +677,35 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				while (true) {
 					// Wait for SSE broadcasts on socket
-					serverSentEvent = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
+					WriteQueueElement writeQueueElement = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
+					ServerSentEvent serverSentEvent = writeQueueElement.getServerSentEvent().orElse(null);
+					String comment = writeQueueElement.getComment().orElse(null);
 
 					if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) {
-						// Encountered poison pill, exiting...
+						// Encountered poison pill, exit...
 						break;
 					}
 
-					ByteBuffer byteBuffer;
+					String payload;
 
 					if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK) {
 						// Perform socket validity check by writing a heartbeat
-						String message = formatForResponse(SERVER_SENT_EVENT_HEARTBEAT);
-						byteBuffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+						payload = formatCommentForResponse("");
+					} else if (serverSentEvent != null) {
+						// It's a normal server-sent event
+						payload = formatServerSentEventForResponse(serverSentEvent);
+					} else if (comment != null) {
+						// It's a comment
+						payload = formatCommentForResponse(comment);
 					} else {
-						// It's a normal server-sent event, write it
-						String message = formatForResponse(serverSentEvent);
-						byteBuffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+						throw new IllegalStateException("Not sure what to do; no Server-Sent Event or comment available");
 					}
 
-					getLifecycleInterceptor().get().willStartServerSentEventWriting(request,
-							clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent);
+					ByteBuffer byteBuffer = ByteBuffer.wrap(payload.getBytes(StandardCharsets.UTF_8));
+
+					if (serverSentEvent != null)
+						getLifecycleInterceptor().get().willStartServerSentEventWriting(request,
+								clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent);
 
 					writeStarted = Instant.now();
 					Throwable writeThrowable = null;
@@ -692,8 +720,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						Instant writeFinished = Instant.now();
 						Duration writeDuration = Duration.between(writeStarted, writeFinished);
 
-						getLifecycleInterceptor().get().didFinishServerSentEventWriting(request,
-								clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, writeThrowable);
+						if (serverSentEvent != null)
+							getLifecycleInterceptor().get().didFinishServerSentEventWriting(request,
+									clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, writeThrowable);
 
 						if (writeThrowable != null)
 							throw writeThrowable;
@@ -877,11 +906,33 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected String formatForResponse(@Nonnull ServerSentEvent serverSentEvent) {
-		requireNonNull(serverSentEvent);
+	protected String formatCommentForResponse(@Nonnull String comment) {
+		requireNonNull(comment);
 
-		if (serverSentEvent == SERVER_SENT_EVENT_HEARTBEAT)
+		String[] lines = comment.split("\\R", -1);
+
+		if (lines.length == 0)
 			return ":\n\n";
+
+		StringBuilder stringBuilder = new StringBuilder();
+
+		for (String line : lines) {
+			stringBuilder.append(':');
+
+			if (!line.isEmpty())
+				stringBuilder.append(' ').append(line);
+
+			stringBuilder.append('\n');
+		}
+
+		stringBuilder.append('\n');
+
+		return stringBuilder.toString();
+	}
+
+	@Nonnull
+	protected String formatServerSentEventForResponse(@Nonnull ServerSentEvent serverSentEvent) {
+		requireNonNull(serverSentEvent);
 
 		String event = serverSentEvent.getEvent().orElse(null);
 
@@ -922,17 +973,59 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@ThreadSafe
-	protected static class ServerSentEventConnection {
+	protected static final class ServerSentEventConnection {
 		@Nonnull
 		private final Request request;
 		@Nonnull
 		private final ResourceMethod resourceMethod;
 		@Nonnull
-		private final BlockingQueue<ServerSentEvent> writeQueue;
+		private final BlockingQueue<WriteQueueElement> writeQueue;
 		@Nonnull
 		private final Instant establishedAt;
 		@Nonnull
 		private final AtomicLong lastValidityCheckInNanos;
+
+		@ThreadSafe
+		static final class WriteQueueElement {
+			@Nullable
+			private final ServerSentEvent serverSentEvent;
+			@Nullable
+			private final String comment;
+
+			@Nonnull
+			public static WriteQueueElement withServerSentEvent(@Nonnull ServerSentEvent serverSentEvent) {
+				requireNonNull(serverSentEvent);
+				return new WriteQueueElement(serverSentEvent, null);
+			}
+
+			@Nonnull
+			public static WriteQueueElement withComment(@Nonnull String comment) {
+				requireNonNull(comment);
+				return new WriteQueueElement(null, comment);
+			}
+
+			private WriteQueueElement(@Nullable ServerSentEvent serverSentEvent,
+																@Nullable String comment) {
+				if (serverSentEvent == null && comment == null)
+					throw new IllegalStateException("Must provide either a server-sent event or a comment");
+
+				if (serverSentEvent != null && comment != null)
+					throw new IllegalStateException("Must provide either a server-sent event or a comment; not both");
+
+				this.serverSentEvent = serverSentEvent;
+				this.comment = comment;
+			}
+
+			@Nonnull
+			public Optional<ServerSentEvent> getServerSentEvent() {
+				return Optional.ofNullable(this.serverSentEvent);
+			}
+
+			@Nonnull
+			public Optional<String> getComment() {
+				return Optional.ofNullable(this.comment);
+			}
+		}
 
 		public ServerSentEventConnection(@Nonnull Request request,
 																		 @Nonnull ResourceMethod resourceMethod) {
@@ -957,7 +1050,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public BlockingQueue<ServerSentEvent> getWriteQueue() {
+		public BlockingQueue<WriteQueueElement> getWriteQueue() {
 			return this.writeQueue;
 		}
 
@@ -1027,10 +1120,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final ResourcePath resourcePath;
 		@Nonnull
-		private final BlockingQueue<ServerSentEvent> writeQueue;
+		private final BlockingQueue<WriteQueueElement> writeQueue;
 
 		public DefaultServerSentEventUnicaster(@Nonnull ResourcePath resourcePath,
-																					 @Nonnull BlockingQueue<ServerSentEvent> writeQueue) {
+																					 @Nonnull BlockingQueue<WriteQueueElement> writeQueue) {
 			requireNonNull(resourcePath);
 			requireNonNull(writeQueue);
 
@@ -1039,11 +1132,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void unicast(@Nonnull List<ServerSentEvent> serverSentEvents) {
-			requireNonNull(serverSentEvents);
+		public void unicastEvent(@Nonnull ServerSentEvent serverSentEvent) {
+			requireNonNull(serverSentEvent);
+			getWriteQueue().add(WriteQueueElement.withServerSentEvent(serverSentEvent));
+		}
 
-			for (ServerSentEvent serverSentEvent : serverSentEvents)
-				getWriteQueue().add(serverSentEvent);
+		@Override
+		public void unicastComment(@Nonnull String comment) {
+			requireNonNull(comment);
+			getWriteQueue().add(WriteQueueElement.withComment(comment));
 		}
 
 		@Nonnull
@@ -1053,7 +1150,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		public BlockingQueue<ServerSentEvent> getWriteQueue() {
+		protected BlockingQueue<WriteQueueElement> getWriteQueue() {
 			return this.writeQueue;
 		}
 	}
