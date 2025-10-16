@@ -68,7 +68,7 @@ public interface Simulator {
 	RequestResult performRequest(@Nonnull Request request);
 
 	/**
-	 * Registers a {@link ServerSentEvent} "consumer" for the given {@link ResourcePath} - similar to how a real client would listen for Server-Sent Events.
+	 * Registers {@link ServerSentEvent} data "consumers" for the given {@link ResourcePath} - similar to how a real client would listen for Server-Sent Events and comments.
 	 * <p>
 	 * See documentation at <a href="https://www.soklet.com/docs/server-sent-events#testing">https://www.soklet.com/docs/server-sent-events#testing</a>.
 	 *

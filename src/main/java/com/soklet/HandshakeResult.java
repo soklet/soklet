@@ -131,7 +131,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	/**
 	 * Type which indicates a successful server-sent event handshake.
 	 * <p>
-	 * A default, no-customization instance can be acquired via {@link #accept()} and a builder can be acquired via {@link #acceptWithDefaults()}.
+	 * A default, no-customization-permitted instance can be acquired via {@link #accept()} and a builder which enables customization can be acquired via {@link #acceptWithDefaults()}.
 	 */
 	@ThreadSafe
 	final class Accepted implements HandshakeResult {
@@ -173,18 +173,40 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 				// Only permit construction through Handshake builder methods
 			}
 
+			/**
+			 * Specifies custom response headers to be sent with the handshake.
+			 *
+			 * @param headers custom response headers to send
+			 * @return this builder, for chaining
+			 */
 			@Nonnull
 			public Builder headers(@Nullable Map<String, Set<String>> headers) {
 				this.headers = headers;
 				return this;
 			}
 
+			/**
+			 * Specifies custom response cookies to be sent with the handshake.
+			 *
+			 * @param cookies custom response cookies to send
+			 * @return this builder, for chaining
+			 */
 			@Nonnull
 			public Builder cookies(@Nullable Set<ResponseCookie> cookies) {
 				this.cookies = cookies;
 				return this;
 			}
 
+			/**
+			 * Specifies custom "client initializer" function to run immediately after the handshake succeeds - useful for performing "catch-up" logic if the client had provided a {@code Last-Event-ID} request header.
+			 * <p>
+			 * The function is provided with a {@link ServerSentEventUnicaster}, which permits sending Server-Sent Events and comments directly to the client that accepted the handshake (as opposed to a {@link ServerSentEventBroadcaster}, which would send to all clients listening on the same {@link ResourcePath}).
+			 * <p>
+			 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a>.
+			 *
+			 * @param clientInitializer custom function to run to initialize the client
+			 * @return this builder, for chaining
+			 */
 			@Nonnull
 			public Builder clientInitializer(@Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
 				this.clientInitializer = clientInitializer;
