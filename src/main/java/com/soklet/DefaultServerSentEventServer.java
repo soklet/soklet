@@ -97,6 +97,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Integer DEFAULT_CONNECTION_QUEUE_CAPACITY;
 	@Nonnull
+	private static final Integer DEFAULT_CONCURRENT_CONNECTION_LIMIT;
+	@Nonnull
+	private static final Integer DEFAULT_BROADCASTER_CACHE_CAPACITY;
+	@Nonnull
+	private static final Integer DEFAULT_RESOURCE_PATH_CACHE_CAPACITY;
+	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK;
 	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_POISON_PILL;
@@ -111,6 +117,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(1);
 		DEFAULT_CONNECTION_QUEUE_CAPACITY = 256;
+		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
+		DEFAULT_BROADCASTER_CACHE_CAPACITY = 1_024;
+		DEFAULT_RESOURCE_PATH_CACHE_CAPACITY = 8_192;
 
 		// Make a unique "validity check" server-sent event used to wake a socket listener thread by injecting it into the relevant write queue.
 		// When this event is taken off of the queue, a validity check is performed on the socket to see if it's still active.
@@ -204,7 +213,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.resourcePath = resourcePath;
 			this.connectionUnregisteredListener = connectionUnregisteredListener;
 			// TODO: let clients specify capacity
-			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(1_024);
+			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(256);
 		}
 
 		@Nonnull
@@ -326,8 +335,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (this.heartbeatInterval.isNegative() || this.heartbeatInterval.isZero())
 			throw new IllegalArgumentException("Heartbeat interval must be > 0");
 
-		this.broadcastersByResourcePath = new ConcurrentLruMap<>(builder.broadcasterCacheCapacity != null ? builder.broadcasterCacheCapacity : 1_024, (resourcePath, broadcaster) -> { /* nothing to do for now */});
-		this.resourcePathDeclarationsByResourcePathCache = new ConcurrentLruMap<>(builder.resourcePathCacheCapacity != null ? builder.resourcePathCacheCapacity : 1_024, (resourcePath, broadcaster) -> { /* nothing to do for now */});
+		this.broadcastersByResourcePath = new ConcurrentLruMap<>(builder.broadcasterCacheCapacity != null ? builder.broadcasterCacheCapacity : DEFAULT_BROADCASTER_CACHE_CAPACITY, (resourcePath, broadcaster) -> { /* nothing to do for now */});
+		this.resourcePathDeclarationsByResourcePathCache = new ConcurrentLruMap<>(builder.resourcePathCacheCapacity != null ? builder.resourcePathCacheCapacity : DEFAULT_RESOURCE_PATH_CACHE_CAPACITY, (resourcePath, broadcaster) -> { /* nothing to do for now */});
 
 		// Cowardly refuse to run on anything other than a runtime that supports Virtual threads.
 		if (!Utilities.virtualThreadsAvailable())
@@ -367,18 +376,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			});
 		};
 
-		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : 8_192;
+		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : DEFAULT_CONCURRENT_CONNECTION_LIMIT;
 
 		if (this.concurrentConnectionLimit < 1)
 			throw new IllegalArgumentException("The value for concurrentConnectionLimit must be > 0");
 
-		this.connectionQueueCapacity = builder.connectionQueueCapacity != null ? builder.connectionQueueCapacity : 1_024;
+		this.connectionQueueCapacity = builder.connectionQueueCapacity != null ? builder.connectionQueueCapacity : DEFAULT_CONNECTION_QUEUE_CAPACITY;
 
 		if (this.connectionQueueCapacity < 1)
 			throw new IllegalArgumentException("The value for connectionQueueCapacity must be > 0");
 
 		// Initialize the global LRU map with the specified limit. Assume ConcurrentLRUMap supports a removal listener.
-		this.globalConnections = new ConcurrentLruMap<>(this.concurrentConnectionLimit, (evictedConnection, broadcaster) -> {
+		this.globalConnections = new ConcurrentLruMap<>(getConcurrentConnectionLimit(), (evictedConnection, broadcaster) -> {
 			// This callback is triggered when a connection is evicted from the global LRU map.
 			// Unregister the evicted connection from the broadcaster and send poison pill to close it.
 			broadcaster.unregisterServerSentEventConnection(evictedConnection, true);
@@ -1113,7 +1122,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			clientInitializer.accept(serverSentEventUnicaster);
 
 		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection
-		//serverSentEventConnection.getWriteQueue().add(WriteQueueElement.withComment(""));
+		// serverSentEventConnection.getWriteQueue().add(WriteQueueElement.withComment(""));
 
 		// Get a handle to the event source (it will be created if necessary)
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath, resourceMethod).get();
