@@ -22,7 +22,42 @@ import javax.annotation.Nonnull;
  * Unicasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> or comment payload to a specific client listening on a {@link ResourcePath}.
  * <p>
  * For example:
- * <pre>{@code TODO}</pre>
+ * <pre>{@code @ServerSentEventSource("/chats/{chatId}/event-source")
+ * public HandshakeResult chatEventSource(
+ *   @PathParameter Long chatId,
+ *   // Browsers will send this header automatically on reconnects
+ *   @RequestHeader(name="Last-Event-ID", optional=true) String lastEventId
+ * ) {
+ *   Chat chat = myChatService.find(chatId);
+ *
+ *   // Exceptions that bubble out will reject the handshake and go through the
+ *   // ResponseMarshaler::forThrowable path, same as non-SSE Resource Methods
+ *   if (chat == null)
+ *     throw new NoSuchChatException();
+ *
+ *   // If a Last-Event-ID header was sent, pull data to "catch up" the client
+ *   List<ChatMessage> catchupMessages = new ArrayList<>();
+ *
+ *   if(lastEventId != null)
+ *     catchupMessages.addAll(myChatService.findCatchups(chatId, lastEventId));
+ *
+ *   // Customize "accept" handshake with a client initializer
+ *   return HandshakeResult.acceptWithDefaults()
+ *     .clientInitializer((unicaster) -> {
+ *       // Unicast "catchup" initialization events to this specific client.
+ *       // The unicaster is guaranteed to write these events before any
+ *       // other broadcaster does, allowing clients to safely catch up
+ *       // without the risk of event interleaving
+ *       catchupMessages.stream()
+ *         .map(catchupMessage -> ServerSentEvent.withEvent("chat-message")
+ *           .id(catchupMessage.id())
+ *           .data(catchupMessage.toJson())
+ *           .retry(Duration.ofSeconds(5))
+ *           .build())
+ *         .forEach(event -> unicaster.unicastEvent(event));
+ *     })
+ *     .build();
+ * }}</pre>
  * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  * <p>

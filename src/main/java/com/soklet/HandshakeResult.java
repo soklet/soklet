@@ -81,13 +81,13 @@ import static java.util.Objects.requireNonNull;
  * ServerSentEventBroadcaster broadcaster = sseServer.acquireBroadcaster(resourcePath).get();
  *
  * // ...construct the payload...
- * ServerSentEvent sse = ServerSentEvent.withEvent("chat-message")
+ * ServerSentEvent event = ServerSentEvent.withEvent("chat-message")
  *   .data("Hello, world") // often JSON
  *   .retry(Duration.ofSeconds(5))
  *   .build();
  *
  * // ...and send it to all connected clients.
- * broadcaster.broadcast(sse);}</pre>
+ * broadcaster.broadcastEvent(event);}</pre>
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a>.
  *
@@ -132,6 +132,10 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 * Type which indicates a successful server-sent event handshake.
 	 * <p>
 	 * A default, no-customization-permitted instance can be acquired via {@link #accept()} and a builder which enables customization can be acquired via {@link #acceptWithDefaults()}.
+	 * <p>
+	 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events#accepting-handshakes">https://www.soklet.com/docs/server-sent-events#accepting-handshakes</a>.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
 	final class Accepted implements HandshakeResult {
@@ -300,6 +304,10 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 * Type which indicates a rejected server-sent event handshake.
 	 * <p>
 	 * Instances can be acquired via the {@link HandshakeResult#rejectWithResponse(Response)} factory method.
+	 * <p>
+	 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events#rejecting-handshakes">https://www.soklet.com/docs/server-sent-events#rejecting-handshakes</a>.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
 	final class Rejected implements HandshakeResult {

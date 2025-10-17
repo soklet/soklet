@@ -34,12 +34,14 @@ Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/do
 * Small, comprehensible codebase
 * Support for automated unit and integration testing
 * Emphasis on configurability
+* Thorough, high-quality documentation
 * Support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
+* [Servlet Integration](https://www.soklet.com/docs/servlet-integration) for legacy code
 
 ### Design Non-Goals
 
 * SSL/TLS (your load balancer should provide TLS termination)
-* HTTP streaming
+* Traditional HTTP streaming
 * WebSockets
 * Dictate which technologies to use (Guice vs. Dagger, Gson vs. Jackson, etc.)
 * "Batteries included" authentication and authorization
@@ -59,7 +61,7 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 Soklet is a single JAR, available on Maven Central.
 
-JDK 17+ is required.
+JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)).
 
 #### Maven
 
