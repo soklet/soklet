@@ -48,19 +48,6 @@ public class SseLastEventIdTests {
 		SokletConfig config = SokletConfig.withServer(Server.withPort(port).build())
 				.serverSentEventServer(serverSentEventServer)
 				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseResource.class)))
-				.instanceProvider(new InstanceProvider() {
-					@Nonnull
-					@Override
-					@SuppressWarnings("unchecked")
-					public <T> T provide(@Nonnull Class<T> instanceClass) {
-						// Hack to expose SSE server to resource methods
-						if (instanceClass.equals(ServerSentEventServer.class)) {
-							return (T) serverSentEventServer;
-						} else {
-							return InstanceProvider.defaultInstance().provide(instanceClass);
-						}
-					}
-				})
 				.build();
 
 		try (Soklet soklet = Soklet.withConfig(config)) {

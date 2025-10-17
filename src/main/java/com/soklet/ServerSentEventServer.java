@@ -188,6 +188,12 @@ public interface ServerSentEventServer extends AutoCloseable {
 		Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 		@Nullable
 		Integer concurrentConnectionLimit;
+		@Nullable
+		Integer broadcasterCacheCapacity;
+		@Nullable
+		Integer resourcePathCacheCapacity;
+		@Nullable
+		Integer connectionQueueCapacity;
 
 		@Nonnull
 		protected Builder(@Nonnull Integer port) {
@@ -239,14 +245,32 @@ public interface ServerSentEventServer extends AutoCloseable {
 		}
 
 		@Nonnull
+		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
+			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
+			return this;
+		}
+
+		@Nonnull
 		public Builder concurrentConnectionLimit(@Nullable Integer concurrentConnectionLimit) {
 			this.concurrentConnectionLimit = concurrentConnectionLimit;
 			return this;
 		}
 
 		@Nonnull
-		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
-			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
+		public Builder broadcasterCacheCapacity(@Nullable Integer broadcasterCacheCapacity) {
+			this.broadcasterCacheCapacity = broadcasterCacheCapacity;
+			return this;
+		}
+
+		@Nonnull
+		public Builder resourcePathCacheCapacity(@Nullable Integer resourcePathCacheCapacity) {
+			this.resourcePathCacheCapacity = resourcePathCacheCapacity;
+			return this;
+		}
+
+		@Nonnull
+		public Builder connectionQueueCapacity(@Nullable Integer connectionQueueCapacity) {
+			this.connectionQueueCapacity = connectionQueueCapacity;
 			return this;
 		}
 

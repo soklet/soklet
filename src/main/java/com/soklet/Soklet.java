@@ -436,7 +436,11 @@ public final class Soklet implements AutoCloseable {
 							updatedMarshaledResponse = applyHeadResponseIfApplicable(request, updatedMarshaledResponse);
 
 							// 2. Apply other standard response customizations (CORS, Content-Length)
-							updatedMarshaledResponse = applyCommonPropertiesToMarshaledResponse(request, updatedMarshaledResponse);
+							// Note that we don't want to write Content-Length for SSE "accepted" handshakes
+							HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
+							boolean suppressContentLength = handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted;
+
+							updatedMarshaledResponse = applyCommonPropertiesToMarshaledResponse(request, updatedMarshaledResponse, suppressContentLength);
 
 							// Update our result holder with the modified response if necessary
 							if (originalMarshaledResponse != updatedMarshaledResponse) {
@@ -909,7 +913,21 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
 
-		marshaledResponse = applyContentLengthIfApplicable(request, marshaledResponse);
+		return applyCommonPropertiesToMarshaledResponse(request, marshaledResponse, false);
+	}
+
+	@Nonnull
+	protected MarshaledResponse applyCommonPropertiesToMarshaledResponse(@Nonnull Request request,
+																																			 @Nonnull MarshaledResponse marshaledResponse,
+																																			 @Nonnull Boolean suppressContentLength) {
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+		requireNonNull(suppressContentLength);
+
+		// Don't write Content-Length for an accepted SSE Handshake, for example
+		if (!suppressContentLength)
+			marshaledResponse = applyContentLengthIfApplicable(request, marshaledResponse);
+
 		marshaledResponse = applyCorsResponseIfApplicable(request, marshaledResponse);
 
 		return marshaledResponse;

@@ -141,12 +141,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final Integer maximumRequestSizeInBytes;
 	@Nonnull
 	private final Integer requestReadBufferSizeInBytes;
-	// TODO: we probably want to convert to ConcurrentLruMap
 	@Nonnull
-	private final ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
-	// TODO: we probably want to convert to ConcurrentLruMap
+	private final ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
 	@Nonnull
-	private final ConcurrentHashMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
+	private final ConcurrentLruMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
 	@Nonnull
 	private final ConcurrentLruMap<ServerSentEventConnection, DefaultServerSentEventBroadcaster> globalConnections;
 	@Nonnull
@@ -157,6 +155,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final Supplier<ExecutorService> requestReaderExecutorServiceSupplier;
 	@Nonnull
 	private final Integer concurrentConnectionLimit;
+	@Nonnull
+	private final Integer connectionQueueCapacity;
 	@Nonnull
 	private final AtomicBoolean stopPoisonPill;
 	@Nullable
@@ -279,8 +279,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		public void unregisterAllServerSentEventConnections(@Nonnull Boolean sendPoisonPill) {
 			requireNonNull(sendPoisonPill);
 
-			// TODO: we probably want to have a lock around registration/unregistration
-			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
+			// Snapshot list for consistency during unregister process
+			for (ServerSentEventConnection serverSentEventConnection : new ArrayList<>(getServerSentEventConnections()))
 				unregisterServerSentEventConnection(serverSentEventConnection, sendPoisonPill);
 		}
 
@@ -326,9 +326,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (this.heartbeatInterval.isNegative() || this.heartbeatInterval.isZero())
 			throw new IllegalArgumentException("Heartbeat interval must be > 0");
 
-		// TODO: let clients specify initial capacity
-		this.broadcastersByResourcePath = new ConcurrentHashMap<>(1_024);
-		this.resourcePathDeclarationsByResourcePathCache = new ConcurrentHashMap<>(1_024);
+		this.broadcastersByResourcePath = new ConcurrentLruMap<>(builder.broadcasterCacheCapacity != null ? builder.broadcasterCacheCapacity : 1_024, (resourcePath, broadcaster) -> { /* nothing to do for now */});
+		this.resourcePathDeclarationsByResourcePathCache = new ConcurrentLruMap<>(builder.resourcePathCacheCapacity != null ? builder.resourcePathCacheCapacity : 1_024, (resourcePath, broadcaster) -> { /* nothing to do for now */});
 
 		// Cowardly refuse to run on anything other than a runtime that supports Virtual threads.
 		if (!Utilities.virtualThreadsAvailable())
@@ -372,6 +371,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		if (this.concurrentConnectionLimit < 1)
 			throw new IllegalArgumentException("The value for concurrentConnectionLimit must be > 0");
+
+		this.connectionQueueCapacity = builder.connectionQueueCapacity != null ? builder.connectionQueueCapacity : 1_024;
+
+		if (this.connectionQueueCapacity < 1)
+			throw new IllegalArgumentException("The value for connectionQueueCapacity must be > 0");
 
 		// Initialize the global LRU map with the specified limit. Assume ConcurrentLRUMap supports a removal listener.
 		this.globalConnections = new ConcurrentLruMap<>(this.concurrentConnectionLimit, (evictedConnection, broadcaster) -> {
@@ -791,7 +795,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				 PrintWriter printWriter = new PrintWriter(outputStreamWriter, false)) {
 
 			if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted) {
-				final Set<String> ILLEGAL_LOWERCASE_HEADER_NAMES = Set.of("content-length");
+				final Set<String> ILLEGAL_LOWERCASE_HEADER_NAMES = Set.of("content-length", "transfer-encoding");
 
 				// HTTP status line
 				printWriter.print("HTTP/1.1 200 OK\r\n");
@@ -800,8 +804,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				for (Map.Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 					String headerName = entry.getKey();
 
-					if (headerName == null || ILLEGAL_LOWERCASE_HEADER_NAMES.contains(headerName.toLowerCase(Locale.ENGLISH)))
+					if (headerName == null)
 						continue;
+
+					if (ILLEGAL_LOWERCASE_HEADER_NAMES.contains(headerName.toLowerCase(Locale.ENGLISH)))
+						throw new IllegalArgumentException(format("You may not specify the '%s' header for %s.%s responses",
+								headerName, HandshakeResult.class.getSimpleName(), HandshakeResult.Accepted.class.getSimpleName()));
 
 					Set<String> values = entry.getValue();
 
@@ -1028,13 +1036,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		public ServerSentEventConnection(@Nonnull Request request,
-																		 @Nonnull ResourceMethod resourceMethod) {
+																		 @Nonnull ResourceMethod resourceMethod,
+																		 @Nonnull Integer connectionQueueCapacity) {
 			requireNonNull(request);
 			requireNonNull(resourceMethod);
+			requireNonNull(connectionQueueCapacity);
 
 			this.request = request;
 			this.resourceMethod = resourceMethod;
-			this.writeQueue = new ArrayBlockingQueue<>(DEFAULT_CONNECTION_QUEUE_CAPACITY);
+			this.writeQueue = new ArrayBlockingQueue<>(connectionQueueCapacity);
 			this.establishedAt = Instant.now();
 			this.lastValidityCheckInNanos = new AtomicLong(System.nanoTime());
 		}
@@ -1094,13 +1104,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			return Optional.empty();
 
 		// Create the connection and register it with the EventSource
-		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, resourceMethod);
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, resourceMethod, getConnectionQueueCapacity());
 
-		// If a client initializer exists, create a unicaster and expose it to support Last-Event-ID "catch up" scenarios
-		if (clientInitializer != null) {
-			ServerSentEventUnicaster serverSentEventUnicaster = new DefaultServerSentEventUnicaster(resourcePath, serverSentEventConnection.getWriteQueue());
+		// If a client initializer exists, hand it the unicaster to support Last-Event-ID "catch up" scenarios
+		ServerSentEventUnicaster serverSentEventUnicaster = new DefaultServerSentEventUnicaster(resourcePath, serverSentEventConnection.getWriteQueue());
+
+		if (clientInitializer != null)
 			clientInitializer.accept(serverSentEventUnicaster);
-		}
+
+		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection
+		//serverSentEventConnection.getWriteQueue().add(WriteQueueElement.withComment(""));
 
 		// Get a handle to the event source (it will be created if necessary)
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath, resourceMethod).get();
@@ -1709,24 +1722,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (resourcePath == null)
 			return Optional.empty();
 
-		// TODO: convert to computeIfAbsent()
+		ResourcePathDeclaration resourcePathDeclaration = getResourcePathDeclarationsByResourcePathCache()
+				.computeIfAbsent(resourcePath, rp -> {
+					for (ResourcePathDeclaration d : getResourceMethodsByResourcePathDeclaration().keySet())
+						if (d.matches(rp))
+							return d;
 
-		// Try a cache lookup first
-		ResourcePathDeclaration resourcePathDeclaration = getResourcePathDeclarationsByResourcePathCache().get(resourcePath);
-
-		if (resourcePathDeclaration == null) {
-			// If the cache lookup fails, perform a manual lookup
-			for (ResourcePathDeclaration registeredResourcePathDeclaration : getResourceMethodsByResourcePathDeclaration().keySet()) {
-				if (registeredResourcePathDeclaration.matches(resourcePath)) {
-					resourcePathDeclaration = registeredResourcePathDeclaration;
-					break;
-				}
-			}
-
-			// Put the value in the cache for quick access later
-			if (resourcePathDeclaration != null)
-				getResourcePathDeclarationsByResourcePathCache().put(resourcePath, resourcePathDeclaration);
-		}
+					return null;
+				});
 
 		return Optional.ofNullable(resourcePathDeclaration);
 	}
@@ -1784,12 +1787,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
+	protected ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
 		return this.broadcastersByResourcePath;
 	}
 
 	@Nonnull
-	protected ConcurrentHashMap<ResourcePath, ResourcePathDeclaration> getResourcePathDeclarationsByResourcePathCache() {
+	protected ConcurrentLruMap<ResourcePath, ResourcePathDeclaration> getResourcePathDeclarationsByResourcePathCache() {
 		return this.resourcePathDeclarationsByResourcePathCache;
 	}
 
@@ -1821,6 +1824,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Integer getConcurrentConnectionLimit() {
 		return this.concurrentConnectionLimit;
+	}
+
+	@Nonnull
+	protected Integer getConnectionQueueCapacity() {
+		return this.connectionQueueCapacity;
 	}
 
 	@Nonnull
