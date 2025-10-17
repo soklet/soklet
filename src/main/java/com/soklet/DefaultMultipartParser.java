@@ -1136,9 +1136,6 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * trailing {@code CRLF} marker. Parsing is left to the
 		 * application.
 		 *
-		 * <p><strong>TODO</strong> allow limiting maximum header size to
-		 * protect against abuse.
-		 *
 		 * @return The {@code header-part} of the current encapsulation.
 		 * @throws FileUploadIOException    if the bytes read from the stream exceeded the size limits.
 		 * @throws MalformedStreamException if the stream ends unexpectedly.
