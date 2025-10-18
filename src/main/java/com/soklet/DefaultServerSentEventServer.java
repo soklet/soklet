@@ -1121,6 +1121,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (clientInitializer != null)
 			clientInitializer.accept(serverSentEventUnicaster);
 
+		// TODO: introduce this in a subsequent release.  Will need to make it configurable or rework some SSE tests to ignore the initial message
 		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection
 		// serverSentEventConnection.getWriteQueue().add(WriteQueueElement.withComment(""));
 
@@ -1236,7 +1237,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (requestBuilder == null) {
 				// This is the first line.
 				// Example: GET /testing?one=two HTTP/1.1
-				String[] components = line.split(" ");
+				String[] components = line.trim().split("\\s+");
 
 				if (components.length != 3)
 					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
@@ -1263,7 +1264,21 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (uri == null || httpMethod == null)
 					throw new URISyntaxException(rawUri, format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
-				requestBuilder = Request.with(httpMethod, rawUri);
+				// Safely handle both absolute and relative URIs
+				String finalUri = rawUri;
+
+				try {
+					URI u = new URI(rawUri);
+					if (u.isAbsolute()) {
+						String path = (u.getRawPath() == null ? "/" : u.getRawPath());
+						String q = u.getRawQuery();
+						finalUri = (q == null ? path : path + "?" + q);
+					}
+				} catch (Exception e) {
+					throw new URISyntaxException(rawUri, format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
+				}
+
+				requestBuilder = Request.with(httpMethod, finalUri);
 			} else {
 				// This is a header line.
 				// Example: Accept-Encoding: gzip, deflate, br, zstd
@@ -1413,7 +1428,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (firstLine == null || firstLine.length() == 0)
 			return Optional.empty();
 
-		String[] parts = firstLine.split(" ");
+		String[] parts = firstLine.trim().split("\\s+");
 
 		// First line of the request is malformed
 		if (parts.length < 2)
