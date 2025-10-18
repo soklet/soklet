@@ -1045,7 +1045,7 @@ public final class Soklet implements AutoCloseable {
 	/**
 	 * Runs Soklet with a special "simulator" server that is useful for integration testing.
 	 * <p>
-	 * See <a href="https://www.soklet.com/docs/automated-testing">https://www.soklet.com/docs/automated-testing</a> for how to write these tests.
+	 * See <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a> for how to write these tests.
 	 *
 	 * @param sokletConfig      configuration that drives the Soklet system
 	 * @param simulatorConsumer code to execute within the context of the simulator

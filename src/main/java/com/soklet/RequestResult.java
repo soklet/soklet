@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Instances can be acquired via the {@link #withMarshaledResponse(MarshaledResponse)} factory method.
  * <p>
- * See <a href="https://www.soklet.com/docs/automated-testing#integration-testing">https://www.soklet.com/docs/automated-testing#integration-testing</a> for detailed documentation.
+ * See <a href="https://www.soklet.com/docs/testing#integration-testing">https://www.soklet.com/docs/testing#integration-testing</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

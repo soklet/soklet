@@ -53,7 +53,7 @@ import java.util.function.Consumer;
  *   }));
  * }}</pre>
  * <p>
- * Full documentation is available at <a href="https://www.soklet.com/docs/automated-testing">https://www.soklet.com/docs/automated-testing</a>.
+ * Full documentation is available at <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
