@@ -59,7 +59,7 @@ import javax.annotation.Nonnull;
  *     .build();
  * }}</pre>
  * <p>
- * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
+ * See <a href="https://www.soklet.com/docs/server-sent-events#client-initialization">https://www.soklet.com/docs/server-sent-events#client-initialization</a> for detailed documentation.
  * <p>
  * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
  *
