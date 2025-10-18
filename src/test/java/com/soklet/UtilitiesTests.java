@@ -221,10 +221,10 @@ public class UtilitiesTests {
 
 	@Test
 	void cacheControl_singleLineCommaSeparated_equals_multiLine() {
-		Map<String, Set<String>> a = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> a = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Cache-Control: no-cache, no-store"
 		));
-		Map<String, Set<String>> b = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> b = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Cache-Control: no-cache",
 				"Cache-Control: no-store"
 		));
@@ -237,7 +237,7 @@ public class UtilitiesTests {
 
 	@Test
 	void cacheControl_unfolds_obsFold_continuations() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Cache-Control: no-cache,",
 				"  no-store"
 		));
@@ -247,7 +247,7 @@ public class UtilitiesTests {
 
 	@Test
 	void accept_isCommaSplit_deduped_preservingInsertionOrder() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Accept: text/html, application/json, text/html  "
 		));
 
@@ -258,7 +258,7 @@ public class UtilitiesTests {
 
 	@Test
 	void vary_mergesAcrossLines_and_dedupes_caseInsensitiveNames() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Vary: Accept-Encoding",
 				"vary: Accept-Encoding, Accept",
 				"VARY: Accept" // duplicates should collapse
@@ -270,7 +270,7 @@ public class UtilitiesTests {
 
 	@Test
 	void setCookie_isNotCommaSplit_andMultipleLinesAreSeparateValues() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Set-Cookie: a=b; Path=/; HttpOnly; Secure",
 				"Set-Cookie: session=xyz; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/"
 		));
@@ -285,7 +285,7 @@ public class UtilitiesTests {
 
 	@Test
 	void quoted_commas_doNotSplit_values_for_joinable_headers() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Warning: 299 - \"Deprecated, will be removed soon\""
 		));
 
@@ -297,7 +297,7 @@ public class UtilitiesTests {
 
 	@Test
 	void quoted_escapes_are_respected_inside_quotes() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Warning: 199 example \"quote: \\\"inside\\\"\" , 299 example2 \"ok\""
 		));
 
@@ -310,7 +310,7 @@ public class UtilitiesTests {
 
 	@Test
 	void whitespace_isTrimmed_and_emptyValuesIgnored() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Cache-Control:   no-cache   ",
 				"Cache-Control:    ,   ,   no-store   "  // empties ignored
 		));
@@ -319,7 +319,7 @@ public class UtilitiesTests {
 
 	@Test
 	void malformedLinesAreSkipped_gracefully() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"X-JustNameNoColon",
 				" : value",
 				"Good: value"
@@ -330,7 +330,7 @@ public class UtilitiesTests {
 
 	@Test
 	void connection_and_transferEncoding_are_joinable() {
-		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaders(lines(
+		Map<String, Set<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Connection: keep-alive, Upgrade",
 				"Transfer-Encoding: chunked, gzip"
 		));

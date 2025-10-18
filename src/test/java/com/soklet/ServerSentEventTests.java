@@ -200,7 +200,7 @@ public class ServerSentEventTests {
 				String[] headerLines = rawHeaders.split("\r?\n");
 				Assertions.assertTrue(headerLines[0].startsWith("HTTP/1.1 200"), "Non-200 handshake");
 
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(headerLines));
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(headerLines));
 				Assertions.assertTrue(singleHeaderValue("content-type", headers).get().toLowerCase().contains("text/event-stream"),
 						"Missing text/event-stream");
 				Assertions.assertEquals("no", singleHeaderValue("x-accel-buffering", headers).get().toLowerCase());
@@ -412,7 +412,7 @@ public class ServerSentEventTests {
 				String[] headerLines = rawHeaders.split("\r?\n");
 				Assertions.assertTrue(headerLines[0].startsWith("HTTP/1.1 403"), "Expected 403 for rejected handshake");
 
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(headerLines));
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(headerLines));
 				// Body should be present and connection closed
 				Assertions.assertEquals("close", firstOrEmpty(headers, "connection").toLowerCase(Locale.ROOT));
 				// Our custom header survived
@@ -494,7 +494,7 @@ public class ServerSentEventTests {
 				Assertions.assertNotNull(rawHeaders);
 
 				String[] lines = rawHeaders.split("\r?\n");
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(lines));
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
 
 				Set<String> cls = headers.getOrDefault("content-length", Set.of());
 				Assertions.assertEquals(1, cls.size(), "Expected exactly one Content-Length header");
@@ -536,7 +536,7 @@ public class ServerSentEventTests {
 				// 200 OK handshake
 				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(lines));
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
 				// Should echo Origin (because credentials=true)
 				Assertions.assertEquals(origin, firstOrEmpty(headers, "access-control-allow-origin"));
 				Assertions.assertEquals("true", firstOrEmpty(headers, "access-control-allow-credentials").toLowerCase(Locale.ROOT));
@@ -583,7 +583,7 @@ public class ServerSentEventTests {
 				// Rejected handshake returns a non-200 status (we use 403 in the resource)
 				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 403"), "Expected 403 for rejected handshake");
 
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(lines));
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
 				// CORS must still be applied to the error response
 				Assertions.assertEquals(origin, firstOrEmpty(headers, "access-control-allow-origin"));
 				Assertions.assertEquals("true", firstOrEmpty(headers, "access-control-allow-credentials").toLowerCase(Locale.ROOT));
@@ -628,7 +628,7 @@ public class ServerSentEventTests {
 
 				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 
-				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(lines));
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
 				// Origin not authorized => no CORS headers
 				Assertions.assertEquals("", firstOrEmpty(headers, "access-control-allow-origin"));
 				Assertions.assertEquals("", firstOrEmpty(headers, "access-control-allow-credentials"));

@@ -1224,7 +1224,7 @@ public final class Utilities {
 	);
 
 	/**
-	 * Given a list of "raw" HTTP header lines, convert them into a normalized case-insensitive, order-preserving map which "inflates" comma-separated headers into distinct values where permissible according to RFC 7230/9110.
+	 * Given a list of raw HTTP header lines, convert them into a normalized case-insensitive, order-preserving map which "inflates" comma-separated headers into distinct values where permitted according to RFC 7230/9110.
 	 * <p>
 	 * For example, given these raw header lines:
 	 * <pre>{@code List<String> lines = List.of(
@@ -1237,7 +1237,6 @@ public final class Utilities {
 	 *   "no-cache",
 	 *   "no-store"
 	 * ]
-	 *
 	 * result.get("set-cookie") -> [
 	 *   "a=b; Path=/; HttpOnly",
 	 *   "c=d; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/"
@@ -1247,15 +1246,15 @@ public final class Utilities {
 	 * <p>
 	 * Values in the returned map are guaranteed to be in the same order as encountered in {@code rawHeaderLines}.
 	 *
-	 * @param rawHeaders the raw HTTP header lines to parse
+	 * @param rawHeaderLines the raw HTTP header lines to parse
 	 * @return a normalized mapping of header name keys to values
 	 */
 	@Nonnull
-	public static Map<String, Set<String>> extractHeadersFromRawHeaders(@Nonnull List<String> rawHeaders) {
-		requireNonNull(rawHeaders, "rawHeaderLines");
+	public static Map<String, Set<String>> extractHeadersFromRawHeaderLines(@Nonnull List<String> rawHeaderLines) {
+		requireNonNull(rawHeaderLines, "rawHeaderLines");
 
 		// 1) Unfold obsolete folded lines (obs-fold): lines beginning with SP/HT are continuations
-		List<String> lines = unfold(rawHeaders);
+		List<String> lines = unfold(rawHeaderLines);
 
 		// 2) Parse into map
 		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>();
