@@ -34,14 +34,17 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
+import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -197,12 +200,13 @@ public class ServerSentEventTests {
 				String[] headerLines = rawHeaders.split("\r?\n");
 				Assertions.assertTrue(headerLines[0].startsWith("HTTP/1.1 200"), "Non-200 handshake");
 
-				Map<String, String> headers = parseHeaders(headerLines);
-				Assertions.assertTrue(headers.getOrDefault("content-type", "").toLowerCase().contains("text/event-stream"),
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(headerLines));
+				Assertions.assertTrue(singleHeaderValue("content-type", headers).get().toLowerCase().contains("text/event-stream"),
 						"Missing text/event-stream");
-				Assertions.assertEquals("no", headers.getOrDefault("x-accel-buffering", "").toLowerCase());
-				Assertions.assertEquals("keep-alive", headers.getOrDefault("connection", "").toLowerCase());
-				Assertions.assertEquals("no-cache", headers.getOrDefault("cache-control", "").toLowerCase());
+				Assertions.assertEquals("no", singleHeaderValue("x-accel-buffering", headers).get().toLowerCase());
+				Assertions.assertEquals("keep-alive", singleHeaderValue("connection", headers).get().toLowerCase());
+				Assertions.assertTrue(headerValues("cache-control", headers).stream().map(String::toLowerCase).collect(Collectors.toSet()).contains("no-cache"), "Missing no-cache");
+				Assertions.assertTrue(headerValues("cache-control", headers).stream().map(String::toLowerCase).collect(Collectors.toSet()).contains("no-transform"), "Missing no-transform");
 
 				// Broadcast one event and verify frame formatting
 				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.withPath("/tests/abc")).get();
@@ -408,7 +412,7 @@ public class ServerSentEventTests {
 				String[] headerLines = rawHeaders.split("\r?\n");
 				Assertions.assertTrue(headerLines[0].startsWith("HTTP/1.1 403"), "Expected 403 for rejected handshake");
 
-				Map<String, List<String>> headers = parseHeadersMulti(headerLines);
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(headerLines));
 				// Body should be present and connection closed
 				Assertions.assertEquals("close", firstOrEmpty(headers, "connection").toLowerCase(Locale.ROOT));
 				// Our custom header survived
@@ -490,11 +494,11 @@ public class ServerSentEventTests {
 				Assertions.assertNotNull(rawHeaders);
 
 				String[] lines = rawHeaders.split("\r?\n");
-				Map<String, List<String>> headers = parseHeadersMulti(lines);
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(lines));
 
-				List<String> cls = headers.getOrDefault("content-length", List.of());
+				Set<String> cls = headers.getOrDefault("content-length", Set.of());
 				Assertions.assertEquals(1, cls.size(), "Expected exactly one Content-Length header");
-				Assertions.assertEquals("3", cls.get(0));
+				Assertions.assertEquals("3", cls.stream().findFirst().get());
 			}
 		}
 	}
@@ -532,7 +536,7 @@ public class ServerSentEventTests {
 				// 200 OK handshake
 				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 
-				Map<String, List<String>> headers = parseHeadersMulti(lines);
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(lines));
 				// Should echo Origin (because credentials=true)
 				Assertions.assertEquals(origin, firstOrEmpty(headers, "access-control-allow-origin"));
 				Assertions.assertEquals("true", firstOrEmpty(headers, "access-control-allow-credentials").toLowerCase(Locale.ROOT));
@@ -579,7 +583,7 @@ public class ServerSentEventTests {
 				// Rejected handshake returns a non-200 status (we use 403 in the resource)
 				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 403"), "Expected 403 for rejected handshake");
 
-				Map<String, List<String>> headers = parseHeadersMulti(lines);
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(lines));
 				// CORS must still be applied to the error response
 				Assertions.assertEquals(origin, firstOrEmpty(headers, "access-control-allow-origin"));
 				Assertions.assertEquals("true", firstOrEmpty(headers, "access-control-allow-credentials").toLowerCase(Locale.ROOT));
@@ -624,7 +628,7 @@ public class ServerSentEventTests {
 
 				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 
-				Map<String, List<String>> headers = parseHeadersMulti(lines);
+				Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaders(Arrays.asList(lines));
 				// Origin not authorized => no CORS headers
 				Assertions.assertEquals("", firstOrEmpty(headers, "access-control-allow-origin"));
 				Assertions.assertEquals("", firstOrEmpty(headers, "access-control-allow-credentials"));
@@ -822,6 +826,61 @@ public class ServerSentEventTests {
 		}
 	}
 
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sseHandshake_allowsExtraSpacesInRequestLine() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).host("127.0.0.1").build())
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseBasicHandshakeResource.class)))
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
+				socket.setSoTimeout(4000);
+				// Note the extra spaces after GET and before HTTP/1.1
+				String req = "GET   /sse   HTTP/1.1\r\nHost: 127.0.0.1:" + ssePort + "\r\nAccept: text/event-stream\r\n\r\n";
+				socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
+
+				String raw = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (raw == null) raw = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(raw, "No HTTP response headers received");
+				Assertions.assertTrue(raw.startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sseHandshake_acceptsAbsoluteRequestTarget() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).host("127.0.0.1").build())
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseBasicHandshakeResource.class)))
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
+				socket.setSoTimeout(4000);
+				String req = "GET http://127.0.0.1:" + ssePort + "/sse HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: text/event-stream\r\n\r\n";
+				socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
+
+				String raw = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (raw == null) raw = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(raw, "No HTTP response headers received");
+				Assertions.assertTrue(raw.startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
+			}
+		}
+	}
+
 	private static String readLineCRLF(InputStream in) throws IOException {
 		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
 		int prev = -1, cur;
@@ -868,22 +927,9 @@ public class ServerSentEventTests {
 		return out;
 	}
 
-	private static Map<String, List<String>> parseHeadersMulti(String[] headerLines) {
-		Map<String, List<String>> m = new HashMap<>();
-		for (int i = 1; i < headerLines.length; i++) {
-			String line = headerLines[i];
-			int idx = line.indexOf(':');
-			if (idx <= 0) continue;
-			String k = line.substring(0, idx).trim().toLowerCase(Locale.ROOT);
-			String v = line.substring(idx + 1).trim();
-			m.computeIfAbsent(k, __ -> new ArrayList<>()).add(v);
-		}
-		return m;
-	}
-
-	private static String firstOrEmpty(Map<String, List<String>> headers, String key) {
-		List<String> v = headers.getOrDefault(key.toLowerCase(Locale.ROOT), List.of());
-		return v.isEmpty() ? "" : v.get(0);
+	private static String firstOrEmpty(Map<String, Set<String>> headers, String key) {
+		Set<String> v = headers.getOrDefault(key.toLowerCase(Locale.ROOT), Set.of());
+		return v.isEmpty() ? "" : v.stream().findFirst().get();
 	}
 
 	private static void writeHttpGet(Socket socket, String path, int port) throws IOException {
@@ -957,17 +1003,27 @@ public class ServerSentEventTests {
 		return false;
 	}
 
-	private static Map<String, String> parseHeaders(String[] headerLines) {
-		java.util.HashMap<String, String> m = new java.util.HashMap<>();
-		for (int i = 1; i < headerLines.length; i++) {
-			String line = headerLines[i];
-			int idx = line.indexOf(':');
-			if (idx <= 0) continue;
-			String k = line.substring(0, idx).trim().toLowerCase(java.util.Locale.ROOT);
-			String v = line.substring(idx + 1).trim();
-			m.put(k, v);
-		}
-		return m;
+	@Nonnull
+	private static Optional<String> singleHeaderValue(String name, Map<String, Set<String>> headers) {
+		Set<String> values = headers.get(name);
+
+		if (values == null || values.size() == 0)
+			return Optional.empty();
+
+		if (values.size() > 1)
+			throw new IllegalArgumentException(format("Tried to extract a single value for header named '%s', but it has more than 1 value: %s", name, values));
+
+		return Optional.of(new ArrayList<>(values).get(0));
+	}
+
+	@Nonnull
+	private static Set<String> headerValues(String name, Map<String, Set<String>> headers) {
+		Set<String> values = headers.get(name);
+
+		if (values == null || values.size() == 0)
+			return Set.of();
+
+		return values;
 	}
 
 	private static int findFreePort() throws IOException {

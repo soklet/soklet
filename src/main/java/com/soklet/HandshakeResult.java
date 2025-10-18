@@ -149,7 +149,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			// Users can override if they think necessary
 			LinkedCaseInsensitiveMap<Set<String>> defaultHeaders = new LinkedCaseInsensitiveMap<>(4);
 			defaultHeaders.put("Content-Type", Set.of("text/event-stream; charset=UTF-8"));
-			defaultHeaders.put("Cache-Control", Set.of("no-cache"));
+			defaultHeaders.put("Cache-Control", Set.of("no-cache", "no-transform"));
 			defaultHeaders.put("Connection", Set.of("keep-alive"));
 			defaultHeaders.put("X-Accel-Buffering", Set.of("no"));
 

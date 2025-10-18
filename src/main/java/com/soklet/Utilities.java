@@ -16,6 +16,8 @@
 
 package com.soklet;
 
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -1201,5 +1203,170 @@ public final class Utilities {
 			return String.format("\\u%04X", (int) c);
 
 		return String.valueOf(c);
+	}
+
+	@Nonnull
+	private static final Set<String> COMMA_JOINABLE_HEADER_NAMES = Set.of(
+			// Common list-type headers (RFC 7230/9110)
+			"accept",
+			"accept-encoding",
+			"accept-language",
+			"cache-control",
+			"pragma",
+			"vary",
+			"connection",
+			"transfer-encoding",
+			"upgrade",
+			"allow",
+			"via",
+			"warning"
+			// intentionally NOT: set-cookie, authorization, cookie, content-disposition, location
+	);
+
+	/**
+	 * Given a list of "raw" HTTP header lines, convert them into a normalized case-insensitive, order-preserving map which "inflates" comma-separated headers into distinct values where permissible according to RFC 7230/9110.
+	 * <p>
+	 * For example, given these raw header lines:
+	 * <pre>{@code List<String> lines = List.of(
+	 *   "Cache-Control: no-cache, no-store",
+	 *   "Set-Cookie: a=b; Path=/; HttpOnly",
+	 *   "Set-Cookie: c=d; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/"
+	 * );}</pre>
+	 * The result of parsing would look like this:
+	 * <pre>{@code result.get("cache-control") -> [
+	 *   "no-cache",
+	 *   "no-store"
+	 * ]
+	 *
+	 * result.get("set-cookie") -> [
+	 *   "a=b; Path=/; HttpOnly",
+	 *   "c=d; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/"
+	 * ]}</pre>
+	 * <p>
+	 * Keys in the returned map are case-insensitive and are guaranteed to be in the same order as encountered in {@code rawHeaderLines}.
+	 * <p>
+	 * Values in the returned map are guaranteed to be in the same order as encountered in {@code rawHeaderLines}.
+	 *
+	 * @param rawHeaders the raw HTTP header lines to parse
+	 * @return a normalized mapping of header name keys to values
+	 */
+	@Nonnull
+	public static Map<String, Set<String>> extractHeadersFromRawHeaders(@Nonnull List<String> rawHeaders) {
+		requireNonNull(rawHeaders, "rawHeaderLines");
+
+		// 1) Unfold obsolete folded lines (obs-fold): lines beginning with SP/HT are continuations
+		List<String> lines = unfold(rawHeaders);
+
+		// 2) Parse into map
+		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>();
+
+		for (String raw : lines) {
+			String line = trimAggressivelyToNull(raw);
+
+			if (line == null)
+				continue;
+
+			int idx = line.indexOf(':');
+
+			if (idx <= 0)
+				continue; // skip malformed
+
+			String key = trimAggressivelyToEmpty(line.substring(0, idx)); // keep original case for display
+			String keyLowercase = key.toLowerCase(Locale.ROOT);
+			String value = trimAggressivelyToNull(line.substring(idx + 1));
+
+			if (value == null)
+				continue;
+
+			Set<String> bucket = headers.computeIfAbsent(key, k -> new LinkedHashSet<>());
+
+			if (COMMA_JOINABLE_HEADER_NAMES.contains(keyLowercase)) {
+				for (String part : splitCommaAware(value)) {
+					String v = trimAggressivelyToNull(part);
+					if (v != null)
+						bucket.add(v);
+				}
+			} else {
+				bucket.add(value.trim());
+			}
+		}
+
+		return headers;
+	}
+
+	/**
+	 * Header parsing helper
+	 */
+	@Nonnull
+	private static List<String> unfold(@Nonnull List<String> raw) {
+		requireNonNull(raw);
+		if (raw.isEmpty()) return List.of();
+
+		List<String> out = new ArrayList<>(raw.size());
+		StringBuilder cur = null;
+		boolean curIsHeader = false;
+
+		for (String line : raw) {
+			if (line == null) continue;
+
+			boolean isContinuation = !line.isEmpty() && (line.charAt(0) == ' ' || line.charAt(0) == '\t');
+			if (isContinuation) {
+				if (cur != null && curIsHeader) {
+					cur.append(' ').append(line.trim());
+				} else {
+					// Do not fold into a non-header; flush previous and start anew
+					if (cur != null) out.add(cur.toString());
+					cur = new StringBuilder(line);
+					curIsHeader = line.indexOf(':') > 0; // almost certainly false for leading-space lines
+				}
+			} else {
+				if (cur != null) out.add(cur.toString());
+				cur = new StringBuilder(line);
+				curIsHeader = line.indexOf(':') > 0;
+			}
+		}
+		if (cur != null) out.add(cur.toString());
+		return out;
+	}
+
+	/**
+	 * Header parsing helper: split on commas that are not inside a quoted-string; supports \" escapes inside quotes.
+	 */
+	@Nonnull
+	private static List<String> splitCommaAware(@Nonnull String string) {
+		requireNonNull(string);
+
+		List<String> out = new ArrayList<>(4);
+		StringBuilder cur = new StringBuilder();
+		boolean inQuotes = false;
+		boolean escaped = false;
+
+		for (int i = 0; i < string.length(); i++) {
+			char c = string.charAt(i);
+
+			if (escaped) {
+				// Preserve the escaped char as-is
+				cur.append(c);
+				escaped = false;
+			} else if (c == '\\') {
+				if (inQuotes) {
+					// Preserve the backslash itself, then mark next char as escaped
+					cur.append('\\');       // ← keep the backslash
+					escaped = true;
+				} else {
+					cur.append('\\');       // literal backslash outside quotes
+				}
+			} else if (c == '"') {
+				inQuotes = !inQuotes;
+				cur.append('"');
+			} else if (c == ',' && !inQuotes) {
+				out.add(cur.toString());
+				cur.setLength(0);
+			} else {
+				cur.append(c);
+			}
+		}
+		out.add(cur.toString());
+		return out;
 	}
 }
