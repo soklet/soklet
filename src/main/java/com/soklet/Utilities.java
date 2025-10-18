@@ -1251,7 +1251,7 @@ public final class Utilities {
 	 */
 	@Nonnull
 	public static Map<String, Set<String>> extractHeadersFromRawHeaderLines(@Nonnull List<String> rawHeaderLines) {
-		requireNonNull(rawHeaderLines, "rawHeaderLines");
+		requireNonNull(rawHeaderLines);
 
 		// 1) Unfold obsolete folded lines (obs-fold): lines beginning with SP/HT are continuations
 		List<String> lines = unfold(rawHeaderLines);

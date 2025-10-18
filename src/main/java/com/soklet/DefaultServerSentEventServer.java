@@ -18,7 +18,6 @@ package com.soklet;
 
 import com.soklet.DefaultServerSentEventServer.ServerSentEventConnection.WriteQueueElement;
 import com.soklet.annotation.ServerSentEventSource;
-import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import com.soklet.internal.util.ConcurrentLruMap;
 
 import javax.annotation.Nonnull;
@@ -45,10 +44,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -810,7 +809,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				printWriter.print("HTTP/1.1 200 OK\r\n");
 
 				// Write headers, ignoring illegal ones
-				for (Map.Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
+				for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 					String headerName = entry.getKey();
 
 					if (headerName == null)
@@ -851,7 +850,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				boolean hasContentLength = false;
 				boolean hasTransferEncoding = false;
 
-				for (Map.Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
+				for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 					String headerName = entry.getKey();
 
 					if (headerName == null)
@@ -1226,7 +1225,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// ...and so forth.
 
 		Request.Builder requestBuilder = null;
-		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>(32);
+		List<String> headerLines = new ArrayList<>();
 
 		for (String line : rawRequest.lines().toList()) {
 			line = Utilities.trimAggressivelyToNull(line);
@@ -1280,6 +1279,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				requestBuilder = Request.with(httpMethod, finalUri);
 			} else {
+				if (line.isEmpty())
+					continue;
+
 				// This is a header line.
 				// Example: Accept-Encoding: gzip, deflate, br, zstd
 				int indexOfFirstColon = line.indexOf(":");
@@ -1287,21 +1289,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (indexOfFirstColon == -1)
 					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'Header-Name: Value", line));
 
-				String headerName = line.substring(0, indexOfFirstColon);
-				String headerValue = Utilities.trimAggressivelyToNull(line.substring(indexOfFirstColon + 1));
-
-				Set<String> headerValues = headers.get(headerName);
-
-				if (headerValues == null) {
-					headerValues = new LinkedHashSet<>();
-					headers.put(headerName, headerValues);
-				}
-
-				// Blank headers will have a key in the map, but an empty set of header values.
-				if (headerValue != null)
-					headerValues.add(headerValue);
+				headerLines.add(line);
 			}
 		}
+
+		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(headerLines);
 
 		return requestBuilder.id(requestIdentifier).headers(headers).build();
 	}

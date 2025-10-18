@@ -25,7 +25,6 @@ import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.Options;
 import com.soklet.internal.microhttp.OptionsBuilder;
-import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -57,9 +56,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.emptyByteArray;
-import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
@@ -217,17 +216,16 @@ final class DefaultServer implements Server {
 						if (body != null && body.length == 0)
 							body = null;
 
+						Map<String, Set<String>> headers = headersFromMicrohttpRequest(microhttpRequest);
+
 						// Special case: look for a poison-pill header that indicates "content too large",
 						// make a note of it, and then remove it from the request.
 						// This header is specially set for Soklet inside of Microhttp's connection event loop.
-						Map<String, Set<String>> headers = headersFromMicrohttpRequest(microhttpRequest);
 						boolean contentTooLarge = false;
 
-						for (Header header : microhttpRequest.headers()) {
-							if (header.name().equals("com.soklet.CONTENT_TOO_LARGE")) {
-								headers.remove("com.soklet.CONTENT_TOO_LARGE");
-								contentTooLarge = true;
-							}
+						if (headers.containsKey("com.soklet.CONTENT_TOO_LARGE")) {
+							headers.remove("com.soklet.CONTENT_TOO_LARGE");
+							contentTooLarge = true;
 						}
 
 						String uri = decodeUrlPathOnly(microhttpRequest.uri());
@@ -463,18 +461,12 @@ final class DefaultServer implements Server {
 	protected Map<String, Set<String>> headersFromMicrohttpRequest(@Nonnull MicrohttpRequest microhttpRequest) {
 		requireNonNull(microhttpRequest);
 
-		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>(microhttpRequest.headers().size());
+		// Turn Microhttp headers back into "name: value" lines for consumption by the Soklet parser/normalizer
+		List<String> rawHeaderLines = microhttpRequest.headers().stream()
+				.map(header -> format("%s: %s", header.name(), header.value() == null ? "" : header.value()))
+				.collect(Collectors.toList());
 
-		for (Header header : microhttpRequest.headers()) {
-			Set<String> values = headers.computeIfAbsent(header.name(), k -> new LinkedHashSet<>());
-
-			String value = trimAggressivelyToNull(header.value());
-
-			if (value != null)
-				values.add(value);
-		}
-
-		return headers;
+		return Utilities.extractHeadersFromRawHeaderLines(rawHeaderLines);
 	}
 
 	@Nonnull
