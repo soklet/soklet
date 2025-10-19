@@ -41,6 +41,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.soklet.Utilities.trimAggressivelyToEmpty;
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Collections.unmodifiableList;
@@ -485,7 +486,7 @@ public final class Request {
 
 			try {
 				result = this.bodyAsString;
-				
+
 				if (this.body != null && result == null) {
 					result = new String(this.body, getCharset().orElse(DEFAULT_CHARSET));
 					this.bodyAsString = result;
@@ -545,13 +546,16 @@ public final class Request {
 				result = this.locales;
 
 				if (result == null) {
-					Set<String> acceptLanguageHeaderValue = getHeaders().get("Accept-Language");
+					Set<String> acceptLanguageHeaderValues = getHeaders().get("Accept-Language");
 
-					if (acceptLanguageHeaderValue != null && !acceptLanguageHeaderValue.isEmpty()) {
+					if (acceptLanguageHeaderValues != null && !acceptLanguageHeaderValues.isEmpty()) {
+						// Support data spread across multiple header lines, which spec allows
+						String acceptLanguageHeaderValue = acceptLanguageHeaderValues.stream()
+								.filter(value -> trimAggressivelyToEmpty(value).length() > 0)
+								.collect(Collectors.joining(","));
+
 						try {
-							result = unmodifiableList(
-									Utilities.extractLocalesFromAcceptLanguageHeaderValue(
-											acceptLanguageHeaderValue.stream().findFirst().get()));
+							result = unmodifiableList(Utilities.extractLocalesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue));
 						} catch (Exception ignored) {
 							// Malformed Accept-Language header; ignore it
 							result = List.of();
@@ -592,11 +596,16 @@ public final class Request {
 				result = this.languageRanges;
 
 				if (result == null) {
-					Set<String> acceptLanguageHeaderValue = getHeaders().get("Accept-Language");
+					Set<String> acceptLanguageHeaderValues = getHeaders().get("Accept-Language");
 
-					if (acceptLanguageHeaderValue != null && !acceptLanguageHeaderValue.isEmpty()) {
+					if (acceptLanguageHeaderValues != null && !acceptLanguageHeaderValues.isEmpty()) {
+						// Support data spread across multiple header lines, which spec allows
+						String acceptLanguageHeaderValue = acceptLanguageHeaderValues.stream()
+								.filter(value -> trimAggressivelyToEmpty(value).length() > 0)
+								.collect(Collectors.joining(","));
+
 						try {
-							result = Collections.unmodifiableList(LanguageRange.parse(acceptLanguageHeaderValue.stream().findFirst().get()));
+							result = Collections.unmodifiableList(LanguageRange.parse(acceptLanguageHeaderValue));
 						} catch (Exception ignored) {
 							// Malformed Accept-Language header; ignore it
 							result = List.of();

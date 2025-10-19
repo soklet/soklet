@@ -39,7 +39,9 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -441,5 +443,43 @@ public class SokletTests {
 		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromQuery(
 				"q=a+b%2B", Utilities.QueryDecodingStrategy.X_WWW_FORM_URLENCODED, StandardCharsets.UTF_8);
 		Assertions.assertEquals(Set.of("a b+"), qp.get("q"));
+	}
+
+
+	@Test
+	public void multipleHeaderLinesAreMergedForLocales() {
+		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		headers.put("Accept-Language", new LinkedHashSet<>(List.of(
+				"en-US;q=0.5",
+				"fr-CA;q=1.0"
+		)));
+
+		Request req = Request.with(HttpMethod.GET, "/").headers(headers).build();
+
+		List<String> tags = req.getLocales().stream()
+				.map(Locale::toLanguageTag)
+				.toList();
+
+		// Both should be present
+		Assertions.assertTrue(tags.contains("en-US") && tags.contains("fr-CA"),
+				"Accept-Language split across multiple header lines must be merged");
+	}
+
+	@Test
+	public void multipleHeaderLinesAreMergedForLanguageRanges() {
+		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		headers.put("Accept-Language", new LinkedHashSet<>(List.of(
+				"en-US;q=0.4",
+				"fr-CA;q=1.0"
+		)));
+
+		Request req = Request.with(HttpMethod.GET, "/").headers(headers).build();
+
+		List<String> ranges = req.getLanguageRanges().stream()
+				.map(Locale.LanguageRange::getRange)
+				.toList();
+
+		Assertions.assertTrue(ranges.contains("en-us") || ranges.contains("en-US"));
+		Assertions.assertTrue(ranges.contains("fr-ca") || ranges.contains("fr-CA"));
 	}
 }
