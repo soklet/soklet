@@ -478,17 +478,24 @@ public final class Request {
 	@Nonnull
 	public Optional<String> getBodyAsString() {
 		// Lazily instantiate a string instance using double-checked locking
-		if (this.body != null && this.bodyAsString == null) {
+		String result = this.bodyAsString;
+
+		if (this.body != null && result == null) {
 			getLock().lock();
+
 			try {
-				if (this.body != null && this.bodyAsString == null)
-					this.bodyAsString = new String(this.body, getCharset().orElse(DEFAULT_CHARSET));
+				result = this.bodyAsString;
+				
+				if (this.body != null && result == null) {
+					result = new String(this.body, getCharset().orElse(DEFAULT_CHARSET));
+					this.bodyAsString = result;
+				}
 			} finally {
 				getLock().unlock();
 			}
 		}
 
-		return Optional.ofNullable(this.bodyAsString);
+		return Optional.ofNullable(result);
 	}
 
 	/**
@@ -529,31 +536,38 @@ public final class Request {
 	@Nonnull
 	public List<Locale> getLocales() {
 		// Lazily instantiate our parsed locales using double-checked locking
-		if (this.locales == null) {
+		List<Locale> result = this.locales;
+
+		if (result == null) {
 			getLock().lock();
+
 			try {
-				if (this.locales == null) {
+				result = this.locales;
+
+				if (result == null) {
 					Set<String> acceptLanguageHeaderValue = getHeaders().get("Accept-Language");
 
-					if (acceptLanguageHeaderValue != null && acceptLanguageHeaderValue.size() > 0) {
+					if (acceptLanguageHeaderValue != null && !acceptLanguageHeaderValue.isEmpty()) {
 						try {
-							this.locales = unmodifiableList(Utilities.extractLocalesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue.stream().findFirst().get()));
+							result = unmodifiableList(
+									Utilities.extractLocalesFromAcceptLanguageHeaderValue(
+											acceptLanguageHeaderValue.stream().findFirst().get()));
 						} catch (Exception ignored) {
-							// Malformed accept-language header; ignore it
-							this.locales = List.of();
+							// Malformed Accept-Language header; ignore it
+							result = List.of();
 						}
 					} else {
-						this.locales = List.of();
+						result = List.of();
 					}
-				} else {
-					this.locales = List.of();
+
+					this.locales = result;
 				}
 			} finally {
 				getLock().unlock();
 			}
 		}
 
-		return this.locales;
+		return result;
 	}
 
 	/**
@@ -569,32 +583,36 @@ public final class Request {
 	 */
 	@Nonnull
 	public List<LanguageRange> getLanguageRanges() {
-		// Lazily instantiate our parsed locales using double-checked locking
-		if (this.languageRanges == null) {
+		// Lazily instantiate our parsed language ranges using double-checked locking
+		List<LanguageRange> result = this.languageRanges;
+
+		if (result == null) {
 			getLock().lock();
 			try {
-				if (this.languageRanges == null) {
+				result = this.languageRanges;
+
+				if (result == null) {
 					Set<String> acceptLanguageHeaderValue = getHeaders().get("Accept-Language");
 
-					if (acceptLanguageHeaderValue != null && acceptLanguageHeaderValue.size() > 0) {
+					if (acceptLanguageHeaderValue != null && !acceptLanguageHeaderValue.isEmpty()) {
 						try {
-							this.languageRanges = Collections.unmodifiableList(LanguageRange.parse(acceptLanguageHeaderValue.stream().findFirst().get()));
+							result = Collections.unmodifiableList(LanguageRange.parse(acceptLanguageHeaderValue.stream().findFirst().get()));
 						} catch (Exception ignored) {
-							// Malformed accept-language header; ignore it
-							this.languageRanges = List.of();
+							// Malformed Accept-Language header; ignore it
+							result = List.of();
 						}
 					} else {
-						this.languageRanges = List.of();
+						result = List.of();
 					}
-				} else {
-					this.languageRanges = List.of();
+
+					this.languageRanges = result;
 				}
 			} finally {
 				getLock().unlock();
 			}
 		}
 
-		return this.languageRanges;
+		return result;
 	}
 
 	/**
