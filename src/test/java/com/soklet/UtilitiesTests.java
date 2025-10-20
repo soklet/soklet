@@ -25,9 +25,11 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,13 +43,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class UtilitiesTests {
 	@Test
 	public void normalizedPathForUrl() {
-		assertEquals("/", Utilities.normalizedPathForUrl("https://www.google.com/"));
-		assertEquals("/", Utilities.normalizedPathForUrl("https://www.google.com"));
-		assertEquals("/", Utilities.normalizedPathForUrl(""));
-		assertEquals("/", Utilities.normalizedPathForUrl("/"));
-		assertEquals("/test", Utilities.normalizedPathForUrl("/test"));
-		assertEquals("/test", Utilities.normalizedPathForUrl("/test/"));
-		assertEquals("/test", Utilities.normalizedPathForUrl("/test//"));
+		assertEquals("/", Utilities.normalizedPathForUrl("https://www.google.com/", true));
+		assertEquals("/", Utilities.normalizedPathForUrl("https://www.google.com", true));
+		assertEquals("/", Utilities.normalizedPathForUrl("", true));
+		assertEquals("/", Utilities.normalizedPathForUrl("/", true));
+		assertEquals("/test", Utilities.normalizedPathForUrl("/test", true));
+		assertEquals("/test", Utilities.normalizedPathForUrl("/test/", true));
+		assertEquals("/test", Utilities.normalizedPathForUrl("/test//", true));
 	}
 
 	@Test
@@ -336,6 +338,74 @@ public class UtilitiesTests {
 		));
 		assertEquals(Set.of("keep-alive", "Upgrade"), m.get("connection"));
 		assertEquals(Set.of("chunked", "gzip"), m.get("transfer-encoding"));
+	}
+
+	@Test
+	public void hostAndProto_ipv6WithPort_isRecognized() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Host", Set.of("[2001:db8::1]:8080"));
+		headers.put("X-Forwarded-Proto", Set.of("https"));
+
+		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
+		Assertions.assertEquals("https://[2001:db8::1]:8080", url.get());
+	}
+
+	@Test
+	public void forwarded_ipv6WithPort_isRecognized() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Forwarded", Set.of("for=\"[2001:db8::1]\"; host=\"[2001:db8::1]:8443\"; proto=https"));
+
+		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
+		Assertions.assertEquals("https://[2001:db8::1]:8443", url.get());
+	}
+
+	@Test
+	public void origin_ipv6WithPort_isRecognized() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Origin", Set.of("http://[2001:db8::1]:12345"));
+
+		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
+		Assertions.assertEquals("http://[2001:db8::1]:12345", url.get());
+	}
+
+	@Test
+	public void commaJoinableHeaders_splitOutsideQuotes() {
+		List<String> lines = List.of(
+				"Cache-Control: no-cache, no-store",
+				"Warning: \"c,omma inside quotes\", 199 Misc"
+		);
+		Map<String, Set<String>> parsed = Utilities.extractHeadersFromRawHeaderLines(lines);
+		Assertions.assertEquals(Set.of("no-cache", "no-store"), parsed.get("cache-control"));
+	}
+
+	@Test
+	public void contentType_parsesMediaTypeAndCharset() {
+		Map<String, Set<String>> h = Map.of("Content-Type", Set.of("text/html; charset=\"UTF-8\""));
+		Assertions.assertEquals(Optional.of("text/html"), Utilities.extractContentTypeFromHeaders(h));
+		Assertions.assertEquals(Optional.of(StandardCharsets.UTF_8), Utilities.extractCharsetFromHeaders(h));
+	}
+
+	@Test
+	public void cookieParsing_handlesQuotedAndEscaped() {
+		Map<String, Set<String>> h = Map.of("Cookie", Set.of("a=\"b\\\";c\"; d=%20; e=; f=\"\""));
+		Map<String, Set<String>> cookies = Utilities.extractCookiesFromHeaders(h);
+		Assertions.assertEquals(Set.of("b\";c"), cookies.get("a"));
+		Assertions.assertEquals(Set.of(" "), cookies.get("d"));
+		Assertions.assertEquals(Set.of(""), cookies.get("e"));
+		Assertions.assertEquals(Set.of(""), cookies.get("f"));
+	}
+
+	@Test
+	public void quotedForwarded_isUnquotedAndParsed() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Forwarded", Set.of("for=\"[2001:db8::1]\"; host=\"example.com:8443\"; proto=\"https\""));
+
+		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
+		Assertions.assertEquals("https://example.com:8443", url.get());
 	}
 
 	// --- header parsing helpers ---

@@ -482,4 +482,33 @@ public class SokletTests {
 		Assertions.assertTrue(ranges.contains("en-us") || ranges.contains("en-US"));
 		Assertions.assertTrue(ranges.contains("fr-ca") || ranges.contains("fr-CA"));
 	}
+
+	static class SimulatorDecodingResource {
+		@GET("/widgets/{id}")
+		public Response echo(@PathParameter String id) {
+			return Response.withStatusCode(200)
+					.body(id.getBytes(StandardCharsets.UTF_8))
+					.build();
+		}
+	}
+
+	@Test
+	public void encodedSpaceInPath_isDecodedInSimulatorToo() {
+		var cfg = SokletConfig.forTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SimulatorDecodingResource.class)))
+				.build();
+
+		Soklet.runSimulator(cfg, sim -> {
+			var res = sim.performRequest(Request.with(HttpMethod.GET, "/widgets/ab%20c").build());
+			Assertions.assertEquals(200, res.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals("ab c", new String(res.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
+		});
+	}
+
+	@Test
+	public void duplicatePlaceholderNames_areRejected() {
+		Assertions.assertThrows(IllegalArgumentException.class, () -> {
+			ResourcePathDeclaration.withPath("/a/{id}/b/{id}");
+		}, "Duplicate placeholder names should be illegal");
+	}
 }

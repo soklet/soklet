@@ -27,10 +27,8 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
@@ -610,7 +608,7 @@ public final class Utilities {
 	}
 
 	/**
-	 * Normalizes a URL or path into a canonical request path.
+	 * Normalizes a URL or path into a canonical request path and optionally perform percent-decoding.
 	 * <p>
 	 * Behavior:
 	 * <ul>
@@ -621,42 +619,54 @@ public final class Utilities {
 	 *   <li>Applies aggressive trimming of Unicode whitespace.</li>
 	 * </ul>
 	 *
-	 * @param url a URL or path to normalize (must be non-{@code null})
-	 * @return the normalized path (never {@code null}); {@code "/"} for empty input
+	 * @param url                    a URL or path to normalize
+	 * @param performPercentDecoding {@code true} if percent decoding should be performed on the path, {@code false} otherwise
+	 * @return the normalized path, {@code "/"} for empty input
 	 */
 	@Nonnull
-	public static String normalizedPathForUrl(@Nonnull String url) {
+	public static String normalizedPathForUrl(@Nonnull String url,
+																						@Nonnull Boolean performPercentDecoding) {
 		requireNonNull(url);
 
-		url = trimAggressively(url);
+		// Parse with java.net.URI to isolate raw path; then percent-decode only the path
+		try {
+			URI uri = new URI(url);
 
-		if (url.length() == 0)
-			return "/";
+			String rawPath = uri.getRawPath(); // null => "/"
 
-		if (url.startsWith("http://") || url.startsWith("https://")) {
-			try {
-				URL absoluteUrl = new URL(url);
-				url = absoluteUrl.getPath();
-			} catch (MalformedURLException e) {
-				throw new RuntimeException(format("Malformed URL: %s", url), e);
-			}
+			if (rawPath == null || rawPath.isEmpty())
+				rawPath = "/";
+
+			String decodedPath = performPercentDecoding ? percentDecode(rawPath, StandardCharsets.UTF_8) : rawPath;
+
+			// Normalize trailing slashes like normalizedPathForUrl currently does
+			if (!decodedPath.startsWith("/"))
+				decodedPath = "/" + decodedPath;
+
+			if (!"/".equals(decodedPath))
+				while (decodedPath.endsWith("/"))
+					decodedPath = decodedPath.substring(0, decodedPath.length() - 1);
+
+			return decodedPath;
+		} catch (URISyntaxException e) {
+			// If it's not an absolute URL, treat the whole string as a path and percent-decode
+			String path = url;
+			int q = path.indexOf('?');
+
+			if (q != -1)
+				path = path.substring(0, q);
+
+			String decodedPath = performPercentDecoding ? percentDecode(path, StandardCharsets.UTF_8) : path;
+
+			if (!decodedPath.startsWith("/"))
+				decodedPath = "/" + decodedPath;
+
+			if (!"/".equals(decodedPath))
+				while (decodedPath.endsWith("/"))
+					decodedPath = decodedPath.substring(0, decodedPath.length() - 1);
+
+			return decodedPath;
 		}
-
-		if (!url.startsWith("/"))
-			url = format("/%s", url);
-
-		if ("/".equals(url))
-			return url;
-
-		while (url.endsWith("/"))
-			url = url.substring(0, url.length() - 1);
-
-		int queryIndex = url.indexOf("?");
-
-		if (queryIndex != -1)
-			url = url.substring(0, queryIndex);
-
-		return url;
 	}
 
 	/**

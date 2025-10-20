@@ -22,10 +22,12 @@ import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -127,6 +129,13 @@ public final class ResourcePathDeclaration {
 					throw new IllegalArgumentException(format("Varargs placeholder must be the last component in the path declaration: %s", path));
 			}
 		}
+
+		Set<String> pathParameterNames = new LinkedHashSet<String>();
+
+		for (var component : components)
+			if (component.getType() == ComponentType.PLACEHOLDER && !pathParameterNames.add(component.getValue()))
+				throw new IllegalArgumentException(
+						String.format("Duplicate placeholder name '%s' in resource path declaration: %s", component.getValue(), path));
 
 		if (varargsCount > 1)
 			throw new IllegalArgumentException(format("Only one varargs placeholder is allowed in the path declaration: %s", path));

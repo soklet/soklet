@@ -208,7 +208,7 @@ public final class Request {
 			}
 		}
 
-		this.resourcePath = ResourcePath.withPath(Utilities.normalizedPathForUrl(uri));
+		this.resourcePath = ResourcePath.withPath(Utilities.normalizedPathForUrl(uri, true));
 
 		// Form parameters
 		// TODO: optimize copy/modify scenarios - we don't want to be re-processing body data
