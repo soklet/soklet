@@ -372,6 +372,17 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void forwardedQuotedValues_areHandled() {
+		Map<String, Set<String>> headers = Map.of(
+				"Forwarded", Set.of("for=203.0.113.60; proto=\"https\"; host=\"example.com:443\"")
+		);
+
+		Optional<String> prefix = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		Assertions.assertTrue(prefix.isPresent());
+		Assertions.assertEquals("https://example.com:443", prefix.get());
+	}
+
+	@Test
 	public void commaJoinableHeaders_splitOutsideQuotes() {
 		List<String> lines = List.of(
 				"Cache-Control: no-cache, no-store",

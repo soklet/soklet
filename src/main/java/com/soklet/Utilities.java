@@ -755,17 +755,21 @@ public final class Utilities {
 		String protocol = null;
 		String host = null;
 		String portAsString = null;
+		Boolean portExplicit = false;
 
 		// Host: developer.mozilla.org OR developer.mozilla.org:443 OR [2001:db8::1]:8443
 		Set<String> hostHeaders = headers.get("Host");
+
 		if (hostHeaders != null && !hostHeaders.isEmpty()) {
 			HostPort hostPort = parseHostPort(hostHeaders.iterator().next()).orElse(null);
 
 			if (hostPort != null) {
 				host = hostPort.getHost();
 
-				if (hostPort.getPort().isPresent())
+				if (hostPort.getPort().isPresent()) {
 					portAsString = String.valueOf(hostPort.getPort().get());
+					portExplicit = true;
+				}
 			}
 		}
 
@@ -803,8 +807,10 @@ public final class Utilities {
 							if (hostPort != null) {
 								host = hostPort.getHost();
 
-								if (hostPort.getPort().isPresent())
+								if (hostPort.getPort().isPresent()) {
 									portAsString = String.valueOf(hostPort.getPort().get());
+									portExplicit = true;
+								}
 							}
 						}
 					} else if ("proto".equalsIgnoreCase(name)) {
@@ -818,6 +824,7 @@ public final class Utilities {
 		// Origin: null OR <scheme>://<hostname> OR <scheme>://<hostname>:<port> (IPv6 supported)
 		if (protocol == null || host == null || portAsString == null) {
 			Set<String> originHeaders = headers.get("Origin");
+
 			if (originHeaders != null && !originHeaders.isEmpty()) {
 				String originHeader = trimAggressivelyToNull(originHeaders.iterator().next());
 				try {
@@ -825,13 +832,20 @@ public final class Utilities {
 					String sch = trimAggressivelyToNull(o.getScheme());
 					String h = o.getHost(); // may be bracketed already on some JDKs
 					int p = o.getPort(); // -1 if absent
-					if (sch != null) protocol = sch;
+
+					if (sch != null)
+						protocol = sch;
+
 					if (h != null) {
 						boolean alreadyBracketed = h.startsWith("[") && h.endsWith("]");
 						boolean isIpv6Like = h.indexOf(':') >= 0; // contains colon(s)
 						host = (isIpv6Like && !alreadyBracketed) ? "[" + h + "]" : h;
 					}
-					if (p >= 0) portAsString = String.valueOf(p);
+
+					if (p >= 0) {
+						portAsString = String.valueOf(p);
+						portExplicit = true;
+					}
 				} catch (URISyntaxException ignored) {
 					// no-op
 				}
@@ -896,8 +910,10 @@ public final class Utilities {
 				if (hostPort != null) {
 					host = hostPort.getHost();
 
-					if (hostPort.getPort().isPresent() && portAsString == null)
+					if (hostPort.getPort().isPresent() && portAsString == null) {
 						portAsString = String.valueOf(hostPort.getPort().get());
+						portExplicit = true;
+					}
 				}
 			}
 		}
@@ -908,6 +924,9 @@ public final class Utilities {
 			if (xForwardedPortHeaders != null && xForwardedPortHeaders.size() > 0) {
 				String xForwardedPortHeader = trimAggressivelyToNull(xForwardedPortHeaders.stream().findFirst().get());
 				portAsString = xForwardedPortHeader;
+
+				if (xForwardedPortHeader != null)
+					portExplicit = true;
 			}
 		}
 
@@ -921,15 +940,17 @@ public final class Utilities {
 			}
 		}
 
-		if (protocol != null && host != null && port == null)
+		if (protocol != null && host != null && port == null) {
 			return Optional.of(format("%s://%s", protocol, host));
+		}
 
 		if (protocol != null && host != null && port != null) {
-			boolean usingDefaultPort = ("http".equalsIgnoreCase(protocol) && port.equals(80))
-					|| ("https".equalsIgnoreCase(protocol) && port.equals(443));
+			boolean usingDefaultPort =
+					("http".equalsIgnoreCase(protocol) && port.equals(80)) ||
+							("https".equalsIgnoreCase(protocol) && port.equals(443));
 
-			// Only include the port number if it's nonstandard for the protocol
-			String clientUrlPrefix = usingDefaultPort
+			// Keep default ports if the client/proxy explicitly sent them
+			String clientUrlPrefix = (usingDefaultPort && !portExplicit)
 					? format("%s://%s", protocol, host)
 					: format("%s://%s:%s", protocol, host, port);
 
