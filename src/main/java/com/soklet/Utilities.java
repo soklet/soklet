@@ -610,6 +610,8 @@ public final class Utilities {
 	/**
 	 * Normalizes a URL or path into a canonical request path and optionally perform percent-decoding.
 	 * <p>
+	 * For example, {@code "https://www.soklet.com/ab%20c?one=two"} would be normalized to {@code "/ab c"}.
+	 * <p>
 	 * Behavior:
 	 * <ul>
 	 *   <li>If input starts with {@code http://} or {@code https://}, the path portion is extracted.</li>
@@ -739,7 +741,7 @@ public final class Utilities {
 	public static Optional<String> extractClientUrlPrefixFromHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 
-		// Host                   developer.mozilla.org OR developer.mozilla.org:443
+		// Host                   developer.mozilla.org OR developer.mozilla.org:443 OR [2001:db8::1]:8443
 		// Forwarded              by=<identifier>;for=<identifier>;host=<host>;proto=<http|https> (can be repeated if comma-separated, e.g. for=12.34.56.78;host=example.com;proto=https, for=23.45.67.89)
 		// Origin                 null OR <scheme>://<hostname> OR <scheme>://<hostname>:<port>
 		// X-Forwarded-Proto      https
@@ -754,42 +756,33 @@ public final class Utilities {
 		String host = null;
 		String portAsString = null;
 
-		// Host: developer.mozilla.org OR developer.mozilla.org:443
+		// Host: developer.mozilla.org OR developer.mozilla.org:443 OR [2001:db8::1]:8443
 		Set<String> hostHeaders = headers.get("Host");
+		if (hostHeaders != null && !hostHeaders.isEmpty()) {
+			HostPort hostPort = parseHostPort(hostHeaders.iterator().next()).orElse(null);
 
-		if (hostHeaders != null && hostHeaders.size() > 0) {
-			String hostHeader = trimAggressivelyToNull(hostHeaders.stream().findFirst().get());
+			if (hostPort != null) {
+				host = hostPort.getHost();
 
-			if (hostHeader != null) {
-				if (hostHeader.contains(":")) {
-					String[] hostHeaderComponents = hostHeader.split(":");
-					if (hostHeaderComponents.length == 2) {
-						host = trimAggressivelyToNull(hostHeaderComponents[0]);
-						portAsString = trimAggressivelyToNull(hostHeaderComponents[1]);
-					}
-				} else {
-					host = hostHeader;
-				}
+				if (hostPort.getPort().isPresent())
+					portAsString = String.valueOf(hostPort.getPort().get());
 			}
 		}
 
-		// Forwarded: by=<identifier>;for=<identifier>;host=<host>;proto=<http|https> (can be repeated if comma-separated, e.g. for=12.34.56.78;host=example.com;proto=https, for=23.45.67.89)
+		// Forwarded: by=<identifier>;for=<identifier>;host=<host>;proto=<http|https>
 		Set<String> forwardedHeaders = headers.get("Forwarded");
-
 		if (forwardedHeaders != null && forwardedHeaders.size() > 0) {
 			String forwardedHeader = trimAggressivelyToNull(forwardedHeaders.stream().findFirst().get());
 
 			// If there are multiple comma-separated components, pick the first one
-			String[] forwardedHeaderComponents = forwardedHeader.split(",");
-			forwardedHeader = trimAggressivelyToNull(forwardedHeaderComponents[0]);
+			String[] forwardedHeaderComponents = forwardedHeader != null ? forwardedHeader.split(",") : new String[0];
+			forwardedHeader = forwardedHeaderComponents.length > 0 ? trimAggressivelyToNull(forwardedHeaderComponents[0]) : null;
 
 			if (forwardedHeader != null) {
 				// Each field component might look like "by=<identifier>"
 				String[] forwardedHeaderFieldComponents = forwardedHeader.split(";");
-
 				for (String forwardedHeaderFieldComponent : forwardedHeaderFieldComponents) {
 					forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
-
 					if (forwardedHeaderFieldComponent == null)
 						continue;
 
@@ -798,50 +791,49 @@ public final class Utilities {
 					if (forwardedHeaderFieldNameAndValue.length != 2)
 						continue;
 
-					// e.g. "by"
 					String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
-					// e.g. "<identifier>"
 					String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
-
 					if (name == null || value == null)
 						continue;
 
-					// We only care about the "Host" and "Proto" components here.
 					if ("host".equalsIgnoreCase(name)) {
-						if (host == null)
-							host = value;
+						if (host == null) {
+							HostPort hostPort = parseHostPort(value).orElse(null);
+
+							if (hostPort != null) {
+								host = hostPort.getHost();
+
+								if (hostPort.getPort().isPresent())
+									portAsString = String.valueOf(hostPort.getPort().get());
+							}
+						}
 					} else if ("proto".equalsIgnoreCase(name)) {
 						if (protocol == null)
-							protocol = value;
+							protocol = stripOptionalQuotes(value);
 					}
 				}
 			}
 		}
 
-		// Origin: null OR <scheme>://<hostname> OR <scheme>://<hostname>:<port>
+		// Origin: null OR <scheme>://<hostname> OR <scheme>://<hostname>:<port> (IPv6 supported)
 		if (protocol == null || host == null || portAsString == null) {
 			Set<String> originHeaders = headers.get("Origin");
-
-			if (originHeaders != null && originHeaders.size() > 0) {
-				String originHeader = trimAggressivelyToNull(originHeaders.stream().findFirst().get());
-				String[] originHeaderComponents = originHeader.split("://");
-
-				if (originHeaderComponents.length == 2) {
-					protocol = trimAggressivelyToNull(originHeaderComponents[0]);
-					String originHostAndMaybePort = trimAggressivelyToNull(originHeaderComponents[1]);
-
-					if (originHostAndMaybePort != null) {
-						if (originHostAndMaybePort.contains(":")) {
-							String[] originHostAndPortComponents = originHostAndMaybePort.split(":");
-
-							if (originHostAndPortComponents.length == 2) {
-								host = trimAggressivelyToNull(originHostAndPortComponents[0]);
-								portAsString = trimAggressivelyToNull(originHostAndPortComponents[1]);
-							}
-						} else {
-							host = originHostAndMaybePort;
-						}
+			if (originHeaders != null && !originHeaders.isEmpty()) {
+				String originHeader = trimAggressivelyToNull(originHeaders.iterator().next());
+				try {
+					URI o = new URI(originHeader);
+					String sch = trimAggressivelyToNull(o.getScheme());
+					String h = o.getHost(); // may be bracketed already on some JDKs
+					int p = o.getPort(); // -1 if absent
+					if (sch != null) protocol = sch;
+					if (h != null) {
+						boolean alreadyBracketed = h.startsWith("[") && h.endsWith("]");
+						boolean isIpv6Like = h.indexOf(':') >= 0; // contains colon(s)
+						host = (isIpv6Like && !alreadyBracketed) ? "[" + h + "]" : h;
 					}
+					if (p >= 0) portAsString = String.valueOf(p);
+				} catch (URISyntaxException ignored) {
+					// no-op
 				}
 			}
 		}
@@ -895,12 +887,18 @@ public final class Utilities {
 			}
 		}
 
-		// X-Forwarded-Host: id42.example-cdn.com
+		// X-Forwarded-Host: id42.example-cdn.com (or with port / IPv6)
 		if (host == null) {
 			Set<String> xForwardedHostHeaders = headers.get("X-Forwarded-Host");
 			if (xForwardedHostHeaders != null && xForwardedHostHeaders.size() > 0) {
-				String xForwardedHostHeader = trimAggressivelyToNull(xForwardedHostHeaders.stream().findFirst().get());
-				host = xForwardedHostHeader;
+				HostPort hostPort = parseHostPort(xForwardedHostHeaders.iterator().next()).orElse(null);
+
+				if (hostPort != null) {
+					host = hostPort.getHost();
+
+					if (hostPort.getPort().isPresent() && portAsString == null)
+						portAsString = String.valueOf(hostPort.getPort().get());
+				}
 			}
 		}
 
@@ -1077,14 +1075,24 @@ public final class Utilities {
 		}
 
 		if (finishedCharsetName) {
-			// e.g. "charset=UTF-8" -> "UTF-8"
-			charsetName = trimAggressivelyToNull(charsetName.replace("charset=", ""));
+			// e.g. charset=UTF-8 or charset="UTF-8" or charset='UTF-8'
+			String possibleCharsetName = trimAggressivelyToNull(charsetName.replace("charset=", ""));
 
-			if (charsetName != null) {
-				try {
-					return Optional.of(Charset.forName(charsetName));
-				} catch (IllegalCharsetNameException | UnsupportedCharsetException ignored) {
-					return Optional.empty();
+			if (possibleCharsetName != null) {
+				// strip optional surrounding quotes
+				if ((possibleCharsetName.length() >= 2) &&
+						((possibleCharsetName.charAt(0) == '"' && possibleCharsetName.charAt(possibleCharsetName.length() - 1) == '"') ||
+								(possibleCharsetName.charAt(0) == '\'' && possibleCharsetName.charAt(possibleCharsetName.length() - 1) == '\''))) {
+					possibleCharsetName = possibleCharsetName.substring(1, possibleCharsetName.length() - 1);
+					possibleCharsetName = trimAggressivelyToNull(possibleCharsetName);
+				}
+
+				if (possibleCharsetName != null) {
+					try {
+						return Optional.of(Charset.forName(possibleCharsetName));
+					} catch (IllegalCharsetNameException | UnsupportedCharsetException ignored) {
+						return Optional.empty();
+					}
 				}
 			}
 		}
@@ -1377,5 +1385,106 @@ public final class Utilities {
 		}
 		out.add(cur.toString());
 		return out;
+	}
+
+	/**
+	 * Remove a single pair of surrounding quotes if present.
+	 */
+	@Nonnull
+	private static String stripOptionalQuotes(@Nonnull String string) {
+		requireNonNull(string);
+
+		if (string.length() >= 2) {
+			char first = string.charAt(0), last = string.charAt(string.length() - 1);
+
+			if ((first == '"' && last == '"') || (first == '\'' && last == '\''))
+				return string.substring(1, string.length() - 1);
+		}
+
+		return string;
+	}
+
+	/**
+	 * Parse host[:port] with IPv6 support: "[v6](:port)?" or "host(:port)?".
+	 * Returns host (with brackets for v6) and port (nullable).
+	 */
+	@ThreadSafe
+	private static final class HostPort {
+		@Nonnull
+		private final String host;
+		@Nullable
+		private final Integer port;
+
+		HostPort(@Nonnull String host,
+						 @Nullable Integer port) {
+			this.host = host;
+			this.port = port;
+		}
+
+		@Nonnull
+		public String getHost() {
+			return this.host;
+		}
+
+		@Nonnull
+		public Optional<Integer> getPort() {
+			return Optional.ofNullable(this.port);
+		}
+	}
+
+	@Nonnull
+	private static Optional<HostPort> parseHostPort(@Nullable String input) {
+		input = trimAggressivelyToNull(input);
+
+		if (input == null)
+			return Optional.empty();
+
+		input = stripOptionalQuotes(input);
+
+		if (input.startsWith("[")) {
+			int close = input.indexOf(']');
+
+			if (close > 0) {
+				String core = input.substring(1, close); // IPv6 literal without brackets
+				String rest = input.substring(close + 1); // maybe ":port"
+				String host = "[" + core + "]";
+				Integer port = null;
+
+				if (rest.startsWith(":")) {
+					String ps = trimAggressivelyToNull(rest.substring(1));
+					if (ps != null) {
+						try {
+							port = Integer.parseInt(ps, 10);
+						} catch (Exception ignored) {
+							// Nothing to do
+						}
+					}
+				}
+
+				return Optional.of(new HostPort(host, port));
+			}
+		}
+
+		int colon = input.indexOf(':');
+
+		if (colon > 0 && input.indexOf(':', colon + 1) == -1) {
+			// exactly one ':' -> host:port (IPv4/hostname)
+			String h = trimAggressivelyToNull(input.substring(0, colon));
+			String ps = trimAggressivelyToNull(input.substring(colon + 1));
+			Integer p = null;
+
+			if (ps != null) {
+				try {
+					p = Integer.parseInt(ps, 10);
+				} catch (Exception ignored) {
+					// Nothing to do
+				}
+			}
+			if (h != null)
+				return Optional.of(new HostPort(h, p));
+		}
+
+		// no port
+		return Optional.of(new HostPort(input, null));
 	}
 }
