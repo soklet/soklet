@@ -26,6 +26,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -418,6 +420,110 @@ public class UtilitiesTests {
 		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
 		Assertions.assertEquals("https://example.com:8443", url.get());
+	}
+
+	@Test
+	void unfoldsObsFold_andSplitsCommaJoinable_andKeepsSetCookieDistinct() {
+		var raw = List.of(
+				"Cache-Control: no-cache, no-store",
+				"Set-Cookie: a=b; Path=/; HttpOnly",
+				"Set-Cookie: c=d; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/",
+				"X-Foo: first",
+				" second-line" // obs-fold continuation for X-Foo
+		);
+
+		var headers = Utilities.extractHeadersFromRawHeaderLines(raw);
+
+		// case-insensitive key access + insertion order preserved
+		assertEquals(Set.of("no-cache", "no-store"), new LinkedHashSet<>(headers.get("Cache-Control")));
+		assertEquals(
+				List.of(
+						"a=b; Path=/; HttpOnly",
+						"c=d; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/"
+				),
+				new ArrayList<>(headers.get("Set-Cookie"))
+		);
+		assertEquals(Set.of("first second-line"), headers.get("X-Foo"));
+	}
+
+	@Test
+	void quotedCommasAreNotSplit() {
+		var raw = List.of("Cache-Control: foo=\"a,b\", bar=c");
+		var headers = Utilities.extractHeadersFromRawHeaderLines(raw);
+		assertEquals(Set.of("foo=\"a,b\"", "bar=c"), headers.get("Cache-Control"));
+	}
+
+	@Test
+	void rejectsIllegalHeaderNameCharacters() {
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> Utilities.validateHeaderNameAndValue("X Foo", "ok")); // space not allowed in name
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> Utilities.validateHeaderNameAndValue("X\nFoo", "ok")); // CR/LF must be rejected
+	}
+
+	@Test
+	void rejectsCRLFInHeaderValue() {
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> Utilities.validateHeaderNameAndValue("X-Foo", "bar\r\nInjected: evil"));
+	}
+
+	@Test
+	void acceptsLegalHeaders() {
+		Assertions.assertDoesNotThrow(() -> Utilities.validateHeaderNameAndValue("X-Foo", "bar"));
+	}
+
+	@Test
+	void formMode_treatsPlusAsSpace_andDecodesPercentEscapes() {
+		var q = "a=a+b%2B%20&empty=&name=%E2%9C%93";
+		var m = Utilities.extractQueryParametersFromQuery(
+				q, Utilities.QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+
+		assertEquals(Set.of("a b+ "), m.get("a"));  // '+' -> space; %2B -> '+'; %20 -> space
+		assertEquals(Set.of(""), m.get("empty"));   // empty preserved
+		assertEquals(Set.of("✓"), m.get("name"));   // UTF-8 percent-decoding
+	}
+
+	@Test
+	void strictMode_leavesPlusAsPlus() {
+		var q = "a=a+b%2B%20";
+		var m = Utilities.extractQueryParametersFromQuery(q, Utilities.QueryDecodingStrategy.RFC_3986_STRICT);
+
+		assertEquals(Set.of("a+b+ "), m.get("a")); // '+' stays '+'
+	}
+
+	@Test
+	void parsesQuotedAndEscapedCookieValues_andPercentDecoding() {
+		var headers = new LinkedHashMap<String, Set<String>>();
+		headers.put("Cookie", Set.of(
+				"a=1; b=\"two;three\"; c=\"a\\\"b\\\\c\"; d=%E2%9C%93"
+		));
+
+		var cookies = Utilities.extractCookiesFromHeaders(headers);
+		assertEquals(Set.of("1"), cookies.get("a"));
+		assertEquals(Set.of("two;three"), cookies.get("b"));
+		assertEquals(Set.of("a\"b\\c"), cookies.get("c"));
+		assertEquals(Set.of("✓"), cookies.get("d"));
+	}
+
+	@Test
+	void responseCookie_toSetCookieHeaderRepresentation_isWellFormed() {
+		var cookie = ResponseCookie.with("session", "abc")
+				.path("/")
+				.domain("example.com")
+				.maxAge(java.time.Duration.ofHours(1))
+				.secure(true)
+				.httpOnly(true)
+				.sameSite(ResponseCookie.SameSite.LAX)
+				.build();
+
+		var header = cookie.toSetCookieHeaderRepresentation();
+		assertTrue(header.contains("session=abc"));
+		assertTrue(header.contains("Path=/"));
+		assertTrue(header.contains("Domain=example.com"));
+		assertTrue(header.contains("Max-Age="));
+		assertTrue(header.contains("Secure"));
+		assertTrue(header.contains("HttpOnly"));
+		assertTrue(header.contains("SameSite=Lax"));
 	}
 
 	// --- header parsing helpers ---

@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -162,5 +163,26 @@ public class CorsTests {
 		public String hello() {
 			return "ok";
 		}
+	}
+
+	@Test
+	void corsFromHeaders_shouldTreatOriginCaseInsensitively() {
+		var headers = new LinkedHashMap<String, Set<String>>();
+		headers.put("origin", Set.of("https://example.com")); // lowercase
+
+		var cors = Cors.fromHeaders(HttpMethod.GET, headers);
+		Assertions.assertTrue(cors.isPresent(),
+				"Expected Cors.fromHeaders to find 'origin' irrespective of case");
+	}
+
+	@Test
+	void corsPreflightFromHeaders_shouldTreatOriginCaseInsensitively() {
+		var headers = new LinkedHashMap<String, Set<String>>();
+		headers.put("origin", Set.of("https://example.com"));
+		headers.put("access-control-request-method", Set.of("POST"));
+
+		var preflight = CorsPreflight.fromHeaders(headers);
+		Assertions.assertTrue(preflight.isPresent(),
+				"Expected CorsPreflight.fromHeaders to find headers irrespective of case");
 	}
 }

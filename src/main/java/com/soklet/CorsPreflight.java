@@ -19,11 +19,14 @@ package com.soklet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.trimAggressively;
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
@@ -107,7 +110,15 @@ public final class CorsPreflight {
 	public static Optional<CorsPreflight> fromHeaders(@Nonnull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 
-		Set<String> originHeaderValues = headers.get("Origin");
+		// Build a lowercase-key view of headers for case-insensitive lookups
+		Map<String, Set<String>> normalizedHeaders = headers.entrySet().stream()
+				.collect(java.util.stream.Collectors.toMap(
+						entry -> entry.getKey().toLowerCase(java.util.Locale.ROOT),
+						Map.Entry::getValue,
+						(a, b) -> b, // if duplicate differing only by case, keep last
+						java.util.LinkedHashMap::new));
+
+		Set<String> originHeaderValues = normalizedHeaders.get("origin");
 
 		if (originHeaderValues == null || originHeaderValues.size() == 0)
 			return Optional.empty();
@@ -117,7 +128,7 @@ public final class CorsPreflight {
 		if (originHeaderValue == null)
 			return Optional.empty();
 
-		Set<String> accessControlRequestMethodHeaderValues = headers.get("Access-Control-Request-Method");
+		Set<String> accessControlRequestMethodHeaderValues = normalizedHeaders.get("access-control-request-method");
 
 		if (accessControlRequestMethodHeaderValues == null)
 			accessControlRequestMethodHeaderValues = Set.of();
@@ -140,7 +151,14 @@ public final class CorsPreflight {
 		if (accessControlRequestMethods.size() == 0)
 			return Optional.empty();
 
-		Set<String> accessControlRequestHeaderValues = headers.get("Access-Control-Request-Header");
+		Set<String> accessControlRequestHeaderValues = Optional
+				.ofNullable(normalizedHeaders.get("access-control-request-headers"))
+				.orElse(Set.of())
+				.stream()
+				.flatMap(value -> Arrays.stream(value.split(",")))
+				.map(value -> trimAggressivelyToEmpty(value))
+				.filter(value -> !value.isEmpty())
+				.collect(Collectors.toCollection(LinkedHashSet::new));
 
 		if (accessControlRequestHeaderValues == null)
 			accessControlRequestHeaderValues = Set.of();

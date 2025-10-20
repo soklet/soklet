@@ -24,6 +24,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.soklet.Utilities.trimAggressivelyToEmpty;
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.util.Objects.requireNonNull;
 
@@ -78,7 +79,12 @@ public final class Cors {
 		requireNonNull(httpMethod);
 		requireNonNull(headers);
 
-		Set<String> originHeaderValues = headers.get("Origin");
+		Set<String> originHeaderValues = headers.entrySet().stream()
+				.filter(e -> e.getKey() != null && "origin".equalsIgnoreCase(trimAggressivelyToEmpty(e.getKey())))
+				.map(Map.Entry::getValue)
+				.filter(Objects::nonNull)
+				.findFirst()
+				.orElse(null);
 
 		if (originHeaderValues == null || originHeaderValues.size() == 0)
 			return Optional.empty();
