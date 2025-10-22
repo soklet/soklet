@@ -25,6 +25,7 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.ServerSentEventSource;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
@@ -41,7 +42,9 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.lang.annotation.Annotation;
@@ -96,6 +99,7 @@ import java.util.Set;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@NotThreadSafe
 public final class SokletProcessor extends AbstractProcessor {
 	private Types types;
 	private Elements elements;
@@ -147,8 +151,23 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private final List<ResourceMethodDeclaration> collected = new ArrayList<>();
 
+	/**
+	 * Accumulates the top-level classes that participated in this compilation.
+	 * We use top-level "binary" names (e.g., pkg.Outer) and will match nested
+	 * classes by prefix (pkg.Outer$...).
+	 */
+	private final Set<String> touchedTopLevelBinaries = new LinkedHashSet<>();
+
 	@Override
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+		// Track roots for this round (used later to remove stale entries for changed classes)
+		for (Element root : roundEnv.getRootElements()) {
+			if (root instanceof TypeElement te) {
+				String bin = elements.getBinaryName(te).toString(); // e.g. pkg.Outer
+				touchedTopLevelBinaries.add(bin);
+			}
+		}
+
 		// 1) Validate SSE method return types (if we can resolve HandshakeResult)
 		enforceSseReturnTypes(roundEnv);
 
@@ -163,10 +182,9 @@ public final class SokletProcessor extends AbstractProcessor {
 		// Treat SSE as GET with the SSE flag
 		collect(roundEnv, HttpMethod.GET, ServerSentEventSource.class, true);
 
-		// 3) On the final round, write the resource index once
-		if (roundEnv.processingOver() && !collected.isEmpty()) {
-			List<ResourceMethodDeclaration> routes = dedupeAndOrder(collected);
-			writeRoutesIndexResource(routes);
+		// 3) On the final round, merge with previous index and write once
+		if (roundEnv.processingOver()) {
+			mergeAndWriteIndex(collected, touchedTopLevelBinaries);
 		}
 
 		// Return false so other processors can still run on these annotations if they like
@@ -226,7 +244,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				String methodName = method.getSimpleName().toString();
 
 				String[] paramTypes = method.getParameters().stream()
-						.map(p -> jvmTypeName(p.asType()))   // <- new helper below
+						.map(p -> jvmTypeName(p.asType()))
 						.toArray(String[]::new);
 
 				collected.add(new ResourceMethodDeclaration(
@@ -330,14 +348,17 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
+	private static String generateKey(ResourceMethodDeclaration r) {
+		return r.httpMethod().name() + "|" + r.path() + "|" + r.className() + "|" +
+				r.methodName() + "|" + String.join(";", r.parameterTypes()) + "|" +
+				r.serverSentEventSource();
+	}
+
 	private static List<ResourceMethodDeclaration> dedupeAndOrder(List<ResourceMethodDeclaration> in) {
 		// De-dupe by (method, path, class, methodName, params, sse)
 		Map<String, ResourceMethodDeclaration> byKey = new LinkedHashMap<>();
 		for (ResourceMethodDeclaration r : in) {
-			String key = r.httpMethod().name() + "|" + r.path() + "|" + r.className() + "|" +
-					r.methodName() + "|" + String.join(";", r.parameterTypes()) + "|" +
-					r.serverSentEventSource();
-			byKey.putIfAbsent(key, r);
+			byKey.putIfAbsent(generateKey(r), r);
 		}
 		List<ResourceMethodDeclaration> out = new ArrayList<>(byKey.values());
 		out.sort(Comparator
@@ -352,7 +373,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private void enforceSseReturnTypes(RoundEnvironment roundEnv) {
 		if (handshakeResultType == null) {
-			// HandshakeResult not on the AP classpath: skip validation quietly (keeps processor usable in partial builds)
+			// HandshakeResult not on the AP classpath: skip validation quietly
 			return;
 		}
 		TypeElement sseAnn = elements.getTypeElement(ServerSentEventSource.class.getCanonicalName());
@@ -382,13 +403,133 @@ public final class SokletProcessor extends AbstractProcessor {
 		return (t == null ? "null" : t.toString());
 	}
 
-	// ---- Resource emission ----------------------------------------------------
+	// ---- Resource emission & merge -------------------------------------------
 
 	static String RESOURCE_METHOD_LOOKUP_TABLE_PATH = "META-INF/soklet/resource-method-lookup-table";
 
 	/**
 	 * Emit a single resource per module. Each line has:
 	 * METHOD|b64(path)|b64(class)|b64(method)|b64(param1;param2;...)|true|false
+	 * <p>
+	 * - Reads the previous file (if present).
+	 * - Removes entries for touched classes in this compile (including nested classes).
+	 * - Prunes entries whose declaring type no longer resolves.
+	 * - Adds freshly collected routes and writes the union.
+	 */
+	private void mergeAndWriteIndex(List<ResourceMethodDeclaration> newlyCollected,
+																	Set<String> touchedTopLevelBinaries) {
+		// 1) Read previous (if any)
+		Map<String, ResourceMethodDeclaration> merged = readExistingIndex();
+
+		// 2) Remove entries for classes touched in this compilation (and their nested classes)
+		if (!touchedTopLevelBinaries.isEmpty()) {
+			merged.values().removeIf(r -> {
+				String ownerBin = r.className(); // e.g. pkg.Outer$Inner
+				for (String top : touchedTopLevelBinaries) {
+					if (ownerBin.equals(top) || ownerBin.startsWith(top + "$")) return true;
+				}
+				return false;
+			});
+		}
+
+		// 3) Prune entries whose owner type no longer exists (handles deletions)
+		merged.values().removeIf(r -> {
+			String canonical = binaryToCanonical(r.className());
+			TypeElement te = elements.getTypeElement(canonical);
+			return te == null; // type disappeared
+		});
+
+		// 4) Add fresh entries
+		for (ResourceMethodDeclaration r : dedupeAndOrder(newlyCollected)) {
+			merged.put(generateKey(r), r);
+		}
+
+		// 5) Sort deterministically and write
+		List<ResourceMethodDeclaration> toWrite = new ArrayList<>(merged.values());
+		toWrite.sort(Comparator
+				.comparing((ResourceMethodDeclaration r) -> r.httpMethod().name())
+				.thenComparing(ResourceMethodDeclaration::path)
+				.thenComparing(ResourceMethodDeclaration::className)
+				.thenComparing(ResourceMethodDeclaration::methodName));
+
+		writeRoutesIndexResource(toWrite);
+	}
+
+	private static String binaryToCanonical(String binary) {
+		// e.g. "pkg.Outer$Inner" -> "pkg.Outer.Inner"
+		return binary.replace('$', '.');
+	}
+
+	/**
+	 * Reads the existing index file if present and returns entries keyed by generateKey(...).
+	 * Any malformed lines are ignored.
+	 */
+	private Map<String, ResourceMethodDeclaration> readExistingIndex() {
+		Map<String, ResourceMethodDeclaration> out = new LinkedHashMap<>();
+
+		BufferedReader reader = null;
+		try {
+			FileObject fo = filer.getResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE_METHOD_LOOKUP_TABLE_PATH);
+			reader = new BufferedReader(new InputStreamReader(fo.openInputStream(), StandardCharsets.UTF_8));
+			String line;
+			while ((line = reader.readLine()) != null) {
+				line = line.trim();
+				if (line.isEmpty()) continue;
+
+				ResourceMethodDeclaration r = parseIndexLine(line);
+				if (r != null) {
+					out.put(generateKey(r), r);
+				}
+			}
+		} catch (IOException e) {
+			// Treat as "no previous index". Do not spam logs during normal incremental compiles.
+		} finally {
+			if (reader != null) {
+				try {
+					reader.close();
+				} catch (IOException ignored) {
+				}
+			}
+		}
+		return out;
+	}
+
+	private ResourceMethodDeclaration parseIndexLine(String line) {
+		try {
+			// METHOD|b64(path)|b64(class)|b64(method)|b64(params)|boolean
+			String[] parts = line.split("\\|", -1);
+			if (parts.length < 6) return null;
+
+			HttpMethod httpMethod = HttpMethod.valueOf(parts[0]); // throws if unknown
+			Base64.Decoder dec = Base64.getDecoder();
+
+			String path = new String(dec.decode(parts[1]), StandardCharsets.UTF_8);
+			String className = new String(dec.decode(parts[2]), StandardCharsets.UTF_8);
+			String methodName = new String(dec.decode(parts[3]), StandardCharsets.UTF_8);
+			String paramsJoined = new String(dec.decode(parts[4]), StandardCharsets.UTF_8);
+			boolean sse = Boolean.parseBoolean(parts[5]);
+
+			String[] paramTypes;
+			if (paramsJoined.isEmpty()) {
+				paramTypes = new String[0];
+			} else {
+				// Preserve empty components? We never emit empties between semicolons, so ignore blanks safely.
+				List<String> tmp = new ArrayList<>();
+				for (String p : paramsJoined.split(";")) {
+					if (!p.isEmpty()) tmp.add(p);
+				}
+				paramTypes = tmp.toArray(String[]::new);
+			}
+
+			return new ResourceMethodDeclaration(httpMethod, path, className, methodName, paramTypes, sse);
+		} catch (Throwable t) {
+			// Malformed or unknown method; ignore this line.
+			return null;
+		}
+	}
+
+	/**
+	 * Emit the (merged) routes index resource.
 	 */
 	private void writeRoutesIndexResource(List<ResourceMethodDeclaration> routes) {
 		try {
@@ -410,7 +551,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				}
 			}
 		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to write META-INF/soklet/routes.index", e);
+			throw new UncheckedIOException("Failed to write " + RESOURCE_METHOD_LOOKUP_TABLE_PATH, e);
 		}
 	}
 
