@@ -526,6 +526,42 @@ public class UtilitiesTests {
 		assertTrue(header.contains("SameSite=Lax"));
 	}
 
+	@Test void queryParamsAreUrlDecoded_andPlusBecomesSpace() {
+		String url = "https://example.com/p?q=First+Last&x=%2F";
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl(url, QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+
+		assertEquals(Set.of("First Last"), qp.get("q"));
+		assertEquals(Set.of("/"), qp.get("x"));
+	}
+
+	@Test
+	void cookieHeaderNameIsCaseInsensitive_and_AllowsEqualsInValue() {
+		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		headers.put("COOKIE", Set.of("token=abc==; theme=dark"));
+
+		Map<String, Set<String>> cookies = Utilities.extractCookiesFromHeaders(headers);
+
+		assertEquals(Set.of("abc=="), cookies.get("token"), "should keep trailing == in value");
+		assertEquals(Set.of("dark"), cookies.get("theme"));
+	}
+
+	@Test void quotedCharsetParameterIsSupported() {
+		assertEquals(
+				StandardCharsets.UTF_8,
+				Utilities.extractCharsetFromHeaderValue("text/plain; charset=\"utf-8\"").orElseThrow()
+		);
+	}
+
+	@Test void forwardedHeaderQuotedValuesProduceCleanPrefix() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Forwarded", Set.of("proto=\"https\";host=\"www.example.com\""));
+
+		assertEquals(
+				Optional.of("https://www.example.com"),
+				Utilities.extractClientUrlPrefixFromHeaders(headers)
+		);
+	}
+
 	// --- header parsing helpers ---
 	private static List<String> lines(String... ls) {
 		return Arrays.asList(ls);
