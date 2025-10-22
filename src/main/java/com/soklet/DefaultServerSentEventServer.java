@@ -1754,7 +1754,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(logEvent);
 
 		try {
-			getLifecycleInterceptor().get().didReceiveLogEvent(logEvent);
+			getLifecycleInterceptor().ifPresent(lifecycleInterceptor -> lifecycleInterceptor.didReceiveLogEvent(logEvent));
 		} catch (Throwable throwable) {
 			// The LifecycleInterceptor implementation errored out, but we can't let that affect us - swallow its exception.
 			// Not much else we can do here but dump to stderr
