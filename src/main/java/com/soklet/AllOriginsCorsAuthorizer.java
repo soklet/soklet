@@ -18,9 +18,9 @@ package com.soklet;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -63,8 +63,7 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 		requireNonNull(request);
 		requireNonNull(cors);
 
-		return Optional.of(CorsResponse.withAccessControlAllowOrigin("*")
-				.accessControlExposeHeaders(Set.of("*"))
+		return Optional.of(CorsResponse.withAccessControlAllowOrigin(cors.getOrigin())
 				.accessControlAllowCredentials(true)
 				.build());
 	}
@@ -78,9 +77,11 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);
 
-		return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin("*")
+		// Reflect the requested header names (no "*"), allow methods for the resource, and set a cache TTL.
+		return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(corsPreflight.getOrigin())
 				.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
-				.accessControlAllowHeaders(Set.of("*"))
+				.accessControlAllowHeaders(corsPreflight.getAccessControlRequestHeaders())
+				.accessControlMaxAge(Duration.ofMinutes(10))
 				.accessControlAllowCredentials(true)
 				.build());
 	}

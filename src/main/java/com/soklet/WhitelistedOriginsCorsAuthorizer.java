@@ -18,6 +18,7 @@ package com.soklet;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
@@ -89,11 +90,15 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 		requireNonNull(request);
 		requireNonNull(cors);
 
-		Boolean authorized = getAuthorizer().apply(normalizeOrigin(cors.getOrigin()));
+		String origin = normalizeOrigin(cors.getOrigin());
+
+		if (isSuspiciousOrigin(origin))
+			return Optional.empty();
+
+		Boolean authorized = getAuthorizer().apply(origin);
 
 		if (authorized != null && authorized)
 			return Optional.of(CorsResponse.withAccessControlAllowOrigin(cors.getOrigin())
-					.accessControlExposeHeaders(Set.of("*"))
 					.accessControlAllowCredentials(true)
 					.build());
 
@@ -109,13 +114,19 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);
 
-		Boolean authorized = getAuthorizer().apply(normalizeOrigin(corsPreflight.getOrigin()));
+		String origin = normalizeOrigin(corsPreflight.getOrigin());
+
+		if (isSuspiciousOrigin(origin))
+			return Optional.empty();
+
+		Boolean authorized = getAuthorizer().apply(origin);
 
 		if (authorized != null && authorized)
 			return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(corsPreflight.getOrigin())
 					.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
-					.accessControlAllowHeaders(Set.of("*"))
+					.accessControlAllowHeaders(corsPreflight.getAccessControlRequestHeaders())
 					.accessControlAllowCredentials(true)
+					.accessControlMaxAge(Duration.ofMinutes(10))
 					.build());
 
 		return Optional.empty();
@@ -125,6 +136,12 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	private static String normalizeOrigin(@Nonnull String origin) {
 		requireNonNull(origin);
 		return trimAggressively(origin).toLowerCase(Locale.ROOT);
+	}
+
+	@Nonnull
+	private Boolean isSuspiciousOrigin(@Nonnull String origin) {
+		requireNonNull(origin);
+		return "null".equals(origin);
 	}
 
 	@Nonnull

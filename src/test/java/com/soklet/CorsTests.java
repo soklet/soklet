@@ -16,15 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.CorsAuthorizer;
-import com.soklet.HttpMethod;
-import com.soklet.LifecycleInterceptor;
-import com.soklet.LogEvent;
-import com.soklet.Request;
-import com.soklet.RequestResult;
-import com.soklet.ResourceMethodResolver;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -126,38 +117,6 @@ public class CorsTests {
 		});
 	}
 
-	@Test
-	public void preflight_whitelist_allows_only_listed_origin() {
-		SokletConfig configuration = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
-				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://good.example")))
-				.lifecycleInterceptor(new LifecycleInterceptor() {
-					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
-				})
-				.build();
-
-		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult allowed = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
-							.headers(Map.of(
-									"Origin", Set.of("https://good.example"),
-									"Access-Control-Request-Method", Set.of("GET")
-							))
-							.build());
-			Assertions.assertEquals(204, allowed.getMarshaledResponse().getStatusCode());
-
-			RequestResult denied = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
-							.headers(Map.of(
-									"Origin", Set.of("https://evil.example"),
-									"Access-Control-Request-Method", Set.of("GET")
-							))
-							.build());
-			Assertions.assertEquals(403, denied.getMarshaledResponse().getStatusCode());
-		});
-	}
-
 	public static class CorsResource {
 		@GET("/api/hello")
 		public String hello() {
@@ -184,5 +143,131 @@ public class CorsTests {
 		var preflight = CorsPreflight.fromHeaders(headers);
 		Assertions.assertTrue(preflight.isPresent(),
 				"Expected CorsPreflight.fromHeaders to find headers irrespective of case");
+	}
+
+	@Test
+	public void preflight_whitelist_allows_only_listed_origin() {
+		SokletConfig configuration = SokletConfig.forTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://good.example")))
+				.build();
+
+		Soklet.runSimulator(configuration, simulator -> {
+			RequestResult allowed = simulator.performRequest(
+					Request.with(HttpMethod.OPTIONS, "/api/hello")
+							.headers(Map.of(
+									"Origin", Set.of("https://good.example"),
+									"Access-Control-Request-Method", Set.of("GET")
+							))
+							.build());
+			Assertions.assertEquals(204, allowed.getMarshaledResponse().getStatusCode());
+
+			RequestResult denied = simulator.performRequest(
+					Request.with(HttpMethod.OPTIONS, "/api/hello")
+							.headers(Map.of(
+									"Origin", Set.of("https://evil.example"),
+									"Access-Control-Request-Method", Set.of("GET")
+							))
+							.build());
+			Assertions.assertEquals(403, denied.getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	@Test
+	public void preflight_reflects_requested_headers_and_sets_max_age() {
+		SokletConfig configuration = SokletConfig.forTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://good.example")))
+				.build();
+
+		Soklet.runSimulator(configuration, simulator -> {
+			RequestResult preflight = simulator.performRequest(
+					Request.with(HttpMethod.OPTIONS, "/api/hello")
+							.headers(Map.of(
+									"Origin", Set.of("https://good.example"),
+									"Access-Control-Request-Method", Set.of("GET"),
+									"Access-Control-Request-Headers", Set.of("Authorization, X-Token")
+							))
+							.build());
+
+			var resp = preflight.getMarshaledResponse();
+			Assertions.assertEquals(204, resp.getStatusCode());
+
+			Map<String, Set<String>> headers = resp.getHeaders();
+			Assertions.assertEquals(Set.of("Authorization", "X-Token"), headers.get("Access-Control-Allow-Headers"));
+			Assertions.assertEquals(Set.of("600"), headers.get("Access-Control-Max-Age")); // 10 minutes
+			// Vary should include Origin (marshaler adds this when normalizing "*" + credentials)
+			Assertions.assertTrue(headers.getOrDefault("Vary", Set.of()).contains("Origin"));
+		});
+	}
+
+	@Test
+	public void nonpreflight_whitelist_sets_vary_origin_and_allows_credentials() {
+		SokletConfig configuration = SokletConfig.forTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://good.example")))
+				.build();
+
+		Soklet.runSimulator(configuration, simulator -> {
+			RequestResult result = simulator.performRequest(
+					Request.with(HttpMethod.GET, "/api/hello")
+							.headers(Map.of("Origin", Set.of("https://good.example")))
+							.build());
+
+			var resp = result.getMarshaledResponse();
+			Assertions.assertEquals(200, resp.getStatusCode());
+
+			Map<String, Set<String>> headers = resp.getHeaders();
+			Assertions.assertEquals(Set.of("https://good.example"), headers.get("Access-Control-Allow-Origin"));
+			Assertions.assertEquals(Set.of("true"), headers.get("Access-Control-Allow-Credentials"));
+			Assertions.assertTrue(headers.getOrDefault("Vary", Set.of()).contains("Origin"));
+		});
+	}
+
+	@Test
+	public void allorigins_acceptall_echoes_origin_and_reflects_headers() {
+		SokletConfig configuration = SokletConfig.forTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())  // permissive: creds ON
+				.build();
+
+		Soklet.runSimulator(configuration, simulator -> {
+			RequestResult preflight = simulator.performRequest(
+					Request.with(HttpMethod.OPTIONS, "/api/hello")
+							.headers(Map.of(
+									"Origin", Set.of("https://any.example"),
+									"Access-Control-Request-Method", Set.of("GET"),
+									"Access-Control-Request-Headers", Set.of("Authorization")
+							))
+							.build());
+
+			var resp = preflight.getMarshaledResponse();
+			Assertions.assertEquals(204, resp.getStatusCode());
+
+			Map<String, Set<String>> headers = resp.getHeaders();
+
+			// With credentials enabled, marshaler echoes the concrete Origin and adds Vary: Origin
+			Assertions.assertEquals(Set.of("https://any.example"), headers.get("Access-Control-Allow-Origin"));
+			Assertions.assertEquals(Set.of("true"), headers.get("Access-Control-Allow-Credentials"));
+			Assertions.assertTrue(headers.getOrDefault("Vary", Set.of()).contains("Origin"));
+
+			// Still reflects requested headers
+			Assertions.assertEquals(Set.of("Authorization"), headers.get("Access-Control-Allow-Headers"));
+
+			// If you set a Max-Age in the authorizer, you can assert it here too (e.g., "600")
+			// Assertions.assertEquals(Set.of("600"), headers.get("Access-Control-Max-Age"));
+		});
+	}
+
+	@Test
+	public void corspreflight_fromHeaders_parses_plural_headers_with_commas() {
+		Map<String, Set<String>> headers = Map.of(
+				"Origin", Set.of("https://good.example"),
+				"Access-Control-Request-Method", Set.of("GET"),
+				"Access-Control-Request-Headers", Set.of("X-Alpha, X-Beta , Authorization")
+		);
+
+		CorsPreflight preflight = CorsPreflight.fromHeaders(headers).orElseThrow();
+		Assertions.assertEquals(Set.of("X-Alpha", "X-Beta", "Authorization"), preflight.getAccessControlRequestHeaders());
 	}
 }

@@ -47,6 +47,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.emptyByteArray;
+import static com.soklet.Utilities.trimAggressivelyToEmpty;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -368,31 +369,36 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 			headers.put("Access-Control-Allow-Origin", Set.of(normalizedAccessControlAllowOrigin));
 
-			// Either "true" or omit entirely
-			if (accessControlAllowCredentials != null && accessControlAllowCredentials)
+			if (Boolean.TRUE.equals(accessControlAllowCredentials))
 				headers.put("Access-Control-Allow-Credentials", Set.of("true"));
 
-			// If we turned "*" into the full origin, add Vary: Origin
-			if (!normalizedAccessControlAllowOrigin.equals(corsPreflightResponse.getAccessControlAllowOrigin()))
-				headers.put("Vary", Set.of("Origin"));
+			// Always add Vary: Origin for specific origins (not "*").
+			// For preflight, also vary on inputs that affect the decision.
+			if (!"*".equals(normalizedAccessControlAllowOrigin)) {
+				Set<String> vary = new LinkedHashSet<>(headers.getOrDefault("Vary", new LinkedHashSet<>()));
+				vary.add("Origin");
+				vary.add("Access-Control-Request-Method");
+				vary.add("Access-Control-Request-Headers");
+				headers.put("Vary", vary);
+			}
 
 			Set<String> accessControlAllowHeaders = corsPreflightResponse.getAccessControlAllowHeaders();
 
-			if (accessControlAllowHeaders.size() > 0)
+			if (!accessControlAllowHeaders.isEmpty())
 				headers.put("Access-Control-Allow-Headers", new LinkedHashSet<>(accessControlAllowHeaders));
 
-			Set<String> accessControlAllowMethodAsStrings = new LinkedHashSet<>();
+			Set<String> allowMethodStrings = new LinkedHashSet<>();
 
 			for (HttpMethod httpMethod : corsPreflightResponse.getAccessControlAllowMethods())
-				accessControlAllowMethodAsStrings.add(httpMethod.name());
+				allowMethodStrings.add(httpMethod.name());
 
-			if (accessControlAllowMethodAsStrings.size() > 0)
-				headers.put("Access-Control-Allow-Methods", accessControlAllowMethodAsStrings);
+			if (!allowMethodStrings.isEmpty())
+				headers.put("Access-Control-Allow-Methods", allowMethodStrings);
 
 			Duration accessControlMaxAge = corsPreflightResponse.getAccessControlMaxAge().orElse(null);
 
-			if (accessControlMaxAge != null)
-				headers.put("Access-Control-Max-Age", Set.of(String.valueOf(accessControlMaxAge.toSeconds())));
+			if (accessControlMaxAge != null && !accessControlMaxAge.isNegative() && !accessControlMaxAge.isZero())
+				headers.put("Access-Control-Max-Age", Set.of(Long.toString(accessControlMaxAge.toSeconds())));
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
 					.headers(headers)
@@ -452,35 +458,38 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		if (corsAllowedHandler != null) {
 			finalMarshaledResponse = corsAllowedHandler.handle(request, cors, corsResponse, marshaledResponse);
 		} else {
+			// Mutate a copy of the downstream headers
+			Map<String, Set<String>> mutableHeaders = new LinkedHashMap<>(marshaledResponse.getHeaders());
+
+			Boolean accessControlAllowCredentials = corsResponse.getAccessControlAllowCredentials().orElse(null);
+
+			String normalizedAccessControlAllowOrigin = normalizedAccessControlAllowOrigin(
+					cors.getOrigin(),
+					corsResponse.getAccessControlAllowOrigin(),
+					accessControlAllowCredentials
+			);
+
+			mutableHeaders.put("Access-Control-Allow-Origin", Set.of(normalizedAccessControlAllowOrigin));
+
+			// Either "true" or omit entirely
+			if (Boolean.TRUE.equals(accessControlAllowCredentials))
+				mutableHeaders.put("Access-Control-Allow-Credentials", Set.of("true"));
+
+			// Always add Vary: Origin for specific origins (not "*"), and preserve any existing Vary values
+			if (!"*".equals(normalizedAccessControlAllowOrigin)) {
+				Set<String> vary = new LinkedHashSet<>(mutableHeaders.getOrDefault("Vary", new LinkedHashSet<>()));
+				vary.add("Origin");
+				mutableHeaders.put("Vary", vary);
+			}
+
+			Set<String> accessControlExposeHeaders = corsResponse.getAccessControlExposeHeaders();
+
+			if (!accessControlExposeHeaders.isEmpty())
+				mutableHeaders.put("Access-Control-Expose-Headers", new LinkedHashSet<>(accessControlExposeHeaders));
+
 			finalMarshaledResponse = marshaledResponse.copy()
-					.headers((mutableHeaders) -> {
-						Boolean accessControlAllowCredentials = corsResponse.getAccessControlAllowCredentials().orElse(null);
-
-						String normalizedAccessControlAllowOrigin = normalizedAccessControlAllowOrigin(
-								cors.getOrigin(),
-								corsResponse.getAccessControlAllowOrigin(),
-								accessControlAllowCredentials
-						);
-
-						mutableHeaders.put("Access-Control-Allow-Origin", Set.of(normalizedAccessControlAllowOrigin));
-
-						// Either "true" or omit entirely
-						if (accessControlAllowCredentials != null && accessControlAllowCredentials)
-							mutableHeaders.put("Access-Control-Allow-Credentials", Set.of("true"));
-
-						// If we turned "*" into the full origin, add Vary: Origin...
-						if (!normalizedAccessControlAllowOrigin.equals(corsResponse.getAccessControlAllowOrigin())) {
-							// ...and preserve any existing Vary values
-							Set<String> vary = new LinkedHashSet<>(mutableHeaders.getOrDefault("Vary", Set.of()));
-							vary.add("Origin");
-							mutableHeaders.put("Vary", vary);
-						}
-
-						Set<String> accessControlExposeHeaders = corsResponse.getAccessControlExposeHeaders();
-
-						if (accessControlExposeHeaders.size() > 0)
-							mutableHeaders.put("Access-Control-Expose-Headers", new LinkedHashSet<>(accessControlExposeHeaders));
-					}).finish();
+					.headers(mutableHeaders)
+					.finish();
 		}
 
 		if (postProcessor != null)
@@ -497,7 +506,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(accessControlAllowOrigin);
 
 		// If credentials are allowed, "*" is forbidden and must echo the request Origin
-		if (Objects.equals(Boolean.TRUE, accessControlAllowCredentials) && "*".equals(accessControlAllowOrigin.trim()))
+		if (Objects.equals(Boolean.TRUE, accessControlAllowCredentials) && "*".equals(trimAggressivelyToEmpty(accessControlAllowOrigin)))
 			return origin;
 
 		return accessControlAllowOrigin;
