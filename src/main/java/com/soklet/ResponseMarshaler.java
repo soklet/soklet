@@ -59,9 +59,8 @@ import static java.util.Objects.requireNonNull;
  *   headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
  *
  *   // Tell Soklet: "OK - here is the final response data to send"
- *   return MarshaledResponse.withStatusCode(response.getStatusCode())
+ *   return MarshaledResponse.withResponse(response)
  *     .headers(headers)
- *     .cookies(response.getCookies())
  *     .body(body)
  *     .build();
  * };

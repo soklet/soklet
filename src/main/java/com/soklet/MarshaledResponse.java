@@ -44,7 +44,7 @@ import static java.util.Objects.requireNonNull;
  * Alternatively, your <em>Resource Method</em> might want to directly serve bytes to clients (e.g. an image or PDF) and skip the {@link ResponseMarshaler} entirely.
  * To accomplish this, just have your <em>Resource Method</em> return a {@link MarshaledResponse} instance: this tells Soklet "I already know exactly what bytes I want to send; don't go through the normal marshaling process".
  * <p>
- * Instances can be acquired via the {@link #withStatusCode(Integer)} builder factory method.
+ * Instances can be acquired via the {@link #withResponse(Response)} or {@link #withStatusCode(Integer)} builder factory methods.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
@@ -60,6 +60,28 @@ public final class MarshaledResponse {
 	private final Set<ResponseCookie> cookies;
 	@Nullable
 	private final byte[] body;
+
+	/**
+	 * Acquires a builder for {@link MarshaledResponse} instances.
+	 *
+	 * @param response the logical response whose values are used to prime this builder
+	 * @return the builder
+	 */
+	@Nonnull
+	public static Builder withResponse(@Nonnull Response response) {
+		requireNonNull(response);
+
+		Object rawBody = response.getBody().orElse(null);
+		byte[] body = null;
+
+		if (rawBody != null && rawBody instanceof byte[] byteArrayBody)
+			body = byteArrayBody;
+
+		return new Builder(response.getStatusCode())
+				.headers(response.getHeaders())
+				.cookies(response.getCookies())
+				.body(body);
+	}
 
 	/**
 	 * Acquires a builder for {@link MarshaledResponse} instances.
