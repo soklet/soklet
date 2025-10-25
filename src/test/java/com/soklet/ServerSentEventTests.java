@@ -56,7 +56,7 @@ public class ServerSentEventTests {
 	@Test
 	public void serverSentEventServerSimulator() throws InterruptedException {
 		SokletConfig configuration = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ServerSentEventSimulatorResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
 
 		Soklet.runSimulator(configuration, (simulator -> {
@@ -158,7 +158,7 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(1)).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle()) // no noise in test logs
 				.build();
 
@@ -181,7 +181,7 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
@@ -243,7 +243,7 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
@@ -297,7 +297,7 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
@@ -352,7 +352,7 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
@@ -394,7 +394,7 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(RejectingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RejectingSseResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
@@ -444,7 +444,7 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(AcceptingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
@@ -479,7 +479,7 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(RejectWithExplicitContentLength.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RejectWithExplicitContentLength.class)))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 
@@ -519,7 +519,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.corsAuthorizer(cors)
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(AcceptingSseCorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseCorsResource.class)))
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -566,7 +566,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.corsAuthorizer(cors)
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(RejectingSseCorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RejectingSseCorsResource.class)))
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -612,7 +612,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.corsAuthorizer(cors)
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(AcceptingSseCorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseCorsResource.class)))
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -717,7 +717,7 @@ public class ServerSentEventTests {
 		SokletConfig config = SokletConfig
 				.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).build())
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseBasicHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
 		try (Soklet soklet = Soklet.withConfig(config)) {
@@ -802,7 +802,7 @@ public class ServerSentEventTests {
 		SokletConfig config = SokletConfig
 				.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).build())
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseBasicHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
 		try (Soklet soklet = Soklet.withConfig(config)) {
@@ -834,7 +834,7 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).host("127.0.0.1").build())
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseBasicHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -862,7 +862,7 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).host("127.0.0.1").build())
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseBasicHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {

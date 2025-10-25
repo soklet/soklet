@@ -411,7 +411,7 @@ public class SokletTests {
 	protected SokletConfig configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
 		return SokletConfig.forTesting()
 				// Use a resource method resolver that explicitly specifies resource classes
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(resourceClasses))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(resourceClasses))
 				// Quiet logging to keep the console clean
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -495,7 +495,7 @@ public class SokletTests {
 	@Test
 	public void encodedSpaceInPath_isDecodedInSimulatorToo() {
 		var cfg = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SimulatorDecodingResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SimulatorDecodingResource.class)))
 				.build();
 
 		Soklet.runSimulator(cfg, sim -> {

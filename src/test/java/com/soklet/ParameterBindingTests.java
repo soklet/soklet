@@ -16,15 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.HttpMethod;
-import com.soklet.LifecycleInterceptor;
-import com.soklet.LogEvent;
-import com.soklet.Request;
-import com.soklet.RequestResult;
-import com.soklet.ResourceMethodResolver;
-import com.soklet.Response;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
@@ -51,7 +42,7 @@ public class ParameterBindingTests {
 	@Test
 	public void required_and_optional_query_parameters() {
 		SokletConfig cfg = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ParamResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ParamResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
@@ -82,7 +73,7 @@ public class ParameterBindingTests {
 	@Test
 	public void headers_cookies_path_and_body_conversions() {
 		SokletConfig cfg = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ParamResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ParamResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }

@@ -16,14 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.HttpMethod;
-import com.soklet.LifecycleInterceptor;
-import com.soklet.LogEvent;
-import com.soklet.Request;
-import com.soklet.RequestResult;
-import com.soklet.ResourceMethodResolver;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
 import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
 import org.junit.jupiter.api.Assertions;
@@ -56,7 +48,7 @@ public class MultipartEdgeCaseTests {
 	@Test
 	public void missing_required_field_yields_400() {
 		SokletConfig cfg = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(UploadResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
@@ -80,7 +72,7 @@ public class MultipartEdgeCaseTests {
 	@Test
 	public void missing_optional_field_is_ok() {
 		SokletConfig cfg = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(UploadResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }

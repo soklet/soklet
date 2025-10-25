@@ -31,13 +31,13 @@ import static java.util.Objects.requireNonNull;
  * The {@link MarshaledResponse} value returned from these methods is what is ultimately sent back to
  * clients as bytes over the wire.
  * <p>
- * A standard threadsafe implementation builder can be acquired via the {@link #withCharset(Charset)} method.
+ * A standard threadsafe implementation builder can be acquired via {@link #withDefaults()} or {@link #withCharset(Charset)} builder factory methods.
  * This builder allows you to specify, for example, how to turn a <em>Resource Method</em> response object into a wire format (e.g. JSON) and is generally what you want.
  * <p>
  * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
  * This is generally not needed unless your implementation requires dynamic "fall back to default" behavior that is not otherwise accessible.
  * <p>
- * Example implementation using {@link #withCharset(Charset)}:
+ * Example implementation using {@link #withDefaults()}:
  * <pre>{@code // Let's use Gson to write response body data
  * // See https://github.com/google/gson
  * final Gson GSON = new Gson();

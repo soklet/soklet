@@ -81,7 +81,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@Nonnull
-	public static DefaultResourceMethodResolver withResourceClasses(@Nullable Set<Class<?>> resourceClasses) {
+	public static DefaultResourceMethodResolver withClasses(@Nullable Set<Class<?>> resourceClasses) {
 		requireNonNull(resourceClasses);
 		return new DefaultResourceMethodResolver(resourceClasses, null);
 	}

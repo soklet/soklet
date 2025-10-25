@@ -125,7 +125,7 @@ public class IntegrationTests {
 
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(5)).build())
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(resourceClasses))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(resourceClasses))
 				.lifecycleInterceptor(new QuietLifecycle())
 				.build();
 		Soklet app = Soklet.withConfig(cfg);

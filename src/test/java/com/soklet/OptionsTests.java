@@ -16,14 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.HttpMethod;
-import com.soklet.LifecycleInterceptor;
-import com.soklet.LogEvent;
-import com.soklet.Request;
-import com.soklet.RequestResult;
-import com.soklet.ResourceMethodResolver;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -41,7 +33,7 @@ public class OptionsTests {
 	@Test
 	public void options_includes_allow_header() {
 		SokletConfig cfg = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(EchoResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }

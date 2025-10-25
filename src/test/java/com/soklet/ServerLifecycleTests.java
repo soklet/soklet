@@ -16,12 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.LifecycleInterceptor;
-import com.soklet.LogEvent;
-import com.soklet.ResourceMethodResolver;
-import com.soklet.Server;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -68,7 +62,7 @@ public class ServerLifecycleTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(HealthResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(HealthResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }

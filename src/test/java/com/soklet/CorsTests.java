@@ -35,7 +35,7 @@ public class CorsTests {
 	@Test
 	public void preflight_allOrigins_allowed() {
 		SokletConfig configuration = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -67,7 +67,7 @@ public class CorsTests {
 	@Test
 	public void preflight_rejected_without_authorizer() {
 		SokletConfig configuration = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withRejectAllPolicy())
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -92,7 +92,7 @@ public class CorsTests {
 	@Test
 	public void actual_request_includes_cors_headers_when_allowed() {
 		SokletConfig configuration = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -148,7 +148,7 @@ public class CorsTests {
 	@Test
 	public void preflight_whitelist_allows_only_listed_origin() {
 		SokletConfig configuration = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://good.example")))
 				.build();
 
@@ -176,7 +176,7 @@ public class CorsTests {
 	@Test
 	public void preflight_reflects_requested_headers_and_sets_max_age() {
 		SokletConfig configuration = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://good.example")))
 				.build();
 
@@ -204,7 +204,7 @@ public class CorsTests {
 	@Test
 	public void nonpreflight_whitelist_sets_vary_origin_and_allows_credentials() {
 		SokletConfig configuration = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://good.example")))
 				.build();
 
@@ -227,7 +227,7 @@ public class CorsTests {
 	@Test
 	public void allorigins_acceptall_echoes_origin_and_reflects_headers() {
 		SokletConfig configuration = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(CorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())  // permissive: creds ON
 				.build();
 

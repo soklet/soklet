@@ -47,7 +47,7 @@ public class SseLastEventIdTests {
 
 		SokletConfig config = SokletConfig.withServer(Server.withPort(port).build())
 				.serverSentEventServer(serverSentEventServer)
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(SseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseResource.class)))
 				.build();
 
 		try (Soklet soklet = Soklet.withConfig(config)) {

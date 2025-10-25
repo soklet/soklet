@@ -16,14 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.HttpMethod;
-import com.soklet.LifecycleInterceptor;
-import com.soklet.LogEvent;
-import com.soklet.Request;
-import com.soklet.RequestResult;
-import com.soklet.ResourceMethodResolver;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.QueryParameter;
 import org.junit.jupiter.api.Assertions;
@@ -50,7 +42,7 @@ public class ValueConversionTests {
 	@Test
 	public void converts_common_types_from_query_params() {
 		SokletConfig cfg = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withResourceClasses(Set.of(ConversionResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ConversionResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }

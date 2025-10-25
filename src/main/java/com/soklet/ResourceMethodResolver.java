@@ -31,7 +31,7 @@ import static java.util.Objects.requireNonNull;
  * Standard threadsafe implementations can be acquired via these factory methods:
  * <ul>
  *   <li>{@link #fromClasspathIntrospection()} (examines an annotation-processor-generated lookup table of Java {@link Method} declarations with corresponding HTTP method annotations)</li>
- *   <li>{@link #withResourceClasses(Set)} (examines methods within the hardcoded set of classes)</li>
+ *   <li>{@link #withClasses(Set)} (examines methods within the hardcoded set of classes)</li>
  *   <li>{@link #withMethods(Set)} (examines the hardcoded set of methods)</li>
  * </ul>
  * <p>
@@ -78,17 +78,17 @@ public interface ResourceMethodResolver {
 	}
 
 	/**
-	 * Acquires a threadsafe {@link ResourceMethodResolver} implementation which locates <em>Resource Methods</em> by examining the provided {@code resourceClasses}.
+	 * Acquires a threadsafe {@link ResourceMethodResolver} implementation which locates <em>Resource Methods</em> by examining the provided {@code classes}.
 	 * <p>
 	 * This method is guaranteed to return a new instance.
 	 *
-	 * @param resourceClasses the classes to inspect for <em>Resource Methods</em>
-	 * @return a {@code ResourceMethodResolver} backed by the given {@code resourceClasses}
+	 * @param classes the classes to inspect for <em>Resource Methods</em>
+	 * @return a {@code ResourceMethodResolver} backed by the given {@code classes}
 	 */
 	@Nonnull
-	static ResourceMethodResolver withResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
-		requireNonNull(resourceClasses);
-		return DefaultResourceMethodResolver.withResourceClasses(resourceClasses);
+	static ResourceMethodResolver withClasses(@Nonnull Set<Class<?>> classes) {
+		requireNonNull(classes);
+		return DefaultResourceMethodResolver.withClasses(classes);
 	}
 
 	/**
