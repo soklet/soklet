@@ -36,9 +36,12 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
+	private static final Duration DEFAULT_ACCESS_CONTROL_MAX_AGE;
+	@Nonnull
 	private static final AllOriginsCorsAuthorizer DEFAULT_INSTANCE;
 
 	static {
+		DEFAULT_ACCESS_CONTROL_MAX_AGE = Duration.ofMinutes(10);
 		DEFAULT_INSTANCE = new AllOriginsCorsAuthorizer();
 	}
 
@@ -81,7 +84,7 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 		return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(corsPreflight.getOrigin())
 				.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
 				.accessControlAllowHeaders(corsPreflight.getAccessControlRequestHeaders())
-				.accessControlMaxAge(Duration.ofMinutes(10))
+				.accessControlMaxAge(DEFAULT_ACCESS_CONTROL_MAX_AGE)
 				.accessControlAllowCredentials(true)
 				.build());
 	}

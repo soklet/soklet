@@ -43,6 +43,13 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
+	private static final Duration DEFAULT_ACCESS_CONTROL_MAX_AGE;
+
+	static {
+		DEFAULT_ACCESS_CONTROL_MAX_AGE = Duration.ofMinutes(10);
+	}
+
+	@Nonnull
 	private final Function<String, Boolean> authorizer;
 
 	/**
@@ -126,7 +133,7 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 					.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
 					.accessControlAllowHeaders(corsPreflight.getAccessControlRequestHeaders())
 					.accessControlAllowCredentials(true)
-					.accessControlMaxAge(Duration.ofMinutes(10))
+					.accessControlMaxAge(DEFAULT_ACCESS_CONTROL_MAX_AGE)
 					.build());
 
 		return Optional.empty();
