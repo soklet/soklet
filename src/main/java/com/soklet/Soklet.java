@@ -844,7 +844,7 @@ public final class Soklet implements AutoCloseable {
 			throw new IllegalArgumentException(format("Unable to acquire an instance of %s", resourceClass.getName()), e);
 		}
 
-		List<Object> parameterValues = resourceMethodParameterProvider.parameterValuesForResourceMethod(request, resourceMethod, getSokletConfig());
+		List<Object> parameterValues = resourceMethodParameterProvider.parameterValuesForResourceMethod(request, resourceMethod);
 
 		Object responseObject;
 

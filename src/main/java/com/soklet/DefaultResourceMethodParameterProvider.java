@@ -84,29 +84,17 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	}
 
 	@Nonnull
-	private final InstanceProvider instanceProvider;
-	@Nonnull
-	private final ValueConverterRegistry valueConverterRegistry;
-	@Nonnull
-	private final RequestBodyMarshaler requestBodyMarshaler;
+	private final SokletConfig sokletConfig;
 
-	public DefaultResourceMethodParameterProvider(@Nonnull InstanceProvider instanceProvider,
-																								@Nonnull ValueConverterRegistry valueConverterRegistry,
-																								@Nonnull RequestBodyMarshaler requestBodyMarshaler) {
-		requireNonNull(instanceProvider);
-		requireNonNull(valueConverterRegistry);
-		requireNonNull(requestBodyMarshaler);
-
-		this.instanceProvider = instanceProvider;
-		this.valueConverterRegistry = valueConverterRegistry;
-		this.requestBodyMarshaler = requestBodyMarshaler;
+	public DefaultResourceMethodParameterProvider(@Nonnull SokletConfig sokletConfig) {
+		requireNonNull(sokletConfig);
+		this.sokletConfig = sokletConfig;
 	}
 
 	@Nonnull
 	@Override
 	public List<Object> parameterValuesForResourceMethod(@Nonnull Request request,
-																											 @Nonnull ResourceMethod resourceMethod,
-																											 @Nonnull SokletConfig sokletConfig) {
+																											 @Nonnull ResourceMethod resourceMethod) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(sokletConfig);
@@ -118,7 +106,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			Parameter parameter = parameters[i];
 
 			try {
-				parametersToPass.add(extractParameterValueToPassToResourceMethod(request, resourceMethod, parameter, sokletConfig));
+				parametersToPass.add(extractParameterValueToPassToResourceMethod(request, resourceMethod, parameter));
 			} catch (BadRequestException e) {
 				throw e;
 			} catch (Exception e) {
@@ -133,12 +121,12 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	@Nullable
 	protected Object extractParameterValueToPassToResourceMethod(@Nonnull Request request,
 																															 @Nonnull ResourceMethod resourceMethod,
-																															 @Nonnull Parameter parameter,
-																															 @Nonnull SokletConfig sokletConfig) {
+																															 @Nonnull Parameter parameter) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
-		requireNonNull(sokletConfig);
+
+		SokletConfig sokletConfig = getSokletConfig();
 
 		// First, support a few special injections based on type.
 		Class<?> basicParameterType = parameter.getType();
@@ -216,7 +204,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				throw new IllegalStateException(format("Path parameter '%s' for resource method %s is defined as supporting varargs. Its type was declared as %s, but varargs path parameters must be of type %s.",
 						pathParameterName, resourceMethod, parameter.getType(), String.class));
 
-			ValueConverter<Object, Object> valueConverter = getValueConverterRegistry().get(String.class, parameter.getType()).orElse(null);
+			ValueConverter<Object, Object> valueConverter = getSokletConfig().getValueConverterRegistry().get(String.class, parameter.getType()).orElse(null);
 
 			if (valueConverter == null)
 				throwValueConverterMissingException(parameter, String.class, parameter.getType(), resourceMethod);
@@ -314,7 +302,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				Type requestBodyType = parameterType.getNormalizedType();
 
 				try {
-					Optional<Object> marshaledRequestBody = getRequestBodyMarshaler().marshalRequestBody(request, resourceMethod, parameter, requestBodyType);
+					Optional<Object> marshaledRequestBody = getSokletConfig().getRequestBodyMarshaler().marshalRequestBody(request, resourceMethod, parameter, requestBodyType);
 					requestBodyObject = marshaledRequestBody == null ? null : marshaledRequestBody.orElse(null);
 				} catch (IllegalRequestBodyException e) {
 					throw e;
@@ -334,9 +322,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		// Don't recognize what's being asked for? Have the InstanceProvider try to vend something
 		if (parameterType.isWrappedInOptional())
-			return Optional.ofNullable(getInstanceProvider().provide(parameter));
+			return Optional.ofNullable(getSokletConfig().getInstanceProvider().provide(parameter));
 		else
-			return getInstanceProvider().provide(parameter);
+			return getSokletConfig().getInstanceProvider().provide(parameter);
 	}
 
 	/**
@@ -588,7 +576,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		boolean returnMetadataInsteadOfValues = valueMetadatumConverter != null;
 		Type toType = parameterType.isList() ? parameterType.getListElementType().get() : parameterType.getNormalizedType();
 
-		ValueConverter<Object, Object> valueConverter = getValueConverterRegistry().get(String.class, toType).orElse(null);
+		ValueConverter<Object, Object> valueConverter = getSokletConfig().getValueConverterRegistry().get(String.class, toType).orElse(null);
 
 		if (valueConverter == null && !returnMetadataInsteadOfValues)
 			throwValueConverterMissingException(parameter, String.class, toType, resourceMethod);
@@ -697,18 +685,8 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	}
 
 	@Nonnull
-	protected InstanceProvider getInstanceProvider() {
-		return this.instanceProvider;
-	}
-
-	@Nonnull
-	protected ValueConverterRegistry getValueConverterRegistry() {
-		return this.valueConverterRegistry;
-	}
-
-	@Nonnull
-	protected RequestBodyMarshaler getRequestBodyMarshaler() {
-		return this.requestBodyMarshaler;
+	protected SokletConfig getSokletConfig() {
+		return this.sokletConfig;
 	}
 
 	@FunctionalInterface
