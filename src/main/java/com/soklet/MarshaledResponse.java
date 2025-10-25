@@ -171,7 +171,7 @@ public final class MarshaledResponse {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link MarshaledResponse} via {@link MarshaledResponse#withStatusCode(Integer)}.
+	 * Builder used to construct instances of {@link MarshaledResponse} via {@link MarshaledResponse#withResponse(Response)} or {@link MarshaledResponse#withStatusCode(Integer)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
