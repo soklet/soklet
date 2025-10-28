@@ -52,7 +52,7 @@ public interface InstanceProvider {
 	 * For example, given this <em>Resource Method</em>:
 	 * <pre>{@code @GET("/robot-generator")
 	 * public Robot robotGenerator(
-	 *   @Left LegFactory leftLegFactory,   // Custom annotation
+	 *   @Left LegFactory leftLegFactory, // Custom annotation
 	 *   @Right LegFactory rightLegFactory, // Custom annotation
 	 *   BodyFactory bodyFactory
 	 * ) {
@@ -69,11 +69,12 @@ public interface InstanceProvider {
 	 * public <T> T provide(@Nonnull Parameter parameter) {
 	 *   Class<T> type = (Class<T>) parameter.getType();
 	 *
+	 *   // Pick the appropriate LegFactory by inspecting annotations
 	 *   if (type == LegFactory.class) {
 	 *     if (parameter.isAnnotationPresent(Left.class))
-	 *       return (T) LEFT_INSTANCE; // a reference to your left instance
+	 *       return (T) LEFT_INSTANCE;
 	 *     if (parameter.isAnnotationPresent(Right.class))
-	 *       return (T) RIGHT_INSTANCE; // a reference to your right instance
+	 *       return (T) RIGHT_INSTANCE;
 	 *
 	 *     throw new IllegalArgumentException("LegFactory requires @Left or @Right");
 	 *   }
