@@ -34,8 +34,6 @@ import static java.util.Objects.requireNonNull;
 /**
  * {@link CorsAuthorizer} implementation which whitelists specific origins (normally what you want in production).
  * <p>
- * Use {@link #withOrigins(Set)} or {@link #withAuthorizer(Function)} to acquire instances of this class.
- * <p>
  * See <a href="https://www.soklet.com/docs/cors#authorize-whitelisted-origins" target="_blank">https://www.soklet.com/docs/cors#authorize-whitelisted-origins</a> for documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -51,43 +49,56 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@Nonnull
 	private final Function<String, Boolean> authorizer;
+	@Nonnull
+	private final Function<String, Boolean> allowCredentialsResolver;
 
 	/**
 	 * Creates an authorizer with a fixed set of whitelisted origins.
 	 * <p>
-	 * For dynamic authorization, see {@link WhitelistedOriginsCorsAuthorizer#withAuthorizer(Function)}.
+	 * For dynamic authorization, see {@link WhitelistedOriginsCorsAuthorizer#withAuthorizer(Function, Function)}.
 	 *
-	 * @param origins the set of whitelisted origins
+	 * @param origins                  the set of whitelisted origins
+	 * @param allowCredentialsResolver function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise.
 	 * @return an instance of {@link WhitelistedOriginsCorsAuthorizer}
 	 */
 	@Nonnull
-	public static WhitelistedOriginsCorsAuthorizer withOrigins(@Nonnull Set<String> origins) {
+	public static WhitelistedOriginsCorsAuthorizer withOrigins(@Nonnull Set<String> origins,
+																														 @Nonnull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(origins);
+		requireNonNull(allowCredentialsResolver);
 
 		Set<String> normalizedOrigins = Collections.unmodifiableSet(new TreeSet<>(origins.stream()
 				.map(origin -> normalizeOrigin(origin))
 				.collect(Collectors.toSet())));
 
-		return new WhitelistedOriginsCorsAuthorizer(origin -> normalizedOrigins.contains(origin));
+		return new WhitelistedOriginsCorsAuthorizer(origin -> normalizedOrigins.contains(origin), allowCredentialsResolver);
 	}
 
 	/**
 	 * Acquires a {@link WhitelistedOriginsCorsAuthorizer} instance backed by an authorization function which supports runtime authorization decisions.
 	 * <p>
-	 * For static "build time" authorization, see {@link WhitelistedOriginsCorsAuthorizer#withOrigins(Set)}.
+	 * For static "build time" authorization, see {@link WhitelistedOriginsCorsAuthorizer#withOrigins(Set, Function)}.
 	 *
-	 * @param authorizer a function that returns {@code true} if the input is a whitelisted origin and {@code false} otherwise
+	 * @param authorizer               a function that returns {@code true} if the input is a whitelisted origin and {@code false} otherwise
+	 * @param allowCredentialsResolver function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise.
 	 * @return an instance of {@link WhitelistedOriginsCorsAuthorizer}
 	 */
 	@Nonnull
-	public static WhitelistedOriginsCorsAuthorizer withAuthorizer(@Nonnull Function<String, Boolean> authorizer) {
+	public static WhitelistedOriginsCorsAuthorizer withAuthorizer(@Nonnull Function<String, Boolean> authorizer,
+																																@Nonnull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(authorizer);
-		return new WhitelistedOriginsCorsAuthorizer(authorizer);
+		requireNonNull(allowCredentialsResolver);
+
+		return new WhitelistedOriginsCorsAuthorizer(authorizer, allowCredentialsResolver);
 	}
 
-	private WhitelistedOriginsCorsAuthorizer(@Nonnull Function<String, Boolean> authorizer) {
+	private WhitelistedOriginsCorsAuthorizer(@Nonnull Function<String, Boolean> authorizer,
+																					 @Nonnull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(authorizer);
+		requireNonNull(allowCredentialsResolver);
+
 		this.authorizer = authorizer;
+		this.allowCredentialsResolver = allowCredentialsResolver;
 	}
 
 	@Nonnull
@@ -128,13 +139,17 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 
 		Boolean authorized = getAuthorizer().apply(origin);
 
-		if (authorized != null && authorized)
+		if (authorized != null && authorized) {
+			// May be null, which is OK
+			Boolean accessControlAllowCredentials = getAllowCredentialsResolver().apply(origin);
+
 			return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(corsPreflight.getOrigin())
 					.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
 					.accessControlAllowHeaders(corsPreflight.getAccessControlRequestHeaders())
-					.accessControlAllowCredentials(true)
+					.accessControlAllowCredentials(accessControlAllowCredentials)
 					.accessControlMaxAge(DEFAULT_ACCESS_CONTROL_MAX_AGE)
 					.build());
+		}
 
 		return Optional.empty();
 	}
@@ -154,5 +169,10 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	@Nonnull
 	private Function<String, Boolean> getAuthorizer() {
 		return this.authorizer;
+	}
+
+	@Nonnull
+	private Function<String, Boolean> getAllowCredentialsResolver() {
+		return this.allowCredentialsResolver;
 	}
 }
