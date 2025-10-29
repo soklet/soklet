@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
  *   <li>{@link #withWhitelistAuthorizer(Function)} (permit origins via function)</li>
  *   <li>{@link #withWhitelistAuthorizer(Function, Function)} (permit origins via function + control credentials behavior)</li>
  * </ul>
- * See <a href="https://www.soklet.com/docs/cors#authorizing-cors-requests">https://www.soklet.com/docs/cors#authorizing-cors-requests</a> for detailed documentation.
+ * See <a href="https://www.soklet.com/docs/cors">https://www.soklet.com/docs/cors</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
