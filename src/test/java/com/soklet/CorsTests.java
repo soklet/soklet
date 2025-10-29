@@ -223,7 +223,7 @@ public class CorsTests {
 
 			Map<String, Set<String>> headers = resp.getHeaders();
 			Assertions.assertEquals(Set.of("https://good.example"), headers.get("Access-Control-Allow-Origin"));
-			Assertions.assertEquals(Set.of("true"), headers.get("Access-Control-Allow-Credentials"));
+			Assertions.assertEquals(null, headers.get("Access-Control-Allow-Credentials"));
 			Assertions.assertTrue(headers.getOrDefault("Vary", Set.of()).contains("Origin"));
 		});
 	}
@@ -444,11 +444,6 @@ public class CorsTests {
 		});
 	}
 
-	/**
-	 * NOTE: As of the provided implementation, non-preflight authorize() always sets credentials to true.
-	 * This test documents the desired behavior (respect resolver for actual requests too) and is disabled
-	 * until authorize() is updated to use allowCredentialsResolver for non-preflight.
-	 */
 	@Test
 	public void nonpreflight_whitelist_resolver_false_should_disable_credentials() {
 		var config = SokletConfig.forTesting()
