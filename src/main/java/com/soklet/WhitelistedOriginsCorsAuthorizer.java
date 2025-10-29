@@ -115,10 +115,14 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 
 		Boolean authorized = getAuthorizer().apply(origin);
 
-		if (authorized != null && authorized)
+		if (authorized != null && authorized) {
+			// May be null, which is OK
+			Boolean accessControlAllowCredentials = getAllowCredentialsResolver().apply(origin);
+
 			return Optional.of(CorsResponse.withAccessControlAllowOrigin(cors.getOrigin())
-					.accessControlAllowCredentials(true)
+					.accessControlAllowCredentials(accessControlAllowCredentials)
 					.build());
+		}
 
 		return Optional.empty();
 	}
