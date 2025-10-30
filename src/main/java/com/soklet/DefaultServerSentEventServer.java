@@ -65,6 +65,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
@@ -102,6 +103,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Integer DEFAULT_RESOURCE_PATH_CACHE_CAPACITY;
 	@Nonnull
+	private static final Integer HEARTBEAT_BATCH_SIZE;
+	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK;
 	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_POISON_PILL;
@@ -119,6 +122,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
 		DEFAULT_BROADCASTER_CACHE_CAPACITY = 1_024;
 		DEFAULT_RESOURCE_PATH_CACHE_CAPACITY = 8_192;
+		HEARTBEAT_BATCH_SIZE = 1_000;
 
 		// Make a unique "validity check" server-sent event used to wake a socket listener thread by injecting it into the relevant write queue.
 		// When this event is taken off of the queue, a validity check is performed on the socket to see if it's still active.
@@ -167,6 +171,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final Integer connectionQueueCapacity;
 	@Nonnull
 	private final AtomicBoolean stopPoisonPill;
+	@Nonnull
+	private final AtomicInteger heartbeatBatch;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
@@ -239,7 +245,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
-				enqueueServerSentEvent(serverSentEventConnection, serverSentEvent);
+				enqueueServerSentEvent(serverSentEventConnection, serverSentEvent, EnqueueStrategy.DEFAULT);
 		}
 
 		@Override
@@ -277,7 +283,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				// If requested, send a poison pill so the socket thread gets terminated
 				if (sendPoisonPill)
-					enqueueServerSentEvent(serverSentEventConnection, SERVER_SENT_EVENT_POISON_PILL);
+					enqueueServerSentEvent(serverSentEventConnection, SERVER_SENT_EVENT_POISON_PILL, EnqueueStrategy.DEFAULT);
 			}
 
 			return unregistered;
@@ -317,6 +323,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.heartbeatInterval = builder.heartbeatInterval != null ? builder.heartbeatInterval : DEFAULT_HEARTBEAT_INTERVAL;
+		this.heartbeatBatch = new AtomicInteger(0);
 		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
 		if (this.maximumRequestSizeInBytes <= 0)
@@ -474,18 +481,41 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	private static void enqueueServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																						 @Nonnull ServerSentEvent serverSentEvent) {
+	private enum EnqueueStrategy {
+		DEFAULT,
+		ONLY_IF_CAPACITY_EXISTS
+	}
+
+	@Nonnull
+	private static Boolean enqueueServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																								@Nonnull ServerSentEvent serverSentEvent,
+																								@Nonnull EnqueueStrategy enqueueStrategy) {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(serverSentEvent);
+		requireNonNull(enqueueStrategy);
 
 		BlockingQueue<WriteQueueElement> writeQueue = serverSentEventConnection.getWriteQueue();
 		WriteQueueElement writeQueueElement = WriteQueueElement.withServerSentEvent(serverSentEvent);
 
-		if (!writeQueue.offer(writeQueueElement)) {
-			writeQueue.poll();
-			writeQueue.offer(writeQueueElement);
-		}
+		if (enqueueStrategy == EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS)
+			return writeQueue.offer(writeQueueElement);
+
+		// Try to add without blocking
+		if (writeQueue.offer(writeQueueElement))
+			return true;
+
+		// Queue is full - this is a critical backpressure situation. Drop oldest and retry
+		// TODO: maybe have this configurable?  e.g. DROP_OLDEST, DROP_NEWEST, FAIL, ...
+		@SuppressWarnings("unused")
+		WriteQueueElement dropped = writeQueue.poll();
+		boolean added = writeQueue.offer(writeQueueElement);
+
+		// This is a race condition - another thread filled the slot. We've now lost BOTH the old and new events
+		if (!added)
+			throw new IllegalStateException("Failed to enqueue event after removing oldest - queue capacity issue");
+
+		// Return false to indicate an event was dropped
+		return false;
 	}
 
 	private static void enqueueComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
@@ -505,26 +535,62 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	protected void performConnectionValidityTask() {
 		Collection<DefaultServerSentEventBroadcaster> broadcasters = getBroadcastersByResourcePath().values();
 
-		if (broadcasters.size() > 0) {
-			final long nowInNanos = System.nanoTime();
+		if (broadcasters.isEmpty())
+			return;
 
-			for (DefaultServerSentEventBroadcaster broadcaster : broadcasters) {
-				Set<ServerSentEventConnection> serverSentEventConnections = broadcaster.getServerSentEventConnections();
+		final long NOW_IN_NANOS = System.nanoTime();
 
-				if (serverSentEventConnections.size() == 0) {
-					// This broadcaster can be entirely dealloced because it has no more connections.
-					// Remove empty broadcaster as a failsafe (also handled on connection teardown).
-					getBroadcastersByResourcePath().remove(broadcaster.getResourcePath(), broadcaster);
-				} else {
-					for (ServerSentEventConnection serverSentEventConnection : serverSentEventConnections) {
-						// Throttle heartbeats per connection
-						AtomicLong lastValidityCheckInNanos = serverSentEventConnection.getLastValidityCheckInNanos();
-						long previousValidityCheckInNanos = lastValidityCheckInNanos.get();
+		// Calculate total connections
+		int totalConnections = broadcasters.stream()
+				.mapToInt(b -> b.getServerSentEventConnections().size())
+				.sum();
 
-						if ((nowInNanos - previousValidityCheckInNanos) >= getHeartbeatInterval().toNanos() && lastValidityCheckInNanos.compareAndSet(previousValidityCheckInNanos, nowInNanos))
-							enqueueServerSentEvent(serverSentEventConnection, SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK);
-					}
+		if (totalConnections == 0)
+			return;
+
+		// For large connection counts, only process a subset per heartbeat
+		// This spreads the CPU cost across multiple heartbeat intervals
+		boolean shouldBatch = totalConnections > HEARTBEAT_BATCH_SIZE * 2;
+		int batchSize = shouldBatch ? Math.max(HEARTBEAT_BATCH_SIZE, totalConnections / 10) : totalConnections;
+		int startIndex = shouldBatch ? getHeartbeatBatch().getAndAdd(batchSize) % totalConnections : 0;
+
+		int currentIndex = 0;
+		int processed = 0;
+
+		outer:
+		for (DefaultServerSentEventBroadcaster broadcaster : broadcasters) {
+			Set<ServerSentEventConnection> connections = broadcaster.getServerSentEventConnections();
+
+			if (connections.isEmpty()) {
+				getBroadcastersByResourcePath().remove(broadcaster.getResourcePath(), broadcaster);
+				continue;
+			}
+
+			for (ServerSentEventConnection connection : connections) {
+				// Skip connections not in this batch
+				if (shouldBatch && (currentIndex < startIndex || processed >= batchSize)) {
+					currentIndex++;
+					continue;
 				}
+
+				currentIndex++;
+				processed++;
+
+				AtomicLong lastCheck = connection.getLastValidityCheckInNanos();
+				long previousCheck = lastCheck.get();
+				long elapsed = NOW_IN_NANOS - previousCheck;
+
+				if (elapsed >= getHeartbeatInterval().toNanos()) {
+					// If the queue is full, skip the heartbeat until the next go-round
+					boolean enqueued = enqueueServerSentEvent(connection, SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK, EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS);
+
+					if (enqueued)
+						lastCheck.set(NOW_IN_NANOS);
+				}
+
+				// Early exit if we've processed enough
+				if (shouldBatch && processed >= batchSize)
+					break outer;
 			}
 		}
 	}
@@ -669,7 +735,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.throwable(t)
 							.build());
 
-
 					// Clear the accepted handshake reference in case it was set
 					handshakeAcceptedReference.set(null);
 				}
@@ -678,6 +743,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Happy path: register the channel for future ServerSentEvent writes and keep it open.
 			// Otherwise, we're done immediately now that initial data has been written - shut it all down.
 			HandshakeResult.Accepted handshakeAccepted = handshakeAcceptedReference.get();
+
 			if (handshakeAccepted != null) {
 				getLifecycleInterceptor().get().willEstablishServerSentEventConnection(request, resourceMethod);
 
@@ -751,40 +817,39 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (t instanceof InterruptedException)
 				Thread.currentThread().interrupt();
 		} finally {
-			// First, tell the event source to unregister the connection
-			if (clientSocketChannelRegistration != null) {
-				if (resourceMethod != null)
-					getLifecycleInterceptor().get().willTerminateServerSentEventConnection(request, resourceMethod, throwable);
-
+			// First, close the channel itself...
+			if (clientSocketChannel != null) {
 				try {
-					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
+					clientSocketChannel.close();
 				} catch (Exception exception) {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+									"Unable to close Server-Sent Event connection socket channel")
 							.throwable(exception)
 							.build());
 				}
 			}
 
-			// Then, close the channel itself
-			if (clientSocketChannel != null) {
+			// ...then unregister from broadcaster (prevents race with broadcasts)
+			if (clientSocketChannelRegistration != null) {
+				if (resourceMethod != null)
+					getLifecycleInterceptor().get().willTerminateServerSentEventConnection(request, resourceMethod, throwable);
+
 				try {
-					// Should already be closed, but just in case
-					clientSocketChannel.close();
+					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(
+							clientSocketChannelRegistration.serverSentEventConnection(), false);
 				} catch (Exception exception) {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event connection socket channel")
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
 							.throwable(exception)
 							.build());
-				} finally {
-					// If that broadcaster is now empty, remove it promptly
-					if (clientSocketChannelRegistration != null)
-						maybeCleanupBroadcaster(clientSocketChannelRegistration.broadcaster());
+				}
 
-					if (clientSocketChannelRegistration != null && resourceMethod != null) {
-						Instant connectionFinished = Instant.now();
-						Duration connectionDuration = Duration.between(clientSocketChannelRegistration.serverSentEventConnection().getEstablishedAt(), connectionFinished);
+				// Cleanup empty broadcaster
+				maybeCleanupBroadcaster(clientSocketChannelRegistration.broadcaster());
 
-						getLifecycleInterceptor().get().didTerminateServerSentEventConnection(request, resourceMethod, connectionDuration, throwable);
-					}
+				if (resourceMethod != null) {
+					Instant connectionFinished = Instant.now();
+					Duration connectionDuration = Duration.between(clientSocketChannelRegistration.serverSentEventConnection().getEstablishedAt(), connectionFinished);
+					getLifecycleInterceptor().get().didTerminateServerSentEventConnection(request, resourceMethod, connectionDuration, throwable);
 				}
 			}
 		}
@@ -1181,10 +1246,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(broadcaster);
 
 		try {
-			if (broadcaster.getServerSentEventConnections().isEmpty())
-				getBroadcastersByResourcePath().remove(broadcaster.getResourcePath(), broadcaster);
-		} catch (Throwable ignored) {
-			// Nothing to do
+			getBroadcastersByResourcePath().computeIfPresent(broadcaster.getResourcePath(), (path, existingBroadcaster) -> {
+						// Only remove if it's the same instance AND empty
+						if (existingBroadcaster == broadcaster && existingBroadcaster.getServerSentEventConnections().isEmpty())
+							return null;  // Remove the mapping
+
+						return existingBroadcaster; // Keep the mapping
+					}
+			);
+		} catch (Exception e) {
+			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Failed to clean up empty broadcaster")
+					.throwable(e)
+					.build());
 		}
 	}
 
@@ -1785,6 +1858,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Duration getHeartbeatInterval() {
 		return this.heartbeatInterval;
+	}
+
+	@Nonnull
+	protected AtomicInteger getHeartbeatBatch() {
+		return this.heartbeatBatch;
 	}
 
 	@Nonnull
