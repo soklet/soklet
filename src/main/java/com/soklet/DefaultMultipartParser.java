@@ -20,6 +20,7 @@
 
 package com.soklet;
 
+import com.soklet.exception.IllegalRequestBodyException;
 import com.soklet.exception.MissingRequestHeaderException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
@@ -96,10 +97,17 @@ final class DefaultMultipartParser implements MultipartParser {
 			throw new MissingRequestHeaderException("The 'Content-Type' header must be specified for multipart requests.", "Content-Type");
 
 		Map<String, String> contentTypeHeaderFields = extractFields(contentTypeHeader);
+
+		// Validate boundary before using it
+		String boundary = trimAggressivelyToNull(contentTypeHeaderFields.get("boundary"));
+
+		if (boundary == null)
+			throw new IllegalRequestBodyException("Multipart request must include a non-empty 'boundary' parameter in Content-Type header");
+
 		Map<String, Set<MultipartField>> multipartFieldsByName = new LinkedHashMap<>();
 
 		try (ByteArrayInputStream input = new ByteArrayInputStream(requestBody)) {
-			MultipartStream multipartStream = new MultipartStream(input, contentTypeHeaderFields.get("boundary").getBytes(), progressNotifier);
+			MultipartStream multipartStream = new MultipartStream(input, boundary.getBytes(StandardCharsets.UTF_8), progressNotifier);
 
 			boolean hasNext = multipartStream.skipPreamble();
 

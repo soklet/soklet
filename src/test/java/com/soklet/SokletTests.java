@@ -23,6 +23,7 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
+import com.soklet.exception.IllegalRequestBodyException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -48,6 +49,9 @@ import java.util.Set;
 
 import static com.soklet.Utilities.emptyByteArray;
 import static java.util.Objects.requireNonNull;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -70,14 +74,14 @@ public class SokletTests {
 					Request.with(HttpMethod.GET, "/integer-query-param")
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
 
 			// Have the query param?  It's a 204
 			requestResult = simulator.performRequest(
 					Request.with(HttpMethod.GET, "/integer-query-param?intQueryParam=123")
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertArrayEquals(emptyByteArray(), requestResult.getMarshaledResponse().getBody().orElse(emptyByteArray()),
 					"Received a response body but didn't expect one");
 
@@ -86,7 +90,7 @@ public class SokletTests {
 					Request.with(HttpMethod.GET, "/query-param-custom-name?local_date=2023-09-30")
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertArrayEquals("2023-09-30".getBytes(StandardCharsets.UTF_8), requestResult.getMarshaledResponse().getBody().get(),
 					"Response body doesn't match");
 
@@ -95,7 +99,7 @@ public class SokletTests {
 					Request.with(HttpMethod.POST, "/optional-query-param")
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertArrayEquals(emptyByteArray(), requestResult.getMarshaledResponse().getBody().orElse(emptyByteArray()),
 					"Received a response body but didn't expect one");
 
@@ -104,7 +108,7 @@ public class SokletTests {
 					Request.with(HttpMethod.POST, "/optional-query-param?optionalQueryParam=123.456789")
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertArrayEquals("123.456789".getBytes(StandardCharsets.UTF_8), requestResult.getMarshaledResponse().getBody().get(),
 					"Response body doesn't match");
 
@@ -113,7 +117,7 @@ public class SokletTests {
 					Request.with(HttpMethod.POST, "/echo-integer-request-body")
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
 
 			// Integer (nonprimitive) request body, integer is required and provided
 			requestResult = simulator.performRequest(
@@ -121,7 +125,7 @@ public class SokletTests {
 							.body("123".getBytes(StandardCharsets.UTF_8))
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertArrayEquals("123".getBytes(StandardCharsets.UTF_8), requestResult.getMarshaledResponse().getBody().get(),
 					"Response body doesn't match");
 
@@ -131,7 +135,7 @@ public class SokletTests {
 					Request.with(HttpMethod.POST, "/echo-integer-optional-request-body-1")
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertArrayEquals(null, requestResult.getMarshaledResponse().getBody().orElse(null),
 					"Response body doesn't match");
 
@@ -141,7 +145,7 @@ public class SokletTests {
 					Request.with(HttpMethod.POST, "/echo-integer-optional-request-body-2")
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertArrayEquals(null, requestResult.getMarshaledResponse().getBody().orElse(null),
 					"Response body doesn't match");
 
@@ -151,7 +155,7 @@ public class SokletTests {
 							.body("123".getBytes(StandardCharsets.UTF_8))
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertArrayEquals("123".getBytes(StandardCharsets.UTF_8), requestResult.getMarshaledResponse().getBody().get(),
 					"Response body doesn't match");
 
@@ -160,14 +164,14 @@ public class SokletTests {
 					Request.with(HttpMethod.POST, "/echo-int-request-body")
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(400), requestResult.getMarshaledResponse().getStatusCode());
 
 			// Integer (primitive) request body, integer is not required and not provided
 			requestResult = simulator.performRequest(
 					Request.with(HttpMethod.POST, "/echo-int-optional-request-body")
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertArrayEquals("0".getBytes(StandardCharsets.UTF_8), // 0 is understood to be the default value for uninitialized int
 					requestResult.getMarshaledResponse().getBody().get(),
 					"Response body doesn't match");
@@ -185,7 +189,7 @@ public class SokletTests {
 			Response response = requestResult.getResponse().get();
 			Object responseBody = response.getBody().get();
 
-			Assertions.assertEquals("hello world", responseBody, "Response body doesn't match");
+			assertEquals("hello world", responseBody, "Response body doesn't match");
 
 			ResourceMethod resourceMethod = requestResult.getResourceMethod().get();
 			Method expectedMethod;
@@ -196,7 +200,7 @@ public class SokletTests {
 				throw new RuntimeException(e);
 			}
 
-			Assertions.assertEquals(expectedMethod, resourceMethod.getMethod(), "Resource method doesn't match");
+			assertEquals(expectedMethod, resourceMethod.getMethod(), "Resource method doesn't match");
 		}));
 	}
 
@@ -221,7 +225,7 @@ public class SokletTests {
 							.body(requestBody)
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
 		}));
 	}
 
@@ -239,18 +243,18 @@ public class SokletTests {
 																@Multipart(name = "another") byte[] anotherAsBytes,
 																@Multipart(name = "another") Optional<Double> anotherAsOptionalDouble,
 																@Multipart(name = "another") Optional<byte[]> anotherAsOptionalBytes) {
-			Assertions.assertEquals("3x", notReallyAnInt);
-			Assertions.assertEquals(Optional.of("3x"), optionalNotReallyAnInt);
-			Assertions.assertEquals(2, oneAsList.size());
-			Assertions.assertEquals("1", oneAsList.get(0).getDataAsString().get());
-			Assertions.assertEquals("2", oneAsList.get(1).getDataAsString().get());
-			Assertions.assertEquals("3", another.getDataAsString().get());
-			Assertions.assertEquals("3", anotherAsString);
-			Assertions.assertEquals("3", new String(anotherAsBytes, StandardCharsets.UTF_8));
-			Assertions.assertEquals("3", new String(anotherAsOptionalListOfBytes.get().get(0), StandardCharsets.UTF_8));
-			Assertions.assertEquals(3, anotherAsOptionalListOfInteger.get().get(0), 0);
-			Assertions.assertEquals("3", new String(anotherAsOptionalBytes.get(), StandardCharsets.UTF_8));
-			Assertions.assertEquals(3D, anotherAsOptionalDouble.get(), 0);
+			assertEquals("3x", notReallyAnInt);
+			assertEquals(Optional.of("3x"), optionalNotReallyAnInt);
+			assertEquals(2, oneAsList.size());
+			assertEquals("1", oneAsList.get(0).getDataAsString().get());
+			assertEquals("2", oneAsList.get(1).getDataAsString().get());
+			assertEquals("3", another.getDataAsString().get());
+			assertEquals("3", anotherAsString);
+			assertEquals("3", new String(anotherAsBytes, StandardCharsets.UTF_8));
+			assertEquals("3", new String(anotherAsOptionalListOfBytes.get().get(0), StandardCharsets.UTF_8));
+			assertEquals(3, anotherAsOptionalListOfInteger.get().get(0), 0);
+			assertEquals("3", new String(anotherAsOptionalBytes.get(), StandardCharsets.UTF_8));
+			assertEquals(3D, anotherAsOptionalDouble.get(), 0);
 		}
 	}
 
@@ -324,8 +328,8 @@ public class SokletTests {
 							.build()
 			);
 
-			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals("js/some/file/example.js", requestResult.getResponse().get().getBody().get());
+			assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals("js/some/file/example.js", requestResult.getResponse().get().getBody().get());
 
 
 			requestResult = simulator.performRequest(
@@ -333,15 +337,15 @@ public class SokletTests {
 							.build()
 			);
 
-			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals("123-js/some/file/example.js", requestResult.getResponse().get().getBody().get());
+			assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals("123-js/some/file/example.js", requestResult.getResponse().get().getBody().get());
 
 			requestResult = simulator.performRequest(
 					Request.with(HttpMethod.GET, "/static2/js/some/file/example.js")
 							.build()
 			);
 
-			Assertions.assertEquals(Integer.valueOf(500), requestResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Integer.valueOf(500), requestResult.getMarshaledResponse().getStatusCode());
 		}));
 	}
 
@@ -379,8 +383,8 @@ public class SokletTests {
 			RequestResult headMethodResult = simulator.performRequest(
 					Request.with(HttpMethod.HEAD, "/hello-world").build());
 
-			Assertions.assertEquals(Integer.valueOf(200), headMethodResult.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals(getMethodResult.getMarshaledResponse().getHeaders(), headMethodResult.getMarshaledResponse().getHeaders(),
+			assertEquals(Integer.valueOf(200), headMethodResult.getMarshaledResponse().getStatusCode());
+			assertEquals(getMethodResult.getMarshaledResponse().getHeaders(), headMethodResult.getMarshaledResponse().getHeaders(),
 					"GET and HEAD headers don't match");
 			Assertions.assertArrayEquals(emptyByteArray(), headMethodResult.getMarshaledResponse().getBody().orElse(emptyByteArray()),
 					"Received a response body but didn't expect one");
@@ -427,12 +431,12 @@ public class SokletTests {
 		Map<String, Set<String>> headers = new LinkedHashMap<>();
 		headers.put("X-Test", Set.of("ok\r\nInjected-Header: yes"));
 
-		Assertions.assertThrows(IllegalArgumentException.class, () ->
+		assertThrows(IllegalArgumentException.class, () ->
 				Response.withStatusCode(200)
 						.headers(headers)
 						.build());
 
-		Assertions.assertThrows(IllegalArgumentException.class, () ->
+		assertThrows(IllegalArgumentException.class, () ->
 				MarshaledResponse.withStatusCode(200)
 						.headers(headers)
 						.build());
@@ -442,7 +446,7 @@ public class SokletTests {
 	void plusBecomesSpace_percent2BBecomesPlus() {
 		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromQuery(
 				"q=a+b%2B", Utilities.QueryDecodingStrategy.X_WWW_FORM_URLENCODED, StandardCharsets.UTF_8);
-		Assertions.assertEquals(Set.of("a b+"), qp.get("q"));
+		assertEquals(Set.of("a b+"), qp.get("q"));
 	}
 
 
@@ -500,15 +504,142 @@ public class SokletTests {
 
 		Soklet.runSimulator(cfg, sim -> {
 			var res = sim.performRequest(Request.with(HttpMethod.GET, "/widgets/ab%20c").build());
-			Assertions.assertEquals(200, res.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals("ab c", new String(res.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
+			assertEquals(200, res.getMarshaledResponse().getStatusCode());
+			assertEquals("ab c", new String(res.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
 		});
 	}
 
 	@Test
 	public void duplicatePlaceholderNames_areRejected() {
-		Assertions.assertThrows(IllegalArgumentException.class, () -> {
+		assertThrows(IllegalArgumentException.class, () -> {
 			ResourcePathDeclaration.withPath("/a/{id}/b/{id}");
 		}, "Duplicate placeholder names should be illegal");
+	}
+
+
+	@Test
+	public void emptyBoundaryThrowsException() {
+		// Should throw an exception due to empty boundary
+		assertThrows(IllegalRequestBodyException.class, () -> {
+			// The boundary value is present but empty: "boundary="
+			String requestBody = "--\r\n" +
+					"Content-Disposition: form-data; name=\"field1\"\r\n\r\n" +
+					"value1\r\n" +
+					"--\r\n";
+
+			Request request = Request.with(HttpMethod.POST, "/upload")
+					.body(requestBody.getBytes(StandardCharsets.UTF_8))
+					.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=")))
+					.build();
+		}, "Empty multipart boundary should cause an exception");
+	}
+
+	@Test
+	public void missingBoundaryThrowsException() {
+		// Should throw an exception due to missing boundary
+		assertThrows(IllegalRequestBodyException.class, () -> {
+			// Create a request with no boundary parameter at all
+			String requestBody = "--ABC\r\n" +
+					"Content-Disposition: form-data; name=\"field1\"\r\n\r\n" +
+					"value1\r\n" +
+					"--ABC--\r\n";
+
+			Request request = Request.with(HttpMethod.POST, "/upload")
+					.body(requestBody.getBytes(StandardCharsets.UTF_8))
+					.headers(Map.of("Content-Type", Set.of("multipart/form-data"))) // No boundary at all
+					.build();
+		}, "Missing multipart boundary should cause an exception");
+	}
+
+	@Test
+	public void whitespaceBoundaryIsInvalid() {
+		// Should throw an exception due to whitespace boundary
+		assertThrows(IllegalRequestBodyException.class, () -> {
+			// Create a request with whitespace boundary
+			String requestBody = "--   \r\n" +
+					"Content-Disposition: form-data; name=\"field1\"\r\n\r\n" +
+					"value1\r\n" +
+					"--   --\r\n";
+
+			Request request = Request.with(HttpMethod.POST, "/upload")
+					.body(requestBody.getBytes(StandardCharsets.UTF_8))
+					.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=   ")))
+					.build();
+		}, "Whitespace multipart boundary should cause an exception");
+	}
+
+	@Test
+	public void validBoundarySucceeds() {
+		// Arrange: Create a proper multipart request with valid boundary
+		String boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+		String requestBody = "--" + boundary + "\r\n" +
+				"Content-Disposition: form-data; name=\"field1\"\r\n\r\n" +
+				"value1\r\n" +
+				"--" + boundary + "--\r\n";
+
+		Request request = Request.with(HttpMethod.POST, "/upload")
+				.body(requestBody.getBytes(StandardCharsets.UTF_8))
+				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.build();
+
+		ResourceMethodResolver resolver = ResourceMethodResolver.withClasses(
+				Set.of(MultipartResource2.class)
+		);
+
+		SokletConfig config = SokletConfig.withServer(
+						Server.withPort(8080).build()
+				)
+				.resourceMethodResolver(resolver)
+				.build();
+
+		// Act & Assert: Valid boundary should work correctly
+		assertDoesNotThrow(() -> {
+			Soklet.runSimulator(config, simulator -> {
+				RequestResult requestResult = simulator.performRequest(request);
+				assertEquals(200, requestResult.getMarshaledResponse().getStatusCode(), "Valid multipart request should succeed");
+			});
+		});
+	}
+
+	@Test
+	public void quotedBoundaryIsHandled() {
+		// Arrange: According to RFC 2046, boundary values can be quoted
+		String boundary = "----WebKitFormBoundary";
+		String requestBody = "--" + boundary + "\r\n" +
+				"Content-Disposition: form-data; name=\"test\"\r\n\r\n" +
+				"data\r\n" +
+				"--" + boundary + "--\r\n";
+
+		// Boundary is quoted in Content-Type header
+		Request request = Request.with(HttpMethod.POST, "/upload")
+				.body(requestBody.getBytes(StandardCharsets.UTF_8))
+				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=\"" + boundary + "\"")))
+				.build();
+
+		ResourceMethodResolver resolver = ResourceMethodResolver.withClasses(
+				Set.of(MultipartResource2.class)
+		);
+
+		SokletConfig config = SokletConfig.withServer(
+						Server.withPort(8080).build()
+				)
+				.resourceMethodResolver(resolver)
+				.build();
+
+		// Act & Assert: Quoted boundary should be handled correctly
+		assertDoesNotThrow(() -> {
+			Soklet.runSimulator(config, simulator -> {
+				RequestResult requestResult = simulator.performRequest(request);
+				assertEquals(200, requestResult.getMarshaledResponse().getStatusCode(), "Quoted boundary should be handled correctly");
+			});
+		});
+	}
+
+	// Test resource that accepts multipart uploads
+	public static class MultipartResource2 {
+		@POST("/upload")
+		public String upload(@Multipart(name = "field1", optional = true) MultipartField field) {
+			return "ok";
+		}
 	}
 }
