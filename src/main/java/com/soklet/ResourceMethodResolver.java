@@ -47,11 +47,13 @@ public interface ResourceMethodResolver {
 	 * <p>
 	 * An unmatched <em>Resource Method</em> generally indicates an {@code HTTP 404}.
 	 *
-	 * @param request the HTTP request
+	 * @param request    the HTTP request
+	 * @param serverType the type of server that's handling the request
 	 * @return the matching <em>Resource Method</em>, or {@link Optional#empty()} if no match was found
 	 */
 	@Nonnull
-	Optional<ResourceMethod> resourceMethodForRequest(@Nonnull Request request);
+	Optional<ResourceMethod> resourceMethodForRequest(@Nonnull Request request,
+																										@Nonnull ServerType serverType);
 
 	/**
 	 * Vends the set of all <em>Resource Methods</em> registered in the system.

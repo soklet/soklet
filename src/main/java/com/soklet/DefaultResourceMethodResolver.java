@@ -285,8 +285,10 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	@Nonnull
 	@Override
-	public Optional<ResourceMethod> resourceMethodForRequest(@Nonnull Request request) {
+	public Optional<ResourceMethod> resourceMethodForRequest(@Nonnull Request request,
+																													 @Nonnull ServerType serverType) {
 		requireNonNull(request);
+		requireNonNull(serverType);
 
 		Set<Method> methods = getMethodsByHttpMethod().get(request.getHttpMethod());
 		if (methods == null)
@@ -301,12 +303,21 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			Set<HttpMethodResourcePathDeclaration> httpMethodResourcePathDeclarations = entry.getValue();
 			for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations)
 				if (httpMethodResourcePathDeclaration.getHttpMethod().equals(request.getHttpMethod())
-						&& resourcePath.matches(httpMethodResourcePathDeclaration.getResourcePathDeclaration()))
+						&& resourcePath.matches(httpMethodResourcePathDeclaration.getResourcePathDeclaration())) {
+					// Special handling based on ServerType: if the Resource Method is marked as @ServerSentEventSource then it can only be used by an SSE server.
+					// Similarly, any Resource Method marked with @GET, @POST etc. is only usable by the Standard HTTP server.
+					boolean isServerSentEventSource = httpMethodResourcePathDeclaration.isServerSentEventSource();
+					boolean isServerSentEventServer = serverType == ServerType.SERVER_SENT_EVENT;
+
+					if (isServerSentEventSource != isServerSentEventServer)
+						continue;
+
 					matchingResourceMethods.add(ResourceMethod.withComponents(
 							request.getHttpMethod(),
 							httpMethodResourcePathDeclaration.getResourcePathDeclaration(),
 							method,
 							httpMethodResourcePathDeclaration.isServerSentEventSource()));
+				}
 		}
 
 		// Varargs precedence: if any matching resource method is defined with a varargs placeholder, only consider those.

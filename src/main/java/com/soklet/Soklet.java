@@ -112,7 +112,7 @@ public final class Soklet implements AutoCloseable {
 
 		sokletConfig.getServer().initialize(getSokletConfig(), (request, marshaledResponseConsumer) -> {
 			// Delegate to Soklet's internal request handling method
-			soklet.handleRequest(request, marshaledResponseConsumer);
+			soklet.handleRequest(request, ServerType.STANDARD_HTTP, marshaledResponseConsumer);
 		});
 
 		ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
@@ -120,7 +120,7 @@ public final class Soklet implements AutoCloseable {
 		if (serverSentEventServer != null)
 			serverSentEventServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
 				// Delegate to Soklet's internal request handling method
-				soklet.handleRequest(request, marshaledResponseConsumer);
+				soklet.handleRequest(request, ServerType.SERVER_SENT_EVENT, marshaledResponseConsumer);
 			});
 	}
 
@@ -349,8 +349,10 @@ public final class Soklet implements AutoCloseable {
 	 * provided by a {@link Server} or {@link ServerSentEventServer} implementation.
 	 */
 	protected void handleRequest(@Nonnull Request request,
+															 @Nonnull ServerType serverType,
 															 @Nonnull Consumer<RequestResult> requestResultConsumer) {
 		requireNonNull(request);
+		requireNonNull(serverType);
 		requireNonNull(requestResultConsumer);
 
 		Instant processingStarted = Instant.now();
@@ -387,7 +389,7 @@ public final class Soklet implements AutoCloseable {
 
 		try {
 			// Do we have an exact match for this resource method?
-			resourceMethodHolder.set(resourceMethodResolver.resourceMethodForRequest(requestHolder.get()).orElse(null));
+			resourceMethodHolder.set(resourceMethodResolver.resourceMethodForRequest(requestHolder.get(), serverType).orElse(null));
 		} catch (Throwable t) {
 			safelyLog.accept(LogEvent.with(LogEventType.RESOURCE_METHOD_RESOLUTION_FAILED, "Unable to resolve Resource Method")
 					.throwable(t)
@@ -426,7 +428,7 @@ public final class Soklet implements AutoCloseable {
 							if (resourceMethodResolutionExceptionHolder.get() != null)
 								throw resourceMethodResolutionExceptionHolder.get();
 
-							RequestResult requestResult = toRequestResult(requestHolder.get(), resourceMethodHolder.get());
+							RequestResult requestResult = toRequestResult(requestHolder.get(), resourceMethodHolder.get(), serverType);
 							requestResultHolder.set(requestResult);
 
 							MarshaledResponse originalMarshaledResponse = requestResult.getMarshaledResponse();
@@ -725,7 +727,11 @@ public final class Soklet implements AutoCloseable {
 
 	@Nonnull
 	protected RequestResult toRequestResult(@Nonnull Request request,
-																					@Nullable ResourceMethod resourceMethod) throws Throwable {
+																					@Nullable ResourceMethod resourceMethod,
+																					@Nonnull ServerType serverType) throws Throwable {
+		requireNonNull(request);
+		requireNonNull(serverType);
+
 		ResourceMethodParameterProvider resourceMethodParameterProvider = getSokletConfig().getResourceMethodParameterProvider();
 		InstanceProvider instanceProvider = getSokletConfig().getInstanceProvider();
 		CorsAuthorizer corsAuthorizer = getSokletConfig().getCorsAuthorizer();
@@ -735,7 +741,7 @@ public final class Soklet implements AutoCloseable {
 
 		// Special short-circuit for big requests
 		if (request.isContentTooLarge())
-			return RequestResult.withMarshaledResponse(responseMarshaler.forContentTooLarge(request, resourceMethodResolver.resourceMethodForRequest(request).orElse(null)))
+			return RequestResult.withMarshaledResponse(responseMarshaler.forContentTooLarge(request, resourceMethodResolver.resourceMethodForRequest(request, serverType).orElse(null)))
 					.resourceMethod(resourceMethod)
 					.build();
 
@@ -745,7 +751,7 @@ public final class Soklet implements AutoCloseable {
 			// If not, figure out if we should return a 404 or 405.
 			if (request.getHttpMethod() == HttpMethod.OPTIONS) {
 				// See what methods are available to us for this request's path
-				Map<HttpMethod, ResourceMethod> matchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver);
+				Map<HttpMethod, ResourceMethod> matchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver, serverType);
 
 				// Special handling for CORS preflight requests, if needed
 				if (corsPreflight != null) {
@@ -796,7 +802,7 @@ public final class Soklet implements AutoCloseable {
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
 				// If there's a matching GET resource method for this HEAD request, then invoke it
 				Request headGetRequest = Request.with(HttpMethod.GET, request.getUri()).build();
-				ResourceMethod headGetResourceMethod = resourceMethodResolver.resourceMethodForRequest(headGetRequest).orElse(null);
+				ResourceMethod headGetResourceMethod = resourceMethodResolver.resourceMethodForRequest(headGetRequest, serverType).orElse(null);
 
 				if (headGetResourceMethod != null)
 					resourceMethod = headGetResourceMethod;
@@ -806,7 +812,7 @@ public final class Soklet implements AutoCloseable {
 							.build();
 			} else {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
-				Map<HttpMethod, ResourceMethod> otherMatchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver);
+				Map<HttpMethod, ResourceMethod> otherMatchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver, serverType);
 
 				Set<HttpMethod> matchingNonOptionsHttpMethods = otherMatchingResourceMethodsByHttpMethod.keySet().stream()
 						.filter(httpMethod -> httpMethod != HttpMethod.OPTIONS)
@@ -985,15 +991,17 @@ public final class Soklet implements AutoCloseable {
 
 	@Nonnull
 	protected Map<HttpMethod, ResourceMethod> resolveMatchingResourceMethodsByHttpMethod(@Nonnull Request request,
-																																											 @Nonnull ResourceMethodResolver resourceMethodResolver) {
+																																											 @Nonnull ResourceMethodResolver resourceMethodResolver,
+																																											 @Nonnull ServerType serverType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethodResolver);
+		requireNonNull(serverType);
 
 		Map<HttpMethod, ResourceMethod> matchingResourceMethodsByHttpMethod = new LinkedHashMap<>(HttpMethod.values().length);
 
 		for (HttpMethod httpMethod : HttpMethod.values()) {
 			Request otherRequest = Request.with(httpMethod, request.getUri()).build();
-			ResourceMethod resourceMethod = resourceMethodResolver.resourceMethodForRequest(otherRequest).orElse(null);
+			ResourceMethod resourceMethod = resourceMethodResolver.resourceMethodForRequest(otherRequest, serverType).orElse(null);
 
 			if (resourceMethod != null)
 				matchingResourceMethodsByHttpMethod.put(httpMethod, resourceMethod);

@@ -88,7 +88,7 @@ public enum LogEventType {
 	 */
 	RESPONSE_MARSHALER_FOR_THROWABLE_FAILED,
 	/**
-	 * Indicates <em>Resource Method</em> resolution via ({@link ResourceMethodResolver#resourceMethodForRequest(Request)} threw an exception.
+	 * Indicates <em>Resource Method</em> resolution via ({@link ResourceMethodResolver#resourceMethodForRequest(Request, ServerType)} threw an exception.
 	 */
 	RESOURCE_METHOD_RESOLUTION_FAILED,
 	/**
