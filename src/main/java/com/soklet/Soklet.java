@@ -274,7 +274,7 @@ public final class Soklet implements AutoCloseable {
 		 * If System.in is not usable (or disabled), returns false and does nothing.
 		 */
 		@Nonnull
-		static Boolean register(@Nonnull Soklet soklet) {
+		synchronized static Boolean register(@Nonnull Soklet soklet) {
 			requireNonNull(soklet);
 
 			// If stdin is not readable (e.g., container with no TTY), don't start a listener.
@@ -293,7 +293,7 @@ public final class Soklet implements AutoCloseable {
 			return true;
 		}
 
-		static void unregister(@Nonnull Soklet soklet) {
+		synchronized static void unregister(@Nonnull Soklet soklet) {
 			SOKLET_REGISTRY.remove(soklet);
 			// We intentionally keep the listener alive; it's daemon and cheap.
 			// If stdin hits EOF, the listener exits on its own.
@@ -323,17 +323,20 @@ public final class Soklet implements AutoCloseable {
 			try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
 				// Blocks until newline or EOF; EOF (null) happens with /dev/null or closed pipe.
 				bufferedReader.readLine();
-
-				// Either a line or EOF → stop everything that’s currently registered.
-				for (Soklet soklet : SOKLET_REGISTRY) {
-					try {
-						soklet.stop();
-					} catch (Throwable ignored) {
-						// Nothing to do
-					}
-				}
+				stopAllSoklets();
 			} catch (Throwable ignored) {
 				// If stdin is closed mid-run, just exit quietly.
+			}
+		}
+
+		synchronized private static void stopAllSoklets() {
+			// Either a line or EOF → stop everything that’s currently registered.
+			for (Soklet soklet : SOKLET_REGISTRY) {
+				try {
+					soklet.stop();
+				} catch (Throwable ignored) {
+					// Nothing to do
+				}
 			}
 		}
 
