@@ -28,6 +28,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -142,7 +143,7 @@ public final class ResponseCookie {
 		this.value = builder.value;
 		this.maxAge = builder.maxAge;
 		this.domain = builder.domain;
-		this.path = builder.path;
+		this.path = trimAggressivelyToNull(builder.path); // Can't specify blank paths. Must be null (omitted) or start with "/"
 		this.secure = builder.secure == null ? false : builder.secure;
 		this.httpOnly = builder.httpOnly == null ? false : builder.httpOnly;
 		this.sameSite = builder.sameSite;
@@ -644,9 +645,58 @@ public final class ResponseCookie {
 		}
 
 		public static void validatePath(@Nullable String path) {
-			if (path == null) {
+			if (path == null)
 				return;
+
+			// Check for path traversal attempts
+			if (path.contains("..")) {
+				throw new IllegalArgumentException(
+						"Cookie path must not contain '..' segments (path traversal): " + path
+				);
 			}
+
+			// Check for query strings
+			if (path.contains("?")) {
+				throw new IllegalArgumentException(
+						"Cookie path must not contain query strings: " + path
+				);
+			}
+
+			// Check for fragments
+			if (path.contains("#")) {
+				throw new IllegalArgumentException(
+						"Cookie path must not contain fragments: " + path
+				);
+			}
+
+			// Check for backslashes (Windows-style paths)
+			if (path.contains("\\")) {
+				throw new IllegalArgumentException(
+						"Cookie path must not contain backslashes: " + path
+				);
+			}
+
+			// Check for URL-encoded dots (potential bypass attempt)
+			if (path.contains("%2E") || path.contains("%2e")) {
+				throw new IllegalArgumentException(
+						"Cookie path must not contain encoded dots: " + path
+				);
+			}
+
+			// Must start with forward slash
+			if (!path.startsWith("/")) {
+				throw new IllegalArgumentException(
+						"Cookie path must start with '/': " + path
+				);
+			}
+
+			// Check for null bytes
+			if (path.contains("\0") || path.contains("%00")) {
+				throw new IllegalArgumentException(
+						"Cookie path must not contain null bytes: " + path
+				);
+			}
+
 			for (int i = 0; i < path.length(); i++) {
 				char c = path.charAt(i);
 				if (c < 0x20 || c > 0x7E || c == ';') {
