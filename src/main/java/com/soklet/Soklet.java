@@ -102,7 +102,7 @@ public final class Soklet implements AutoCloseable {
 
 		// Fail fast in the event that Soklet appears misconfigured
 		if (sokletConfig.getResourceMethodResolver().getResourceMethods().size() == 0)
-			throw new IllegalArgumentException(format("No Soklet Resource Methods were found. Please ensure your %s is configured correctly. "
+			throw new IllegalStateException(format("No Soklet Resource Methods were found. Please ensure your %s is configured correctly. "
 					+ "See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.", ResourceMethodResolver.class.getSimpleName()));
 
 		// Use a layer of indirection here so the Soklet type does not need to directly implement the `RequestHandler` interface.
