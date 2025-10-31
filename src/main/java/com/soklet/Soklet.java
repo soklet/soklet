@@ -16,6 +16,8 @@
 
 package com.soklet;
 
+import com.soklet.ServerSentEventRequestResult.HandshakeAccepted;
+import com.soklet.ServerSentEventRequestResult.HandshakeRejected;
 import com.soklet.ServerSentEventRequestResult.ServerSentEventSourceConnection;
 
 import javax.annotation.Nonnull;
@@ -1149,18 +1151,18 @@ public final class Soklet implements AutoCloseable {
 			}));
 
 			RequestResult requestResult = requestResultHolder.get();
+			HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
 
-			// TODO: handle scenario where there is no handshake
-			HandshakeResult handshakeResult = requestResult.getHandshakeResult().get();
+			if (handshakeResult == null)
+				return new ServerSentEventRequestResult.RequestFailed(requestResult);
 
 			if (handshakeResult instanceof HandshakeResult.Accepted acceptedHandshake)
-				return new ServerSentEventRequestResult.Accepted(acceptedHandshake, new DefaultServerSentEventSourceConnection());
+				return new HandshakeAccepted(acceptedHandshake, new DefaultServerSentEventSourceConnection());
 
 			if (handshakeResult instanceof HandshakeResult.Rejected rejectedHandshake)
-				return new ServerSentEventRequestResult.Rejected(rejectedHandshake, requestResult);
+				return new HandshakeRejected(rejectedHandshake, requestResult);
 
-			// TODO: clean up
-			throw new IllegalStateException("Should never get here");
+			throw new IllegalStateException(format("Encountered unexpected %s: %s", HandshakeResult.class.getSimpleName(), handshakeResult));
 		}
 
 		@ThreadSafe
@@ -1181,6 +1183,27 @@ public final class Soklet implements AutoCloseable {
 			@Override
 			public void close() {
 				this.connected.set(false);
+			}
+
+			@Override
+			public String toString() {
+				return format("%s{isConnected=%s}", ServerSentEventSourceConnection.class.getSimpleName(), isConnected());
+			}
+
+			@Override
+			public boolean equals(@Nullable Object object) {
+				if (this == object)
+					return true;
+
+				if (!(object instanceof DefaultServerSentEventSourceConnection defaultServerSentEventSourceConnection))
+					return false;
+
+				return Objects.equals(isConnected(), defaultServerSentEventSourceConnection.isConnected());
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hash(isConnected());
 			}
 		}
 

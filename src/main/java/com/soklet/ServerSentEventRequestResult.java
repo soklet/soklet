@@ -17,7 +17,11 @@
 package com.soklet;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
+import java.util.Objects;
 
+import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -27,8 +31,14 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public sealed interface ServerSentEventRequestResult permits ServerSentEventRequestResult.Accepted, ServerSentEventRequestResult.Rejected {
+public sealed interface ServerSentEventRequestResult permits ServerSentEventRequestResult.HandshakeAccepted, ServerSentEventRequestResult.HandshakeRejected, ServerSentEventRequestResult.RequestFailed {
+	/**
+	 * TODO: document
+	 */
 	interface ServerSentEventSourceConnection extends AutoCloseable {
+		// TODO: do we need the concept of "connected?"
+		// TODO: should we have a mechanism to register event and comment listeners here, or one level up?
+
 		@Nonnull
 		Boolean isConnected();
 
@@ -37,14 +47,15 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		void close();
 	}
 
-	final class Accepted implements ServerSentEventRequestResult {
+	@ThreadSafe
+	final class HandshakeAccepted implements ServerSentEventRequestResult {
 		@Nonnull
 		private final HandshakeResult.Accepted handshakeResult;
 		@Nonnull
 		private final ServerSentEventSourceConnection connection;
 
-		Accepted(@Nonnull HandshakeResult.Accepted handshakeResult,
-						 @Nonnull ServerSentEventSourceConnection connection) {
+		HandshakeAccepted(@Nonnull HandshakeResult.Accepted handshakeResult,
+											@Nonnull ServerSentEventSourceConnection connection) {
 			requireNonNull(handshakeResult);
 			requireNonNull(connection);
 
@@ -61,16 +72,39 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		public ServerSentEventSourceConnection getConnection() {
 			return this.connection;
 		}
+
+		@Override
+		public String toString() {
+			return format("%s{handshakeResult=%s, connection=%s}", HandshakeAccepted.class.getSimpleName(), getHandshakeResult(), getConnection());
+		}
+
+		@Override
+		public boolean equals(@Nullable Object object) {
+			if (this == object)
+				return true;
+
+			if (!(object instanceof HandshakeAccepted handshakeAccepted))
+				return false;
+
+			return Objects.equals(getHandshakeResult(), handshakeAccepted.getHandshakeResult())
+					&& Objects.equals(getConnection(), handshakeAccepted.getConnection());
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(getHandshakeResult(), getConnection());
+		}
 	}
 
-	final class Rejected implements ServerSentEventRequestResult {
+	@ThreadSafe
+	final class HandshakeRejected implements ServerSentEventRequestResult {
 		@Nonnull
 		private final HandshakeResult.Rejected handshakeResult;
 		@Nonnull
 		private final RequestResult requestResult;
 
-		Rejected(@Nonnull HandshakeResult.Rejected handshakeResult,
-						 @Nonnull RequestResult requestResult) {
+		HandshakeRejected(@Nonnull HandshakeResult.Rejected handshakeResult,
+											@Nonnull RequestResult requestResult) {
 			requireNonNull(handshakeResult);
 			requireNonNull(requestResult);
 
@@ -86,6 +120,65 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		@Nonnull
 		public RequestResult getRequestResult() {
 			return this.requestResult;
+		}
+
+		@Override
+		public String toString() {
+			return format("%s{handshakeResult=%s, requestResult=%s}", HandshakeRejected.class.getSimpleName(), getHandshakeResult(), getRequestResult());
+		}
+
+		@Override
+		public boolean equals(@Nullable Object object) {
+			if (this == object)
+				return true;
+
+			if (!(object instanceof HandshakeRejected handshakeRejected))
+				return false;
+
+			return Objects.equals(getHandshakeResult(), handshakeRejected.getHandshakeResult())
+					&& Objects.equals(getRequestResult(), handshakeRejected.getRequestResult());
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(getHandshakeResult(), getRequestResult());
+		}
+	}
+
+	@ThreadSafe
+	final class RequestFailed implements ServerSentEventRequestResult {
+		@Nonnull
+		private final RequestResult requestResult;
+
+		RequestFailed(@Nonnull RequestResult requestResult) {
+			requireNonNull(requestResult);
+			this.requestResult = requestResult;
+		}
+
+		@Nonnull
+		public RequestResult getRequestResult() {
+			return this.requestResult;
+		}
+
+		@Override
+		public String toString() {
+			return format("%s{requestResult=%s}", RequestFailed.class.getSimpleName(), getRequestResult());
+		}
+
+		@Override
+		public boolean equals(@Nullable Object object) {
+			if (this == object)
+				return true;
+
+			if (!(object instanceof RequestFailed requestFailed))
+				return false;
+
+			return Objects.equals(getRequestResult(), requestFailed.getRequestResult());
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(getRequestResult());
 		}
 	}
 }

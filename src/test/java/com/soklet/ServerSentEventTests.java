@@ -16,6 +16,9 @@
 
 package com.soklet;
 
+import com.soklet.ServerSentEventRequestResult.HandshakeAccepted;
+import com.soklet.ServerSentEventRequestResult.HandshakeRejected;
+import com.soklet.ServerSentEventRequestResult.RequestFailed;
 import com.soklet.ServerSentEventRequestResult.ServerSentEventSourceConnection;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
@@ -74,8 +77,8 @@ public class ServerSentEventTests {
 			Request request = Request.with(HttpMethod.GET, "/examples/abc").build();
 			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
 
-			if (requestResult instanceof ServerSentEventRequestResult.Accepted accepted) {
-				try (ServerSentEventSourceConnection connection = accepted.getConnection()) {
+			if (requestResult instanceof HandshakeAccepted handshakeAccepted) {
+				try (ServerSentEventSourceConnection connection = handshakeAccepted.getConnection()) {
 					// Create a server-sent event...
 					ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
 							.data("data")
@@ -87,10 +90,13 @@ public class ServerSentEventTests {
 					ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.withPath("/examples/abc"));
 					broadcaster.broadcastEvent(serverSentEvent);
 				}
-			} else if (requestResult instanceof ServerSentEventRequestResult.Rejected rejected) {
-				Assertions.fail("SSE request failed: " + rejected);
+			} else if (requestResult instanceof HandshakeRejected handshakeRejected) {
+				Assertions.fail("SSE handshake rejected: " + handshakeRejected);
+			} else if (requestResult instanceof RequestFailed requestFailed) {
+				Assertions.fail("SSE request failed: " + requestFailed);
 			} else {
-				throw new IllegalStateException("Unhandled type: " + requestResult.getClass());
+				// Should never happen
+				throw new IllegalStateException(format("Unexpected SSE result: %s", requestResult.getClass()));
 			}
 		}));
 	}
