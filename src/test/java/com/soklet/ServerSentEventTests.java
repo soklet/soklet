@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.Nonnull;
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
@@ -70,7 +71,7 @@ public class ServerSentEventTests {
 
 			// Perform initial handshake with /examples/abc and verify 200 response
 			Request request = Request.with(HttpMethod.GET, "/examples/abc").build();
-			RequestResult requestResult = simulator.performRequest(request);
+			RequestResult requestResult = simulator.performServerSentEventRequest(request);
 
 			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
 
@@ -1031,5 +1032,36 @@ public class ServerSentEventTests {
 			ss.setReuseAddress(true);
 			return ss.getLocalPort();
 		}
+	}
+
+	@NotThreadSafe
+	protected static class SseHandshakeSimulatorResource {
+		@ServerSentEventSource("/example/{id}")
+		public HandshakeResult example(@Nonnull @PathParameter(name = "id") Integer id) {
+			return HandshakeResult.acceptWithDefaults()
+					.headers(Map.of(
+							"X-Soklet-Test", Set.of("example")
+					))
+					.cookies(Set.of(
+							ResponseCookie.with("one", "two").build()
+					))
+					.build();
+		}
+	}
+
+	@Test
+	public void testSseHandshakeAcceptedSimulator() {
+		SokletConfig sokletConfig = SokletConfig.forTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseHandshakeSimulatorResource.class)))
+				.build();
+
+		Soklet.runSimulator(sokletConfig, (simulator) -> {
+			Request request = Request.with(HttpMethod.GET, "/example/123")
+					.build();
+
+			RequestResult requestResult = simulator.performServerSentEventRequest(request);
+
+			// TODO: implement
+		});
 	}
 }

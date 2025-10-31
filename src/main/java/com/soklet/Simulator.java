@@ -59,13 +59,24 @@ import java.util.function.Consumer;
  */
 public interface Simulator {
 	/**
-	 * Given a request, process it and return response data (both logical {@link Response}, if present, and the {@link MarshaledResponse} bytes to be sent over the wire) as well as the matching <em>Resource Method</em>, if available.
+	 * Given a request that would normally be handled by your standard HTTP server, process it and return response data (both logical {@link Response}, if present, and the {@link MarshaledResponse} bytes to be sent over the wire) as well as the matching <em>Resource Method</em>, if available.
+	 * <p>
+	 * To make requests that would normally be handled by your Server-Sent Event server, use {@link #performServerSentEventRequest(Request)}.
 	 *
-	 * @param request the request to process
+	 * @param request the standard HTTP request to process
 	 * @return the result (logical response, marshaled response, etc.) that corresponds to the request
 	 */
 	@Nonnull
 	RequestResult performRequest(@Nonnull Request request);
+
+	/**
+	 * TODO: document
+	 *
+	 * @param request TODO
+	 * @return TODO
+	 */
+	@Nonnull
+	RequestResult performServerSentEventRequest(@Nonnull Request request);
 
 	/**
 	 * Registers {@link ServerSentEvent} data "consumers" for the given {@link ResourcePath} - similar to how a real client would listen for Server-Sent Events and comments.

@@ -1133,6 +1133,22 @@ public final class Soklet implements AutoCloseable {
 			return requestResultHolder.get();
 		}
 
+		@Nonnull
+		@Override
+		public RequestResult performServerSentEventRequest(@Nonnull Request request) {
+			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
+			ServerSentEventServer.RequestHandler requestHandler = getServerSentEventServer().getRequestHandler().orElse(null);
+
+			if (requestHandler == null)
+				throw new IllegalStateException("You must register a request handler prior to simulating SSE Event Source requests");
+
+			requestHandler.handleRequest(request, (requestResult -> {
+				requestResultHolder.set(requestResult);
+			}));
+
+			return requestResultHolder.get();
+		}
+
 		@Override
 		public void registerServerSentEventConsumers(@Nonnull ResourcePath resourcePath,
 																								 @Nonnull Consumer<ServerSentEvent> eventConsumer,
