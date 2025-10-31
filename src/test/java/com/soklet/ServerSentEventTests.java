@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.ServerSentEventRequestResult.ServerSentEventSourceConnection;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.ServerSentEventSource;
@@ -71,20 +72,26 @@ public class ServerSentEventTests {
 
 			// Perform initial handshake with /examples/abc and verify 200 response
 			Request request = Request.with(HttpMethod.GET, "/examples/abc").build();
-			RequestResult requestResult = simulator.performServerSentEventRequest(request);
+			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
 
-			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			if (requestResult instanceof ServerSentEventRequestResult.Accepted accepted) {
+				try (ServerSentEventSourceConnection connection = accepted.getConnection()) {
+					// Create a server-sent event...
+					ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
+							.data("data")
+							.id("abc")
+							.retry(Duration.ofSeconds(10))
+							.build();
 
-			// Create a server-sent event...
-			ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
-					.data("data")
-					.id("abc")
-					.retry(Duration.ofSeconds(10))
-					.build();
-
-			// ...and broadcast it to all /examples/abc listeners
-			ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.withPath("/examples/abc"));
-			broadcaster.broadcastEvent(serverSentEvent);
+					// ...and broadcast it to all /examples/abc listeners
+					ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.withPath("/examples/abc"));
+					broadcaster.broadcastEvent(serverSentEvent);
+				}
+			} else if (requestResult instanceof ServerSentEventRequestResult.Rejected rejected) {
+				Assertions.fail("SSE request failed: " + rejected);
+			} else {
+				throw new IllegalStateException("Unhandled type: " + requestResult.getClass());
+			}
 		}));
 	}
 
@@ -1059,7 +1066,7 @@ public class ServerSentEventTests {
 			Request request = Request.with(HttpMethod.GET, "/example/123")
 					.build();
 
-			RequestResult requestResult = simulator.performServerSentEventRequest(request);
+			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
 
 			// TODO: implement
 		});

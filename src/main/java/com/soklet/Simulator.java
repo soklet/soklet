@@ -76,7 +76,7 @@ public interface Simulator {
 	 * @return TODO
 	 */
 	@Nonnull
-	RequestResult performServerSentEventRequest(@Nonnull Request request);
+	ServerSentEventRequestResult performServerSentEventRequest(@Nonnull Request request);
 
 	/**
 	 * Registers {@link ServerSentEvent} data "consumers" for the given {@link ResourcePath} - similar to how a real client would listen for Server-Sent Events and comments.

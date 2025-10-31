@@ -16,6 +16,8 @@
 
 package com.soklet;
 
+import com.soklet.ServerSentEventRequestResult.ServerSentEventSourceConnection;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -1135,7 +1137,7 @@ public final class Soklet implements AutoCloseable {
 
 		@Nonnull
 		@Override
-		public RequestResult performServerSentEventRequest(@Nonnull Request request) {
+		public ServerSentEventRequestResult performServerSentEventRequest(@Nonnull Request request) {
 			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
 			ServerSentEventServer.RequestHandler requestHandler = getServerSentEventServer().getRequestHandler().orElse(null);
 
@@ -1146,7 +1148,40 @@ public final class Soklet implements AutoCloseable {
 				requestResultHolder.set(requestResult);
 			}));
 
-			return requestResultHolder.get();
+			RequestResult requestResult = requestResultHolder.get();
+
+			// TODO: handle scenario where there is no handshake
+			HandshakeResult handshakeResult = requestResult.getHandshakeResult().get();
+
+			if (handshakeResult instanceof HandshakeResult.Accepted acceptedHandshake)
+				return new ServerSentEventRequestResult.Accepted(acceptedHandshake, new DefaultServerSentEventSourceConnection());
+
+			if (handshakeResult instanceof HandshakeResult.Rejected rejectedHandshake)
+				return new ServerSentEventRequestResult.Rejected(rejectedHandshake, requestResult);
+
+			// TODO: clean up
+			throw new IllegalStateException("Should never get here");
+		}
+
+		@ThreadSafe
+		static class DefaultServerSentEventSourceConnection implements ServerSentEventSourceConnection {
+			@Nonnull
+			private final AtomicBoolean connected;
+
+			DefaultServerSentEventSourceConnection() {
+				this.connected = new AtomicBoolean(true);
+			}
+
+			@Nonnull
+			@Override
+			public Boolean isConnected() {
+				return this.connected.get();
+			}
+
+			@Override
+			public void close() {
+				this.connected.set(false);
+			}
 		}
 
 		@Override
