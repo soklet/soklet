@@ -80,10 +80,10 @@ import static java.util.Objects.requireNonNull;
  *   // Note: real systems should localize these messages
  *   switch (throwable) {
  *     // Soklet throws this exception, a specific subclass of BadRequestException
- *     case IllegalQueryParameterException ex -> {
+ *     case IllegalQueryParameterException e -> {
  *       message = String.format("Illegal value '%s' for parameter '%s'",
- *         ex.getQueryParameterValue().orElse("[not provided]"),
- *         ex.getQueryParameterName());
+ *         e.getQueryParameterValue().orElse("[not provided]"),
+ *         e.getQueryParameterName());
  *       statusCode = 400;
  *     }
  *

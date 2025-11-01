@@ -17,6 +17,11 @@
 package com.soklet;
 
 import com.soklet.Utilities.QueryDecodingStrategy;
+import com.soklet.exception.IllegalFormParameterException;
+import com.soklet.exception.IllegalMultipartFieldException;
+import com.soklet.exception.IllegalQueryParameterException;
+import com.soklet.exception.IllegalRequestCookieException;
+import com.soklet.exception.IllegalRequestHeaderException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
@@ -30,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Locale.LanguageRange;
@@ -629,17 +635,25 @@ public final class Request {
 	 * <p>
 	 * If a query parameter {@code name} can support multiple values, {@link #getQueryParameters()} should be used instead of this method.
 	 * <p>
-	 * If this method is invoked for a query parameter {@code name} with multiple values, Soklet does not guarantee which value will be returned.
+	 * If this method is invoked for a query parameter {@code name} with multiple values, Soklet will throw {@link IllegalQueryParameterException}.
 	 * <p>
 	 * <em>Note that query parameters have case-sensitive names per the HTTP spec.</em>
 	 *
 	 * @param name the name of the query parameter
 	 * @return the value for the query parameter, or {@link Optional#empty()} if none is present
+	 * @throws IllegalQueryParameterException if the query parameter with the given {@code name} has multiple values
 	 */
 	@Nonnull
 	public Optional<String> getQueryParameter(@Nonnull String name) {
 		requireNonNull(name);
-		return singleValueForName(name, getQueryParameters());
+
+		try {
+			return singleValueForName(name, getQueryParameters());
+		} catch (MultipleValuesException e) {
+			@SuppressWarnings("unchecked")
+			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
+			throw new IllegalQueryParameterException(format("Multiple values specified for query parameter '%s' (but expected single value): %s", name, valuesAsString), name, valuesAsString);
+		}
 	}
 
 	/**
@@ -647,17 +661,25 @@ public final class Request {
 	 * <p>
 	 * If a form parameter {@code name} can support multiple values, {@link #getFormParameters()} should be used instead of this method.
 	 * <p>
-	 * If this method is invoked for a form parameter {@code name} with multiple values, Soklet does not guarantee which value will be returned.
+	 * If this method is invoked for a form parameter {@code name} with multiple values, Soklet will throw {@link IllegalFormParameterException}.
 	 * <p>
 	 * <em>Note that form parameters have case-sensitive names per the HTTP spec.</em>
 	 *
 	 * @param name the name of the form parameter
 	 * @return the value for the form parameter, or {@link Optional#empty()} if none is present
+	 * @throws IllegalFormParameterException if the form parameter with the given {@code name} has multiple values
 	 */
 	@Nonnull
 	public Optional<String> getFormParameter(@Nonnull String name) {
 		requireNonNull(name);
-		return singleValueForName(name, getFormParameters());
+
+		try {
+			return singleValueForName(name, getFormParameters());
+		} catch (MultipleValuesException e) {
+			@SuppressWarnings("unchecked")
+			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
+			throw new IllegalFormParameterException(format("Multiple values specified for form parameter '%s' (but expected single value): %s", name, valuesAsString), name, valuesAsString);
+		}
 	}
 
 	/**
@@ -665,17 +687,25 @@ public final class Request {
 	 * <p>
 	 * If a header {@code name} can support multiple values, {@link #getHeaders()} should be used instead of this method.
 	 * <p>
-	 * If this method is invoked for a header {@code name} with multiple values, Soklet does not guarantee which value will be returned.
+	 * If this method is invoked for a header {@code name} with multiple values, Soklet will throw {@link IllegalRequestHeaderException}.
 	 * <p>
 	 * <em>Note that request headers have case-insensitive names per the HTTP spec.</em>
 	 *
 	 * @param name the name of the header
 	 * @return the value for the header, or {@link Optional#empty()} if none is present
+	 * @throws IllegalRequestHeaderException if the header with the given {@code name} has multiple values
 	 */
 	@Nonnull
 	public Optional<String> getHeader(@Nonnull String name) {
 		requireNonNull(name);
-		return singleValueForName(name, getHeaders());
+
+		try {
+			return singleValueForName(name, getHeaders());
+		} catch (MultipleValuesException e) {
+			@SuppressWarnings("unchecked")
+			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
+			throw new IllegalRequestHeaderException(format("Multiple values specified for request header '%s' (but expected single value): %s", name, valuesAsString), name, valuesAsString);
+		}
 	}
 
 	/**
@@ -683,17 +713,25 @@ public final class Request {
 	 * <p>
 	 * If a cookie {@code name} can support multiple values, {@link #getCookies()} should be used instead of this method.
 	 * <p>
-	 * If this method is invoked for a cookie {@code name} with multiple values, Soklet does not guarantee which value will be returned.
+	 * If this method is invoked for a cookie {@code name} with multiple values, Soklet will throw {@link IllegalRequestCookieException}.
 	 * <p>
 	 * <em>Note that {@code Cookie} headers, like all request headers, have case-insensitive names per the HTTP spec.</em>
 	 *
 	 * @param name the name of the cookie
 	 * @return the value for the cookie, or {@link Optional#empty()} if none is present
+	 * @throws IllegalRequestCookieException if the cookie with the given {@code name} has multiple values
 	 */
 	@Nonnull
 	public Optional<String> getCookie(@Nonnull String name) {
 		requireNonNull(name);
-		return singleValueForName(name, getCookies());
+
+		try {
+			return singleValueForName(name, getCookies());
+		} catch (MultipleValuesException e) {
+			@SuppressWarnings("unchecked")
+			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
+			throw new IllegalRequestCookieException(format("Multiple values specified for request cookie '%s' (but expected single value): %s", name, valuesAsString), name, valuesAsString);
+		}
 	}
 
 	/**
@@ -701,17 +739,29 @@ public final class Request {
 	 * <p>
 	 * If a {@code name} can support multiple multipart fields, {@link #getMultipartFields()} should be used instead of this method.
 	 * <p>
-	 * If this method is invoked for a {@code name} with multiple multipart field values, Soklet does not guarantee which value will be returned.
+	 * If this method is invoked for a {@code name} with multiple multipart field values, Soklet will throw {@link IllegalMultipartFieldException}.
 	 * <p>
 	 * <em>Note that multipart fields have case-sensitive names per the HTTP spec.</em>
 	 *
 	 * @param name the name of the multipart field
 	 * @return the multipart field value, or {@link Optional#empty()} if none is present
+	 * @throws IllegalMultipartFieldException if the multipart field with the given {@code name} has multiple values
 	 */
 	@Nonnull
 	public Optional<MultipartField> getMultipartField(@Nonnull String name) {
 		requireNonNull(name);
-		return singleValueForName(name, getMultipartFields());
+
+		try {
+			return singleValueForName(name, getMultipartFields());
+		} catch (MultipleValuesException e) {
+			@SuppressWarnings("unchecked")
+			MultipartField firstMultipartField = getMultipartFields().get(name).stream().findFirst().get();
+			String valuesAsString = format("[%s]", ((Set<MultipartField>) e.getValues()).stream()
+					.map(multipartField -> multipartField.toString())
+					.collect(Collectors.joining(", ")));
+
+			throw new IllegalMultipartFieldException(format("Multiple values specified for multipart field '%s' (but expected single value): %s", name, valuesAsString), firstMultipartField);
+		}
 	}
 
 	@Nonnull
@@ -726,7 +776,7 @@ public final class Request {
 
 	@Nonnull
 	protected <T> Optional<T> singleValueForName(@Nonnull String name,
-																							 @Nullable Map<String, Set<T>> valuesByName) {
+																							 @Nullable Map<String, Set<T>> valuesByName) throws MultipleValuesException {
 		if (valuesByName == null)
 			return Optional.empty();
 
@@ -736,9 +786,38 @@ public final class Request {
 			return Optional.empty();
 
 		if (values.size() > 1)
-			throw new IllegalArgumentException(format("Expected single value but found multiple values for %s: %s", name, values));
+			throw new MultipleValuesException(name, values);
 
 		return values.stream().findFirst();
+	}
+
+	@NotThreadSafe
+	private static class MultipleValuesException extends Exception {
+		@Nonnull
+		private final String name;
+		@Nonnull
+		private final Set<?> values;
+
+		private MultipleValuesException(@Nonnull String name,
+																		@Nonnull Set<?> values) {
+			super(format("Expected single value but found %d values for '%s': %s", values.size(), name, values));
+
+			requireNonNull(name);
+			requireNonNull(values);
+
+			this.name = name;
+			this.values = Collections.unmodifiableSet(new LinkedHashSet<>(values));
+		}
+
+		@Nonnull
+		public String getName() {
+			return this.name;
+		}
+
+		@Nonnull
+		public Set<?> getValues() {
+			return this.values;
+		}
 	}
 
 	/**
