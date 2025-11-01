@@ -66,16 +66,6 @@ public final class SokletConfig {
 		return new Builder(server);
 	}
 
-	/**
-	 * Vends a configuration builder with mock servers, suitable for unit and integration testing.
-	 *
-	 * @return a builder for {@link SokletConfig} instances
-	 */
-	@Nonnull
-	public static Builder forTesting() {
-		return new Builder(new Soklet.MockServer()).serverSentEventServer(new Soklet.MockServerSentEventServer());
-	}
-
 	protected SokletConfig(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -204,7 +194,7 @@ public final class SokletConfig {
 	/**
 	 * Builder used to construct instances of {@link SokletConfig}.
 	 * <p>
-	 * Instances are created by invoking {@link SokletConfig#withServer(Server)} or {@link SokletConfig#forTesting()}.
+	 * Instances are created by invoking {@link SokletConfig#withServer(Server)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *

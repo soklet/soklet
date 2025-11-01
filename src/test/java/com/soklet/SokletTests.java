@@ -413,7 +413,7 @@ public class SokletTests {
 
 	@Nonnull
 	protected SokletConfig configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
-		return SokletConfig.forTesting()
+		return SokletConfig.withServer(Server.withPort(8080).build())
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(resourceClasses))
 				// Quiet logging to keep the console clean
@@ -498,7 +498,7 @@ public class SokletTests {
 
 	@Test
 	public void encodedSpaceInPath_isDecodedInSimulatorToo() {
-		var cfg = SokletConfig.forTesting()
+		var cfg = SokletConfig.withServer(Server.withPort(8080).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SimulatorDecodingResource.class)))
 				.build();
 

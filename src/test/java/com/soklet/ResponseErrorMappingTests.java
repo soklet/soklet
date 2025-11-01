@@ -32,7 +32,7 @@ import java.util.Set;
 public class ResponseErrorMappingTests {
 	@Test
 	public void runtime_exception_maps_to_500() {
-		SokletConfig cfg = SokletConfig.forTesting()
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(8080).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ExplodeResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -48,7 +48,7 @@ public class ResponseErrorMappingTests {
 
 	@Test
 	public void bad_request_exception_maps_to_400() {
-		SokletConfig cfg = SokletConfig.forTesting()
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(8080).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ExplodeResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

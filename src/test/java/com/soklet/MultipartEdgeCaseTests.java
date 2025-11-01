@@ -47,7 +47,7 @@ public class MultipartEdgeCaseTests {
 
 	@Test
 	public void missing_required_field_yields_400() {
-		SokletConfig cfg = SokletConfig.forTesting()
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(8080).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -71,7 +71,7 @@ public class MultipartEdgeCaseTests {
 
 	@Test
 	public void missing_optional_field_is_ok() {
-		SokletConfig cfg = SokletConfig.forTesting()
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(8080).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

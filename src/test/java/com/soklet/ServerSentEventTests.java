@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.Nonnull;
-import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
@@ -58,9 +57,32 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  */
 @ThreadSafe
 public class ServerSentEventTests {
+	@ThreadSafe
+	public static class ServerSentEventSimulatorResource {
+		@ServerSentEventSource("/examples/{exampleId}")
+		public HandshakeResult example(@Nonnull Request request,
+																	 @Nonnull @PathParameter String exampleId) {
+			return HandshakeResult.acceptWithDefaults()
+					.headers(Map.of(
+							"X-Soklet-Example", Set.of(exampleId)
+					))
+					.cookies(Set.of(
+							ResponseCookie.with("cookie-test", exampleId).build()
+					))
+					.clientInitializer(unicaster -> {
+						unicaster.unicastComment("Unicast comment");
+						unicaster.unicastEvent(ServerSentEvent.withEvent("initial")
+								.data("unicast")
+								.build()
+						);
+					})
+					.build();
+		}
+	}
+
 	@Test
 	public void serverSentEventServerSimulator() throws InterruptedException {
-		SokletConfig configuration = SokletConfig.forTesting()
+		SokletConfig configuration = SokletConfig.withServer(Server.withPort(8080).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
 
@@ -73,14 +95,12 @@ public class ServerSentEventTests {
 				try (ServerSentEventSourceConnection connection = handshakeAccepted.getConnection()) {
 					// Listen for events
 					connection.registerEventConsumer((serverSentEvent) -> {
-						System.out.println(serverSentEvent);
 						Assertions.assertEquals("example", serverSentEvent.getEvent().get(), "SSE event mismatch");
 					});
 
 					// Listen for comments
 					connection.registerCommentConsumer((comment) -> {
 						// Nothing to do for now
-						System.out.println(comment);
 					});
 
 					// Create a server-sent event...
@@ -106,23 +126,6 @@ public class ServerSentEventTests {
 				throw new IllegalStateException(format("Unexpected SSE result: %s", requestResult.getClass()));
 			}
 		}));
-	}
-
-	@ThreadSafe
-	public static class ServerSentEventSimulatorResource {
-		@ServerSentEventSource("/examples/{exampleId}")
-		public HandshakeResult exampleServerSentEventSource(@Nonnull Request request,
-																												@Nonnull @PathParameter String exampleId) {
-			return HandshakeResult.acceptWithDefaults()
-					.clientInitializer(unicaster -> {
-						unicaster.unicastComment("Unicast comment");
-						unicaster.unicastEvent(ServerSentEvent.withEvent("initial")
-								.data("unicast")
-								.build()
-						);
-					})
-					.build();
-		}
 	}
 
 	@ThreadSafe
@@ -1060,36 +1063,5 @@ public class ServerSentEventTests {
 			ss.setReuseAddress(true);
 			return ss.getLocalPort();
 		}
-	}
-
-	@NotThreadSafe
-	protected static class SseHandshakeSimulatorResource {
-		@ServerSentEventSource("/example/{id}")
-		public HandshakeResult example(@Nonnull @PathParameter(name = "id") Integer id) {
-			return HandshakeResult.acceptWithDefaults()
-					.headers(Map.of(
-							"X-Soklet-Test", Set.of("example")
-					))
-					.cookies(Set.of(
-							ResponseCookie.with("one", "two").build()
-					))
-					.build();
-		}
-	}
-
-	@Test
-	public void testSseHandshakeAcceptedSimulator() {
-		SokletConfig sokletConfig = SokletConfig.forTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseHandshakeSimulatorResource.class)))
-				.build();
-
-		Soklet.runSimulator(sokletConfig, (simulator) -> {
-			Request request = Request.with(HttpMethod.GET, "/example/123")
-					.build();
-
-			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
-
-			// TODO: implement
-		});
 	}
 }

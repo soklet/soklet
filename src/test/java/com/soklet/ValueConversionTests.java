@@ -41,7 +41,7 @@ public class ValueConversionTests {
 
 	@Test
 	public void converts_common_types_from_query_params() {
-		SokletConfig cfg = SokletConfig.forTesting()
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(8080).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ConversionResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
