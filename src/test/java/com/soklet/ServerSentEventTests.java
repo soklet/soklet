@@ -94,6 +94,24 @@ public class ServerSentEventTests {
 			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
 
 			if (requestResult instanceof HandshakeAccepted handshakeAccepted) {
+				// Verify the headers and cookies came through
+				MarshaledResponse marshaledResponse = handshakeAccepted.getHandshakeResult().getMarshaledResponse();
+
+				Set<String> headerValues = marshaledResponse.getHeaders().entrySet().stream()
+						.filter(entry -> entry.getKey().equals("X-Soklet-Example"))
+						.map(entry -> entry.getValue())
+						.findAny()
+						.orElse(Set.of());
+
+				Assertions.assertEquals(Set.of("abc"), headerValues, "Unexpected X-Soklet-Example header value");
+
+				ResponseCookie testCookie = marshaledResponse.getCookies().stream()
+						.filter(responseCookie -> responseCookie.getName().equals("cookie-test"))
+						.findAny()
+						.orElse(null);
+
+				Assertions.assertEquals("abc", testCookie.getValue().orElse(null), "Unexpected cookie-test value");
+
 				handshakeAccepted.registerEventConsumer((event) -> {
 					events.add(event);
 				});
