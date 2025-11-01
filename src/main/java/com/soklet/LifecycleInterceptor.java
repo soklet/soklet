@@ -174,14 +174,14 @@ public interface LifecycleInterceptor {
 		String message = logEvent.getMessage();
 
 		if (throwable == null) {
-			System.err.println(message);
+			System.err.printf("%s::didReceiveLogEvent [%s]: %s", LifecycleInterceptor.class.getSimpleName(), logEvent.getLogEventType().name(), message);
 		} else {
 			StringWriter stringWriter = new StringWriter();
 			PrintWriter printWriter = new PrintWriter(stringWriter);
 			throwable.printStackTrace(printWriter);
 
 			String throwableWithStackTrace = stringWriter.toString().trim();
-			System.err.printf("%s\n%s\n", message, throwableWithStackTrace);
+			System.err.printf("%s::didReceiveLogEvent [%s]: %s\n%s\n", LifecycleInterceptor.class.getSimpleName(), logEvent.getLogEventType().name(), message, throwableWithStackTrace);
 		}
 	}
 

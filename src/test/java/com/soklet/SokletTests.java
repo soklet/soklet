@@ -23,6 +23,7 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
+import com.soklet.annotation.RequestHeader;
 import com.soklet.exception.IllegalRequestBodyException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -650,21 +651,38 @@ public class SokletTests {
 		public void query(@QueryParameter String singleOnly) {
 			// Nothing to do
 		}
+
+		@GET("/header")
+		public void header(@RequestHeader String singleOnly) {
+			// Nothing to do
+		}
 	}
 
 	@Test
 	public void duplicateValueTests() {
 		SokletConfig config = SokletConfig.withServer(Server.withPort(8080).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(DuplicateValueResource.class)))
+				.lifecycleInterceptor(new LifecycleInterceptor() {
+					@Override
+					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
+						// Quiet logging
+					}
+				})
 				.build();
 
 		Soklet.runSimulator(config, simulator -> {
-			Request request = Request.with(HttpMethod.GET, "/query?singleOnly=one&singleOnly=two")
+			Request queryRequest = Request.with(HttpMethod.GET, "/query?singleOnly=one&singleOnly=two")
 					.build();
 
-			RequestResult requestResult = simulator.performRequest(request);
-			System.out.println(requestResult);
-			Assertions.assertEquals(422, requestResult.getMarshaledResponse().getStatusCode(), "Unexpected status code");
+			RequestResult queryRequestResult = simulator.performRequest(queryRequest);
+			Assertions.assertEquals(400, queryRequestResult.getMarshaledResponse().getStatusCode(), "Unexpected status code for query test");
+
+			Request headerRequest = Request.with(HttpMethod.GET, "/header")
+					.headers(Map.of("singleOnly", Set.of("one", "two")))
+					.build();
+
+			RequestResult headerRequestResult = simulator.performRequest(headerRequest);
+			Assertions.assertEquals(400, headerRequestResult.getMarshaledResponse().getStatusCode(), "Unexpected status code for header test");
 		});
 	}
 }

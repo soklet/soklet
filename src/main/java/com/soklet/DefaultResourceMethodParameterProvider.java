@@ -55,6 +55,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.trimAggressively;
 import static com.soklet.Utilities.trimAggressivelyToNull;
@@ -629,6 +630,19 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		Object result;
 
 		if (returnMetadataInsteadOfValues) {
+			// Check for multiple values when parameter is not a List and fail-fast instead of just picking the first value
+			if (valuesMetadata.size() > 1) {
+				String valuesAsString = format("[%s]", valuesMetadata.stream()
+						.map(Objects::toString)
+						.collect(Collectors.joining(", ")));
+
+				throw illegalExceptionProvider.provide(
+						format("Multiple values specified for %s '%s' (but expected single value): %s",
+								parameterDescription, parameterName, valuesAsString),
+						new IllegalArgumentException("Multiple values provided for single-value parameter"),
+						parameterName, valuesAsString, Optional.empty());
+			}
+
 			result = valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null;
 
 			if (result != null) {
@@ -647,6 +661,17 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			if (required && result == null)
 				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", parameterDescription, parameterName), parameterName);
 		} else {
+			// Check for multiple values when parameter is not a List and fail-fast instead of just picking the first value
+			if (values.size() > 1) {
+				String valuesAsString = format("[%s]", String.join(", ", values));
+
+				throw illegalExceptionProvider.provide(
+						format("Multiple values specified for %s '%s' (but expected single value): %s",
+								parameterDescription, parameterName, valuesAsString),
+						new IllegalArgumentException("Multiple values provided for single-value parameter"),
+						parameterName, valuesAsString, Optional.empty());
+			}
+
 			String value = values.size() > 0 ? values.get(0) : null;
 
 			if (value != null && trimAggressively(value).length() == 0) value = null;
