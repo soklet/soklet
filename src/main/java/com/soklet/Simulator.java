@@ -32,9 +32,11 @@ import java.util.function.Consumer;
  *   // Build your configuration however you like
  *   SokletConfig config = obtainMySokletConfig();
  *
- *   // Instead of running on a real HTTP server that listens on a port,
- *   // a simulator is provided against which you can issue requests
- *   // and receive responses.
+ *   // Soklet provides a Simulator, which replaces your configured
+ *   // Server and ServerSentEventServer with mock instances
+ *   // that don't listen on network ports.
+ *   // You can issue requests and receive responses just like
+ *   // you would with real servers.
  *   Soklet.runSimulator(config, (simulator -> {
  *     // Construct a request.
  *     // You may alternatively specify query parameters directly in the URI
@@ -49,7 +51,7 @@ import java.util.function.Consumer;
  *     // Verify status code
  *     Integer expectedCode = 200;
  *     Integer actualCode = result.getMarshaledResponse().getStatusCode();
- *     Assert.assertEquals("Bad status code", expectedCode, actualCode);
+ *     assertEquals(expectedCode, actualCode, "Bad status code");
  *   }));
  * }}</pre>
  * <p>
