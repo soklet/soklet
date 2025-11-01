@@ -30,9 +30,11 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Encapsulates the results of a request (both logical response and bytes to be sent over the wire), useful for integration testing via {@link Simulator#performRequest(Request)}.
+ * Encapsulates the results of a request that would normally be handled by your standard HTTP server (both logical response and bytes to be sent over the wire), used for integration testing via {@link Simulator#performRequest(Request)}.
  * <p>
  * Instances can be acquired via the {@link #withMarshaledResponse(MarshaledResponse)} factory method.
+ * <p>
+ * The Server-Sent Event equivalent of this type is {@link ServerSentEventRequestResult}, which is used for integration testing via {@link Simulator#performServerSentEventRequest(Request)}.
  * <p>
  * See <a href="https://www.soklet.com/docs/testing#integration-testing">https://www.soklet.com/docs/testing#integration-testing</a> for detailed documentation.
  *
@@ -104,10 +106,12 @@ public final class RequestResult {
 		if (resourceMethod != null)
 			components.add(format("resourceMethod=%s", resourceMethod));
 
-		HandshakeResult handshakeResult = getHandshakeResult().orElse(null);
+		// Hide this for now because handshake info is package-private and we don't want it to leak out
 
-		if (handshakeResult != null)
-			components.add(format("handshakeResult=%s", handshakeResult));
+		// HandshakeResult handshakeResult = getHandshakeResult().orElse(null);
+
+		// if (handshakeResult != null)
+		//	components.add(format("handshakeResult=%s", handshakeResult));
 
 		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
 	}
@@ -179,7 +183,7 @@ public final class RequestResult {
 	 * @return the SSE handshake result
 	 */
 	@Nonnull
-	public Optional<HandshakeResult> getHandshakeResult() {
+	Optional<HandshakeResult> getHandshakeResult() {
 		return Optional.ofNullable(this.handshakeResult);
 	}
 
@@ -234,7 +238,7 @@ public final class RequestResult {
 		}
 
 		@Nonnull
-		public Builder handshakeResult(@Nullable HandshakeResult handshakeResult) {
+		Builder handshakeResult(@Nullable HandshakeResult handshakeResult) {
 			this.handshakeResult = handshakeResult;
 			return this;
 		}
@@ -293,7 +297,7 @@ public final class RequestResult {
 		}
 
 		@Nonnull
-		public Copier handshakeResult(@Nullable HandshakeResult handshakeResult) {
+		Copier handshakeResult(@Nullable HandshakeResult handshakeResult) {
 			this.builder.handshakeResult(handshakeResult);
 			return this;
 		}

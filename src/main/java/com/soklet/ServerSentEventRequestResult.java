@@ -36,12 +36,9 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 	/**
 	 * TODO: document
 	 */
-	interface ServerSentEventSourceConnection extends AutoCloseable {
-		// TODO: do we need the concept of "connected?"
-		// TODO: should we have a mechanism to register event and comment listeners here, or one level up?
-
+	interface ServerSentEventSourceConnection {
 		/**
-		 * Registers a {@link ServerSentEvent} "consumer" for this connection - similar to how a real client would listen for Server-Sent Events and comments.
+		 * Registers a {@link ServerSentEvent} "consumer" for this connection - similar to how a real client would listen for Server-Sent Events.
 		 * <p>
 		 * See documentation at <a href="https://www.soklet.com/docs/server-sent-events#testing">https://www.soklet.com/docs/server-sent-events#testing</a>.
 		 *
@@ -50,7 +47,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		void registerEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer);
 
 		/**
-		 * Registers a Server-Sent comment "consumer" for this connection - similar to how a real client would listen for Server-Sent Events and comments.
+		 * Registers a Server-Sent comment "consumer" for this connection - similar to how a real client would listen for Server-Sent comment payloads.
 		 * <p>
 		 * See documentation at <a href="https://www.soklet.com/docs/server-sent-events#testing">https://www.soklet.com/docs/server-sent-events#testing</a>.
 		 *
@@ -58,12 +55,14 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 */
 		void registerCommentConsumer(@Nonnull Consumer<String> commentConsumer);
 
-		@Nonnull
-		Boolean isConnected();
-
-		// Narrow AutoCloseable's "closed" to not throw a checked Exception to reduce unnecessary boilerplate
-		@Override
-		void close();
+		/**
+		 * Unregisters all consumers for this connection.
+		 * <p>
+		 * This is optional - consumers will be automatically cleaned up when the {@link Simulator} is destroyed.
+		 * <p>
+		 * Use this only if you need to explicitly stop receiving events on this connection before your simulation completes.
+		 */
+		void unregisterConsumers();
 	}
 
 	@ThreadSafe

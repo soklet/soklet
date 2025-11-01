@@ -92,31 +92,32 @@ public class ServerSentEventTests {
 			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
 
 			if (requestResult instanceof HandshakeAccepted handshakeAccepted) {
-				try (ServerSentEventSourceConnection connection = handshakeAccepted.getConnection()) {
-					// Listen for events
-					connection.registerEventConsumer((serverSentEvent) -> {
-						Assertions.assertEquals("example", serverSentEvent.getEvent().get(), "SSE event mismatch");
-					});
+				ServerSentEventSourceConnection connection = handshakeAccepted.getConnection();
+				// Listen for events
+				connection.registerEventConsumer((serverSentEvent) -> {
+					System.out.println("serverSentEvent: " + serverSentEvent);
+					Assertions.assertEquals("example", serverSentEvent.getEvent().get(), "SSE event mismatch");
+				});
 
-					// Listen for comments
-					connection.registerCommentConsumer((comment) -> {
-						// Nothing to do for now
-					});
+				// Listen for comments
+				connection.registerCommentConsumer((comment) -> {
+					// Nothing to do for now
+					System.out.println("comment: " + comment);
+				});
 
-					// Create a server-sent event...
-					ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
-							.data("data")
-							.id("abc")
-							.retry(Duration.ofSeconds(10))
-							.build();
+				// Create a server-sent event...
+				ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
+						.data("data")
+						.id("abc")
+						.retry(Duration.ofSeconds(10))
+						.build();
 
-					// ...and broadcast it to all /examples/abc listeners
-					ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.withPath("/examples/abc"));
-					broadcaster.broadcastEvent(serverSentEvent);
+				// ...and broadcast it to all /examples/abc listeners
+				ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.withPath("/examples/abc"));
+				broadcaster.broadcastEvent(serverSentEvent);
 
-					// Now try a comment
-					broadcaster.broadcastComment("just a test");
-				}
+				// Now try a comment
+				broadcaster.broadcastComment("just a test");
 			} else if (requestResult instanceof HandshakeRejected handshakeRejected) {
 				Assertions.fail("SSE handshake rejected: " + handshakeRejected);
 			} else if (requestResult instanceof RequestFailed requestFailed) {

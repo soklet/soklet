@@ -1186,8 +1186,6 @@ public final class Soklet implements AutoCloseable {
 			@Nonnull
 			private final DefaultSimulator simulator;
 			@Nonnull
-			private final AtomicBoolean connected;
-			@Nonnull
 			private final Set<Consumer<ServerSentEvent>> eventConsumers;
 			@Nonnull
 			private final Set<Consumer<String>> commentConsumers;
@@ -1204,7 +1202,6 @@ public final class Soklet implements AutoCloseable {
 				this.resourcePath = resourcePath;
 				this.requestResult = requestResult;
 				this.simulator = simulator;
-				this.connected = new AtomicBoolean(true);
 				this.eventConsumers = ConcurrentHashMap.newKeySet();
 				this.commentConsumers = ConcurrentHashMap.newKeySet();
 				this.lock = new ReentrantLock();
@@ -1214,17 +1211,15 @@ public final class Soklet implements AutoCloseable {
 			public void registerEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer) {
 				requireNonNull(eventConsumer);
 
-				lock.lock();
-				try {
-					if (!connected.get())
-						throw new IllegalStateException("Cannot register consumers on a closed connection");
+				getLock().lock();
 
+				try {
 					getEventConsumers().add(eventConsumer);
 
 					// Register with the mock SSE server broadcaster
 					getSimulator().getServerSentEventServer().registerEventConsumer(getResourcePath(), eventConsumer);
 				} finally {
-					lock.unlock();
+					getLock().unlock();
 				}
 			}
 
@@ -1232,66 +1227,34 @@ public final class Soklet implements AutoCloseable {
 			public void registerCommentConsumer(@Nonnull Consumer<String> commentConsumer) {
 				requireNonNull(commentConsumer);
 
-				lock.lock();
-				try {
-					if (!connected.get())
-						throw new IllegalStateException("Cannot register consumers on a closed connection");
+				getLock().lock();
 
+				try {
 					getCommentConsumers().add(commentConsumer);
 
 					// Register with the mock SSE server broadcaster
 					getSimulator().getServerSentEventServer().registerCommentConsumer(getResourcePath(), commentConsumer);
 				} finally {
-					lock.unlock();
+					getLock().unlock();
 				}
 			}
 
-			@Nonnull
 			@Override
-			public Boolean isConnected() {
-				return this.connected.get();
-			}
+			public void unregisterConsumers() {
+				getLock().lock();
 
-			@Override
-			public void close() {
-				lock.lock();
 				try {
-					if (!connected.compareAndSet(true, false))
-						return; // Already closed
-
-					// Unregister all consumers
-					for (Consumer<ServerSentEvent> eventConsumer : eventConsumers)
+					for (Consumer<ServerSentEvent> eventConsumer : getEventConsumers())
 						getSimulator().getServerSentEventServer().unregisterEventConsumer(getResourcePath(), eventConsumer);
 
-					for (Consumer<String> commentConsumer : commentConsumers)
+					for (Consumer<String> commentConsumer : getCommentConsumers())
 						getSimulator().getServerSentEventServer().unregisterCommentConsumer(getResourcePath(), commentConsumer);
 
-					eventConsumers.clear();
-					commentConsumers.clear();
+					getEventConsumers().clear();
+					getCommentConsumers().clear();
 				} finally {
-					lock.unlock();
+					getLock().unlock();
 				}
-			}
-
-			@Override
-			public String toString() {
-				return format("%s{isConnected=%s}", ServerSentEventSourceConnection.class.getSimpleName(), isConnected());
-			}
-
-			@Override
-			public boolean equals(@Nullable Object object) {
-				if (this == object)
-					return true;
-
-				if (!(object instanceof DefaultServerSentEventSourceConnection defaultServerSentEventSourceConnection))
-					return false;
-
-				return Objects.equals(isConnected(), defaultServerSentEventSourceConnection.isConnected());
-			}
-
-			@Override
-			public int hashCode() {
-				return Objects.hash(isConnected());
 			}
 
 			@Nonnull
@@ -1307,11 +1270,6 @@ public final class Soklet implements AutoCloseable {
 			@Nonnull
 			private DefaultSimulator getSimulator() {
 				return this.simulator;
-			}
-
-			@Nonnull
-			private AtomicBoolean getConnected() {
-				return this.connected;
 			}
 
 			@Nonnull
