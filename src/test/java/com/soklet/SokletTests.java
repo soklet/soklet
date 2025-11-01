@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -641,5 +642,29 @@ public class SokletTests {
 		public String upload(@Multipart(name = "field1", optional = true) MultipartField field) {
 			return "ok";
 		}
+	}
+
+	@NotThreadSafe
+	public static class DuplicateValueResource {
+		@GET("/query")
+		public void query(@QueryParameter String singleOnly) {
+			// Nothing to do
+		}
+	}
+
+	@Test
+	public void duplicateValueTests() {
+		SokletConfig config = SokletConfig.withServer(Server.withPort(8080).build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(DuplicateValueResource.class)))
+				.build();
+
+		Soklet.runSimulator(config, simulator -> {
+			Request request = Request.with(HttpMethod.GET, "/query?singleOnly=one&singleOnly=two")
+					.build();
+
+			RequestResult requestResult = simulator.performRequest(request);
+			System.out.println(requestResult);
+			Assertions.assertEquals(422, requestResult.getMarshaledResponse().getStatusCode(), "Unexpected status code");
+		});
 	}
 }

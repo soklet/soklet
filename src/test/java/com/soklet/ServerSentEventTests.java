@@ -80,7 +80,7 @@ public class ServerSentEventTests {
 	}
 
 	@Test
-	public void serverSentEventServerSimulator() throws InterruptedException {
+	public void serverSentEventServerSimulator() {
 		SokletConfig configuration = SokletConfig.withServer(Server.withPort(8080).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
