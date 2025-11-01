@@ -19,7 +19,11 @@ package com.soklet;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 import static java.lang.String.format;
@@ -33,10 +37,79 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public sealed interface ServerSentEventRequestResult permits ServerSentEventRequestResult.HandshakeAccepted, ServerSentEventRequestResult.HandshakeRejected, ServerSentEventRequestResult.RequestFailed {
-	/**
-	 * TODO: document
-	 */
-	interface ServerSentEventSourceConnection {
+	@ThreadSafe
+	final class HandshakeAccepted implements ServerSentEventRequestResult {
+		@Nonnull
+		private final HandshakeResult.Accepted handshakeResult;
+		@Nonnull
+		private final ResourcePath resourcePath;
+		@Nonnull
+		private final RequestResult requestResult;
+		@Nonnull
+		private final Soklet.DefaultSimulator simulator;
+		@Nonnull
+		private List<ServerSentEvent> clientInitializerEvents;
+		@Nonnull
+		private List<String> clientInitializerComments;
+		@Nonnull
+		private final ReentrantLock lock;
+		@Nullable
+		private Consumer<ServerSentEvent> eventConsumer;
+		@Nullable
+		private Consumer<String> commentConsumer;
+
+		HandshakeAccepted(@Nonnull HandshakeResult.Accepted handshakeResult,
+											@Nonnull ResourcePath resourcePath,
+											@Nonnull RequestResult requestResult,
+											@Nonnull Soklet.DefaultSimulator simulator,
+											@Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
+			requireNonNull(handshakeResult);
+			requireNonNull(resourcePath);
+			requireNonNull(requestResult);
+			requireNonNull(simulator);
+
+			this.handshakeResult = handshakeResult;
+			this.resourcePath = resourcePath;
+			this.requestResult = requestResult;
+			this.simulator = simulator;
+			this.eventConsumer = null;
+			this.commentConsumer = null;
+			this.lock = new ReentrantLock();
+
+			this.clientInitializerEvents = new CopyOnWriteArrayList<>();
+			this.clientInitializerComments = new CopyOnWriteArrayList<>();
+
+			if (clientInitializer != null) {
+				clientInitializer.accept(new Soklet.MockServerSentEventUnicaster(
+						getResourcePath(),
+						(serverSentEvent) -> {
+							requireNonNull(serverSentEvent);
+
+							// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
+							// If we do have the event consumer registered, send immediately
+							Consumer<ServerSentEvent> eventConsumer = getEventConsumer().orElse(null);
+
+							if (eventConsumer == null)
+								clientInitializerEvents.add(serverSentEvent);
+							else
+								eventConsumer.accept(serverSentEvent);
+						},
+						(comment) -> {
+							requireNonNull(comment);
+
+							// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
+							// If we do have the event consumer registered, send immediately
+							Consumer<String> commentConsumer = getCommentConsumer().orElse(null);
+
+							if (commentConsumer == null)
+								clientInitializerComments.add(comment);
+							else
+								commentConsumer.accept(comment);
+						})
+				);
+			}
+		}
+
 		/**
 		 * Registers a {@link ServerSentEvent} "consumer" for this connection - similar to how a real client would listen for Server-Sent Events.
 		 * <p>
@@ -47,7 +120,27 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 * @param eventConsumer function to be invoked when a Server-Sent Event has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 event consumer
 		 */
-		void registerEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer);
+		public void registerEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer) {
+			requireNonNull(eventConsumer);
+
+			getLock().lock();
+
+			try {
+				if (getEventConsumer().isPresent())
+					throw new IllegalStateException(format("You cannot specify more than one event consumer for the same %s", HandshakeAccepted.class.getSimpleName()));
+
+				this.eventConsumer = eventConsumer;
+
+				// Send client initializer unicast events immediately, before any broadcasts can make it through
+				for (ServerSentEvent event : getClientInitializerEvents())
+					eventConsumer.accept(event);
+
+				// Register with the mock SSE server broadcaster
+				getSimulator().getServerSentEventServer().registerEventConsumer(getResourcePath(), eventConsumer);
+			} finally {
+				getLock().unlock();
+			}
+		}
 
 		/**
 		 * Registers a Server-Sent comment "consumer" for this connection - similar to how a real client would listen for Server-Sent comment payloads.
@@ -59,23 +152,40 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 * @param commentConsumer function to be invoked when a Server-Sent comment has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 comment consumer
 		 */
-		void registerCommentConsumer(@Nonnull Consumer<String> commentConsumer);
-	}
+		public void registerCommentConsumer(@Nonnull Consumer<String> commentConsumer) {
+			requireNonNull(commentConsumer);
 
-	@ThreadSafe
-	final class HandshakeAccepted implements ServerSentEventRequestResult {
-		@Nonnull
-		private final HandshakeResult.Accepted handshakeResult;
-		@Nonnull
-		private final ServerSentEventSourceConnection connection;
+			getLock().lock();
 
-		HandshakeAccepted(@Nonnull HandshakeResult.Accepted handshakeResult,
-											@Nonnull ServerSentEventSourceConnection connection) {
-			requireNonNull(handshakeResult);
-			requireNonNull(connection);
+			try {
+				if (getCommentConsumer().isPresent())
+					throw new IllegalStateException(format("You cannot specify more than one comment consumer for the same %s", HandshakeAccepted.class.getSimpleName()));
 
-			this.handshakeResult = handshakeResult;
-			this.connection = connection;
+				this.commentConsumer = commentConsumer;
+
+				// Send client initializer unicast comments immediately, before any broadcasts can make it through
+				for (String comment : getClientInitializerComments())
+					commentConsumer.accept(comment);
+
+				// Register with the mock SSE server broadcaster
+				getSimulator().getServerSentEventServer().registerCommentConsumer(getResourcePath(), commentConsumer);
+			} finally {
+				getLock().unlock();
+			}
+		}
+
+		void unregisterConsumers() {
+			getLock().lock();
+
+			try {
+				getEventConsumer().ifPresent((eventConsumer ->
+						getSimulator().getServerSentEventServer().unregisterEventConsumer(getResourcePath(), eventConsumer)));
+
+				getCommentConsumer().ifPresent((commentConsumer ->
+						getSimulator().getServerSentEventServer().unregisterCommentConsumer(getResourcePath(), commentConsumer)));
+			} finally {
+				getLock().unlock();
+			}
 		}
 
 		@Nonnull
@@ -83,31 +193,49 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			return this.handshakeResult;
 		}
 
-		@Nonnull
-		public ServerSentEventSourceConnection getConnection() {
-			return this.connection;
-		}
-
 		@Override
 		public String toString() {
-			return format("%s{handshakeResult=%s, connection=%s}", HandshakeAccepted.class.getSimpleName(), getHandshakeResult(), getConnection());
+			return format("%s{handshakeResult=%s}", HandshakeAccepted.class.getSimpleName(), getHandshakeResult());
 		}
 
-		@Override
-		public boolean equals(@Nullable Object object) {
-			if (this == object)
-				return true;
-
-			if (!(object instanceof HandshakeAccepted handshakeAccepted))
-				return false;
-
-			return Objects.equals(getHandshakeResult(), handshakeAccepted.getHandshakeResult())
-					&& Objects.equals(getConnection(), handshakeAccepted.getConnection());
+		@Nonnull
+		private ResourcePath getResourcePath() {
+			return this.resourcePath;
 		}
 
-		@Override
-		public int hashCode() {
-			return Objects.hash(getHandshakeResult(), getConnection());
+		@Nonnull
+		private RequestResult getRequestResult() {
+			return this.requestResult;
+		}
+
+		@Nonnull
+		private Soklet.DefaultSimulator getSimulator() {
+			return this.simulator;
+		}
+
+		@Nonnull
+		private List<ServerSentEvent> getClientInitializerEvents() {
+			return this.clientInitializerEvents;
+		}
+
+		@Nonnull
+		private List<String> getClientInitializerComments() {
+			return this.clientInitializerComments;
+		}
+
+		@Nonnull
+		private Optional<Consumer<ServerSentEvent>> getEventConsumer() {
+			return Optional.ofNullable(this.eventConsumer);
+		}
+
+		@Nonnull
+		private Optional<Consumer<String>> getCommentConsumer() {
+			return Optional.ofNullable(this.commentConsumer);
+		}
+
+		@Nonnull
+		private ReentrantLock getLock() {
+			return this.lock;
 		}
 	}
 

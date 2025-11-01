@@ -19,7 +19,6 @@ package com.soklet;
 import com.soklet.ServerSentEventRequestResult.HandshakeAccepted;
 import com.soklet.ServerSentEventRequestResult.HandshakeRejected;
 import com.soklet.ServerSentEventRequestResult.RequestFailed;
-import com.soklet.ServerSentEventRequestResult.ServerSentEventSourceConnection;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.ServerSentEventSource;
@@ -86,23 +85,21 @@ public class ServerSentEventTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
 
+		List<ServerSentEvent> events = new ArrayList<>();
+		List<String> comments = new ArrayList<>();
+
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Perform initial handshake with /examples/abc and verify 200 response
 			Request request = Request.with(HttpMethod.GET, "/examples/abc").build();
 			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
 
 			if (requestResult instanceof HandshakeAccepted handshakeAccepted) {
-				ServerSentEventSourceConnection connection = handshakeAccepted.getConnection();
-				// Listen for events
-				connection.registerEventConsumer((serverSentEvent) -> {
-					System.out.println("serverSentEvent: " + serverSentEvent);
-					//Assertions.assertEquals("example", serverSentEvent.getEvent().get(), "SSE event mismatch");
+				handshakeAccepted.registerEventConsumer((event) -> {
+					events.add(event);
 				});
 
-				// Listen for comments
-				connection.registerCommentConsumer((comment) -> {
-					// Nothing to do for now
-					System.out.println("comment: " + comment);
+				handshakeAccepted.registerCommentConsumer((comment) -> {
+					comments.add(comment);
 				});
 
 				// Create a server-sent event...
@@ -127,6 +124,13 @@ public class ServerSentEventTests {
 				throw new IllegalStateException(format("Unexpected SSE result: %s", requestResult.getClass()));
 			}
 		}));
+
+		Assertions.assertEquals(2, events.size(), "Wrong number of events");
+		Assertions.assertEquals(2, comments.size(), "Wrong number of comments");
+		Assertions.assertEquals("unicast", events.get(0).getData().get(), "Unexpected unicast event data");
+		Assertions.assertEquals("data", events.get(1).getData().get(), "Unexpected broadcast event data");
+		Assertions.assertEquals("Unicast comment", comments.get(0), "Unexpected unicast comment");
+		Assertions.assertEquals("just a test", comments.get(1), "Unexpected broadcast comment");
 	}
 
 	@ThreadSafe

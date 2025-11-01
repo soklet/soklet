@@ -18,7 +18,6 @@ package com.soklet;
 
 import com.soklet.ServerSentEventRequestResult.HandshakeAccepted;
 import com.soklet.ServerSentEventRequestResult.HandshakeRejected;
-import com.soklet.ServerSentEventRequestResult.ServerSentEventSourceConnection;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -43,7 +42,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1159,7 +1157,7 @@ public final class Soklet implements AutoCloseable {
 
 			if (handshakeResult instanceof HandshakeResult.Accepted acceptedHandshake) {
 				Consumer<ServerSentEventUnicaster> clientInitializer = acceptedHandshake.getClientInitializer().orElse(null);
-				HandshakeAccepted handshakeAccepted = new HandshakeAccepted(acceptedHandshake, new DefaultServerSentEventSourceConnection(request.getResourcePath(), requestResult, this, clientInitializer));
+				HandshakeAccepted handshakeAccepted = new HandshakeAccepted(acceptedHandshake, request.getResourcePath(), requestResult, this, clientInitializer);
 				return handshakeAccepted;
 			}
 
@@ -1167,175 +1165,6 @@ public final class Soklet implements AutoCloseable {
 				return new HandshakeRejected(rejectedHandshake, requestResult);
 
 			throw new IllegalStateException(format("Encountered unexpected %s: %s", HandshakeResult.class.getSimpleName(), handshakeResult));
-		}
-
-		@ThreadSafe
-		static class DefaultServerSentEventSourceConnection implements ServerSentEventSourceConnection {
-			@Nonnull
-			private final ResourcePath resourcePath;
-			@Nonnull
-			private final RequestResult requestResult;
-			@Nonnull
-			private final DefaultSimulator simulator;
-			@Nonnull
-			private List<ServerSentEvent> clientInitializerEvents;
-			@Nonnull
-			private List<String> clientInitializerComments;
-			@Nonnull
-			private final ReentrantLock lock;
-			@Nullable
-			private Consumer<ServerSentEvent> eventConsumer;
-			@Nullable
-			private Consumer<String> commentConsumer;
-
-			DefaultServerSentEventSourceConnection(@Nonnull ResourcePath resourcePath,
-																						 @Nonnull RequestResult requestResult,
-																						 @Nonnull DefaultSimulator simulator,
-																						 @Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
-				requireNonNull(resourcePath);
-				requireNonNull(requestResult);
-				requireNonNull(simulator);
-
-				this.resourcePath = resourcePath;
-				this.requestResult = requestResult;
-				this.simulator = simulator;
-				this.eventConsumer = null;
-				this.commentConsumer = null;
-				this.lock = new ReentrantLock();
-
-				this.clientInitializerEvents = new CopyOnWriteArrayList<>();
-				this.clientInitializerComments = new CopyOnWriteArrayList<>();
-
-				if (clientInitializer != null) {
-					clientInitializer.accept(new MockServerSentEventUnicaster(
-							getResourcePath(),
-							(serverSentEvent) -> {
-								requireNonNull(serverSentEvent);
-
-								// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
-								// If we do have the event consumer registered, send immediately
-								Consumer<ServerSentEvent> eventConsumer = getEventConsumer().orElse(null);
-
-								if (eventConsumer == null)
-									clientInitializerEvents.add(serverSentEvent);
-								else
-									eventConsumer.accept(serverSentEvent);
-							},
-							(comment) -> {
-								requireNonNull(comment);
-
-								// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
-								// If we do have the event consumer registered, send immediately
-								Consumer<String> commentConsumer = getCommentConsumer().orElse(null);
-
-								if (commentConsumer == null)
-									clientInitializerComments.add(comment);
-								else
-									commentConsumer.accept(comment);
-							})
-					);
-				}
-			}
-
-			@Override
-			public void registerEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer) {
-				requireNonNull(eventConsumer);
-
-				getLock().lock();
-
-				try {
-					if (getEventConsumer().isPresent())
-						throw new IllegalStateException(format("You cannot specify more than one event consumer for the same %s", ServerSentEventSourceConnection.class.getSimpleName()));
-
-					this.eventConsumer = eventConsumer;
-
-					// Send client initializer unicast events immediately, before any broadcasts can make it through
-					for (ServerSentEvent event : getClientInitializerEvents())
-						eventConsumer.accept(event);
-
-					// Register with the mock SSE server broadcaster
-					getSimulator().getServerSentEventServer().registerEventConsumer(getResourcePath(), eventConsumer);
-				} finally {
-					getLock().unlock();
-				}
-			}
-
-			@Override
-			public void registerCommentConsumer(@Nonnull Consumer<String> commentConsumer) {
-				requireNonNull(commentConsumer);
-
-				getLock().lock();
-
-				try {
-					if (getCommentConsumer().isPresent())
-						throw new IllegalStateException(format("You cannot specify more than one comment consumer for the same %s", ServerSentEventSourceConnection.class.getSimpleName()));
-
-					this.commentConsumer = commentConsumer;
-
-					// Send client initializer unicast comments immediately, before any broadcasts can make it through
-					for (String comment : getClientInitializerComments())
-						commentConsumer.accept(comment);
-
-					// Register with the mock SSE server broadcaster
-					getSimulator().getServerSentEventServer().registerCommentConsumer(getResourcePath(), commentConsumer);
-				} finally {
-					getLock().unlock();
-				}
-			}
-
-			public void unregisterConsumers() {
-				getLock().lock();
-
-				try {
-					getEventConsumer().ifPresent((eventConsumer ->
-							getSimulator().getServerSentEventServer().unregisterEventConsumer(getResourcePath(), eventConsumer)));
-
-					getCommentConsumer().ifPresent((commentConsumer ->
-							getSimulator().getServerSentEventServer().unregisterCommentConsumer(getResourcePath(), commentConsumer)));
-				} finally {
-					getLock().unlock();
-				}
-			}
-
-			@Nonnull
-			private ResourcePath getResourcePath() {
-				return this.resourcePath;
-			}
-
-			@Nonnull
-			private RequestResult getRequestResult() {
-				return this.requestResult;
-			}
-
-			@Nonnull
-			private DefaultSimulator getSimulator() {
-				return this.simulator;
-			}
-
-			@Nonnull
-			private List<ServerSentEvent> getClientInitializerEvents() {
-				return this.clientInitializerEvents;
-			}
-
-			@Nonnull
-			private List<String> getClientInitializerComments() {
-				return this.clientInitializerComments;
-			}
-
-			@Nonnull
-			private Optional<Consumer<ServerSentEvent>> getEventConsumer() {
-				return Optional.ofNullable(this.eventConsumer);
-			}
-
-			@Nonnull
-			private Optional<Consumer<String>> getCommentConsumer() {
-				return Optional.ofNullable(this.commentConsumer);
-			}
-
-			@Nonnull
-			private ReentrantLock getLock() {
-				return this.lock;
-			}
 		}
 
 		@Nonnull
