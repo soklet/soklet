@@ -20,6 +20,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -38,6 +39,24 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 	interface ServerSentEventSourceConnection extends AutoCloseable {
 		// TODO: do we need the concept of "connected?"
 		// TODO: should we have a mechanism to register event and comment listeners here, or one level up?
+
+		/**
+		 * Registers a {@link ServerSentEvent} "consumer" for this connection - similar to how a real client would listen for Server-Sent Events and comments.
+		 * <p>
+		 * See documentation at <a href="https://www.soklet.com/docs/server-sent-events#testing">https://www.soklet.com/docs/server-sent-events#testing</a>.
+		 *
+		 * @param eventConsumer function to be invoked when a Server-Sent Event has been unicast/broadcast on the Resource Path
+		 */
+		void registerEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer);
+
+		/**
+		 * Registers a Server-Sent comment "consumer" for this connection - similar to how a real client would listen for Server-Sent Events and comments.
+		 * <p>
+		 * See documentation at <a href="https://www.soklet.com/docs/server-sent-events#testing">https://www.soklet.com/docs/server-sent-events#testing</a>.
+		 *
+		 * @param commentConsumer function to be invoked when a Server-Sent comment has been unicast/broadcast on the Resource Path
+		 */
+		void registerCommentConsumer(@Nonnull Consumer<String> commentConsumer);
 
 		@Nonnull
 		Boolean isConnected();

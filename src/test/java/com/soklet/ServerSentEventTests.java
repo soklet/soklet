@@ -65,20 +65,24 @@ public class ServerSentEventTests {
 				.build();
 
 		Soklet.runSimulator(configuration, (simulator -> {
-			simulator.registerServerSentEventConsumers(ResourcePath.withPath("/examples/abc"),
-					(serverSentEvent) -> {
-						Assertions.assertEquals("example", serverSentEvent.getEvent().get(), "SSE event mismatch");
-					},
-					(comment) -> {
-						// Nothing to do for now
-					});
-
 			// Perform initial handshake with /examples/abc and verify 200 response
 			Request request = Request.with(HttpMethod.GET, "/examples/abc").build();
 			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
 
 			if (requestResult instanceof HandshakeAccepted handshakeAccepted) {
 				try (ServerSentEventSourceConnection connection = handshakeAccepted.getConnection()) {
+					// Listen for events
+					connection.registerEventConsumer((serverSentEvent) -> {
+						System.out.println(serverSentEvent);
+						Assertions.assertEquals("example", serverSentEvent.getEvent().get(), "SSE event mismatch");
+					});
+
+					// Listen for comments
+					connection.registerCommentConsumer((comment) -> {
+						// Nothing to do for now
+						System.out.println(comment);
+					});
+
 					// Create a server-sent event...
 					ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
 							.data("data")
@@ -89,6 +93,9 @@ public class ServerSentEventTests {
 					// ...and broadcast it to all /examples/abc listeners
 					ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.withPath("/examples/abc"));
 					broadcaster.broadcastEvent(serverSentEvent);
+
+					// Now try a comment
+					broadcaster.broadcastComment("just a test");
 				}
 			} else if (requestResult instanceof HandshakeRejected handshakeRejected) {
 				Assertions.fail("SSE handshake rejected: " + handshakeRejected);
@@ -106,7 +113,15 @@ public class ServerSentEventTests {
 		@ServerSentEventSource("/examples/{exampleId}")
 		public HandshakeResult exampleServerSentEventSource(@Nonnull Request request,
 																												@Nonnull @PathParameter String exampleId) {
-			return HandshakeResult.accept();
+			return HandshakeResult.acceptWithDefaults()
+					.clientInitializer(unicaster -> {
+						unicaster.unicastComment("Unicast comment");
+						unicaster.unicastEvent(ServerSentEvent.withEvent("initial")
+								.data("unicast")
+								.build()
+						);
+					})
+					.build();
 		}
 	}
 
