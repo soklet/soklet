@@ -43,6 +43,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1157,17 +1158,8 @@ public final class Soklet implements AutoCloseable {
 				return new ServerSentEventRequestResult.RequestFailed(requestResult);
 
 			if (handshakeResult instanceof HandshakeResult.Accepted acceptedHandshake) {
-				HandshakeAccepted handshakeAccepted = new HandshakeAccepted(acceptedHandshake, new DefaultServerSentEventSourceConnection(request.getResourcePath(), requestResult, this));
-
 				Consumer<ServerSentEventUnicaster> clientInitializer = acceptedHandshake.getClientInitializer().orElse(null);
-
-				if (clientInitializer != null)
-					clientInitializer.accept(new MockServerSentEventUnicaster(
-							request.getResourcePath(),
-							(serverSentEvent) -> {},
-							(comment) -> {})
-					);
-
+				HandshakeAccepted handshakeAccepted = new HandshakeAccepted(acceptedHandshake, new DefaultServerSentEventSourceConnection(request.getResourcePath(), requestResult, this, clientInitializer));
 				return handshakeAccepted;
 			}
 
@@ -1186,6 +1178,10 @@ public final class Soklet implements AutoCloseable {
 			@Nonnull
 			private final DefaultSimulator simulator;
 			@Nonnull
+			private List<ServerSentEvent> clientInitializerEvents;
+			@Nonnull
+			private List<String> clientInitializerComments;
+			@Nonnull
 			private final Set<Consumer<ServerSentEvent>> eventConsumers;
 			@Nonnull
 			private final Set<Consumer<String>> commentConsumers;
@@ -1194,7 +1190,8 @@ public final class Soklet implements AutoCloseable {
 
 			DefaultServerSentEventSourceConnection(@Nonnull ResourcePath resourcePath,
 																						 @Nonnull RequestResult requestResult,
-																						 @Nonnull DefaultSimulator simulator) {
+																						 @Nonnull DefaultSimulator simulator,
+																						 @Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
 				requireNonNull(resourcePath);
 				requireNonNull(requestResult);
 				requireNonNull(simulator);
@@ -1205,6 +1202,23 @@ public final class Soklet implements AutoCloseable {
 				this.eventConsumers = ConcurrentHashMap.newKeySet();
 				this.commentConsumers = ConcurrentHashMap.newKeySet();
 				this.lock = new ReentrantLock();
+
+				this.clientInitializerEvents = new CopyOnWriteArrayList<>();
+				this.clientInitializerComments = new CopyOnWriteArrayList<>();
+
+				if (clientInitializer != null) {
+					clientInitializer.accept(new MockServerSentEventUnicaster(
+							getResourcePath(),
+							(serverSentEvent) -> {
+								requireNonNull(serverSentEvent);
+								clientInitializerEvents.add(serverSentEvent);
+							},
+							(comment) -> {
+								requireNonNull(comment);
+								clientInitializerComments.add(comment);
+							})
+					);
+				}
 			}
 
 			@Override
@@ -1215,6 +1229,10 @@ public final class Soklet implements AutoCloseable {
 
 				try {
 					getEventConsumers().add(eventConsumer);
+
+					// Send client initializer unicast events immediately, before any broadcasts can make it through
+					for (ServerSentEvent event : getClientInitializerEvents())
+						eventConsumer.accept(event);
 
 					// Register with the mock SSE server broadcaster
 					getSimulator().getServerSentEventServer().registerEventConsumer(getResourcePath(), eventConsumer);
@@ -1231,6 +1249,10 @@ public final class Soklet implements AutoCloseable {
 
 				try {
 					getCommentConsumers().add(commentConsumer);
+
+					// Send client initializer unicast comments immediately, before any broadcasts can make it through
+					for (String comment : getClientInitializerComments())
+						commentConsumer.accept(comment);
 
 					// Register with the mock SSE server broadcaster
 					getSimulator().getServerSentEventServer().registerCommentConsumer(getResourcePath(), commentConsumer);
@@ -1270,6 +1292,16 @@ public final class Soklet implements AutoCloseable {
 			@Nonnull
 			private DefaultSimulator getSimulator() {
 				return this.simulator;
+			}
+
+			@Nonnull
+			private List<ServerSentEvent> getClientInitializerEvents() {
+				return this.clientInitializerEvents;
+			}
+
+			@Nonnull
+			private List<String> getClientInitializerComments() {
+				return this.clientInitializerComments;
 			}
 
 			@Nonnull
