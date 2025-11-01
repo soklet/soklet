@@ -1182,11 +1182,11 @@ public final class Soklet implements AutoCloseable {
 			@Nonnull
 			private List<String> clientInitializerComments;
 			@Nonnull
-			private final Set<Consumer<ServerSentEvent>> eventConsumers;
-			@Nonnull
-			private final Set<Consumer<String>> commentConsumers;
-			@Nonnull
 			private final ReentrantLock lock;
+			@Nullable
+			private Consumer<ServerSentEvent> eventConsumer;
+			@Nullable
+			private Consumer<String> commentConsumer;
 
 			DefaultServerSentEventSourceConnection(@Nonnull ResourcePath resourcePath,
 																						 @Nonnull RequestResult requestResult,
@@ -1199,8 +1199,8 @@ public final class Soklet implements AutoCloseable {
 				this.resourcePath = resourcePath;
 				this.requestResult = requestResult;
 				this.simulator = simulator;
-				this.eventConsumers = ConcurrentHashMap.newKeySet();
-				this.commentConsumers = ConcurrentHashMap.newKeySet();
+				this.eventConsumer = null;
+				this.commentConsumer = null;
 				this.lock = new ReentrantLock();
 
 				this.clientInitializerEvents = new CopyOnWriteArrayList<>();
@@ -1211,11 +1211,27 @@ public final class Soklet implements AutoCloseable {
 							getResourcePath(),
 							(serverSentEvent) -> {
 								requireNonNull(serverSentEvent);
-								clientInitializerEvents.add(serverSentEvent);
+
+								// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
+								// If we do have the event consumer registered, send immediately
+								Consumer<ServerSentEvent> eventConsumer = getEventConsumer().orElse(null);
+
+								if (eventConsumer == null)
+									clientInitializerEvents.add(serverSentEvent);
+								else
+									eventConsumer.accept(serverSentEvent);
 							},
 							(comment) -> {
 								requireNonNull(comment);
-								clientInitializerComments.add(comment);
+
+								// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
+								// If we do have the event consumer registered, send immediately
+								Consumer<String> commentConsumer = getCommentConsumer().orElse(null);
+
+								if (commentConsumer == null)
+									clientInitializerComments.add(comment);
+								else
+									commentConsumer.accept(comment);
 							})
 					);
 				}
@@ -1228,7 +1244,10 @@ public final class Soklet implements AutoCloseable {
 				getLock().lock();
 
 				try {
-					getEventConsumers().add(eventConsumer);
+					if (getEventConsumer().isPresent())
+						throw new IllegalStateException(format("You cannot specify more than one event consumer for the same %s", ServerSentEventSourceConnection.class.getSimpleName()));
+
+					this.eventConsumer = eventConsumer;
 
 					// Send client initializer unicast events immediately, before any broadcasts can make it through
 					for (ServerSentEvent event : getClientInitializerEvents())
@@ -1248,7 +1267,10 @@ public final class Soklet implements AutoCloseable {
 				getLock().lock();
 
 				try {
-					getCommentConsumers().add(commentConsumer);
+					if (getCommentConsumer().isPresent())
+						throw new IllegalStateException(format("You cannot specify more than one comment consumer for the same %s", ServerSentEventSourceConnection.class.getSimpleName()));
+
+					this.commentConsumer = commentConsumer;
 
 					// Send client initializer unicast comments immediately, before any broadcasts can make it through
 					for (String comment : getClientInitializerComments())
@@ -1261,19 +1283,15 @@ public final class Soklet implements AutoCloseable {
 				}
 			}
 
-			@Override
 			public void unregisterConsumers() {
 				getLock().lock();
 
 				try {
-					for (Consumer<ServerSentEvent> eventConsumer : getEventConsumers())
-						getSimulator().getServerSentEventServer().unregisterEventConsumer(getResourcePath(), eventConsumer);
+					getEventConsumer().ifPresent((eventConsumer ->
+							getSimulator().getServerSentEventServer().unregisterEventConsumer(getResourcePath(), eventConsumer)));
 
-					for (Consumer<String> commentConsumer : getCommentConsumers())
-						getSimulator().getServerSentEventServer().unregisterCommentConsumer(getResourcePath(), commentConsumer);
-
-					getEventConsumers().clear();
-					getCommentConsumers().clear();
+					getCommentConsumer().ifPresent((commentConsumer ->
+							getSimulator().getServerSentEventServer().unregisterCommentConsumer(getResourcePath(), commentConsumer)));
 				} finally {
 					getLock().unlock();
 				}
@@ -1305,13 +1323,13 @@ public final class Soklet implements AutoCloseable {
 			}
 
 			@Nonnull
-			private Set<Consumer<ServerSentEvent>> getEventConsumers() {
-				return this.eventConsumers;
+			private Optional<Consumer<ServerSentEvent>> getEventConsumer() {
+				return Optional.ofNullable(this.eventConsumer);
 			}
 
 			@Nonnull
-			private Set<Consumer<String>> getCommentConsumers() {
-				return this.commentConsumers;
+			private Optional<Consumer<String>> getCommentConsumer() {
+				return Optional.ofNullable(this.commentConsumer);
 			}
 
 			@Nonnull
