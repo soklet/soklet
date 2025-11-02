@@ -81,13 +81,18 @@ public interface Simulator {
 	ServerSentEventRequestResult performServerSentEventRequest(@Nonnull Request request);
 
 	/**
-	 * Acquires a Server-Sent Event broadcaster for the given {@link ResourcePath}.
-	 * <p>
-	 * See documentation at <a href="https://www.soklet.com/docs/server-sent-events#testing">https://www.soklet.com/docs/server-sent-events#testing</a>.
+	 * TODO: document
 	 *
-	 * @param resourcePath the Resource Path on which to broadcast Server-Sent Events
-	 * @return a Server-Sent Event broadcaster
+	 * @return TODO
 	 */
 	@Nonnull
-	ServerSentEventBroadcaster acquireServerSentEventBroadcaster(@Nonnull ResourcePath resourcePath);
+	Server getServer();
+
+	/**
+	 * TODO: document
+	 *
+	 * @return TODO
+	 */
+	@Nonnull
+	ServerSentEventServer getServerSentEventServer();
 }

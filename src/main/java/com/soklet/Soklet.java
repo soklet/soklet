@@ -1169,21 +1169,13 @@ public final class Soklet implements AutoCloseable {
 
 		@Nonnull
 		@Override
-		public ServerSentEventBroadcaster acquireServerSentEventBroadcaster(@Nonnull ResourcePath resourcePath) {
-			requireNonNull(resourcePath);
-
-			// Delegate to the mock SSE server.
-			// We know the mock will always provide us with a broadcaster, so it's safe to immediately "get" the result
-			return getServerSentEventServer().acquireBroadcaster(resourcePath).get();
-		}
-
-		@Nullable
-		protected MockServer getServer() {
+		public MockServer getServer() {
 			return this.server;
 		}
 
-		@Nullable
-		protected MockServerSentEventServer getServerSentEventServer() {
+		@Nonnull
+		@Override
+		public MockServerSentEventServer getServerSentEventServer() {
 			return this.serverSentEventServer;
 		}
 	}

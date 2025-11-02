@@ -128,7 +128,7 @@ public class ServerSentEventTests {
 						.build();
 
 				// ...and broadcast it to all /examples/abc listeners
-				ServerSentEventBroadcaster broadcaster = simulator.acquireServerSentEventBroadcaster(ResourcePath.withPath("/examples/abc"));
+				ServerSentEventBroadcaster broadcaster = simulator.getServerSentEventServer().acquireBroadcaster(ResourcePath.withPath("/examples/abc")).get();
 				broadcaster.broadcastEvent(serverSentEvent);
 
 				// Now try a comment
