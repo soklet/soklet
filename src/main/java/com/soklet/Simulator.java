@@ -37,7 +37,7 @@ import java.util.function.Consumer;
  *   // that don't listen on network ports.
  *   // You can issue requests and receive responses just like
  *   // you would with real servers.
- *   Soklet.runSimulator(config, (simulator -> {
+ *   Soklet.runSimulator(config, (simulator) -> {
  *     // Construct a request.
  *     // You may alternatively specify query parameters directly in the URI
  *     // as a query string, e.g. "/hello?name=Mark"
@@ -52,7 +52,7 @@ import java.util.function.Consumer;
  *     Integer expectedCode = 200;
  *     Integer actualCode = result.getMarshaledResponse().getStatusCode();
  *     assertEquals(expectedCode, actualCode, "Bad status code");
- *   }));
+ *   });
  * }}</pre>
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a>.
