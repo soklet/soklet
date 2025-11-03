@@ -756,7 +756,7 @@ public final class Request {
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
 			MultipartField firstMultipartField = getMultipartFields().get(name).stream().findFirst().get();
-			String valuesAsString = format("[%s]", ((Set<MultipartField>) e.getValues()).stream()
+			String valuesAsString = format("[%s]", e.getValues().stream()
 					.map(multipartField -> multipartField.toString())
 					.collect(Collectors.joining(", ")));
 
