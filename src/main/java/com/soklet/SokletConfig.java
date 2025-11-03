@@ -16,6 +16,8 @@
 
 package com.soklet;
 
+import com.soklet.Soklet.MockServer;
+import com.soklet.Soklet.MockServerSentEventServer;
 import com.soklet.converter.ValueConverterRegistry;
 
 import javax.annotation.Nonnull;
@@ -23,11 +25,15 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
+import java.util.function.Consumer;
 
+import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
  * Defines how a Soklet system is configured.
+ * <p>
+ * Threadsafe instances can be acquired via the {@link #withServer(Server)} and {@link #forSimulator()} builder factory methods.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -53,6 +59,8 @@ public final class SokletConfig {
 	private final Server server;
 	@Nullable
 	private final ServerSentEventServer serverSentEventServer;
+	@Nonnull
+	private Boolean forSimulator;
 
 	/**
 	 * Vends a configuration builder, primed with the given {@link Server}.
@@ -63,7 +71,17 @@ public final class SokletConfig {
 	@Nonnull
 	public static Builder withServer(@Nonnull Server server) {
 		requireNonNull(server);
-		return new Builder(server);
+		return new Builder(server, false);
+	}
+
+	/**
+	 * Vends a configuration builder designed for use with {@link Soklet#runSimulator(SokletConfig, Consumer)}, with simulated (non-network) implementations of {@link Server} and {@link ServerSentEventServer}.
+	 *
+	 * @return a builder for {@link SokletConfig} instances
+	 */
+	@Nonnull
+	public static Builder forSimulator() {
+		return new Builder(new MockServer(), true).serverSentEventServer(new MockServerSentEventServer());
 	}
 
 	protected SokletConfig(@Nonnull Builder builder) {
@@ -79,6 +97,7 @@ public final class SokletConfig {
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : LifecycleInterceptor.defaultInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : CorsAuthorizer.withRejectAllPolicy();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(this);
+		this.forSimulator = builder.forSimulator;
 	}
 
 	/**
@@ -191,10 +210,15 @@ public final class SokletConfig {
 		return Optional.ofNullable(this.serverSentEventServer);
 	}
 
+	@Nonnull
+	Boolean getForSimulator() {
+		return this.forSimulator;
+	}
+
 	/**
 	 * Builder used to construct instances of {@link SokletConfig}.
 	 * <p>
-	 * Instances are created by invoking {@link SokletConfig#withServer(Server)}.
+	 * Instances are created by invoking {@link SokletConfig#withServer(Server)} or {@link SokletConfig#forSimulator()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -222,16 +246,27 @@ public final class SokletConfig {
 		private LifecycleInterceptor lifecycleInterceptor;
 		@Nullable
 		private CorsAuthorizer corsAuthorizer;
+		@Nonnull
+		private final Boolean forSimulator;
 
 		@Nonnull
-		protected Builder(@Nonnull Server server) {
+		Builder(@Nonnull Server server,
+						@Nonnull Boolean forSimulator) {
 			requireNonNull(server);
+			requireNonNull(forSimulator);
+
 			this.server = server;
+			this.forSimulator = forSimulator;
 		}
 
 		@Nonnull
 		public Builder server(@Nonnull Server server) {
 			requireNonNull(server);
+
+			if (this.forSimulator && (server == null || !(server instanceof MockServer)))
+				throw new IllegalArgumentException(format("When using %s.forSimulator(), you cannot override the %s.",
+						SokletConfig.class.getSimpleName(), Server.class.getSimpleName()));
+
 			this.server = server;
 			return this;
 		}
@@ -239,6 +274,11 @@ public final class SokletConfig {
 		@Nonnull
 		public Builder serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
 			this.serverSentEventServer = serverSentEventServer;
+
+			if (this.forSimulator && (serverSentEventServer == null || !(serverSentEventServer instanceof MockServerSentEventServer)))
+				throw new IllegalArgumentException(format("When using %s.forSimulator(), you cannot override the %s.",
+						SokletConfig.class.getSimpleName(), ServerSentEventServer.class.getSimpleName()));
+
 			return this;
 		}
 
@@ -313,7 +353,7 @@ public final class SokletConfig {
 		Copier(@Nonnull SokletConfig sokletConfig) {
 			requireNonNull(sokletConfig);
 
-			this.builder = new Builder(sokletConfig.getServer())
+			this.builder = new Builder(sokletConfig.getServer(), sokletConfig.getForSimulator())
 					.serverSentEventServer(sokletConfig.getServerSentEventServer().orElse(null))
 					.instanceProvider(sokletConfig.getInstanceProvider())
 					.valueConverterRegistry(sokletConfig.valueConverterRegistry)
@@ -328,61 +368,61 @@ public final class SokletConfig {
 		@Nonnull
 		public Copier server(@Nonnull Server server) {
 			requireNonNull(server);
-			this.builder.server = server;
+			this.builder.server(server);
 			return this;
 		}
 
 		@Nonnull
 		public Copier serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
-			this.builder.serverSentEventServer = serverSentEventServer;
+			this.builder.serverSentEventServer(serverSentEventServer);
 			return this;
 		}
 
 		@Nonnull
 		public Copier instanceProvider(@Nullable InstanceProvider instanceProvider) {
-			this.builder.instanceProvider = instanceProvider;
+			this.builder.instanceProvider(instanceProvider);
 			return this;
 		}
 
 		@Nonnull
 		public Copier valueConverterRegistry(@Nullable ValueConverterRegistry valueConverterRegistry) {
-			this.builder.valueConverterRegistry = valueConverterRegistry;
+			this.builder.valueConverterRegistry(valueConverterRegistry);
 			return this;
 		}
 
 		@Nonnull
 		public Copier requestBodyMarshaler(@Nullable RequestBodyMarshaler requestBodyMarshaler) {
-			this.builder.requestBodyMarshaler = requestBodyMarshaler;
+			this.builder.requestBodyMarshaler(requestBodyMarshaler);
 			return this;
 		}
 
 		@Nonnull
 		public Copier resourceMethodResolver(@Nullable ResourceMethodResolver resourceMethodResolver) {
-			this.builder.resourceMethodResolver = resourceMethodResolver;
+			this.builder.resourceMethodResolver(resourceMethodResolver);
 			return this;
 		}
 
 		@Nonnull
 		public Copier resourceMethodParameterProvider(@Nullable ResourceMethodParameterProvider resourceMethodParameterProvider) {
-			this.builder.resourceMethodParameterProvider = resourceMethodParameterProvider;
+			this.builder.resourceMethodParameterProvider(resourceMethodParameterProvider);
 			return this;
 		}
 
 		@Nonnull
 		public Copier responseMarshaler(@Nullable ResponseMarshaler responseMarshaler) {
-			this.builder.responseMarshaler = responseMarshaler;
+			this.builder.responseMarshaler(responseMarshaler);
 			return this;
 		}
 
 		@Nonnull
 		public Copier lifecycleInterceptor(@Nullable LifecycleInterceptor lifecycleInterceptor) {
-			this.builder.lifecycleInterceptor = lifecycleInterceptor;
+			this.builder.lifecycleInterceptor(lifecycleInterceptor);
 			return this;
 		}
 
 		@Nonnull
 		public Copier corsAuthorizer(@Nullable CorsAuthorizer corsAuthorizer) {
-			this.builder.corsAuthorizer = corsAuthorizer;
+			this.builder.corsAuthorizer(corsAuthorizer);
 			return this;
 		}
 

@@ -1069,17 +1069,13 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(sokletConfig);
 		requireNonNull(simulatorConsumer);
 
-		MockServer server = new MockServer();
-		MockServerSentEventServer serverSentEventServer = new MockServerSentEventServer();
+		if (!sokletConfig.getForSimulator())
+			throw new IllegalArgumentException(format("To run the %s, you must provide a %s instance created with %s.forSimulator(). See documentation at https://www.soklet.com/docs/testing#integration-testing",
+					Simulator.class.getSimpleName(), SokletConfig.class.getSimpleName(), SokletConfig.class.getSimpleName()));
 
-		SokletConfig mockConfiguration = sokletConfig.copy()
-				.server(server)
-				.serverSentEventServer(serverSentEventServer)
-				.finish();
+		Simulator simulator = new DefaultSimulator((MockServer) sokletConfig.getServer(), (MockServerSentEventServer) sokletConfig.getServerSentEventServer().get());
 
-		Simulator simulator = new DefaultSimulator(server, serverSentEventServer);
-
-		try (Soklet soklet = Soklet.withConfig(mockConfiguration)) {
+		try (Soklet soklet = Soklet.withConfig(sokletConfig)) {
 			soklet.start();
 			simulatorConsumer.accept(simulator);
 		} catch (RuntimeException e) {

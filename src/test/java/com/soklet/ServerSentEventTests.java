@@ -81,7 +81,7 @@ public class ServerSentEventTests {
 
 	@Test
 	public void serverSentEventServerSimulator() {
-		SokletConfig configuration = SokletConfig.withServer(Server.withPort(8080).build())
+		SokletConfig configuration = SokletConfig.forSimulator()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
 
