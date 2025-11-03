@@ -107,7 +107,17 @@ public final class SokletConfig {
 	 */
 	@Nonnull
 	public Copier copy() {
-		return new Copier(this);
+		return new Copier(this, false);
+	}
+
+	/**
+	 * Vends a mutable copy of this instance's configuration which is suitable for use with {@link Soklet#runSimulator(SokletConfig, Consumer)}).
+	 *
+	 * @return a mutable copy of this instance's configuration
+	 */
+	@Nonnull
+	public Copier copyForSimulator() {
+		return new Copier(this, true);
 	}
 
 	/**
@@ -264,7 +274,7 @@ public final class SokletConfig {
 			requireNonNull(server);
 
 			if (this.forSimulator && (server == null || !(server instanceof MockServer)))
-				throw new IllegalArgumentException(format("When using %s.forSimulator(), you cannot override the %s.",
+				throw new IllegalArgumentException(format("When using %s.forSimulator(), you cannot specify the %s.",
 						SokletConfig.class.getSimpleName(), Server.class.getSimpleName()));
 
 			this.server = server;
@@ -276,7 +286,7 @@ public final class SokletConfig {
 			this.serverSentEventServer = serverSentEventServer;
 
 			if (this.forSimulator && (serverSentEventServer == null || !(serverSentEventServer instanceof MockServerSentEventServer)))
-				throw new IllegalArgumentException(format("When using %s.forSimulator(), you cannot override the %s.",
+				throw new IllegalArgumentException(format("When using %s.forSimulator(), you cannot specify the %s.",
 						SokletConfig.class.getSimpleName(), ServerSentEventServer.class.getSimpleName()));
 
 			return this;
@@ -350,11 +360,13 @@ public final class SokletConfig {
 		@Nonnull
 		private final Builder builder;
 
-		Copier(@Nonnull SokletConfig sokletConfig) {
+		Copier(@Nonnull SokletConfig sokletConfig,
+					 @Nonnull Boolean forSimulator) {
 			requireNonNull(sokletConfig);
+			requireNonNull(forSimulator);
 
-			this.builder = new Builder(sokletConfig.getServer(), sokletConfig.getForSimulator())
-					.serverSentEventServer(sokletConfig.getServerSentEventServer().orElse(null))
+			this.builder = new Builder(forSimulator ? new MockServer() : sokletConfig.getServer(), forSimulator)
+					.serverSentEventServer(forSimulator ? new MockServerSentEventServer() : sokletConfig.getServerSentEventServer().orElse(null))
 					.instanceProvider(sokletConfig.getInstanceProvider())
 					.valueConverterRegistry(sokletConfig.valueConverterRegistry)
 					.requestBodyMarshaler(sokletConfig.requestBodyMarshaler)
