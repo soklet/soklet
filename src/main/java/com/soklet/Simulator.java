@@ -79,20 +79,4 @@ public interface Simulator {
 	 */
 	@Nonnull
 	ServerSentEventRequestResult performServerSentEventRequest(@Nonnull Request request);
-
-	/**
-	 * TODO: document
-	 *
-	 * @return TODO
-	 */
-	@Nonnull
-	Server getServer();
-
-	/**
-	 * TODO: document
-	 *
-	 * @return TODO
-	 */
-	@Nonnull
-	ServerSentEventServer getServerSentEventServer();
 }

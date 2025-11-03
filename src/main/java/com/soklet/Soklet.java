@@ -1164,14 +1164,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Nonnull
-		@Override
-		public MockServer getServer() {
+		MockServer getServer() {
 			return this.server;
 		}
 
 		@Nonnull
-		@Override
-		public MockServerSentEventServer getServerSentEventServer() {
+		MockServerSentEventServer getServerSentEventServer() {
 			return this.serverSentEventServer;
 		}
 	}

@@ -16,6 +16,9 @@
 
 package com.soklet;
 
+import com.soklet.Soklet.DefaultSimulator;
+import com.soklet.Soklet.MockServerSentEventUnicaster;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -46,7 +49,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		@Nonnull
 		private final RequestResult requestResult;
 		@Nonnull
-		private final Soklet.DefaultSimulator simulator;
+		private final DefaultSimulator simulator;
 		@Nonnull
 		private List<ServerSentEvent> clientInitializerEvents;
 		@Nonnull
@@ -61,7 +64,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		HandshakeAccepted(@Nonnull HandshakeResult.Accepted handshakeResult,
 											@Nonnull ResourcePath resourcePath,
 											@Nonnull RequestResult requestResult,
-											@Nonnull Soklet.DefaultSimulator simulator,
+											@Nonnull DefaultSimulator simulator,
 											@Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
 			requireNonNull(handshakeResult);
 			requireNonNull(resourcePath);
@@ -80,7 +83,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			this.clientInitializerComments = new CopyOnWriteArrayList<>();
 
 			if (clientInitializer != null) {
-				clientInitializer.accept(new Soklet.MockServerSentEventUnicaster(
+				clientInitializer.accept(new MockServerSentEventUnicaster(
 						getResourcePath(),
 						(serverSentEvent) -> {
 							requireNonNull(serverSentEvent);
@@ -209,7 +212,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 
 		@Nonnull
-		private Soklet.DefaultSimulator getSimulator() {
+		private DefaultSimulator getSimulator() {
 			return this.simulator;
 		}
 
