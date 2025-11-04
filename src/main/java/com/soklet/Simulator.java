@@ -28,15 +28,18 @@ import java.util.function.Consumer;
  * <p>
  * Usage example:
  * <pre>{@code @Test
- * public void basicIntegrationTest() {
- *   // Build your configuration however you like
- *   SokletConfig config = obtainMySokletConfig();
- *
- *   // Soklet provides a Simulator, which replaces your configured
- *   // Server and ServerSentEventServer with mock instances
+ * public void basicIntegrationTest () {
+ *   // Take your normal SokletConfig and make a special
+ *   // copy of it that's suitable for use in Soklet's Simulator.
+ *   // This copy replaces your configured Server
+ *   // and ServerSentEventServer with mock instances
  *   // that don't listen on network ports.
- *   // You can issue requests and receive responses just like
- *   // you would with real servers.
+ *   SokletConfig config = obtainMySokletConfig()
+ *     .copyForSimulator()
+ *     .finish();
+ *
+ *   // With the Simulator, you can issue requests
+ *   // and receive responses just like you would with real servers.
  *   Soklet.runSimulator(config, (simulator) -> {
  *     // Construct a request.
  *     // You may alternatively specify query parameters directly in the URI
@@ -52,6 +55,47 @@ import java.util.function.Consumer;
  *     Integer expectedCode = 200;
  *     Integer actualCode = result.getMarshaledResponse().getStatusCode();
  *     assertEquals(expectedCode, actualCode, "Bad status code");
+ *
+ *     // Now, create a request for an SSE Event Source...
+ *     Request eventSourceRequest = Request.with(HttpMethod.GET, "/sse-test")
+ *         .queryParameters(Map.of("signingToken", Set.of("xxx")))
+ *         .build();
+ *
+ *     // ...and perform it and get a handle to the result.
+ *     ServerSentEventRequestResult eventSourceResult =
+ *       simulator.performServerSentEventRequest(eventSourceRequest);
+ *
+ *     // Single-shot latch; we'll wait until a Server-Sent Event comes through
+ *     CountDownLatch eventReceivedLatch = new CountDownLatch(1);
+ *
+ *     // The Simulator provides 3 logical outcomes for SSE connections:
+ *     // * Accepted Handshake (connection stays open)
+ *     // * Rejected Handshake (explicit rejection, connection closed)
+ *     // * Request Failed (implicit rejection, e.g. unexpected exception , connection closed)
+ *     switch (eventSourceResult) {
+ *       // Explicit Handshake Acceptance
+ *       case HandshakeAccepted handshakeAccepted -> {
+ *         handshakeAccepted.registerEventConsumer((event) -> {
+ *           // Server-Sent Event received: open the latch to end the test
+ *           eventReceivedLatch.countDown();
+ *         });
+ *       }
+ *
+ *       // Explicit Handshake Rejection
+ *       case HandshakeRejected handshakeRejected ->
+ *         Assertions.fail("SSE Handshake Rejected: " + handshakeRejected);
+ *
+ *       // Unexpected Error
+ *       case RequestFailed requestFailed ->
+ *         Assertions.fail("SSE Request Failed: " + requestFailed);
+ *     }
+ *
+ *     // Finally, wait a bit for the latch to open
+ *     try {
+ *       eventReceivedLatch.await(5, SECONDS);
+ *     } catch (InterruptedException e) {
+ *       Assertions.fail("Didn't receive a Server-Sent Event in time");
+ *     }
  *   });
  * }}</pre>
  * <p>
@@ -61,9 +105,9 @@ import java.util.function.Consumer;
  */
 public interface Simulator {
 	/**
-	 * Given a request that would normally be handled by your standard HTTP server, process it and return response data (both logical {@link Response}, if present, and the {@link MarshaledResponse} bytes to be sent over the wire) as well as the matching <em>Resource Method</em>, if available.
+	 * Given a request that would normally be handled by your standard {@link Server}, process it and return response data (both logical {@link Response}, if present, and the {@link MarshaledResponse} bytes to be sent over the wire) as well as the matching <em>Resource Method</em>, if available.
 	 * <p>
-	 * To make requests that would normally be handled by your Server-Sent Event server, use {@link #performServerSentEventRequest(Request)}.
+	 * To make requests that would normally be handled by your {@link ServerSentEventServer}, use {@link #performServerSentEventRequest(Request)}.
 	 *
 	 * @param request the standard HTTP request to process
 	 * @return the result (logical response, marshaled response, etc.) that corresponds to the request
@@ -72,10 +116,12 @@ public interface Simulator {
 	RequestResult performRequest(@Nonnull Request request);
 
 	/**
-	 * TODO: document
+	 * Given a request that would normally be handled by your {@link ServerSentEventServer} (that is, for a _Resource Method_ decorated with the {@link com.soklet.annotation.ServerSentEventSource} annotation), process it and return response data ({@link com.soklet.ServerSentEventRequestResult.HandshakeAccepted}, {@link com.soklet.ServerSentEventRequestResult.HandshakeRejected}, or {@link com.soklet.ServerSentEventRequestResult.RequestFailed});
+	 * <p>
+	 * To make requests that would normally be handled by your {@link Server}, use {@link #performRequest(Request)}.
 	 *
-	 * @param request TODO
-	 * @return TODO
+	 * @param request the server-sent event HTTP request to process
+	 * @return the result (handshake outcode, etc.) that corresponds to the request
 	 */
 	@Nonnull
 	ServerSentEventRequestResult performServerSentEventRequest(@Nonnull Request request);

@@ -111,7 +111,7 @@ public final class SokletConfig {
 	}
 
 	/**
-	 * Vends a mutable copy of this instance's configuration which is suitable for use with {@link Soklet#runSimulator(SokletConfig, Consumer)}).
+	 * Vends a mutable copy of this instance's configuration which is suitable for use with {@link Soklet#runSimulator(SokletConfig, Consumer)}.
 	 *
 	 * @return a mutable copy of this instance's configuration
 	 */
