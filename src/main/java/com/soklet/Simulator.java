@@ -71,7 +71,7 @@ import java.util.function.Consumer;
  *     // The Simulator provides 3 logical outcomes for SSE connections:
  *     // * Accepted Handshake (connection stays open)
  *     // * Rejected Handshake (explicit rejection, connection closed)
- *     // * Request Failed (implicit rejection, e.g. unexpected exception , connection closed)
+ *     // * Request Failed (implicit rejection, e.g. unexpected exception, connection closed)
  *     switch (eventSourceResult) {
  *       // Explicit Handshake Acceptance
  *       case HandshakeAccepted handshakeAccepted -> {
@@ -120,7 +120,7 @@ public interface Simulator {
 	 * <p>
 	 * To make requests that would normally be handled by your {@link Server}, use {@link #performRequest(Request)}.
 	 *
-	 * @param request the server-sent event HTTP request to process
+	 * @param request the Server-Sent Event HTTP request to process
 	 * @return the result (handshake outcode, etc.) that corresponds to the request
 	 */
 	@Nonnull

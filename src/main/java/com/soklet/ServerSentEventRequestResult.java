@@ -33,13 +33,20 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * TODO: document
+ * Sealed interface used by {@link Simulator#performServerSentEventRequest(Request)} during integration tests, which encapsulates the 3 logical outcomes for SSE connections: accepted handshake, rejected handshake, and general request failure.
  * <p>
  * See <a href="https://www.soklet.com/docs/testing#integration-testing">https://www.soklet.com/docs/testing#integration-testing</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public sealed interface ServerSentEventRequestResult permits ServerSentEventRequestResult.HandshakeAccepted, ServerSentEventRequestResult.HandshakeRejected, ServerSentEventRequestResult.RequestFailed {
+	/**
+	 * Represents the result of an SSE Accepted Handshake (connection stays open) when simulated by {@link Simulator#performServerSentEventRequest(Request)}.
+	 * <p>
+	 * The {@link #registerEventConsumer(Consumer)} and {@link #registerCommentConsumer(Consumer)} methods can be used to "listen" for Server-Sent Events and Comments, respectively.
+	 * <p>
+	 * The data provided when the handshake was accepted is available via {@link #getHandshakeResult()}.
+	 */
 	@ThreadSafe
 	final class HandshakeAccepted implements ServerSentEventRequestResult {
 		@Nonnull
@@ -191,9 +198,34 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			}
 		}
 
+		/**
+		 * Gets the data provided when the handshake was accepted by the {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em>.
+		 *
+		 * @return the data provided when the handshake was accepted
+		 */
 		@Nonnull
 		public HandshakeResult.Accepted getHandshakeResult() {
 			return this.handshakeResult;
+		}
+
+		/**
+		 * The {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em> that handled the request.
+		 *
+		 * @return the <em>Resource Method</em> that handled the request
+		 */
+		@Nonnull
+		public ResourceMethod getResourceMethod() {
+			return getRequestResult().getResourceMethod().get();
+		}
+
+		/**
+		 * The CORS preflight logical response, if applicable for the request.
+		 *
+		 * @return the CORS preflight logical response
+		 */
+		@Nonnull
+		public Optional<CorsPreflightResponse> getCorsPreflightResponse() {
+			return getRequestResult().getCorsPreflightResponse();
 		}
 
 		@Override
@@ -205,6 +237,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		private ResourcePath getResourcePath() {
 			return this.resourcePath;
 		}
+
 
 		@Nonnull
 		private RequestResult getRequestResult() {

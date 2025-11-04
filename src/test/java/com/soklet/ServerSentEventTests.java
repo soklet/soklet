@@ -120,7 +120,7 @@ public class ServerSentEventTests {
 					comments.add(comment);
 				});
 
-				// Create a server-sent event...
+				// Create a Server-Sent Event...
 				ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("example")
 						.data("data")
 						.id("abc")

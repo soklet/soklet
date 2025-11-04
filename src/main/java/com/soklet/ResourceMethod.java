@@ -51,7 +51,7 @@ public final class ResourceMethod {
 	 * @param httpMethod              an HTTP method
 	 * @param resourcePathDeclaration an HTTP path which might contain placeholders, e.g. {@code /example/{exampleId}}
 	 * @param method                  a Java method to invoke for the combination of HTTP method and resource path
-	 * @param serverSentEventSource   is this <em>Resource Method</em> configured as a server-sent event source?
+	 * @param serverSentEventSource   is this <em>Resource Method</em> configured as a Server-Sent Event source?
 	 * @return a <em>Resource Method</em> for the supplied components
 	 */
 	@Nonnull

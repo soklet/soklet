@@ -43,9 +43,7 @@ import static java.util.Objects.requireNonNull;
  * let eventSourceUrl =
  *   'https://sse.example.com/chats/123/event-source?signingToken=xxx';
  *
- * let eventSource = new EventSource(eventSourceUrl, {
- *   withCredentials: true
- * });
+ * let eventSource = new EventSource(eventSourceUrl);
  *
  * // Listen for Server-Sent Events
  * eventSource.addEventListener('chat-message', (e) => {
@@ -129,7 +127,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	}
 
 	/**
-	 * Type which indicates a successful server-sent event handshake.
+	 * Type which indicates a successful Server-Sent Event handshake.
 	 * <p>
 	 * A default, no-customization-permitted instance can be acquired via {@link #accept()} and a builder which enables customization can be acquired via {@link #acceptWithDefaults()}.
 	 * <p>
@@ -224,6 +222,10 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		}
 
 		@Nullable
+		private final Map<String, Set<String>> headers;
+		@Nullable
+		private final Set<ResponseCookie> cookies;
+		@Nullable
 		private final Consumer<ServerSentEventUnicaster> clientInitializer;
 		@Nonnull
 		private final MarshaledResponse marshaledResponse;
@@ -234,6 +236,10 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			// Don't need defensive copies b/c those happen downstream
 			Map<String, Set<String>> headers = builder.headers == null ? Map.of() : builder.headers;
 			Set<ResponseCookie> cookies = builder.cookies == null ? Set.of() : builder.cookies;
+
+			// Preserve the values provided at handshake acceptance time
+			this.headers = Collections.unmodifiableMap(headers);
+			this.cookies = Collections.unmodifiableSet(cookies);
 
 			LinkedCaseInsensitiveMap<Set<String>> finalHeaders = new LinkedCaseInsensitiveMap<>(DEFAULT_HEADERS.size() + headers.size());
 
@@ -257,7 +263,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		}
 
 		/**
-		 * The response to be sent over the wire for this accepted server-sent event handshake.
+		 * The final response to be sent over the wire for this accepted Server-Sent Event handshake.
 		 *
 		 * @return the response to be sent over the wire
 		 */
@@ -267,7 +273,27 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		}
 
 		/**
-		 * The client initialization function, if specified, for this accepted server-sent event handshake.
+		 * Returns the headers explicitly specified when this handshake was accepted (which may be different from the finalized map of headers sent to the client, accessible via {@link #getMarshaledResponse()}).
+		 *
+		 * @return the headers explicitly specified when this handshake was accepted
+		 */
+		@Nullable
+		public Map<String, Set<String>> getHeaders() {
+			return this.headers;
+		}
+
+		/**
+		 * Returns the cookies explicitly specified when this handshake was accepted (which may be different from the finalized set of cookies sent to the client, accessible via {@link #getMarshaledResponse()}).
+		 *
+		 * @return the cookies explicitly specified when this handshake was accepted
+		 */
+		@Nullable
+		public Set<ResponseCookie> getCookies() {
+			return this.cookies;
+		}
+
+		/**
+		 * The client initialization function, if specified, for this accepted Server-Sent Event handshake.
 		 *
 		 * @return the client initialization function, or {@link Optional#empty()} if none was specified
 		 */
@@ -301,7 +327,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	}
 
 	/**
-	 * Type which indicates a rejected server-sent event handshake.
+	 * Type which indicates a rejected Server-Sent Event handshake.
 	 * <p>
 	 * Instances can be acquired via the {@link HandshakeResult#rejectWithResponse(Response)} factory method.
 	 * <p>
