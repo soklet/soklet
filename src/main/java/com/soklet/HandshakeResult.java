@@ -24,6 +24,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -139,19 +140,8 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	final class Accepted implements HandshakeResult {
 		@Nonnull
 		static final Accepted DEFAULT_INSTANCE;
-		@Nonnull
-		static final Map<String, Set<String>> DEFAULT_HEADERS;
 
 		static {
-			// Generally speaking, we always want these headers for SSE streaming responses.
-			// Users can override if they think necessary
-			LinkedCaseInsensitiveMap<Set<String>> defaultHeaders = new LinkedCaseInsensitiveMap<>(4);
-			defaultHeaders.put("Content-Type", Set.of("text/event-stream; charset=UTF-8"));
-			defaultHeaders.put("Cache-Control", Set.of("no-cache", "no-transform"));
-			defaultHeaders.put("Connection", Set.of("keep-alive"));
-			defaultHeaders.put("X-Accel-Buffering", Set.of("no"));
-
-			DEFAULT_HEADERS = Collections.unmodifiableMap(defaultHeaders);
 			DEFAULT_INSTANCE = new Builder().build();
 		}
 
@@ -227,53 +217,21 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		private final Set<ResponseCookie> cookies;
 		@Nullable
 		private final Consumer<ServerSentEventUnicaster> clientInitializer;
-		@Nonnull
-		private final MarshaledResponse marshaledResponse;
 
 		private Accepted(@Nonnull Builder builder) {
 			requireNonNull(builder);
 
-			// Don't need defensive copies b/c those happen downstream
-			Map<String, Set<String>> headers = builder.headers == null ? Map.of() : builder.headers;
-			Set<ResponseCookie> cookies = builder.cookies == null ? Set.of() : builder.cookies;
+			// Defensive copies
+			Map<String, Set<String>> headers = builder.headers == null ? Map.of() : Collections.unmodifiableMap(new LinkedCaseInsensitiveMap<>(builder.headers));
+			Set<ResponseCookie> cookies = builder.cookies == null ? Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(builder.cookies));
 
-			// Preserve the values provided at handshake acceptance time
-			this.headers = Collections.unmodifiableMap(headers);
-			this.cookies = Collections.unmodifiableSet(cookies);
-
-			LinkedCaseInsensitiveMap<Set<String>> finalHeaders = new LinkedCaseInsensitiveMap<>(DEFAULT_HEADERS.size() + headers.size());
-
-			// Start with defaults
-			for (Map.Entry<String, Set<String>> e : DEFAULT_HEADERS.entrySet())
-				finalHeaders.put(e.getKey(), e.getValue()); // values already unmodifiable
-
-			// Overlay user-supplied headers (prefer user values on key collision)
-			for (Map.Entry<String, Set<String>> e : headers.entrySet()) {
-				// Defensively copy so callers can't mutate after construction
-				Set<String> values = e.getValue() == null ? Set.of() : Set.copyOf(e.getValue());
-				finalHeaders.put(e.getKey(), values);
-			}
-
-			this.marshaledResponse = MarshaledResponse.withStatusCode(200)
-					.headers(finalHeaders)
-					.cookies(cookies)
-					.build();
-
+			this.headers = headers;
+			this.cookies = cookies;
 			this.clientInitializer = builder.clientInitializer;
 		}
 
 		/**
-		 * The final response to be sent over the wire for this accepted Server-Sent Event handshake.
-		 *
-		 * @return the response to be sent over the wire
-		 */
-		@Nonnull
-		public MarshaledResponse getMarshaledResponse() {
-			return this.marshaledResponse;
-		}
-
-		/**
-		 * Returns the headers explicitly specified when this handshake was accepted (which may be different from the finalized map of headers sent to the client, accessible via {@link #getMarshaledResponse()}).
+		 * Returns the headers explicitly specified when this handshake was accepted (which may be different from the finalized map of headers sent to the client).
 		 *
 		 * @return the headers explicitly specified when this handshake was accepted
 		 */
@@ -283,7 +241,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		}
 
 		/**
-		 * Returns the cookies explicitly specified when this handshake was accepted (which may be different from the finalized set of cookies sent to the client, accessible via {@link #getMarshaledResponse()}).
+		 * Returns the cookies explicitly specified when this handshake was accepted (which may be different from the finalized map of headers sent to the client).
 		 *
 		 * @return the cookies explicitly specified when this handshake was accepted
 		 */
@@ -304,8 +262,8 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 
 		@Override
 		public String toString() {
-			return format("%s{marshaledResponse=%s, clientInitializer=%s}",
-					Accepted.class.getSimpleName(), getMarshaledResponse(), getClientInitializer().isPresent() ? "[specified]" : "[not specified]");
+			return format("%s{headers=%s, cookies=%s, clientInitializer=%s}",
+					Accepted.class.getSimpleName(), getHeaders(), getCookies(), getClientInitializer().isPresent() ? "[specified]" : "[not specified]");
 		}
 
 		@Override
@@ -316,13 +274,14 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			if (!(object instanceof Accepted accepted))
 				return false;
 
-			return Objects.equals(getMarshaledResponse(), accepted.getMarshaledResponse())
+			return Objects.equals(getHeaders(), accepted.getHeaders())
+					&& Objects.equals(getCookies(), accepted.getCookies())
 					&& Objects.equals(getClientInitializer(), accepted.getClientInitializer());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getMarshaledResponse(), getClientInitializer());
+			return Objects.hash(getHeaders(), getCookies(), getClientInitializer());
 		}
 	}
 

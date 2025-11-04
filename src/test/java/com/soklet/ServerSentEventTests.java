@@ -82,6 +82,7 @@ public class ServerSentEventTests {
 	@Test
 	public void serverSentEventServerSimulator() {
 		SokletConfig configuration = SokletConfig.forSimulator()
+				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://www.revetkn.com")))
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
 
@@ -90,13 +91,18 @@ public class ServerSentEventTests {
 
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Perform initial handshake with /examples/abc and verify 200 response
-			Request request = Request.with(HttpMethod.GET, "/examples/abc").build();
+			Request request = Request.with(HttpMethod.GET, "/examples/abc")
+					.headers(Map.of("Origin", Set.of("https://www.revetkn.com")))
+					.build();
+
 			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
 
 			if (requestResult instanceof HandshakeAccepted handshakeAccepted) {
-				// Verify the headers and cookies came through
-				MarshaledResponse marshaledResponse = handshakeAccepted.getHandshakeResult().getMarshaledResponse();
+				MarshaledResponse marshaledResponse = handshakeAccepted.getMarshaledResponse();
 
+				Assertions.assertEquals(200, marshaledResponse.getStatusCode(), "Unexpected HTTP status code for accepted handshake");
+
+				// Verify the headers and cookies came through
 				Set<String> headerValues = marshaledResponse.getHeaders().entrySet().stream()
 						.filter(entry -> entry.getKey().equals("X-Soklet-Example"))
 						.map(entry -> entry.getValue())
@@ -104,6 +110,9 @@ public class ServerSentEventTests {
 						.orElse(Set.of());
 
 				Assertions.assertEquals(Set.of("abc"), headerValues, "Unexpected X-Soklet-Example header value");
+
+				// Verify that CORS headers were applied
+				Assertions.assertEquals(Set.of("https://www.revetkn.com"), marshaledResponse.getHeaders().get("Access-Control-Allow-Origin"), "Unexpected Access-Control-Allow-Origin header value");
 
 				ResponseCookie testCookie = marshaledResponse.getCookies().stream()
 						.filter(responseCookie -> responseCookie.getName().equals("cookie-test"))

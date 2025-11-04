@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.ServerSentEventRequestResult.HandshakeAccepted;
 import com.soklet.ServerSentEventRequestResult.HandshakeRejected;
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -73,11 +74,19 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class Soklet implements AutoCloseable {
 	@Nonnull
-	private final SokletConfig sokletConfig;
-	@Nonnull
-	private final ReentrantLock lock;
-	@Nonnull
-	private final AtomicReference<CountDownLatch> awaitShutdownLatchReference;
+	private static final Map<String, Set<String>> DEFAULT_ACCEPTED_HANDSHAKE_HEADERS;
+
+	static {
+		// Generally speaking, we always want these headers for SSE streaming responses.
+		// Users can override if they think necessary
+		LinkedCaseInsensitiveMap<Set<String>> defaultAcceptedHandshakeHeaders = new LinkedCaseInsensitiveMap<>(4);
+		defaultAcceptedHandshakeHeaders.put("Content-Type", Set.of("text/event-stream; charset=UTF-8"));
+		defaultAcceptedHandshakeHeaders.put("Cache-Control", Set.of("no-cache", "no-transform"));
+		defaultAcceptedHandshakeHeaders.put("Connection", Set.of("keep-alive"));
+		defaultAcceptedHandshakeHeaders.put("X-Accel-Buffering", Set.of("no"));
+
+		DEFAULT_ACCEPTED_HANDSHAKE_HEADERS = Collections.unmodifiableMap(defaultAcceptedHandshakeHeaders);
+	}
 
 	/**
 	 * Acquires a Soklet instance with the given configuration.
@@ -90,6 +99,13 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(sokletConfig);
 		return new Soklet(sokletConfig);
 	}
+
+	@Nonnull
+	private final SokletConfig sokletConfig;
+	@Nonnull
+	private final ReentrantLock lock;
+	@Nonnull
+	private final AtomicReference<CountDownLatch> awaitShutdownLatchReference;
 
 	/**
 	 * Creates a Soklet instance with the given configuration.
@@ -889,7 +905,7 @@ public final class Soklet implements AutoCloseable {
 		} else if (responseObject instanceof Response) {
 			response = (Response) responseObject;
 		} else if (responseObject instanceof HandshakeResult.Accepted accepted) { // SSE "accepted" handshake
-			return RequestResult.withMarshaledResponse(accepted.getMarshaledResponse())
+			return RequestResult.withMarshaledResponse(toMarshaledResponse(accepted))
 					.resourceMethod(resourceMethod)
 					.handshakeResult(accepted)
 					.build();
@@ -906,6 +922,30 @@ public final class Soklet implements AutoCloseable {
 				.response(response)
 				.resourceMethod(resourceMethod)
 				.handshakeResult(handshakeResult)
+				.build();
+	}
+
+	@Nonnull
+	private MarshaledResponse toMarshaledResponse(@Nonnull HandshakeResult.Accepted accepted) {
+		requireNonNull(accepted);
+
+		Map<String, Set<String>> headers = accepted.getHeaders();
+		LinkedCaseInsensitiveMap<Set<String>> finalHeaders = new LinkedCaseInsensitiveMap<>(DEFAULT_ACCEPTED_HANDSHAKE_HEADERS.size() + headers.size());
+
+		// Start with defaults
+		for (Map.Entry<String, Set<String>> e : DEFAULT_ACCEPTED_HANDSHAKE_HEADERS.entrySet())
+			finalHeaders.put(e.getKey(), e.getValue()); // values already unmodifiable
+
+		// Overlay user-supplied headers (prefer user values on key collision)
+		for (Map.Entry<String, Set<String>> e : headers.entrySet()) {
+			// Defensively copy so callers can't mutate after construction
+			Set<String> values = e.getValue() == null ? Set.of() : Set.copyOf(e.getValue());
+			finalHeaders.put(e.getKey(), values);
+		}
+
+		return MarshaledResponse.withStatusCode(200)
+				.headers(finalHeaders)
+				.cookies(accepted.getCookies())
 				.build();
 	}
 

@@ -52,6 +52,8 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		@Nonnull
 		private final HandshakeResult.Accepted handshakeResult;
 		@Nonnull
+		private final MarshaledResponse marshaledResponse;
+		@Nonnull
 		private final ResourcePath resourcePath;
 		@Nonnull
 		private final RequestResult requestResult;
@@ -79,6 +81,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			requireNonNull(simulator);
 
 			this.handshakeResult = handshakeResult;
+			this.marshaledResponse = requestResult.getMarshaledResponse();
 			this.resourcePath = resourcePath;
 			this.requestResult = requestResult;
 			this.simulator = simulator;
@@ -216,6 +219,16 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		@Nonnull
 		public ResourceMethod getResourceMethod() {
 			return getRequestResult().getResourceMethod().get();
+		}
+
+		/**
+		 * The final representation of the response to be written over the wire.
+		 *
+		 * @return the response to be written over the wire
+		 */
+		@Nonnull
+		public MarshaledResponse getMarshaledResponse() {
+			return this.marshaledResponse;
 		}
 
 		/**
