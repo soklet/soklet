@@ -45,14 +45,12 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 	 * <p>
 	 * The {@link #registerEventConsumer(Consumer)} and {@link #registerCommentConsumer(Consumer)} methods can be used to "listen" for Server-Sent Events and Comments, respectively.
 	 * <p>
-	 * The data provided when the handshake was accepted is available via {@link #getHandshakeResult()}.
+	 * The data provided when the handshake was accepted is available via {@link #getHandshakeResult()}, and the final data sent to the client is available via {@link #getMarshaledResponse()}.
 	 */
 	@ThreadSafe
 	final class HandshakeAccepted implements ServerSentEventRequestResult {
 		@Nonnull
 		private final HandshakeResult.Accepted handshakeResult;
-		@Nonnull
-		private final MarshaledResponse marshaledResponse;
 		@Nonnull
 		private final ResourcePath resourcePath;
 		@Nonnull
@@ -81,7 +79,6 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			requireNonNull(simulator);
 
 			this.handshakeResult = handshakeResult;
-			this.marshaledResponse = requestResult.getMarshaledResponse();
 			this.resourcePath = resourcePath;
 			this.requestResult = requestResult;
 			this.simulator = simulator;
@@ -211,50 +208,19 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			return this.handshakeResult;
 		}
 
-		/**
-		 * The {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em> that handled the request.
-		 *
-		 * @return the <em>Resource Method</em> that handled the request
-		 */
-		@Nonnull
-		public ResourceMethod getResourceMethod() {
-			return getRequestResult().getResourceMethod().get();
-		}
-
-		/**
-		 * The final representation of the response to be written over the wire.
-		 *
-		 * @return the response to be written over the wire
-		 */
-		@Nonnull
-		public MarshaledResponse getMarshaledResponse() {
-			return this.marshaledResponse;
-		}
-
-		/**
-		 * The CORS preflight logical response, if applicable for the request.
-		 *
-		 * @return the CORS preflight logical response
-		 */
-		@Nonnull
-		public Optional<CorsPreflightResponse> getCorsPreflightResponse() {
-			return getRequestResult().getCorsPreflightResponse();
-		}
-
 		@Override
 		public String toString() {
 			return format("%s{handshakeResult=%s}", HandshakeAccepted.class.getSimpleName(), getHandshakeResult());
 		}
 
 		@Nonnull
-		private ResourcePath getResourcePath() {
-			return this.resourcePath;
+		public RequestResult getRequestResult() {
+			return this.requestResult;
 		}
 
-
 		@Nonnull
-		private RequestResult getRequestResult() {
-			return this.requestResult;
+		private ResourcePath getResourcePath() {
+			return this.resourcePath;
 		}
 
 		@Nonnull
@@ -288,6 +254,11 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 	}
 
+	/**
+	 * Represents the result of an SSE Rejected Handshake (explicit rejection; connection closed) when simulated by {@link Simulator#performServerSentEventRequest(Request)}.
+	 * <p>
+	 * The data provided when the handshake was accepted is available via {@link #getHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
+	 */
 	@ThreadSafe
 	final class HandshakeRejected implements ServerSentEventRequestResult {
 		@Nonnull

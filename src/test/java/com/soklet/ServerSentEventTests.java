@@ -98,7 +98,7 @@ public class ServerSentEventTests {
 			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
 
 			if (requestResult instanceof HandshakeAccepted handshakeAccepted) {
-				MarshaledResponse marshaledResponse = handshakeAccepted.getMarshaledResponse();
+				MarshaledResponse marshaledResponse = handshakeAccepted.getRequestResult().getMarshaledResponse();
 
 				Assertions.assertEquals(200, marshaledResponse.getStatusCode(), "Unexpected HTTP status code for accepted handshake");
 
