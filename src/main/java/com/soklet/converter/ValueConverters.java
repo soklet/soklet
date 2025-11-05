@@ -228,7 +228,17 @@ public final class ValueConverters {
 			if (from == null)
 				return Optional.empty();
 
-			return Optional.of(Boolean.parseBoolean(from));
+			boolean isTrue = "true".equalsIgnoreCase(from);
+
+			if (isTrue)
+				return Optional.of(true);
+
+			boolean isFalse = "false".equalsIgnoreCase(from);
+
+			if (isFalse)
+				return Optional.of(false);
+
+			throw new IllegalArgumentException(format("'%s' is not a valid boolean value", from));
 		}
 	}
 

@@ -104,6 +104,9 @@ final class DefaultMultipartParser implements MultipartParser {
 		if (boundary == null)
 			throw new IllegalRequestBodyException("Multipart request must include a non-empty 'boundary' parameter in Content-Type header");
 
+		if (boundary.length() > 70)
+			throw new IllegalRequestBodyException("Multipart request boundary exceeds maximum length of 70 (per RFC 2046)");
+
 		Map<String, Set<MultipartField>> multipartFieldsByName = new LinkedHashMap<>();
 
 		try (ByteArrayInputStream input = new ByteArrayInputStream(requestBody)) {
