@@ -45,7 +45,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 	 * <p>
 	 * The {@link #registerEventConsumer(Consumer)} and {@link #registerCommentConsumer(Consumer)} methods can be used to "listen" for Server-Sent Events and Comments, respectively.
 	 * <p>
-	 * The data provided when the handshake was accepted is available via {@link #getHandshakeResult()}, and the final data sent to the client is available via {@link #getMarshaledResponse()}.
+	 * The data provided when the handshake was accepted is available via {@link #getHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
 	 */
 	@ThreadSafe
 	final class HandshakeAccepted implements ServerSentEventRequestResult {
