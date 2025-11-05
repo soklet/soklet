@@ -1193,6 +1193,16 @@ public final class Soklet implements AutoCloseable {
 
 			if (handshakeResult instanceof HandshakeResult.Accepted acceptedHandshake) {
 				Consumer<ServerSentEventUnicaster> clientInitializer = acceptedHandshake.getClientInitializer().orElse(null);
+
+				// Create a synthetic logical response using values from the accepted handshake
+				if (requestResult.getResponse().isEmpty())
+					requestResult = requestResult.copy()
+							.response(Response.withStatusCode(200)
+									.headers(acceptedHandshake.getHeaders())
+									.cookies(acceptedHandshake.getCookies())
+									.build())
+							.finish();
+
 				HandshakeAccepted handshakeAccepted = new HandshakeAccepted(acceptedHandshake, request.getResourcePath(), requestResult, this, clientInitializer);
 				return handshakeAccepted;
 			}
