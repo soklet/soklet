@@ -452,7 +452,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				@Nonnull
 				public Thread newThread(@Nonnull Runnable runnable) {
 					requireNonNull(runnable);
-					return new Thread(runnable, "sse-connection-validator");
+					
+					Thread thread = new Thread(runnable, "sse-connection-validator");
+					thread.setDaemon(true);
+					return thread;
 				}
 			});
 
@@ -581,11 +584,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				long elapsed = NOW_IN_NANOS - previousCheck;
 
 				if (elapsed >= getHeartbeatInterval().toNanos()) {
-					// If the queue is full, skip the heartbeat until the next go-round
-					boolean enqueued = enqueueServerSentEvent(connection, SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK, EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS);
-
-					if (enqueued)
-						lastCheck.set(NOW_IN_NANOS);
+					// Use CAS to ensure only one thread enqueues the check
+					if (lastCheck.compareAndSet(previousCheck, NOW_IN_NANOS)) {
+						// If the queue is full, skip the heartbeat until the next go-round
+						enqueueServerSentEvent(connection, SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK, EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS);
+					}
 				}
 
 				// Early exit if we've processed enough
@@ -1462,7 +1465,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		} catch (ExecutionException e) {
 			if (readFuture != null)
 				readFuture.cancel(true);
-			
+
 			// The task itself threw an exception
 			if (e.getCause() instanceof IOException)
 				throw (IOException) e.getCause();
