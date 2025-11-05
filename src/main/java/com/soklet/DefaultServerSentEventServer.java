@@ -1453,10 +1453,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			throw new SocketTimeoutException(format("Reading request took longer than %d seconds", getRequestTimeout().getSeconds()));
 		} catch (InterruptedException e) {
+			if (readFuture != null)
+				readFuture.cancel(true);
+
 			// Current thread interrupted while waiting
 			Thread.currentThread().interrupt(); // restore interrupt status
 			throw new IOException("Interrupted while awaiting request data", e);
 		} catch (ExecutionException e) {
+			if (readFuture != null)
+				readFuture.cancel(true);
+			
 			// The task itself threw an exception
 			if (e.getCause() instanceof IOException)
 				throw (IOException) e.getCause();
