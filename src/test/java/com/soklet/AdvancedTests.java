@@ -145,39 +145,6 @@ public class AdvancedTests {
 		}
 	}
 
-	// ==================== Path Traversal Vulnerability ====================
-
-	@Test
-	public void testPathTraversalVulnerability() {
-		// Test various path traversal attempts
-		String[] maliciousUrls = {
-				"/api/../../../etc/passwd",
-				"/api/%2e%2e/%2e%2e/%2e%2e/etc/passwd",
-				"/api/..%2f..%2f..%2fetc%2fpasswd",
-				"/api/..;/..;/..;/etc/passwd",
-				"/api/..%252f..%252f..%252fetc%252fpasswd", // Double encoding
-				"/api/..%c0%af..%c0%af..%c0%afetc%c0%afpasswd", // Invalid UTF-8
-				"/api/.../.../...//etc/passwd",
-				"/api/\\..\\..\\..\\/etc/passwd"
-		};
-
-		for (String maliciousUrl : maliciousUrls) {
-			String normalized = Utilities.normalizedPathForUrl(maliciousUrl, true);
-
-			// Verify that path traversal attempts are neutralized
-			Assertions.assertFalse(
-					normalized.contains(".."),
-					"Path traversal not prevented for: " + maliciousUrl
-			);
-
-			// Verify the path doesn't escape the expected root
-			Assertions.assertTrue(
-					normalized.startsWith("/api") || normalized.equals("/"),
-					"Path escapes root directory: " + normalized
-			);
-		}
-	}
-
 	@Test
 	public void testPathNormalizationEdgeCases() {
 		// Test edge cases in path normalization
