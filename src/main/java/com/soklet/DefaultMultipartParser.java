@@ -47,6 +47,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.soklet.Utilities.trimAggressivelyToNull;
+import static java.lang.String.format;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -54,9 +55,12 @@ import static com.soklet.Utilities.trimAggressivelyToNull;
 @ThreadSafe
 final class DefaultMultipartParser implements MultipartParser {
 	@Nonnull
+	private static final Integer MAX_MULTIPART_FIELDS;
+	@Nonnull
 	private static final DefaultMultipartParser DEFAULT_INSTANCE;
 
 	static {
+		MAX_MULTIPART_FIELDS = 1_000;
 		DEFAULT_INSTANCE = new DefaultMultipartParser();
 	}
 
@@ -112,6 +116,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		try (ByteArrayInputStream input = new ByteArrayInputStream(requestBody)) {
 			MultipartStream multipartStream = new MultipartStream(input, boundary.getBytes(StandardCharsets.UTF_8), progressNotifier);
 
+			int fieldCount = 0;
 			boolean hasNext = multipartStream.skipPreamble();
 
 			while (hasNext) {
@@ -164,6 +169,9 @@ final class DefaultMultipartParser implements MultipartParser {
 				multipartFields.add(multipartField);
 
 				hasNext = multipartStream.readBoundary();
+
+				if (++fieldCount > MAX_MULTIPART_FIELDS)
+					throw new IllegalRequestBodyException(format("Too many multipart fields. Maximum allowed is %s", MAX_MULTIPART_FIELDS));
 			}
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
@@ -1167,7 +1175,7 @@ final class DefaultMultipartParser implements MultipartParser {
 					throw new MalformedStreamException("Stream ended unexpectedly");
 				}
 				if (++size > HEADER_PART_SIZE_MAX) {
-					throw new MalformedStreamException(String.format(
+					throw new MalformedStreamException(format(
 							"Header section has more than %s bytes (maybe it is not properly terminated)",
 							Integer.valueOf(HEADER_PART_SIZE_MAX)));
 				}

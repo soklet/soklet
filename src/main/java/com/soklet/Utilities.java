@@ -47,6 +47,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -70,6 +71,8 @@ public final class Utilities {
 	private static final Pattern HEAD_WHITESPACE_PATTERN;
 	@Nonnull
 	private static final Pattern TAIL_WHITESPACE_PATTERN;
+	@Nonnull
+	private static final Pattern HEADER_PERCENT_ENCODING_PATTERN;
 
 	static {
 		EMPTY_BYTE_ARRAY = new byte[0];
@@ -105,6 +108,8 @@ public final class Utilities {
 		// with user-supplied input.
 		HEAD_WHITESPACE_PATTERN = Pattern.compile("^(\\p{Z})+");
 		TAIL_WHITESPACE_PATTERN = Pattern.compile("(\\p{Z})+$");
+
+		HEADER_PERCENT_ENCODING_PATTERN = Pattern.compile("%([0-9A-Fa-f]{2})");
 	}
 
 	private Utilities() {
@@ -1207,6 +1212,18 @@ public final class Utilities {
 			char c = value.charAt(i);
 			if (c == '\r' || c == '\n' || c == 0x00 || (c >= 0x00 && c < 0x20 && c != '\t')) {
 				throw new IllegalArgumentException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", value, name, printableChar(c)));
+			}
+		}
+
+		// Percent-encoded control sequence checks
+		Matcher m = HEADER_PERCENT_ENCODING_PATTERN.matcher(value);
+		
+		while (m.find()) {
+			int b = Integer.parseInt(m.group(1), 16);
+			if (b == 0x0D || b == 0x0A || b == 0x00 || (b >= 0x00 && b < 0x20 && b != 0x09)) {
+				throw new IllegalArgumentException(format(
+						"Illegal (percent-encoded) header value '%s' for header name '%s'. Offending octet: 0x%02X",
+						value, name, b));
 			}
 		}
 	}
