@@ -452,7 +452,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				@Nonnull
 				public Thread newThread(@Nonnull Runnable runnable) {
 					requireNonNull(runnable);
-					
+
 					Thread thread = new Thread(runnable, "sse-connection-validator");
 					thread.setDaemon(true);
 					return thread;
@@ -1048,12 +1048,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			return ":\n\n";
 
 		return format("%s\n\n", lines.stream().collect(Collectors.joining("\n")));
-	}
-
-	@Nonnull
-	protected String debuggingString(@Nonnull Request request) {
-		requireNonNull(request);
-		return format("%s %s %s", request.getId(), request.getHttpMethod().name(), request.getUri());
 	}
 
 	@ThreadSafe
