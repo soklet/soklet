@@ -1110,8 +1110,8 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(simulatorConsumer);
 
 		if (!sokletConfig.getForSimulator())
-			throw new IllegalArgumentException(format("To run the %s, you must provide a %s instance created with %s.forSimulator(). See documentation at https://www.soklet.com/docs/testing#integration-testing",
-					Simulator.class.getSimpleName(), SokletConfig.class.getSimpleName(), SokletConfig.class.getSimpleName()));
+			throw new IllegalArgumentException(format("To run the %s, you must provide a %s instance created with %s.forSimulator() static factory method or copied via the %s.copyForSimulator() instance method. See documentation at https://www.soklet.com/docs/testing#integration-testing",
+					Simulator.class.getSimpleName(), SokletConfig.class.getSimpleName(), SokletConfig.class.getSimpleName(), SokletConfig.class.getSimpleName()));
 
 		Simulator simulator = new DefaultSimulator((MockServer) sokletConfig.getServer(), (MockServerSentEventServer) sokletConfig.getServerSentEventServer().get());
 
