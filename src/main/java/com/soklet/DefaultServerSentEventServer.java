@@ -1870,14 +1870,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (!connection.getClosing().compareAndSet(false, true))
 			return;
 
-		// Inform LifecycleInterceptor that we needed to close the connection
-		try {
-			BlockingQueue<WriteQueueElement> writeQueue = connection.getWriteQueue();
-			String message = format("Closing Server-Sent Event connection due to backpressure (write queue at capacity) while enqueuing %s. {resourcePath=%s, queueSize=%d, remainingCapacity=%d}",
-					cause, owner.getResourcePath(), writeQueue.size(), writeQueue.remainingCapacity());
-			// TODO: switch out log type/add method to LifecycleInterceptor
-			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, message).build());
-		} catch (Throwable ignored) { /* best-effort */ }
+		// TODO: future releases should propagate out typed information to LifecycleInterceptor::willTerminateServerSentEventConnection indicating why the connection was terminated (in this case, backpressure) - not just an exception
+		// String message = format("Closing Server-Sent Event connection due to backpressure (write queue at capacity) while enqueuing %s. {resourcePath=%s, queueSize=%d, remainingCapacity=%d}",
+		//					cause, owner.getResourcePath(), writeQueue.size(), writeQueue.remainingCapacity());
 
 		// Unregister from broadcaster (avoid enqueueing further)
 		try {
