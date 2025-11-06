@@ -139,6 +139,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttp500Response();
 	}
 
+	/**
+	 * Strategy/callback for handling backpressure on a single connection's write queue.
+	 * Implemented by the server; injected into broadcasters. Avoids a broadcaster holding a server reference explicitly.
+	 */
+	@FunctionalInterface
+	protected interface BackpressureHandler {
+		void onBackpressure(@Nonnull DefaultServerSentEventBroadcaster owner,
+												@Nonnull ServerSentEventConnection connection,
+												@Nonnull String cause);
+	}
+
 	@Nonnull
 	private final Integer port;
 	@Nonnull
@@ -202,6 +213,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final ResourcePath resourcePath;
 		@Nonnull
+		private final BackpressureHandler backpressureHandler;
+		@Nonnull
 		private final Consumer<ServerSentEventConnection> connectionUnregisteredListener;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@Nonnull
@@ -209,13 +222,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		public DefaultServerSentEventBroadcaster(@Nonnull ResourceMethod resourceMethod,
 																						 @Nonnull ResourcePath resourcePath,
+																						 @Nonnull BackpressureHandler backpressureHandler,
 																						 @Nonnull Consumer<ServerSentEventConnection> connectionUnregisteredListener) {
 			requireNonNull(resourceMethod);
 			requireNonNull(resourcePath);
+			requireNonNull(backpressureHandler);
 			requireNonNull(connectionUnregisteredListener);
 
 			this.resourceMethod = resourceMethod;
 			this.resourcePath = resourcePath;
+			this.backpressureHandler = backpressureHandler;
 			this.connectionUnregisteredListener = connectionUnregisteredListener;
 			// TODO: let clients specify capacity
 			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(256);
@@ -245,7 +261,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
-				enqueueServerSentEvent(serverSentEventConnection, serverSentEvent, EnqueueStrategy.DEFAULT);
+				enqueueServerSentEvent(this, serverSentEventConnection, serverSentEvent, EnqueueStrategy.DEFAULT, getBackpressureHandler());
 		}
 
 		@Override
@@ -255,7 +271,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
-				enqueueComment(serverSentEventConnection, comment);
+				enqueueComment(this, serverSentEventConnection, comment, getBackpressureHandler());
 		}
 
 		@Nonnull
@@ -283,7 +299,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				// If requested, send a poison pill so the socket thread gets terminated
 				if (sendPoisonPill)
-					enqueueServerSentEvent(serverSentEventConnection, SERVER_SENT_EVENT_POISON_PILL, EnqueueStrategy.DEFAULT);
+					enqueueServerSentEvent(this, serverSentEventConnection, SERVER_SENT_EVENT_POISON_PILL, EnqueueStrategy.DEFAULT, getBackpressureHandler());
 			}
 
 			return unregistered;
@@ -296,6 +312,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Snapshot list for consistency during unregister process
 			for (ServerSentEventConnection serverSentEventConnection : new ArrayList<>(getServerSentEventConnections()))
 				unregisterServerSentEventConnection(serverSentEventConnection, sendPoisonPill);
+		}
+
+		@Nonnull
+		protected BackpressureHandler getBackpressureHandler() {
+			return this.backpressureHandler;
 		}
 
 		@Nonnull
@@ -490,49 +511,57 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	private static Boolean enqueueServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
+	private static Boolean enqueueServerSentEvent(@Nonnull DefaultServerSentEventBroadcaster owner,
+																								@Nonnull ServerSentEventConnection connection,
 																								@Nonnull ServerSentEvent serverSentEvent,
-																								@Nonnull EnqueueStrategy enqueueStrategy) {
-		requireNonNull(serverSentEventConnection);
+																								@Nonnull EnqueueStrategy enqueueStrategy,
+																								@Nonnull BackpressureHandler handler) {
+		requireNonNull(owner);
+		requireNonNull(connection);
 		requireNonNull(serverSentEvent);
 		requireNonNull(enqueueStrategy);
+		requireNonNull(handler);
 
-		BlockingQueue<WriteQueueElement> writeQueue = serverSentEventConnection.getWriteQueue();
-		WriteQueueElement writeQueueElement = WriteQueueElement.withServerSentEvent(serverSentEvent);
+		BlockingQueue<WriteQueueElement> writeQueue = connection.getWriteQueue();
+		WriteQueueElement e = WriteQueueElement.withServerSentEvent(serverSentEvent);
 
 		if (enqueueStrategy == EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS)
-			return writeQueue.offer(writeQueueElement);
+			return writeQueue.offer(e);
 
-		// Try to add without blocking
-		if (writeQueue.offer(writeQueueElement))
+		if (writeQueue.offer(e))
 			return true;
 
-		// Queue is full - this is a critical backpressure situation. Drop oldest and retry
-		// TODO: maybe have this configurable?  e.g. DROP_OLDEST, DROP_NEWEST, FAIL, ...
-		@SuppressWarnings("unused")
-		WriteQueueElement dropped = writeQueue.poll();
-		boolean added = writeQueue.offer(writeQueueElement);
+		// Queue full — delegate to handler: log + close + unregister.
+		String cause = "event";
 
-		// This is a race condition - another thread filled the slot. We've now lost BOTH the old and new events
-		if (!added)
-			throw new IllegalStateException("Failed to enqueue event after removing oldest - queue capacity issue");
+		if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL)
+			cause = "poison-pill";
+		else if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK)
+			cause = "validity-check";
 
-		// Return false to indicate an event was dropped
+		handler.onBackpressure(owner, connection, cause);
+
 		return false;
 	}
 
-	private static void enqueueComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																		 @Nonnull String comment) {
-		requireNonNull(serverSentEventConnection);
+	@Nonnull
+	private static Boolean enqueueComment(@Nonnull DefaultServerSentEventBroadcaster owner,
+																				@Nonnull ServerSentEventConnection connection,
+																				@Nonnull String comment,
+																				@Nonnull BackpressureHandler handler) {
+		requireNonNull(owner);
+		requireNonNull(connection);
 		requireNonNull(comment);
+		requireNonNull(handler);
 
-		BlockingQueue<WriteQueueElement> writeQueue = serverSentEventConnection.getWriteQueue();
+		BlockingQueue<WriteQueueElement> writeQueue = connection.getWriteQueue();
 		WriteQueueElement writeQueueElement = WriteQueueElement.withComment(comment);
 
-		if (!writeQueue.offer(writeQueueElement)) {
-			writeQueue.poll();
-			writeQueue.offer(writeQueueElement);
-		}
+		if (writeQueue.offer(writeQueueElement))
+			return true;
+
+		handler.onBackpressure(owner, connection, "comment");
+		return false;
 	}
 
 	protected void performConnectionValidityTask() {
@@ -586,8 +615,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (elapsed >= getHeartbeatInterval().toNanos()) {
 					// Use CAS to ensure only one thread enqueues the check
 					if (lastCheck.compareAndSet(previousCheck, NOW_IN_NANOS)) {
-						// If the queue is full, skip the heartbeat until the next go-round
-						enqueueServerSentEvent(connection, SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK, EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS);
+						// If the queue is full, skip the heartbeat until the next go-round (no closure on heartbeat).
+						enqueueServerSentEvent(broadcaster, connection, SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK, EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS, broadcaster.getBackpressureHandler());
 					}
 				}
 
@@ -1062,6 +1091,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final Instant establishedAt;
 		@Nonnull
 		private final AtomicLong lastValidityCheckInNanos;
+		@Nonnull
+		private final SocketChannel socketChannel;
+		@Nonnull
+		private final AtomicBoolean closing;
 
 		@ThreadSafe
 		static final class WriteQueueElement {
@@ -1107,16 +1140,20 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		public ServerSentEventConnection(@Nonnull Request request,
 																		 @Nonnull ResourceMethod resourceMethod,
-																		 @Nonnull Integer connectionQueueCapacity) {
+																		 @Nonnull Integer connectionQueueCapacity,
+																		 @Nonnull SocketChannel socketChannel) {
 			requireNonNull(request);
 			requireNonNull(resourceMethod);
 			requireNonNull(connectionQueueCapacity);
+			requireNonNull(socketChannel);
 
 			this.request = request;
 			this.resourceMethod = resourceMethod;
 			this.writeQueue = new ArrayBlockingQueue<>(connectionQueueCapacity);
 			this.establishedAt = Instant.now();
 			this.lastValidityCheckInNanos = new AtomicLong(System.nanoTime());
+			this.socketChannel = socketChannel;
+			this.closing = new AtomicBoolean(false);
 		}
 
 		@Nonnull
@@ -1142,6 +1179,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public AtomicLong getLastValidityCheckInNanos() {
 			return this.lastValidityCheckInNanos;
+		}
+
+		@Nonnull
+		public SocketChannel getSocketChannel() {
+			return this.socketChannel;
+		}
+
+		@Nonnull
+		public AtomicBoolean getClosing() {
+			return this.closing;
 		}
 	}
 
@@ -1174,7 +1221,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			return Optional.empty();
 
 		// Create the connection and register it with the EventSource
-		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, resourceMethod, getConnectionQueueCapacity());
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, resourceMethod, getConnectionQueueCapacity(), clientSocketChannel);
 
 		// If a client initializer exists, hand it the unicaster to support Last-Event-ID "catch up" scenarios
 		ServerSentEventUnicaster serverSentEventUnicaster = new DefaultServerSentEventUnicaster(resourcePath, serverSentEventConnection.getWriteQueue());
@@ -1799,14 +1846,59 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(resourcePath);
 		requireNonNull(resourceMethod);
 
-		// Create the event source if it does not already exist
+		// Create the broadcaster if it does not already exist
 		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
-				.computeIfAbsent(resourcePath, (ignored) -> new DefaultServerSentEventBroadcaster(resourceMethod, resourcePath, (serverSentEventConnection -> {
-					// When the broadcaster unregisters a connection it manages, remove it from the global set of connections as well
-					getGlobalConnections().remove(serverSentEventConnection);
-				})));
+				.computeIfAbsent(resourcePath, (ignored) -> {
+					BackpressureHandler handler = (owner, connection, cause) -> closeConnectionDueToBackpressure(owner, connection, cause);
+					return new DefaultServerSentEventBroadcaster(resourceMethod, resourcePath, handler, (serverSentEventConnection -> {
+						// When the broadcaster unregisters a connection it manages, remove it from the global set of connections as well
+						getGlobalConnections().remove(serverSentEventConnection);
+					}));
+				});
 
 		return Optional.of(broadcaster);
+	}
+
+	protected void closeConnectionDueToBackpressure(@Nonnull DefaultServerSentEventBroadcaster owner,
+																									@Nonnull ServerSentEventConnection connection,
+																									@Nonnull String cause) {
+		requireNonNull(owner);
+		requireNonNull(connection);
+		requireNonNull(cause);
+
+		// Ensure only once
+		if (!connection.getClosing().compareAndSet(false, true))
+			return;
+
+		// Inform LifecycleInterceptor that we needed to close the connection
+		try {
+			BlockingQueue<WriteQueueElement> writeQueue = connection.getWriteQueue();
+			String message = format("Closing Server-Sent Event connection due to backpressure (write queue at capacity) while enqueuing %s. {resourcePath=%s, queueSize=%d, remainingCapacity=%d}",
+					cause, owner.getResourcePath(), writeQueue.size(), writeQueue.remainingCapacity());
+			// TODO: switch out log type/add method to LifecycleInterceptor
+			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, message).build());
+		} catch (Throwable ignored) { /* best-effort */ }
+
+		// Unregister from broadcaster (avoid enqueueing further)
+		try {
+			owner.unregisterServerSentEventConnection(connection, false);
+		} catch (Throwable ignored) { /* best-effort */ }
+
+		// Best effort to wake the consumer loop
+		try {
+			BlockingQueue<WriteQueueElement> writeQueue = connection.getWriteQueue();
+			writeQueue.clear();
+			writeQueue.offer(WriteQueueElement.withServerSentEvent(SERVER_SENT_EVENT_POISON_PILL));
+		} catch (Throwable ignored) { /* best-effort */ }
+
+		// Force-close the channel to break any pending I/O
+		try {
+			SocketChannel socketChannel = connection.getSocketChannel();
+
+			if (socketChannel != null)
+				socketChannel.close();
+
+		} catch (Throwable ignored) { /* channel may already be closed */ }
 	}
 
 	@Nonnull
