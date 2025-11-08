@@ -102,6 +102,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Integer DEFAULT_RESOURCE_PATH_CACHE_CAPACITY;
 	@Nonnull
+	private static final Boolean DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
+	@Nonnull
 	private static final Integer HEARTBEAT_BATCH_SIZE;
 	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK;
@@ -121,6 +123,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
 		DEFAULT_BROADCASTER_CACHE_CAPACITY = 1_024;
 		DEFAULT_RESOURCE_PATH_CACHE_CAPACITY = 8_192;
+		DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED = true;
 		HEARTBEAT_BATCH_SIZE = 1_000;
 
 		// Make a unique "validity check" server-sent event used to wake a socket listener thread by injecting it into the relevant write queue.
@@ -163,6 +166,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final Integer maximumRequestSizeInBytes;
 	@Nonnull
 	private final Integer requestReadBufferSizeInBytes;
+	@Nonnull
+	private final Boolean verifyConnectionOnceEstablished;
 	@Nonnull
 	private final ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
 	@Nonnull
@@ -340,6 +345,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
+		this.verifyConnectionOnceEstablished = builder.verifyConnectionOnceEstablished != null ? builder.verifyConnectionOnceEstablished : DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.heartbeatInterval = builder.heartbeatInterval != null ? builder.heartbeatInterval : DEFAULT_HEARTBEAT_INTERVAL;
@@ -1249,9 +1255,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (clientInitializer != null)
 			clientInitializer.accept(serverSentEventUnicaster);
 
-		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection
-		// TODO: enable this
-		//serverSentEventConnection.getWriteQueue().offer(WriteQueueElement.withComment(""));
+		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection if configured to do so
+		if (getVerifyConnectionOnceEstablished())
+			serverSentEventConnection.getWriteQueue().offer(WriteQueueElement.withComment(""));
 
 		// Get a handle to the event source (it will be created if necessary)
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath, resourceMethod).get();
@@ -2033,6 +2039,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Integer getConnectionQueueCapacity() {
 		return this.connectionQueueCapacity;
+	}
+
+	@Nonnull
+	protected Boolean getVerifyConnectionOnceEstablished() {
+		return this.verifyConnectionOnceEstablished;
 	}
 
 	@Nonnull

@@ -43,7 +43,9 @@ public class SseLastEventIdTests {
 		int port = findFreePort();
 		int ssePort = findFreePort();
 
-		ServerSentEventServer serverSentEventServer = ServerSentEventServer.withPort(ssePort).build();
+		ServerSentEventServer serverSentEventServer = ServerSentEventServer.withPort(ssePort)
+				.verifyConnectionOnceEstablished(false)
+				.build();
 
 		SokletConfig config = SokletConfig.withServer(Server.withPort(port).build())
 				.serverSentEventServer(serverSentEventServer)

@@ -242,6 +242,7 @@ public class ServerSentEventTests {
 		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestTimeout(Duration.ofSeconds(5))
+				.verifyConnectionOnceEstablished(false)
 				.build();
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
@@ -304,6 +305,7 @@ public class ServerSentEventTests {
 		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestTimeout(Duration.ofSeconds(5))
+				.verifyConnectionOnceEstablished(false)
 				.build();
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
@@ -794,7 +796,9 @@ public class ServerSentEventTests {
 
 		SokletConfig config = SokletConfig
 				.withServer(Server.withPort(httpPort).build())
-				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.verifyConnectionOnceEstablished(false)
+						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 

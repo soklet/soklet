@@ -194,6 +194,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 		Integer resourcePathCacheCapacity;
 		@Nullable
 		Integer connectionQueueCapacity;
+		@Nullable
+		Boolean verifyConnectionOnceEstablished;
 
 		@Nonnull
 		protected Builder(@Nonnull Integer port) {
@@ -271,6 +273,12 @@ public interface ServerSentEventServer extends AutoCloseable {
 		@Nonnull
 		public Builder connectionQueueCapacity(@Nullable Integer connectionQueueCapacity) {
 			this.connectionQueueCapacity = connectionQueueCapacity;
+			return this;
+		}
+
+		@Nonnull
+		public Builder verifyConnectionOnceEstablished(@Nullable Boolean verifyConnectionOnceEstablished) {
+			this.verifyConnectionOnceEstablished = verifyConnectionOnceEstablished;
 			return this;
 		}
 
