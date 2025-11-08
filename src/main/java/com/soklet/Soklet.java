@@ -68,6 +68,54 @@ import static java.util.Objects.requireNonNull;
  *   System.out.println("Soklet started, press [enter] to exit");
  *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
  * }}</pre>
+ * <p>
+ * Soklet also offers an off-network "simulator" mode via {@link #runSimulator(SokletConfig, Consumer)}, useful for integration testing.
+ * <p>
+ * Given a <em>Resource Method</em>...
+ * <pre>{@code public class HelloResource {
+ *   @GET("/hello")
+ *   public String hello(@QueryParameter String name) {
+ *     return String.format("Hello, %s", name);
+ *   }
+ * }}</pre>
+ * ...we might test it like this:
+ * <pre>{@code @Test
+ * public void basicIntegrationTest() {
+ *   // Build your configuration however you like
+ *   SokletConfig config = obtainMySokletConfig();
+ *
+ *   // Instead of running on a real HTTP server that listens on a port,
+ *   // a non-network Simulator is provided against which you can
+ *   // issue requests and receive responses.
+ *   Soklet.runSimulator(config, (simulator -> {
+ *     // Construct a request
+ *     Request request = Request.with(HttpMethod.GET, "/hello")
+ *       .queryParameters(Map.of("name", Set.of("Mark")))
+ *       .build();
+ *
+ *     // Perform the request and get a handle to the response
+ *     RequestResult result = simulator.performRequest(request);
+ *     MarshaledResponse marshaledResponse = result.getMarshaledResponse();
+ *
+ *     // Verify status code
+ *     Integer expectedCode = 200;
+ *     Integer actualCode = marshaledResponse.getStatusCode();
+ *     assertEquals(expectedCode, actualCode, "Bad status code");
+ *
+ *     // Verify response body
+ *     marshaledResponse.getBody().ifPresentOrElse(body -> {
+ *       String expectedBody = "Hello, Mark";
+ *       String actualBody = new String(body, StandardCharsets.UTF_8);
+ *       assertEquals(expectedBody, actualBody, "Bad response body");
+ *     }, () -> {
+ *       Assertions.fail("No response body");
+ *     });
+ *   }));
+ * }}</pre>
+ * <p>
+ * The simulator also supports Server-Sent Events.
+ * <p>
+ * Integration testing documentation is available at <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -1097,7 +1145,11 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Runs Soklet with a special "simulator" server that is useful for integration testing.
+	 * Runs Soklet with special non-network "simulator" implementations of {@link Server} and {@link ServerSentEventServer} - useful for integration testing.
+	 * <p>
+	 * If your provided {@link SokletConfig} was constructed via {@link SokletConfig#forSimulator()} or {@link SokletConfig#copyForSimulator()}, then the simulator will use your configuration as-is because it already includes "simulator" server implementations.
+	 * <p>
+	 * Otherwise, the simulator will copy your configuration and swap in the "simulator" server implementations.
 	 * <p>
 	 * See <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a> for how to write these tests.
 	 *
@@ -1109,9 +1161,9 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(sokletConfig);
 		requireNonNull(simulatorConsumer);
 
+		// Ensure we are using simulator servers if we are not already
 		if (!sokletConfig.getForSimulator())
-			throw new IllegalArgumentException(format("To run the %s, you must provide a %s instance created with %s.forSimulator() static factory method or copied via the %s.copyForSimulator() instance method. See documentation at https://www.soklet.com/docs/testing#integration-testing",
-					Simulator.class.getSimpleName(), SokletConfig.class.getSimpleName(), SokletConfig.class.getSimpleName(), SokletConfig.class.getSimpleName()));
+			sokletConfig = sokletConfig.copyForSimulator().finish();
 
 		Simulator simulator = new DefaultSimulator((MockServer) sokletConfig.getServer(), (MockServerSentEventServer) sokletConfig.getServerSentEventServer().get());
 

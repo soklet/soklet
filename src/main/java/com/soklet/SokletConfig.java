@@ -76,6 +76,8 @@ public final class SokletConfig {
 
 	/**
 	 * Vends a configuration builder designed for use with {@link Soklet#runSimulator(SokletConfig, Consumer)}, with simulated (non-network) implementations of {@link Server} and {@link ServerSentEventServer}.
+	 * <p>
+	 * If you have an existing {@link SokletConfig} instance and want to make a copy of it suitable for use in the simulator, see {@link #copyForSimulator()}.
 	 *
 	 * @return a builder for {@link SokletConfig} instances
 	 */
