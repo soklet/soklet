@@ -41,7 +41,7 @@ import static java.util.Objects.requireNonNull;
  */
 public sealed interface ServerSentEventRequestResult permits ServerSentEventRequestResult.HandshakeAccepted, ServerSentEventRequestResult.HandshakeRejected, ServerSentEventRequestResult.RequestFailed {
 	/**
-	 * Represents the result of an SSE Accepted Handshake (connection stays open) when simulated by {@link Simulator#performServerSentEventRequest(Request)}.
+	 * Represents the result of an SSE accepted handshake (connection stays open) when simulated by {@link Simulator#performServerSentEventRequest(Request)}.
 	 * <p>
 	 * The {@link #registerEventConsumer(Consumer)} and {@link #registerCommentConsumer(Consumer)} methods can be used to "listen" for Server-Sent Events and Comments, respectively.
 	 * <p>
@@ -213,6 +213,13 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			return format("%s{handshakeResult=%s}", HandshakeAccepted.class.getSimpleName(), getHandshakeResult());
 		}
 
+		/**
+		 * The initial result of the handshake, as written back to the client (note that the connection remains open).
+		 * <p>
+		 * Useful for examining headers/cookies written via {@link RequestResult#getMarshaledResponse()}.
+		 *
+		 * @return the result of this request
+		 */
 		@Nonnull
 		public RequestResult getRequestResult() {
 			return this.requestResult;
@@ -255,9 +262,9 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 	}
 
 	/**
-	 * Represents the result of an SSE Rejected Handshake (explicit rejection; connection closed) when simulated by {@link Simulator#performServerSentEventRequest(Request)}.
+	 * Represents the result of an SSE rejected handshake (explicit rejection; connection closed) when simulated by {@link Simulator#performServerSentEventRequest(Request)}.
 	 * <p>
-	 * The data provided when the handshake was accepted is available via {@link #getHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
+	 * The data provided when the handshake was rejected is available via {@link #getHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
 	 */
 	@ThreadSafe
 	final class HandshakeRejected implements ServerSentEventRequestResult {
@@ -275,11 +282,21 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			this.requestResult = requestResult;
 		}
 
+		/**
+		 * Gets the data provided when the handshake was explicitly rejected by the {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em>.
+		 *
+		 * @return the data provided when the handshake was rejected
+		 */
 		@Nonnull
 		public HandshakeResult.Rejected getHandshakeResult() {
 			return this.handshakeResult;
 		}
 
+		/**
+		 * The result of the handshake, as written back to the client (the connection is then closed).
+		 *
+		 * @return the result of this request
+		 */
 		@Nonnull
 		public RequestResult getRequestResult() {
 			return this.requestResult;
@@ -308,6 +325,11 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 	}
 
+	/**
+	 * Represents the result of an SSE request failure (implicit rejection, e.g. an exception occurred; connection closed) when simulated by {@link Simulator#performServerSentEventRequest(Request)}.
+	 * <p>
+	 * The final data sent to the client is available via {@link #getRequestResult()}.
+	 */
 	@ThreadSafe
 	final class RequestFailed implements ServerSentEventRequestResult {
 		@Nonnull
@@ -318,6 +340,11 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			this.requestResult = requestResult;
 		}
 
+		/**
+		 * The result of the handshake, as written back to the client (the connection is then closed).
+		 *
+		 * @return the result of this request
+		 */
 		@Nonnull
 		public RequestResult getRequestResult() {
 			return this.requestResult;
