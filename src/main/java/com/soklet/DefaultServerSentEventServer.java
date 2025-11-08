@@ -43,7 +43,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -118,7 +117,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
 		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(1);
-		DEFAULT_CONNECTION_QUEUE_CAPACITY = 256;
+		DEFAULT_CONNECTION_QUEUE_CAPACITY = 512;
 		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
 		DEFAULT_BROADCASTER_CACHE_CAPACITY = 1_024;
 		DEFAULT_RESOURCE_PATH_CACHE_CAPACITY = 8_192;
@@ -565,20 +564,23 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	protected void performConnectionValidityTask() {
-		Collection<DefaultServerSentEventBroadcaster> broadcasters = getBroadcastersByResourcePath().values();
+		// Weakly-consistent snapshot of the current map; safe for concurrent maps.
+		// We iterate this snapshot without mutating the underlying map.
+		List<Entry<ResourcePath, DefaultServerSentEventBroadcaster>> snapshot = new ArrayList<>(getBroadcastersByResourcePath().entrySet());
 
-		if (broadcasters.isEmpty())
+		if (snapshot.isEmpty())
 			return;
 
-		final long NOW_IN_NANOS = System.nanoTime();
+		// Compute total connections across the snapshot
+		int totalConnections = 0;
 
-		// Calculate total connections
-		int totalConnections = broadcasters.stream()
-				.mapToInt(b -> b.getServerSentEventConnections().size())
-				.sum();
+		for (Entry<ResourcePath, DefaultServerSentEventBroadcaster> e : snapshot)
+			totalConnections += e.getValue().getServerSentEventConnections().size();
 
 		if (totalConnections == 0)
 			return;
+
+		final long NOW_IN_NANOS = System.nanoTime();
 
 		// For large connection counts, only process a subset per heartbeat
 		// This spreads the CPU cost across multiple heartbeat intervals
@@ -589,12 +591,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		int currentIndex = 0;
 		int processed = 0;
 
+		// Collect removals here; do NOT remove while iterating
+		List<Entry<ResourcePath, DefaultServerSentEventBroadcaster>> toRemove = new ArrayList<>();
+
 		outer:
-		for (DefaultServerSentEventBroadcaster broadcaster : broadcasters) {
+		for (Entry<ResourcePath, DefaultServerSentEventBroadcaster> entry : snapshot) {
+			DefaultServerSentEventBroadcaster broadcaster = entry.getValue();
 			Set<ServerSentEventConnection> connections = broadcaster.getServerSentEventConnections();
 
 			if (connections.isEmpty()) {
-				getBroadcastersByResourcePath().remove(broadcaster.getResourcePath(), broadcaster);
+				// Mark for removal; we'll remove after the loop using remove(key, value)
+				toRemove.add(entry);
 				continue;
 			}
 
@@ -616,7 +623,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					// Use CAS to ensure only one thread enqueues the check
 					if (lastCheck.compareAndSet(previousCheck, NOW_IN_NANOS)) {
 						// If the queue is full, skip the heartbeat until the next go-round (no closure on heartbeat).
-						enqueueServerSentEvent(broadcaster, connection, SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK, EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS, broadcaster.getBackpressureHandler());
+						enqueueServerSentEvent(
+								broadcaster,
+								connection,
+								SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK,
+								EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS,
+								broadcaster.getBackpressureHandler()
+						);
 					}
 				}
 
@@ -625,6 +638,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					break outer;
 			}
 		}
+
+		// Now that iteration is done, remove any empty broadcasters we observed.
+		// Using remove(key, value) avoids removing if the mapping changed concurrently.
+		for (Entry<ResourcePath, DefaultServerSentEventBroadcaster> entry : toRemove)
+			getBroadcastersByResourcePath().remove(entry.getKey(), entry.getValue());
 	}
 
 	protected void startInternal() {
@@ -781,7 +799,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				// If there is a client initializer, invoke it immediately prior to finalizing the SSE connection
 				Consumer<ServerSentEventUnicaster> clientInitializer = handshakeAccepted.getClientInitializer().orElse(null);
-				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, clientInitializer).get();
+
+				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, clientInitializer)
+						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
 
 				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
 
@@ -900,7 +920,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				 PrintWriter printWriter = new PrintWriter(outputStreamWriter, false)) {
 
 			if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted) {
-				final Set<String> ILLEGAL_LOWERCASE_HEADER_NAMES = Set.of("content-length", "transfer-encoding");
+				final Set<String> ILLEGAL_LOWERCASE_HEADER_NAMES = Set.of("content-length");
 
 				// HTTP status line
 				printWriter.print("HTTP/1.1 200 OK\r\n");
@@ -1229,9 +1249,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (clientInitializer != null)
 			clientInitializer.accept(serverSentEventUnicaster);
 
-		// TODO: introduce this in a subsequent release.  Will need to make it configurable or rework some SSE tests to ignore the initial message
 		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection
-		// serverSentEventConnection.getWriteQueue().add(WriteQueueElement.withComment(""));
+		// TODO: enable this
+		//serverSentEventConnection.getWriteQueue().offer(WriteQueueElement.withComment(""));
 
 		// Get a handle to the event source (it will be created if necessary)
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath, resourceMethod).get();
