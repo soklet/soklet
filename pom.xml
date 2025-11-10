@@ -151,6 +151,7 @@
     </build>
 
     <dependencies>
+        <!-- Compile-time-only deps -->
         <dependency>
             <groupId>com.google.code.findbugs</groupId>
             <artifactId>jsr305</artifactId>
@@ -158,12 +159,20 @@
             <scope>compile</scope>
             <optional>true</optional>
         </dependency>
+
+        <!-- Testing-only deps -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
             <version>5.13.3</version>
             <scope>test</scope>
             <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.google.testing.compile</groupId>
+            <artifactId>compile-testing</artifactId>
+            <version>0.23.0</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>
