@@ -117,7 +117,7 @@ public class SokletProcessorTests {
 				.compile(src);
 
 		assertThat(compilation).failed();
-		assertThat(compilation).hadErrorContaining("Path parameter {id} not bound to a @PathParameter argument");
+		assertThat(compilation).hadErrorContaining("Resource Method path parameter {id} not bound to a @PathParameter argument");
 
 		JavaFileObject getSrc = JavaFileObjects.forSourceString("example.MissingParamGet",
 				"""
@@ -134,7 +134,7 @@ public class SokletProcessorTests {
 				.compile(getSrc);
 
 		assertThat(getCompilation).failed();
-		assertThat(getCompilation).hadErrorContaining("Path parameter {id} not bound to a @PathParameter argument");
+		assertThat(getCompilation).hadErrorContaining("Resource Method path parameter {id} not bound to a @PathParameter argument");
 	}
 
 	@Test
@@ -157,7 +157,7 @@ public class SokletProcessorTests {
 				.compile(src);
 
 		assertThat(compilation).failed();
-		assertThat(compilation).hadErrorContaining("No placeholder {id} present in path template");
+		assertThat(compilation).hadErrorContaining("No placeholder {id} present in resource path declaration");
 	}
 
 	@Test
@@ -179,7 +179,7 @@ public class SokletProcessorTests {
 				.compile(src);
 
 		assertThat(compilation).failed();
-		assertThat(compilation).hadErrorContaining("Duplicate path parameter name: id");
+		assertThat(compilation).hadErrorContaining("Duplicate @PathParameter name: id");
 	}
 
 	@Test
@@ -221,6 +221,6 @@ public class SokletProcessorTests {
 				.compile(src);
 
 		assertThat(compilation).failed();
-		assertThat(compilation).hadErrorContaining("Malformed path template (unbalanced braces)");
+		assertThat(compilation).hadErrorContaining("Malformed resource path declaration (unbalanced braces)");
 	}
 }
