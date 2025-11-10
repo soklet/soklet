@@ -232,16 +232,19 @@ public final class SokletProcessor extends AbstractProcessor {
 
 				// 3) @PathParameter bindings
 				ParamBindings pb = readPathParameterBindings(method);
-				// a) all placeholders must be bound
-				for (String placeholder : vr.placeholders) {
+				// a) placeholders must be bound
+				for (String placeholder : vr.placeholders) {            // <-- already normalized
 					if (!pb.paramNames.contains(placeholder)) {
-						error(method, "Soklet: Resource Method path parameter {" + placeholder + "} not bound to a @PathParameter argument");
+						// use the original token if you want to echo "{cssPath*}" in the message
+						String shown = vr.original.getOrDefault(placeholder, placeholder);
+						error(method, "Resource Method path parameter {" + shown + "} not bound to a @PathParameter argument");
 					}
 				}
-				// b) all annotated params must appear in template
-				for (String annotated : pb.paramNames) {
+
+				// b) annotated params must exist in template
+				for (String annotated : pb.paramNames) {                // annotated names are plain ("cssPath")
 					if (!vr.placeholders.contains(annotated)) {
-						error(method, "Soklet: No placeholder {" + annotated + "} present in resource path declaration");
+						error(method, "No placeholder {" + annotated + "} present in resource path declaration");
 					}
 				}
 
@@ -325,25 +328,31 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private static final class ValidationResult {
 		final boolean ok;
-		final Set<String> placeholders;
+		final Set<String> placeholders;       // normalized names (no trailing '*')
+		final Map<String, String> original;   // normalized -> original token (e.g., "cssPath" -> "cssPath*")
 
-		ValidationResult(boolean ok, Set<String> placeholders) {
+		ValidationResult(boolean ok, Set<String> placeholders, Map<String, String> original) {
 			this.ok = ok;
 			this.placeholders = placeholders;
+			this.original = original;
 		}
 	}
 
 	/**
-	 * Validates braces and duplicate placeholders.
+	 * Validates braces and duplicate placeholders (treating {name*} as a greedy/varargs
+	 * placeholder whose logical name is "name"). Duplicate detection is done on the
+	 * normalized name (without the trailing '*').
+	 * <p>
 	 * Emits diagnostics on the element if malformed or duplicate.
 	 */
 	private ValidationResult validatePathTemplate(Element reportOn, String path) {
-		// Quick sanity: must start with '/'
 		if (path == null || path.isEmpty()) {
-			return new ValidationResult(false, Collections.emptySet());
+			return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
 		}
 
 		Set<String> names = new LinkedHashSet<>();
+		Map<String, String> originalTokens = new LinkedHashMap<>();
+
 		int i = 0;
 		while (i < path.length()) {
 			char c = path.charAt(i);
@@ -351,28 +360,44 @@ public final class SokletProcessor extends AbstractProcessor {
 				int close = path.indexOf('}', i + 1);
 				if (close < 0) {
 					error(reportOn, "Soklet: Malformed resource path declaration (unbalanced braces)");
-					return new ValidationResult(false, Collections.emptySet());
+					return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
 				}
-				String name = path.substring(i + 1, close);
-				if (name.isEmpty()) {
-					error(reportOn, "Soklet: Malformed resource path declaration (unbalanced braces)"); // keep message per test expectations
-					return new ValidationResult(false, Collections.emptySet());
+				String token = path.substring(i + 1, close);   // e.g., "id", "cssPath*"
+				if (token.isEmpty()) {
+					error(reportOn, "Soklet: Malformed resource path declaration (unbalanced braces)");
+					return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
 				}
-				// duplicate?
-				if (!names.add(name)) {
-					error(reportOn, "Soklet: Duplicate @PathParameter name: " + name);
-					// Continue scanning so we can surface more issues in one pass.
+
+				String normalized = normalizePlaceholder(token); // strip trailing '*' if present
+				if (normalized.isEmpty()) {
+					error(reportOn, "Soklet: Malformed resource path declaration (unbalanced braces)");
+					return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
 				}
+
+				// Duplicate on normalized name
+				if (!names.add(normalized)) {
+					error(reportOn, "Soklet: Duplicate @PathParameter name: " + normalized);
+				}
+				// keep first-seen original token for any potential messaging
+				originalTokens.putIfAbsent(normalized, token);
+
 				i = close + 1;
 			} else if (c == '}') {
-				// stray closing
 				error(reportOn, "Soklet: Malformed resource path declaration (unbalanced braces)");
-				return new ValidationResult(false, Collections.emptySet());
+				return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
 			} else {
 				i++;
 			}
 		}
-		return new ValidationResult(true, names);
+		return new ValidationResult(true, names, originalTokens);
+	}
+
+	/**
+	 * Accepts vararg placeholders like "cssPath*" and returns the logical name "cssPath".
+	 */
+	private static String normalizePlaceholder(String token) {
+		if (token.endsWith("*")) return token.substring(0, token.length() - 1);
+		return token;
 	}
 
 	// --- Existing utilities ----------------------------------------------------

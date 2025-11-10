@@ -223,4 +223,54 @@ public class SokletProcessorTests {
 		assertThat(compilation).failed();
 		assertThat(compilation).hadErrorContaining("Malformed resource path declaration (unbalanced braces)");
 	}
+
+	@Test
+	void supportsVarargPathParameter() {
+		JavaFileObject src = JavaFileObjects.forSourceString("example.VarargOk",
+				"""
+						import javax.annotation.Nonnull;
+						import com.soklet.annotation.GET;
+						import com.soklet.annotation.PathParameter;
+						
+						public class VarargOk {
+							@GET("/static/css/{cssPath*}")
+							public void staticCssFile(@Nonnull @PathParameter String cssPath) {
+								/* ok */
+							}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(src);
+
+		assertThat(compilation).succeeded();
+	}
+
+	@Test
+	void rejectsUnboundVarargPlaceholder() {
+		JavaFileObject src = JavaFileObjects.forSourceString("example.VarargBad",
+				"""
+						import javax.annotation.Nonnull;
+						import com.soklet.annotation.GET;
+						import com.soklet.annotation.PathParameter;
+						
+						public class VarargBad {
+							@GET("/static/css/{cssPath*}")
+							public void staticCssFile(@Nonnull @PathParameter String other) {
+								/* name mismatch: 'other' != 'cssPath' */
+							}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(src);
+
+		assertThat(compilation).failed();
+		assertThat(compilation)
+				.hadErrorContaining("Resource Method path parameter {cssPath*} not bound to a @PathParameter argument")
+				.inFile(src);
+	}
+
 }
