@@ -71,9 +71,9 @@ import java.util.function.Consumer;
  *     // The Simulator provides 3 logical outcomes for SSE connections:
  *     // * Accepted Handshake (connection stays open)
  *     // * Rejected Handshake (explicit rejection, connection closed)
- *     // * Request Failed (implicit rejection, e.g. unexpected exception, connection closed)
+ *     // * Request Failed (implicit rejection, e.g. uncaught exception, connection closed)
  *     switch (eventSourceResult) {
- *       // Explicit Handshake Acceptance
+ *       // Explicit handshake acceptance
  *       case HandshakeAccepted handshakeAccepted -> {
  *         handshakeAccepted.registerEventConsumer((event) -> {
  *           // Server-Sent Event received: open the latch to end the test
@@ -81,11 +81,11 @@ import java.util.function.Consumer;
  *         });
  *       }
  *
- *       // Explicit Handshake Rejection
+ *       // Explicit handshake rejection
  *       case HandshakeRejected handshakeRejected ->
  *         Assertions.fail("SSE Handshake Rejected: " + handshakeRejected);
  *
- *       // Unexpected Error
+ *       // Uncaught exception
  *       case RequestFailed requestFailed ->
  *         Assertions.fail("SSE Request Failed: " + requestFailed);
  *     }
