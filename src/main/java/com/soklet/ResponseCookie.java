@@ -124,11 +124,15 @@ public final class ResponseCookie {
 			return Optional.empty();
 
 		// Technically OK per the spec to "fold" multiple cookie name/value pairs into the same header but this is
-		// unusual and we don't support it here.  Pick the first cookie and use it.
+		// unusual, and we don't support it here.  Pick the first cookie and use it.
 		HttpCookie httpCookie = cookies.get(0);
 
+		// Handle session cookies (maxAge = -1) by passing null instead of negative Duration
+		long maxAge = httpCookie.getMaxAge();
+		Duration maxAgeDuration = (maxAge >= 0) ? Duration.ofSeconds(maxAge) : null;
+
 		return Optional.of(ResponseCookie.with(httpCookie.getName(), httpCookie.getValue())
-				.maxAge(Duration.ofSeconds(httpCookie.getMaxAge()))
+				.maxAge(maxAgeDuration)
 				.domain(httpCookie.getDomain())
 				.httpOnly(httpCookie.isHttpOnly())
 				.secure(httpCookie.getSecure())
