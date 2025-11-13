@@ -327,9 +327,16 @@ final class DefaultServer implements Server {
 		for (int i = 0; i < rawPath.length(); ) {
 			char c = rawPath.charAt(i);
 			if (c == '%' && i + 2 < rawPath.length()) {
-				int b = Integer.parseInt(rawPath.substring(i + 1, i + 3), 16);
-				out.write(b);
-				i += 3;
+				// Handle invalid hex sequences gracefully
+				try {
+					int b = Integer.parseInt(rawPath.substring(i + 1, i + 3), 16);
+					out.write(b);
+					i += 3;
+				} catch (NumberFormatException e) {
+					// Invalid percent encoding - treat '%' literally and continue
+					out.write((byte) c);
+					i++;
+				}
 			} else {
 				out.write((byte) c);
 				i++;
