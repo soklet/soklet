@@ -16,7 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.Utilities.QueryDecodingStrategy;
 import com.soklet.exception.IllegalFormParameterException;
 import com.soklet.exception.IllegalMultipartFieldException;
 import com.soklet.exception.IllegalQueryParameterException;
@@ -118,7 +117,9 @@ public final class Request {
 	/**
 	 * Acquires a builder for {@link Request} instances.
 	 * <p>
-	 * Note that query parameters are parsed using RFC 3986 semantics by default - see {@link QueryDecodingStrategy#RFC_3986_STRICT}.
+	 * Query parameters are parsed using RFC 3986 semantics - see {@link QueryDecodingStrategy#RFC_3986_STRICT}.
+	 * <p>
+	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed using {@link QueryDecodingStrategy#X_WWW_FORM_URLENCODED}.
 	 *
 	 * @param httpMethod the HTTP method for this request ({@code GET, POST, etc.})
 	 * @param uri        the URI for this request, which must start with a {@code /} character and might include query parameters, e.g. {@code /example/123} or {@code /one?two=three}

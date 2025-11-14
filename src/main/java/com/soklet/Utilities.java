@@ -212,28 +212,6 @@ public final class Utilities {
 	}
 
 	/**
-	 * Strategies for decoding query strings - {@code application/x-www-form-urlencoded} (supports {@code "+"} for spaces) or "strict" RFC 3986 (percent-decoding only).
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 * @see Utilities#extractQueryParametersFromQuery(String, QueryDecodingStrategy)
-	 * @see Utilities#extractQueryParametersFromQuery(String, QueryDecodingStrategy, Charset)
-	 * @see Utilities#extractQueryParametersFromUrl(String, QueryDecodingStrategy)
-	 * @see Utilities#extractQueryParametersFromUrl(String, QueryDecodingStrategy, Charset)
-	 */
-	public enum QueryDecodingStrategy {
-		/**
-		 * Follow RFC 1866 (the {@code application/x-www-form-urlencoded} content type), where keys and values are percent-encoded but prefer {@code "+"} for spaces.
-		 * <p>
-		 * Note that {@code "%20"} values are still decoded as spaces, but any {@code "+"} values are decoded as spaces first.
-		 */
-		X_WWW_FORM_URLENCODED,
-		/**
-		 * Follow RFC 3986, where keys and values are percent-encoded and {@code "+"} values are never decoded as spaces.
-		 */
-		RFC_3986_STRICT
-	}
-
-	/**
 	 * Parses a query string such as {@code "a=1&b=2&c=%20"} into a multimap of names to values.
 	 * <p>
 	 * Decodes percent-escapes using UTF-8, which is usually what you want (see {@link #extractQueryParametersFromQuery(String, QueryDecodingStrategy, Charset)} if you need to specify a different charset).
@@ -1217,7 +1195,7 @@ public final class Utilities {
 
 		// Percent-encoded control sequence checks
 		Matcher m = HEADER_PERCENT_ENCODING_PATTERN.matcher(value);
-		
+
 		while (m.find()) {
 			int b = Integer.parseInt(m.group(1), 16);
 			if (b == 0x0D || b == 0x0A || b == 0x00 || (b >= 0x00 && b < 0x20 && b != 0x09)) {

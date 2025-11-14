@@ -16,7 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.Utilities.QueryDecodingStrategy;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -476,7 +475,7 @@ public class UtilitiesTests {
 	void formMode_treatsPlusAsSpace_andDecodesPercentEscapes() {
 		var q = "a=a+b%2B%20&empty=&name=%E2%9C%93";
 		var m = Utilities.extractQueryParametersFromQuery(
-				q, Utilities.QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+				q, QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
 
 		assertEquals(Set.of("a b+ "), m.get("a"));  // '+' -> space; %2B -> '+'; %20 -> space
 		assertEquals(Set.of(""), m.get("empty"));   // empty preserved
@@ -486,7 +485,7 @@ public class UtilitiesTests {
 	@Test
 	void strictMode_leavesPlusAsPlus() {
 		var q = "a=a+b%2B%20";
-		var m = Utilities.extractQueryParametersFromQuery(q, Utilities.QueryDecodingStrategy.RFC_3986_STRICT);
+		var m = Utilities.extractQueryParametersFromQuery(q, QueryDecodingStrategy.RFC_3986_STRICT);
 
 		assertEquals(Set.of("a+b+ "), m.get("a")); // '+' stays '+'
 	}
@@ -526,7 +525,8 @@ public class UtilitiesTests {
 		assertTrue(header.contains("SameSite=Lax"));
 	}
 
-	@Test void queryParamsAreUrlDecoded_andPlusBecomesSpace() {
+	@Test
+	void queryParamsAreUrlDecoded_andPlusBecomesSpace() {
 		String url = "https://example.com/p?q=First+Last&x=%2F";
 		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl(url, QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
 
@@ -545,14 +545,16 @@ public class UtilitiesTests {
 		assertEquals(Set.of("dark"), cookies.get("theme"));
 	}
 
-	@Test void quotedCharsetParameterIsSupported() {
+	@Test
+	void quotedCharsetParameterIsSupported() {
 		assertEquals(
 				StandardCharsets.UTF_8,
 				Utilities.extractCharsetFromHeaderValue("text/plain; charset=\"utf-8\"").orElseThrow()
 		);
 	}
 
-	@Test void forwardedHeaderQuotedValuesProduceCleanPrefix() {
+	@Test
+	void forwardedHeaderQuotedValuesProduceCleanPrefix() {
 		Map<String, Set<String>> headers = new HashMap<>();
 		headers.put("Forwarded", Set.of("proto=\"https\";host=\"www.example.com\""));
 
