@@ -69,7 +69,7 @@ import static java.util.Objects.requireNonNull;
  *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
  * }}</pre>
  * <p>
- * Soklet also offers an off-network "simulator" mode via {@link #runSimulator(SokletConfig, Consumer)}, useful for integration testing.
+ * Soklet also offers an off-network {@link Simulator} concept via {@link #runSimulator(SokletConfig, Consumer)}, useful for integration testing.
  * <p>
  * Given a <em>Resource Method</em>...
  * <pre>{@code public class HelloResource {
