@@ -82,7 +82,7 @@ public class ServerSentEventTests {
 
 	@Test
 	public void serverSentEventServerSimulator() {
-		SokletConfig configuration = SokletConfig.forSimulator()
+		SokletConfig configuration = SokletConfig.forSimulatorTesting()
 				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://www.revetkn.com")))
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();

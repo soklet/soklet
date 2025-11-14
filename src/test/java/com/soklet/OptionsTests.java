@@ -32,7 +32,7 @@ import java.util.Set;
 public class OptionsTests {
 	@Test
 	public void options_includes_allow_header() {
-		SokletConfig cfg = SokletConfig.forSimulator()
+		SokletConfig cfg = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

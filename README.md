@@ -1020,7 +1020,7 @@ Perform tests:
 ```java
 @Test
 public void basicIntegrationTest() {
-  // Build your app's configuration however you like
+  // Just use your app's existing configuration
   SokletConfig config = obtainMySokletConfig();
 
   // Instead of running in a real HTTP server that listens on a port,

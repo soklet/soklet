@@ -415,7 +415,7 @@ public class SokletTests {
 
 	@Nonnull
 	protected SokletConfig configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
-		return SokletConfig.forSimulator()
+		return SokletConfig.forSimulatorTesting()
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(resourceClasses))
 				// Quiet logging to keep the console clean
@@ -500,7 +500,7 @@ public class SokletTests {
 
 	@Test
 	public void encodedSpaceInPath_isDecodedInSimulatorToo() {
-		var cfg = SokletConfig.forSimulator()
+		var cfg = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SimulatorDecodingResource.class)))
 				.build();
 
@@ -588,7 +588,7 @@ public class SokletTests {
 				Set.of(MultipartResource2.class)
 		);
 
-		SokletConfig config = SokletConfig.forSimulator()
+		SokletConfig config = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(resolver)
 				.build();
 
@@ -620,7 +620,7 @@ public class SokletTests {
 				Set.of(MultipartResource2.class)
 		);
 
-		SokletConfig config = SokletConfig.forSimulator()
+		SokletConfig config = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(resolver)
 				.build();
 
@@ -656,7 +656,7 @@ public class SokletTests {
 
 	@Test
 	public void duplicateValueTests() {
-		SokletConfig config = SokletConfig.forSimulator()
+		SokletConfig config = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(DuplicateValueResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

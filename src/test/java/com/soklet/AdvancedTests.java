@@ -437,7 +437,7 @@ public class AdvancedTests {
 									.body(uniqueId.getBytes(StandardCharsets.UTF_8))
 									.build();
 
-							Soklet.runSimulator(config.copyForSimulator().finish(), simulator -> {
+							Soklet.runSimulator(config, simulator -> {
 								MarshaledResponse response = simulator.performRequest(request).getMarshaledResponse();
 								if (response.getStatusCode() == 200) {
 									String responseBody = new String(
@@ -633,7 +633,7 @@ public class AdvancedTests {
 						.body(largeBody)
 						.build();
 
-				Soklet.runSimulator(config.copyForSimulator().finish(), simulator -> {
+				Soklet.runSimulator(config, simulator -> {
 					MarshaledResponse response = simulator.performRequest(request).getMarshaledResponse();
 					Assertions.assertEquals(200, response.getStatusCode().intValue());
 				});

@@ -81,7 +81,7 @@ import static java.util.Objects.requireNonNull;
  * ...we might test it like this:
  * <pre>{@code @Test
  * public void basicIntegrationTest() {
- *   // Build your configuration however you like
+ *   // Just use your app's existing configuration
  *   SokletConfig config = obtainMySokletConfig();
  *
  *   // Instead of running on a real HTTP server that listens on a port,
@@ -113,7 +113,7 @@ import static java.util.Objects.requireNonNull;
  *   }));
  * }}</pre>
  * <p>
- * The simulator also supports Server-Sent Events.
+ * The {@link Simulator} also supports Server-Sent Events.
  * <p>
  * Integration testing documentation is available at <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a>.
  *
@@ -1147,10 +1147,6 @@ public final class Soklet implements AutoCloseable {
 	/**
 	 * Runs Soklet with special non-network "simulator" implementations of {@link Server} and {@link ServerSentEventServer} - useful for integration testing.
 	 * <p>
-	 * If your provided {@link SokletConfig} was constructed via {@link SokletConfig#forSimulator()} or {@link SokletConfig#copyForSimulator()}, then the simulator will use your configuration as-is because it already includes "simulator" server implementations.
-	 * <p>
-	 * Otherwise, the simulator will copy your configuration and swap in the "simulator" server implementations.
-	 * <p>
 	 * See <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a> for how to write these tests.
 	 *
 	 * @param sokletConfig      configuration that drives the Soklet system
@@ -1161,19 +1157,47 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(sokletConfig);
 		requireNonNull(simulatorConsumer);
 
-		// Ensure we are using simulator servers if we are not already
-		if (!sokletConfig.getForSimulator())
-			sokletConfig = sokletConfig.copyForSimulator().finish();
+		// Create Soklet instance - this initializes the REAL implementations through proxies
+		Soklet soklet = Soklet.withConfig(sokletConfig);
 
-		Simulator simulator = new DefaultSimulator((MockServer) sokletConfig.getServer(), (MockServerSentEventServer) sokletConfig.getServerSentEventServer().get());
+		// Extract proxies (they're guaranteed to be proxies now)
+		ServerProxy serverProxy = (ServerProxy) sokletConfig.getServer();
+		ServerSentEventServerProxy serverSentEventServerProxy = sokletConfig.getServerSentEventServer()
+				.map(s -> (ServerSentEventServerProxy) s)
+				.orElse(null);
 
-		try (Soklet soklet = Soklet.withConfig(sokletConfig)) {
-			soklet.start();
+		// Create mock implementations
+		MockServer mockServer = new MockServer();
+		MockServerSentEventServer mockServerSentEventServer = new MockServerSentEventServer();
+
+		// Switch proxies to simulator mode
+		serverProxy.enableSimulatorMode(mockServer);
+
+		if (serverSentEventServerProxy != null)
+			serverSentEventServerProxy.enableSimulatorMode(mockServerSentEventServer);
+
+		try {
+			// Initialize mocks with request handlers that delegate to Soklet's processing
+			mockServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
+				// Delegate to Soklet's internal request handling
+				soklet.handleRequest(request, ServerType.STANDARD_HTTP, marshaledResponseConsumer);
+			});
+
+			if (mockServerSentEventServer != null)
+				mockServerSentEventServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
+					// Delegate to Soklet's internal request handling for SSE
+					soklet.handleRequest(request, ServerType.SERVER_SENT_EVENT, marshaledResponseConsumer);
+				});
+
+			// Create and provide simulator
+			Simulator simulator = new DefaultSimulator(mockServer, mockServerSentEventServer);
 			simulatorConsumer.accept(simulator);
-		} catch (RuntimeException e) {
-			throw e;
-		} catch (Exception e) {
-			throw new RuntimeException(e);
+		} finally {
+			// Always restore to real implementations
+			serverProxy.disableSimulatorMode();
+
+			if (serverSentEventServerProxy != null)
+				serverSentEventServerProxy.disableSimulatorMode();
 		}
 	}
 
@@ -1200,9 +1224,8 @@ public final class Soklet implements AutoCloseable {
 		private MockServerSentEventServer serverSentEventServer;
 
 		public DefaultSimulator(@Nonnull MockServer server,
-														@Nonnull MockServerSentEventServer serverSentEventServer) {
+														@Nullable MockServerSentEventServer serverSentEventServer) {
 			requireNonNull(server);
-			requireNonNull(serverSentEventServer);
 
 			this.server = server;
 			this.serverSentEventServer = serverSentEventServer;
@@ -1227,8 +1250,14 @@ public final class Soklet implements AutoCloseable {
 		@Nonnull
 		@Override
 		public ServerSentEventRequestResult performServerSentEventRequest(@Nonnull Request request) {
+			MockServerSentEventServer serverSentEventServer = getServerSentEventServer().orElse(null);
+
+			if (serverSentEventServer == null)
+				throw new IllegalStateException(format("You must specify a %s in your %s to simulate Server-Sent Event requests",
+						ServerSentEventServer.class.getSimpleName(), SokletConfig.class.getSimpleName()));
+
 			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
-			ServerSentEventServer.RequestHandler requestHandler = getServerSentEventServer().getRequestHandler().orElse(null);
+			ServerSentEventServer.RequestHandler requestHandler = serverSentEventServer.getRequestHandler().orElse(null);
 
 			if (requestHandler == null)
 				throw new IllegalStateException("You must register a request handler prior to simulating SSE Event Source requests");
@@ -1271,8 +1300,8 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Nonnull
-		MockServerSentEventServer getServerSentEventServer() {
-			return this.serverSentEventServer;
+		Optional<MockServerSentEventServer> getServerSentEventServer() {
+			return Optional.ofNullable(this.serverSentEventServer);
 		}
 	}
 

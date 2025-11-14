@@ -41,7 +41,7 @@ import java.util.Set;
 public class ParameterBindingTests {
 	@Test
 	public void required_and_optional_query_parameters() {
-		SokletConfig cfg = SokletConfig.forSimulator()
+		SokletConfig cfg = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ParamResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
@@ -72,7 +72,7 @@ public class ParameterBindingTests {
 
 	@Test
 	public void headers_cookies_path_and_body_conversions() {
-		SokletConfig cfg = SokletConfig.forSimulator()
+		SokletConfig cfg = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ParamResource.class)))
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override

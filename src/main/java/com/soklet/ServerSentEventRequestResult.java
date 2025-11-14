@@ -146,7 +146,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 					eventConsumer.accept(event);
 
 				// Register with the mock SSE server broadcaster
-				getSimulator().getServerSentEventServer().registerEventConsumer(getResourcePath(), eventConsumer);
+				getSimulator().getServerSentEventServer().get().registerEventConsumer(getResourcePath(), eventConsumer);
 			} finally {
 				getLock().unlock();
 			}
@@ -178,7 +178,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 					commentConsumer.accept(comment);
 
 				// Register with the mock SSE server broadcaster
-				getSimulator().getServerSentEventServer().registerCommentConsumer(getResourcePath(), commentConsumer);
+				getSimulator().getServerSentEventServer().get().registerCommentConsumer(getResourcePath(), commentConsumer);
 			} finally {
 				getLock().unlock();
 			}
@@ -189,10 +189,10 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 
 			try {
 				getEventConsumer().ifPresent((eventConsumer ->
-						getSimulator().getServerSentEventServer().unregisterEventConsumer(getResourcePath(), eventConsumer)));
+						getSimulator().getServerSentEventServer().get().unregisterEventConsumer(getResourcePath(), eventConsumer)));
 
 				getCommentConsumer().ifPresent((commentConsumer ->
-						getSimulator().getServerSentEventServer().unregisterCommentConsumer(getResourcePath(), commentConsumer)));
+						getSimulator().getServerSentEventServer().get().unregisterCommentConsumer(getResourcePath(), commentConsumer)));
 			} finally {
 				getLock().unlock();
 			}

@@ -20,7 +20,7 @@ import javax.annotation.Nonnull;
 import java.util.function.Consumer;
 
 /**
- * Simulates server behavior of accepting a request and returning a response, useful for writing integration tests.
+ * Simulates server behavior of accepting a request and returning a response without touching the network, useful for writing integration tests.
  * <p>
  * <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Event</a> simulation is also supported.
  * <p>
@@ -29,14 +29,8 @@ import java.util.function.Consumer;
  * Usage example:
  * <pre>{@code @Test
  * public void basicIntegrationTest () {
- *   // Take your normal SokletConfig and make a special
- *   // copy of it that's suitable for use in Soklet's Simulator.
- *   // This copy replaces your configured Server
- *   // and ServerSentEventServer with mock instances
- *   // that don't listen on network ports.
- *   SokletConfig config = obtainMySokletConfig()
- *     .copyForSimulator()
- *     .finish();
+ *   // Just use your app's existing configuration
+ *   SokletConfig config = obtainMySokletConfig();
  *
  *   // With the Simulator, you can issue requests
  *   // and receive responses just like you would with real servers.
@@ -79,6 +73,11 @@ import java.util.function.Consumer;
  *           // Server-Sent Event received: open the latch to end the test
  *           eventReceivedLatch.countDown();
  *         });
+ *
+ *         // On a separate thread, broadcast a Server-Sent Event
+ *         new Thread(() -> {
+ *           // ... not shown
+ *         }).start();
  *       }
  *
  *       // Explicit handshake rejection

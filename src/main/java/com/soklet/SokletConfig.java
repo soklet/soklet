@@ -16,8 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.Soklet.MockServer;
-import com.soklet.Soklet.MockServerSentEventServer;
 import com.soklet.converter.ValueConverterRegistry;
 
 import javax.annotation.Nonnull;
@@ -25,15 +23,13 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
-import java.util.function.Consumer;
 
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
  * Defines how a Soklet system is configured.
  * <p>
- * Threadsafe instances can be acquired via the {@link #withServer(Server)} and {@link #forSimulator()} builder factory methods.
+ * Threadsafe instances can be acquired via the {@link #withServer(Server)} builder factory method.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -59,8 +55,6 @@ public final class SokletConfig {
 	private final Server server;
 	@Nullable
 	private final ServerSentEventServer serverSentEventServer;
-	@Nonnull
-	private Boolean forSimulator;
 
 	/**
 	 * Vends a configuration builder, primed with the given {@link Server}.
@@ -71,26 +65,26 @@ public final class SokletConfig {
 	@Nonnull
 	public static Builder withServer(@Nonnull Server server) {
 		requireNonNull(server);
-		return new Builder(server, false);
+		return new Builder(server);
 	}
 
 	/**
-	 * Vends a configuration builder designed for use with {@link Soklet#runSimulator(SokletConfig, Consumer)}, with simulated (non-network) implementations of {@link Server} and {@link ServerSentEventServer}.
-	 * <p>
-	 * If you have an existing {@link SokletConfig} instance and want to make a copy of it suitable for use in the simulator, see {@link #copyForSimulator()}.
-	 *
-	 * @return a builder for {@link SokletConfig} instances
+	 * Package-private - used for internal Soklet tests.
 	 */
 	@Nonnull
-	public static Builder forSimulator() {
-		return new Builder(new MockServer(), true).serverSentEventServer(new MockServerSentEventServer());
+	static Builder forSimulatorTesting() {
+		return SokletConfig.withServer(Server.withPort(0).build()).serverSentEventServer(ServerSentEventServer.withPort(0).build());
 	}
 
 	protected SokletConfig(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
-		this.server = builder.server;
-		this.serverSentEventServer = builder.serverSentEventServer;
+		// Wrap servers in proxies transparently
+		ServerProxy serverProxy = new ServerProxy(builder.server);
+		ServerSentEventServerProxy serverSentEventServerProxy = builder.serverSentEventServer == null ? null : new ServerSentEventServerProxy(builder.serverSentEventServer);
+
+		this.server = serverProxy;
+		this.serverSentEventServer = serverSentEventServerProxy;
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.defaultInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.withDefaults();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.withValueConverterRegistry(getValueConverterRegistry());
@@ -99,7 +93,6 @@ public final class SokletConfig {
 		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : LifecycleInterceptor.defaultInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : CorsAuthorizer.withRejectAllPolicy();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(this);
-		this.forSimulator = builder.forSimulator;
 	}
 
 	/**
@@ -109,17 +102,7 @@ public final class SokletConfig {
 	 */
 	@Nonnull
 	public Copier copy() {
-		return new Copier(this, false);
-	}
-
-	/**
-	 * Vends a mutable copy of this instance's configuration which is suitable for use with {@link Soklet#runSimulator(SokletConfig, Consumer)}.
-	 *
-	 * @return a mutable copy of this instance's configuration
-	 */
-	@Nonnull
-	public Copier copyForSimulator() {
-		return new Copier(this, true);
+		return new Copier(this);
 	}
 
 	/**
@@ -222,15 +205,10 @@ public final class SokletConfig {
 		return Optional.ofNullable(this.serverSentEventServer);
 	}
 
-	@Nonnull
-	Boolean getForSimulator() {
-		return this.forSimulator;
-	}
-
 	/**
 	 * Builder used to construct instances of {@link SokletConfig}.
 	 * <p>
-	 * Instances are created by invoking {@link SokletConfig#withServer(Server)} or {@link SokletConfig#forSimulator()}.
+	 * Instances are created by invoking {@link SokletConfig#withServer(Server)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -258,27 +236,16 @@ public final class SokletConfig {
 		private LifecycleInterceptor lifecycleInterceptor;
 		@Nullable
 		private CorsAuthorizer corsAuthorizer;
-		@Nonnull
-		private final Boolean forSimulator;
 
 		@Nonnull
-		Builder(@Nonnull Server server,
-						@Nonnull Boolean forSimulator) {
+		Builder(@Nonnull Server server) {
 			requireNonNull(server);
-			requireNonNull(forSimulator);
-
 			this.server = server;
-			this.forSimulator = forSimulator;
 		}
 
 		@Nonnull
 		public Builder server(@Nonnull Server server) {
 			requireNonNull(server);
-
-			if (this.forSimulator && (server == null || !(server instanceof MockServer)))
-				throw new IllegalArgumentException(format("When using %s.forSimulator(), you cannot specify the %s.",
-						SokletConfig.class.getSimpleName(), Server.class.getSimpleName()));
-
 			this.server = server;
 			return this;
 		}
@@ -286,11 +253,6 @@ public final class SokletConfig {
 		@Nonnull
 		public Builder serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
 			this.serverSentEventServer = serverSentEventServer;
-
-			if (this.forSimulator && (serverSentEventServer == null || !(serverSentEventServer instanceof MockServerSentEventServer)))
-				throw new IllegalArgumentException(format("When using %s.forSimulator(), you cannot specify the %s.",
-						SokletConfig.class.getSimpleName(), ServerSentEventServer.class.getSimpleName()));
-
 			return this;
 		}
 
@@ -362,13 +324,43 @@ public final class SokletConfig {
 		@Nonnull
 		private final Builder builder;
 
-		Copier(@Nonnull SokletConfig sokletConfig,
-					 @Nonnull Boolean forSimulator) {
-			requireNonNull(sokletConfig);
-			requireNonNull(forSimulator);
+		/**
+		 * Unwraps a Server proxy to get the underlying real implementation.
+		 */
+		@Nonnull
+		private static Server unwrapServer(@Nonnull Server server) {
+			requireNonNull(server);
 
-			this.builder = new Builder(forSimulator ? new MockServer() : sokletConfig.getServer(), forSimulator)
-					.serverSentEventServer(forSimulator ? new MockServerSentEventServer() : sokletConfig.getServerSentEventServer().orElse(null))
+			if (server instanceof ServerProxy)
+				return ((ServerProxy) server).getRealImplementation();
+
+			return server;
+		}
+
+		/**
+		 * Unwraps a ServerSentEventServer proxy to get the underlying real implementation.
+		 */
+		@Nonnull
+		private static ServerSentEventServer unwrapServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+			requireNonNull(serverSentEventServer);
+
+			if (serverSentEventServer instanceof ServerSentEventServerProxy)
+				return ((ServerSentEventServerProxy) serverSentEventServer).getRealImplementation();
+
+			return serverSentEventServer;
+		}
+
+		Copier(@Nonnull SokletConfig sokletConfig) {
+			requireNonNull(sokletConfig);
+
+			// Unwrap proxies to get the real implementations for copying
+			Server realServer = unwrapServer(sokletConfig.getServer());
+			ServerSentEventServer realServerSentEventServer = sokletConfig.getServerSentEventServer()
+					.map(Copier::unwrapServerSentEventServer)
+					.orElse(null);
+
+			this.builder = new Builder(realServer)
+					.serverSentEventServer(realServerSentEventServer)
 					.instanceProvider(sokletConfig.getInstanceProvider())
 					.valueConverterRegistry(sokletConfig.valueConverterRegistry)
 					.requestBodyMarshaler(sokletConfig.requestBodyMarshaler)
