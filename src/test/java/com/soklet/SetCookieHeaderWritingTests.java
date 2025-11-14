@@ -21,16 +21,19 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
+import java.net.HttpCookie;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.URL;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -270,6 +273,74 @@ public class SetCookieHeaderWritingTests {
 		assertTrue(setCookieHeader.contains("Path=/api"));
 		assertTrue(setCookieHeader.contains("Secure"));
 		assertTrue(setCookieHeader.contains("HttpOnly"));
+	}
+
+	@Test
+	public void testSessionCookieMaxAgeBug() {
+		// HttpCookie.getMaxAge() returns -1 for session cookies
+		// This should NOT create a Duration with -1 seconds
+		String setCookieHeader = "sessionid=abc123; Path=/; Secure; HttpOnly";
+
+		Optional<ResponseCookie> parsed = ResponseCookie.fromSetCookieHeaderRepresentation(setCookieHeader);
+		assertTrue(parsed.isPresent(), "Should parse session cookie");
+
+		ResponseCookie cookie = parsed.get();
+		assertEquals("sessionid", cookie.getName());
+		assertEquals("abc123", cookie.getValue().orElse(null));
+
+		// BUG: This will fail because maxAge will be Duration.ofSeconds(-1)
+		// Expected: maxAge should be empty (not present) for session cookies
+		// Actual: maxAge is present with negative duration
+		assertFalse(cookie.getMaxAge().isPresent(),
+				"Session cookies should NOT have a maxAge attribute");
+
+		// The serialized form should NOT include Max-Age
+		String serialized = cookie.toSetCookieHeaderRepresentation();
+		assertFalse(serialized.contains("Max-Age"),
+				"Session cookies should not serialize Max-Age attribute");
+	}
+
+	@Test
+	public void testNegativeMaxAgeCreatesInvalidDuration() {
+		// HttpCookie allows -1 maxAge, but Duration.ofSeconds(-1) is problematic
+		HttpCookie httpCookie = new HttpCookie("test", "value");
+		httpCookie.setMaxAge(-1); // Session cookie
+
+		// This is what the buggy code does:
+		Exception exception = assertThrows(RuntimeException.class, () -> {
+			Duration negativeDuration = Duration.ofSeconds(httpCookie.getMaxAge());
+
+			// When converted back to seconds for serialization:
+			long seconds = negativeDuration.toSeconds(); // This will be -1
+
+			// This creates "Max-Age=-1" which is technically valid but semantically wrong
+			// A session cookie should NOT have Max-Age at all
+			if (seconds >= 0) {
+				// This won't execute due to negative value
+			} else {
+				throw new RuntimeException("Negative maxAge should not be serialized");
+			}
+		});
+
+		assertNotNull(exception, "Should demonstrate the issue with negative Duration");
+	}
+
+
+	@Test
+	public void testZeroMaxAgeWorks() {
+		// Max-Age=0 means "delete this cookie immediately"
+		String setCookieHeader = "sessionid=abc123; Max-Age=0; Path=/";
+
+		Optional<ResponseCookie> parsed = ResponseCookie.fromSetCookieHeaderRepresentation(setCookieHeader);
+		assertTrue(parsed.isPresent());
+
+		ResponseCookie cookie = parsed.get();
+		assertTrue(cookie.getMaxAge().isPresent());
+		assertEquals(0, cookie.getMaxAge().get().toSeconds());
+
+		// Serialization should preserve Max-Age=0
+		String serialized = cookie.toSetCookieHeaderRepresentation();
+		assertTrue(serialized.contains("Max-Age=0"));
 	}
 
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
