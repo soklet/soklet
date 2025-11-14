@@ -117,6 +117,8 @@ public final class Request {
 
 	/**
 	 * Acquires a builder for {@link Request} instances.
+	 * <p>
+	 * Note that query parameters are parsed using RFC 3986 semantics by default - see {@link QueryDecodingStrategy#RFC_3986_STRICT}.
 	 *
 	 * @param httpMethod the HTTP method for this request ({@code GET, POST, etc.})
 	 * @param uri        the URI for this request, which must start with a {@code /} character and might include query parameters, e.g. {@code /example/123} or {@code /one?two=three}
@@ -141,7 +143,7 @@ public final class Request {
 		return new Copier(this);
 	}
 
-	protected Request(@Nonnull Builder builder) {
+	private Request(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
 		IdGenerator idGenerator = builder.idGenerator == null ? getDefaultIdGenerator() : builder.idGenerator;
@@ -171,10 +173,10 @@ public final class Request {
 		// If the URI contains a query string, parse query parameters (if present) from it
 		if (uri.contains("?")) {
 			this.uri = uri;
-			// We always assume x-www-form-urlencoded, because it's possible for browsers to submit GETs with no content-type and we just have to guess.
-			// This means we decode "+" as " " and then apply any percent-decoding rules.
-			// In the future, we might expose a way to let applications prefer QueryDecodingStrategy.RFC_3986_STRICT instead, which treats "+" as literal
-			this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(uri, QueryDecodingStrategy.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET)));
+			// We always assume RFC_3986_STRICT for query parameters because Soklet is for modern systems - HTML Form "GET" submissions are rare/legacy.
+			// This means we leave "+" as "+" (not decode to " ") and then apply any percent-decoding rules.
+			// In the future, we might expose a way to let applications prefer QueryDecodingStrategy.X_WWW_FORM_URLENCODED instead, which treats "+" as a space
+			this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(uri, QueryDecodingStrategy.RFC_3986_STRICT, getCharset().orElse(DEFAULT_CHARSET)));
 
 			// Cannot have 2 different ways of specifying query parameters
 			if (builder.queryParameters != null && builder.queryParameters.size() > 0)

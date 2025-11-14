@@ -208,11 +208,11 @@ public class IntegrationTests {
 	public void queryDecoding_plusAndPercent() throws Exception {
 		int port = findFreePort();
 		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
-			// q=hello+world -> "hello world"
+			// q=hello+world -> "hello+world"
 			URL u1 = new URL("http://127.0.0.1:" + port + "/q?q=hello+world");
 			HttpURLConnection c1 = open("GET", u1, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, c1.getResponseCode());
-			Assertions.assertEquals("hello world", new String(readAll(c1.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals("hello+world", new String(readAll(c1.getInputStream()), StandardCharsets.UTF_8));
 
 			// q=a%2Bb -> "a+b"
 			URL u2 = new URL("http://127.0.0.1:" + port + "/q?q=a%2Bb");
@@ -371,7 +371,7 @@ public class IntegrationTests {
 	}
 
 	@Test
-	public void pathDecoding_plusLiteral_queryPlusIsSpace() throws Exception {
+	public void pathDecoding_plusLiteral_queryPlusIsNotSpace() throws Exception {
 		int port = findFreePort();
 		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
 			URL upath = new URL("http://127.0.0.1:" + port + "/files/a+b");
@@ -382,7 +382,7 @@ public class IntegrationTests {
 			URL uquery = new URL("http://127.0.0.1:" + port + "/q?q=a+b");
 			HttpURLConnection cq = open("GET", uquery, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, cq.getResponseCode());
-			Assertions.assertEquals("a b", new String(readAll(cq.getInputStream()), StandardCharsets.UTF_8));
+			Assertions.assertEquals("a+b", new String(readAll(cq.getInputStream()), StandardCharsets.UTF_8));
 		}
 	}
 }
