@@ -125,7 +125,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 * <p>
 		 * Each connection may have at most 1 event consumer.
 		 * <p>
-		 * See documentation at <a href="https://www.soklet.com/docs/server-sent-events#testing">https://www.soklet.com/docs/server-sent-events#testing</a>.
+		 * See documentation at <a href="https://www.soklet.com/docs/testing#server-sent-events">https://www.soklet.com/docs/testing#server-sent-events</a>.
 		 *
 		 * @param eventConsumer function to be invoked when a Server-Sent Event has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 event consumer
@@ -157,7 +157,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 * <p>
 		 * Each connection may have at most 1 comment consumer.
 		 * <p>
-		 * See documentation at <a href="https://www.soklet.com/docs/server-sent-events#testing">https://www.soklet.com/docs/server-sent-events#testing</a>.
+		 * See documentation at <a href="https://www.soklet.com/docs/testing#server-sent-events">https://www.soklet.com/docs/testing#server-sent-events</a>.
 		 *
 		 * @param commentConsumer function to be invoked when a Server-Sent comment has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 comment consumer
