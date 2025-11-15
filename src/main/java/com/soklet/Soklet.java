@@ -80,7 +80,7 @@ import static java.util.Objects.requireNonNull;
  * }}</pre>
  * ...we might test it like this:
  * <pre>{@code @Test
- * public void basicIntegrationTest() {
+ * public void integrationTest() {
  *   // Just use your app's existing configuration
  *   SokletConfig config = obtainMySokletConfig();
  *

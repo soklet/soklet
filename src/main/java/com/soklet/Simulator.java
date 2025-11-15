@@ -115,7 +115,7 @@ public interface Simulator {
 	RequestResult performRequest(@Nonnull Request request);
 
 	/**
-	 * Given a request that would normally be handled by your {@link ServerSentEventServer} (that is, for a _Resource Method_ decorated with the {@link com.soklet.annotation.ServerSentEventSource} annotation), process it and return response data ({@link com.soklet.ServerSentEventRequestResult.HandshakeAccepted}, {@link com.soklet.ServerSentEventRequestResult.HandshakeRejected}, or {@link com.soklet.ServerSentEventRequestResult.RequestFailed});
+	 * Given a request that would normally be handled by your {@link ServerSentEventServer} (that is, for a <em>Resource Method</em> decorated with the {@link com.soklet.annotation.ServerSentEventSource} annotation), process it and return response data ({@link com.soklet.ServerSentEventRequestResult.HandshakeAccepted}, {@link com.soklet.ServerSentEventRequestResult.HandshakeRejected}, or {@link com.soklet.ServerSentEventRequestResult.RequestFailed});
 	 * <p>
 	 * To make requests that would normally be handled by your {@link Server}, use {@link #performRequest(Request)}.
 	 *
