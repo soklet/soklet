@@ -629,13 +629,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					// Use CAS to ensure only one thread enqueues the check
 					if (lastCheck.compareAndSet(previousCheck, NOW_IN_NANOS)) {
 						// If the queue is full, skip the heartbeat until the next go-round (no closure on heartbeat).
-						enqueueServerSentEvent(
+						boolean enqueued = enqueueServerSentEvent(
 								broadcaster,
 								connection,
 								SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK,
 								EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS,
 								broadcaster.getBackpressureHandler()
 						);
+
+						// If we couldn’t enqueue (queue full), roll back so we retry next cycle
+						if (!enqueued)
+							lastCheck.compareAndSet(NOW_IN_NANOS, previousCheck);
 					}
 				}
 
@@ -655,11 +659,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (!isStarted() || isStopping())
 			return;
 
-		ServerSocketChannel serverSocketChannel = null;
+		ServerSocketChannel serverSocketChannel;
+		boolean bindSucceeded = false;
 
 		try {
 			serverSocketChannel = ServerSocketChannel.open();
 			serverSocketChannel.bind(new InetSocketAddress(getHost(), getPort()));
+
+			bindSucceeded = true;
+
 			this.serverSocketChannel = serverSocketChannel;
 
 			ExecutorService executorService = getRequestHandlerExecutorService().orElse(null);
@@ -704,6 +712,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					// Nothing to do
 				}
 			}
+
+			// If the socket was never bound, ensure a correct stop
+			if (!bindSucceeded)
+				stop();
 		}
 	}
 
