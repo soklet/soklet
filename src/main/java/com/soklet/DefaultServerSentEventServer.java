@@ -1593,12 +1593,19 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// Validate URI
 		if (rawUri != null) {
+			URI uri;
+
 			try {
-				new URI(rawUri.trim());
+				uri = new URI(rawUri.trim());
 			} catch (Exception e) {
 				// Malformed URI specified
 				return Optional.empty();
 			}
+
+			// Normalize absolute URIs to relative form
+			String rawPath = uri.getRawPath() == null ? "/" : uri.getRawPath();
+			String rawQuery = uri.getRawQuery();
+			rawUri = rawQuery == null ? rawPath : rawPath + "?" + rawQuery;
 		}
 
 		// TODO: eventually would be nice to parse headers as best we can.  For now, we just parse the first request line
