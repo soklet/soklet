@@ -31,6 +31,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -1028,6 +1030,12 @@ public final class Soklet implements AutoCloseable {
 		if (!suppressContentLength)
 			marshaledResponse = applyContentLengthIfApplicable(request, marshaledResponse);
 
+		// If the Date header is missing, add it using our cached provider
+		if (!marshaledResponse.getHeaders().containsKey("Date"))
+			marshaledResponse = marshaledResponse.copy()
+					.headers(headers -> headers.put("Date", Set.of(CachedHttpDate.getCurrentValue())))
+					.finish();
+
 		marshaledResponse = applyCorsResponseIfApplicable(request, marshaledResponse);
 
 		return marshaledResponse;
@@ -1621,6 +1629,39 @@ public final class Soklet implements AutoCloseable {
 		@Nonnull
 		protected ConcurrentHashMap<ResourcePath, MockServerSentEventBroadcaster> getBroadcastersByResourcePath() {
 			return this.broadcastersByResourcePath;
+		}
+	}
+
+	/**
+	 * Efficiently provides the current time in RFC 1123 HTTP-date format.
+	 * Updates once per second to avoid the overhead of formatting dates on every request.
+	 */
+	@ThreadSafe
+	private static final class CachedHttpDate {
+		@Nonnull
+		private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss z", Locale.ENGLISH)
+				.withZone(ZoneId.of("GMT"));
+		@Nonnull
+		private static volatile String CURRENT_VALUE = FORMATTER.format(Instant.now());
+
+		static {
+			Thread t = new Thread(() -> {
+				while (true) {
+					try {
+						Thread.sleep(1000);
+						CURRENT_VALUE = FORMATTER.format(Instant.now());
+					} catch (InterruptedException e) {
+						break; // Allow thread to die on JVM shutdown
+					}
+				}
+			}, "soklet-date-updater");
+			t.setDaemon(true);
+			t.start();
+		}
+
+		@Nonnull
+		static String getCurrentValue() {
+			return CURRENT_VALUE;
 		}
 	}
 }
