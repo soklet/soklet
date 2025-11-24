@@ -29,18 +29,14 @@ import com.soklet.internal.microhttp.OptionsBuilder;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -228,10 +224,7 @@ final class DefaultServer implements Server {
 							contentTooLarge = true;
 						}
 
-						String uri = decodeUrlPathOnly(microhttpRequest.uri());
-						uri = removeDotSegments(uri);
-
-						Request request = Request.with(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), uri)
+						Request request = Request.with(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), microhttpRequest.uri())
 								.multipartParser(getMultipartParser())
 								.headers(headers)
 								.body(body)
@@ -299,72 +292,6 @@ final class DefaultServer implements Server {
 		} finally {
 			getLock().unlock();
 		}
-	}
-
-	// URL-decodes the path but leaves query parameters URL-encoded
-	@Nonnull
-	protected String decodeUrlPathOnly(@Nonnull String url) {
-		try {
-			URI uri = new URI(url);
-			String rawPath = uri.getRawPath();
-			String decodedPath = percentDecodePath(rawPath);  // Implement as shown above
-			String rawQuery = uri.getRawQuery();
-
-			return rawQuery != null && !rawQuery.isEmpty()
-					? decodedPath + "?" + rawQuery
-					: decodedPath;
-		} catch (URISyntaxException e) {
-			throw new RuntimeException(format("Unable to decode URL %s", url), e);
-		}
-	}
-
-	@Nonnull
-	protected String percentDecodePath(@Nonnull String rawPath) {
-		requireNonNull(rawPath);
-
-		ByteArrayOutputStream out = new ByteArrayOutputStream(rawPath.length());
-
-		for (int i = 0; i < rawPath.length(); ) {
-			char c = rawPath.charAt(i);
-			if (c == '%' && i + 2 < rawPath.length()) {
-				// Handle invalid hex sequences gracefully
-				try {
-					int b = Integer.parseInt(rawPath.substring(i + 1, i + 3), 16);
-					out.write(b);
-					i += 3;
-				} catch (NumberFormatException e) {
-					// Invalid percent encoding - treat '%' literally and continue
-					out.write((byte) c);
-					i++;
-				}
-			} else {
-				out.write((byte) c);
-				i++;
-			}
-		}
-
-		return out.toString(StandardCharsets.UTF_8);
-	}
-
-	@Nonnull
-	protected String removeDotSegments(@Nonnull String path) {
-		requireNonNull(path);
-
-		Deque<String> stack = new ArrayDeque<>();
-
-		for (String seg : path.split("/")) {
-			if (seg.isEmpty() || ".".equals(seg))
-				continue;
-
-			if ("..".equals(seg)) {
-				if (!stack.isEmpty())
-					stack.removeLast();
-			} else {
-				stack.addLast(seg);
-			}
-		}
-
-		return "/" + String.join("/", stack);
 	}
 
 	@Override

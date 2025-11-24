@@ -33,8 +33,10 @@ import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
 import java.nio.charset.UnsupportedCharsetException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -591,7 +593,7 @@ public final class Utilities {
 	}
 
 	/**
-	 * Normalizes a URL or path into a canonical request path and optionally perform percent-decoding.
+	 * Normalizes a URL or path into a canonical request path and optionally performs percent-decoding on the path.
 	 * <p>
 	 * For example, {@code "https://www.soklet.com/ab%20c?one=two"} would be normalized to {@code "/ab c"}.
 	 * <p>
@@ -600,6 +602,7 @@ public final class Utilities {
 	 *   <li>If input starts with {@code http://} or {@code https://}, the path portion is extracted.</li>
 	 *   <li>Ensures the result begins with {@code '/'}.</li>
 	 *   <li>Removes any trailing {@code '/'} (except for the root path {@code '/'}).</li>
+	 *   <li>Safely normalizes path traversals, e.g. path {@code '/a/../b'} would be normalized to {@code '/b'}</li>
 	 *   <li>Strips any query string.</li>
 	 *   <li>Applies aggressive trimming of Unicode whitespace.</li>
 	 * </ul>
@@ -624,6 +627,9 @@ public final class Utilities {
 
 			String decodedPath = performPercentDecoding ? percentDecode(rawPath, StandardCharsets.UTF_8) : rawPath;
 
+			// Sanitize path traversal (e.g. /a/../b -> /b)
+			decodedPath = removeDotSegments(decodedPath);
+
 			// Normalize trailing slashes like normalizedPathForUrl currently does
 			if (!decodedPath.startsWith("/"))
 				decodedPath = "/" + decodedPath;
@@ -642,6 +648,9 @@ public final class Utilities {
 				path = path.substring(0, q);
 
 			String decodedPath = performPercentDecoding ? percentDecode(path, StandardCharsets.UTF_8) : path;
+
+			// Sanitize path traversal (e.g. /a/../b -> /b)
+			decodedPath = removeDotSegments(decodedPath);
 
 			if (!decodedPath.startsWith("/"))
 				decodedPath = "/" + decodedPath;
@@ -1502,5 +1511,26 @@ public final class Utilities {
 
 		// no port
 		return Optional.of(new HostPort(input, null));
+	}
+
+	@Nonnull
+	private static String removeDotSegments(@Nonnull String path) {
+		requireNonNull(path);
+
+		Deque<String> stack = new ArrayDeque<>();
+
+		for (String seg : path.split("/")) {
+			if (seg.isEmpty() || ".".equals(seg))
+				continue;
+
+			if ("..".equals(seg)) {
+				if (!stack.isEmpty())
+					stack.removeLast();
+			} else {
+				stack.addLast(seg);
+			}
+		}
+
+		return "/" + String.join("/", stack);
 	}
 }

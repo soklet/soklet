@@ -1654,7 +1654,7 @@ public final class Soklet implements AutoCloseable {
 						break; // Allow thread to die on JVM shutdown
 					}
 				}
-			}, "soklet-date-updater");
+			}, "soklet-date-header-value-updater");
 			t.setDaemon(true);
 			t.start();
 		}
