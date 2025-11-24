@@ -29,7 +29,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-public class IllegalRequestHeaderException extends BadRequestException {
+public final class IllegalRequestHeaderException extends BadRequestException {
 	@Nonnull
 	private final String requestHeaderName;
 	@Nullable

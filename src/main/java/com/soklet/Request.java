@@ -20,6 +20,7 @@ import com.soklet.exception.IllegalFormParameterException;
 import com.soklet.exception.IllegalMultipartFieldException;
 import com.soklet.exception.IllegalQueryParameterException;
 import com.soklet.exception.IllegalRequestCookieException;
+import com.soklet.exception.IllegalRequestException;
 import com.soklet.exception.IllegalRequestHeaderException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
@@ -117,6 +118,8 @@ public final class Request {
 	/**
 	 * Acquires a builder for {@link Request} instances.
 	 * <p>
+	 * Paths are percent-decoded.
+	 * <p>
 	 * Query parameters are parsed using RFC 3986 semantics - see {@link QueryDecodingStrategy#RFC_3986_STRICT}.
 	 * <p>
 	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed using {@link QueryDecodingStrategy#X_WWW_FORM_URLENCODED}.
@@ -170,6 +173,10 @@ public final class Request {
 
 		if (!uri.startsWith("/"))
 			throw new IllegalArgumentException(format("URI must start with a '/' character. Illegal URI was '%s'", uri));
+
+		// Reject null bytes
+		if (uri.contains("\u0000") || uri.contains("%00"))
+			throw new IllegalRequestException(format("Illegal null byte in URI '%s'", uri));
 
 		// If the URI contains a query string, parse query parameters (if present) from it
 		if (uri.contains("?")) {

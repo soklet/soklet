@@ -92,9 +92,7 @@ public enum LogEventType {
 	 */
 	RESOURCE_METHOD_RESOLUTION_FAILED,
 	/**
-	 * Indicates that the {@link Server} received a request with an illegal structure, which generally indicates a bot searching for vulnerabilities.
-	 * <p>
-	 * Example: {@code "/\\\\\\%20.../%20.../%20.../%20.../%20.../%20.../etc/passwd"}.
+	 * Indicates that the {@link Server} received a request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
 	 */
 	SERVER_UNPARSEABLE_REQUEST,
 	/**
@@ -102,9 +100,7 @@ public enum LogEventType {
 	 */
 	SERVER_INTERNAL_ERROR,
 	/**
-	 * Indicates that the {@link ServerSentEventServer} received a handshake request with an illegal structure, which generally indicates a bot searching for vulnerabilities.
-	 * <p>
-	 * Example: {@code "/\\\\\\%20.../%20.../%20.../%20.../%20.../%20.../etc/passwd"}.
+	 * Indicates that the {@link ServerSentEventServer} received a handshake request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
 	 */
 	SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST,
 	/**

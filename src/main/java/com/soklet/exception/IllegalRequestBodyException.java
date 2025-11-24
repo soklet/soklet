@@ -25,7 +25,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-public class IllegalRequestBodyException extends BadRequestException {
+public final class IllegalRequestBodyException extends BadRequestException {
 	public IllegalRequestBodyException(@Nullable String message) {
 		super(message);
 	}

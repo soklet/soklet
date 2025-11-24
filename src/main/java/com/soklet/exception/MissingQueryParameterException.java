@@ -28,7 +28,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-public class MissingQueryParameterException extends BadRequestException {
+public final class MissingQueryParameterException extends BadRequestException {
 	@Nonnull
 	private final String queryParameterName;
 

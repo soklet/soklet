@@ -25,7 +25,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-public class MissingRequestBodyException extends BadRequestException {
+public final class MissingRequestBodyException extends BadRequestException {
 	public MissingRequestBodyException(@Nullable String message) {
 		super(message);
 	}

@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.Handler;
 import com.soklet.internal.microhttp.Header;
@@ -55,6 +56,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.emptyByteArray;
+import static com.soklet.Utilities.trimAggressivelyToEmpty;
 import static java.lang.String.format;
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
@@ -224,7 +226,20 @@ final class DefaultServer implements Server {
 							contentTooLarge = true;
 						}
 
-						Request request = Request.with(HttpMethod.valueOf(microhttpRequest.method().toUpperCase(ENGLISH)), microhttpRequest.uri())
+						HttpMethod httpMethod;
+
+						try {
+							String normalizedMethod = trimAggressivelyToEmpty(microhttpRequest.method()).toUpperCase(ENGLISH);
+
+							if (normalizedMethod.equals("PRI"))
+								throw new IllegalRequestException("HTTP/2.0 Connection Preface specified, but Soklet only supports HTTP/1.1");
+
+							httpMethod = HttpMethod.valueOf(normalizedMethod);
+						} catch (IllegalArgumentException e) {
+							throw new IllegalRequestException(format("Unsupported HTTP method specified: '%s'", microhttpRequest.method()));
+						}
+
+						Request request = Request.with(httpMethod, microhttpRequest.uri())
 								.multipartParser(getMultipartParser())
 								.headers(headers)
 								.body(body)
@@ -249,7 +264,7 @@ final class DefaultServer implements Server {
 										.build());
 
 								try {
-									microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
+									microHttpCallback.accept(provideMicrohttpFailsafeResponse(500, microhttpRequest, t));
 								} catch (Throwable t2) {
 									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 											.throwable(t2)
@@ -258,7 +273,15 @@ final class DefaultServer implements Server {
 							}
 						}));
 					} catch (Throwable t) {
-						if (t instanceof URISyntaxException) {
+						Integer failsafeStatusCode = 500;
+
+						if (t instanceof IllegalRequestException) {
+							failsafeStatusCode = 400;
+							safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, t.getMessage())
+									.throwable(t)
+									.build());
+						} else if (t instanceof URISyntaxException) {
+							failsafeStatusCode = 400;
 							safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, format("Unable to parse request URI: %s", microhttpRequest.uri()))
 									.throwable(t)
 									.build());
@@ -270,7 +293,7 @@ final class DefaultServer implements Server {
 
 						if (shouldWriteFailsafeResponse.get()) {
 							try {
-								microHttpCallback.accept(provideMicrohttpFailsafeResponse(microhttpRequest, t));
+								microHttpCallback.accept(provideMicrohttpFailsafeResponse(failsafeStatusCode, microhttpRequest, t));
 							} catch (Throwable t2) {
 								safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 										.throwable(t2)
@@ -355,12 +378,13 @@ final class DefaultServer implements Server {
 	}
 
 	@Nonnull
-	protected MicrohttpResponse provideMicrohttpFailsafeResponse(@Nonnull MicrohttpRequest microhttpRequest,
+	protected MicrohttpResponse provideMicrohttpFailsafeResponse(@Nonnull Integer statusCode,
+																															 @Nonnull MicrohttpRequest microhttpRequest,
 																															 @Nonnull Throwable throwable) {
+		requireNonNull(statusCode);
 		requireNonNull(microhttpRequest);
 		requireNonNull(throwable);
 
-		Integer statusCode = 500;
 		Charset charset = StandardCharsets.UTF_8;
 		String reasonPhrase = StatusCode.fromStatusCode(statusCode).get().getReasonPhrase();
 		List<Header> headers = List.of(new Header("Content-Type", format("text/plain; charset=%s", charset.name())));

@@ -28,8 +28,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -867,6 +869,95 @@ public class AdvancedTests {
 		try (ServerSocket ss = new ServerSocket(0)) {
 			ss.setReuseAddress(true);
 			return ss.getLocalPort();
+		}
+	}
+
+	private SokletConfig config(int port) {
+		return SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(2)).build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
+				/*
+				.lifecycleInterceptor(new LifecycleInterceptor() {
+					@Override
+					public void didReceiveLogEvent(LogEvent e) {} // quiet
+				})*/.build();
+	}
+
+	private void write(Socket s, String data) throws Exception {
+		s.getOutputStream().write(data.getBytes(StandardCharsets.UTF_8));
+	}
+
+	private String readResponse(Socket s) throws Exception {
+		InputStream in = s.getInputStream();
+		byte[] buf = new byte[1024];
+		int n = in.read(buf);
+		return n > 0 ? new String(buf, 0, n, StandardCharsets.UTF_8) : "";
+	}
+
+	private String firstLine(String resp) {
+		return resp.lines().findFirst().orElse("empty");
+	}
+
+	@Test
+	public void bug_absoluteUriRequestFormIsRejected() throws Exception {
+		int port = findFreePort();
+		SokletConfig config = config(port);
+
+		try (Soklet app = Soklet.withConfig(config)) {
+			app.start();
+			try (Socket socket = new Socket("localhost", port)) {
+				// RFC 7230: A server MUST accept the absolute-form in requests
+				String request = "GET http://localhost:" + port + "/hello HTTP/1.1\r\n" +
+						"Host: localhost\r\n\r\n";
+
+				write(socket, request);
+				String response = readResponse(socket);
+
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 200"),
+						"Server rejected absolute URI form: " + firstLine(response));
+			}
+		}
+	}
+
+	@Test
+	public void bug_optionsAsteriskIsRejected() throws Exception {
+		int port = findFreePort();
+		SokletConfig config = config(port);
+
+		try (Soklet app = Soklet.withConfig(config)) {
+			app.start();
+			try (Socket socket = new Socket("localhost", port)) {
+				// Standard server health check
+				String request = "OPTIONS * HTTP/1.1\r\n" +
+						"Host: localhost\r\n\r\n";
+
+				write(socket, request);
+				String response = readResponse(socket);
+
+				System.out.println(response);
+
+				Assertions.assertFalse(response.startsWith("HTTP/1.1 500"), "Server did not handle OPTIONS *");
+			}
+		}
+	}
+
+	@Test
+	public void security_nullByteInjectionIsAllowed() throws Exception {
+		int port = findFreePort();
+		SokletConfig config = config(port);
+
+		try (Soklet app = Soklet.withConfig(config)) {
+			app.start();
+			try (Socket socket = new Socket("localhost", port)) {
+				// Attack: try to access file with null byte terminator
+				String request = "GET /hello%00.png HTTP/1.1\r\n" +
+						"Host: localhost\r\n\r\n";
+
+				write(socket, request);
+				String response = readResponse(socket);
+
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 400"),
+						"Server should reject paths containing null bytes with 400 Bad Request");
+			}
 		}
 	}
 }

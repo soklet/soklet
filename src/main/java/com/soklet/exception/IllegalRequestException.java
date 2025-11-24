@@ -16,30 +16,19 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * Exception thrown when a required HTTP form parameter is missing from the request.
+ * Exception thrown when the HTTP request line itself is malformed, such as a client specifying a nonexistent HTTP method.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-public final class MissingFormParameterException extends BadRequestException {
-	@Nonnull
-	private final String formParameterName;
-
-	public MissingFormParameterException(@Nullable String message,
-																			 @Nonnull String formParameterName) {
-		super(message);
-		this.formParameterName = requireNonNull(formParameterName);
-	}
-
-	@Nonnull
-	public String getFormParameterName() {
-		return this.formParameterName;
+public final class IllegalRequestException extends BadRequestException {
+	public IllegalRequestException(@Nullable String message) {
+		super(requireNonNull(message));
 	}
 }

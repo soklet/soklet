@@ -29,7 +29,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-public class IllegalPathParameterException extends BadRequestException {
+public final class IllegalPathParameterException extends BadRequestException {
 	@Nonnull
 	private final String pathParameterName;
 	@Nullable

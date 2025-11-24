@@ -28,7 +28,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-public class MissingMultipartFieldException extends BadRequestException {
+public final class MissingMultipartFieldException extends BadRequestException {
 	@Nonnull
 	private final String multipartFieldName;
 
