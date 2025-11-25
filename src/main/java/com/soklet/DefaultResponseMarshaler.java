@@ -24,6 +24,7 @@ import com.soklet.ResponseMarshaler.Builder.HeadHandler;
 import com.soklet.ResponseMarshaler.Builder.MethodNotAllowedHandler;
 import com.soklet.ResponseMarshaler.Builder.NotFoundHandler;
 import com.soklet.ResponseMarshaler.Builder.OptionsHandler;
+import com.soklet.ResponseMarshaler.Builder.OptionsSplatHandler;
 import com.soklet.ResponseMarshaler.Builder.PostProcessor;
 import com.soklet.ResponseMarshaler.Builder.ResourceMethodHandler;
 import com.soklet.ResponseMarshaler.Builder.ThrowableHandler;
@@ -81,6 +82,8 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nullable
 	private final OptionsHandler optionsHandler;
 	@Nullable
+	private final OptionsSplatHandler optionsSplatHandler;
+	@Nullable
 	private final ThrowableHandler throwableHandler;
 	@Nullable
 	private final HeadHandler headHandler;
@@ -102,6 +105,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		this.methodNotAllowedHandler = builder.methodNotAllowedHandler;
 		this.contentTooLargeHandler = builder.contentTooLargeHandler;
 		this.optionsHandler = builder.optionsHandler;
+		this.optionsSplatHandler = builder.optionsSplatHandler;
 		this.throwableHandler = builder.throwableHandler;
 		this.headHandler = builder.headHandler;
 		this.corsPreflightAllowedHandler = builder.corsPreflightAllowedHandler;
@@ -271,6 +275,34 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.collect(Collectors.toSet()));
 
 			marshaledResponse = MarshaledResponse.withStatusCode(204)
+					.headers(Map.of("Allow", allowedHttpMethodsAsStrings))
+					.build();
+		}
+
+		if (postProcessor != null)
+			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+
+		return marshaledResponse;
+	}
+
+	@Nonnull
+	@Override
+	public MarshaledResponse forOptionsSplat(@Nonnull Request request) {
+		requireNonNull(request);
+
+		OptionsSplatHandler optionsSplatHandler = getOptionsSplatHandler().orElse(null);
+		PostProcessor postProcessor = getPostProcessor().orElse(null);
+		MarshaledResponse marshaledResponse;
+
+		if (optionsSplatHandler != null) {
+			marshaledResponse = optionsSplatHandler.handle(request);
+		} else {
+			// Expose all possible methods in the Allow header
+			SortedSet<String> allowedHttpMethodsAsStrings = new TreeSet<>(HttpMethod.valuesAsSet().stream()
+					.map(httpMethod -> httpMethod.name())
+					.collect(Collectors.toSet()));
+
+			marshaledResponse = MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Allow", allowedHttpMethodsAsStrings))
 					.build();
 		}
@@ -541,6 +573,11 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
 	protected Optional<OptionsHandler> getOptionsHandler() {
 		return Optional.ofNullable(this.optionsHandler);
+	}
+
+	@Nonnull
+	protected Optional<OptionsSplatHandler> getOptionsSplatHandler() {
+		return Optional.ofNullable(this.optionsSplatHandler);
 	}
 
 	@Nonnull

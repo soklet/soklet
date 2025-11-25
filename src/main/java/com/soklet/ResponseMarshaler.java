@@ -202,6 +202,19 @@ public interface ResponseMarshaler {
 															 @Nonnull Set<HttpMethod> allowedHttpMethods);
 
 	/**
+	 * Prepares a response for an HTTP {@code OPTIONS *} (colloquially, "{@code OPTIONS} Splat") request.
+	 * <p>
+	 * This is a special HTTP/1.1 request defined in RFC 7231 §4.3.7 which permits querying of server-wide capabilities, not the capabilities of a particular resource - e.g. a load balancer asking "is the system up?" without an explicit health-check URL.
+	 * <p>
+	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#http-options">https://www.soklet.com/docs/response-writing#http-options</a>.
+	 *
+	 * @param request the HTTP request
+	 * @return the response to be sent over the wire
+	 */
+	@Nonnull
+	MarshaledResponse forOptionsSplat(@Nonnull Request request);
+
+	/**
 	 * Prepares a response for scenarios in which an uncaught exception is encountered.
 	 * <p>
 	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#uncaught-exceptions">https://www.soklet.com/docs/response-writing#uncaught-exceptions</a>.
@@ -426,6 +439,25 @@ public interface ResponseMarshaler {
 		}
 
 		/**
+		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forOptionsSplat(Request)}.
+		 */
+		@FunctionalInterface
+		public interface OptionsSplatHandler {
+			/**
+			 * Prepares a response for an HTTP {@code OPTIONS *} (colloquially, "{@code OPTIONS} Splat") request.
+			 * <p>
+			 * This is a special HTTP/1.1 request defined in RFC 7231 §4.3.7 which permits querying of server-wide capabilities, not the capabilities of a particular resource - e.g. a load balancer asking "is the system up?" without an explicit health-check URL.
+			 * <p>
+			 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#http-options">https://www.soklet.com/docs/response-writing#http-options</a>.
+			 *
+			 * @param request the HTTP request
+			 * @return the response to be sent over the wire
+			 */
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request);
+		}
+
+		/**
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)}.
 		 */
 		@FunctionalInterface
@@ -564,6 +596,8 @@ public interface ResponseMarshaler {
 		@Nullable
 		OptionsHandler optionsHandler;
 		@Nullable
+		OptionsSplatHandler optionsSplatHandler;
+		@Nullable
 		ThrowableHandler throwableHandler;
 		@Nullable
 		HeadHandler headHandler;
@@ -615,6 +649,12 @@ public interface ResponseMarshaler {
 		@Nonnull
 		public Builder optionsHandler(@Nullable OptionsHandler optionsHandler) {
 			this.optionsHandler = optionsHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder optionsSplatHandler(@Nullable OptionsSplatHandler optionsSplatHandler) {
+			this.optionsSplatHandler = optionsSplatHandler;
 			return this;
 		}
 

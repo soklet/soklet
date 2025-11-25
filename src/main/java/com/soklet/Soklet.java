@@ -814,6 +814,10 @@ public final class Soklet implements AutoCloseable {
 					.resourceMethod(resourceMethod)
 					.build();
 
+		// Special short-circuit for OPTIONS *
+		if (request.getResourcePath() == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH)
+			return RequestResult.withMarshaledResponse(responseMarshaler.forOptionsSplat(request)).build();
+
 		// No resource method was found for this HTTP method and path.
 		if (resourceMethod == null) {
 			// If this was an OPTIONS request, do special processing.

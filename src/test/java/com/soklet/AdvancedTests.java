@@ -875,11 +875,10 @@ public class AdvancedTests {
 	private SokletConfig config(int port) {
 		return SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(2)).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
-				/*
 				.lifecycleInterceptor(new LifecycleInterceptor() {
 					@Override
 					public void didReceiveLogEvent(LogEvent e) {} // quiet
-				})*/.build();
+				}).build();
 	}
 
 	private void write(Socket s, String data) throws Exception {
@@ -932,8 +931,6 @@ public class AdvancedTests {
 
 				write(socket, request);
 				String response = readResponse(socket);
-
-				System.out.println(response);
 
 				Assertions.assertFalse(response.startsWith("HTTP/1.1 500"), "Server did not handle OPTIONS *");
 			}
