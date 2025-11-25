@@ -173,6 +173,9 @@ public final class ResourcePathDeclaration {
 	public Boolean matches(@Nonnull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
 
+		if (resourcePath == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH)
+			return false;
+
 		List<Component> declarationComponents = getComponents();
 		List<String> pathComponents = resourcePath.getComponents();
 

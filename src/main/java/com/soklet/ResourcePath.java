@@ -50,6 +50,13 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class ResourcePath {
 	@Nonnull
+	final static ResourcePath OPTIONS_SPLAT_RESOURCE_PATH;
+
+	static {
+		OPTIONS_SPLAT_RESOURCE_PATH = new ResourcePath();
+	}
+
+	@Nonnull
 	private final String path;
 	@Nonnull
 	private final List<String> components;
@@ -66,6 +73,12 @@ public final class ResourcePath {
 	public static ResourcePath withPath(@Nonnull String path) {
 		requireNonNull(path);
 		return new ResourcePath(path);
+	}
+
+	// Special "options splat" path
+	private ResourcePath() {
+		this.path = "*";
+		this.components = List.of();
 	}
 
 	private ResourcePath(@Nonnull String path) {
@@ -85,6 +98,9 @@ public final class ResourcePath {
 	@Nonnull
 	public Boolean matches(@Nonnull ResourcePathDeclaration resourcePathDeclaration) {
 		requireNonNull(resourcePathDeclaration);
+
+		if (this == OPTIONS_SPLAT_RESOURCE_PATH)
+			return false;
 
 		List<Component> declarationComponents = resourcePathDeclaration.getComponents();
 

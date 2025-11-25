@@ -79,7 +79,9 @@ public final class Request {
 	@Nonnull
 	private final HttpMethod httpMethod;
 	@Nonnull
-	private final String uri;
+	private final String rawUrl;
+	@Nonnull
+	private final String path;
 	@Nonnull
 	private final ResourcePath resourcePath;
 	@Nonnull
@@ -118,23 +120,26 @@ public final class Request {
 	/**
 	 * Acquires a builder for {@link Request} instances.
 	 * <p>
-	 * Paths are percent-decoded.
+	 * The provided {@code rawUrl} must be un-decoded and in either "path-and-query" form (i.e. starts with a {@code /} character) or an absolute URL (i.e. starts with {@code http://} or {@code https://}).
+	 * It might include un-decoded query parameters, e.g. {@code https://www.example.com/one?two=thr%20ee} or {@code /one?two=thr%20ee}.  An exception to this rule is {@code OPTIONS *} requests, where the URL is the {@code *} "splat" symbol.
 	 * <p>
-	 * Query parameters are parsed using RFC 3986 semantics - see {@link QueryDecodingStrategy#RFC_3986_STRICT}.
+	 * Paths will be percent-decoded at build time.
 	 * <p>
-	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed using {@link QueryDecodingStrategy#X_WWW_FORM_URLENCODED}.
+	 * Query parameters are parsed and decoded at build time using RFC 3986 semantics - see {@link QueryDecodingStrategy#RFC_3986_STRICT}.
+	 * <p>
+	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded at build time by using {@link QueryDecodingStrategy#X_WWW_FORM_URLENCODED}.
 	 *
 	 * @param httpMethod the HTTP method for this request ({@code GET, POST, etc.})
-	 * @param uri        the URI for this request, which must start with a {@code /} character and might include query parameters, e.g. {@code /example/123} or {@code /one?two=three}
+	 * @param rawUrl     the raw (un-decoded) URL for this request
 	 * @return the builder
 	 */
 	@Nonnull
 	public static Builder with(@Nonnull HttpMethod httpMethod,
-														 @Nonnull String uri) {
+														 @Nonnull String rawUrl) {
 		requireNonNull(httpMethod);
-		requireNonNull(uri);
+		requireNonNull(rawUrl);
 
-		return new Builder(httpMethod, uri);
+		return new Builder(httpMethod, rawUrl);
 	}
 
 	/**
@@ -147,6 +152,13 @@ public final class Request {
 		return new Copier(this);
 	}
 
+	private enum UrlType {
+		UNKNOWN,
+		ABSOLUTE,
+		RELATIVE,
+		OPTIONS_SPLAT
+	}
+
 	private Request(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
@@ -155,6 +167,14 @@ public final class Request {
 		this.lock = new ReentrantLock();
 		this.id = builder.id == null ? idGenerator.generateId() : builder.id;
 		this.httpMethod = builder.httpMethod;
+
+		String rawUrl = trimAggressivelyToNull(builder.rawUrl);
+
+		if (rawUrl == null)
+			throw new IllegalArgumentException("URL cannot be blank.");
+
+		if (rawUrl.contains("\u0000") || rawUrl.contains("%00"))
+			throw new IllegalRequestException(format("Illegal null byte in URL '%s'", rawUrl));
 
 		// Header names are case-insensitive.  Enforce that here with a special map
 		Map<String, Set<String>> caseInsensitiveHeaders = new LinkedCaseInsensitiveMap<>(builder.headers);
@@ -166,36 +186,35 @@ public final class Request {
 		this.contentType = Utilities.extractContentTypeFromHeaders(this.headers).orElse(null);
 		this.charset = Utilities.extractCharsetFromHeaders(this.headers).orElse(null);
 
-		String uri = trimAggressivelyToNull(builder.uri);
+		UrlType urlType;
 
-		if (uri == null)
-			throw new IllegalArgumentException("URI cannot be blank.");
+		// Determine what flavor of URL we're looking at
+		if (this.httpMethod == HttpMethod.OPTIONS && "*".equals(rawUrl))
+			urlType = UrlType.OPTIONS_SPLAT;
+		else if (rawUrl.toLowerCase().startsWith("http://") || rawUrl.toLowerCase().startsWith("https://"))
+			urlType = UrlType.ABSOLUTE;
+		else if (rawUrl.startsWith("/"))
+			urlType = UrlType.RELATIVE;
+		else
+			throw new IllegalArgumentException(format("URL must be absolute (e.g. https://www.example.com) or start with a '/' character. Illegal URL was '%s'", rawUrl));
 
-		if (!uri.startsWith("/"))
-			throw new IllegalArgumentException(format("URI must start with a '/' character. Illegal URI was '%s'", uri));
+		this.path = Utilities.normalizedPathForUrl(rawUrl, true);
 
-		// Reject null bytes
-		if (uri.contains("\u0000") || uri.contains("%00"))
-			throw new IllegalRequestException(format("Illegal null byte in URI '%s'", uri));
-
-		// If the URI contains a query string, parse query parameters (if present) from it
-		if (uri.contains("?")) {
-			this.uri = uri;
+		// If the URL contains a query string, parse query parameters (if present) from it
+		if (rawUrl.contains("?")) {
 			// We always assume RFC_3986_STRICT for query parameters because Soklet is for modern systems - HTML Form "GET" submissions are rare/legacy.
 			// This means we leave "+" as "+" (not decode to " ") and then apply any percent-decoding rules.
 			// In the future, we might expose a way to let applications prefer QueryDecodingStrategy.X_WWW_FORM_URLENCODED instead, which treats "+" as a space
-			this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(uri, QueryDecodingStrategy.RFC_3986_STRICT, getCharset().orElse(DEFAULT_CHARSET)));
+			this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(rawUrl, QueryDecodingStrategy.RFC_3986_STRICT, getCharset().orElse(DEFAULT_CHARSET)));
 
 			// Cannot have 2 different ways of specifying query parameters
 			if (builder.queryParameters != null && builder.queryParameters.size() > 0)
-				throw new IllegalArgumentException("You cannot specify both query parameters and a URI with a query string.");
+				throw new IllegalArgumentException("You cannot specify both query parameters and a URL with a query string.");
 		} else {
-			// If the URI does not contain a query string, then use query parameters provided by the builder, if present
+			// If the URL does not contain a query string, then use query parameters provided by the builder (assumed to be already decoded), if present, and tack those onto the raw URL
 			this.queryParameters = builder.queryParameters == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(builder.queryParameters));
 
-			if (this.queryParameters.size() == 0) {
-				this.uri = uri;
-			} else {
+			if (this.queryParameters.size() > 0) {
 				Charset queryParameterCharset = getCharset().orElse(DEFAULT_CHARSET);
 				String queryString = this.queryParameters.entrySet().stream()
 						.map((entry) -> {
@@ -220,11 +239,12 @@ public final class Request {
 						.flatMap(Collection::stream)
 						.collect(Collectors.joining("&"));
 
-				this.uri = format("%s?%s", uri, queryString);
+				rawUrl = format("%s?%s", rawUrl, queryString);
 			}
 		}
 
-		this.resourcePath = ResourcePath.withPath(Utilities.normalizedPathForUrl(uri, true));
+		this.rawUrl = rawUrl;
+		this.resourcePath = urlType == UrlType.OPTIONS_SPLAT ? ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH : ResourcePath.withPath(this.path);
 
 		// Form parameters
 		// TODO: optimize copy/modify scenarios - we don't want to be re-processing body data
@@ -257,8 +277,8 @@ public final class Request {
 
 	@Override
 	public String toString() {
-		return format("%s{id=%s, httpMethod=%s, uri=%s, path=%s, cookies=%s, queryParameters=%s, headers=%s, body=%s}",
-				getClass().getSimpleName(), getId(), getHttpMethod(), getUri(), getPath(), getCookies(), getQueryParameters(),
+		return format("%s{id=%s, httpMethod=%s, path=%s, cookies=%s, queryParameters=%s, headers=%s, body=%s}",
+				getClass().getSimpleName(), getId(), getHttpMethod(), getPath(), getCookies(), getQueryParameters(),
 				getHeaders(), format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
 	}
 
@@ -272,7 +292,7 @@ public final class Request {
 
 		return Objects.equals(getId(), request.getId())
 				&& Objects.equals(getHttpMethod(), request.getHttpMethod())
-				&& Objects.equals(getUri(), request.getUri())
+				&& Objects.equals(getPath(), request.getPath())
 				&& Objects.equals(getQueryParameters(), request.getQueryParameters())
 				&& Objects.equals(getHeaders(), request.getHeaders())
 				&& Objects.equals(getBody(), request.getBody())
@@ -281,7 +301,7 @@ public final class Request {
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getId(), getHttpMethod(), getUri(), getQueryParameters(), getHeaders(), getBody(), isContentTooLarge());
+		return Objects.hash(getId(), getHttpMethod(), getPath(), getQueryParameters(), getHeaders(), getBody(), isContentTooLarge());
 	}
 
 	/**
@@ -307,23 +327,25 @@ public final class Request {
 	}
 
 	/**
-	 * The URI for this request, which must start with a {@code /} character and might include query parameters, such as {@code /example/123} or {@code /one?two=three}.
+	 * The raw URL for this request, which is un-decoded and in either "path-and-query" form (i.e. starts with a {@code /} character) or an absolute URL (i.e. starts with {@code http://} or {@code https://}).
+	 * <p>
+	 * It might include un-decoded query parameters, e.g. {@code https://www.example.com/one?two=thr%20ee} or {@code /one?two=thr%20ee}.  An exception to this rule is {@code OPTIONS *} requests, where the URL is the {@code *} "splat" symbol.
 	 *
-	 * @return the request's URI
+	 * @return the request's raw URL
 	 */
 	@Nonnull
-	public String getUri() {
-		return this.uri;
+	public String getRawUrl() {
+		return this.rawUrl;
 	}
 
 	/**
-	 * The path component of this request, which is a representation of the value returned by {@link #getUri()} with the query string (if any) removed.
+	 * The path component of this request, which is a decoded representation of the value returned by {@link #getRawUrl()} with the query string (if any) removed.
 	 *
 	 * @return the path for this request
 	 */
 	@Nonnull
 	public String getPath() {
-		return getResourcePath().getPath();
+		return getPath();
 	}
 
 	/**
@@ -354,7 +376,7 @@ public final class Request {
 	}
 
 	/**
-	 * The query parameters provided by the client for this request.
+	 * The decoded query parameters provided by the client for this request.
 	 * <p>
 	 * The keys are the query parameter names and the values are query parameter values
 	 * (it is possible for a client to send multiple query parameters with the same name, e.g. {@code ?test=1&test=2}).
@@ -371,7 +393,7 @@ public final class Request {
 	}
 
 	/**
-	 * The HTML {@code form} parameters provided by the client for this request.
+	 * The decoded HTML {@code application/x-www-form-urlencoded} form parameters provided by the client for this request.
 	 * <p>
 	 * The keys are the form parameter names and the values are form parameter values
 	 * (it is possible for a client to send multiple form parameters with the same name, e.g. {@code ?test=1&test=2}).
@@ -435,7 +457,7 @@ public final class Request {
 	}
 
 	/**
-	 * The HTML {@code multipart/form-data} fields provided by the client for this request.
+	 * The decoded HTML {@code multipart/form-data} fields provided by the client for this request.
 	 * <p>
 	 * The keys are the multipart field names and the values are multipart field values
 	 * (it is possible for a client to send multiple multipart fields with the same name).
@@ -641,7 +663,7 @@ public final class Request {
 	}
 
 	/**
-	 * Convenience method to access a query parameter's value when at most one is expected for the given {@code name}.
+	 * Convenience method to access a decoded query parameter's value when at most one is expected for the given {@code name}.
 	 * <p>
 	 * If a query parameter {@code name} can support multiple values, {@link #getQueryParameters()} should be used instead of this method.
 	 * <p>
@@ -667,7 +689,7 @@ public final class Request {
 	}
 
 	/**
-	 * Convenience method to access a form parameter's value when at most one is expected for the given {@code name}.
+	 * Convenience method to access a decoded form parameter's value when at most one is expected for the given {@code name}.
 	 * <p>
 	 * If a form parameter {@code name} can support multiple values, {@link #getFormParameters()} should be used instead of this method.
 	 * <p>
@@ -745,7 +767,7 @@ public final class Request {
 	}
 
 	/**
-	 * Convenience method to access a multipart field when at most one is expected for the given {@code name}.
+	 * Convenience method to access a decoded multipart field when at most one is expected for the given {@code name}.
 	 * <p>
 	 * If a {@code name} can support multiple multipart fields, {@link #getMultipartFields()} should be used instead of this method.
 	 * <p>
@@ -842,7 +864,7 @@ public final class Request {
 		@Nonnull
 		private HttpMethod httpMethod;
 		@Nonnull
-		private String uri;
+		private String rawUrl;
 		@Nullable
 		private Object id;
 		@Nullable
@@ -859,12 +881,12 @@ public final class Request {
 		private Boolean contentTooLarge;
 
 		protected Builder(@Nonnull HttpMethod httpMethod,
-											@Nonnull String uri) {
+											@Nonnull String rawUrl) {
 			requireNonNull(httpMethod);
-			requireNonNull(uri);
+			requireNonNull(rawUrl);
 
 			this.httpMethod = httpMethod;
-			this.uri = uri;
+			this.rawUrl = rawUrl;
 		}
 
 		@Nonnull
@@ -875,9 +897,9 @@ public final class Request {
 		}
 
 		@Nonnull
-		public Builder uri(@Nonnull String uri) {
-			requireNonNull(uri);
-			this.uri = uri;
+		public Builder rawUrl(@Nonnull String rawUrl) {
+			requireNonNull(rawUrl);
+			this.rawUrl = rawUrl;
 			return this;
 		}
 
@@ -944,9 +966,10 @@ public final class Request {
 		Copier(@Nonnull Request request) {
 			requireNonNull(request);
 
-			this.builder = new Builder(request.getHttpMethod(), request.getUri())
+			this.builder = new Builder(request.getHttpMethod(), request.getRawUrl())
 					.id(request.getId())
-					.queryParameters(new LinkedHashMap<>(request.getQueryParameters()))
+					// Deliberately don't seed the copy builder with query parameters because those come from the non-decoded raw URL
+					// TODO: revisit this
 					.headers(new LinkedCaseInsensitiveMap<>(request.getHeaders()))
 					.body(request.getBody().orElse(null))
 					.contentTooLarge(request.isContentTooLarge());
@@ -960,9 +983,9 @@ public final class Request {
 		}
 
 		@Nonnull
-		public Copier uri(@Nonnull String uri) {
-			requireNonNull(uri);
-			this.builder.uri(uri);
+		public Copier rawUrl(@Nonnull String rawUrl) {
+			requireNonNull(rawUrl);
+			this.builder.rawUrl(rawUrl);
 			return this;
 		}
 

@@ -531,7 +531,7 @@ public class AdvancedTests {
 					// Concurrent reads from request
 					for (int j = 0; j < 100; j++) {
 						request.getHttpMethod();
-						request.getUri();
+						request.getRawUrl();
 						request.getHeaders();
 						request.getBody();
 						request.getCookies();
@@ -906,7 +906,7 @@ public class AdvancedTests {
 			app.start();
 			try (Socket socket = new Socket("localhost", port)) {
 				// RFC 7230: A server MUST accept the absolute-form in requests
-				String request = "GET http://localhost:" + port + "/hello HTTP/1.1\r\n" +
+				String request = "GET http://localhost:" + port + "/test HTTP/1.1\r\n" +
 						"Host: localhost\r\n\r\n";
 
 				write(socket, request);
