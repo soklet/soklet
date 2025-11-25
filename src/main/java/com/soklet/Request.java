@@ -345,7 +345,7 @@ public final class Request {
 	 */
 	@Nonnull
 	public String getPath() {
-		return getPath();
+		return this.path;
 	}
 
 	/**
