@@ -52,7 +52,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Encapsulates information specified in an HTTP request.
  * <p>
- * Instances can be acquired via the {@link #withRawUrl(HttpMethod, String)} (e.g. provided by clients on a "raw" HTTP/1.1 request line, un-encoded) and {@link #withPath(HttpMethod, String)} (e.g. manually-constructed during integration testing, understood to be already-decoded) builder factory methods.
+ * Instances can be acquired via the {@link #withRawUrl(HttpMethod, String)} (e.g. provided by clients on a "raw" HTTP/1.1 request line, un-decoded) and {@link #withPath(HttpMethod, String)} (e.g. manually-constructed during integration testing, understood to be already-decoded) builder factory methods.
  * <p>
  * As part of instance construction, any necessary decoding (path, URL parameter, {@code Content-Type: application/x-www-form-urlencoded}, etc.) will be performed.  Unless otherwise indicated, all accessor methods will return decoded data.
  * <p>
@@ -145,9 +145,9 @@ public final class Request {
 	/**
 	 * Acquires a builder for {@link Request} instances from already-decoded path and query components - useful for manual construction, e.g. integration tests.
 	 * <p>
-	 * The provided {@code path} should be decoded (e.g. {@code "/my path"}, not {@code "/my%20path"}).  It should not include query parameters.
+	 * The provided {@code path} must start with the {@code /} character and already be decoded (e.g. {@code "/my path"}, not {@code "/my%20path"}).  It must not include query parameters. For {@code OPTIONS *} requests, the {@code path} must be {@code *} - the "splat" symbol.
 	 * <p>
-	 * Query parameters must be specified via {@link PathBuilder#queryParameters(Map)}.
+	 * Query parameters must be specified via {@link PathBuilder#queryParameters(Map)} and are assumed to be already-decoded.
 	 * <p>
 	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded at build time by using {@link QueryDecodingStrategy#X_WWW_FORM_URLENCODED}.
 	 *
