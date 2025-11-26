@@ -30,6 +30,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -54,7 +55,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Instances can be acquired via the {@link #withRawUrl(HttpMethod, String)} (e.g. provided by clients on a "raw" HTTP/1.1 request line, un-decoded) and {@link #withPath(HttpMethod, String)} (e.g. manually-constructed during integration testing, understood to be already-decoded) builder factory methods.
  * <p>
- * As part of instance construction, any necessary decoding (path, URL parameter, {@code Content-Type: application/x-www-form-urlencoded}, etc.) will be performed.  Unless otherwise indicated, all accessor methods will return decoded data.
+ * Any necessary decoding (path, URL parameter, {@code Content-Type: application/x-www-form-urlencoded}, etc.) will be automatically performed.  Unless otherwise indicated, all accessor methods will return decoded data.
  * <p>
  * Detailed documentation available at <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
  *
@@ -81,11 +82,7 @@ public final class Request {
 	@Nonnull
 	private final ResourcePath resourcePath;
 	@Nonnull
-	private final Map<String, Set<String>> cookies;
-	@Nonnull
 	private final Map<String, Set<String>> queryParameters;
-	@Nonnull
-	private final Map<String, Set<String>> formParameters;
 	@Nullable
 	private final String contentType;
 	@Nullable
@@ -101,8 +98,6 @@ public final class Request {
 	@Nonnull
 	private final Boolean multipart;
 	@Nonnull
-	private final Map<String, Set<MultipartField>> multipartFields;
-	@Nonnull
 	private final Boolean contentTooLarge;
 	@Nonnull
 	private final MultipartParser multipartParser;
@@ -116,6 +111,12 @@ public final class Request {
 	private volatile List<Locale> locales = null;
 	@Nullable
 	private volatile List<LanguageRange> languageRanges = null;
+	@Nullable
+	private volatile Map<String, Set<String>> cookies = null;
+	@Nullable
+	private volatile Map<String, Set<MultipartField>> multipartFields = null;
+	@Nullable
+	private volatile Map<String, Set<String>> formParameters = null;
 
 	/**
 	 * Acquires a builder for {@link Request} instances from the URL provided by clients on a "raw" HTTP/1.1 request line.
@@ -183,13 +184,22 @@ public final class Request {
 		IdGenerator builderIdGenerator = rawBuilder == null ? pathBuilder.idGenerator : rawBuilder.idGenerator;
 		Object builderId = rawBuilder == null ? pathBuilder.id : rawBuilder.id;
 		HttpMethod builderHttpMethod = rawBuilder == null ? pathBuilder.httpMethod : rawBuilder.httpMethod;
-		Map<String, Set<String>> builderHeaders = rawBuilder == null ? pathBuilder.headers : rawBuilder.headers;
 		byte[] builderBody = rawBuilder == null ? pathBuilder.body : rawBuilder.body;
 		MultipartParser builderMultipartParser = rawBuilder == null ? pathBuilder.multipartParser : rawBuilder.multipartParser;
 		Boolean builderContentTooLarge = rawBuilder == null ? pathBuilder.contentTooLarge : rawBuilder.contentTooLarge;
+		Map<String, Set<String>> builderHeaders = rawBuilder == null ? pathBuilder.headers : rawBuilder.headers;
+
+		if (builderHeaders == null)
+			builderHeaders = Map.of();
 
 		this.idGenerator = builderIdGenerator == null ? DEFAULT_ID_GENERATOR : builderIdGenerator;
 		this.multipartParser = builderMultipartParser == null ? DefaultMultipartParser.defaultInstance() : builderMultipartParser;
+
+		// Header names are case-insensitive.  Enforce that here with a special map
+		Map<String, Set<String>> caseInsensitiveHeaders = new LinkedCaseInsensitiveMap<>(builderHeaders);
+		this.headers = Collections.unmodifiableMap(caseInsensitiveHeaders);
+		this.contentType = Utilities.extractContentTypeFromHeaders(this.headers).orElse(null);
+		this.charset = Utilities.extractCharsetFromHeaders(this.headers).orElse(null);
 
 		String path;
 
@@ -209,17 +219,26 @@ public final class Request {
 			// Use already-decoded query parameters as provided by the path builder
 			this.queryParameters = pathBuilder.queryParameters == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(pathBuilder.queryParameters));
 		} else {
-			// RawBuilder scenario - first, parse and decode the path
-			path = Utilities.normalizedPathForUrl(rawBuilder.rawUrl, true);
+			// RawBuilder scenario
+			String rawUrl = trimAggressivelyToEmpty(rawBuilder.rawUrl);
 
-			// Then, parse out any query parameters
-			if (rawBuilder.rawUrl.contains("?")) {
-				// We always assume RFC_3986_STRICT for query parameters because Soklet is for modern systems - HTML Form "GET" submissions are rare/legacy.
-				// This means we leave "+" as "+" (not decode to " ") and then apply any percent-decoding rules.
-				// In the future, we might expose a way to let applications prefer QueryDecodingStrategy.X_WWW_FORM_URLENCODED instead, which treats "+" as a space
-				this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(rawBuilder.rawUrl, QueryDecodingStrategy.RFC_3986_STRICT, getCharset().orElse(DEFAULT_CHARSET)));
-			} else {
+			// Special handling for OPTIONS *
+			if ("*".equals(rawUrl)) {
+				path = "*";
 				this.queryParameters = Map.of();
+			} else {
+				// First, parse and decode the path...
+				path = Utilities.normalizedPathForUrl(rawUrl, true);
+
+				// ...then, parse out any query parameters.
+				if (rawUrl.contains("?")) {
+					// We always assume RFC_3986_STRICT for query parameters because Soklet is for modern systems - HTML Form "GET" submissions are rare/legacy.
+					// This means we leave "+" as "+" (not decode to " ") and then apply any percent-decoding rules.
+					// In the future, we might expose a way to let applications prefer QueryDecodingStrategy.X_WWW_FORM_URLENCODED instead, which treats "+" as a space
+					this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(rawUrl, QueryDecodingStrategy.RFC_3986_STRICT, getCharset().orElse(DEFAULT_CHARSET)));
+				} else {
+					this.queryParameters = Map.of();
+				}
 			}
 		}
 
@@ -234,43 +253,16 @@ public final class Request {
 		this.lock = new ReentrantLock();
 		this.id = builderId == null ? this.idGenerator.generateId() : builderId;
 		this.httpMethod = builderHttpMethod;
-
-		// Header names are case-insensitive.  Enforce that here with a special map
-		Map<String, Set<String>> caseInsensitiveHeaders = new LinkedCaseInsensitiveMap<>(builderHeaders);
-		this.headers = Collections.unmodifiableMap(caseInsensitiveHeaders);
-		this.cookies = Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(caseInsensitiveHeaders));
 		this.corsPreflight = this.httpMethod == HttpMethod.OPTIONS ? CorsPreflight.fromHeaders(this.headers).orElse(null) : null;
 		this.cors = this.corsPreflight == null ? Cors.fromHeaders(this.httpMethod, this.headers).orElse(null) : null;
-		this.body = builderBody;
-		this.contentType = Utilities.extractContentTypeFromHeaders(this.headers).orElse(null);
-		this.charset = Utilities.extractCharsetFromHeaders(this.headers).orElse(null);
 		this.resourcePath = this.path.equals("*") ? ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH : ResourcePath.withPath(this.path);
-
-		// Form parameters
-		// TODO: optimize copy/modify scenarios - we don't want to be re-processing body data
-		Map<String, Set<String>> formParameters = Map.of();
-
-		if (this.body != null && this.contentType != null && this.contentType.equalsIgnoreCase("application/x-www-form-urlencoded")) {
-			String bodyAsString = getBodyAsString().orElse(null);
-			formParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromQuery(bodyAsString, QueryDecodingStrategy.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET)));
-		}
-
-		this.formParameters = formParameters;
-
-		// Multipart handling
-		// TODO: optimize copy/modify scenarios - we don't want to be copying big already-parsed multipart byte arrays
-		boolean multipart = false;
-		Map<String, Set<MultipartField>> multipartFields = Map.of();
-
-		if (this.contentType != null && this.contentType.toLowerCase(Locale.ENGLISH).startsWith("multipart/")) {
-			multipart = true;
-			multipartFields = Collections.unmodifiableMap(this.multipartParser.extractMultipartFields(this));
-		}
-
-		this.multipart = multipart;
-		this.multipartFields = multipartFields;
-
+		this.multipart = this.contentType != null && this.contentType.toLowerCase(Locale.ENGLISH).startsWith("multipart/");
 		this.contentTooLarge = builderContentTooLarge == null ? false : builderContentTooLarge;
+
+		// It's illegal to specify a body if the request is marked "content too large"
+		this.body = this.contentTooLarge ? null : builderBody;
+
+		// Cookies, form parameters, and multipart data are lazily parsed/instantiated when callers try to access them
 	}
 
 	@Override
@@ -293,13 +285,13 @@ public final class Request {
 				&& Objects.equals(getPath(), request.getPath())
 				&& Objects.equals(getQueryParameters(), request.getQueryParameters())
 				&& Objects.equals(getHeaders(), request.getHeaders())
-				&& Objects.equals(getBody(), request.getBody())
+				&& Arrays.equals(this.body, request.body)
 				&& Objects.equals(isContentTooLarge(), request.isContentTooLarge());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getId(), getHttpMethod(), getPath(), getQueryParameters(), getHeaders(), getBody(), isContentTooLarge());
+		return Objects.hash(getId(), getHttpMethod(), getPath(), getQueryParameters(), getHeaders(), Arrays.hashCode(this.body), isContentTooLarge());
 	}
 
 	/**
@@ -358,7 +350,24 @@ public final class Request {
 	 */
 	@Nonnull
 	public Map<String, Set<String>> getCookies() {
-		return this.cookies;
+		Map<String, Set<String>> result = this.cookies;
+
+		if (result == null) {
+			getLock().lock();
+
+			try {
+				result = this.cookies;
+
+				if (result == null) {
+					result = Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(getHeaders()));
+					this.cookies = result;
+				}
+			} finally {
+				getLock().unlock();
+			}
+		}
+
+		return result;
 	}
 
 	/**
@@ -392,7 +401,29 @@ public final class Request {
 	 */
 	@Nonnull
 	public Map<String, Set<String>> getFormParameters() {
-		return this.formParameters;
+		Map<String, Set<String>> result = this.formParameters;
+
+		if (result == null) {
+			getLock().lock();
+			try {
+				result = this.formParameters;
+
+				if (result == null) {
+					if (this.body != null && this.contentType != null && this.contentType.equalsIgnoreCase("application/x-www-form-urlencoded")) {
+						String bodyAsString = getBodyAsString().orElse(null);
+						result = Collections.unmodifiableMap(Utilities.extractQueryParametersFromQuery(bodyAsString, QueryDecodingStrategy.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET)));
+					} else {
+						result = Map.of();
+					}
+
+					this.formParameters = result;
+				}
+			} finally {
+				getLock().unlock();
+			}
+		}
+
+		return result;
 	}
 
 	/**
@@ -458,11 +489,30 @@ public final class Request {
 	 */
 	@Nonnull
 	public Map<String, Set<MultipartField>> getMultipartFields() {
-		return this.multipartFields;
+		if (!isMultipart())
+			return Map.of();
+
+		Map<String, Set<MultipartField>> result = this.multipartFields;
+
+		if (result == null) {
+			getLock().lock();
+			try {
+				result = this.multipartFields;
+
+				if (result == null) {
+					result = Collections.unmodifiableMap(getMultipartParser().extractMultipartFields(this));
+					this.multipartFields = result;
+				}
+			} finally {
+				getLock().unlock();
+			}
+		}
+
+		return result;
 	}
 
 	/**
-	 * The raw bytes of the request body.
+	 * The raw bytes of the request body - <em>callers should not modify this array; it is not defensively copied for performance reasons</em>.
 	 * <p>
 	 * For convenience, {@link #getBodyAsString()} is available if you expect your request body to be of type {@link String}.
 	 *
@@ -471,6 +521,9 @@ public final class Request {
 	@Nonnull
 	public Optional<byte[]> getBody() {
 		return Optional.ofNullable(this.body);
+
+		// Note: it would be nice to defensively copy, but it's inefficient
+		// return Optional.ofNullable(this.body == null ? null : Arrays.copyOf(this.body, this.body.length));
 	}
 
 	/**
@@ -793,13 +846,13 @@ public final class Request {
 	}
 
 	@Nonnull
-	protected ReentrantLock getLock() {
+	private ReentrantLock getLock() {
 		return this.lock;
 	}
 
 	@Nonnull
-	protected <T> Optional<T> singleValueForName(@Nonnull String name,
-																							 @Nullable Map<String, Set<T>> valuesByName) throws MultipleValuesException {
+	private <T> Optional<T> singleValueForName(@Nonnull String name,
+																						 @Nullable Map<String, Set<T>> valuesByName) throws MultipleValuesException {
 		if (valuesByName == null)
 			return Optional.empty();
 
@@ -1052,7 +1105,7 @@ public final class Request {
 					.id(request.getId())
 					.queryParameters(new LinkedHashMap<>(request.getQueryParameters()))
 					.headers(new LinkedCaseInsensitiveMap<>(request.getHeaders()))
-					.body(request.getBody().orElse(null))
+					.body(request.body) // Direct field access to avoid array copy
 					.multipartParser(request.getMultipartParser())
 					.idGenerator(request.getIdGenerator())
 					.contentTooLarge(request.isContentTooLarge());
@@ -1068,16 +1121,6 @@ public final class Request {
 		@Nonnull
 		public Copier path(@Nonnull String path) {
 			requireNonNull(path);
-
-			path = trimAggressivelyToEmpty(path);
-
-			if (path.contains("?"))
-				throw new IllegalRequestException(format("Path should not contain a query string. Use %s.%s.queryParameters(...) to specify query parameters as a %s.",
-						Request.class.getSimpleName(), Copier.class.getSimpleName(), Map.class.getSimpleName()));
-
-			if (path.length() == 0)
-				path = "/";
-
 			this.builder.path(path);
 			return this;
 		}
