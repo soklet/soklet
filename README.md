@@ -1027,10 +1027,8 @@ public void basicIntegrationTest() {
   // a simulator is provided against which you can issue requests
   // and receive responses.
   Soklet.runSimulator(config, (simulator -> {
-    // Construct a request.
-    // You may alternatively specify query parameters directly in the URI
-    // as a query string, e.g. "/hello?name=Mark"
-    Request request = Request.with(HttpMethod.GET, "/hello")
+    // Construct a request
+    Request request = Request.withPath(HttpMethod.GET, "/hello")
       .queryParameters(Map.of("name", Set.of("Mark")))
       .build();
 

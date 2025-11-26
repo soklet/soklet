@@ -91,7 +91,7 @@ import static java.util.Objects.requireNonNull;
  *   // issue requests and receive responses.
  *   Soklet.runSimulator(config, (simulator -> {
  *     // Construct a request
- *     Request request = Request.with(HttpMethod.GET, "/hello")
+ *     Request request = Request.withPath(HttpMethod.GET, "/hello")
  *       .queryParameters(Map.of("name", Set.of("Mark")))
  *       .build();
  *

@@ -35,10 +35,8 @@ import java.util.function.Consumer;
  *   // With the Simulator, you can issue requests
  *   // and receive responses just like you would with real servers.
  *   Soklet.runSimulator(config, (simulator) -> {
- *     // Construct a request.
- *     // You may alternatively specify query parameters directly in the URI
- *     // as a query string, e.g. "/hello?name=Mark"
- *     Request request = Request.with(HttpMethod.GET, "/hello")
+ *     // Construct a request
+ *     Request request = Request.withPath(HttpMethod.GET, "/hello")
  *       .queryParameters(Map.of("name", Set.of("Mark")))
  *       .build();
  *
@@ -51,7 +49,7 @@ import java.util.function.Consumer;
  *     assertEquals(expectedCode, actualCode, "Bad status code");
  *
  *     // Now, create a request for an SSE Event Source...
- *     Request eventSourceRequest = Request.with(HttpMethod.GET, "/sse-test")
+ *     Request eventSourceRequest = Request.withPath(HttpMethod.GET, "/sse-test")
  *         .queryParameters(Map.of("signingToken", Set.of("xxx")))
  *         .build();
  *
