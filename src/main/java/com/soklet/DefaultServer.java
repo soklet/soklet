@@ -115,6 +115,8 @@ final class DefaultServer implements Server {
 	@Nonnull
 	private final MultipartParser multipartParser;
 	@Nonnull
+	private final IdGenerator<?> idGenerator;
+	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
@@ -142,6 +144,7 @@ final class DefaultServer implements Server {
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.defaultInstance();
+		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.withDefaults();
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "request-handler-";
 
@@ -239,8 +242,9 @@ final class DefaultServer implements Server {
 							throw new IllegalRequestException(format("Unsupported HTTP method specified: '%s'", microhttpRequest.method()));
 						}
 
-						Request request = Request.with(httpMethod, microhttpRequest.uri())
+						Request request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
 								.multipartParser(getMultipartParser())
+								.idGenerator(getIdGenerator())
 								.headers(headers)
 								.body(body)
 								.contentTooLarge(contentTooLarge)
@@ -540,6 +544,11 @@ final class DefaultServer implements Server {
 	@Nonnull
 	protected MultipartParser getMultipartParser() {
 		return this.multipartParser;
+	}
+
+	@Nonnull
+	protected IdGenerator<?> getIdGenerator() {
+		return this.idGenerator;
 	}
 
 	@Nonnull

@@ -28,11 +28,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -48,7 +45,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
-import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
@@ -79,8 +75,6 @@ public final class Request {
 	@Nonnull
 	private final HttpMethod httpMethod;
 	@Nonnull
-	private final String rawUrl;
-	@Nonnull
 	private final String path;
 	@Nonnull
 	private final ResourcePath resourcePath;
@@ -109,6 +103,10 @@ public final class Request {
 	@Nonnull
 	private final Boolean contentTooLarge;
 	@Nonnull
+	private final MultipartParser multipartParser;
+	@Nonnull
+	private final IdGenerator<?> idGenerator;
+	@Nonnull
 	private final ReentrantLock lock;
 	@Nullable
 	private volatile String bodyAsString = null;
@@ -118,7 +116,7 @@ public final class Request {
 	private volatile List<LanguageRange> languageRanges = null;
 
 	/**
-	 * Acquires a builder for {@link Request} instances.
+	 * Acquires a builder for {@link Request} instances from the URL provided by clients on a "raw" HTTP/1.1 request line.
 	 * <p>
 	 * The provided {@code rawUrl} must be un-decoded and in either "path-and-query" form (i.e. starts with a {@code /} character) or an absolute URL (i.e. starts with {@code http://} or {@code https://}).
 	 * It might include un-decoded query parameters, e.g. {@code https://www.example.com/one?two=thr%20ee} or {@code /one?two=thr%20ee}.  An exception to this rule is {@code OPTIONS *} requests, where the URL is the {@code *} "splat" symbol.
@@ -134,12 +132,34 @@ public final class Request {
 	 * @return the builder
 	 */
 	@Nonnull
-	public static Builder with(@Nonnull HttpMethod httpMethod,
-														 @Nonnull String rawUrl) {
+	public static RawBuilder withRawUrl(@Nonnull HttpMethod httpMethod,
+																			@Nonnull String rawUrl) {
 		requireNonNull(httpMethod);
 		requireNonNull(rawUrl);
 
-		return new Builder(httpMethod, rawUrl);
+		return new RawBuilder(httpMethod, rawUrl);
+	}
+
+	/**
+	 * Acquires a builder for {@link Request} instances from already-decoded path and query components - useful for manual construction, e.g. integration tests.
+	 * <p>
+	 * The provided {@code path} should be decoded (e.g. {@code "/my path"}, not {@code "/my%20path"}).  It should not include query parameters.
+	 * <p>
+	 * Query parameters must be specified via {@link PathBuilder#queryParameters(Map)}.
+	 * <p>
+	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded at build time by using {@link QueryDecodingStrategy#X_WWW_FORM_URLENCODED}.
+	 *
+	 * @param httpMethod the HTTP method for this request ({@code GET, POST, etc.})
+	 * @param path       the decoded URL path for this request
+	 * @return the builder
+	 */
+	@Nonnull
+	public static PathBuilder withPath(@Nonnull HttpMethod httpMethod,
+																		 @Nonnull String path) {
+		requireNonNull(httpMethod);
+		requireNonNull(path);
+
+		return new PathBuilder(httpMethod, path);
 	}
 
 	/**
@@ -152,99 +172,77 @@ public final class Request {
 		return new Copier(this);
 	}
 
-	private enum UrlType {
-		UNKNOWN,
-		ABSOLUTE,
-		RELATIVE,
-		OPTIONS_SPLAT
-	}
+	private Request(@Nullable RawBuilder rawBuilder,
+									@Nullable PathBuilder pathBuilder) {
+		// Should never occur
+		if (rawBuilder == null && pathBuilder == null)
+			throw new IllegalStateException(format("Neither %s nor %s were specified", RawBuilder.class.getSimpleName(), PathBuilder.class.getSimpleName()));
 
-	private Request(@Nonnull Builder builder) {
-		requireNonNull(builder);
+		IdGenerator builderIdGenerator = rawBuilder == null ? pathBuilder.idGenerator : rawBuilder.idGenerator;
+		Object builderId = rawBuilder == null ? pathBuilder.id : rawBuilder.id;
+		HttpMethod builderHttpMethod = rawBuilder == null ? pathBuilder.httpMethod : rawBuilder.httpMethod;
+		Map<String, Set<String>> builderHeaders = rawBuilder == null ? pathBuilder.headers : rawBuilder.headers;
+		byte[] builderBody = rawBuilder == null ? pathBuilder.body : rawBuilder.body;
+		MultipartParser builderMultipartParser = rawBuilder == null ? pathBuilder.multipartParser : rawBuilder.multipartParser;
+		Boolean builderContentTooLarge = rawBuilder == null ? pathBuilder.contentTooLarge : rawBuilder.contentTooLarge;
 
-		IdGenerator idGenerator = builder.idGenerator == null ? getDefaultIdGenerator() : builder.idGenerator;
+		this.idGenerator = builderIdGenerator == null ? DEFAULT_ID_GENERATOR : builderIdGenerator;
+		this.multipartParser = builderMultipartParser == null ? DefaultMultipartParser.defaultInstance() : builderMultipartParser;
+
+		String path;
+
+		// If we use PathBuilder, use its path directly.
+		// If we use RawBuilder, parse and decode its path.
+		if (pathBuilder != null) {
+			path = trimAggressivelyToEmpty(pathBuilder.path);
+
+			// Validate path
+			if (!path.startsWith("/") && !path.equals("*"))
+				throw new IllegalRequestException("Path must start with '/' or be '*'");
+
+			if (path.contains("?"))
+				throw new IllegalRequestException(format("Path should not contain a query string. Use %s.withPath(...).queryParameters(...) to specify query parameters as a %s.",
+						Request.class.getSimpleName(), Map.class.getSimpleName()));
+
+			// Use already-decoded query parameters as provided by the path builder
+			this.queryParameters = pathBuilder.queryParameters == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(pathBuilder.queryParameters));
+		} else {
+			// RawBuilder scenario - first, parse and decode the path
+			path = Utilities.normalizedPathForUrl(rawBuilder.rawUrl, true);
+
+			// Then, parse out any query parameters
+			if (rawBuilder.rawUrl.contains("?")) {
+				// We always assume RFC_3986_STRICT for query parameters because Soklet is for modern systems - HTML Form "GET" submissions are rare/legacy.
+				// This means we leave "+" as "+" (not decode to " ") and then apply any percent-decoding rules.
+				// In the future, we might expose a way to let applications prefer QueryDecodingStrategy.X_WWW_FORM_URLENCODED instead, which treats "+" as a space
+				this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(rawBuilder.rawUrl, QueryDecodingStrategy.RFC_3986_STRICT, getCharset().orElse(DEFAULT_CHARSET)));
+			} else {
+				this.queryParameters = Map.of();
+			}
+		}
+
+		if (path.equals("*") && builderHttpMethod != HttpMethod.OPTIONS)
+			throw new IllegalRequestException(format("Path '*' is only legal for HTTP %s", HttpMethod.OPTIONS.name()));
+
+		if (path.contains("\u0000") || path.contains("%00"))
+			throw new IllegalRequestException(format("Illegal null byte in path '%s'", path));
+
+		this.path = path;
 
 		this.lock = new ReentrantLock();
-		this.id = builder.id == null ? idGenerator.generateId() : builder.id;
-		this.httpMethod = builder.httpMethod;
-
-		String rawUrl = trimAggressivelyToNull(builder.rawUrl);
-
-		if (rawUrl == null)
-			throw new IllegalArgumentException("URL cannot be blank.");
-
-		if (rawUrl.contains("\u0000") || rawUrl.contains("%00"))
-			throw new IllegalRequestException(format("Illegal null byte in URL '%s'", rawUrl));
+		this.id = builderId == null ? this.idGenerator.generateId() : builderId;
+		this.httpMethod = builderHttpMethod;
 
 		// Header names are case-insensitive.  Enforce that here with a special map
-		Map<String, Set<String>> caseInsensitiveHeaders = new LinkedCaseInsensitiveMap<>(builder.headers);
+		Map<String, Set<String>> caseInsensitiveHeaders = new LinkedCaseInsensitiveMap<>(builderHeaders);
 		this.headers = Collections.unmodifiableMap(caseInsensitiveHeaders);
 		this.cookies = Collections.unmodifiableMap(Utilities.extractCookiesFromHeaders(caseInsensitiveHeaders));
 		this.corsPreflight = this.httpMethod == HttpMethod.OPTIONS ? CorsPreflight.fromHeaders(this.headers).orElse(null) : null;
 		this.cors = this.corsPreflight == null ? Cors.fromHeaders(this.httpMethod, this.headers).orElse(null) : null;
-		this.body = builder.body;
+		this.body = builderBody;
 		this.contentType = Utilities.extractContentTypeFromHeaders(this.headers).orElse(null);
 		this.charset = Utilities.extractCharsetFromHeaders(this.headers).orElse(null);
-
-		UrlType urlType;
-
-		// Determine what flavor of URL we're looking at
-		if (this.httpMethod == HttpMethod.OPTIONS && "*".equals(rawUrl))
-			urlType = UrlType.OPTIONS_SPLAT;
-		else if (rawUrl.toLowerCase().startsWith("http://") || rawUrl.toLowerCase().startsWith("https://"))
-			urlType = UrlType.ABSOLUTE;
-		else if (rawUrl.startsWith("/"))
-			urlType = UrlType.RELATIVE;
-		else
-			throw new IllegalArgumentException(format("URL must be absolute (e.g. https://www.example.com) or start with a '/' character. Illegal URL was '%s'", rawUrl));
-
-		this.path = Utilities.normalizedPathForUrl(rawUrl, true);
-
-		// If the URL contains a query string, parse query parameters (if present) from it
-		if (rawUrl.contains("?")) {
-			// We always assume RFC_3986_STRICT for query parameters because Soklet is for modern systems - HTML Form "GET" submissions are rare/legacy.
-			// This means we leave "+" as "+" (not decode to " ") and then apply any percent-decoding rules.
-			// In the future, we might expose a way to let applications prefer QueryDecodingStrategy.X_WWW_FORM_URLENCODED instead, which treats "+" as a space
-			this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(rawUrl, QueryDecodingStrategy.RFC_3986_STRICT, getCharset().orElse(DEFAULT_CHARSET)));
-
-			// Cannot have 2 different ways of specifying query parameters
-			if (builder.queryParameters != null && builder.queryParameters.size() > 0)
-				throw new IllegalArgumentException("You cannot specify both query parameters and a URL with a query string.");
-		} else {
-			// If the URL does not contain a query string, then use query parameters provided by the builder (assumed to be already decoded), if present, and tack those onto the raw URL
-			this.queryParameters = builder.queryParameters == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(builder.queryParameters));
-
-			if (this.queryParameters.size() > 0) {
-				Charset queryParameterCharset = getCharset().orElse(DEFAULT_CHARSET);
-				String queryString = this.queryParameters.entrySet().stream()
-						.map((entry) -> {
-							String name = entry.getKey();
-							Set<String> values = entry.getValue();
-
-							if (name == null)
-								return List.<String>of();
-
-							if (values == null || values.size() == 0)
-								return List.of(format("%s=", URLEncoder.encode(name, queryParameterCharset)));
-
-							List<String> nameValuePairs = new ArrayList<>();
-
-							for (String value : values)
-								nameValuePairs.add(format("%s=%s", URLEncoder.encode(name, queryParameterCharset),
-										value == null ? "" : URLEncoder.encode(value, queryParameterCharset)));
-
-							return nameValuePairs;
-						})
-						.filter(nameValuePairs -> nameValuePairs.size() > 0)
-						.flatMap(Collection::stream)
-						.collect(Collectors.joining("&"));
-
-				rawUrl = format("%s?%s", rawUrl, queryString);
-			}
-		}
-
-		this.rawUrl = rawUrl;
-		this.resourcePath = urlType == UrlType.OPTIONS_SPLAT ? ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH : ResourcePath.withPath(this.path);
+		this.resourcePath = this.path.equals("*") ? ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH : ResourcePath.withPath(this.path);
 
 		// Form parameters
 		// TODO: optimize copy/modify scenarios - we don't want to be re-processing body data
@@ -264,15 +262,13 @@ public final class Request {
 
 		if (this.contentType != null && this.contentType.toLowerCase(Locale.ENGLISH).startsWith("multipart/")) {
 			multipart = true;
-
-			MultipartParser multipartParser = builder.multipartParser == null ? DefaultMultipartParser.defaultInstance() : builder.multipartParser;
-			multipartFields = Collections.unmodifiableMap(multipartParser.extractMultipartFields(this));
+			multipartFields = Collections.unmodifiableMap(this.multipartParser.extractMultipartFields(this));
 		}
 
 		this.multipart = multipart;
 		this.multipartFields = multipartFields;
 
-		this.contentTooLarge = builder.contentTooLarge == null ? false : builder.contentTooLarge;
+		this.contentTooLarge = builderContentTooLarge == null ? false : builderContentTooLarge;
 	}
 
 	@Override
@@ -327,19 +323,7 @@ public final class Request {
 	}
 
 	/**
-	 * The raw URL for this request, which is un-decoded and in either "path-and-query" form (i.e. starts with a {@code /} character) or an absolute URL (i.e. starts with {@code http://} or {@code https://}).
-	 * <p>
-	 * It might include un-decoded query parameters, e.g. {@code https://www.example.com/one?two=thr%20ee} or {@code /one?two=thr%20ee}.  An exception to this rule is {@code OPTIONS *} requests, where the URL is the {@code *} "splat" symbol.
-	 *
-	 * @return the request's raw URL
-	 */
-	@Nonnull
-	public String getRawUrl() {
-		return this.rawUrl;
-	}
-
-	/**
-	 * The path component of this request, which is a decoded representation of the value returned by {@link #getRawUrl()} with the query string (if any) removed.
+	 * The percent-decoded path component of this request (no query string).
 	 *
 	 * @return the path for this request
 	 */
@@ -797,8 +781,13 @@ public final class Request {
 	}
 
 	@Nonnull
-	protected IdGenerator getDefaultIdGenerator() {
-		return DEFAULT_ID_GENERATOR;
+	private MultipartParser getMultipartParser() {
+		return this.multipartParser;
+	}
+
+	@Nonnull
+	private IdGenerator<?> getIdGenerator() {
+		return this.idGenerator;
 	}
 
 	@Nonnull
@@ -853,18 +842,109 @@ public final class Request {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link Request} via {@link Request#with(HttpMethod, String)}.
+	 * Builder used to construct instances of {@link Request} via {@link Request#withRawUrl(HttpMethod, String)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@NotThreadSafe
-	public static final class Builder {
+	public static final class RawBuilder {
 		@Nonnull
 		private HttpMethod httpMethod;
 		@Nonnull
 		private String rawUrl;
+		@Nullable
+		private Object id;
+		@Nullable
+		private IdGenerator idGenerator;
+		@Nullable
+		private MultipartParser multipartParser;
+		@Nullable
+		private Map<String, Set<String>> headers;
+		@Nullable
+		private byte[] body;
+		@Nullable
+		private Boolean contentTooLarge;
+
+		protected RawBuilder(@Nonnull HttpMethod httpMethod,
+												 @Nonnull String rawUrl) {
+			requireNonNull(httpMethod);
+			requireNonNull(rawUrl);
+
+			this.httpMethod = httpMethod;
+			this.rawUrl = rawUrl;
+		}
+
+		@Nonnull
+		public RawBuilder httpMethod(@Nonnull HttpMethod httpMethod) {
+			requireNonNull(httpMethod);
+			this.httpMethod = httpMethod;
+			return this;
+		}
+
+		@Nonnull
+		public RawBuilder rawUrl(@Nonnull String rawUrl) {
+			requireNonNull(rawUrl);
+			this.rawUrl = rawUrl;
+			return this;
+		}
+
+		@Nonnull
+		public RawBuilder id(@Nullable Object id) {
+			this.id = id;
+			return this;
+		}
+
+		@Nonnull
+		public RawBuilder idGenerator(@Nullable IdGenerator idGenerator) {
+			this.idGenerator = idGenerator;
+			return this;
+		}
+
+		@Nonnull
+		public RawBuilder multipartParser(@Nullable MultipartParser multipartParser) {
+			this.multipartParser = multipartParser;
+			return this;
+		}
+
+		@Nonnull
+		public RawBuilder headers(@Nullable Map<String, Set<String>> headers) {
+			this.headers = headers;
+			return this;
+		}
+
+		@Nonnull
+		public RawBuilder body(@Nullable byte[] body) {
+			this.body = body;
+			return this;
+		}
+
+		@Nonnull
+		public RawBuilder contentTooLarge(@Nullable Boolean contentTooLarge) {
+			this.contentTooLarge = contentTooLarge;
+			return this;
+		}
+
+		@Nonnull
+		public Request build() {
+			return new Request(this, null);
+		}
+	}
+
+	/**
+	 * Builder used to construct instances of {@link Request} via {@link Request#withPath(HttpMethod, String)}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	public static final class PathBuilder {
+		@Nonnull
+		private HttpMethod httpMethod;
+		@Nonnull
+		private String path;
 		@Nullable
 		private Object id;
 		@Nullable
@@ -880,74 +960,74 @@ public final class Request {
 		@Nullable
 		private Boolean contentTooLarge;
 
-		protected Builder(@Nonnull HttpMethod httpMethod,
-											@Nonnull String rawUrl) {
+		protected PathBuilder(@Nonnull HttpMethod httpMethod,
+													@Nonnull String path) {
 			requireNonNull(httpMethod);
-			requireNonNull(rawUrl);
+			requireNonNull(path);
 
 			this.httpMethod = httpMethod;
-			this.rawUrl = rawUrl;
+			this.path = path;
 		}
 
 		@Nonnull
-		public Builder httpMethod(@Nonnull HttpMethod httpMethod) {
+		public PathBuilder httpMethod(@Nonnull HttpMethod httpMethod) {
 			requireNonNull(httpMethod);
 			this.httpMethod = httpMethod;
 			return this;
 		}
 
 		@Nonnull
-		public Builder rawUrl(@Nonnull String rawUrl) {
-			requireNonNull(rawUrl);
-			this.rawUrl = rawUrl;
+		public PathBuilder path(@Nonnull String path) {
+			requireNonNull(path);
+			this.path = path;
 			return this;
 		}
 
 		@Nonnull
-		public Builder id(@Nullable Object id) {
+		public PathBuilder id(@Nullable Object id) {
 			this.id = id;
 			return this;
 		}
 
 		@Nonnull
-		public Builder idGenerator(@Nullable IdGenerator idGenerator) {
+		public PathBuilder idGenerator(@Nullable IdGenerator idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}
 
 		@Nonnull
-		public Builder multipartParser(@Nullable MultipartParser multipartParser) {
+		public PathBuilder multipartParser(@Nullable MultipartParser multipartParser) {
 			this.multipartParser = multipartParser;
 			return this;
 		}
 
 		@Nonnull
-		public Builder queryParameters(@Nullable Map<String, Set<String>> queryParameters) {
+		public PathBuilder queryParameters(@Nullable Map<String, Set<String>> queryParameters) {
 			this.queryParameters = queryParameters;
 			return this;
 		}
 
 		@Nonnull
-		public Builder headers(@Nullable Map<String, Set<String>> headers) {
+		public PathBuilder headers(@Nullable Map<String, Set<String>> headers) {
 			this.headers = headers;
 			return this;
 		}
 
 		@Nonnull
-		public Builder body(@Nullable byte[] body) {
+		public PathBuilder body(@Nullable byte[] body) {
 			this.body = body;
 			return this;
 		}
 
 		@Nonnull
-		public Builder contentTooLarge(@Nullable Boolean contentTooLarge) {
+		public PathBuilder contentTooLarge(@Nullable Boolean contentTooLarge) {
 			this.contentTooLarge = contentTooLarge;
 			return this;
 		}
 
 		@Nonnull
 		public Request build() {
-			return new Request(this);
+			return new Request(null, this);
 		}
 	}
 
@@ -961,17 +1041,18 @@ public final class Request {
 	@NotThreadSafe
 	public static final class Copier {
 		@Nonnull
-		private final Builder builder;
+		private final PathBuilder builder;
 
 		Copier(@Nonnull Request request) {
 			requireNonNull(request);
 
-			this.builder = new Builder(request.getHttpMethod(), request.getRawUrl())
+			this.builder = new PathBuilder(request.getHttpMethod(), request.getPath())
 					.id(request.getId())
-					// Deliberately don't seed the copy builder with query parameters because those come from the non-decoded raw URL
-					// TODO: revisit this
+					.queryParameters(request.getQueryParameters())
 					.headers(new LinkedCaseInsensitiveMap<>(request.getHeaders()))
 					.body(request.getBody().orElse(null))
+					.multipartParser(request.getMultipartParser())
+					.idGenerator(request.getIdGenerator())
 					.contentTooLarge(request.isContentTooLarge());
 		}
 
@@ -979,13 +1060,6 @@ public final class Request {
 		public Copier httpMethod(@Nonnull HttpMethod httpMethod) {
 			requireNonNull(httpMethod);
 			this.builder.httpMethod(httpMethod);
-			return this;
-		}
-
-		@Nonnull
-		public Copier rawUrl(@Nonnull String rawUrl) {
-			requireNonNull(rawUrl);
-			this.builder.rawUrl(rawUrl);
 			return this;
 		}
 

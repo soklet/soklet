@@ -92,7 +92,7 @@ public class ServerSentEventTests {
 
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Perform initial handshake with /examples/abc and verify 200 response
-			Request request = Request.with(HttpMethod.GET, "/examples/abc")
+			Request request = Request.withPath(HttpMethod.GET, "/examples/abc")
 					.headers(Map.of("Origin", Set.of("https://www.revetkn.com")))
 					.build();
 

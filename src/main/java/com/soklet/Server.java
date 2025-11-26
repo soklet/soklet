@@ -162,6 +162,8 @@ public interface Server extends AutoCloseable {
 		MultipartParser multipartParser;
 		@Nullable
 		Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+		@Nullable
+		IdGenerator<?> idGenerator;
 
 		@Nonnull
 		private Builder(@Nonnull Integer port) {
@@ -233,6 +235,12 @@ public interface Server extends AutoCloseable {
 		@Nonnull
 		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
 			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
+			return this;
+		}
+
+		@Nonnull
+		public Builder idGenerator(@Nullable IdGenerator<?> idGenerator) {
+			this.idGenerator = idGenerator;
 			return this;
 		}
 

@@ -41,7 +41,7 @@ public class OptionsTests {
 				.build();
 
 		Soklet.runSimulator(cfg, simulator -> {
-			RequestResult result = simulator.performRequest(Request.with(HttpMethod.OPTIONS, "/echo").build());
+			RequestResult result = simulator.performRequest(Request.withPath(HttpMethod.OPTIONS, "/echo").build());
 			Assertions.assertEquals(204, result.getMarshaledResponse().getStatusCode());
 			Map<String, Set<String>> headers = result.getMarshaledResponse().getHeaders();
 			Assertions.assertTrue(headers.containsKey("Allow"), "missing Allow header");

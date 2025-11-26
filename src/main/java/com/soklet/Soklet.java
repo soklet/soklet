@@ -874,7 +874,7 @@ public final class Soklet implements AutoCloseable {
 				}
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
 				// If there's a matching GET resource method for this HEAD request, then invoke it
-				Request headGetRequest = Request.with(HttpMethod.GET, request.getRawUrl()).build();
+				Request headGetRequest = request.copy().httpMethod(HttpMethod.GET).finish();
 				ResourceMethod headGetResourceMethod = resourceMethodResolver.resourceMethodForRequest(headGetRequest, serverType).orElse(null);
 
 				if (headGetResourceMethod != null)
@@ -1107,7 +1107,8 @@ public final class Soklet implements AutoCloseable {
 		Map<HttpMethod, ResourceMethod> matchingResourceMethodsByHttpMethod = new LinkedHashMap<>(HttpMethod.values().length);
 
 		for (HttpMethod httpMethod : HttpMethod.values()) {
-			Request otherRequest = Request.with(httpMethod, request.getRawUrl()).build();
+			// Make a quick copy of the request to see if other paths match
+			Request otherRequest = Request.withPath(httpMethod, request.getPath()).build();
 			ResourceMethod resourceMethod = resourceMethodResolver.resourceMethodForRequest(otherRequest, serverType).orElse(null);
 
 			if (resourceMethod != null)

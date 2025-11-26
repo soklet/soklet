@@ -196,6 +196,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 		Integer connectionQueueCapacity;
 		@Nullable
 		Boolean verifyConnectionOnceEstablished;
+		@Nullable
+		IdGenerator<?> idGenerator;
 
 		@Nonnull
 		protected Builder(@Nonnull Integer port) {
@@ -279,6 +281,12 @@ public interface ServerSentEventServer extends AutoCloseable {
 		@Nonnull
 		public Builder verifyConnectionOnceEstablished(@Nullable Boolean verifyConnectionOnceEstablished) {
 			this.verifyConnectionOnceEstablished = verifyConnectionOnceEstablished;
+			return this;
+		}
+
+		@Nonnull
+		public Builder idGenerator(@Nullable IdGenerator<?> idGenerator) {
+			this.idGenerator = idGenerator;
 			return this;
 		}
 

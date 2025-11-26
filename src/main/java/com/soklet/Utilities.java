@@ -597,6 +597,8 @@ public final class Utilities {
 	 * <p>
 	 * For example, {@code "https://www.soklet.com/ab%20c?one=two"} would be normalized to {@code "/ab c"}.
 	 * <p>
+	 * The {@code OPTIONS *} special case returns {@code "*"}.
+	 * <p>
 	 * Behavior:
 	 * <ul>
 	 *   <li>If input starts with {@code http://} or {@code https://}, the path portion is extracted.</li>
@@ -615,6 +617,12 @@ public final class Utilities {
 	public static String normalizedPathForUrl(@Nonnull String url,
 																						@Nonnull Boolean performPercentDecoding) {
 		requireNonNull(url);
+
+		url = trimAggressivelyToEmpty(url);
+
+		// Special case for OPTIONS * requests
+		if (url.equals("*"))
+			return "*";
 
 		// Parse with java.net.URI to isolate raw path; then percent-decode only the path
 		try {

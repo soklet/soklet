@@ -41,7 +41,7 @@ public class ResponseErrorMappingTests {
 				.build();
 
 		Soklet.runSimulator(cfg, simulator -> {
-			RequestResult result = simulator.performRequest(Request.with(HttpMethod.GET, "/explode").build());
+			RequestResult result = simulator.performRequest(Request.withPath(HttpMethod.GET, "/explode").build());
 			Assertions.assertEquals(500, result.getMarshaledResponse().getStatusCode());
 		});
 	}
@@ -57,7 +57,7 @@ public class ResponseErrorMappingTests {
 				.build();
 
 		Soklet.runSimulator(cfg, simulator -> {
-			RequestResult result = simulator.performRequest(Request.with(HttpMethod.GET, "/bad-request").build());
+			RequestResult result = simulator.performRequest(Request.withPath(HttpMethod.GET, "/bad-request").build());
 			Assertions.assertEquals(400, result.getMarshaledResponse().getStatusCode());
 		});
 	}

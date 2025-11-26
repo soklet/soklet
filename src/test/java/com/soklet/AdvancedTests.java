@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.Request.PathBuilder;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
@@ -100,7 +101,7 @@ public class AdvancedTests {
 						startLatch.await();
 
 						// Simulate SSE connection
-						Request request = Request.with(HttpMethod.GET, "/events")
+						Request request = Request.withPath(HttpMethod.GET, "/events")
 								.headers(Map.of("Accept", Set.of("text/event-stream")))
 								.build();
 
@@ -268,7 +269,7 @@ public class AdvancedTests {
 						"value\r\n" +
 						"--" + boundary + "--";
 
-				Request request = Request.with(HttpMethod.POST, "/upload")
+				Request request = Request.withPath(HttpMethod.POST, "/upload")
 						.headers(Map.of("Content-Type", Set.of(contentType)))
 						.body(body.getBytes(StandardCharsets.UTF_8))
 						.build();
@@ -309,7 +310,7 @@ public class AdvancedTests {
 		}
 		body.append("--").append(boundary).append("--");
 
-		Request request = Request.with(HttpMethod.POST, "/upload")
+		Request request = Request.withPath(HttpMethod.POST, "/upload")
 				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
 				.body(body.toString().getBytes(StandardCharsets.UTF_8))
 				.build();
@@ -435,7 +436,7 @@ public class AdvancedTests {
 
 						for (int j = 0; j < requestsPerThread; j++) {
 							String uniqueId = threadId + "-" + j;
-							Request request = Request.with(HttpMethod.POST, "/concurrent")
+							Request request = Request.withPath(HttpMethod.POST, "/concurrent")
 									.body(uniqueId.getBytes(StandardCharsets.UTF_8))
 									.build();
 
@@ -487,7 +488,7 @@ public class AdvancedTests {
 		// Test that Request.Builder is not thread-safe (as documented)
 		// but that built Request objects are immutable and thread-safe
 
-		Request.Builder builder = Request.with(HttpMethod.GET, "/test");
+		PathBuilder builder = Request.withPath(HttpMethod.GET, "/test");
 		CountDownLatch latch = new CountDownLatch(1);
 		AtomicBoolean builderIsThreadSafe = new AtomicBoolean(true);
 
@@ -515,7 +516,7 @@ public class AdvancedTests {
 		executor.awaitTermination(5, TimeUnit.SECONDS);
 
 		// Now test that built Request is immutable and thread-safe
-		Request request = Request.with(HttpMethod.POST, "/immutable")
+		Request request = Request.withPath(HttpMethod.POST, "/immutable")
 				.headers(Map.of("X-Test", Set.of("value")))
 				.body("test".getBytes())
 				.build();
@@ -531,7 +532,7 @@ public class AdvancedTests {
 					// Concurrent reads from request
 					for (int j = 0; j < 100; j++) {
 						request.getHttpMethod();
-						request.getRawUrl();
+						request.getPath();
 						request.getHeaders();
 						request.getBody();
 						request.getCookies();
@@ -631,7 +632,7 @@ public class AdvancedTests {
 				byte[] largeBody = new byte[5 * 1024 * 1024]; // 5MB
 				Arrays.fill(largeBody, (byte) ('A' + i));
 
-				Request request = Request.with(HttpMethod.POST, "/large")
+				Request request = Request.withPath(HttpMethod.POST, "/large")
 						.body(largeBody)
 						.build();
 
@@ -795,7 +796,7 @@ public class AdvancedTests {
 		headers.put("X-Many", values);
 
 		long start = System.currentTimeMillis();
-		Request request = Request.with(HttpMethod.GET, "/test")
+		Request request = Request.withPath(HttpMethod.GET, "/test")
 				.headers(headers)
 				.build();
 		long duration = System.currentTimeMillis() - start;
@@ -809,7 +810,7 @@ public class AdvancedTests {
 		}
 
 		start = System.currentTimeMillis();
-		request = Request.with(HttpMethod.GET, "/test")
+		request = Request.withPath(HttpMethod.GET, "/test")
 				.queryParameters(queryParams)
 				.build();
 		duration = System.currentTimeMillis() - start;

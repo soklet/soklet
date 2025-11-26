@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.DefaultServerSentEventServer.ServerSentEventConnection.WriteQueueElement;
 import com.soklet.annotation.ServerSentEventSource;
+import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.util.ConcurrentLruMap;
 
 import javax.annotation.Nonnull;
@@ -33,7 +34,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
@@ -73,6 +73,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -209,6 +210,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private RequestHandler requestHandler;
 	@Nullable
 	private LifecycleInterceptor lifecycleInterceptor;
+	@Nullable
+	private IdGenerator<?> idGenerator;
 
 	@ThreadSafe
 	protected static class DefaultServerSentEventBroadcaster implements ServerSentEventBroadcaster {
@@ -346,6 +349,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.verifyConnectionOnceEstablished = builder.verifyConnectionOnceEstablished != null ? builder.verifyConnectionOnceEstablished : DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
+		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.withDefaults();
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.heartbeatInterval = builder.heartbeatInterval != null ? builder.heartbeatInterval : DEFAULT_HEARTBEAT_INTERVAL;
@@ -729,18 +733,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		Throwable throwable = null;
 
 		try (clientSocketChannel) {
-			// Use the socket's address as an identifier
-			String requestIdentifier = clientSocketChannel.getRemoteAddress().toString();
-
 			try {
 				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "will/didInitiateConnection"
-				String rawRequest = readRequest(requestIdentifier, clientSocketChannel);
-				request = parseRequest(requestIdentifier, rawRequest);
-			} catch (URISyntaxException e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST, format("Unable to parse Server-Sent Event request URI: %s", e.getInput()))
-						.throwable(e)
-						.build());
-				throw e;
+				String rawRequest = readRequest(clientSocketChannel);
+				request = parseRequest(rawRequest);
 			} catch (RequestTooLargeIOException e) {
 				// Exception provides a "too large"-flagged request with whatever data we could pull out of it
 				request = e.getTooLargeRequest();
@@ -1344,12 +1340,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected Request parseRequest(@Nonnull String requestIdentifier,
-																 @Nonnull String rawRequest) throws URISyntaxException {
-		requireNonNull(requestIdentifier);
+	protected Request parseRequest(@Nonnull String rawRequest) {
 		requireNonNull(rawRequest);
 
-		rawRequest = Utilities.trimAggressivelyToNull(rawRequest);
+		rawRequest = trimAggressivelyToNull(rawRequest);
 
 		if (rawRequest == null)
 			throw new IllegalStateException("Server-Sent Event HTTP request has no data");
@@ -1379,11 +1373,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Line 2: Accept-Encoding: gzip, deflate, br, zstd
 		// ...and so forth.
 
-		Request.Builder requestBuilder = null;
+		Request.RawBuilder requestBuilder = null;
 		List<String> headerLines = new ArrayList<>();
 
 		for (String line : rawRequest.lines().toList()) {
-			line = Utilities.trimAggressivelyToNull(line);
+			line = trimAggressivelyToNull(line);
 
 			if (line == null)
 				continue;
@@ -1396,43 +1390,23 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (components.length != 3)
 					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
+				HttpMethod httpMethod;
 				String rawHttpMethod = components[0];
-				String rawUri = components[1];
-				HttpMethod httpMethod = null;
-				URI uri = null;
+				String rawUrl = components[1];
 
-				if (rawUri != null) {
-					try {
-						uri = new URI(rawUri);
-					} catch (Exception ignored) {
-						// Malformed URI
-					}
-				}
+				if (rawHttpMethod == null)
+					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Unable to parse HTTP method. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
 				try {
 					httpMethod = HttpMethod.valueOf(rawHttpMethod);
 				} catch (IllegalArgumentException e) {
-					// Malformed HTTP method
+					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Unable to parse HTTP method. Expected a format like 'GET /example?one=two HTTP/1.1'", line), e);
 				}
 
-				if (uri == null || httpMethod == null)
-					throw new URISyntaxException(rawUri, format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
+				if (rawUrl == null)
+					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Unable to parse URL. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
 
-				// Safely handle both absolute and relative URIs
-				String finalUri = rawUri;
-
-				try {
-					URI u = new URI(rawUri);
-					if (u.isAbsolute()) {
-						String path = (u.getRawPath() == null ? "/" : u.getRawPath());
-						String q = u.getRawQuery();
-						finalUri = (q == null ? path : path + "?" + q);
-					}
-				} catch (Exception e) {
-					throw new URISyntaxException(rawUri, format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
-				}
-
-				requestBuilder = Request.with(httpMethod, finalUri);
+				requestBuilder = Request.withRawUrl(httpMethod, rawUrl);
 			} else {
 				if (line.isEmpty())
 					continue;
@@ -1450,13 +1424,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(headerLines);
 
-		return requestBuilder.id(requestIdentifier).headers(headers).build();
+		return requestBuilder.idGenerator(getIdGenerator()).headers(headers).build();
 	}
 
 	@Nonnull
-	protected String readRequest(@Nonnull String requestIdentifier,
-															 @Nonnull SocketChannel clientSocketChannel) throws IOException {
-		requireNonNull(requestIdentifier);
+	protected String readRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
 		requireNonNull(clientSocketChannel);
 
 		// Because reads from the socket channel are blocking, there is no way to specify a timeout for it.
@@ -1504,7 +1476,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						String rawRequest = requestBuilder.toString();
 
 						// Given our partial raw request, try to parse it into a request...
-						Request tooLargeRequest = parseTooLargeRequestForRawRequest(requestIdentifier, rawRequest).orElse(null);
+						Request tooLargeRequest = parseTooLargeRequestForRawRequest(rawRequest).orElse(null);
 
 						// ...if unable to parse into a request (as in, we can't even make it through the first line), bail
 						if (tooLargeRequest == null)
@@ -1560,9 +1532,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	 * If there isn't sufficient data to parse into a request (or if the data is malformed), then return the empty value.
 	 */
 	@Nonnull
-	protected Optional<Request> parseTooLargeRequestForRawRequest(@Nonnull String requestIdentifier,
-																																@Nonnull String rawRequest) {
-		requireNonNull(requestIdentifier);
+	protected Optional<Request> parseTooLargeRequestForRawRequest(@Nonnull String rawRequest) {
 		requireNonNull(rawRequest);
 
 		// Supports both relative and absolute paths.
@@ -1592,7 +1562,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (rawHttpMethod != null)
 			rawHttpMethod = rawHttpMethod.trim().toUpperCase(Locale.ENGLISH);
 
-		HttpMethod httpMethod = null;
+		HttpMethod httpMethod;
 
 		try {
 			httpMethod = HttpMethod.valueOf(rawHttpMethod);
@@ -1621,8 +1591,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		// TODO: eventually would be nice to parse headers as best we can.  For now, we just parse the first request line
-		return Optional.of(Request.with(httpMethod, rawUri)
-				.id(requestIdentifier)
+		return Optional.of(Request.withRawUrl(httpMethod, rawUri)
+				.idGenerator(getIdGenerator())
 				.contentTooLarge(true)
 				.build());
 	}
@@ -2093,5 +2063,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Optional<LifecycleInterceptor> getLifecycleInterceptor() {
 		return Optional.ofNullable(this.lifecycleInterceptor);
+	}
+
+	@Nullable
+	private IdGenerator<?> getIdGenerator() {
+		return this.idGenerator;
 	}
 }

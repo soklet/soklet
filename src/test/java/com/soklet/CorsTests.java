@@ -49,7 +49,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult requestResult = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://example.com"),
 									"Access-Control-Request-Method", Set.of("GET"),
@@ -81,7 +81,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult requestResult = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://malicious.net"),
 									"Access-Control-Request-Method", Set.of("POST")
@@ -106,7 +106,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult result = simulator.performRequest(
-					Request.with(HttpMethod.GET, "/api/hello")
+					Request.withPath(HttpMethod.GET, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://app.example")
 							))
@@ -158,7 +158,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult allowed = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://good.example"),
 									"Access-Control-Request-Method", Set.of("GET")
@@ -167,7 +167,7 @@ public class CorsTests {
 			Assertions.assertEquals(204, allowed.getMarshaledResponse().getStatusCode());
 
 			RequestResult denied = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://evil.example"),
 									"Access-Control-Request-Method", Set.of("GET")
@@ -186,7 +186,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult preflight = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://good.example"),
 									"Access-Control-Request-Method", Set.of("GET"),
@@ -214,7 +214,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult result = simulator.performRequest(
-					Request.with(HttpMethod.GET, "/api/hello")
+					Request.withPath(HttpMethod.GET, "/api/hello")
 							.headers(Map.of("Origin", Set.of("https://good.example")))
 							.build());
 
@@ -237,7 +237,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(configuration, simulator -> {
 			RequestResult preflight = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://any.example"),
 									"Access-Control-Request-Method", Set.of("GET"),
@@ -289,7 +289,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(config, simulator -> {
 			var result = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of(GOOD),
 									"Access-Control-Request-Method", Set.of("GET"),
@@ -314,7 +314,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(config, simulator -> {
 			var result = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of(GOOD),
 									"Access-Control-Request-Method", Set.of("GET")
@@ -343,7 +343,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(config, simulator -> {
 			var result = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of(GOOD),
 									"Access-Control-Request-Method", Set.of("GET")
@@ -376,7 +376,7 @@ public class CorsTests {
 			headers.put("Access-Control-Request-Method", Set.of("GET"));
 
 			var result = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello").headers(headers).build()
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello").headers(headers).build()
 			);
 
 			Assertions.assertEquals(204, result.getMarshaledResponse().getStatusCode());
@@ -397,7 +397,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(config, simulator -> {
 			var ok = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of(GOOD),
 									"Access-Control-Request-Method", Set.of("GET")
@@ -410,7 +410,7 @@ public class CorsTests {
 			}
 
 			var denied = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of(EVIL),
 									"Access-Control-Request-Method", Set.of("GET")
@@ -429,7 +429,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(config, simulator -> {
 			var result = simulator.performRequest(
-					Request.with(HttpMethod.GET, "/api/hello")
+					Request.withPath(HttpMethod.GET, "/api/hello")
 							.headers(Map.of("Origin", Set.of(GOOD)))
 							.build()
 			);
@@ -453,7 +453,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(config, simulator -> {
 			var result = simulator.performRequest(
-					Request.with(HttpMethod.GET, "/api/hello")
+					Request.withPath(HttpMethod.GET, "/api/hello")
 							.headers(Map.of("Origin", Set.of(GOOD)))
 							.build()
 			);
@@ -477,7 +477,7 @@ public class CorsTests {
 
 		Soklet.runSimulator(config, simulator -> {
 			var result = simulator.performRequest(
-					Request.with(HttpMethod.OPTIONS, "/api/hello")
+					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("null"),
 									"Access-Control-Request-Method", Set.of("GET")
