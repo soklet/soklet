@@ -537,6 +537,9 @@ public class SokletTests {
 					.body(requestBody.getBytes(StandardCharsets.UTF_8))
 					.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=")))
 					.build();
+
+			// Trigger lazy-load of multipart parser
+			request.getMultipartFields();
 		}, "Empty multipart boundary should cause an exception");
 	}
 
@@ -554,6 +557,10 @@ public class SokletTests {
 					.body(requestBody.getBytes(StandardCharsets.UTF_8))
 					.headers(Map.of("Content-Type", Set.of("multipart/form-data"))) // No boundary at all
 					.build();
+
+			// Trigger lazy-load of multipart parser
+			request.getMultipartFields();
+
 		}, "Missing multipart boundary should cause an exception");
 	}
 
@@ -571,6 +578,9 @@ public class SokletTests {
 					.body(requestBody.getBytes(StandardCharsets.UTF_8))
 					.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=   ")))
 					.build();
+
+			// Trigger lazy-load of multipart parser
+			request.getMultipartFields();
 		}, "Whitespace multipart boundary should cause an exception");
 	}
 
