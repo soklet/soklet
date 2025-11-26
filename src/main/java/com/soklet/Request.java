@@ -52,7 +52,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * Encapsulates information specified in an HTTP request.
  * <p>
- * Instances can be acquired via the {@link #with(HttpMethod, String)} builder factory method.
+ * Instances can be acquired via the {@link #withRawUrl(HttpMethod, String)} (e.g. provided by clients on a "raw" HTTP/1.1 request line, un-encoded) and {@link #withPath(HttpMethod, String)} (e.g. manually-constructed during integration testing, understood to be already-decoded) builder factory methods.
+ * <p>
+ * As part of instance construction, any necessary decoding (path, URL parameter, {@code Content-Type: application/x-www-form-urlencoded}, etc.) will be performed.  Unless otherwise indicated, all accessor methods will return decoded data.
  * <p>
  * Detailed documentation available at <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
  *
@@ -1049,7 +1051,7 @@ public final class Request {
 			this.builder = new PathBuilder(request.getHttpMethod(), request.getPath())
 					.id(request.getId())
 					.queryParameters(request.getQueryParameters())
-					.headers(new LinkedCaseInsensitiveMap<>(request.getHeaders()))
+					.headers(request.getHeaders())
 					.body(request.getBody().orElse(null))
 					.multipartParser(request.getMultipartParser())
 					.idGenerator(request.getIdGenerator())
