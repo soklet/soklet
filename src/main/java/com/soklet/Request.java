@@ -1050,8 +1050,8 @@ public final class Request {
 
 			this.builder = new PathBuilder(request.getHttpMethod(), request.getPath())
 					.id(request.getId())
-					.queryParameters(request.getQueryParameters())
-					.headers(request.getHeaders())
+					.queryParameters(new LinkedHashMap<>(request.getQueryParameters()))
+					.headers(new LinkedCaseInsensitiveMap<>(request.getHeaders()))
 					.body(request.getBody().orElse(null))
 					.multipartParser(request.getMultipartParser())
 					.idGenerator(request.getIdGenerator())
@@ -1062,6 +1062,23 @@ public final class Request {
 		public Copier httpMethod(@Nonnull HttpMethod httpMethod) {
 			requireNonNull(httpMethod);
 			this.builder.httpMethod(httpMethod);
+			return this;
+		}
+
+		@Nonnull
+		public Copier path(@Nonnull String path) {
+			requireNonNull(path);
+
+			path = trimAggressivelyToEmpty(path);
+
+			if (path.contains("?"))
+				throw new IllegalRequestException(format("Path should not contain a query string. Use %s.%s.queryParameters(...) to specify query parameters as a %s.",
+						Request.class.getSimpleName(), Copier.class.getSimpleName(), Map.class.getSimpleName()));
+
+			if (path.length() == 0)
+				path = "/";
+
+			this.builder.path(path);
 			return this;
 		}
 
