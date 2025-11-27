@@ -629,9 +629,13 @@ public class UtilitiesTests {
 		String path = "/test";
 
 		// Use LinkedHashMap/LinkedHashSet to get deterministic order
+		Set<String> a = new LinkedHashSet<>();
+		a.add("1");
+		a.add("2");
+
 		Map<String, Set<String>> params = new LinkedHashMap<>();
-		params.put("a", new LinkedHashSet<>(Set.of("1", "2")));
-		params.put("b", new LinkedHashSet<>(Set.of("3")));
+		params.put("a", a);
+		params.put("b", Set.of("3"));
 
 		String result = encodedPathAndQueryParameters(
 				path,
