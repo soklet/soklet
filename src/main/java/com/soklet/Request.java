@@ -126,9 +126,9 @@ public final class Request {
 	 * <p>
 	 * Paths will be percent-decoded at build time.
 	 * <p>
-	 * Query parameters are parsed and decoded at build time using RFC 3986 semantics - see {@link QueryDecodingStrategy#RFC_3986_STRICT}.
+	 * Query parameters are parsed and decoded at build time using RFC 3986 semantics - see {@link QueryStringFormat#RFC_3986_STRICT}.
 	 * <p>
-	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded at build time by using {@link QueryDecodingStrategy#X_WWW_FORM_URLENCODED}.
+	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded at build time by using {@link QueryStringFormat#X_WWW_FORM_URLENCODED}.
 	 *
 	 * @param httpMethod the HTTP method for this request ({@code GET, POST, etc.})
 	 * @param rawUrl     the raw (un-decoded) URL for this request
@@ -150,7 +150,7 @@ public final class Request {
 	 * <p>
 	 * Query parameters must be specified via {@link PathBuilder#queryParameters(Map)} and are assumed to be already-decoded.
 	 * <p>
-	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded at build time by using {@link QueryDecodingStrategy#X_WWW_FORM_URLENCODED}.
+	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded at build time by using {@link QueryStringFormat#X_WWW_FORM_URLENCODED}.
 	 *
 	 * @param httpMethod the HTTP method for this request ({@code GET, POST, etc.})
 	 * @param path       the decoded URL path for this request
@@ -234,8 +234,8 @@ public final class Request {
 				if (rawUrl.contains("?")) {
 					// We always assume RFC_3986_STRICT for query parameters because Soklet is for modern systems - HTML Form "GET" submissions are rare/legacy.
 					// This means we leave "+" as "+" (not decode to " ") and then apply any percent-decoding rules.
-					// In the future, we might expose a way to let applications prefer QueryDecodingStrategy.X_WWW_FORM_URLENCODED instead, which treats "+" as a space
-					this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(rawUrl, QueryDecodingStrategy.RFC_3986_STRICT, getCharset().orElse(DEFAULT_CHARSET)));
+					// In the future, we might expose a way to let applications prefer QueryStringFormat.X_WWW_FORM_URLENCODED instead, which treats "+" as a space
+					this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(rawUrl, QueryStringFormat.RFC_3986_STRICT, getCharset().orElse(DEFAULT_CHARSET)));
 				} else {
 					this.queryParameters = Map.of();
 				}
@@ -411,7 +411,7 @@ public final class Request {
 				if (result == null) {
 					if (this.body != null && this.contentType != null && this.contentType.equalsIgnoreCase("application/x-www-form-urlencoded")) {
 						String bodyAsString = getBodyAsString().orElse(null);
-						result = Collections.unmodifiableMap(Utilities.extractQueryParametersFromQuery(bodyAsString, QueryDecodingStrategy.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET)));
+						result = Collections.unmodifiableMap(Utilities.extractQueryParametersFromQueryString(bodyAsString, QueryStringFormat.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET)));
 					} else {
 						result = Map.of();
 					}
@@ -512,7 +512,7 @@ public final class Request {
 	}
 
 	/**
-	 * The raw bytes of the request body - <em>callers should not modify this array; it is not defensively copied for performance reasons</em>.
+	 * The raw bytes of the request body - <strong>callers should not modify this array; it is not defensively copied for performance reasons</strong>.
 	 * <p>
 	 * For convenience, {@link #getBodyAsString()} is available if you expect your request body to be of type {@link String}.
 	 *

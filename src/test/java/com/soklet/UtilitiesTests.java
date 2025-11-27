@@ -33,8 +33,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.soklet.Utilities.encodedPathAndQueryParameters;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -175,46 +178,46 @@ public class UtilitiesTests {
 
 	@Test
 	public void plusIsPreservedInRfc3986Queries() {
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?q=C++", QueryDecodingStrategy.RFC_3986_STRICT);
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?q=C++", QueryStringFormat.RFC_3986_STRICT);
 		// Desired (URL semantics): "+" is literal, not a space
 		assertEquals(Set.of("C++"), qp.get("q"));
 	}
 
 	@Test
 	public void percentEncodedPlusIsPreservedInRfc3986Queries() {
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?q=C%2B%2B", QueryDecodingStrategy.RFC_3986_STRICT);
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?q=C%2B%2B", QueryStringFormat.RFC_3986_STRICT);
 		assertEquals(Set.of("C++"), qp.get("q"));
 	}
 
 	@Test
 	public void plusInFormBodyIsSpace() {
 		// Form semantics (x-www-form-urlencoded) *do* translate '+' to space:
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromQuery("q=C+Sharp", QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromQueryString("q=C+Sharp", QueryStringFormat.X_WWW_FORM_URLENCODED);
 		assertEquals(Set.of("C Sharp"), qp.get("q"));
 	}
 
 	@Test
 	public void emptyValueInRfc3986QueryIsPreserved() {
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?a=", QueryDecodingStrategy.RFC_3986_STRICT);
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?a=", QueryStringFormat.RFC_3986_STRICT);
 		assertTrue(qp.containsKey("a"), "Parameter name should exist");
 		assertEquals(Set.of(""), qp.get("a"), "Empty value should be preserved");
 	}
 
 	@Test
 	public void emptyValueInFormIsPreserved() {
-		Map<String, Set<String>> form = Utilities.extractQueryParametersFromQuery("x=", QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+		Map<String, Set<String>> form = Utilities.extractQueryParametersFromQueryString("x=", QueryStringFormat.X_WWW_FORM_URLENCODED);
 		assertTrue(form.containsKey("x"));
 		assertEquals(Set.of(""), form.get("x"));
 	}
 
 	@Test
 	public void invalidEscapeDoesNotThrow() {
-		Assertions.assertDoesNotThrow(() -> Utilities.extractQueryParametersFromUrl("/?a=%ZZ", QueryDecodingStrategy.X_WWW_FORM_URLENCODED));
+		Assertions.assertDoesNotThrow(() -> Utilities.extractQueryParametersFromUrl("/?a=%ZZ", QueryStringFormat.X_WWW_FORM_URLENCODED));
 	}
 
 	@Test
 	public void invalidEscapeIsLeftLiteralOrSkipped() {
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?a=%ZZ", QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?a=%ZZ", QueryStringFormat.X_WWW_FORM_URLENCODED);
 		// Implementation choice: either literal "%ZZ" or skip parameter entirely.
 		// For literal behavior:
 		// Assertions.assertEquals(Set.of("%ZZ"), qp.get("a"));
@@ -454,15 +457,15 @@ public class UtilitiesTests {
 
 	@Test
 	void rejectsIllegalHeaderNameCharacters() {
-		Assertions.assertThrows(IllegalArgumentException.class,
+		assertThrows(IllegalArgumentException.class,
 				() -> Utilities.validateHeaderNameAndValue("X Foo", "ok")); // space not allowed in name
-		Assertions.assertThrows(IllegalArgumentException.class,
+		assertThrows(IllegalArgumentException.class,
 				() -> Utilities.validateHeaderNameAndValue("X\nFoo", "ok")); // CR/LF must be rejected
 	}
 
 	@Test
 	void rejectsCRLFInHeaderValue() {
-		Assertions.assertThrows(IllegalArgumentException.class,
+		assertThrows(IllegalArgumentException.class,
 				() -> Utilities.validateHeaderNameAndValue("X-Foo", "bar\r\nInjected: evil"));
 	}
 
@@ -474,8 +477,8 @@ public class UtilitiesTests {
 	@Test
 	void formMode_treatsPlusAsSpace_andDecodesPercentEscapes() {
 		var q = "a=a+b%2B%20&empty=&name=%E2%9C%93";
-		var m = Utilities.extractQueryParametersFromQuery(
-				q, QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+		var m = Utilities.extractQueryParametersFromQueryString(
+				q, QueryStringFormat.X_WWW_FORM_URLENCODED);
 
 		assertEquals(Set.of("a b+ "), m.get("a"));  // '+' -> space; %2B -> '+'; %20 -> space
 		assertEquals(Set.of(""), m.get("empty"));   // empty preserved
@@ -485,7 +488,7 @@ public class UtilitiesTests {
 	@Test
 	void strictMode_leavesPlusAsPlus() {
 		var q = "a=a+b%2B%20";
-		var m = Utilities.extractQueryParametersFromQuery(q, QueryDecodingStrategy.RFC_3986_STRICT);
+		var m = Utilities.extractQueryParametersFromQueryString(q, QueryStringFormat.RFC_3986_STRICT);
 
 		assertEquals(Set.of("a+b+ "), m.get("a")); // '+' stays '+'
 	}
@@ -528,7 +531,7 @@ public class UtilitiesTests {
 	@Test
 	void queryParamsAreUrlDecoded_andPlusBecomesSpace() {
 		String url = "https://example.com/p?q=First+Last&x=%2F";
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl(url, QueryDecodingStrategy.X_WWW_FORM_URLENCODED);
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl(url, QueryStringFormat.X_WWW_FORM_URLENCODED);
 
 		assertEquals(Set.of("First Last"), qp.get("q"));
 		assertEquals(Set.of("/"), qp.get("x"));
@@ -571,5 +574,160 @@ public class UtilitiesTests {
 
 	private static List<String> setToList(Set<String> s) {
 		return new ArrayList<>(s);
+	}
+
+
+	@Test
+	void javadocExample_isEncodedAsExpected() {
+		// path "/my path", params {a=[b], c=[d e]}
+		String path = "/my path";
+
+		Map<String, Set<String>> params = new LinkedHashMap<>();
+		params.put("a", new LinkedHashSet<>(Set.of("b")));
+		params.put("c", new LinkedHashSet<>(Set.of("d e")));
+
+		String result = encodedPathAndQueryParameters(
+				path,
+				params,
+				QueryStringFormat.RFC_3986_STRICT
+		);
+
+		assertEquals("/my%20path?a=b&c=d%20e", result);
+	}
+
+	@Test
+	void emptyQueryParameters_returnsEncodedPathOnly() {
+		String path = "/my path";
+		Map<String, Set<String>> params = Map.of(); // empty
+
+		String result = encodedPathAndQueryParameters(
+				path,
+				params,
+				QueryStringFormat.RFC_3986_STRICT
+		);
+
+		// path should still be encoded, but no '?' suffix
+		assertEquals("/my%20path", result);
+	}
+
+	@Test
+	void asteriskPath_returnsAsteriskWhenNoQueryParameters() {
+		String path = "*";
+		Map<String, Set<String>> params = Map.of();
+
+		String result = encodedPathAndQueryParameters(
+				path,
+				params,
+				QueryStringFormat.RFC_3986_STRICT
+		);
+
+		assertEquals("*", result);
+	}
+
+	@Test
+	void multiValueParameters_areRepeatedInQueryStringPreservingOrder() {
+		String path = "/test";
+
+		// Use LinkedHashMap/LinkedHashSet to get deterministic order
+		Map<String, Set<String>> params = new LinkedHashMap<>();
+		params.put("a", new LinkedHashSet<>(Set.of("1", "2")));
+		params.put("b", new LinkedHashSet<>(Set.of("3")));
+
+		String result = encodedPathAndQueryParameters(
+				path,
+				params,
+				QueryStringFormat.RFC_3986_STRICT
+		);
+
+		// Order: a=1, a=2, b=3
+		assertEquals("/test?a=1&a=2&b=3", result);
+	}
+
+	@Test
+	void parameterNamesAndValues_areEncodedWithRfc3986Semantics() {
+		String path = "/path with space";
+
+		Map<String, Set<String>> params = new LinkedHashMap<>();
+		params.put("na me", new LinkedHashSet<>(Set.of("va lue&more")));
+
+		String result = encodedPathAndQueryParameters(
+				path,
+				params,
+				QueryStringFormat.RFC_3986_STRICT
+		);
+
+		// Path spaces -> %20, query spaces -> %20 (no '+'), '&' encoded as %26
+		assertEquals("/path%20with%20space?na%20me=va%20lue%26more", result);
+	}
+
+	@Test
+	void strictFormat_replacesPlusWithPercent20InQuery() {
+		String path = "/search";
+
+		Map<String, Set<String>> params = Map.of(
+				"q", Set.of("a b")
+		);
+
+		String result = encodedPathAndQueryParameters(
+				path,
+				params,
+				QueryStringFormat.RFC_3986_STRICT
+		);
+
+		assertEquals("/search?q=a%20b", result);
+		assertFalse(result.contains("+"), "RFC_3986_STRICT should not contain '+' for spaces");
+	}
+
+	@Test
+	void pathWithMultipleAndTrailingSlashes_isEncodedSegmentWise() {
+		String path = "/foo//bar baz/";
+
+		Map<String, Set<String>> params = Map.of();
+
+		String result = encodedPathAndQueryParameters(
+				path,
+				params,
+				QueryStringFormat.RFC_3986_STRICT
+		);
+
+		// Expect: "/foo//bar%20baz/"
+		assertEquals("/foo//bar%20baz/", result);
+	}
+
+	@Test
+	void nullPath_throwsNullPointerException() {
+		Map<String, Set<String>> params = Map.of();
+
+		assertThrows(NullPointerException.class, () ->
+				encodedPathAndQueryParameters(
+						null,
+						params,
+						QueryStringFormat.RFC_3986_STRICT
+				)
+		);
+	}
+
+	@Test
+	void nullQueryParameters_throwsNullPointerException() {
+		assertThrows(NullPointerException.class, () ->
+				encodedPathAndQueryParameters(
+						"/test",
+						null,
+						QueryStringFormat.RFC_3986_STRICT
+				)
+		);
+	}
+
+	@Test
+	void nullQueryStringFormat_throwsNullPointerException() {
+		Map<String, Set<String>> params = Map.of("a", Set.of("b"));
+
+		assertThrows(NullPointerException.class, () ->
+				encodedPathAndQueryParameters(
+						"/test",
+						params,
+						null
+				)
+		);
 	}
 }
