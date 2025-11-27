@@ -688,9 +688,9 @@ public final class Utilities {
 	 * @return the encoded target string
 	 */
 	@Nonnull
-	public static String encodedPathAndQueryParameters(@Nonnull String path,
-																										 @Nonnull Map<String, Set<String>> queryParameters,
-																										 @Nonnull QueryStringFormat queryStringFormat) {
+	public static String encodedPathAndQueryString(@Nonnull String path,
+																								 @Nonnull Map<String, Set<String>> queryParameters,
+																								 @Nonnull QueryStringFormat queryStringFormat) {
 		requireNonNull(path);
 		requireNonNull(queryParameters);
 		requireNonNull(queryStringFormat);

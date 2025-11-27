@@ -33,7 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.soklet.Utilities.encodedPathAndQueryParameters;
+import static com.soklet.Utilities.encodedPathAndQueryString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -586,7 +586,7 @@ public class UtilitiesTests {
 		params.put("a", new LinkedHashSet<>(Set.of("b")));
 		params.put("c", new LinkedHashSet<>(Set.of("d e")));
 
-		String result = encodedPathAndQueryParameters(
+		String result = encodedPathAndQueryString(
 				path,
 				params,
 				QueryStringFormat.RFC_3986_STRICT
@@ -600,7 +600,7 @@ public class UtilitiesTests {
 		String path = "/my path";
 		Map<String, Set<String>> params = Map.of(); // empty
 
-		String result = encodedPathAndQueryParameters(
+		String result = encodedPathAndQueryString(
 				path,
 				params,
 				QueryStringFormat.RFC_3986_STRICT
@@ -615,7 +615,7 @@ public class UtilitiesTests {
 		String path = "*";
 		Map<String, Set<String>> params = Map.of();
 
-		String result = encodedPathAndQueryParameters(
+		String result = encodedPathAndQueryString(
 				path,
 				params,
 				QueryStringFormat.RFC_3986_STRICT
@@ -637,7 +637,7 @@ public class UtilitiesTests {
 		params.put("a", a);
 		params.put("b", Set.of("3"));
 
-		String result = encodedPathAndQueryParameters(
+		String result = encodedPathAndQueryString(
 				path,
 				params,
 				QueryStringFormat.RFC_3986_STRICT
@@ -654,7 +654,7 @@ public class UtilitiesTests {
 		Map<String, Set<String>> params = new LinkedHashMap<>();
 		params.put("na me", new LinkedHashSet<>(Set.of("va lue&more")));
 
-		String result = encodedPathAndQueryParameters(
+		String result = encodedPathAndQueryString(
 				path,
 				params,
 				QueryStringFormat.RFC_3986_STRICT
@@ -672,7 +672,7 @@ public class UtilitiesTests {
 				"q", Set.of("a b")
 		);
 
-		String result = encodedPathAndQueryParameters(
+		String result = encodedPathAndQueryString(
 				path,
 				params,
 				QueryStringFormat.RFC_3986_STRICT
@@ -688,7 +688,7 @@ public class UtilitiesTests {
 
 		Map<String, Set<String>> params = Map.of();
 
-		String result = encodedPathAndQueryParameters(
+		String result = encodedPathAndQueryString(
 				path,
 				params,
 				QueryStringFormat.RFC_3986_STRICT
@@ -703,7 +703,7 @@ public class UtilitiesTests {
 		Map<String, Set<String>> params = Map.of();
 
 		assertThrows(NullPointerException.class, () ->
-				encodedPathAndQueryParameters(
+				encodedPathAndQueryString(
 						null,
 						params,
 						QueryStringFormat.RFC_3986_STRICT
@@ -714,7 +714,7 @@ public class UtilitiesTests {
 	@Test
 	void nullQueryParameters_throwsNullPointerException() {
 		assertThrows(NullPointerException.class, () ->
-				encodedPathAndQueryParameters(
+				encodedPathAndQueryString(
 						"/test",
 						null,
 						QueryStringFormat.RFC_3986_STRICT
@@ -727,7 +727,7 @@ public class UtilitiesTests {
 		Map<String, Set<String>> params = Map.of("a", Set.of("b"));
 
 		assertThrows(NullPointerException.class, () ->
-				encodedPathAndQueryParameters(
+				encodedPathAndQueryString(
 						"/test",
 						params,
 						null
