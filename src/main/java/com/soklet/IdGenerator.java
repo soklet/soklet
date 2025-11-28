@@ -56,7 +56,7 @@ public interface IdGenerator<T> {
 	 * @return an {@code IdGenerator} with default settings
 	 */
 	@Nonnull
-	static IdGenerator withDefaults() {
+	static IdGenerator<String> withDefaults() {
 		return DefaultIdGenerator.withDefaults();
 	}
 
@@ -70,8 +70,8 @@ public interface IdGenerator<T> {
 	 * @return an {@code IdGenerator} configured with the given range
 	 */
 	@Nonnull
-	static IdGenerator withRange(@Nonnull Long minimumId,
-															 @Nonnull Long maximumId) {
+	static IdGenerator<String> withRange(@Nonnull Long minimumId,
+																			 @Nonnull Long maximumId) {
 		requireNonNull(minimumId);
 		requireNonNull(maximumId);
 		return DefaultIdGenerator.withRange(minimumId, maximumId);
@@ -88,9 +88,9 @@ public interface IdGenerator<T> {
 	 * @return an {@code IdGenerator} configured with the given range and prefix
 	 */
 	@Nonnull
-	static IdGenerator withRangeAndPrefix(@Nonnull Long minimumId,
-																				@Nonnull Long maximumId,
-																				@Nonnull String prefix) {
+	static IdGenerator<String> withRangeAndPrefix(@Nonnull Long minimumId,
+																								@Nonnull Long maximumId,
+																								@Nonnull String prefix) {
 		requireNonNull(minimumId);
 		requireNonNull(maximumId);
 		requireNonNull(prefix);
@@ -106,7 +106,7 @@ public interface IdGenerator<T> {
 	 * @return an {@code IdGenerator} configured with the given prefix
 	 */
 	@Nonnull
-	static IdGenerator withPrefix(@Nonnull String prefix) {
+	static IdGenerator<String> withPrefix(@Nonnull String prefix) {
 		requireNonNull(prefix);
 		return DefaultIdGenerator.withPrefix(prefix);
 	}
