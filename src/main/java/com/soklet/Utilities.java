@@ -611,13 +611,13 @@ public final class Utilities {
 	 *   <li>Applies aggressive trimming of Unicode whitespace.</li>
 	 * </ul>
 	 *
-	 * @param url                    a URL or path to normalize
-	 * @param performPercentDecoding {@code true} if percent decoding should be performed on the path, {@code false} otherwise
+	 * @param url             a URL or path to normalize
+	 * @param performDecoding {@code true} if decoding should be performed on the path (e.g. replace {@code %20} with a space character), {@code false} otherwise
 	 * @return the normalized path, {@code "/"} for empty input
 	 */
 	@Nonnull
-	public static String normalizedPathForUrl(@Nonnull String url,
-																						@Nonnull Boolean performPercentDecoding) {
+	public static String extractPathFromUrl(@Nonnull String url,
+																					@Nonnull Boolean performDecoding) {
 		requireNonNull(url);
 
 		url = trimAggressivelyToEmpty(url);
@@ -635,7 +635,7 @@ public final class Utilities {
 			if (rawPath == null || rawPath.isEmpty())
 				rawPath = "/";
 
-			String decodedPath = performPercentDecoding ? percentDecode(rawPath, StandardCharsets.UTF_8) : rawPath;
+			String decodedPath = performDecoding ? percentDecode(rawPath, StandardCharsets.UTF_8) : rawPath;
 
 			// Sanitize path traversal (e.g. /a/../b -> /b)
 			decodedPath = removeDotSegments(decodedPath);
@@ -657,7 +657,7 @@ public final class Utilities {
 			if (q != -1)
 				path = path.substring(0, q);
 
-			String decodedPath = performPercentDecoding ? percentDecode(path, StandardCharsets.UTF_8) : path;
+			String decodedPath = performDecoding ? percentDecode(path, StandardCharsets.UTF_8) : path;
 
 			// Sanitize path traversal (e.g. /a/../b -> /b)
 			decodedPath = removeDotSegments(decodedPath);
@@ -674,38 +674,59 @@ public final class Utilities {
 	}
 
 	/**
-	 * Generates an encoded "target" string from a decoded path and decoded query parameters (e.g. from {@link Request#getPath()} and {@link Request#getQueryParameters()}).
+	 * Extracts the raw (un-decoded) query component from a URL.
 	 * <p>
-	 * For example, given path {@code "/my path"}, parameters {@code {a=[b], c=[d e]}},
-	 * and strategy {@link QueryFormat#RFC_3986_STRICT},
-	 * returns {@code "/my%20path?a=b&c=d%20e"}.
-	 * <p>
-	 * This is not guaranteed to reconstruct the exact data sent over the wire; it just generates a logically-equivalent representation useful for logging, proxying, etc.
+	 * For example, {@code "/path?a=b&c=d%20e"} would return {@code "a=b&c=d%20e"}.
 	 *
-	 * @param path            the decoded path (must start with '/' or be '*')
-	 * @param queryParameters the decoded query parameters, or an empty {@link Map} if none
-	 * @param queryFormat     the encoding strategy for query parameter keys and values
-	 * @return the encoded target string
+	 * @param url a raw URL or path
+	 * @return the raw query component, or {@link Optional#empty()} if none
 	 */
 	@Nonnull
-	public static String encodedPathAndQuery(@Nonnull String path,
-																					 @Nonnull Map<String, Set<String>> queryParameters,
-																					 @Nonnull QueryFormat queryFormat) {
-		requireNonNull(path);
+	public static Optional<String> extractRawQueryFromUrl(@Nonnull String url) {
+		requireNonNull(url);
+
+		url = trimAggressivelyToEmpty(url);
+
+		if ("*".equals(url))
+			return Optional.empty();
+
+		try {
+			URI uri = new URI(url);
+			return Optional.ofNullable(trimAggressivelyToNull(uri.getRawQuery()));
+		} catch (URISyntaxException e) {
+			// Not a valid URI, try to extract query manually
+			int q = url.indexOf('?');
+			if (q == -1)
+				return Optional.empty();
+
+			String query = trimAggressivelyToNull(url.substring(q + 1));
+			return Optional.ofNullable(query);
+		}
+	}
+
+	/**
+	 * Encodes decoded query parameters into a raw query string.
+	 * <p>
+	 * For example, given {@code {a=[b], c=[d e]}} and {@link QueryFormat#RFC_3986_STRICT},
+	 * returns {@code "a=b&c=d%20e"}.
+	 *
+	 * @param queryParameters the decoded query parameters
+	 * @param queryFormat     the encoding strategy
+	 * @return the encoded query string, or the empty string if no parameters
+	 */
+	@Nonnull
+	public static String encodeQueryParameters(@Nonnull Map<String, Set<String>> queryParameters,
+																						 @Nonnull QueryFormat queryFormat) {
 		requireNonNull(queryParameters);
 		requireNonNull(queryFormat);
 
-		String encodedPath = encodePath(path);
+		if (queryParameters.isEmpty())
+			return "";
 
-		if (queryParameters == null || queryParameters.isEmpty())
-			return encodedPath;
-
-		StringBuilder sb = new StringBuilder(encodedPath);
-		sb.append('?');
-
+		StringBuilder sb = new StringBuilder();
 		boolean first = true;
 
-		for (Map.Entry<String, Set<String>> entry : queryParameters.entrySet()) {
+		for (Entry<String, Set<String>> entry : queryParameters.entrySet()) {
 			String encodedName = encodeQueryComponent(entry.getKey(), queryFormat);
 
 			for (String value : entry.getValue()) {
@@ -724,8 +745,8 @@ public final class Utilities {
 	}
 
 	@Nonnull
-	private static String encodeQueryComponent(@Nonnull String queryComponent,
-																						 @Nonnull QueryFormat queryFormat) {
+	static String encodeQueryComponent(@Nonnull String queryComponent,
+																		 @Nonnull QueryFormat queryFormat) {
 		requireNonNull(queryComponent);
 		requireNonNull(queryFormat);
 
@@ -738,7 +759,7 @@ public final class Utilities {
 	}
 
 	@Nonnull
-	private static String encodePath(@Nonnull String path) {
+	static String encodePath(@Nonnull String path) {
 		requireNonNull(path);
 
 		if ("*".equals(path))

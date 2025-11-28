@@ -33,9 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.soklet.Utilities.encodedPathAndQuery;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,14 +44,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ThreadSafe
 public class UtilitiesTests {
 	@Test
-	public void normalizedPathForUrl() {
-		assertEquals("/", Utilities.normalizedPathForUrl("https://www.google.com/", true));
-		assertEquals("/", Utilities.normalizedPathForUrl("https://www.google.com", true));
-		assertEquals("/", Utilities.normalizedPathForUrl("", true));
-		assertEquals("/", Utilities.normalizedPathForUrl("/", true));
-		assertEquals("/test", Utilities.normalizedPathForUrl("/test", true));
-		assertEquals("/test", Utilities.normalizedPathForUrl("/test/", true));
-		assertEquals("/test", Utilities.normalizedPathForUrl("/test//", true));
+	public void extractPathFromUrl() {
+		assertEquals("/", Utilities.extractPathFromUrl("https://www.google.com/", true));
+		assertEquals("/", Utilities.extractPathFromUrl("https://www.google.com", true));
+		assertEquals("/", Utilities.extractPathFromUrl("", true));
+		assertEquals("/", Utilities.extractPathFromUrl("/", true));
+		assertEquals("/test", Utilities.extractPathFromUrl("/test", true));
+		assertEquals("/test", Utilities.extractPathFromUrl("/test/", true));
+		assertEquals("/test", Utilities.extractPathFromUrl("/test//", true));
 	}
 
 	@Test
@@ -574,164 +572,5 @@ public class UtilitiesTests {
 
 	private static List<String> setToList(Set<String> s) {
 		return new ArrayList<>(s);
-	}
-
-
-	@Test
-	void javadocExample_isEncodedAsExpected() {
-		// path "/my path", params {a=[b], c=[d e]}
-		String path = "/my path";
-
-		Map<String, Set<String>> params = new LinkedHashMap<>();
-		params.put("a", new LinkedHashSet<>(Set.of("b")));
-		params.put("c", new LinkedHashSet<>(Set.of("d e")));
-
-		String result = encodedPathAndQuery(
-				path,
-				params,
-				QueryFormat.RFC_3986_STRICT
-		);
-
-		assertEquals("/my%20path?a=b&c=d%20e", result);
-	}
-
-	@Test
-	void emptyQueryParameters_returnsEncodedPathOnly() {
-		String path = "/my path";
-		Map<String, Set<String>> params = Map.of(); // empty
-
-		String result = encodedPathAndQuery(
-				path,
-				params,
-				QueryFormat.RFC_3986_STRICT
-		);
-
-		// path should still be encoded, but no '?' suffix
-		assertEquals("/my%20path", result);
-	}
-
-	@Test
-	void asteriskPath_returnsAsteriskWhenNoQueryParameters() {
-		String path = "*";
-		Map<String, Set<String>> params = Map.of();
-
-		String result = encodedPathAndQuery(
-				path,
-				params,
-				QueryFormat.RFC_3986_STRICT
-		);
-
-		assertEquals("*", result);
-	}
-
-	@Test
-	void multiValueParameters_areRepeatedInQueryStringPreservingOrder() {
-		String path = "/test";
-
-		// Use LinkedHashMap/LinkedHashSet to get deterministic order
-		Set<String> a = new LinkedHashSet<>();
-		a.add("1");
-		a.add("2");
-
-		Map<String, Set<String>> params = new LinkedHashMap<>();
-		params.put("a", a);
-		params.put("b", Set.of("3"));
-
-		String result = encodedPathAndQuery(
-				path,
-				params,
-				QueryFormat.RFC_3986_STRICT
-		);
-
-		// Order: a=1, a=2, b=3
-		assertEquals("/test?a=1&a=2&b=3", result);
-	}
-
-	@Test
-	void parameterNamesAndValues_areEncodedWithRfc3986Semantics() {
-		String path = "/path with space";
-
-		Map<String, Set<String>> params = new LinkedHashMap<>();
-		params.put("na me", new LinkedHashSet<>(Set.of("va lue&more")));
-
-		String result = encodedPathAndQuery(
-				path,
-				params,
-				QueryFormat.RFC_3986_STRICT
-		);
-
-		// Path spaces -> %20, query spaces -> %20 (no '+'), '&' encoded as %26
-		assertEquals("/path%20with%20space?na%20me=va%20lue%26more", result);
-	}
-
-	@Test
-	void strictFormat_replacesPlusWithPercent20InQuery() {
-		String path = "/search";
-
-		Map<String, Set<String>> params = Map.of(
-				"q", Set.of("a b")
-		);
-
-		String result = encodedPathAndQuery(
-				path,
-				params,
-				QueryFormat.RFC_3986_STRICT
-		);
-
-		assertEquals("/search?q=a%20b", result);
-		assertFalse(result.contains("+"), "RFC_3986_STRICT should not contain '+' for spaces");
-	}
-
-	@Test
-	void pathWithMultipleAndTrailingSlashes_isEncodedSegmentWise() {
-		String path = "/foo//bar baz/";
-
-		Map<String, Set<String>> params = Map.of();
-
-		String result = encodedPathAndQuery(
-				path,
-				params,
-				QueryFormat.RFC_3986_STRICT
-		);
-
-		// Expect: "/foo//bar%20baz/"
-		assertEquals("/foo//bar%20baz/", result);
-	}
-
-	@Test
-	void nullPath_throwsNullPointerException() {
-		Map<String, Set<String>> params = Map.of();
-
-		assertThrows(NullPointerException.class, () ->
-				encodedPathAndQuery(
-						null,
-						params,
-						QueryFormat.RFC_3986_STRICT
-				)
-		);
-	}
-
-	@Test
-	void nullQueryParameters_throwsNullPointerException() {
-		assertThrows(NullPointerException.class, () ->
-				encodedPathAndQuery(
-						"/test",
-						null,
-						QueryFormat.RFC_3986_STRICT
-				)
-		);
-	}
-
-	@Test
-	void nullQueryStringFormat_throwsNullPointerException() {
-		Map<String, Set<String>> params = Map.of("a", Set.of("b"));
-
-		assertThrows(NullPointerException.class, () ->
-				encodedPathAndQuery(
-						"/test",
-						params,
-						null
-				)
-		);
 	}
 }

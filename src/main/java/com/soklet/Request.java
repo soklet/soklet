@@ -228,7 +228,7 @@ public final class Request {
 				this.queryParameters = Map.of();
 			} else {
 				// First, parse and decode the path...
-				path = Utilities.normalizedPathForUrl(rawUrl, true);
+				path = Utilities.extractPathFromUrl(rawUrl, true);
 
 				// ...then, parse out any query parameters.
 				if (rawUrl.contains("?")) {

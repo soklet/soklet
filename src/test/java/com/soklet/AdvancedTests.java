@@ -164,7 +164,7 @@ public class AdvancedTests {
 			String expected = testCase.getValue();
 
 			try {
-				String result = Utilities.normalizedPathForUrl(input, true);
+				String result = Utilities.extractPathFromUrl(input, true);
 				// Some edge cases might not match exactly but should be safe
 				Assertions.assertNotNull(result, "Normalization returned null for: " + input);
 				Assertions.assertTrue(result.startsWith("/"), "Result should start with /");
@@ -378,7 +378,7 @@ public class AdvancedTests {
 			// Test various regex-based operations in Soklet
 			try {
 				// Path normalization
-				Utilities.normalizedPathForUrl("/" + pattern, true);
+				Utilities.extractPathFromUrl("/" + pattern, true);
 
 				// Cookie parsing
 				Utilities.extractHeadersFromRawHeaderLines(List.of("name=" + pattern));
