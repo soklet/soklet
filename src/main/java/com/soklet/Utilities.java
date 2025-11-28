@@ -218,23 +218,23 @@ public final class Utilities {
 	/**
 	 * Parses a query string such as {@code "a=1&b=2&c=%20"} into a multimap of names to values.
 	 * <p>
-	 * Decodes percent-escapes using UTF-8, which is usually what you want (see {@link #extractQueryParametersFromQueryString(String, QueryStringFormat, Charset)} if you need to specify a different charset).
+	 * Decodes percent-escapes using UTF-8, which is usually what you want (see {@link #extractQueryParametersFromQuery(String, QueryFormat, Charset)} if you need to specify a different charset).
 	 * <p>
 	 * Pairs missing a name are ignored.
 	 * <p>
 	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
 	 *
-	 * @param queryString       a raw query string such as {@code "a=1&b=2&c=%20"}
-	 * @param queryStringFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
+	 * @param query       a raw query string such as {@code "a=1&b=2&c=%20"}
+	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
 	 */
 	@Nonnull
-	public static Map<String, Set<String>> extractQueryParametersFromQueryString(@Nonnull String queryString,
-																																							 @Nonnull QueryStringFormat queryStringFormat) {
-		requireNonNull(queryString);
-		requireNonNull(queryStringFormat);
+	public static Map<String, Set<String>> extractQueryParametersFromQuery(@Nonnull String query,
+																																				 @Nonnull QueryFormat queryFormat) {
+		requireNonNull(query);
+		requireNonNull(queryFormat);
 
-		return extractQueryParametersFromQueryString(queryString, queryStringFormat, StandardCharsets.UTF_8);
+		return extractQueryParametersFromQuery(query, queryFormat, StandardCharsets.UTF_8);
 	}
 
 	/**
@@ -246,44 +246,44 @@ public final class Utilities {
 	 * <p>
 	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
 	 *
-	 * @param queryString       a raw query string such as {@code "a=1&b=2&c=%20"}
-	 * @param queryStringFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
-	 * @param charset           the charset to use when decoding percent-escapes
+	 * @param query       a raw query string such as {@code "a=1&b=2&c=%20"}
+	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
+	 * @param charset     the charset to use when decoding percent-escapes
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
 	 */
 	@Nonnull
-	public static Map<String, Set<String>> extractQueryParametersFromQueryString(@Nonnull String queryString,
-																																							 @Nonnull QueryStringFormat queryStringFormat,
-																																							 @Nonnull Charset charset) {
-		requireNonNull(queryString);
-		requireNonNull(queryStringFormat);
+	public static Map<String, Set<String>> extractQueryParametersFromQuery(@Nonnull String query,
+																																				 @Nonnull QueryFormat queryFormat,
+																																				 @Nonnull Charset charset) {
+		requireNonNull(query);
+		requireNonNull(queryFormat);
 		requireNonNull(charset);
 
 		// For form parameters, body will look like "One=Two&Three=Four" ...a query string.
-		String syntheticUrl = format("https://soklet.invalid?%s", queryString); // avoid referencing real domain
-		return extractQueryParametersFromUrl(syntheticUrl, queryStringFormat, charset);
+		String syntheticUrl = format("https://soklet.invalid?%s", query); // avoid referencing real domain
+		return extractQueryParametersFromUrl(syntheticUrl, queryFormat, charset);
 	}
 
 	/**
 	 * Parses query strings from relative or absolute URLs such as {@code "/example?a=a=1&b=2&c=%20"} or {@code "https://www.soklet.com/example?a=1&b=2&c=%20"} into a multimap of names to values.
 	 * <p>
-	 * Decodes percent-escapes using UTF-8, which is usually what you want (see {@link #extractQueryParametersFromUrl(String, QueryStringFormat, Charset)} if you need to specify a different charset).
+	 * Decodes percent-escapes using UTF-8, which is usually what you want (see {@link #extractQueryParametersFromUrl(String, QueryFormat, Charset)} if you need to specify a different charset).
 	 * <p>
 	 * Pairs missing a name are ignored.
 	 * <p>
 	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
 	 *
-	 * @param url               a relative or absolute URL/URI string
-	 * @param queryStringFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
+	 * @param url         a relative or absolute URL/URI string
+	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none/invalid
 	 */
 	@Nonnull
 	public static Map<String, Set<String>> extractQueryParametersFromUrl(@Nonnull String url,
-																																			 @Nonnull QueryStringFormat queryStringFormat) {
+																																			 @Nonnull QueryFormat queryFormat) {
 		requireNonNull(url);
-		requireNonNull(queryStringFormat);
+		requireNonNull(queryFormat);
 
-		return extractQueryParametersFromUrl(url, queryStringFormat, StandardCharsets.UTF_8);
+		return extractQueryParametersFromUrl(url, queryFormat, StandardCharsets.UTF_8);
 	}
 
 	/**
@@ -295,17 +295,17 @@ public final class Utilities {
 	 * <p>
 	 * Multiple occurrences of the same name are collected into a {@link Set} in insertion order (duplicates are de-duplicated).
 	 *
-	 * @param url               a relative or absolute URL/URI string
-	 * @param queryStringFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
-	 * @param charset           the charset to use when decoding percent-escapes
+	 * @param url         a relative or absolute URL/URI string
+	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
+	 * @param charset     the charset to use when decoding percent-escapes
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none/invalid
 	 */
 	@Nonnull
 	public static Map<String, Set<String>> extractQueryParametersFromUrl(@Nonnull String url,
-																																			 @Nonnull QueryStringFormat queryStringFormat,
+																																			 @Nonnull QueryFormat queryFormat,
 																																			 @Nonnull Charset charset) {
 		requireNonNull(url);
-		requireNonNull(queryStringFormat);
+		requireNonNull(queryFormat);
 		requireNonNull(charset);
 
 		URI uri;
@@ -337,8 +337,8 @@ public final class Utilities {
 			if (rawValue == null)
 				rawValue = "";
 
-			String name = decodeQueryComponent(rawName, queryStringFormat, charset);
-			String value = decodeQueryComponent(rawValue, queryStringFormat, charset);
+			String name = decodeQueryComponent(rawName, queryFormat, charset);
+			String value = decodeQueryComponent(rawValue, queryFormat, charset);
 
 			queryParameters.computeIfAbsent(name, k -> new LinkedHashSet<>()).add(value);
 		}
@@ -351,17 +351,17 @@ public final class Utilities {
 	 */
 	@Nonnull
 	private static String decodeQueryComponent(@Nonnull String string,
-																						 @Nonnull QueryStringFormat queryStringFormat,
+																						 @Nonnull QueryFormat queryFormat,
 																						 @Nonnull Charset charset) {
 		requireNonNull(string);
-		requireNonNull(queryStringFormat);
+		requireNonNull(queryFormat);
 		requireNonNull(charset);
 
 		if (string.isEmpty())
 			return "";
 
 		// Step 1: in form mode, '+' means space
-		String prepped = (queryStringFormat == QueryStringFormat.X_WWW_FORM_URLENCODED) ? string.replace('+', ' ') : string;
+		String prepped = (queryFormat == QueryFormat.X_WWW_FORM_URLENCODED) ? string.replace('+', ' ') : string;
 		// Step 2: percent-decode bytes, then interpret bytes with the provided charset
 		return percentDecode(prepped, charset);
 	}
@@ -677,23 +677,23 @@ public final class Utilities {
 	 * Generates an encoded "target" string from a decoded path and decoded query parameters (e.g. from {@link Request#getPath()} and {@link Request#getQueryParameters()}).
 	 * <p>
 	 * For example, given path {@code "/my path"}, parameters {@code {a=[b], c=[d e]}},
-	 * and strategy {@link QueryStringFormat#RFC_3986_STRICT},
+	 * and strategy {@link QueryFormat#RFC_3986_STRICT},
 	 * returns {@code "/my%20path?a=b&c=d%20e"}.
 	 * <p>
 	 * This is not guaranteed to reconstruct the exact data sent over the wire; it just generates a logically-equivalent representation useful for logging, proxying, etc.
 	 *
-	 * @param path              the decoded path (must start with '/' or be '*')
-	 * @param queryParameters   the decoded query parameters, or an empty {@link Map} if none
-	 * @param queryStringFormat the encoding strategy for query parameter keys and values
+	 * @param path            the decoded path (must start with '/' or be '*')
+	 * @param queryParameters the decoded query parameters, or an empty {@link Map} if none
+	 * @param queryFormat     the encoding strategy for query parameter keys and values
 	 * @return the encoded target string
 	 */
 	@Nonnull
-	public static String encodedPathAndQueryString(@Nonnull String path,
-																								 @Nonnull Map<String, Set<String>> queryParameters,
-																								 @Nonnull QueryStringFormat queryStringFormat) {
+	public static String encodedPathAndQuery(@Nonnull String path,
+																					 @Nonnull Map<String, Set<String>> queryParameters,
+																					 @Nonnull QueryFormat queryFormat) {
 		requireNonNull(path);
 		requireNonNull(queryParameters);
-		requireNonNull(queryStringFormat);
+		requireNonNull(queryFormat);
 
 		String encodedPath = encodePath(path);
 
@@ -706,7 +706,7 @@ public final class Utilities {
 		boolean first = true;
 
 		for (Map.Entry<String, Set<String>> entry : queryParameters.entrySet()) {
-			String encodedName = encodeQueryComponent(entry.getKey(), queryStringFormat);
+			String encodedName = encodeQueryComponent(entry.getKey(), queryFormat);
 
 			for (String value : entry.getValue()) {
 				if (!first)
@@ -714,7 +714,7 @@ public final class Utilities {
 
 				sb.append(encodedName);
 				sb.append('=');
-				sb.append(encodeQueryComponent(value, queryStringFormat));
+				sb.append(encodeQueryComponent(value, queryFormat));
 
 				first = false;
 			}
@@ -725,13 +725,13 @@ public final class Utilities {
 
 	@Nonnull
 	private static String encodeQueryComponent(@Nonnull String queryComponent,
-																						 @Nonnull QueryStringFormat queryStringFormat) {
+																						 @Nonnull QueryFormat queryFormat) {
 		requireNonNull(queryComponent);
-		requireNonNull(queryStringFormat);
+		requireNonNull(queryFormat);
 
 		String encoded = URLEncoder.encode(queryComponent, StandardCharsets.UTF_8);
 
-		if (queryStringFormat == QueryStringFormat.RFC_3986_STRICT)
+		if (queryFormat == QueryFormat.RFC_3986_STRICT)
 			encoded = encoded.replace("+", "%20");
 
 		return encoded;

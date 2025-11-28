@@ -22,12 +22,12 @@ import java.nio.charset.Charset;
  * Strategies for encoding/decoding query strings: {@code Content-Type: application/x-www-form-urlencoded} (supports {@code "+"} for spaces) or "strict" RFC 3986 (percent-decoding only).
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
- * @see com.soklet.Utilities#extractQueryParametersFromQueryString(String, QueryStringFormat)
- * @see com.soklet.Utilities#extractQueryParametersFromQueryString(String, QueryStringFormat, Charset)
- * @see com.soklet.Utilities#extractQueryParametersFromUrl(String, QueryStringFormat)
- * @see com.soklet.Utilities#extractQueryParametersFromUrl(String, QueryStringFormat, Charset)
+ * @see com.soklet.Utilities#extractQueryParametersFromQuery(String, QueryFormat)
+ * @see com.soklet.Utilities#extractQueryParametersFromQuery(String, QueryFormat, Charset)
+ * @see com.soklet.Utilities#extractQueryParametersFromUrl(String, QueryFormat)
+ * @see com.soklet.Utilities#extractQueryParametersFromUrl(String, QueryFormat, Charset)
  */
-public enum QueryStringFormat {
+public enum QueryFormat {
 	/**
 	 * Follow RFC 1866 (the {@code application/x-www-form-urlencoded} content type), where keys and values are percent-encoded but prefer {@code "+"} for spaces.
 	 * <p>

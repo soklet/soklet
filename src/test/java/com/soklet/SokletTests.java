@@ -446,8 +446,8 @@ public class SokletTests {
 
 	@Test
 	void plusBecomesSpace_percent2BBecomesPlus() {
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromQueryString(
-				"q=a+b%2B", QueryStringFormat.X_WWW_FORM_URLENCODED, StandardCharsets.UTF_8);
+		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromQuery(
+				"q=a+b%2B", QueryFormat.X_WWW_FORM_URLENCODED, StandardCharsets.UTF_8);
 		assertEquals(Set.of("a b+"), qp.get("q"));
 	}
 
