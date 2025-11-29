@@ -128,11 +128,11 @@ public final class Request {
 	 * The provided {@code rawUrl} must be un-decoded and in either "path-and-query" form (i.e. starts with a {@code /} character) or an absolute URL (i.e. starts with {@code http://} or {@code https://}).
 	 * It might include un-decoded query parameters, e.g. {@code https://www.example.com/one?two=thr%20ee} or {@code /one?two=thr%20ee}.  An exception to this rule is {@code OPTIONS *} requests, where the URL is the {@code *} "splat" symbol.
 	 * <p>
-	 * Paths will be percent-decoded at build time.
+	 * Paths will be percent-decoded.
 	 * <p>
-	 * Query parameters are parsed and decoded at build time using RFC 3986 semantics - see {@link QueryFormat#RFC_3986_STRICT}.
+	 * Query parameters are parsed and decoded using RFC 3986 semantics - see {@link QueryFormat#RFC_3986_STRICT}.
 	 * <p>
-	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded at build time by using {@link QueryFormat#X_WWW_FORM_URLENCODED}.
+	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded by using {@link QueryFormat#X_WWW_FORM_URLENCODED}.
 	 *
 	 * @param httpMethod the HTTP method for this request ({@code GET, POST, etc.})
 	 * @param rawUrl     the raw (un-decoded) URL for this request
@@ -154,7 +154,7 @@ public final class Request {
 	 * <p>
 	 * Query parameters must be specified via {@link PathBuilder#queryParameters(Map)} and are assumed to be already-decoded.
 	 * <p>
-	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded at build time by using {@link QueryFormat#X_WWW_FORM_URLENCODED}.
+	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded by using {@link QueryFormat#X_WWW_FORM_URLENCODED}.
 	 *
 	 * @param httpMethod the HTTP method for this request ({@code GET, POST, etc.})
 	 * @param path       the decoded URL path for this request
