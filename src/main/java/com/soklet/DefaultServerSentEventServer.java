@@ -112,6 +112,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private static final ServerSentEvent SERVER_SENT_EVENT_POISON_PILL;
 	@Nonnull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
+	@Nonnull
+	private static final ResourcePathDeclaration NO_MATCH_SENTINEL;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -140,6 +142,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// Cache off a special failsafe response
 		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttp500Response();
+
+		// Create a sentinel ResourcePathDeclaration that represents "no match found".
+		// This allows us to cache negative lookups and avoid repeated O(n) scans.
+		NO_MATCH_SENTINEL = ResourcePathDeclaration.withPath("/__soklet_internal_no_match_sentinel__");
 	}
 
 	/**
@@ -205,7 +211,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private volatile ServerSocketChannel serverSocketChannel;
 	// Does not need to be concurrent because it's calculated just once at initialization time and is never modified after
 	@Nonnull
-	private Map<ResourcePathDeclaration, ResourceMethod> resourceMethodsByResourcePathDeclaration;
+	private volatile Map<ResourcePathDeclaration, ResourceMethod> resourceMethodsByResourcePathDeclaration;
 	@Nullable
 	private RequestHandler requestHandler;
 	@Nullable
@@ -301,13 +307,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Underlying set is threadsafe so this is OK
 			boolean unregistered = getServerSentEventConnections().remove(serverSentEventConnection);
 
-			if (unregistered) {
+			if (unregistered)
 				getConnectionUnregisteredListener().accept(serverSentEventConnection);
 
-				// If requested, send a poison pill so the socket thread gets terminated
-				if (sendPoisonPill)
-					enqueueServerSentEvent(this, serverSentEventConnection, SERVER_SENT_EVENT_POISON_PILL, EnqueueStrategy.DEFAULT, getBackpressureHandler());
-			}
+			// Send poison pill regardless of whether we were registered, if requested.
+			// This handles the edge case where eviction happens before registration completes.
+			if (sendPoisonPill)
+				enqueueServerSentEvent(this, serverSentEventConnection, SERVER_SENT_EVENT_POISON_PILL, EnqueueStrategy.DEFAULT, getBackpressureHandler());
 
 			return unregistered;
 		}
@@ -820,8 +826,21 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
 
 				while (true) {
-					// Wait for SSE broadcasts on socket
-					WriteQueueElement writeQueueElement = clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue().take();
+					// Wait for SSE broadcasts on socket.
+					WriteQueueElement writeQueueElement;
+
+					try {
+						// Block until an event arrives or thread is interrupted during shutdown
+						writeQueueElement = clientSocketChannelRegistration
+								.serverSentEventConnection()
+								.getWriteQueue()
+								.take();
+					} catch (InterruptedException e) {
+						// Interrupted during shutdown - exit cleanly
+						Thread.currentThread().interrupt();
+						break;
+					}
+
 					ServerSentEvent serverSentEvent = writeQueueElement.getServerSentEvent().orElse(null);
 					String comment = writeQueueElement.getComment().orElse(null);
 
@@ -897,8 +916,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// ...then unregister from broadcaster (prevents race with broadcasts)
 			if (clientSocketChannelRegistration != null) {
-				if (resourceMethod != null)
-					getLifecycleInterceptor().get().willTerminateServerSentEventConnection(request, resourceMethod, throwable);
+				// We know resourceMethod is non-null if clientSocketChannelRegistration is non-null,
+				// because registration requires a valid resourceMethod. But let's be defensive.
+				ResourceMethod registeredResourceMethod = clientSocketChannelRegistration
+						.serverSentEventConnection()
+						.getResourceMethod();
+
+				getLifecycleInterceptor().get().willTerminateServerSentEventConnection(request, registeredResourceMethod, throwable);
 
 				try {
 					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(
@@ -912,11 +936,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				// Cleanup empty broadcaster
 				maybeCleanupBroadcaster(clientSocketChannelRegistration.broadcaster());
 
-				if (resourceMethod != null) {
-					Instant connectionFinished = Instant.now();
-					Duration connectionDuration = Duration.between(clientSocketChannelRegistration.serverSentEventConnection().getEstablishedAt(), connectionFinished);
-					getLifecycleInterceptor().get().didTerminateServerSentEventConnection(request, resourceMethod, connectionDuration, throwable);
-				}
+				Instant connectionFinished = Instant.now();
+				Duration connectionDuration = Duration.between(
+						clientSocketChannelRegistration.serverSentEventConnection().getEstablishedAt(),
+						connectionFinished);
+
+				getLifecycleInterceptor().get().didTerminateServerSentEventConnection(request, registeredResourceMethod, connectionDuration, throwable);
 			}
 		}
 	}
@@ -1107,6 +1132,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (dataLines.size() > 0)
 			lines.addAll(dataLines);
 
+		// Per SSE spec, an event with no fields is effectively a comment/keep-alive.
+		// This can occur if a ServerSentEvent is constructed with no event, data, id, or retry.
+		// We emit a comment line to maintain the SSE stream format.
 		if (lines.size() == 0)
 			return ":\n\n";
 
@@ -1270,12 +1298,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Get a handle to the event source (it will be created if necessary)
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath, resourceMethod).get();
 
-		if (!broadcaster.registerServerSentEventConnection(serverSentEventConnection))
-			return Optional.empty();
-
-		// Also register the connection globally so we can enforce an overall limit on the number of open connections.
-		// If this causes an eviction, the eviction callback supplied to the ConcurrentLruMap will handle cleanup.
+		// Register globally FIRST, so if eviction happens, it evicts this connection
+		// (which is correct—we're the newest, but if we exceed capacity, we should be evictable).
+		// Store the broadcaster reference so eviction callback knows which broadcaster owns it.
 		getGlobalConnections().put(serverSentEventConnection, broadcaster);
+
+		// Now register with the broadcaster. If this fails, clean up the global registration.
+		if (!broadcaster.registerServerSentEventConnection(serverSentEventConnection)) {
+			getGlobalConnections().remove(serverSentEventConnection);
+			return Optional.empty();
+		}
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
 	}
@@ -1632,12 +1664,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				try {
 					this.serverSocketChannel.close();
 				} catch (Exception e) {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
-							"Unable to close Server-Sent Event SocketChannel").throwable(e).build());
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event SocketChannel").throwable(e).build());
 				}
 			}
 
-			// Close client connections
+			// Close client connections - sends poison pills to all registered connections
 			for (DefaultServerSentEventBroadcaster broadcaster : getBroadcastersByResourcePath().values()) {
 				try {
 					broadcaster.unregisterAllServerSentEventConnections(true);
@@ -1655,17 +1686,19 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (this.connectionValidityExecutorService != null)
 				this.connectionValidityExecutorService.shutdownNow();
 
+			// Use shutdownNow() immediately for request handlers.
+			// Poison pills handle normal cases; interrupt handles edge cases where
+			// a connection registered after we iterated above.
 			if (this.requestHandlerExecutorService != null)
-				this.requestHandlerExecutorService.shutdown();
+				this.requestHandlerExecutorService.shutdownNow();
 
 			if (this.requestReaderExecutorService != null)
-				this.requestReaderExecutorService.shutdown();
+				this.requestReaderExecutorService.shutdownNow();
 
 			// Shared wall-clock deadline
 			final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
 
 			// Await the accept-loop thread and all executors **in parallel**
-			// Give a short grace period to the remaining components
 			long grace = Math.min(250L, remainingMillis(deadlineNanos));
 
 			List<CompletableFuture<Boolean>> waits = new ArrayList<>(3);
@@ -1686,18 +1719,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				interrupted = true;
 				Thread.currentThread().interrupt();
 			} catch (ExecutionException e) {
-				// Log and continue shutdown
 				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Exception while awaiting SSE shutdown").throwable(e).build());
 			}
 
 			// Escalate for any stragglers using remaining time
 			hardenJoin(this.eventLoopThread, remainingMillis(deadlineNanos));
 
+			// Pools already had shutdownNow() called; just await termination
 			if (this.requestHandlerExecutorService != null)
-				hardenPool(this.requestHandlerExecutorService, remainingMillis(deadlineNanos));
+				awaitPoolTermination(this.requestHandlerExecutorService, remainingMillis(deadlineNanos));
 
 			if (this.requestReaderExecutorService != null)
-				hardenPool(this.requestReaderExecutorService, remainingMillis(deadlineNanos));
+				awaitPoolTermination(this.requestReaderExecutorService, remainingMillis(deadlineNanos));
 		} finally {
 			try {
 				this.started = false;
@@ -1715,6 +1748,20 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			} finally {
 				getLock().unlock();
 			}
+		}
+	}
+
+	private void awaitPoolTermination(@Nullable ExecutorService executorService,
+																		@Nonnull Long millis) {
+		requireNonNull(millis);
+
+		if (executorService == null || executorService.isTerminated())
+			return;
+
+		try {
+			executorService.awaitTermination(Math.max(100L, millis), TimeUnit.MILLISECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
 		}
 	}
 
@@ -1922,10 +1969,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						if (d.matches(rp))
 							return d;
 
-					return null;
+					// Return sentinel instead of null to cache the negative result
+					return NO_MATCH_SENTINEL;
 				});
 
-		return Optional.ofNullable(resourcePathDeclaration);
+		// Convert sentinel back to empty Optional
+		if (resourcePathDeclaration == NO_MATCH_SENTINEL)
+			return Optional.empty();
+
+		return Optional.of(resourcePathDeclaration);
 	}
 
 	protected void safelyLog(@Nonnull LogEvent logEvent) {
