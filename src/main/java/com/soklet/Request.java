@@ -1248,6 +1248,7 @@ public final class Request {
 		@Nonnull
 		public Copier path(@Nonnull String path) {
 			requireNonNull(path);
+			this.builder.path(path);
 			this.pathModified = true;
 			// Clear preserved raw path since decoded path changed
 			this.builder.rawPath(null);
