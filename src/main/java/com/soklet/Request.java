@@ -128,6 +128,8 @@ public final class Request {
 	 * The provided {@code rawUrl} must be un-decoded and in either "path-and-query" form (i.e. starts with a {@code /} character) or an absolute URL (i.e. starts with {@code http://} or {@code https://}).
 	 * It might include un-decoded query parameters, e.g. {@code https://www.example.com/one?two=thr%20ee} or {@code /one?two=thr%20ee}.  An exception to this rule is {@code OPTIONS *} requests, where the URL is the {@code *} "splat" symbol.
 	 * <p>
+	 * Note: request targets are normalized to origin-form. For example, if a client sends an absolute-form URL like {@code http://example.com/path?query}, only the path and query components are retained.
+	 * <p>
 	 * Paths will be percent-decoded.
 	 * <p>
 	 * Query parameters are parsed and decoded using RFC 3986 semantics - see {@link QueryFormat#RFC_3986_STRICT}.
