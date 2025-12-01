@@ -1803,23 +1803,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		});
 	}
 
-	protected void hardenPool(@Nullable ExecutorService executorService,
-														@Nonnull Long millis) {
-		requireNonNull(millis);
-
-		if (executorService == null || executorService.isTerminated())
-			return;
-
-		// Interrupt stuck tasks
-		executorService.shutdownNow();
-
-		try {
-			executorService.awaitTermination(Math.max(100L, millis), TimeUnit.MILLISECONDS);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
-	}
-
 	protected void hardenJoin(@Nullable Thread thread,
 														@Nonnull Long millis) {
 		requireNonNull(millis);
