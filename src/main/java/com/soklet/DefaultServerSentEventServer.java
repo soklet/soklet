@@ -660,9 +660,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		// Now that iteration is done, remove any empty broadcasters we observed.
-		// Using remove(key, value) avoids removing if the mapping changed concurrently.
-		for (Entry<ResourcePath, DefaultServerSentEventBroadcaster> entry : toRemove)
-			getBroadcastersByResourcePath().remove(entry.getKey(), entry.getValue());
+		for (Entry<ResourcePath, DefaultServerSentEventBroadcaster> entry : toRemove) {
+			DefaultServerSentEventBroadcaster broadcaster = entry.getValue();
+			maybeCleanupBroadcaster(broadcaster);
+		}
 	}
 
 	protected void startInternal() {
@@ -1298,8 +1299,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Get a handle to the event source (it will be created if necessary)
 		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath, resourceMethod).get();
 
-		// Register globally FIRST, so if eviction happens, it evicts this connection
-		// (which is correct—we're the newest, but if we exceed capacity, we should be evictable).
 		// Store the broadcaster reference so eviction callback knows which broadcaster owns it.
 		getGlobalConnections().put(serverSentEventConnection, broadcaster);
 
