@@ -47,6 +47,50 @@ import static java.util.Objects.requireNonNull;
  */
 public interface LifecycleInterceptor {
 	/**
+	 * Called before a {@link Soklet} instance starts.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
+	 *
+	 * @param soklet the {@link Soklet} instance that will start
+	 */
+	default void willStartSoklet(@Nonnull Soklet soklet) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link Soklet} instance starts.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
+	 *
+	 * @param soklet the {@link Soklet} instance that started
+	 */
+	default void didStartSoklet(@Nonnull Soklet soklet) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before a {@link Soklet} instance stops.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
+	 *
+	 * @param soklet the {@link Soklet} instance that will stop
+	 */
+	default void willStopSoklet(@Nonnull Soklet soklet) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link Soklet} instance stops.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
+	 *
+	 * @param soklet the {@link Soklet} instance that stopped
+	 */
+	default void didStopSoklet(@Nonnull Soklet soklet) {
+		// No-op by default
+	}
+
+	/**
 	 * Called before the server starts.
 	 * <p>
 	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.

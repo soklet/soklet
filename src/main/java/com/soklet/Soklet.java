@@ -218,6 +218,9 @@ public final class Soklet implements AutoCloseable {
 
 			SokletConfig sokletConfig = getSokletConfig();
 			LifecycleInterceptor lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
+
+			lifecycleInterceptor.willStartSoklet(this);
+
 			Server server = sokletConfig.getServer();
 
 			lifecycleInterceptor.willStartServer(server);
@@ -231,6 +234,8 @@ public final class Soklet implements AutoCloseable {
 				serverSentEventServer.start();
 				lifecycleInterceptor.didStartServerSentEventServer(serverSentEventServer);
 			}
+
+			lifecycleInterceptor.didStartSoklet(this);
 		} finally {
 			getLock().unlock();
 		}
@@ -248,6 +253,9 @@ public final class Soklet implements AutoCloseable {
 			if (isStarted()) {
 				SokletConfig sokletConfig = getSokletConfig();
 				LifecycleInterceptor lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
+
+				lifecycleInterceptor.willStopSoklet(this);
+
 				Server server = sokletConfig.getServer();
 
 				if (server.isStarted()) {
@@ -263,6 +271,8 @@ public final class Soklet implements AutoCloseable {
 					serverSentEventServer.stop();
 					lifecycleInterceptor.didStopServerSentEventServer(serverSentEventServer);
 				}
+
+				lifecycleInterceptor.didStopSoklet(this);
 			}
 		} finally {
 			try {
