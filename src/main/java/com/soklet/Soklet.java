@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.ServerSentEventRequestResult.HandshakeAccepted;
 import com.soklet.ServerSentEventRequestResult.HandshakeRejected;
+import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
@@ -173,6 +174,14 @@ public final class Soklet implements AutoCloseable {
 		if (sokletConfig.getResourceMethodResolver().getResourceMethods().size() == 0)
 			throw new IllegalStateException(format("No Soklet Resource Methods were found. Please ensure your %s is configured correctly. "
 					+ "See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.", ResourceMethodResolver.class.getSimpleName()));
+
+		// SSE misconfiguration check: @ServerSentEventSource resource methods are declared, but not ServerSentEventServer exists
+		boolean hasSseResourceMethods = sokletConfig.getResourceMethodResolver().getResourceMethods().stream()
+				.anyMatch(resourceMethod -> resourceMethod.isServerSentEventSource());
+
+		if (hasSseResourceMethods && sokletConfig.getServerSentEventServer().isEmpty())
+			throw new IllegalStateException(format("Resource Methods annotated with @%s were found, but no %s is configured. See https://www.soklet.com/docs/server-sent-events for details.",
+					ServerSentEventSource.class.getSimpleName(), ServerSentEventServer.class.getSimpleName()));
 
 		// Use a layer of indirection here so the Soklet type does not need to directly implement the `RequestHandler` interface.
 		// Reasoning: the `handleRequest` method for Soklet should not be public, which might lead to accidental invocation by users.
