@@ -32,6 +32,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.BindException;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -313,6 +314,8 @@ final class DefaultServer implements Server {
 			try {
 				this.eventLoop = new EventLoop(options, logger, handler);
 				eventLoop.start();
+			} catch (BindException e) {
+				throw new UncheckedIOException(format("Soklet was unable to start the HTTP server - port %d is already in use.", options.port()), e);
 			} catch (IOException e) {
 				throw new UncheckedIOException(e);
 			}
