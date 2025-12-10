@@ -495,7 +495,7 @@ final class DefaultServer implements Server {
 		} catch (Throwable throwable) {
 			// The LifecycleInterceptor implementation errored out, but we can't let that affect us - swallow its exception.
 			// Not much else we can do here but dump to stderr
-			throwable.printStackTrace();
+			throwable.printStackTrace(System.err);
 		}
 	}
 

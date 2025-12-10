@@ -395,8 +395,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				} catch (Throwable loggingThrowable) {
 					// We are in a bad state - the log operation in the uncaught exception handler failed.
 					// Not much else we can do here but dump to stderr and try to stop the server.
-					throwable.printStackTrace();
-					loggingThrowable.printStackTrace();
+					throwable.printStackTrace(System.err);
+					loggingThrowable.printStackTrace(System.err);
 				}
 			});
 		};
@@ -412,8 +412,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				} catch (Throwable loggingThrowable) {
 					// We are in a bad state - the log operation in the uncaught exception handler failed.
 					// Not much else we can do here but dump to stderr and try to stop the server.
-					throwable.printStackTrace();
-					loggingThrowable.printStackTrace();
+					throwable.printStackTrace(System.err);
+					loggingThrowable.printStackTrace(System.err);
 				}
 			});
 		};
@@ -2041,7 +2041,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		} catch (Throwable throwable) {
 			// The LifecycleInterceptor implementation errored out, but we can't let that affect us - swallow its exception.
 			// Not much else we can do here but dump to stderr
-			throwable.printStackTrace();
+			throwable.printStackTrace(System.err);
 		}
 	}
 
