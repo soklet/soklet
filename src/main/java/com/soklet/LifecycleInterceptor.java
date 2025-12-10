@@ -559,6 +559,57 @@ public interface LifecycleInterceptor {
 	}
 
 	/**
+	 * Called before a Server-Sent Event comment is sent to the client.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED}.
+	 *
+	 * @param request        the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
+	 * @param comment        the comment to send to the client
+	 */
+	default void willWriteServerSentEventComment(@Nonnull Request request,
+																							 @Nonnull ResourceMethod resourceMethod,
+																							 @Nonnull String comment) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a Server-Sent Event comment is sent to the client.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED}.
+	 *
+	 * @param request        the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
+	 * @param comment        the comment that was sent to the client
+	 * @param writeDuration  how long it took to send the comment to the client
+	 */
+	default void didWriteServerSentEventComment(@Nonnull Request request,
+																							@Nonnull ResourceMethod resourceMethod,
+																							@Nonnull String comment,
+																							@Nonnull Duration writeDuration) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the server attempted to send a Server-Sent Event comment, but failed due to an exception.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED}.
+	 *
+	 * @param request        the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
+	 * @param comment        the comment that was sent to the client
+	 * @param writeDuration  how long it took to attempt to send the comment to the client
+	 * @param throwable      the exception thrown during writing (if any)
+	 */
+	default void didFailToWriteServerSentEventComment(@Nonnull Request request,
+																										@Nonnull ResourceMethod resourceMethod,
+																										@Nonnull String comment,
+																										@Nonnull Duration writeDuration,
+																										@Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
 	 * Acquires a threadsafe {@link LifecycleInterceptor} instance with sensible defaults.
 	 * <p>
 	 * The returned instance is guaranteed to be a JVM-wide singleton.

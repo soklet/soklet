@@ -855,6 +855,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK) {
 						// Perform socket validity check by writing a heartbeat
 						payload = formatCommentForResponse("");
+						// Guaranteeing a non-null comment here ensures that empty heartbeat comments are exposed to LifecycleInterceptor methods in case introspection is needed.
+						// Might revisit this later...
+						comment = "";
 					} else if (serverSentEvent != null) {
 						// It's a normal server-sent event
 						payload = formatServerSentEventForResponse(serverSentEvent);
@@ -866,6 +869,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					}
 
 					ByteBuffer byteBuffer = ByteBuffer.wrap(payload.getBytes(StandardCharsets.UTF_8));
+
+					if (comment != null) {
+						try {
+							getLifecycleInterceptor().get().willWriteServerSentEventComment(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), comment);
+						} catch (Throwable t) {
+							safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEventComment", LifecycleInterceptor.class.getSimpleName()))
+									.throwable(t)
+									.build());
+						}
+					}
 
 					if (serverSentEvent != null) {
 						try {
@@ -904,6 +917,24 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 									getLifecycleInterceptor().get().didWriteServerSentEvent(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration);
 								} catch (Throwable t) {
 									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEvent", LifecycleInterceptor.class.getSimpleName()))
+											.throwable(t)
+											.build());
+								}
+							}
+						} else if (comment != null) {
+							if (writeThrowable != null) {
+								try {
+									getLifecycleInterceptor().get().didFailToWriteServerSentEventComment(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), comment, writeDuration, writeThrowable);
+								} catch (Throwable t) {
+									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteServerSentEventComment", LifecycleInterceptor.class.getSimpleName()))
+											.throwable(t)
+											.build());
+								}
+							} else {
+								try {
+									getLifecycleInterceptor().get().didWriteServerSentEventComment(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), comment, writeDuration);
+								} catch (Throwable t) {
+									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEventComment", LifecycleInterceptor.class.getSimpleName()))
 											.throwable(t)
 											.build());
 								}
