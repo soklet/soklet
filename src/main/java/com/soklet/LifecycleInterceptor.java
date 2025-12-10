@@ -223,21 +223,39 @@ public interface LifecycleInterceptor {
 	/**
 	 * Called before the response is sent to the client.
 	 * <p>
-	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_START_RESPONSE_WRITING_FAILED}.
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_WRITE_RESPONSE_FAILED}.
 	 *
 	 * @param request           the request that was received
 	 * @param resourceMethod    the <em>Resource Method</em> that handled the request.
 	 *                          May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 * @param marshaledResponse the response to send to the client
 	 */
-	default void willStartResponseWriting(@Nonnull Request request,
-																				@Nullable ResourceMethod resourceMethod,
-																				@Nonnull MarshaledResponse marshaledResponse) {
+	default void willWriteResponse(@Nonnull Request request,
+																 @Nullable ResourceMethod resourceMethod,
+																 @Nonnull MarshaledResponse marshaledResponse) {
 		// No-op by default
 	}
 
 	/**
-	 * Called after the response is sent to the client.
+	 * Called after the response is successfully sent to the client.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_WRITE_RESPONSE_FAILED}.
+	 *
+	 * @param request               the request that was received
+	 * @param resourceMethod        the <em>Resource Method</em> that handled the request.
+	 *                              May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
+	 * @param marshaledResponse     the response that was sent to the client
+	 * @param responseWriteDuration how long it took to send the response to the client
+	 */
+	default void didWriteResponse(@Nonnull Request request,
+																@Nullable ResourceMethod resourceMethod,
+																@Nonnull MarshaledResponse marshaledResponse,
+																@Nonnull Duration responseWriteDuration) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the response was attempted to be sent to the client, but failed.
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED}.
 	 *
@@ -246,13 +264,13 @@ public interface LifecycleInterceptor {
 	 *                              May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 * @param marshaledResponse     the response that was sent to the client
 	 * @param responseWriteDuration how long it took to send the response to the client
-	 * @param throwable             the exception thrown during response writing (if any)
+	 * @param throwable             the exception thrown during response writing
 	 */
-	default void didFinishResponseWriting(@Nonnull Request request,
-																				@Nullable ResourceMethod resourceMethod,
-																				@Nonnull MarshaledResponse marshaledResponse,
-																				@Nonnull Duration responseWriteDuration,
-																				@Nullable Throwable throwable) {
+	default void didFailToWriteResponse(@Nonnull Request request,
+																			@Nullable ResourceMethod resourceMethod,
+																			@Nonnull MarshaledResponse marshaledResponse,
+																			@Nonnull Duration responseWriteDuration,
+																			@Nonnull Throwable throwable) {
 		// No-op by default
 	}
 

@@ -655,7 +655,7 @@ public final class Soklet implements AutoCloseable {
 				} finally {
 					try {
 						try {
-							lifecycleInterceptor.willStartResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
+							lifecycleInterceptor.willWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
 						} finally {
 							willStartResponseWritingCompleted.set(true);
 						}
@@ -676,12 +676,12 @@ public final class Soklet implements AutoCloseable {
 							Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
 
 							try {
-								lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, null);
+								lifecycleInterceptor.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration);
 							} catch (Throwable t) {
 								throwables.add(t);
 
-								safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
-												format("An exception occurred while invoking %s::didFinishResponseWriting",
+								safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_RESPONSE_FAILED,
+												format("An exception occurred while invoking %s::didWriteResponse",
 														LifecycleInterceptor.class.getSimpleName()))
 										.throwable(t)
 										.request(requestHolder.get())
@@ -698,12 +698,12 @@ public final class Soklet implements AutoCloseable {
 							Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
 
 							try {
-								lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
+								lifecycleInterceptor.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
 							} catch (Throwable t2) {
 								throwables.add(t2);
 
-								safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
-												format("An exception occurred while invoking %s::didFinishResponseWriting",
+								safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_RESPONSE_FAILED,
+												format("An exception occurred while invoking %s::didFailToWriteResponse",
 														LifecycleInterceptor.class.getSimpleName()))
 										.throwable(t2)
 										.request(requestHolder.get())
@@ -770,10 +770,10 @@ public final class Soklet implements AutoCloseable {
 
 			if (!willStartResponseWritingCompleted.get()) {
 				try {
-					lifecycleInterceptor.willStartResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
+					lifecycleInterceptor.willWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
 				} catch (Throwable t2) {
-					safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_WILL_START_RESPONSE_WRITING_FAILED,
-									format("An exception occurred while invoking %s::willStartResponseWriting",
+					safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_WILL_WRITE_RESPONSE_FAILED,
+									format("An exception occurred while invoking %s::willWriteResponse",
 											LifecycleInterceptor.class.getSimpleName()))
 							.throwable(t2)
 							.request(requestHolder.get())
@@ -801,12 +801,12 @@ public final class Soklet implements AutoCloseable {
 						Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
 
 						try {
-							lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, null);
+							lifecycleInterceptor.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration);
 						} catch (Throwable t2) {
 							throwables.add(t2);
 
-							safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
-											format("An exception occurred while invoking %s::didFinishResponseWriting",
+							safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_RESPONSE_FAILED,
+											format("An exception occurred while invoking %s::didWriteResponse",
 													LifecycleInterceptor.class.getSimpleName()))
 									.throwable(t2)
 									.request(requestHolder.get())
@@ -821,12 +821,12 @@ public final class Soklet implements AutoCloseable {
 						Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
 
 						try {
-							lifecycleInterceptor.didFinishResponseWriting(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
+							lifecycleInterceptor.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
 						} catch (Throwable t3) {
 							throwables.add(t3);
 
-							safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED,
-											format("An exception occurred while invoking %s::didFinishResponseWriting",
+							safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_RESPONSE_FAILED,
+											format("An exception occurred while invoking %s::didFailToWriteResponse",
 													LifecycleInterceptor.class.getSimpleName()))
 									.throwable(t3)
 									.request(requestHolder.get())
