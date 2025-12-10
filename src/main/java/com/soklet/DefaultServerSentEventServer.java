@@ -739,6 +739,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		Instant writeStarted;
 		Throwable throwable = null;
 
+		// Keep track of whether or not we should go through the "handshake accepted" flow.
+		// Might change from "accepted" to "rejected" if an error occurs
+		AtomicReference<HandshakeResult.Accepted> handshakeAcceptedReference = new AtomicReference<>();
+
 		try (clientSocketChannel) {
 			try {
 				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "will/didInitiateConnection"
@@ -762,10 +766,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			if (resourcePathDeclaration != null)
 				resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
-
-			// Keep track of whether or not we should go through the "handshake accepted" flow.
-			// Might change from "accepted" to "rejected" if an error occurs
-			AtomicReference<HandshakeResult.Accepted> handshakeAcceptedReference = new AtomicReference<>();
 
 			// We're now ready to write the handshake response - and then we keep the socket open for subsequent writes if handshake was accepted (otherwise we write the body and close).
 			// To write the handshake response, we delegate to the Soklet instance, handing it the request we just parsed
@@ -892,13 +892,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							throw writeThrowable;
 					}
 				}
-			} else {
-				// Nothing to do for the moment - handshake was rejected, we're not keeping the socket open - shut it down!
 			}
 		} catch (Throwable t) {
 			throwable = t;
 
-			// TODO: log out exception that caused the socket to close?
+			// If we attempted to establish (willEstablish fired), but registration is null, it means we failed before didEstablish could fire.
+			if (handshakeAcceptedReference.get() != null && clientSocketChannelRegistration == null)
+				getLifecycleInterceptor().get().didFailToEstablishServerSentEventConnection(request, resourceMethod, t);
 
 			if (t instanceof InterruptedException)
 				Thread.currentThread().interrupt();

@@ -69,6 +69,19 @@ public interface LifecycleInterceptor {
 	}
 
 	/**
+	 * Called after a {@link Soklet} instance was asked to start, but failed due to an exception.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
+	 *
+	 * @param soklet    the {@link Soklet} instance that failed to start
+	 * @param throwable the exception thrown
+	 */
+	default void didFailToStartSoklet(@Nonnull Soklet soklet,
+																		@Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
 	 * Called before a {@link Soklet} instance stops.
 	 * <p>
 	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
@@ -87,6 +100,19 @@ public interface LifecycleInterceptor {
 	 * @param soklet the {@link Soklet} instance that stopped
 	 */
 	default void didStopSoklet(@Nonnull Soklet soklet) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link Soklet} instance was asked to stop, but failed due to an exception.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
+	 *
+	 * @param soklet    the {@link Soklet} instance that failed to stop
+	 * @param throwable the exception thrown
+	 */
+	default void didFailToStopSoklet(@Nonnull Soklet soklet,
+																	 @Nonnull Throwable throwable) {
 		// No-op by default
 	}
 
@@ -113,6 +139,19 @@ public interface LifecycleInterceptor {
 	}
 
 	/**
+	 * Called after a {@link Server} instance was asked to start, but failed due to an exception.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
+	 *
+	 * @param server    the {@link Server} instance that failed to start
+	 * @param throwable the exception thrown
+	 */
+	default void didFailToStartServer(@Nonnull Server server,
+																		@Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
 	 * Called before the server stops.
 	 * <p>
 	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
@@ -131,6 +170,19 @@ public interface LifecycleInterceptor {
 	 * @param server the server that stopped
 	 */
 	default void didStopServer(@Nonnull Server server) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link Server} instance was asked to stop, but failed due to an exception.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
+	 *
+	 * @param server    the {@link Server} instance that failed to stop
+	 * @param throwable the exception thrown
+	 */
+	default void didFailToStopServer(@Nonnull Server server,
+																	 @Nonnull Throwable throwable) {
 		// No-op by default
 	}
 
@@ -311,6 +363,19 @@ public interface LifecycleInterceptor {
 	}
 
 	/**
+	 * Called after a {@link ServerSentEventServer} instance was asked to start, but failed due to an exception.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
+	 *
+	 * @param serverSentEventServer the {@link ServerSentEventServer} instance that failed to start
+	 * @param throwable             the exception thrown
+	 */
+	default void didFailToStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer,
+																									 @Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
 	 * Called before the Server-Sent Event server stops.
 	 * <p>
 	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
@@ -329,6 +394,19 @@ public interface LifecycleInterceptor {
 	 * @param serverSentEventServer the Server-Sent Event server that stopped
 	 */
 	default void didStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link ServerSentEventServer} instance was asked to stop, but failed due to an exception.
+	 * <p>
+	 * This method <strong>is</strong> fail-fast. If an exception occurs when Soklet invokes this method, it will halt execution and bubble out for your application code to handle.
+	 *
+	 * @param serverSentEventServer the {@link ServerSentEventServer} instance that failed to stop
+	 * @param throwable             the exception thrown
+	 */
+	default void didFailToStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer,
+																									@Nonnull Throwable throwable) {
 		// No-op by default
 	}
 
@@ -359,6 +437,23 @@ public interface LifecycleInterceptor {
 	 */
 	default void didEstablishServerSentEventConnection(@Nonnull Request request,
 																										 @Nonnull ResourceMethod resourceMethod) {
+		// No-op by default
+	}
+
+	/**
+	 * Called immediately after a Server-Sent Event connection of indefinite duration to the client was attempted to be established, but failed due to an exception.
+	 * <p>
+	 * This occurs after the initial "handshake" Server-Sent Event request has successfully completed (that is, an HTTP 200 response).
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED}.
+	 *
+	 * @param request        the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
+	 * @param throwable      the exception thrown
+	 */
+	default void didFailToEstablishServerSentEventConnection(@Nonnull Request request,
+																													 @Nonnull ResourceMethod resourceMethod,
+																													 @Nonnull Throwable throwable) {
 		// No-op by default
 	}
 

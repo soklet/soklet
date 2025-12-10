@@ -219,23 +219,48 @@ public final class Soklet implements AutoCloseable {
 			SokletConfig sokletConfig = getSokletConfig();
 			LifecycleInterceptor lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
 
+			// 1. Notify global intent to start
 			lifecycleInterceptor.willStartSoklet(this);
 
-			Server server = sokletConfig.getServer();
+			try {
+				Server server = sokletConfig.getServer();
 
-			lifecycleInterceptor.willStartServer(server);
-			server.start();
-			lifecycleInterceptor.didStartServer(server);
+				// 2. Attempt to start Main Server
+				lifecycleInterceptor.willStartServer(server);
+				try {
+					server.start();
+					lifecycleInterceptor.didStartServer(server);
+				} catch (Throwable t) {
+					lifecycleInterceptor.didFailToStartServer(server, t);
+					throw t; // Rethrow to trigger outer catch block
+				}
 
-			ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
+				// 3. Attempt to start SSE Server (if present)
+				ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
 
-			if (serverSentEventServer != null) {
-				lifecycleInterceptor.willStartServerSentEventServer(serverSentEventServer);
-				serverSentEventServer.start();
-				lifecycleInterceptor.didStartServerSentEventServer(serverSentEventServer);
+				if (serverSentEventServer != null) {
+					lifecycleInterceptor.willStartServerSentEventServer(serverSentEventServer);
+					try {
+						serverSentEventServer.start();
+						lifecycleInterceptor.didStartServerSentEventServer(serverSentEventServer);
+					} catch (Throwable t) {
+						lifecycleInterceptor.didFailToStartServerSentEventServer(serverSentEventServer, t);
+						throw t; // Rethrow to trigger outer catch block
+					}
+				}
+
+				// 4. Global success
+				lifecycleInterceptor.didStartSoklet(this);
+			} catch (Throwable t) {
+				// 5. Global failure
+				lifecycleInterceptor.didFailToStartSoklet(this, t);
+
+				// Ensure the exception bubbles up so the application knows startup failed
+				if (t instanceof RuntimeException)
+					throw (RuntimeException) t;
+
+				throw new RuntimeException(t);
 			}
-
-			lifecycleInterceptor.didStartSoklet(this);
 		} finally {
 			getLock().unlock();
 		}
@@ -254,25 +279,45 @@ public final class Soklet implements AutoCloseable {
 				SokletConfig sokletConfig = getSokletConfig();
 				LifecycleInterceptor lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
 
+				// 1. Notify global intent to stop
 				lifecycleInterceptor.willStopSoklet(this);
 
+				Throwable firstEncounteredException = null;
 				Server server = sokletConfig.getServer();
 
+				// 2. Attempt to stop Main Server
 				if (server.isStarted()) {
 					lifecycleInterceptor.willStopServer(server);
-					server.stop();
-					lifecycleInterceptor.didStopServer(server);
+					try {
+						server.stop();
+						lifecycleInterceptor.didStopServer(server);
+					} catch (Throwable t) {
+						firstEncounteredException = t;
+						lifecycleInterceptor.didFailToStopServer(server, t);
+					}
 				}
 
+				// 3. Attempt to stop SSE Server
 				ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
 
 				if (serverSentEventServer != null && serverSentEventServer.isStarted()) {
 					lifecycleInterceptor.willStopServerSentEventServer(serverSentEventServer);
-					serverSentEventServer.stop();
-					lifecycleInterceptor.didStopServerSentEventServer(serverSentEventServer);
+					try {
+						serverSentEventServer.stop();
+						lifecycleInterceptor.didStopServerSentEventServer(serverSentEventServer);
+					} catch (Throwable t) {
+						if (firstEncounteredException == null)
+							firstEncounteredException = t;
+
+						lifecycleInterceptor.didFailToStopServerSentEventServer(serverSentEventServer, t);
+					}
 				}
 
-				lifecycleInterceptor.didStopSoklet(this);
+				// 4. Global completion (Success or Failure)
+				if (firstEncounteredException == null)
+					lifecycleInterceptor.didStopSoklet(this);
+				else
+					lifecycleInterceptor.didFailToStopSoklet(this, firstEncounteredException);
 			}
 		} finally {
 			try {
