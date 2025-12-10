@@ -868,7 +868,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					ByteBuffer byteBuffer = ByteBuffer.wrap(payload.getBytes(StandardCharsets.UTF_8));
 
 					if (serverSentEvent != null)
-						getLifecycleInterceptor().get().willStartServerSentEventWriting(request,
+						getLifecycleInterceptor().get().willWriteServerSentEvent(request,
 								clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent);
 
 					writeStarted = Instant.now();
@@ -884,9 +884,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						Instant writeFinished = Instant.now();
 						Duration writeDuration = Duration.between(writeStarted, writeFinished);
 
-						if (serverSentEvent != null)
-							getLifecycleInterceptor().get().didFinishServerSentEventWriting(request,
-									clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, writeThrowable);
+						if (serverSentEvent != null) {
+							if (writeThrowable != null)
+								getLifecycleInterceptor().get().didFailToWriteServerSentEvent(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, writeThrowable);
+							else
+								getLifecycleInterceptor().get().didWriteServerSentEvent(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration);
+						}
 
 						if (writeThrowable != null)
 							throw writeThrowable;

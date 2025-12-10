@@ -76,13 +76,13 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_INTERCEPTOR_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#willStartServerSentEventWriting(Request, ResourceMethod, ServerSentEvent)} threw an exception.
+	 * Indicates {@link LifecycleInterceptor#willWriteServerSentEvent(Request, ResourceMethod, ServerSentEvent)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_WILL_START_SERVER_SENT_EVENT_WRITING_FAILED,
+	LIFECYCLE_INTERCEPTOR_WILL_WRITE_SERVER_SENT_EVENT_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#didFinishServerSentEventWriting(Request, ResourceMethod, ServerSentEvent, Duration, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleInterceptor#didWriteServerSentEvent(Request, ResourceMethod, ServerSentEvent, Duration)} or {@link LifecycleInterceptor#didFailToWriteServerSentEvent(Request, ResourceMethod, ServerSentEvent, Duration, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_DID_FINISH_SERVER_SENT_EVENT_WRITING_FAILED,
+	LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_FAILED,
 	/**
 	 * Indicates {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)} threw an exception.
 	 */

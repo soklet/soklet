@@ -263,7 +263,7 @@ public interface LifecycleInterceptor {
 	 * @param resourceMethod        the <em>Resource Method</em> that handled the request.
 	 *                              May be {@code null} if no <em>Resource Method</em> was resolved, e.g. a 404
 	 * @param marshaledResponse     the response that was sent to the client
-	 * @param responseWriteDuration how long it took to send the response to the client
+	 * @param responseWriteDuration how long it took to attempt to send the response to the client
 	 * @param throwable             the exception thrown during response writing
 	 */
 	default void didFailToWriteResponse(@Nonnull Request request,
@@ -510,34 +510,51 @@ public interface LifecycleInterceptor {
 	/**
 	 * Called before a Server-Sent Event is sent to the client.
 	 * <p>
-	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_START_SERVER_SENT_EVENT_WRITING_FAILED}.
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_WRITE_SERVER_SENT_EVENT_FAILED}.
 	 *
 	 * @param request         the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
 	 * @param serverSentEvent the Server-Sent Event to send to the client
 	 */
-	default void willStartServerSentEventWriting(@Nonnull Request request,
-																							 @Nonnull ResourceMethod resourceMethod,
-																							 @Nonnull ServerSentEvent serverSentEvent) {
+	default void willWriteServerSentEvent(@Nonnull Request request,
+																				@Nonnull ResourceMethod resourceMethod,
+																				@Nonnull ServerSentEvent serverSentEvent) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after a Server-Sent Event is sent to the client.
 	 * <p>
-	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_FINISH_SERVER_SENT_EVENT_WRITING_FAILED}.
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_FAILED}.
 	 *
 	 * @param request         the initial "handshake" Server-Sent Event request that was received
 	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
 	 * @param serverSentEvent the Server-Sent Event that was sent to the client
 	 * @param writeDuration   how long it took to send the Server-Sent Event to the client
+	 */
+	default void didWriteServerSentEvent(@Nonnull Request request,
+																			 @Nonnull ResourceMethod resourceMethod,
+																			 @Nonnull ServerSentEvent serverSentEvent,
+																			 @Nonnull Duration writeDuration) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the server attempted to send a Server-Sent Event, but failed due to an exception.
+	 * <p>
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_FAILED}.
+	 *
+	 * @param request         the initial "handshake" Server-Sent Event request that was received
+	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
+	 * @param serverSentEvent the Server-Sent Event that was sent to the client
+	 * @param writeDuration   how long it took to attempt to send the Server-Sent Event to the client
 	 * @param throwable       the exception thrown during Server-Sent Event writing (if any)
 	 */
-	default void didFinishServerSentEventWriting(@Nonnull Request request,
-																							 @Nonnull ResourceMethod resourceMethod,
-																							 @Nonnull ServerSentEvent serverSentEvent,
-																							 @Nonnull Duration writeDuration,
-																							 @Nullable Throwable throwable) {
+	default void didFailToWriteServerSentEvent(@Nonnull Request request,
+																						 @Nonnull ResourceMethod resourceMethod,
+																						 @Nonnull ServerSentEvent serverSentEvent,
+																						 @Nonnull Duration writeDuration,
+																						 @Nullable Throwable throwable) {
 		// No-op by default
 	}
 
