@@ -257,7 +257,7 @@ public interface LifecycleInterceptor {
 	/**
 	 * Called after the response was attempted to be sent to the client, but failed.
 	 * <p>
-	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_FINISH_RESPONSE_WRITING_FAILED}.
+	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_WRITE_RESPONSE_FAILED}.
 	 *
 	 * @param request               the request that was received
 	 * @param resourceMethod        the <em>Resource Method</em> that handled the request.
