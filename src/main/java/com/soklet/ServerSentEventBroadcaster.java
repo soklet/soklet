@@ -98,10 +98,8 @@ public interface ServerSentEventBroadcaster {
 	 *                      (If the client has no context, the implementation passes {@code null})
 	 * @param eventProvider a function that provides the {@link ServerSentEvent} for a given key
 	 */
-	<T> void broadcastEvent(
-			@Nonnull Function<Object, T> keySelector,
-			@Nonnull Function<T, ServerSentEvent> eventProvider
-	);
+	<T> void broadcastEvent(@Nonnull Function<Object, T> keySelector,
+													@Nonnull Function<T, ServerSentEvent> eventProvider);
 
 	/**
 	 * Broadcasts a single Server-Sent Event comment to all clients listening to this broadcaster's {@link ResourcePath}.
@@ -131,8 +129,6 @@ public interface ServerSentEventBroadcaster {
 	 * @param keySelector     a function that derives a grouping key from the client's associated context object
 	 * @param commentProvider a function that provides the comment string for a given key
 	 */
-	<T> void broadcastComment(
-			@Nonnull Function<Object, T> keySelector,
-			@Nonnull Function<T, String> commentProvider
-	);
+	<T> void broadcastComment(@Nonnull Function<Object, T> keySelector,
+														@Nonnull Function<T, String> commentProvider);
 }

@@ -116,6 +116,10 @@ public enum LogEventType {
 	 */
 	SERVER_SENT_EVENT_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED,
 	/**
+	 * Indicates that the {@link ServerSentEventServer} encountered an error when executing application-provided code while performing a memoized broadcast via {@link ServerSentEventBroadcaster#broadcastEvent(Function, Function)} or {@link ServerSentEventBroadcaster#broadcastComment(Function, Function)}.
+	 */
+	SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
+	/**
 	 * Indicates an internal {@link ServerSentEventServer} error occurred.
 	 */
 	SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR

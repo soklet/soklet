@@ -43,6 +43,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -229,6 +230,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final BackpressureHandler backpressureHandler;
 		@Nonnull
 		private final Consumer<ServerSentEventConnection> connectionUnregisteredListener;
+		@Nonnull
+		private final Consumer<LogEvent> logEventConsumer;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@Nonnull
 		private final Set<ServerSentEventConnection> serverSentEventConnections;
@@ -236,16 +239,19 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		public DefaultServerSentEventBroadcaster(@Nonnull ResourceMethod resourceMethod,
 																						 @Nonnull ResourcePath resourcePath,
 																						 @Nonnull BackpressureHandler backpressureHandler,
-																						 @Nonnull Consumer<ServerSentEventConnection> connectionUnregisteredListener) {
+																						 @Nonnull Consumer<ServerSentEventConnection> connectionUnregisteredListener,
+																						 @Nonnull Consumer<LogEvent> logEventConsumer) {
 			requireNonNull(resourceMethod);
 			requireNonNull(resourcePath);
 			requireNonNull(backpressureHandler);
 			requireNonNull(connectionUnregisteredListener);
+			requireNonNull(logEventConsumer);
 
 			this.resourceMethod = resourceMethod;
 			this.resourcePath = resourcePath;
 			this.backpressureHandler = backpressureHandler;
 			this.connectionUnregisteredListener = connectionUnregisteredListener;
+			this.logEventConsumer = logEventConsumer;
 			// TODO: let clients specify capacity
 			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(256);
 		}
@@ -293,7 +299,27 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
 
-			throw new UnsupportedOperationException("TODO");
+			Map<T, ServerSentEvent> payloadCache = new HashMap<>();
+
+			for (ServerSentEventConnection connection : getServerSentEventConnections()) {
+				Object clientContext = connection.getClientContext().orElse(null);
+
+				try {
+					// Ask client code to generate a key given the context object
+					T key = keySelector.apply(clientContext);
+
+					// Ask client code to generate payload (if not present in our local cache)
+					ServerSentEvent event = payloadCache.computeIfAbsent(key, eventProvider);
+
+					enqueueServerSentEvent(this, connection, event, EnqueueStrategy.DEFAULT, getBackpressureHandler());
+				} catch (Throwable t) {
+					this.getLogEventConsumer().accept(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
+									format("Failed to generate Server-Sent-Event for connection on %s with client context %s",
+											getResourcePath(), (clientContext == null ? "[none specified]" : clientContext)))
+							.throwable(t)
+							.build());
+				}
+			}
 		}
 
 		@Override
@@ -302,7 +328,27 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 
-			throw new UnsupportedOperationException("TODO");
+			Map<T, String> payloadCache = new HashMap<>();
+
+			for (ServerSentEventConnection connection : getServerSentEventConnections()) {
+				Object clientContext = connection.getClientContext().orElse(null);
+
+				try {
+					// Ask client code to generate a key given the context object
+					T key = keySelector.apply(clientContext);
+
+					// Ask client code to generate payload (if not present in our local cache)
+					String comment = payloadCache.computeIfAbsent(key, commentProvider);
+
+					enqueueComment(this, connection, comment, getBackpressureHandler());
+				} catch (Throwable t) {
+					this.getLogEventConsumer().accept(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
+									format("Failed to generate Server-Sent Event comment for connection on %s with client context %s",
+											getResourcePath(), (clientContext == null ? "[none specified]" : clientContext)))
+							.throwable(t)
+							.build());
+				}
+			}
 		}
 
 		@Nonnull
@@ -346,18 +392,23 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Nonnull
-		protected BackpressureHandler getBackpressureHandler() {
+		private BackpressureHandler getBackpressureHandler() {
 			return this.backpressureHandler;
 		}
 
 		@Nonnull
-		protected Set<ServerSentEventConnection> getServerSentEventConnections() {
+		private Set<ServerSentEventConnection> getServerSentEventConnections() {
 			return this.serverSentEventConnections;
 		}
 
 		@Nonnull
-		protected Consumer<ServerSentEventConnection> getConnectionUnregisteredListener() {
+		private Consumer<ServerSentEventConnection> getConnectionUnregisteredListener() {
 			return this.connectionUnregisteredListener;
+		}
+
+		@Nonnull
+		private Consumer<LogEvent> getLogEventConsumer() {
+			return this.logEventConsumer;
 		}
 	}
 
@@ -1997,7 +2048,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					return new DefaultServerSentEventBroadcaster(resourceMethod, resourcePath, handler, (serverSentEventConnection -> {
 						// When the broadcaster unregisters a connection it manages, remove it from the global set of connections as well
 						getGlobalConnections().remove(serverSentEventConnection);
-					}));
+					}), this::safelyLog);
 				});
 
 		return Optional.of(broadcaster);
