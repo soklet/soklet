@@ -18,305 +18,933 @@ package com.soklet.internal.util;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.AbstractCollection;
+import java.util.AbstractSet;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReferenceArray;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-import static java.util.Map.Entry;
-import static java.util.Objects.requireNonNull;
-
 /**
- * A threadsafe LRU {@link Map}.
+ * A high-performance thread-safe approximate LRU {@link Map} using buffered access recording.
+ * <p>
+ * Design notes:
+ * <ul>
+ *   <li>Reads record access into a lossy ring buffer.</li>
+ *   <li>Writes enqueue lossless tasks.</li>
+ *   <li>Maintenance drains buffers, updates an intrusive doubly-linked list, and evicts.</li>
+ * </ul>
+ * <p>
+ * LRU ordering is approximate under high contention (read events may be overwritten).
  *
- * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ * @param <K> key type
+ * @param <V> value type
  */
 @ThreadSafe
 public class ConcurrentLruMap<K, V> implements Map<K, V> {
-	@Nonnull
-	private final Lock readLock;
-	@Nonnull
-	private final Lock writeLock;
+
+	// ===================================================================================
+	// Configuration
+	// ===================================================================================
 
 	/**
-	 * A LinkedHashMap with access-order and custom eviction behavior.
-	 * When the size exceeds 'capacity', the eldest entry is removed,
-	 * and 'evictionListener' is invoked.
+	 * Size of the read buffer.
+	 * Must be a power of two (masking is used).
 	 */
-	@Nonnull
-	private final LinkedHashMap<K, V> backingMap;
+	private static final int READ_BUFFER_SIZE = 64;
 
-	public ConcurrentLruMap(@Nonnull Integer capacity,
-													@Nonnull BiConsumer<K, V> evictionListener) {
-		requireNonNull(capacity);
-		requireNonNull(evictionListener);
+	/**
+	 * Number of pending write tasks that triggers maintenance.
+	 */
+	private static final int WRITE_BUFFER_DRAIN_THRESHOLD = 16;
 
+	private static final int READ_BUFFER_MASK = READ_BUFFER_SIZE - 1;
+
+	static {
+		if (Integer.bitCount(READ_BUFFER_SIZE) != 1)
+			throw new ExceptionInInitializerError("READ_BUFFER_SIZE must be a power of two");
+		if (WRITE_BUFFER_DRAIN_THRESHOLD <= 0)
+			throw new ExceptionInInitializerError("WRITE_BUFFER_DRAIN_THRESHOLD must be > 0");
+	}
+
+	// ===================================================================================
+	// Core State
+	// ===================================================================================
+
+	private final int capacity;
+	private final ConcurrentHashMap<K, Node<K, V>> map;
+	private final BiConsumer<K, V> evictionListener;
+
+	// ===================================================================================
+	// LRU Tracking (Intrusive Doubly-Linked List)
+	// ===================================================================================
+
+	/**
+	 * Sentinel head; head.next is MRU.
+	 */
+	@GuardedBy("maintenanceLock")
+	private final Node<K, V> head;
+
+	/**
+	 * Sentinel tail; tail.prev is LRU.
+	 */
+	@GuardedBy("maintenanceLock")
+	private final Node<K, V> tail;
+
+	// ===================================================================================
+	// Buffers
+	// ===================================================================================
+
+	/**
+	 * Lossy ring buffer for recording read accesses.
+	 * Entries may be overwritten under contention (dropping older access events).
+	 */
+	private final AtomicReferenceArray<Node<K, V>> readBuffer;
+	private final AtomicInteger readBufferWriteIndex;
+
+	/**
+	 * Lossless MPSC queue for write operations.
+	 */
+	private final ConcurrentLinkedQueue<WriteTask<K, V>> writeBuffer;
+
+	/**
+	 * Approximate count of queued write tasks.
+	 * This is used only for heuristics/triggering maintenance.
+	 * <p>
+	 * Important: we increment BEFORE enqueue to avoid "poll before increment" races going negative.
+	 */
+	private final AtomicInteger writeBufferSize;
+
+	// ===================================================================================
+	// Maintenance
+	// ===================================================================================
+
+	/**
+	 * Lock protecting all maintenance operations:
+	 * - Draining read/write buffers
+	 * - Updating the LRU linked list
+	 * - Evicting entries
+	 */
+	private final ReentrantLock maintenanceLock;
+
+	// ===================================================================================
+	// Node States
+	// ===================================================================================
+
+	private static final int ALIVE = 0;
+	private static final int RETIRED = 1;
+	private static final int DEAD = 2;
+
+	// ===================================================================================
+	// Constructors
+	// ===================================================================================
+
+	public ConcurrentLruMap(int capacity) {
+		this(capacity, null);
+	}
+
+	public ConcurrentLruMap(int capacity, @Nullable BiConsumer<K, V> evictionListener) {
 		if (capacity <= 0)
-			throw new IllegalArgumentException("Capacity must be greater than 0");
+			throw new IllegalArgumentException("Capacity must be greater than zero");
 
-		ReentrantReadWriteLock reentrantReadWriteLock = new ReentrantReadWriteLock();
+		this.capacity = capacity;
+		this.map = new ConcurrentHashMap<>(capacity);
+		this.evictionListener = evictionListener != null ? evictionListener : (k, v) -> {};
 
-		this.readLock = reentrantReadWriteLock.readLock();
-		this.writeLock = reentrantReadWriteLock.writeLock();
+		this.head = new Node<>(null, null);
+		this.tail = new Node<>(null, null);
+		this.head.next = this.tail;
+		this.tail.prev = this.head;
 
-		// Between this and load factor of 1, we ensure the backing map never needs to resize itself
-		// since there's a hard limit on size (we always evict the eldest entry once capacity is reached)
-		int backingMapTrueCapacity = capacity + 1;
+		this.readBuffer = new AtomicReferenceArray<>(READ_BUFFER_SIZE);
+		this.readBufferWriteIndex = new AtomicInteger(0);
 
-		// Access-order = true -> get operations move entry to most-recently-used position
-		this.backingMap = new LinkedHashMap<K, V>(backingMapTrueCapacity, 1, true) {
-			@Override
-			protected boolean removeEldestEntry(@Nonnull Entry<K, V> eldest) {
-				if (size() > capacity) {
-					evictionListener.accept(eldest.getKey(), eldest.getValue());
-					return true;
-				}
+		this.writeBuffer = new ConcurrentLinkedQueue<>();
+		this.writeBufferSize = new AtomicInteger(0);
 
-				return false;
-			}
-		};
+		this.maintenanceLock = new ReentrantLock();
 	}
 
-	@Override
-	public String toString() {
-		getReadLock().lock();
-		try {
-			return getBackingMap().toString();
-		} finally {
-			getReadLock().unlock();
-		}
-	}
+	// ===================================================================================
+	// Map Interface - Read Operations
+	// ===================================================================================
 
 	@Override
 	public int size() {
-		getReadLock().lock();
-		try {
-			return getBackingMap().size();
-		} finally {
-			getReadLock().unlock();
-		}
+		return map.size();
 	}
 
 	@Override
 	public boolean isEmpty() {
-		getReadLock().lock();
-		try {
-			return getBackingMap().isEmpty();
-		} finally {
-			getReadLock().unlock();
-		}
+		return map.isEmpty();
 	}
 
 	@Override
-	public boolean containsKey(@Nonnull Object key) {
-		requireNonNull(key);
-
-		getReadLock().lock();
-		try {
-			return getBackingMap().containsKey(key);
-		} finally {
-			getReadLock().unlock();
-		}
+	public boolean containsKey(Object key) {
+		return map.containsKey(key);
 	}
 
 	@Override
-	public boolean containsValue(@Nonnull Object value) {
-		requireNonNull(value);
-
-		getReadLock().lock();
-		try {
-			return getBackingMap().containsValue(value);
-		} finally {
-			getReadLock().unlock();
+	public boolean containsValue(Object value) {
+		for (Node<K, V> node : map.values()) {
+			if (Objects.equals(node.value, value))
+				return true;
 		}
+		return false;
 	}
 
 	@Override
-	@Nullable
-	public V get(@Nonnull Object key) {
-		requireNonNull(key);
+	public V get(Object key) {
+		Node<K, V> node = map.get(key);
+		if (node == null)
+			return null;
 
-		getReadLock().lock();
-		try {
-			return getBackingMap().get(key);
-		} finally {
-			getReadLock().unlock();
-		}
-	}
-
-	/**
-	 * Returns the value to which the specified key is mapped, or
-	 * {@code defaultValue} if this map contains no mapping for the key.
-	 */
-	@Override
-	@Nonnull
-	public V getOrDefault(@Nonnull Object key,
-												@Nonnull V defaultValue) {
-		requireNonNull(key);
-		requireNonNull(defaultValue);
-
-		getReadLock().lock();
-		try {
-			return getBackingMap().getOrDefault(key, defaultValue);
-		} finally {
-			getReadLock().unlock();
-		}
+		recordRead(node);
+		return node.value;
 	}
 
 	@Override
-	@Nonnull
-	public V put(@Nonnull K key,
-							 @Nonnull V value) {
-		requireNonNull(key);
-		requireNonNull(value);
+	public V getOrDefault(Object key, V defaultValue) {
+		Node<K, V> node = map.get(key);
+		if (node == null)
+			return defaultValue;
 
-		getWriteLock().lock();
-		try {
-			return getBackingMap().put(key, value);
-		} finally {
-			getWriteLock().unlock();
-		}
+		recordRead(node);
+		return node.value;
 	}
 
-	/**
-	 * If the specified key is not already associated with a value, associate it
-	 * with the given value and return null, else return the current value.
-	 */
+	// ===================================================================================
+	// Map Interface - Write Operations
+	// ===================================================================================
+
 	@Override
-	@Nullable
-	public V putIfAbsent(@Nonnull K key,
-											 @Nonnull V value) {
-		requireNonNull(key);
-		requireNonNull(value);
+	public V put(K key, V value) {
+		Objects.requireNonNull(key, "key");
+		Objects.requireNonNull(value, "value");
 
-		getWriteLock().lock();
-		try {
-			return getBackingMap().putIfAbsent(key, value);
-		} finally {
-			getWriteLock().unlock();
+		Node<K, V> newNode = new Node<>(key, value);
+		Node<K, V> oldNode = map.put(key, newNode);
+
+		if (oldNode != null) {
+			oldNode.state = RETIRED;
+			scheduleWrite(WriteTask.update(oldNode, newNode));
+			return oldNode.value;
 		}
-	}
 
-	/**
-	 * If the specified key is not already associated with a value (or is mapped
-	 * to null), attempts to compute its value using the given mapping function
-	 * and enters it into this map unless null.
-	 */
-	@Override
-	@Nullable
-	public V computeIfAbsent(@Nonnull K key,
-													 @Nonnull Function<? super K, ? extends V> mappingFunction) {
-		requireNonNull(key);
-		requireNonNull(mappingFunction);
-
-		getWriteLock().lock();
-		try {
-			return getBackingMap().computeIfAbsent(key, mappingFunction);
-		} finally {
-			getWriteLock().unlock();
-		}
+		scheduleWrite(WriteTask.add(newNode));
+		return null;
 	}
 
 	@Override
-	@Nullable
-	public V remove(@Nonnull Object key) {
-		requireNonNull(key);
+	public V putIfAbsent(K key, V value) {
+		Objects.requireNonNull(key, "key");
+		Objects.requireNonNull(value, "value");
 
-		getWriteLock().lock();
-		try {
-			return getBackingMap().remove(key);
-		} finally {
-			getWriteLock().unlock();
+		Node<K, V> newNode = new Node<>(key, value);
+		Node<K, V> existing = map.putIfAbsent(key, newNode);
+
+		if (existing == null) {
+			scheduleWrite(WriteTask.add(newNode));
+			return null;
 		}
+
+		recordRead(existing);
+		return existing.value;
 	}
 
 	@Override
-	public void putAll(@Nonnull Map<? extends K, ? extends V> map) {
-		requireNonNull(map);
+	public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+		Objects.requireNonNull(key, "key");
+		Objects.requireNonNull(mappingFunction, "mappingFunction");
 
-		getWriteLock().lock();
-		try {
-			for (Entry<? extends K, ? extends V> entry : map.entrySet())
-				getBackingMap().put(entry.getKey(), entry.getValue());
-		} finally {
-			getWriteLock().unlock();
+		Node<K, V> existing = map.get(key);
+		if (existing != null) {
+			recordRead(existing);
+			return existing.value;
 		}
+
+		final boolean[] inserted = {false};
+
+		Node<K, V> node = map.computeIfAbsent(key, k -> {
+			V newValue = mappingFunction.apply(k);
+			if (newValue == null)
+				return null;
+
+			inserted[0] = true;
+			return new Node<>(k, newValue);
+		});
+
+		if (node == null)
+			return null;
+
+		if (inserted[0]) {
+			scheduleWrite(WriteTask.add(node));
+		} else {
+			recordRead(node);
+		}
+
+		return node.value;
+	}
+
+	@Override
+	public V remove(Object key) {
+		Node<K, V> node = map.remove(key);
+		if (node == null)
+			return null;
+
+		retire(node);
+		return node.value;
+	}
+
+	@Override
+	public boolean remove(Object key, Object value) {
+		Node<K, V> node = map.get(key);
+		if (node == null || !Objects.equals(node.value, value))
+			return false;
+
+		if (map.remove(key, node)) {
+			retire(node);
+			return true;
+		}
+
+		return false;
+	}
+
+	@Override
+	public void putAll(Map<? extends K, ? extends V> m) {
+		for (Entry<? extends K, ? extends V> entry : m.entrySet())
+			put(entry.getKey(), entry.getValue());
 	}
 
 	@Override
 	public void clear() {
-		getWriteLock().lock();
+		List<Node<K, V>> evicted = List.of();
+
+		maintenanceLock.lock();
 		try {
-			getBackingMap().clear();
+			map.clear();
+
+			// Unlink everything currently on the list
+			Node<K, V> current = head.next;
+			while (current != tail) {
+				Node<K, V> next = current.next;
+				current.prev = null;
+				current.next = null;
+				current.state = DEAD;
+				current = next;
+			}
+			head.next = tail;
+			tail.prev = head;
+
+			// Clear read buffer
+			for (int i = 0; i < READ_BUFFER_SIZE; i++)
+				readBuffer.set(i, null);
+
+			// Drain (discard) pending write tasks safely and keep the counter sane
+			WriteTask<K, V> task;
+			while ((task = writeBuffer.poll()) != null)
+				writeBufferSize.decrementAndGet();
+
+			// No eviction callbacks on clear (Map.clear semantics)
+			// (evicted remains empty)
 		} finally {
-			getWriteLock().unlock();
+			maintenanceLock.unlock();
 		}
+
+		notifyEvictionListener(evicted);
 	}
 
-	/**
-	 * Returns a snapshot of the keys in this map at the time of calling.
-	 * Iterating over this set will not reflect subsequent modifications.
-	 */
+	// ===================================================================================
+	// Map Interface - Backed Views (contract-correct)
+	// ===================================================================================
+
 	@Override
-	@Nonnull
 	public Set<K> keySet() {
-		getReadLock().lock();
-		try {
-			return new LinkedHashSet<>(getBackingMap().keySet());
-		} finally {
-			getReadLock().unlock();
-		}
+		return new KeySetView();
 	}
 
-	/**
-	 * Returns a snapshot of the values in this map at the time of calling.
-	 * Iterating over this collection will not reflect subsequent modifications.
-	 */
-	@Nonnull
 	@Override
 	public Collection<V> values() {
-		getReadLock().lock();
+		return new ValuesView();
+	}
+
+	@Override
+	public Set<Entry<K, V>> entrySet() {
+		return new EntrySetView();
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (o == this)
+			return true;
+		if (!(o instanceof Map))
+			return false;
+
+		Map<?, ?> other = (Map<?, ?>) o;
+		return this.entrySet().equals(other.entrySet());
+	}
+
+	@Override
+	public int hashCode() {
+		return entrySet().hashCode();
+	}
+
+	// ===================================================================================
+	// Read Buffer (Lossy)
+	// ===================================================================================
+
+	private void recordRead(@Nonnull Node<K, V> node) {
+		// Claim a slot in the ring buffer
+		int writeIndex = readBufferWriteIndex.getAndIncrement();
+		int slot = writeIndex & READ_BUFFER_MASK;
+
+		// Overwrite the slot (dropping any prior recorded access event for that slot)
+		readBuffer.lazySet(slot, node);
+
+		// Help out if there are pending writes (but don't do it on every read).
+		// This keeps reads cheap while ensuring small write bursts still get processed.
+		if (writeBufferSize.get() != 0 && slot == READ_BUFFER_MASK)
+			tryMaintenance();
+	}
+
+	// ===================================================================================
+	// Write Buffer (Lossless)
+	// ===================================================================================
+
+	private void scheduleWrite(@Nonnull WriteTask<K, V> task) {
+		// Increment first to avoid "poll before increment" going negative.
+		int pending = writeBufferSize.incrementAndGet();
+		writeBuffer.offer(task);
+
+		// If we're over capacity, trigger maintenance immediately.
+		// Also trigger when the write backlog is getting large.
+		if (pending >= WRITE_BUFFER_DRAIN_THRESHOLD || map.size() > capacity)
+			tryMaintenance();
+	}
+
+	private void retire(@Nonnull Node<K, V> node) {
+		node.state = RETIRED;
+		scheduleWrite(WriteTask.remove(node));
+	}
+
+	// ===================================================================================
+	// Maintenance
+	// ===================================================================================
+
+	private void tryMaintenance() {
+		if (!maintenanceLock.tryLock())
+			return;
+
+		List<Node<K, V>> evicted;
 		try {
-			return new ArrayList<>(getBackingMap().values());
+			evicted = performMaintenanceLocked();
 		} finally {
-			getReadLock().unlock();
+			maintenanceLock.unlock();
 		}
+
+		notifyEvictionListener(evicted);
+	}
+
+	private void forceMaintenance() {
+		List<Node<K, V>> evicted;
+
+		maintenanceLock.lock();
+		try {
+			evicted = performMaintenanceLocked();
+		} finally {
+			maintenanceLock.unlock();
+		}
+
+		notifyEvictionListener(evicted);
+	}
+
+	@GuardedBy("maintenanceLock")
+	private List<Node<K, V>> performMaintenanceLocked() {
+		drainReadBufferLocked();
+		drainWriteBufferLocked();
+		return evictLocked();
+	}
+
+	@GuardedBy("maintenanceLock")
+	private void drainReadBufferLocked() {
+		for (int i = 0; i < READ_BUFFER_SIZE; i++) {
+			Node<K, V> node = readBuffer.getAndSet(i, null);
+			if (node != null && node.state == ALIVE)
+				promoteToHeadLocked(node);
+		}
+	}
+
+	@GuardedBy("maintenanceLock")
+	private void drainWriteBufferLocked() {
+		WriteTask<K, V> task;
+		while ((task = writeBuffer.poll()) != null) {
+			writeBufferSize.decrementAndGet();
+			processWriteTaskLocked(task);
+		}
+	}
+
+	@GuardedBy("maintenanceLock")
+	private void processWriteTaskLocked(@Nonnull WriteTask<K, V> task) {
+		switch (task.type) {
+			case ADD:
+				// Idempotent: promotes whether or not already linked
+				promoteToHeadLocked(task.node);
+				break;
+
+			case REMOVE:
+				unlinkNodeLocked(task.node);
+				break;
+
+			case UPDATE:
+				unlinkNodeLocked(task.oldNode);
+				promoteToHeadLocked(task.node);
+				break;
+		}
+	}
+
+	@GuardedBy("maintenanceLock")
+	private List<Node<K, V>> evictLocked() {
+		List<Node<K, V>> evicted = new ArrayList<>();
+
+		while (map.size() > capacity) {
+			Node<K, V> victim = tail.prev;
+			if (victim == head)
+				break;
+
+			// Remove from map first
+			if (map.remove(victim.key, victim)) {
+				unlinkNodeLocked(victim);
+				evicted.add(victim);
+			} else {
+				// Not current in map anymore; just unlink stale list node
+				unlinkNodeLocked(victim);
+			}
+		}
+
+		return evicted;
+	}
+
+	private void notifyEvictionListener(@Nonnull List<Node<K, V>> evicted) {
+		if (evicted.isEmpty())
+			return;
+
+		RuntimeException first = null;
+
+		for (Node<K, V> node : evicted) {
+			try {
+				evictionListener.accept(node.key, node.value);
+			} catch (RuntimeException e) {
+				if (first == null)
+					first = e;
+				else
+					first.addSuppressed(e);
+			}
+		}
+
+		if (first != null)
+			throw first;
+	}
+
+	// ===================================================================================
+	// Linked List Operations
+	// ===================================================================================
+
+	/**
+	 * Ensures the node is linked and is at the MRU position.
+	 * Safe to call for nodes that are not yet linked, already linked, or linked in the wrong place.
+	 */
+	@GuardedBy("maintenanceLock")
+	private void promoteToHeadLocked(@Nonnull Node<K, V> node) {
+		if (node.state != ALIVE)
+			return;
+
+		// Already MRU?
+		if (node.prev == head)
+			return;
+
+		// If linked somewhere (or partially linked), unlink defensively
+		if (node.prev != null)
+			node.prev.next = node.next;
+		if (node.next != null)
+			node.next.prev = node.prev;
+
+		// Link at head
+		Node<K, V> first = head.next;
+		node.prev = head;
+		node.next = first;
+		head.next = node;
+		first.prev = node;
+	}
+
+	@GuardedBy("maintenanceLock")
+	private void unlinkNodeLocked(@Nonnull Node<K, V> node) {
+		if (node.state == DEAD)
+			return;
+
+		node.state = DEAD;
+
+		if (node.prev != null)
+			node.prev.next = node.next;
+		if (node.next != null)
+			node.next.prev = node.prev;
+
+		node.prev = null;
+		node.next = null;
+	}
+
+	// ===================================================================================
+	// Internal Classes
+	// ===================================================================================
+
+	private static final class Node<K, V> {
+		final K key;
+		final V value;
+
+		@GuardedBy("maintenanceLock")
+		Node<K, V> prev;
+
+		@GuardedBy("maintenanceLock")
+		Node<K, V> next;
+
+		volatile int state = ALIVE;
+
+		Node(@Nullable K key, @Nullable V value) {
+			this.key = key;
+			this.value = value;
+		}
+	}
+
+	private static final class WriteTask<K, V> {
+		enum Type {ADD, REMOVE, UPDATE}
+
+		final Type type;
+		final Node<K, V> node;
+		final Node<K, V> oldNode; // only for UPDATE
+
+		private WriteTask(@Nonnull Type type, @Nonnull Node<K, V> node, @Nullable Node<K, V> oldNode) {
+			this.type = type;
+			this.node = node;
+			this.oldNode = oldNode;
+		}
+
+		static <K, V> WriteTask<K, V> add(@Nonnull Node<K, V> node) {
+			return new WriteTask<>(Type.ADD, node, null);
+		}
+
+		static <K, V> WriteTask<K, V> remove(@Nonnull Node<K, V> node) {
+			return new WriteTask<>(Type.REMOVE, node, null);
+		}
+
+		static <K, V> WriteTask<K, V> update(@Nonnull Node<K, V> oldNode, @Nonnull Node<K, V> newNode) {
+			return new WriteTask<>(Type.UPDATE, newNode, oldNode);
+		}
+	}
+
+	// ===================================================================================
+	// Backed Views
+	// ===================================================================================
+
+	private final class KeySetView extends AbstractSet<K> {
+		@Override
+		public int size() {
+			return ConcurrentLruMap.this.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return ConcurrentLruMap.this.isEmpty();
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			return ConcurrentLruMap.this.containsKey(o);
+		}
+
+		@Override
+		public Iterator<K> iterator() {
+			final Iterator<K> it = map.keySet().iterator();
+
+			return new Iterator<>() {
+				private K last;
+
+				@Override
+				public boolean hasNext() {
+					return it.hasNext();
+				}
+
+				@Override
+				public K next() {
+					last = it.next();
+					return last;
+				}
+
+				@Override
+				public void remove() {
+					if (last == null)
+						throw new IllegalStateException();
+					ConcurrentLruMap.this.remove(last);
+					last = null;
+				}
+			};
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			return ConcurrentLruMap.this.remove(o) != null;
+		}
+
+		@Override
+		public void clear() {
+			ConcurrentLruMap.this.clear();
+		}
+
+		@Override
+		public boolean add(K k) {
+			throw new UnsupportedOperationException();
+		}
+	}
+
+	private final class ValuesView extends AbstractCollection<V> {
+		@Override
+		public int size() {
+			return ConcurrentLruMap.this.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return ConcurrentLruMap.this.isEmpty();
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			return ConcurrentLruMap.this.containsValue(o);
+		}
+
+		@Override
+		public Iterator<V> iterator() {
+			final Iterator<Entry<K, Node<K, V>>> it = map.entrySet().iterator();
+
+			return new Iterator<>() {
+				private Entry<K, Node<K, V>> last;
+
+				@Override
+				public boolean hasNext() {
+					return it.hasNext();
+				}
+
+				@Override
+				public V next() {
+					last = it.next();
+					return last.getValue().value;
+				}
+
+				@Override
+				public void remove() {
+					if (last == null)
+						throw new IllegalStateException();
+
+					K key = last.getKey();
+					Node<K, V> node = last.getValue();
+					last = null;
+
+					if (map.remove(key, node))
+						retire(node);
+				}
+			};
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			for (Entry<K, Node<K, V>> e : map.entrySet()) {
+				Node<K, V> node = e.getValue();
+				if (Objects.equals(node.value, o)) {
+					if (map.remove(e.getKey(), node)) {
+						retire(node);
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
+		@Override
+		public void clear() {
+			ConcurrentLruMap.this.clear();
+		}
+	}
+
+	private final class EntrySetView extends AbstractSet<Entry<K, V>> {
+		@Override
+		public int size() {
+			return ConcurrentLruMap.this.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return ConcurrentLruMap.this.isEmpty();
+		}
+
+		@Override
+		public void clear() {
+			ConcurrentLruMap.this.clear();
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			if (!(o instanceof Entry))
+				return false;
+
+			Entry<?, ?> e = (Entry<?, ?>) o;
+			Node<K, V> node = map.get(e.getKey());
+			return node != null && Objects.equals(node.value, e.getValue());
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			if (!(o instanceof Entry))
+				return false;
+
+			Entry<?, ?> e = (Entry<?, ?>) o;
+			return ConcurrentLruMap.this.remove(e.getKey(), e.getValue());
+		}
+
+		@Override
+		public Iterator<Entry<K, V>> iterator() {
+			final Iterator<Entry<K, Node<K, V>>> it = map.entrySet().iterator();
+
+			return new Iterator<>() {
+				private Entry<K, Node<K, V>> last;
+
+				@Override
+				public boolean hasNext() {
+					return it.hasNext();
+				}
+
+				@Override
+				public Entry<K, V> next() {
+					last = it.next();
+					K key = last.getKey();
+					return new WriteThroughEntry(key);
+				}
+
+				@Override
+				public void remove() {
+					if (last == null)
+						throw new IllegalStateException();
+
+					K key = last.getKey();
+					Node<K, V> node = last.getValue();
+					last = null;
+
+					if (map.remove(key, node))
+						retire(node);
+				}
+			};
+		}
+
+		@Override
+		public boolean add(Entry<K, V> kvEntry) {
+			throw new UnsupportedOperationException();
+		}
+	}
+
+	private final class WriteThroughEntry implements Entry<K, V> {
+		private final K key;
+
+		private WriteThroughEntry(K key) {
+			this.key = key;
+		}
+
+		@Override
+		public K getKey() {
+			return key;
+		}
+
+		@Override
+		public V getValue() {
+			Node<K, V> node = map.get(key);
+			return node == null ? null : node.value;
+		}
+
+		@Override
+		public V setValue(V value) {
+			Objects.requireNonNull(value, "value");
+			Node<K, V> prior = map.get(key);
+			V oldValue = prior == null ? null : prior.value;
+			ConcurrentLruMap.this.put(key, value);
+			return oldValue;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (!(o instanceof Entry))
+				return false;
+			Entry<?, ?> e = (Entry<?, ?>) o;
+			return Objects.equals(key, e.getKey()) && Objects.equals(getValue(), e.getValue());
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hashCode(key) ^ Objects.hashCode(getValue());
+		}
+	}
+
+	// ===================================================================================
+	// Testing / Debugging Support
+	// ===================================================================================
+
+	public int capacity() {
+		return capacity;
 	}
 
 	/**
-	 * Returns a snapshot of the entries in this map at the time of calling.
-	 * Iterating over this set will not reflect subsequent modifications.
+	 * Forces all pending operations to be processed.
+	 * Useful for tests.
+	 */
+	public void drain() {
+		forceMaintenance();
+	}
+
+	/**
+	 * Snapshot of keys in (approximate) MRU->LRU order. Primarily for tests/debugging.
 	 */
 	@Nonnull
-	@Override
-	public Set<Entry<K, V>> entrySet() {
-		getReadLock().lock();
+	public List<K> keysInAccessOrder() {
+		List<K> keys = new ArrayList<>();
+		List<Node<K, V>> evicted;
+
+		maintenanceLock.lock();
 		try {
-			return new LinkedHashSet<>(getBackingMap().entrySet());
+			evicted = performMaintenanceLocked();
+
+			Node<K, V> current = head.next;
+			while (current != tail) {
+				if (current.key != null)
+					keys.add(current.key);
+				current = current.next;
+			}
 		} finally {
-			getReadLock().unlock();
+			maintenanceLock.unlock();
 		}
+
+		notifyEvictionListener(evicted);
+		return keys;
 	}
 
 	@Nonnull
-	protected Lock getReadLock() {
-		return this.readLock;
-	}
-
-	@Nonnull
-	protected Lock getWriteLock() {
-		return this.writeLock;
-	}
-
-	@Nonnull
-	protected LinkedHashMap<K, V> getBackingMap() {
-		return this.backingMap;
+	private BiConsumer<K, V> getEvictionListener() {
+		return this.evictionListener;
 	}
 }
