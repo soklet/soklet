@@ -287,6 +287,24 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				enqueueComment(this, serverSentEventConnection, comment, getBackpressureHandler());
 		}
 
+		@Override
+		public <T> void broadcastEvent(@Nonnull Function<Object, T> keySelector,
+																	 @Nonnull Function<T, ServerSentEvent> eventProvider) {
+			requireNonNull(keySelector);
+			requireNonNull(eventProvider);
+
+			throw new UnsupportedOperationException("TODO");
+		}
+
+		@Override
+		public <T> void broadcastComment(@Nonnull Function<Object, T> keySelector,
+																		 @Nonnull Function<T, String> commentProvider) {
+			requireNonNull(keySelector);
+			requireNonNull(commentProvider);
+
+			throw new UnsupportedOperationException("TODO");
+		}
+
 		@Nonnull
 		public Boolean registerServerSentEventConnection(@Nullable ServerSentEventConnection serverSentEventConnection) {
 			if (serverSentEventConnection == null)

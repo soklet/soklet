@@ -37,6 +37,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -52,6 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.emptyByteArray;
@@ -1492,19 +1494,28 @@ public final class Soklet implements AutoCloseable {
 	 */
 	@ThreadSafe
 	static class MockServerSentEventBroadcaster implements ServerSentEventBroadcaster {
+		// ConcurrentHashMap doesn't allow null values, so we use a sentinel if context is null
+		private static final Object NULL_CONTEXT_SENTINEL;
+
+		static {
+			NULL_CONTEXT_SENTINEL = new Object();
+		}
+
 		@Nonnull
 		private final ResourcePath resourcePath;
+		// Maps the Consumer (Listener) to its Context object (e.g. Locale)
 		@Nonnull
-		private final Set<Consumer<ServerSentEvent>> eventConsumers;
+		private final Map<Consumer<ServerSentEvent>, Object> eventConsumers;
+		// Same goes for comments
 		@Nonnull
-		private final Set<Consumer<String>> commentConsumers;
+		private final Map<Consumer<String>, Object> commentConsumers;
 
 		public MockServerSentEventBroadcaster(@Nonnull ResourcePath resourcePath) {
 			requireNonNull(resourcePath);
 
 			this.resourcePath = resourcePath;
-			this.eventConsumers = ConcurrentHashMap.newKeySet();
-			this.commentConsumers = ConcurrentHashMap.newKeySet();
+			this.eventConsumers = new ConcurrentHashMap<>();
+			this.commentConsumers = new ConcurrentHashMap<>();
 		}
 
 		@Nonnull
@@ -1523,7 +1534,7 @@ public final class Soklet implements AutoCloseable {
 		public void broadcastEvent(@Nonnull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
 
-			for (Consumer<ServerSentEvent> eventConsumer : getEventConsumers()) {
+			for (Consumer<ServerSentEvent> eventConsumer : getEventConsumers().keySet()) {
 				try {
 					eventConsumer.accept(serverSentEvent);
 				} catch (Throwable throwable) {
@@ -1538,47 +1549,124 @@ public final class Soklet implements AutoCloseable {
 		public void broadcastComment(@Nonnull String comment) {
 			requireNonNull(comment);
 
-			for (Consumer<String> commentConsumer : getCommentConsumers()) {
+			for (Consumer<String> commentConsumer : getCommentConsumers().keySet()) {
 				try {
 					commentConsumer.accept(comment);
 				} catch (Throwable throwable) {
 					// TODO: revisit this - should we communicate back exceptions, and should we fire these on separate threads for "realism" (probably not)?
+					// TODO: should probably tie this and other mock SSE types into LifecycleInterceptor for parity once we fully implement metric tracking
 					throwable.printStackTrace();
 				}
 			}
 		}
 
+		@Override
+		public <T> void broadcastEvent(
+				@Nonnull Function<Object, T> keySelector,
+				@Nonnull Function<T, ServerSentEvent> eventProvider
+		) {
+			requireNonNull(keySelector);
+			requireNonNull(eventProvider);
+
+			// 1. Create a temporary cache for this specific broadcast operation.
+			// This ensures we only run the expensive 'eventProvider' once per unique key.
+			Map<T, ServerSentEvent> payloadCache = new HashMap<>();
+
+			this.getEventConsumers().forEach((consumer, context) -> {
+				try {
+					// 2. Derive the key from the subscriber's context
+					T key = keySelector.apply(context);
+
+					// 3. Memoize: Generate the payload if we haven't seen this key yet, otherwise reuse it
+					ServerSentEvent event = payloadCache.computeIfAbsent(key, eventProvider);
+
+					// 4. Dispatch
+					consumer.accept(event);
+				} catch (Throwable throwable) {
+					// TODO: revisit this - should we communicate back exceptions, and should we fire these on separate threads for "realism" (probably not)?
+					// TODO: should probably tie this and other mock SSE types into LifecycleInterceptor for parity once we fully implement metric tracking
+					throwable.printStackTrace();
+				}
+			});
+		}
+
+		@Override
+		public <T> void broadcastComment(
+				@Nonnull Function<Object, T> keySelector,
+				@Nonnull Function<T, String> commentProvider
+		) {
+			requireNonNull(keySelector);
+			requireNonNull(commentProvider);
+
+			// 1. Create temporary cache
+			Map<T, String> commentCache = new HashMap<>();
+
+			this.getCommentConsumers().forEach((consumer, context) -> {
+				try {
+					// 2. Derive key
+					T key = keySelector.apply(context);
+
+					// 3. Memoize
+					String comment = commentCache.computeIfAbsent(key, commentProvider);
+
+					// 4. Dispatch
+					consumer.accept(comment);
+				} catch (Throwable throwable) {
+					// TODO: revisit this - should we communicate back exceptions, and should we fire these on separate threads for "realism" (probably not)?
+					// TODO: should probably tie this and other mock SSE types into LifecycleInterceptor for parity once we fully implement metric tracking
+					throwable.printStackTrace();
+				}
+			});
+		}
+
 		@Nonnull
 		public Boolean registerEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer) {
+			return registerEventConsumer(eventConsumer, null);
+		}
+
+		/**
+		 * Registers a consumer with an associated context, simulating a client with specific traits.
+		 */
+		@Nonnull
+		public Boolean registerEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer, @Nullable Object context) {
 			requireNonNull(eventConsumer);
-			return getEventConsumers().add(eventConsumer);
+			// map.put returns null if the key was new, which conceptually matches "add" returning true
+			return this.getEventConsumers().put(eventConsumer, context == null ? NULL_CONTEXT_SENTINEL : context) == null;
 		}
 
 		@Nonnull
 		public Boolean unregisterEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer) {
 			requireNonNull(eventConsumer);
-			return getEventConsumers().remove(eventConsumer);
+			return this.getEventConsumers().remove(eventConsumer) != null;
 		}
 
 		@Nonnull
 		public Boolean registerCommentConsumer(@Nonnull Consumer<String> commentConsumer) {
+			return registerCommentConsumer(commentConsumer, null);
+		}
+
+		/**
+		 * Registers a consumer with an associated context, simulating a client with specific traits.
+		 */
+		@Nonnull
+		public Boolean registerCommentConsumer(@Nonnull Consumer<String> commentConsumer, @Nullable Object context) {
 			requireNonNull(commentConsumer);
-			return getCommentConsumers().add(commentConsumer);
+			return this.getCommentConsumers().put(commentConsumer, context == null ? NULL_CONTEXT_SENTINEL : context) == null;
 		}
 
 		@Nonnull
 		public Boolean unregisterCommentConsumer(@Nonnull Consumer<String> commentConsumer) {
 			requireNonNull(commentConsumer);
-			return getCommentConsumers().remove(commentConsumer);
+			return this.getCommentConsumers().remove(commentConsumer) != null;
 		}
 
 		@Nonnull
-		protected Set<Consumer<ServerSentEvent>> getEventConsumers() {
+		protected Map<Consumer<ServerSentEvent>, Object> getEventConsumers() {
 			return this.eventConsumers;
 		}
 
 		@Nonnull
-		protected Set<Consumer<String>> getCommentConsumers() {
+		protected Map<Consumer<String>, Object> getCommentConsumers() {
 			return this.commentConsumers;
 		}
 	}

@@ -17,6 +17,7 @@
 package com.soklet;
 
 import javax.annotation.Nonnull;
+import java.util.function.Function;
 
 /**
  * Broadcasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> payload to all clients listening on a {@link ResourcePath}.
@@ -82,6 +83,27 @@ public interface ServerSentEventBroadcaster {
 	void broadcastEvent(@Nonnull ServerSentEvent serverSentEvent);
 
 	/**
+	 * Broadcasts a Server-Sent Event where the payload is dynamically generated and memoized based on a specific trait of the client (e.g. {@link java.util.Locale} or User Role).
+	 * <p>
+	 * This method is designed for high-scale scenarios where generating the payload is expensive (e.g. JSON serialization with localization) and the number of distinct variations (keys) is significantly smaller than the number of clients.
+	 * <p>
+	 * The implementation guarantees that {@code eventProvider} is called exactly once per unique key derived by {@code keySelector} among the currently active clients.
+	 * <p>
+	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
+	 * <p>
+	 * However, mock implementations may wish to block until broadcasts have completed - for example, to simplify automated testing.
+	 *
+	 * @param <T>           the type of the grouping key (e.g. {@link java.util.Locale} or {@link String})
+	 * @param keySelector   a function that derives a grouping key from the client's associated context object.
+	 *                      (If the client has no context, the implementation passes {@code null})
+	 * @param eventProvider a function that provides the {@link ServerSentEvent} for a given key
+	 */
+	<T> void broadcastEvent(
+			@Nonnull Function<Object, T> keySelector,
+			@Nonnull Function<T, ServerSentEvent> eventProvider
+	);
+
+	/**
 	 * Broadcasts a single Server-Sent Event comment to all clients listening to this broadcaster's {@link ResourcePath}.
 	 * <p>
 	 * Specify a blank string to generate a bare {@code ":"} Server-Sent Event comment line.
@@ -93,4 +115,24 @@ public interface ServerSentEventBroadcaster {
 	 * @param comment the comment payload to broadcast
 	 */
 	void broadcastComment(@Nonnull String comment);
+
+	/**
+	 * Broadcasts a Server-Sent Event comment where the payload is dynamically generated and memoized based on a specific trait of the client (e.g. {@link java.util.Locale} or User Role).
+	 * <p>
+	 * This follows the same memoization pattern as {@link #broadcastEvent(Function, Function)}.
+	 * <p>
+	 * The implementation guarantees that {@code commentProvider} is called exactly once per unique key derived by {@code keySelector} among the currently active clients.
+	 * <p>
+	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
+	 * <p>
+	 * However, mock implementations may wish to block until broadcasts have completed - for example, to simplify automated testing.
+	 *
+	 * @param <T>             the type of the grouping key
+	 * @param keySelector     a function that derives a grouping key from the client's associated context object
+	 * @param commentProvider a function that provides the comment string for a given key
+	 */
+	<T> void broadcastComment(
+			@Nonnull Function<Object, T> keySelector,
+			@Nonnull Function<T, String> commentProvider
+	);
 }

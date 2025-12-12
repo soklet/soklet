@@ -30,6 +30,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -159,6 +160,8 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			@Nullable
 			private Set<ResponseCookie> cookies;
 			@Nullable
+			private Object clientContext;
+			@Nullable
 			private Consumer<ServerSentEventUnicaster> clientInitializer;
 
 			private Builder() {
@@ -190,6 +193,22 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			}
 
 			/**
+			 * Specifies an application-specific custom context to be preserved over the lifetime of the SSE connection.
+			 * <p>
+			 * For example, an application might want to broadcast differently-formatted payloads based on the client's locale - a {@link java.util.Locale} object could be specified as client context.
+			 * <p>
+			 * Server-Sent Events can then be broadcast per-locale via {@link ServerSentEventBroadcaster#broadcastEvent(Function, Function)}.
+			 *
+			 * @param clientContext custom context
+			 * @return this builder, for chaining
+			 */
+			@Nonnull
+			public Builder clientContext(@Nullable Object clientContext) {
+				this.clientContext = clientContext;
+				return this;
+			}
+
+			/**
 			 * Specifies custom "client initializer" function to run immediately after the handshake succeeds - useful for performing "catch-up" logic if the client had provided a {@code Last-Event-ID} request header.
 			 * <p>
 			 * The function is provided with a {@link ServerSentEventUnicaster}, which permits sending Server-Sent Events and comments directly to the client that accepted the handshake (as opposed to a {@link ServerSentEventBroadcaster}, which would send to all clients listening on the same {@link ResourcePath}).
@@ -216,6 +235,8 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		@Nullable
 		private final Set<ResponseCookie> cookies;
 		@Nullable
+		private final Object clientContext;
+		@Nullable
 		private final Consumer<ServerSentEventUnicaster> clientInitializer;
 
 		private Accepted(@Nonnull Builder builder) {
@@ -227,6 +248,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 
 			this.headers = headers;
 			this.cookies = cookies;
+			this.clientContext = builder.clientContext;
 			this.clientInitializer = builder.clientInitializer;
 		}
 
@@ -251,7 +273,19 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		}
 
 		/**
-		 * The client initialization function, if specified, for this accepted Server-Sent Event handshake.
+		 * Returns the client context, if specified, for this accepted Server-Sent Event handshake.
+		 * <p>
+		 * Useful for "targeted" broadcasts via {@link ServerSentEventBroadcaster#broadcastEvent(Function, Function)}.
+		 *
+		 * @return the client context, or {@link Optional#empty()} if none was specified
+		 */
+		@Nonnull
+		public Optional<Object> getClientContext() {
+			return Optional.ofNullable(this.clientContext);
+		}
+
+		/**
+		 * Returns the client initialization function, if specified, for this accepted Server-Sent Event handshake.
 		 *
 		 * @return the client initialization function, or {@link Optional#empty()} if none was specified
 		 */
@@ -262,8 +296,11 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 
 		@Override
 		public String toString() {
-			return format("%s{headers=%s, cookies=%s, clientInitializer=%s}",
-					Accepted.class.getSimpleName(), getHeaders(), getCookies(), getClientInitializer().isPresent() ? "[specified]" : "[not specified]");
+			return format("%s{headers=%s, cookies=%s, clientContext=%s clientInitializer=%s}",
+					Accepted.class.getSimpleName(), getHeaders(), getCookies(),
+					(getClientContext().isPresent() ? getClientContext().get() : "[not specified]"),
+					(getClientInitializer().isPresent() ? "[specified]" : "[not specified]")
+			);
 		}
 
 		@Override
@@ -276,12 +313,13 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 
 			return Objects.equals(getHeaders(), accepted.getHeaders())
 					&& Objects.equals(getCookies(), accepted.getCookies())
+					&& Objects.equals(getClientContext(), accepted.getClientContext())
 					&& Objects.equals(getClientInitializer(), accepted.getClientInitializer());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getHeaders(), getCookies(), getClientInitializer());
+			return Objects.hash(getHeaders(), getCookies(), getClientContext(), getClientInitializer());
 		}
 	}
 
