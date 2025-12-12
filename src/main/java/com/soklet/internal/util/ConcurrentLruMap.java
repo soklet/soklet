@@ -193,6 +193,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 	@Override
 	public boolean containsKey(Object key) {
+		// Note: does not count as access for LRU purposes
 		return map.containsKey(key);
 	}
 
@@ -330,8 +331,6 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 	@Override
 	public void clear() {
-		List<Node<K, V>> evicted = List.of();
-
 		maintenanceLock.lock();
 		try {
 			map.clear();
@@ -362,8 +361,6 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		} finally {
 			maintenanceLock.unlock();
 		}
-
-		notifyEvictionListener(evicted);
 	}
 
 	// ===================================================================================
@@ -677,7 +674,8 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			final Iterator<K> it = map.keySet().iterator();
 
 			return new Iterator<>() {
-				private K last;
+				private K lastKey;
+				private Node<K, V> lastNode;
 
 				@Override
 				public boolean hasNext() {
@@ -686,16 +684,21 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 				@Override
 				public K next() {
-					last = it.next();
-					return last;
+					lastKey = it.next();
+					lastNode = map.get(lastKey);
+					return lastKey;
 				}
 
 				@Override
 				public void remove() {
-					if (last == null)
+					if (lastKey == null)
 						throw new IllegalStateException();
-					ConcurrentLruMap.this.remove(last);
-					last = null;
+
+					if (lastNode != null && map.remove(lastKey, lastNode))
+						retire(lastNode);
+
+					lastKey = null;
+					lastNode = null;
 				}
 			};
 		}
@@ -878,6 +881,10 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			return node == null ? null : node.value;
 		}
 
+		/**
+		 * Sets the value. Note: in concurrent scenarios, the returned previous value
+		 * may differ from what was actually replaced.
+		 */
 		@Override
 		public V setValue(V value) {
 			Objects.requireNonNull(value, "value");
