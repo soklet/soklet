@@ -773,7 +773,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "request timed out"
 				throw e;
 			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST, "Unable to parse Server-Sent Event request")
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_HANDSHAKE_REQUEST_UNPARSEABLE, "Unable to parse Server-Sent Event request")
 						.throwable(e)
 						.build());
 				throw e;
@@ -820,7 +820,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				} catch (Throwable t) {
 					// We couldn't write a response to the client (maybe they disconnected).
 					// Go through the rejected flow and close out the connection
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_FAILED_WRITING_HANDSHAKE_RESPONSE, "Unable to write SSE handshake response")
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED, "Unable to write SSE handshake response")
 							.throwable(t)
 							.build());
 
@@ -839,7 +839,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				// If there is a client initializer, invoke it immediately prior to finalizing the SSE connection
 				Consumer<ServerSentEventUnicaster> clientInitializer = handshakeAccepted.getClientInitializer().orElse(null);
 
-				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, clientInitializer)
+				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, handshakeAccepted)
 						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
 
 				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
@@ -1237,6 +1237,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final Request request;
 		@Nonnull
 		private final ResourceMethod resourceMethod;
+		@Nullable
+		private final Object clientContext;
 		@Nonnull
 		private final BlockingQueue<WriteQueueElement> writeQueue;
 		@Nonnull
@@ -1292,6 +1294,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		public ServerSentEventConnection(@Nonnull Request request,
 																		 @Nonnull ResourceMethod resourceMethod,
+																		 @Nullable Object clientContext,
 																		 @Nonnull Integer connectionQueueCapacity,
 																		 @Nonnull SocketChannel socketChannel) {
 			requireNonNull(request);
@@ -1301,6 +1304,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			this.request = request;
 			this.resourceMethod = resourceMethod;
+			this.clientContext = clientContext;
 			this.writeQueue = new ArrayBlockingQueue<>(connectionQueueCapacity);
 			this.establishedAt = Instant.now();
 			this.lastValidityCheckInNanos = new AtomicLong(System.nanoTime());
@@ -1316,6 +1320,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public ResourceMethod getResourceMethod() {
 			return this.resourceMethod;
+		}
+
+		@Nonnull
+		public Optional<Object> getClientContext() {
+			return Optional.ofNullable(this.clientContext);
 		}
 
 		@Nonnull
@@ -1355,9 +1364,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Optional<ClientSocketChannelRegistration> registerClientSocketChannel(@Nonnull SocketChannel clientSocketChannel,
 																																									@Nonnull Request request,
-																																									@Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
+																																									@Nonnull HandshakeResult.Accepted handshakeAccepted) {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
+		requireNonNull(handshakeAccepted);
 
 		if (isStopping() || !isStarted())
 			return Optional.empty();
@@ -1373,13 +1383,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			return Optional.empty();
 
 		// Create the connection and register it with the EventSource
-		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, resourceMethod, getConnectionQueueCapacity(), clientSocketChannel);
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, resourceMethod, handshakeAccepted.getClientContext().orElse(null), getConnectionQueueCapacity(), clientSocketChannel);
 
 		// If a client initializer exists, hand it the unicaster to support Last-Event-ID "catch up" scenarios
 		ServerSentEventUnicaster serverSentEventUnicaster = new DefaultServerSentEventUnicaster(resourcePath, serverSentEventConnection.getWriteQueue());
 
-		if (clientInitializer != null)
+		handshakeAccepted.getClientInitializer().ifPresent((clientInitializer -> {
 			clientInitializer.accept(serverSentEventUnicaster);
+		}));
 
 		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection if configured to do so
 		if (getVerifyConnectionOnceEstablished())

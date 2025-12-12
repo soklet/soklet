@@ -110,11 +110,11 @@ public enum LogEventType {
 	/**
 	 * Indicates that the {@link ServerSentEventServer} received a handshake request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
 	 */
-	SERVER_SENT_EVENT_SERVER_UNPARSEABLE_HANDSHAKE_REQUEST,
+	SERVER_SENT_EVENT_SERVER_HANDSHAKE_REQUEST_UNPARSEABLE,
 	/**
 	 * Indicates that the {@link ServerSentEventServer} was unable to successfully write a handshake response.
 	 */
-	SERVER_SENT_EVENT_SERVER_FAILED_WRITING_HANDSHAKE_RESPONSE,
+	SERVER_SENT_EVENT_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED,
 	/**
 	 * Indicates an internal {@link ServerSentEventServer} error occurred.
 	 */
