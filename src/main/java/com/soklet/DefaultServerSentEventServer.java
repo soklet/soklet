@@ -757,12 +757,30 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			HandshakeResult.Accepted handshakeAccepted = handshakeAcceptedReference.get();
 
 			if (handshakeAccepted != null) {
-				getLifecycleInterceptor().get().willEstablishServerSentEventConnection(request, resourceMethod);
+				try {
+					getLifecycleInterceptor().get().willEstablishServerSentEventConnection(request, resourceMethod);
+				} catch (Throwable t) {
+					safelyLog(LogEvent.with(
+									LogEventType.LIFECYCLE_INTERCEPTOR_WILL_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+									format("An exception occurred while invoking %s::willEstablishServerSentEventConnection",
+											LifecycleInterceptor.class.getSimpleName()))
+							.throwable(t)
+							.build());
+				}
 
 				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, handshakeAccepted)
 						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
 
-				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
+				try {
+					getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
+				} catch (Throwable t) {
+					safelyLog(LogEvent.with(
+									LogEventType.LIFECYCLE_INTERCEPTOR_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+									format("An exception occurred while invoking %s::didEstablishServerSentEventConnection",
+											LifecycleInterceptor.class.getSimpleName()))
+							.throwable(t)
+							.build());
+				}
 
 				BlockingQueue<WriteQueueElement> writeQueue =
 						clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue();
