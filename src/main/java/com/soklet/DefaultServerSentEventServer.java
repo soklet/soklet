@@ -505,11 +505,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (this.connectionQueueCapacity < 1)
 			throw new IllegalArgumentException("The value for connectionQueueCapacity must be > 0");
 
-		// Initialize the global LRU map with the specified limit. Assume ConcurrentLRUMap supports a removal listener.
+		// Initialize the global LRU map with the specified limit
 		this.globalConnections = new ConcurrentLruMap<>(getConcurrentConnectionLimit(), (evictedConnection, broadcaster) -> {
-			// This callback is triggered when a connection is evicted from the global LRU map.
-			// Unregister the evicted connection from the broadcaster and send poison pill to close it.
-			broadcaster.unregisterServerSentEventConnection(evictedConnection, true);
+			try {
+				// This callback is triggered when a connection is evicted from the global LRU map.
+				// Unregister the evicted connection from the broadcaster and send poison pill to close it.
+				broadcaster.unregisterServerSentEventConnection(evictedConnection, true);
+			} catch (Throwable t) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+								"Failed while evicting SSE connection from global LRU")
+						.throwable(t)
+						.build());
+			}
 		});
 	}
 
