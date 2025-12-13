@@ -606,6 +606,10 @@ public class AdvancedTests {
 					collected > 0, "Potential memory leak - broadcasters not being garbage collected. " +
 							"Collected: " + collected + " out of " + references.size()
 			);
+
+			int broadcastersByResourcePathSize = ((DefaultServerSentEventServer) sseServer).getBroadcastersByResourcePath().size();
+
+			Assertions.assertTrue(broadcastersByResourcePathSize <= 10, "Expected broadcastersByResourcePathSize of <= 10 but was " + broadcastersByResourcePathSize);
 		}
 	}
 

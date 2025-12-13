@@ -166,6 +166,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final ConcurrentLruMap<ServerSentEventConnection, DefaultServerSentEventBroadcaster> globalConnections;
 	@Nonnull
+	private final ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> idleBroadcastersByResourcePath;
+	@Nonnull
 	private final ReentrantLock lock;
 	@Nonnull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
@@ -432,6 +434,28 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.broadcastersByResourcePath = new ConcurrentHashMap<>(broadcasterInitialCapacity);
 
 		this.resourcePathDeclarationsByResourcePathCache = new ConcurrentLruMap<>(builder.resourcePathCacheCapacity != null ? builder.resourcePathCacheCapacity : DEFAULT_RESOURCE_PATH_CACHE_CAPACITY, (resourcePath, broadcaster) -> { /* nothing to do for now */});
+
+		int idleBroadcasterCacheCapacity = builder.broadcasterCacheCapacity != null
+				? builder.broadcasterCacheCapacity
+				: DEFAULT_BROADCASTER_CACHE_CAPACITY;
+
+		// LRU of *idle* (zero-connection) broadcasters.
+		// When an idle broadcaster is evicted here, we attempt to remove it from the main registry,
+		// but only if it is still mapped and still idle. This avoids orphaning active connections.
+		this.idleBroadcastersByResourcePath = new ConcurrentLruMap<>(idleBroadcasterCacheCapacity, (resourcePath, broadcaster) -> {
+			try {
+				this.broadcastersByResourcePath.computeIfPresent(resourcePath, (rp, existing) -> {
+					if (existing == broadcaster && existing.getServerSentEventConnections().isEmpty())
+						return null; // remove from main registry -> eligible for GC
+					return existing;
+				});
+			} catch (Throwable t) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+								"Failed to evict idle SSE broadcaster")
+						.throwable(t)
+						.build());
+			}
+		});
 
 		// Cowardly refuse to run on anything other than a runtime that supports Virtual threads.
 		if (!Utilities.virtualThreadsAvailable())
@@ -1326,7 +1350,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Override
 		public void unicastComment(@Nonnull String comment) {
 			requireNonNull(comment);
-			
+
 			if (!getWriteQueue().offer(WriteQueueElement.withComment(comment)))
 				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
@@ -1726,6 +1750,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				this.requestHandlerExecutorService = null;
 				this.requestReaderExecutorService = null;
 				this.getBroadcastersByResourcePath().clear();
+				this.getIdleBroadcastersByResourcePath().clear();
 				this.getResourcePathDeclarationsByResourcePathCache().clear();
 				getStopPoisonPill().set(false);
 
@@ -1909,6 +1934,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (!registered)
 				throw new IllegalStateException(format("Unable to register Server-Sent Event connection for %s", resourcePath));
 
+			// This broadcaster is now active; don't allow idle eviction.
+			try {
+				getIdleBroadcastersByResourcePath().remove(resourcePath, broadcaster);
+			} catch (Throwable ignored) { /* best-effort */ }
+
 			// Track in global LRU limit. If this causes eviction, the eviction callback will unregister/poison the evicted connection.
 			getGlobalConnections().put(connection, broadcaster);
 
@@ -1924,6 +1954,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
 				.computeIfAbsent(resourcePath, (rp) -> newBroadcaster(resourceMethod, rp));
+
+		// If no active connections, treat it as idle and put it in the idle LRU.
+		// If it later becomes active, registration removes it from idle LRU.
+		try {
+			if (broadcaster.getServerSentEventConnections().isEmpty())
+				getIdleBroadcastersByResourcePath().put(resourcePath, broadcaster);
+			else
+				getIdleBroadcastersByResourcePath().remove(resourcePath, broadcaster);
+		} catch (Throwable ignored) {
+			// best-effort; never fail acquire due to cache bookkeeping
+		}
 
 		return Optional.of(broadcaster);
 	}
@@ -2039,8 +2080,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return this.resourceMethodsByResourcePathDeclaration;
 	}
 
+	// Package-private for test hook
 	@Nonnull
-	protected ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
+	ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
 		return this.broadcastersByResourcePath;
 	}
 
@@ -2092,6 +2134,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected ConcurrentLruMap<ServerSentEventConnection, DefaultServerSentEventBroadcaster> getGlobalConnections() {
 		return this.globalConnections;
+	}
+
+	@Nonnull
+	protected ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> getIdleBroadcastersByResourcePath() {
+		return this.idleBroadcastersByResourcePath;
 	}
 
 	@Nonnull
