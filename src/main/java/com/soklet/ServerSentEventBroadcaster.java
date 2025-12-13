@@ -35,7 +35,7 @@ import java.util.function.Function;
  * // Publish SSE payload to all listening clients
  * broadcaster.broadcastEvent(event);}</pre>
  * <p>
- * Soklet's default {@link ServerSentEventServer} implementation guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath}. That implementation is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
+ * Soklet's default {@link ServerSentEventServer} implementation guarantees at most one broadcaster is registered per {@link ResourcePath} at a time; instances may be recreated after becoming idle. That implementation is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
  * <p>
  * You may acquire a broadcaster via {@link ServerSentEventServer#acquireBroadcaster(ResourcePath)}.
  * <p>

@@ -759,9 +759,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (handshakeAccepted != null) {
 				getLifecycleInterceptor().get().willEstablishServerSentEventConnection(request, resourceMethod);
 
-				// If there is a client initializer, invoke it immediately prior to finalizing the SSE connection
-				Consumer<ServerSentEventUnicaster> clientInitializer = handshakeAccepted.getClientInitializer().orElse(null);
-
 				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, handshakeAccepted)
 						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
 
@@ -1315,10 +1312,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (getVerifyConnectionOnceEstablished())
 			serverSentEventConnection.getWriteQueue().offer(WriteQueueElement.withComment(""));
 
-		// IMPORTANT: atomically (per resourcePath) get-or-create broadcaster and register the connection,
-		// so cleanup cannot remove the broadcaster between acquire and register (split-brain prevention).
 		DefaultServerSentEventBroadcaster broadcaster =
 				registerConnectionWithBroadcaster(resourcePath, resourceMethod, serverSentEventConnection);
+
+		// Remove from idle LRU *outside* of any broadcastersByResourcePath compute() to avoid deadlocks.
+		try {
+			getIdleBroadcastersByResourcePath().remove(resourcePath, broadcaster);
+		} catch (Throwable ignored) {
+			// best-effort; never fail connection establishment due to cache bookkeeping
+		}
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
 	}
@@ -1383,6 +1385,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Failed to clean up empty broadcaster")
 					.throwable(e)
 					.build());
+		} finally {
+			// Best-effort: ensure idle cache doesn't keep a strong ref to a broadcaster that is (or is about to be) unmapped.
+			try {
+				getIdleBroadcastersByResourcePath().remove(broadcaster.getResourcePath(), broadcaster);
+			} catch (Throwable ignored) {
+				// ignore
+			}
 		}
 	}
 
@@ -1933,11 +1942,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			if (!registered)
 				throw new IllegalStateException(format("Unable to register Server-Sent Event connection for %s", resourcePath));
-
-			// This broadcaster is now active; don't allow idle eviction.
-			try {
-				getIdleBroadcastersByResourcePath().remove(resourcePath, broadcaster);
-			} catch (Throwable ignored) { /* best-effort */ }
 
 			// Track in global LRU limit. If this causes eviction, the eviction callback will unregister/poison the evicted connection.
 			getGlobalConnections().put(connection, broadcaster);
