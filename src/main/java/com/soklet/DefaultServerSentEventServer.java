@@ -56,17 +56,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -106,10 +100,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Boolean DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
 	@Nonnull
-	private static final Integer HEARTBEAT_BATCH_SIZE;
-	@Nonnull
-	private static final ServerSentEvent SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK;
-	@Nonnull
 	private static final ServerSentEvent SERVER_SENT_EVENT_POISON_PILL;
 	@Nonnull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
@@ -128,13 +118,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_BROADCASTER_CACHE_CAPACITY = 1_024;
 		DEFAULT_RESOURCE_PATH_CACHE_CAPACITY = 8_192;
 		DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED = true;
-		HEARTBEAT_BATCH_SIZE = 1_000;
-
-		// Make a unique "validity check" server-sent event used to wake a socket listener thread by injecting it into the relevant write queue.
-		// When this event is taken off of the queue, a validity check is performed on the socket to see if it's still active.
-		// If not, socket is torn down and the thread finishes running.
-		// The contents don't matter; the object reference is used to determine if it's a validity check.
-		SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK = ServerSentEvent.withEvent("validity-check").build();
 
 		// Make a unique "poison pill" server-sent event used to stop a socket listener thread by injecting it into the relevant write queue.
 		// When this event is taken off of the queue, the socket is torn down and the thread finishes running.
@@ -177,7 +160,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final Boolean verifyConnectionOnceEstablished;
 	@Nonnull
-	private final ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
+	private final ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
 	@Nonnull
 	private final ConcurrentLruMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
 	@Nonnull
@@ -194,14 +177,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final Integer connectionQueueCapacity;
 	@Nonnull
 	private final AtomicBoolean stopPoisonPill;
-	@Nonnull
-	private final AtomicInteger heartbeatBatch;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
 	private volatile ExecutorService requestReaderExecutorService;
-	@Nullable
-	private volatile ScheduledExecutorService connectionValidityExecutorService;
 	@Nonnull
 	private volatile Boolean started;
 	@Nonnull
@@ -280,7 +259,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			for (ServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
-				enqueueServerSentEvent(this, serverSentEventConnection, serverSentEvent, EnqueueStrategy.DEFAULT, getBackpressureHandler());
+				enqueueServerSentEvent(this, serverSentEventConnection, serverSentEvent, getBackpressureHandler());
 		}
 
 		@Override
@@ -310,8 +289,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					// Ask client code to generate payload (if not present in our local cache)
 					ServerSentEvent event = payloadCache.computeIfAbsent(key, eventProvider);
-
-					enqueueServerSentEvent(this, connection, event, EnqueueStrategy.DEFAULT, getBackpressureHandler());
+					enqueueServerSentEvent(this, connection, event, getBackpressureHandler());
 				} catch (Throwable t) {
 					this.getLogEventConsumer().accept(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
 									format("Failed to generate Server-Sent-Event for connection on %s with client context %s",
@@ -377,7 +355,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Send poison pill regardless of whether we were registered, if requested.
 			// This handles the edge case where eviction happens before registration completes.
 			if (sendPoisonPill)
-				enqueueServerSentEvent(this, serverSentEventConnection, SERVER_SENT_EVENT_POISON_PILL, EnqueueStrategy.DEFAULT, getBackpressureHandler());
+				enqueueServerSentEvent(this, serverSentEventConnection, SERVER_SENT_EVENT_POISON_PILL, getBackpressureHandler());
 
 			return unregistered;
 		}
@@ -428,7 +406,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.heartbeatInterval = builder.heartbeatInterval != null ? builder.heartbeatInterval : DEFAULT_HEARTBEAT_INTERVAL;
-		this.heartbeatBatch = new AtomicInteger(0);
 		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
 		if (this.maximumRequestSizeInBytes <= 0)
@@ -446,7 +423,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (this.heartbeatInterval.isNegative() || this.heartbeatInterval.isZero())
 			throw new IllegalArgumentException("Heartbeat interval must be > 0");
 
-		this.broadcastersByResourcePath = new ConcurrentLruMap<>(builder.broadcasterCacheCapacity != null ? builder.broadcasterCacheCapacity : DEFAULT_BROADCASTER_CACHE_CAPACITY, (resourcePath, broadcaster) -> { /* nothing to do for now */});
+		int broadcasterInitialCapacity = builder.broadcasterCacheCapacity != null
+				? builder.broadcasterCacheCapacity
+				: DEFAULT_BROADCASTER_CACHE_CAPACITY;
+
+		// Important: broadcaster registry must not evict live broadcasters, or active clients can become orphaned.
+		// We rely on maybeCleanupBroadcaster(...) to remove empty broadcasters safely.
+		this.broadcastersByResourcePath = new ConcurrentHashMap<>(broadcasterInitialCapacity);
+
 		this.resourcePathDeclarationsByResourcePathCache = new ConcurrentLruMap<>(builder.resourcePathCacheCapacity != null ? builder.resourcePathCacheCapacity : DEFAULT_RESOURCE_PATH_CACHE_CAPACITY, (resourcePath, broadcaster) -> { /* nothing to do for now */});
 
 		// Cowardly refuse to run on anything other than a runtime that supports Virtual threads.
@@ -551,78 +535,29 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.started = true; // set before thread starts to avoid early exit races
 			this.eventLoopThread = new Thread(this::startInternal, "sse-event-loop");
 			this.eventLoopThread.start();
-
-			this.connectionValidityExecutorService = Executors.newScheduledThreadPool(1, new ThreadFactory() {
-				@Override
-				@Nonnull
-				public Thread newThread(@Nonnull Runnable runnable) {
-					requireNonNull(runnable);
-
-					Thread thread = new Thread(runnable, "sse-connection-validator");
-					thread.setDaemon(true);
-					return thread;
-				}
-			});
-
-			if (this.connectionValidityExecutorService instanceof ScheduledThreadPoolExecutor scheduledThreadPoolExecutor) {
-				// Do not run existing delayed or periodic tasks after shutdown
-				scheduledThreadPoolExecutor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
-				scheduledThreadPoolExecutor.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
-				// Clean up canceled tasks quickly
-				scheduledThreadPoolExecutor.setRemoveOnCancelPolicy(true);
-			}
-
-			int initialDelayInSeconds = (int) Math.max(1, Math.min(5, getHeartbeatInterval().getSeconds()));
-			long periodInSeconds = Math.max(1, getHeartbeatInterval().getSeconds());
-
-			this.connectionValidityExecutorService.scheduleWithFixedDelay(() -> {
-				try {
-					performConnectionValidityTask();
-				} catch (Throwable throwable) {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Server-Sent Event connection validity checker encountered an error")
-							.throwable(throwable)
-							.build());
-				}
-			}, initialDelayInSeconds, periodInSeconds, TimeUnit.SECONDS);
 		} finally {
 			getLock().unlock();
 		}
-	}
-
-	private enum EnqueueStrategy {
-		DEFAULT,
-		ONLY_IF_CAPACITY_EXISTS
 	}
 
 	@Nonnull
 	private static Boolean enqueueServerSentEvent(@Nonnull DefaultServerSentEventBroadcaster owner,
 																								@Nonnull ServerSentEventConnection connection,
 																								@Nonnull ServerSentEvent serverSentEvent,
-																								@Nonnull EnqueueStrategy enqueueStrategy,
 																								@Nonnull BackpressureHandler handler) {
 		requireNonNull(owner);
 		requireNonNull(connection);
 		requireNonNull(serverSentEvent);
-		requireNonNull(enqueueStrategy);
 		requireNonNull(handler);
 
 		BlockingQueue<WriteQueueElement> writeQueue = connection.getWriteQueue();
 		WriteQueueElement e = WriteQueueElement.withServerSentEvent(serverSentEvent);
 
-		if (enqueueStrategy == EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS)
-			return writeQueue.offer(e);
-
 		if (writeQueue.offer(e))
 			return true;
 
 		// Queue full — delegate to handler: log + close + unregister.
-		String cause = "event";
-
-		if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL)
-			cause = "poison-pill";
-		else if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK)
-			cause = "validity-check";
-
+		String cause = (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) ? "poison-pill" : "event";
 		handler.onBackpressure(owner, connection, cause);
 
 		return false;
@@ -646,93 +581,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		handler.onBackpressure(owner, connection, "comment");
 		return false;
-	}
-
-	protected void performConnectionValidityTask() {
-		// Weakly-consistent snapshot of the current map; safe for concurrent maps.
-		// We iterate this snapshot without mutating the underlying map.
-		List<Entry<ResourcePath, DefaultServerSentEventBroadcaster>> snapshot = new ArrayList<>(getBroadcastersByResourcePath().entrySet());
-
-		if (snapshot.isEmpty())
-			return;
-
-		// Compute total connections across the snapshot
-		int totalConnections = 0;
-
-		for (Entry<ResourcePath, DefaultServerSentEventBroadcaster> e : snapshot)
-			totalConnections += e.getValue().getServerSentEventConnections().size();
-
-		if (totalConnections == 0)
-			return;
-
-		final long NOW_IN_NANOS = System.nanoTime();
-
-		// For large connection counts, only process a subset per heartbeat
-		// This spreads the CPU cost across multiple heartbeat intervals
-		boolean shouldBatch = totalConnections > HEARTBEAT_BATCH_SIZE * 2;
-		int batchSize = shouldBatch ? Math.max(HEARTBEAT_BATCH_SIZE, totalConnections / 10) : totalConnections;
-		int startIndex = shouldBatch ? getHeartbeatBatch().getAndAdd(batchSize) % totalConnections : 0;
-
-		int currentIndex = 0;
-		int processed = 0;
-
-		// Collect removals here; do NOT remove while iterating
-		List<Entry<ResourcePath, DefaultServerSentEventBroadcaster>> toRemove = new ArrayList<>();
-
-		outer:
-		for (Entry<ResourcePath, DefaultServerSentEventBroadcaster> entry : snapshot) {
-			DefaultServerSentEventBroadcaster broadcaster = entry.getValue();
-			Set<ServerSentEventConnection> connections = broadcaster.getServerSentEventConnections();
-
-			if (connections.isEmpty()) {
-				// Mark for removal; we'll remove after the loop using remove(key, value)
-				toRemove.add(entry);
-				continue;
-			}
-
-			for (ServerSentEventConnection connection : connections) {
-				// Skip connections not in this batch
-				if (shouldBatch && (currentIndex < startIndex || processed >= batchSize)) {
-					currentIndex++;
-					continue;
-				}
-
-				currentIndex++;
-				processed++;
-
-				AtomicLong lastCheck = connection.getLastValidityCheckInNanos();
-				long previousCheck = lastCheck.get();
-				long elapsed = NOW_IN_NANOS - previousCheck;
-
-				if (elapsed >= getHeartbeatInterval().toNanos()) {
-					// Use CAS to ensure only one thread enqueues the check
-					if (lastCheck.compareAndSet(previousCheck, NOW_IN_NANOS)) {
-						// If the queue is full, skip the heartbeat until the next go-round (no closure on heartbeat).
-						boolean enqueued = enqueueServerSentEvent(
-								broadcaster,
-								connection,
-								SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK,
-								EnqueueStrategy.ONLY_IF_CAPACITY_EXISTS,
-								broadcaster.getBackpressureHandler()
-						);
-
-						// If we couldn’t enqueue (queue full), roll back so we retry next cycle
-						if (!enqueued)
-							lastCheck.compareAndSet(NOW_IN_NANOS, previousCheck);
-					}
-				}
-
-				// Early exit if we've processed enough
-				if (shouldBatch && processed >= batchSize)
-					break outer;
-			}
-		}
-
-		// Now that iteration is done, remove any empty broadcasters we observed.
-		for (Entry<ResourcePath, DefaultServerSentEventBroadcaster> entry : toRemove) {
-			DefaultServerSentEventBroadcaster broadcaster = entry.getValue();
-			maybeCleanupBroadcaster(broadcaster);
-		}
 	}
 
 	protected void startInternal() {
@@ -895,21 +743,24 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
 
+				BlockingQueue<WriteQueueElement> writeQueue =
+						clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue();
+
 				while (true) {
-					// Wait for SSE broadcasts on socket.
 					WriteQueueElement writeQueueElement;
 
 					try {
-						// Block until an event arrives or thread is interrupted during shutdown
-						writeQueueElement = clientSocketChannelRegistration
-								.serverSentEventConnection()
-								.getWriteQueue()
-								.take();
+						// Wait for an event/comment; if idle for heartbeatInterval, emit a heartbeat comment.
+						writeQueueElement = writeQueue.poll(getHeartbeatInterval().toMillis(), TimeUnit.MILLISECONDS);
 					} catch (InterruptedException e) {
 						// Interrupted during shutdown - exit cleanly
 						Thread.currentThread().interrupt();
 						break;
 					}
+
+					// Idle heartbeat
+					if (writeQueueElement == null)
+						writeQueueElement = WriteQueueElement.withComment("");
 
 					ServerSentEvent serverSentEvent = writeQueueElement.getServerSentEvent().orElse(null);
 					String comment = writeQueueElement.getComment().orElse(null);
@@ -921,17 +772,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					String payload;
 
-					if (serverSentEvent == SERVER_SENT_EVENT_CONNECTION_VALIDITY_CHECK) {
-						// Perform socket validity check by writing a heartbeat
-						payload = formatCommentForResponse("");
-						// Guaranteeing a non-null comment here ensures that empty heartbeat comments are exposed to LifecycleInterceptor methods in case introspection is needed.
-						// Might revisit this later...
-						comment = "";
-					} else if (serverSentEvent != null) {
+					if (serverSentEvent != null) {
 						// It's a normal server-sent event
 						payload = formatServerSentEventForResponse(serverSentEvent);
 					} else if (comment != null) {
-						// It's a comment
+						// It's a comment (includes heartbeats)
 						payload = formatCommentForResponse(comment);
 					} else {
 						throw new IllegalStateException("Not sure what to do; no Server-Sent Event or comment available");
@@ -1295,8 +1140,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final Instant establishedAt;
 		@Nonnull
-		private final AtomicLong lastValidityCheckInNanos;
-		@Nonnull
 		private final SocketChannel socketChannel;
 		@Nonnull
 		private final AtomicBoolean closing;
@@ -1358,7 +1201,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.clientContext = clientContext;
 			this.writeQueue = new ArrayBlockingQueue<>(connectionQueueCapacity);
 			this.establishedAt = Instant.now();
-			this.lastValidityCheckInNanos = new AtomicLong(System.nanoTime());
 			this.socketChannel = socketChannel;
 			this.closing = new AtomicBoolean(false);
 		}
@@ -1386,11 +1228,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public Instant getEstablishedAt() {
 			return this.establishedAt;
-		}
-
-		@Nonnull
-		public AtomicLong getLastValidityCheckInNanos() {
-			return this.lastValidityCheckInNanos;
 		}
 
 		@Nonnull
@@ -1433,31 +1270,31 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (resourceMethod == null)
 			return Optional.empty();
 
-		// Create the connection and register it with the EventSource
-		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(request, resourceMethod, handshakeAccepted.getClientContext().orElse(null), getConnectionQueueCapacity(), clientSocketChannel);
+		// Create the connection (write queue owned per connection)
+		ServerSentEventConnection serverSentEventConnection = new ServerSentEventConnection(
+				request,
+				resourceMethod,
+				handshakeAccepted.getClientContext().orElse(null),
+				getConnectionQueueCapacity(),
+				clientSocketChannel
+		);
 
 		// If a client initializer exists, hand it the unicaster to support Last-Event-ID "catch up" scenarios
-		ServerSentEventUnicaster serverSentEventUnicaster = new DefaultServerSentEventUnicaster(resourcePath, serverSentEventConnection.getWriteQueue());
+		ServerSentEventUnicaster serverSentEventUnicaster =
+				new DefaultServerSentEventUnicaster(resourcePath, serverSentEventConnection.getWriteQueue());
 
-		handshakeAccepted.getClientInitializer().ifPresent((clientInitializer -> {
+		handshakeAccepted.getClientInitializer().ifPresent((clientInitializer) -> {
 			clientInitializer.accept(serverSentEventUnicaster);
-		}));
+		});
 
 		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection if configured to do so
 		if (getVerifyConnectionOnceEstablished())
 			serverSentEventConnection.getWriteQueue().offer(WriteQueueElement.withComment(""));
 
-		// Get a handle to the event source (it will be created if necessary)
-		DefaultServerSentEventBroadcaster broadcaster = acquireBroadcasterInternal(resourcePath, resourceMethod).get();
-
-		// Store the broadcaster reference so eviction callback knows which broadcaster owns it.
-		getGlobalConnections().put(serverSentEventConnection, broadcaster);
-
-		// Now register with the broadcaster. If this fails, clean up the global registration.
-		if (!broadcaster.registerServerSentEventConnection(serverSentEventConnection)) {
-			getGlobalConnections().remove(serverSentEventConnection);
-			return Optional.empty();
-		}
+		// IMPORTANT: atomically (per resourcePath) get-or-create broadcaster and register the connection,
+		// so cleanup cannot remove the broadcaster between acquire and register (split-brain prevention).
+		DefaultServerSentEventBroadcaster broadcaster =
+				registerConnectionWithBroadcaster(resourcePath, resourceMethod, serverSentEventConnection);
 
 		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
 	}
@@ -1481,13 +1318,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Override
 		public void unicastEvent(@Nonnull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
-			getWriteQueue().add(WriteQueueElement.withServerSentEvent(serverSentEvent));
+
+			if (!getWriteQueue().offer(WriteQueueElement.withServerSentEvent(serverSentEvent)))
+				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 
 		@Override
 		public void unicastComment(@Nonnull String comment) {
 			requireNonNull(comment);
-			getWriteQueue().add(WriteQueueElement.withComment(comment));
+			
+			if (!getWriteQueue().offer(WriteQueueElement.withComment(comment)))
+				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 
 		@Nonnull
@@ -1832,10 +1673,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Clear global connections map for sanity (though it should be empty by this point)
 			getGlobalConnections().clear();
 
-			// Initiate shutdowns quickly (no blocking here beyond close() above)
-			if (this.connectionValidityExecutorService != null)
-				this.connectionValidityExecutorService.shutdownNow();
-
 			// Use shutdownNow() immediately for request handlers.
 			// Poison pills handle normal cases; interrupt handles edge cases where
 			// a connection registered after we iterated above.
@@ -1888,7 +1725,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				this.eventLoopThread = null;
 				this.requestHandlerExecutorService = null;
 				this.requestReaderExecutorService = null;
-				this.connectionValidityExecutorService = null;
 				this.getBroadcastersByResourcePath().clear();
 				this.getResourcePathDeclarationsByResourcePathCache().clear();
 				getStopPoisonPill().set(false);
@@ -2036,20 +1872,58 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
+	private DefaultServerSentEventBroadcaster newBroadcaster(@Nonnull ResourceMethod resourceMethod,
+																													 @Nonnull ResourcePath resourcePath) {
+		requireNonNull(resourceMethod);
+		requireNonNull(resourcePath);
+
+		BackpressureHandler handler = (owner, connection, cause) ->
+				closeConnectionDueToBackpressure(owner, connection, cause);
+
+		return new DefaultServerSentEventBroadcaster(
+				resourceMethod,
+				resourcePath,
+				handler,
+				(serverSentEventConnection) -> {
+					// When the broadcaster unregisters a connection it manages, remove it from the global set as well
+					getGlobalConnections().remove(serverSentEventConnection);
+				},
+				this::safelyLog
+		);
+	}
+
+	@Nonnull
+	private DefaultServerSentEventBroadcaster registerConnectionWithBroadcaster(@Nonnull ResourcePath resourcePath,
+																																							@Nonnull ResourceMethod resourceMethod,
+																																							@Nonnull ServerSentEventConnection connection) {
+		requireNonNull(resourcePath);
+		requireNonNull(resourceMethod);
+		requireNonNull(connection);
+
+		return getBroadcastersByResourcePath().compute(resourcePath, (rp, existing) -> {
+			DefaultServerSentEventBroadcaster broadcaster =
+					(existing != null) ? existing : newBroadcaster(resourceMethod, rp);
+
+			boolean registered = broadcaster.registerServerSentEventConnection(connection);
+
+			if (!registered)
+				throw new IllegalStateException(format("Unable to register Server-Sent Event connection for %s", resourcePath));
+
+			// Track in global LRU limit. If this causes eviction, the eviction callback will unregister/poison the evicted connection.
+			getGlobalConnections().put(connection, broadcaster);
+
+			return broadcaster;
+		});
+	}
+
+	@Nonnull
 	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@Nonnull ResourcePath resourcePath,
 																																									 @Nonnull ResourceMethod resourceMethod) {
 		requireNonNull(resourcePath);
 		requireNonNull(resourceMethod);
 
-		// Create the broadcaster if it does not already exist
 		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
-				.computeIfAbsent(resourcePath, (ignored) -> {
-					BackpressureHandler handler = (owner, connection, cause) -> closeConnectionDueToBackpressure(owner, connection, cause);
-					return new DefaultServerSentEventBroadcaster(resourceMethod, resourcePath, handler, (serverSentEventConnection -> {
-						// When the broadcaster unregisters a connection it manages, remove it from the global set of connections as well
-						getGlobalConnections().remove(serverSentEventConnection);
-					}), this::safelyLog);
-				});
+				.computeIfAbsent(resourcePath, (rp) -> newBroadcaster(resourceMethod, rp));
 
 		return Optional.of(broadcaster);
 	}
@@ -2151,11 +2025,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected AtomicInteger getHeartbeatBatch() {
-		return this.heartbeatBatch;
-	}
-
-	@Nonnull
 	protected Integer getMaximumRequestSizeInBytes() {
 		return this.maximumRequestSizeInBytes;
 	}
@@ -2171,7 +2040,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
+	protected ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
 		return this.broadcastersByResourcePath;
 	}
 
@@ -2223,11 +2092,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected ConcurrentLruMap<ServerSentEventConnection, DefaultServerSentEventBroadcaster> getGlobalConnections() {
 		return this.globalConnections;
-	}
-
-	@Nullable
-	protected ScheduledExecutorService getConnectionValidityExecutorService() {
-		return this.connectionValidityExecutorService;
 	}
 
 	@Nonnull
