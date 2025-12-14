@@ -508,12 +508,41 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Initialize the global LRU map with the specified limit
 		this.globalConnections = new ConcurrentLruMap<>(getConcurrentConnectionLimit(), (evictedConnection, broadcaster) -> {
 			try {
-				// This callback is triggered when a connection is evicted from the global LRU map.
-				// Unregister the evicted connection from the broadcaster and send poison pill to close it.
+				// Make eviction close idempotent & consistent with backpressure
+				if (!evictedConnection.getClosing().compareAndSet(false, true))
+					return; // someone else is already closing it
+
+				// Unregister, get the queue and clear it to ensure poison-pill enqueue succeeds, then close the connection
+				try {
+					broadcaster.unregisterServerSentEventConnection(evictedConnection, false); // unregister only
+				} finally {
+					try {
+						BlockingQueue<WriteQueueElement> q = evictedConnection.getWriteQueue();
+						q.clear();
+						q.offer(WriteQueueElement.withServerSentEvent(SERVER_SENT_EVENT_POISON_PILL));
+					} catch (Throwable ignored) {
+						// Nothing to do
+					}
+
+					try {
+						// Hard-close the socket to break any pending I/O
+						evictedConnection.getSocketChannel().close();
+					} catch (Throwable ignored) {
+						// Nothing to do
+					}
+				}
+
+				// Unregister + poison-pill
 				broadcaster.unregisterServerSentEventConnection(evictedConnection, true);
+
+				// Hard-close the socket to break any pending I/O
+				try {
+					evictedConnection.getSocketChannel().close();
+				} catch (Throwable ignored) {
+					// best effort
+				}
 			} catch (Throwable t) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
-								"Failed while evicting SSE connection from global LRU")
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Failed while evicting SSE connection from global LRU")
 						.throwable(t)
 						.build());
 			}
@@ -1083,7 +1112,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				return outputStream.toByteArray();
 			} else {
-				throw new IllegalStateException(String.format("Unsupported %s: %s", HandshakeResult.class.getSimpleName(), handshakeResult));
+				throw new IllegalStateException(format("Unsupported %s: %s", HandshakeResult.class.getSimpleName(), handshakeResult));
 			}
 		}
 	}
@@ -1728,6 +1757,22 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			}
 
+			// Ensure nothing slipped through the cracks
+			List<ServerSentEventConnection> connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
+
+			for (ServerSentEventConnection connection : connectionsSnapshot) {
+				try {
+					connection.getClosing().compareAndSet(false, true);
+
+					DefaultServerSentEventBroadcaster b = getGlobalConnections().get(connection);
+					if (b != null) b.unregisterServerSentEventConnection(connection, true);
+
+					connection.getSocketChannel().close();
+				} catch (Throwable ignored) {
+					// Nothing to do
+				}
+			}
+
 			// Clear global connections map for sanity (though it should be empty by this point)
 			getGlobalConnections().clear();
 
@@ -1952,9 +1997,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	private DefaultServerSentEventBroadcaster registerConnectionWithBroadcaster(@Nonnull ResourcePath resourcePath,
-																																							@Nonnull ResourceMethod resourceMethod,
-																																							@Nonnull ServerSentEventConnection connection) {
+	private DefaultServerSentEventBroadcaster registerConnectionWithBroadcaster(
+			@Nonnull ResourcePath resourcePath,
+			@Nonnull ResourceMethod resourceMethod,
+			@Nonnull ServerSentEventConnection connection) {
 		requireNonNull(resourcePath);
 		requireNonNull(resourceMethod);
 		requireNonNull(connection);
@@ -1963,13 +2009,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			DefaultServerSentEventBroadcaster broadcaster =
 					(existing != null) ? existing : newBroadcaster(resourceMethod, rp);
 
+			// 1) Claim global slot FIRST (prevents "unregister before put" ghost entries)
+			getGlobalConnections().put(connection, broadcaster);
+
+			// 2) Only then make it visible to broadcasts
 			boolean registered = broadcaster.registerServerSentEventConnection(connection);
 
-			if (!registered)
+			if (!registered) {
+				// rollback global bookkeeping
+				getGlobalConnections().remove(connection, broadcaster); // conditional remove is safer
 				throw new IllegalStateException(format("Unable to register Server-Sent Event connection for %s", resourcePath));
-
-			// Track in global LRU limit. If this causes eviction, the eviction callback will unregister/poison the evicted connection.
-			getGlobalConnections().put(connection, broadcaster);
+			}
 
 			return broadcaster;
 		});
