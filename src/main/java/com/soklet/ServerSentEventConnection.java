@@ -21,7 +21,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * A long-running connection that has been established with a {@link ServerSentEventServer}.
+ * Represents characteristics of a long-running connection that has been established with a {@link ServerSentEventServer}.
  * <p>
  * Instances are exposed via {@link LifecycleInterceptor}, which enables you to monitor events that occur on the connection over time (established, SSE payload written, terminated, etc.)
  * <p>

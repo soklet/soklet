@@ -807,7 +807,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
 
 				try {
-					getLifecycleInterceptor().get().didEstablishServerSentEventConnection(request, resourceMethod);
+					getLifecycleInterceptor().get().didEstablishServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot());
 				} catch (Throwable t) {
 					safelyLog(LogEvent.with(
 									LogEventType.LIFECYCLE_INTERCEPTOR_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
@@ -860,7 +860,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					if (comment != null) {
 						try {
-							getLifecycleInterceptor().get().willWriteServerSentEventComment(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), comment);
+							getLifecycleInterceptor().get().willWriteServerSentEventComment(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), comment);
 						} catch (Throwable t) {
 							safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEventComment", LifecycleInterceptor.class.getSimpleName()))
 									.throwable(t)
@@ -870,7 +870,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					if (serverSentEvent != null) {
 						try {
-							getLifecycleInterceptor().get().willWriteServerSentEvent(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent);
+							getLifecycleInterceptor().get().willWriteServerSentEvent(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), serverSentEvent);
 						} catch (Throwable t) {
 							safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_WILL_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEvent", LifecycleInterceptor.class.getSimpleName()))
 									.throwable(t)
@@ -894,7 +894,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						if (serverSentEvent != null) {
 							if (writeThrowable != null) {
 								try {
-									getLifecycleInterceptor().get().didFailToWriteServerSentEvent(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration, writeThrowable);
+									getLifecycleInterceptor().get().didFailToWriteServerSentEvent(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), serverSentEvent, writeDuration, writeThrowable);
 								} catch (Throwable t) {
 									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteServerSentEvent", LifecycleInterceptor.class.getSimpleName()))
 											.throwable(t)
@@ -902,7 +902,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 								}
 							} else {
 								try {
-									getLifecycleInterceptor().get().didWriteServerSentEvent(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), serverSentEvent, writeDuration);
+									getLifecycleInterceptor().get().didWriteServerSentEvent(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), serverSentEvent, writeDuration);
 								} catch (Throwable t) {
 									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEvent", LifecycleInterceptor.class.getSimpleName()))
 											.throwable(t)
@@ -912,7 +912,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						} else if (comment != null) {
 							if (writeThrowable != null) {
 								try {
-									getLifecycleInterceptor().get().didFailToWriteServerSentEventComment(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), comment, writeDuration, writeThrowable);
+									getLifecycleInterceptor().get().didFailToWriteServerSentEventComment(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), comment, writeDuration, writeThrowable);
 								} catch (Throwable t) {
 									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteServerSentEventComment", LifecycleInterceptor.class.getSimpleName()))
 											.throwable(t)
@@ -920,7 +920,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 								}
 							} else {
 								try {
-									getLifecycleInterceptor().get().didWriteServerSentEventComment(request, clientSocketChannelRegistration.serverSentEventConnection().getResourceMethod(), comment, writeDuration);
+									getLifecycleInterceptor().get().didWriteServerSentEventComment(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), comment, writeDuration);
 								} catch (Throwable t) {
 									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEventComment", LifecycleInterceptor.class.getSimpleName()))
 											.throwable(t)
@@ -956,8 +956,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				try {
 					clientSocketChannel.close();
 				} catch (Exception exception) {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
-									"Unable to close Server-Sent Event connection socket channel")
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event connection socket channel")
 							.throwable(exception)
 							.build());
 				}
@@ -965,14 +964,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// ...then unregister from broadcaster (prevents race with broadcasts)
 			if (clientSocketChannelRegistration != null) {
-				// We know resourceMethod is non-null if clientSocketChannelRegistration is non-null,
-				// because registration requires a valid resourceMethod. But let's be defensive.
-				ResourceMethod registeredResourceMethod = clientSocketChannelRegistration
-						.serverSentEventConnection()
-						.getResourceMethod();
-
 				try {
-					getLifecycleInterceptor().get().willTerminateServerSentEventConnection(request, registeredResourceMethod, throwable);
+					getLifecycleInterceptor().get().willTerminateServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), throwable);
 				} catch (Throwable t) {
 					safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::willTerminateServerSentEventConnection", LifecycleInterceptor.class.getSimpleName()))
 							.throwable(t)
@@ -981,9 +974,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				try {
 					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
-				} catch (Exception exception) {
+				} catch (Throwable t) {
 					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
-							.throwable(exception)
+							.throwable(t)
 							.build());
 				}
 
@@ -996,7 +989,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						connectionFinished);
 
 				try {
-					getLifecycleInterceptor().get().didTerminateServerSentEventConnection(request, registeredResourceMethod, connectionDuration, throwable);
+					getLifecycleInterceptor().get().didTerminateServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), connectionDuration, throwable);
 				} catch (Throwable t) {
 					safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::didTerminateServerSentEventConnection", LifecycleInterceptor.class.getSimpleName()))
 							.throwable(t)

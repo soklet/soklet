@@ -450,11 +450,9 @@ public interface LifecycleInterceptor {
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED}.
 	 *
-	 * @param request        the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
+	 * @param serverSentEventConnection the long-lived Server-Sent Event connection that was established
 	 */
-	default void didEstablishServerSentEventConnection(@Nonnull Request request,
-																										 @Nonnull ResourceMethod resourceMethod) {
+	default void didEstablishServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection) {
 		// No-op by default
 	}
 
@@ -466,7 +464,7 @@ public interface LifecycleInterceptor {
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED}.
 	 *
 	 * @param request        the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
+	 * @param resourceMethod the <em>Event Source Method</em> that handled the "handshake"
 	 * @param throwable      the exception thrown
 	 */
 	default void didFailToEstablishServerSentEventConnection(@Nonnull Request request,
@@ -480,12 +478,10 @@ public interface LifecycleInterceptor {
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED}.
 	 *
-	 * @param request        the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
-	 * @param throwable      the exception thrown which caused the connection to terminate (if any)
+	 * @param serverSentEventConnection the connection that will be terminated
+	 * @param throwable                 the exception thrown which caused the connection to terminate (if any)
 	 */
-	default void willTerminateServerSentEventConnection(@Nonnull Request request,
-																											@Nonnull ResourceMethod resourceMethod,
+	default void willTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																											@Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -495,13 +491,11 @@ public interface LifecycleInterceptor {
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED}.
 	 *
-	 * @param request            the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod     the <em>Resource Method</em> that handled the "handshake"
-	 * @param connectionDuration how long the connection was open for
-	 * @param throwable          the exception thrown which caused the connection to terminate (if any)
+	 * @param serverSentEventConnection the connection that was terminated
+	 * @param connectionDuration        how long the connection was open for
+	 * @param throwable                 the exception thrown which caused the connection to terminate (if any)
 	 */
-	default void didTerminateServerSentEventConnection(@Nonnull Request request,
-																										 @Nonnull ResourceMethod resourceMethod,
+	default void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																										 @Nonnull Duration connectionDuration,
 																										 @Nullable Throwable throwable) {
 		// No-op by default
@@ -512,12 +506,10 @@ public interface LifecycleInterceptor {
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_WRITE_SERVER_SENT_EVENT_FAILED}.
 	 *
-	 * @param request         the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
-	 * @param serverSentEvent the Server-Sent Event to send to the client
+	 * @param serverSentEventConnection the connection that will have a Server-Sent Event payload written to it
+	 * @param serverSentEvent           the Server-Sent Event to send to the client
 	 */
-	default void willWriteServerSentEvent(@Nonnull Request request,
-																				@Nonnull ResourceMethod resourceMethod,
+	default void willWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																				@Nonnull ServerSentEvent serverSentEvent) {
 		// No-op by default
 	}
@@ -527,13 +519,11 @@ public interface LifecycleInterceptor {
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_FAILED}.
 	 *
-	 * @param request         the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
-	 * @param serverSentEvent the Server-Sent Event that was sent to the client
-	 * @param writeDuration   how long it took to send the Server-Sent Event to the client
+	 * @param serverSentEventConnection the connection that had a Server-Sent Event payload written to it
+	 * @param serverSentEvent           the Server-Sent Event that was sent to the client
+	 * @param writeDuration             how long it took to send the Server-Sent Event to the client
 	 */
-	default void didWriteServerSentEvent(@Nonnull Request request,
-																			 @Nonnull ResourceMethod resourceMethod,
+	default void didWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																			 @Nonnull ServerSentEvent serverSentEvent,
 																			 @Nonnull Duration writeDuration) {
 		// No-op by default
@@ -544,17 +534,15 @@ public interface LifecycleInterceptor {
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_FAILED}.
 	 *
-	 * @param request         the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod  the <em>Resource Method</em> that handled the "handshake"
-	 * @param serverSentEvent the Server-Sent Event that was sent to the client
-	 * @param writeDuration   how long it took to attempt to send the Server-Sent Event to the client
-	 * @param throwable       the exception thrown during Server-Sent Event writing (if any)
+	 * @param serverSentEventConnection the connection that failed to have a Server-Sent Event payload written to it
+	 * @param serverSentEvent           the Server-Sent Event that was sent to the client
+	 * @param writeDuration             how long it took to attempt to send the Server-Sent Event to the client
+	 * @param throwable                 the exception thrown during Server-Sent Event writing
 	 */
-	default void didFailToWriteServerSentEvent(@Nonnull Request request,
-																						 @Nonnull ResourceMethod resourceMethod,
+	default void didFailToWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																						 @Nonnull ServerSentEvent serverSentEvent,
 																						 @Nonnull Duration writeDuration,
-																						 @Nullable Throwable throwable) {
+																						 @Nonnull Throwable throwable) {
 		// No-op by default
 	}
 
@@ -563,12 +551,10 @@ public interface LifecycleInterceptor {
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED}.
 	 *
-	 * @param request        the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
-	 * @param comment        the comment to send to the client
+	 * @param serverSentEventConnection the connection that will have a Server-Sent Event comment payload written to it
+	 * @param comment                   the comment to send to the client
 	 */
-	default void willWriteServerSentEventComment(@Nonnull Request request,
-																							 @Nonnull ResourceMethod resourceMethod,
+	default void willWriteServerSentEventComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																							 @Nonnull String comment) {
 		// No-op by default
 	}
@@ -578,13 +564,11 @@ public interface LifecycleInterceptor {
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED}.
 	 *
-	 * @param request        the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
-	 * @param comment        the comment that was sent to the client
-	 * @param writeDuration  how long it took to send the comment to the client
+	 * @param serverSentEventConnection the connection that had a Server-Sent Event comment payload written to it
+	 * @param comment                   the comment that was sent to the client
+	 * @param writeDuration             how long it took to send the comment to the client
 	 */
-	default void didWriteServerSentEventComment(@Nonnull Request request,
-																							@Nonnull ResourceMethod resourceMethod,
+	default void didWriteServerSentEventComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																							@Nonnull String comment,
 																							@Nonnull Duration writeDuration) {
 		// No-op by default
@@ -595,17 +579,15 @@ public interface LifecycleInterceptor {
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED}.
 	 *
-	 * @param request        the initial "handshake" Server-Sent Event request that was received
-	 * @param resourceMethod the <em>Resource Method</em> that handled the "handshake"
-	 * @param comment        the comment that was sent to the client
-	 * @param writeDuration  how long it took to attempt to send the comment to the client
-	 * @param throwable      the exception thrown during writing (if any)
+	 * @param serverSentEventConnection the connection that failed to have a Server-Sent Event payload written to it
+	 * @param comment                   the comment that was sent to the client
+	 * @param writeDuration             how long it took to attempt to send the comment to the client
+	 * @param throwable                 the exception thrown during writing
 	 */
-	default void didFailToWriteServerSentEventComment(@Nonnull Request request,
-																										@Nonnull ResourceMethod resourceMethod,
+	default void didFailToWriteServerSentEventComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																										@Nonnull String comment,
 																										@Nonnull Duration writeDuration,
-																										@Nullable Throwable throwable) {
+																										@Nonnull Throwable throwable) {
 		// No-op by default
 	}
 
