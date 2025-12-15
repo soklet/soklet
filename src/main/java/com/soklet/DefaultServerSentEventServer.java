@@ -531,9 +531,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					}
 				}
 
-				// Unregister + poison-pill
-				broadcaster.unregisterServerSentEventConnection(evictedConnection, true);
-
 				// Hard-close the socket to break any pending I/O
 				try {
 					evictedConnection.getSocketChannel().close();
