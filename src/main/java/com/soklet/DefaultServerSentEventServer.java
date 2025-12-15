@@ -1201,8 +1201,47 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return format("%s\n\n", lines.stream().collect(Collectors.joining("\n")));
 	}
 
+	// Internal snapshot - the only implementation users ever see
+	private record ServerSentEventConnectionSnapshot(
+			@Nonnull Request request,
+			@Nonnull ResourceMethod resourceMethod,
+			@Nonnull Instant establishedAt,
+			@Nullable Object clientContext
+	) implements ServerSentEventConnection {
+		public ServerSentEventConnectionSnapshot {
+			requireNonNull(request);
+			requireNonNull(resourceMethod);
+			requireNonNull(establishedAt);
+		}
+
+		@Override
+		@Nonnull
+		public Request getRequest() {
+			return this.request;
+		}
+
+		@Override
+		@Nonnull
+		public ResourceMethod getResourceMethod() {
+			return this.resourceMethod;
+		}
+
+		@Override
+		@Nonnull
+		public Instant getEstablishedAt() {
+			return this.establishedAt;
+		}
+
+		@Nonnull
+		@Override
+		public Optional<Object> getClientContext() {
+			return Optional.ofNullable(clientContext);
+		}
+	}
+
+	// We deliberately don't explicitly implement the ServerSentEventConnection interface - we never want a direct ref to this to leak out to clients.
 	@ThreadSafe
-	private static final class DefaultServerSentEventConnection implements ServerSentEventConnection {
+	private static final class DefaultServerSentEventConnection /* implements ServerSentEventConnection */ {
 		@Nonnull
 		private final Request request;
 		@Nonnull
@@ -1217,6 +1256,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final SocketChannel socketChannel;
 		@Nonnull
 		private final AtomicBoolean closing;
+		@Nonnull
+		private final ServerSentEventConnectionSnapshot snapshot;
 
 		@ThreadSafe
 		static final class WriteQueueElement {
@@ -1277,28 +1318,28 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.establishedAt = Instant.now();
 			this.socketChannel = socketChannel;
 			this.closing = new AtomicBoolean(false);
+
+			// Cache off an immutable data-only snapshot.
+			// This can be safely exposed to client code without worrying about holding onto internal state (e.g. write queue)
+			this.snapshot = new ServerSentEventConnectionSnapshot(request, resourceMethod, establishedAt, clientContext);
 		}
 
 		@Nonnull
-		@Override
 		public Request getRequest() {
 			return this.request;
 		}
 
 		@Nonnull
-		@Override
 		public ResourceMethod getResourceMethod() {
 			return this.resourceMethod;
 		}
 
 		@Nonnull
-		@Override
 		public Optional<Object> getClientContext() {
 			return Optional.ofNullable(this.clientContext);
 		}
 
 		@Nonnull
-		@Override
 		public Instant getEstablishedAt() {
 			return this.establishedAt;
 		}
@@ -1316,6 +1357,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public AtomicBoolean getClosing() {
 			return this.closing;
+		}
+
+		@Nonnull
+		public ServerSentEventConnectionSnapshot getSnapshot() {
+			return this.snapshot;
 		}
 	}
 
