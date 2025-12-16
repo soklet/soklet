@@ -371,33 +371,49 @@ public final class Utilities {
 	 * One pass only: invalid %xy sequences are left as literal '%' + chars.
 	 */
 	@Nonnull
-	private static String percentDecode(@Nonnull String string,
-																			@Nonnull Charset charset) {
-		requireNonNull(string);
+	private static String percentDecode(@Nonnull String s, @Nonnull Charset charset) {
+		requireNonNull(s);
 		requireNonNull(charset);
 
-		if (string.isEmpty())
+		if (s.isEmpty())
 			return "";
 
-		ByteArrayOutputStream out = new ByteArrayOutputStream(string.length());
-		for (int i = 0; i < string.length(); i++) {
-			char c = string.charAt(i);
-			if (c == '%' && i + 2 < string.length()) {
-				int hi = hex(string.charAt(i + 1));
-				int lo = hex(string.charAt(i + 2));
-				if (hi >= 0 && lo >= 0) {
-					out.write((hi << 4) | lo);
-					i += 2;
+		StringBuilder sb = new StringBuilder(s.length());
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+
+		for (int i = 0; i < s.length(); ) {
+			char c = s.charAt(i);
+
+			if (c == '%' && i + 2 < s.length()) {
+				// Consume one or more consecutive %xx triplets into bytes
+				bytes.reset();
+				int j = i;
+
+				while (j + 2 < s.length() && s.charAt(j) == '%') {
+					int hi = hex(s.charAt(j + 1));
+					int lo = hex(s.charAt(j + 2));
+					if (hi < 0 || lo < 0)
+						break;
+					bytes.write((hi << 4) | lo);
+					j += 3;
+				}
+
+				// If we decoded at least one triplet, append decoded chars and advance
+				if (bytes.size() > 0) {
+					sb.append(new String(bytes.toByteArray(), charset));
+					i = j;
 					continue;
 				}
-				// fall through: invalid percent triplet, treat '%' literally
+				// else: invalid % sequence, fall through and treat '%' literally
 			}
-			// Write this character's bytes in the given charset (ASCII-fast path is fine too)
-			byte[] bs = String.valueOf(c).getBytes(charset);
-			out.write(bs, 0, bs.length);
+
+			// Non-'%' char (or invalid '%' sequence): append it as-is.
+			// This preserves surrogate pairs naturally as the loop hits both chars.
+			sb.append(c);
+			i++;
 		}
 
-		return new String(out.toByteArray(), charset);
+		return sb.toString();
 	}
 
 	private static int hex(char c) {

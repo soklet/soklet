@@ -962,4 +962,10 @@ public class AdvancedTests {
 			}
 		}
 	}
+
+	@Test
+	public void urlUnicodeTests() {
+		Request request = Request.withRawUrl(HttpMethod.GET, "/👁️👄👁️").build();
+		Assertions.assertEquals("/👁️👄👁️", request.getPath());
+	}
 }
