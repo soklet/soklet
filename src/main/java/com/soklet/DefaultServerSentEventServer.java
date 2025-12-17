@@ -200,6 +200,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nullable
 	private LifecycleInterceptor lifecycleInterceptor;
 	@Nullable
+	private ResponseMarshaler responseMarshaler;
+	@Nullable
 	private IdGenerator<?> idGenerator;
 
 	@ThreadSafe
@@ -554,6 +556,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(requestHandler);
 
 		this.lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
+		this.responseMarshaler = sokletConfig.getResponseMarshaler();
 		this.requestHandler = requestHandler;
 
 		// Pick out all the @ServerSentEventSource resource methods and store off keyed on resource path for ease of lookup.
@@ -730,7 +733,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "request timed out"
 				throw e;
 			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_HANDSHAKE_REQUEST_UNPARSEABLE, "Unable to parse Server-Sent Event request")
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
 						.throwable(e)
 						.build());
 				throw e;
@@ -741,6 +744,29 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			if (resourcePathDeclaration != null)
 				resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
+
+			// Check to see if we're overloaded (503) - if so, write a response and bail before going further
+			if (resourcePathDeclaration != null && getGlobalConnections().size() >= getConcurrentConnectionLimit()) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
+						format("Rejecting request to %s: Concurrent connection limit (%d) reached", request.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
+
+				MarshaledResponse response = getResponseMarshaler().get().forServiceUnavailable(request, resourceMethod);
+
+				try {
+					writeMarshaledResponseToChannel(clientSocketChannel, response);
+				} catch (Throwable t) {
+					// best effort
+				} finally {
+					try {
+						clientSocketChannel.close();
+					} catch (IOException ignored) {
+						// Nothing to do
+					}
+				}
+
+				// Bail early
+				return;
+			}
 
 			// We're now ready to write the handshake response - and then we keep the socket open for subsequent writes if handshake was accepted (otherwise we write the body and close).
 			// To write the handshake response, we delegate to the Soklet instance, handing it the request we just parsed
@@ -999,7 +1025,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected byte[] createHandshakeHttpResponse(@Nonnull RequestResult requestResult) throws IOException {
+	private byte[] createHandshakeHttpResponse(@Nonnull RequestResult requestResult) throws IOException {
 		requireNonNull(requestResult);
 
 		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
@@ -1127,6 +1153,38 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		System.arraycopy(headerBytes, 0, combined, 0, headerBytes.length);
 		System.arraycopy(bodyBytes, 0, combined, headerBytes.length, bodyBytes.length);
 		return combined;
+	}
+
+	// Helper to write the marshaled response directly to the channel
+	private void writeMarshaledResponseToChannel(@Nonnull SocketChannel socketChannel,
+																							 @Nonnull MarshaledResponse marshaledResponse) throws IOException {
+		requireNonNull(socketChannel);
+		requireNonNull(marshaledResponse);
+
+		// Write Status Line
+		String statusLine = format("HTTP/1.1 %d\r\n", marshaledResponse.getStatusCode());
+		socketChannel.write(ByteBuffer.wrap(statusLine.getBytes(StandardCharsets.UTF_8)));
+
+		// Write Headers
+		for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
+			for (String value : entry.getValue()) {
+				String header = entry.getKey() + ": " + value + "\r\n";
+				socketChannel.write(ByteBuffer.wrap(header.getBytes(StandardCharsets.UTF_8)));
+			}
+		}
+
+		// Write Cookies
+		for (ResponseCookie cookie : marshaledResponse.getCookies()) {
+			String header = "Set-Cookie: " + cookie.toSetCookieHeaderRepresentation() + "\r\n";
+			socketChannel.write(ByteBuffer.wrap(header.getBytes(StandardCharsets.UTF_8)));
+		}
+
+		// Headers end
+		socketChannel.write(ByteBuffer.wrap(new byte[]{'\r', '\n'}));
+
+		// Write Body
+		if (marshaledResponse.getBody().isPresent())
+			socketChannel.write(ByteBuffer.wrap(marshaledResponse.getBody().get()));
 	}
 
 	@Nonnull
@@ -2333,6 +2391,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Optional<LifecycleInterceptor> getLifecycleInterceptor() {
 		return Optional.ofNullable(this.lifecycleInterceptor);
+	}
+
+	@Nonnull
+	protected Optional<ResponseMarshaler> getResponseMarshaler() {
+		return Optional.ofNullable(this.responseMarshaler);
 	}
 
 	@Nullable

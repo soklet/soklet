@@ -108,9 +108,9 @@ public enum LogEventType {
 	 */
 	SERVER_INTERNAL_ERROR,
 	/**
-	 * Indicates that the {@link ServerSentEventServer} received a handshake request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
+	 * Indicates that the {@link ServerSentEventServer} received a request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
 	 */
-	SERVER_SENT_EVENT_SERVER_HANDSHAKE_REQUEST_UNPARSEABLE,
+	SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST,
 	/**
 	 * Indicates that the {@link ServerSentEventServer} was unable to successfully write a handshake response.
 	 */
@@ -119,6 +119,10 @@ public enum LogEventType {
 	 * Indicates that the {@link ServerSentEventServer} encountered an error when executing application-provided code while performing a memoized broadcast via {@link ServerSentEventBroadcaster#broadcastEvent(Function, Function)} or {@link ServerSentEventBroadcaster#broadcastComment(Function, Function)}.
 	 */
 	SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
+	/**
+	 * Indicates that the {@link ServerSentEventServer} rejected a connection, e.g. due to capacity limits.
+	 */
+	SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
 	/**
 	 * Indicates an internal {@link ServerSentEventServer} error occurred.
 	 */
