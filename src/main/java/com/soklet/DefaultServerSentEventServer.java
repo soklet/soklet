@@ -34,9 +34,12 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -1593,6 +1596,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			readFuture = requestReaderExecutorService.submit(() -> {
 				ByteBuffer buffer = ByteBuffer.allocate(getRequestReadBufferSizeInBytes());
+
+				// Use a stateful decoder to handle multi-byte characters (e.g. UTF-8) that span buffer boundaries.
+				// This prevents replacement characters from corrupting the stream when a read splits a character.
+				CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+						.onMalformedInput(CodingErrorAction.REPLACE)
+						.onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPLACE);
+
+				CharBuffer charBuffer = CharBuffer.allocate(getRequestReadBufferSizeInBytes());
+
 				StringBuilder requestBuilder = new StringBuilder();
 				boolean headersComplete = false;
 				int totalBytesRead = 0;
@@ -1600,48 +1612,53 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				while (!headersComplete) {
 					int bytesRead = clientSocketChannel.read(buffer);
 
-					// If the thread was interrupted while blocked in read(...),
-					// the read call should throw InterruptedIOException or similar.
+					// Standard interruption/EOF checks
 					if (Thread.interrupted())
 						throw new InterruptedIOException("Thread interrupted while reading request data");
-
-					// End of stream (connection closed by client)
 					if (bytesRead == -1)
 						throw new IOException("Client closed the connection before request was complete");
 
-					// Flip the buffer to read mode
+					// Track total bytes read from the wire
+					totalBytesRead += bytesRead;
+
+					// Flip the buffer to "read mode" so the decoder can consume bytes
 					buffer.flip();
 
-					// Decode the buffer content to a string and append to the request
-					byte[] bytes = new byte[buffer.remaining()];
-					buffer.get(bytes);
+					// Decode bytes into chars. 'false' indicates we are not yet at the end of the input stream.
+					// If the buffer ends with a partial multi-byte sequence, the decoder stops before it
+					// and leaves those bytes in 'buffer' to be handled in the next iteration.
+					decoder.decode(buffer, charBuffer, false);
 
-					totalBytesRead += bytes.length;
+					// Flip charBuffer to read the decoded characters out and append to builder
+					charBuffer.flip();
+					requestBuilder.append(charBuffer);
+
+					// Reset charBuffer for the next pass
+					charBuffer.clear();
+
+					// Compact the buffer.
+					// If the decoder didn't consume all bytes (because of a split character at the end),
+					// compact() moves those remaining bytes to the start of the buffer and prepares
+					// the rest of the buffer for the next socket read.
+					buffer.compact();
 
 					// Check size limit
-					// To test:
-					// echo -ne 'GET /example HTTP/1.1\r\nHost: example.com FILLER_UNTIL_WE_ARE_TOO_BIG\r\n\r\n' | netcat -v localhost 8081
 					if (totalBytesRead > getMaximumRequestSizeInBytes()) {
 						String rawRequest = requestBuilder.toString();
 
 						// Given our partial raw request, try to parse it into a request...
 						Request tooLargeRequest = parseTooLargeRequestForRawRequest(rawRequest).orElse(null);
 
-						// ...if unable to parse into a request (as in, we can't even make it through the first line), bail
+						// ...if unable to parse into a request, bail
 						if (tooLargeRequest == null)
 							throw new IOException(format("Request is too large (exceeded %d bytes) but we do not have enough data available to know its path", getMaximumRequestSizeInBytes()));
 
 						throw new RequestTooLargeIOException(format("Request too large (exceeded %d bytes)", getMaximumRequestSizeInBytes()), tooLargeRequest);
 					}
 
-					requestBuilder.append(new String(bytes, StandardCharsets.UTF_8));
-
 					// Check if the headers are complete (CRLFCRLF or LFLF)
 					if (requestBuilder.indexOf("\r\n\r\n") != -1 || requestBuilder.indexOf("\n\n") != -1)
 						headersComplete = true;
-
-					// Clear the buffer for the next read
-					buffer.clear();
 				}
 
 				return requestBuilder.toString();
