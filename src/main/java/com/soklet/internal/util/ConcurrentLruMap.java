@@ -51,6 +51,7 @@ import java.util.function.Function;
  *
  * @param <K> key type
  * @param <V> value type
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public class ConcurrentLruMap<K, V> implements Map<K, V> {

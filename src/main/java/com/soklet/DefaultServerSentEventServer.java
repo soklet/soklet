@@ -714,7 +714,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		Instant writeStarted;
 		Throwable throwable = null;
 
-		// Keep track of whether or not we should go through the "handshake accepted" flow.
+		// Keep track of whether we should go through the "handshake accepted" flow.
 		// Might change from "accepted" to "rejected" if an error occurs
 		AtomicReference<HandshakeResult.Accepted> handshakeAcceptedReference = new AtomicReference<>();
 
@@ -1213,7 +1213,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						start = i + 1;
 					}
 				}
-				
+
 				// Append the final segment.
 				// If the string ended with a newline, 'start' will equal 'len'.
 				// string.substring(len, len) returns "", so we get "data: \n".

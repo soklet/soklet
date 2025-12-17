@@ -186,6 +186,19 @@ public interface ResponseMarshaler {
 																			 @Nullable ResourceMethod resourceMethod);
 
 	/**
+	 * Prepares a response for a request that is rejected because the server is overloaded (e.g. connection limit reached), triggering an <a href="https://httpwg.org/specs/rfc9110.html#status.503">HTTP 503 Service Unavailable</a>.
+	 * <p>
+	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#503-service-unavailable">https://www.soklet.com/docs/response-writing#503-service-unavailable</a>.
+	 *
+	 * @param request        the HTTP request
+	 * @param resourceMethod the <em>Resource Method</em> that would have handled the request, if available
+	 * @return the response to be sent over the wire
+	 */
+	@Nonnull
+	MarshaledResponse forServiceUnavailable(@Nonnull Request request,
+																					@Nullable ResourceMethod resourceMethod);
+
+	/**
 	 * Prepares a response for an HTTP {@code OPTIONS} request.
 	 * <p>
 	 * Note that CORS preflight responses are handled specially by {@link #forCorsPreflightAllowed(Request, CorsPreflight, CorsPreflightResponse)}
@@ -417,6 +430,25 @@ public interface ResponseMarshaler {
 		}
 
 		/**
+		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forServiceUnavailable(Request, ResourceMethod)}.
+		 */
+		@FunctionalInterface
+		public interface ServiceUnavailableHandler {
+			/**
+			 * Prepares a response for a request that triggers an <a href="https://httpwg.org/specs/rfc9110.html#status.503">HTTP 503 Service Unavailable</a>.
+			 * <p>
+			 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#503-service-unavailable">https://www.soklet.com/docs/response-writing#503-service-unavailable</a>.
+			 *
+			 * @param request        the HTTP request
+			 * @param resourceMethod the <em>Resource Method</em> that would have handled the request, if available
+			 * @return the response to be sent over the wire
+			 */
+			@Nonnull
+			MarshaledResponse handle(@Nonnull Request request,
+															 @Nullable ResourceMethod resourceMethod);
+		}
+
+		/**
 		 * Function used to support pluggable implementations of {@link ResponseMarshaler#forOptions(Request, Set)}.
 		 */
 		@FunctionalInterface
@@ -594,6 +626,8 @@ public interface ResponseMarshaler {
 		@Nullable
 		ContentTooLargeHandler contentTooLargeHandler;
 		@Nullable
+		ServiceUnavailableHandler serviceUnavailableHandler;
+		@Nullable
 		OptionsHandler optionsHandler;
 		@Nullable
 		OptionsSplatHandler optionsSplatHandler;
@@ -643,6 +677,12 @@ public interface ResponseMarshaler {
 		@Nonnull
 		public Builder contentTooLargeHandler(@Nullable ContentTooLargeHandler contentTooLargeHandler) {
 			this.contentTooLargeHandler = contentTooLargeHandler;
+			return this;
+		}
+
+		@Nonnull
+		public Builder serviceUnavailableHandler(@Nullable ServiceUnavailableHandler serviceUnavailableHandler) {
+			this.serviceUnavailableHandler = serviceUnavailableHandler;
 			return this;
 		}
 

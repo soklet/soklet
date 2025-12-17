@@ -27,6 +27,7 @@ import com.soklet.ResponseMarshaler.Builder.OptionsHandler;
 import com.soklet.ResponseMarshaler.Builder.OptionsSplatHandler;
 import com.soklet.ResponseMarshaler.Builder.PostProcessor;
 import com.soklet.ResponseMarshaler.Builder.ResourceMethodHandler;
+import com.soklet.ResponseMarshaler.Builder.ServiceUnavailableHandler;
 import com.soklet.ResponseMarshaler.Builder.ThrowableHandler;
 import com.soklet.exception.BadRequestException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
@@ -80,6 +81,8 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nullable
 	private final ContentTooLargeHandler contentTooLargeHandler;
 	@Nullable
+	private final ServiceUnavailableHandler serviceUnavailableHandler;
+	@Nullable
 	private final OptionsHandler optionsHandler;
 	@Nullable
 	private final OptionsSplatHandler optionsSplatHandler;
@@ -104,6 +107,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		this.notFoundHandler = builder.notFoundHandler;
 		this.methodNotAllowedHandler = builder.methodNotAllowedHandler;
 		this.contentTooLargeHandler = builder.contentTooLargeHandler;
+		this.serviceUnavailableHandler = builder.serviceUnavailableHandler;
 		this.optionsHandler = builder.optionsHandler;
 		this.optionsSplatHandler = builder.optionsSplatHandler;
 		this.throwableHandler = builder.throwableHandler;
@@ -246,6 +250,36 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
 					.headers(Map.of("Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name()))))
+					.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
+					.build();
+		}
+
+		if (postProcessor != null)
+			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+
+		return marshaledResponse;
+	}
+
+	@Nonnull
+	@Override
+	public MarshaledResponse forServiceUnavailable(@Nonnull Request request,
+																								 @Nullable ResourceMethod resourceMethod) {
+		requireNonNull(request);
+
+		ServiceUnavailableHandler serviceUnavailableHandler = getServiceUnavailableHandler().orElse(null);
+		PostProcessor postProcessor = getPostProcessor().orElse(null);
+		MarshaledResponse marshaledResponse;
+
+		if (serviceUnavailableHandler != null) {
+			marshaledResponse = serviceUnavailableHandler.handle(request, resourceMethod);
+		} else {
+			Integer statusCode = 503;
+
+			marshaledResponse = MarshaledResponse.withStatusCode(statusCode)
+					.headers(Map.of(
+							"Content-Type", Set.of(format("text/plain; charset=%s", getCharset().name())),
+							"Connection", Set.of("close") // Important for load shedding
+					))
 					.body(format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(getCharset()))
 					.build();
 		}
@@ -568,6 +602,11 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nonnull
 	protected Optional<ContentTooLargeHandler> getContentTooLargeHandler() {
 		return Optional.ofNullable(this.contentTooLargeHandler);
+	}
+
+	@Nonnull
+	protected Optional<ServiceUnavailableHandler> getServiceUnavailableHandler() {
+		return Optional.ofNullable(this.serviceUnavailableHandler);
 	}
 
 	@Nonnull
