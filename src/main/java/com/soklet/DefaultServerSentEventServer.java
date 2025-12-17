@@ -1179,6 +1179,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// 3. Retry
 		Duration retry = serverSentEvent.getRetry().orElse(null);
+
 		if (retry != null) {
 			sb.append("retry: ").append(retry.toMillis()).append('\n');
 			hasField = true;
@@ -1187,6 +1188,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// 4. Data
 		// We perform a manual scan to avoid Regex compilation and array allocation.
 		String data = serverSentEvent.getData().orElse(null);
+
 		if (data != null) {
 			hasField = true;
 			int len = data.length();
@@ -1196,8 +1198,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				sb.append("data: \n");
 			} else {
 				int start = 0;
+
 				for (int i = 0; i < len; i++) {
 					char c = data.charAt(i);
+
 					if (c == '\n' || c == '\r') {
 						// Append the current segment
 						sb.append("data: ").append(data, start, i).append('\n');
@@ -1209,6 +1213,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						start = i + 1;
 					}
 				}
+				
 				// Append the final segment.
 				// If the string ended with a newline, 'start' will equal 'len'.
 				// string.substring(len, len) returns "", so we get "data: \n".
