@@ -28,12 +28,17 @@ import com.soklet.exception.IllegalRequestBodyException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -967,5 +972,100 @@ public class AdvancedTests {
 	public void urlUnicodeTests() {
 		Request request = Request.withRawUrl(HttpMethod.GET, "/👁️👄👁️").build();
 		Assertions.assertEquals("/👁️👄👁️", request.getPath());
+	}
+
+	@Test
+	public void testSSEConcurrentConnectionLimitWithCustomResponse() throws Exception {
+		// 1. Setup an SSE server with a STRICT limit of 1 connection
+		// We assume findFreePort() is available in your test suite
+		int ssePort = findFreePort();
+		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
+				.concurrentConnectionLimit(1)
+				.build();
+
+		// 2. Define a custom ResponseMarshaler to verify we can control the 503 output
+		ResponseMarshaler customMarshaler = ResponseMarshaler.withDefaults()
+				.serviceUnavailableHandler((request, resourceMethod) ->
+						MarshaledResponse.withStatusCode(503)
+								.headers(Map.of("X-Soklet-Overload", Set.of("true")))
+								.body("Custom Overload Message".getBytes(StandardCharsets.UTF_8))
+								.build()
+				)
+				.build();
+
+		// 3. Configure Soklet
+		SokletConfig config = SokletConfig.withServer(Server.withPort(findFreePort()).build())
+				.serverSentEventServer(sseServer)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(LimitTestResource.class)))
+				.responseMarshaler(customMarshaler)
+				.lifecycleInterceptor(new LifecycleInterceptor() {
+					@Override
+					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
+						// Ignore the SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED log event
+					}
+				})
+				.build();
+
+		try (Soklet soklet = Soklet.withConfig(config)) {
+			soklet.start();
+
+			String sseUrl = "http://localhost:" + ssePort + "/limit-test";
+			CountDownLatch clientAConnected = new CountDownLatch(1);
+
+			// 4. Client A: Occupy the ONLY available slot
+			// We run this in a thread because the SSE connection stays open indefinitely
+			Thread clientAThread = new Thread(() -> {
+				try {
+					java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+					java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+							.uri(URI.create(sseUrl))
+							.build();
+
+					// Use a line subscriber to detect when we've successfully connected
+					client.send(request, HttpResponse.BodyHandlers.ofLines())
+							.body()
+							.forEach(line -> {
+								// Signal that Client A has successfully taken the slot
+								if (line.contains("connected"))
+									clientAConnected.countDown();
+							});
+				} catch (Exception ignored) {
+					// Client A will be killed when we close the server, which is expected
+				}
+			});
+			clientAThread.start();
+
+			// Wait for Client A to be fully established before trying Client B
+			Assertions.assertTrue(clientAConnected.await(5, TimeUnit.SECONDS), "Client A failed to connect");
+
+			// 5. Client B: Attempt to connect (Should be REJECTED)
+			HttpClient clientB = HttpClient.newHttpClient();
+			HttpRequest requestB = HttpRequest.newBuilder()
+					.uri(URI.create(sseUrl))
+					.build();
+
+			HttpResponse<String> responseB = clientB.send(requestB, HttpResponse.BodyHandlers.ofString());
+
+			// 6. Verify assertions
+			Assertions.assertEquals(503, responseB.statusCode(),
+					"Expected 503 Service Unavailable");
+
+			Assertions.assertEquals("Custom Overload Message", responseB.body(),
+					"Expected response body from custom serviceOverloadedHandler");
+
+			Assertions.assertEquals("true", responseB.headers().firstValue("X-Soklet-Overload").orElse(null),
+					"Expected custom header from serviceOverloadedHandler");
+		}
+	}
+
+	// Helper Resource for the test
+	public static class LimitTestResource {
+		@ServerSentEventSource("/limit-test")
+		public HandshakeResult stream() {
+			// Return an accepted handshake that sends an initial comment so the test knows we're live.
+			return HandshakeResult.acceptWithDefaults()
+					.clientInitializer(unicaster -> unicaster.unicastComment("connected"))
+					.build();
+		}
 	}
 }

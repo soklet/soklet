@@ -165,7 +165,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private final ConcurrentLruMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
 	@Nonnull
-	private final ConcurrentLruMap<DefaultServerSentEventConnection, DefaultServerSentEventBroadcaster> globalConnections;
+	private final ConcurrentHashMap<DefaultServerSentEventConnection, DefaultServerSentEventBroadcaster> globalConnections;
 	@Nonnull
 	private final ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> idleBroadcastersByResourcePath;
 	@Nonnull
@@ -508,45 +508,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (this.connectionQueueCapacity < 1)
 			throw new IllegalArgumentException("The value for connectionQueueCapacity must be > 0");
 
-		// Initialize the global LRU map with the specified limit
-		this.globalConnections = new ConcurrentLruMap<>(getConcurrentConnectionLimit(), (evictedConnection, broadcaster) -> {
-			try {
-				// Make eviction close idempotent & consistent with backpressure
-				if (!evictedConnection.getClosing().compareAndSet(false, true))
-					return; // someone else is already closing it
-
-				// Unregister, get the queue and clear it to ensure poison-pill enqueue succeeds, then close the connection
-				try {
-					broadcaster.unregisterServerSentEventConnection(evictedConnection, false); // unregister only
-				} finally {
-					try {
-						BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> q = evictedConnection.getWriteQueue();
-						q.clear();
-						q.offer(DefaultServerSentEventConnection.WriteQueueElement.withServerSentEvent(SERVER_SENT_EVENT_POISON_PILL));
-					} catch (Throwable ignored) {
-						// Nothing to do
-					}
-
-					try {
-						// Hard-close the socket to break any pending I/O
-						evictedConnection.getSocketChannel().close();
-					} catch (Throwable ignored) {
-						// Nothing to do
-					}
-				}
-
-				// Hard-close the socket to break any pending I/O
-				try {
-					evictedConnection.getSocketChannel().close();
-				} catch (Throwable ignored) {
-					// best effort
-				}
-			} catch (Throwable t) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Failed while evicting SSE connection from global LRU")
-						.throwable(t)
-						.build());
-			}
-		});
+		// Initialize the global LRU map with the specified limit.
+		// We do not need an eviction listener because we will not evict active connections.
+		this.globalConnections = new ConcurrentHashMap<>(getConcurrentConnectionLimit());
 	}
 
 	@Override
@@ -2364,7 +2328,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected ConcurrentLruMap<DefaultServerSentEventConnection, DefaultServerSentEventBroadcaster> getGlobalConnections() {
+	protected ConcurrentHashMap<DefaultServerSentEventConnection, DefaultServerSentEventBroadcaster> getGlobalConnections() {
 		return this.globalConnections;
 	}
 
