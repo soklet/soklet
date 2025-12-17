@@ -44,7 +44,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -1156,42 +1155,77 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected String formatServerSentEventForResponse(@Nonnull ServerSentEvent serverSentEvent) {
+	private String formatServerSentEventForResponse(@Nonnull ServerSentEvent serverSentEvent) {
 		requireNonNull(serverSentEvent);
 
+		// Estimate buffer size: 256 bytes covers most typical event/id/short-data payloads
+		// to avoid resizing the internal array.
+		StringBuilder sb = new StringBuilder(256);
+		boolean hasField = false;
+
+		// 1. Event Name
 		String event = serverSentEvent.getEvent().orElse(null);
+		if (event != null) {
+			sb.append("event: ").append(event).append('\n');
+			hasField = true;
+		}
 
-		String data = serverSentEvent.getData().orElse(null);
-		List<String> dataLines = data == null
-				? List.of()
-				: Arrays.stream(data.split("\\R", -1)) // preserve trailing empties
-				.map(line -> format("data: %s", line))
-				.collect(Collectors.toList());
-
+		// 2. ID
 		String id = serverSentEvent.getId().orElse(null);
+		if (id != null) {
+			sb.append("id: ").append(id).append('\n');
+			hasField = true;
+		}
+
+		// 3. Retry
 		Duration retry = serverSentEvent.getRetry().orElse(null);
+		if (retry != null) {
+			sb.append("retry: ").append(retry.toMillis()).append('\n');
+			hasField = true;
+		}
 
-		List<String> lines = new ArrayList<>(16);
+		// 4. Data
+		// We perform a manual scan to avoid Regex compilation and array allocation.
+		String data = serverSentEvent.getData().orElse(null);
+		if (data != null) {
+			hasField = true;
+			int len = data.length();
 
-		if (event != null)
-			lines.add(format("event: %s", event));
+			if (len == 0) {
+				// Emulates split behavior on empty string: produces one empty "data:" line
+				sb.append("data: \n");
+			} else {
+				int start = 0;
+				for (int i = 0; i < len; i++) {
+					char c = data.charAt(i);
+					if (c == '\n' || c == '\r') {
+						// Append the current segment
+						sb.append("data: ").append(data, start, i).append('\n');
 
-		if (id != null)
-			lines.add(format("id: %s", id));
+						// Handle CRLF (\r\n) by skipping the next char if it is \n
+						if (c == '\r' && (i + 1) < len && data.charAt(i + 1) == '\n') {
+							i++;
+						}
+						start = i + 1;
+					}
+				}
+				// Append the final segment.
+				// If the string ended with a newline, 'start' will equal 'len'.
+				// string.substring(len, len) returns "", so we get "data: \n".
+				// This emulates the behavior of data.split("\\R", -1) which
+				// preserves trailing empty strings.
+				sb.append("data: ").append(data, start, len).append('\n');
+			}
+		}
 
-		if (retry != null)
-			lines.add(format("retry: %d", retry.toMillis()));
-
-		if (dataLines.size() > 0)
-			lines.addAll(dataLines);
-
-		// Per SSE spec, an event with no fields is effectively a comment/keep-alive.
-		// This can occur if a ServerSentEvent is constructed with no event, data, id, or retry.
-		// We emit a comment line to maintain the SSE stream format.
-		if (lines.size() == 0)
+		// Per SSE spec, an event with no fields is a keep-alive comment.
+		if (!hasField)
 			return ":\n\n";
 
-		return format("%s\n\n", lines.stream().collect(Collectors.joining("\n")));
+		// Terminate the block
+		sb.append('\n');
+
+		return sb.toString();
 	}
 
 	// Internal snapshot - the only implementation users ever see
