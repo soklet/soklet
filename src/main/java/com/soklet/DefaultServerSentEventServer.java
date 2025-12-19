@@ -205,7 +205,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private IdGenerator<?> idGenerator;
 
 	@ThreadSafe
-	protected static class DefaultServerSentEventBroadcaster implements ServerSentEventBroadcaster {
+	private static class DefaultServerSentEventBroadcaster implements ServerSentEventBroadcaster {
 		@Nonnull
 		private final ResourceMethod resourceMethod;
 		@Nonnull
@@ -395,7 +395,72 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	protected DefaultServerSentEventServer(@Nonnull Builder builder) {
+	/**
+	 * Instead of returning an actual DefaultServerSentEventBroadcaster instance to client code, we return this lightweight object that:
+	 * <ul>
+	 * <li>stores only ResourcePath (and optionally ResourceMethod)</li>
+	 * <li>looks up the current broadcaster in broadcastersByResourcePath on every call</li>
+	 * <li>no-ops if no broadcaster exists (i.e. no clients currently connected)</li>
+	 * </ul>
+	 * <p>
+	 * This makes cached broadcaster handles safe forever, while keeping idle eviction working as expected.
+	 */
+	@ThreadSafe
+	private final class StableBroadcasterHandle implements ServerSentEventBroadcaster {
+		@Nonnull
+		private final ResourcePath resourcePath;
+
+		private StableBroadcasterHandle(@Nonnull ResourcePath resourcePath) {
+			this.resourcePath = requireNonNull(resourcePath);
+		}
+
+		@Override
+		@Nonnull
+		public ResourcePath getResourcePath() {
+			return this.resourcePath;
+		}
+
+		@Override
+		@Nonnull
+		public Long getClientCount() {
+			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
+			return b != null ? b.getClientCount() : 0L;
+		}
+
+		@Override
+		public void broadcastEvent(@Nonnull ServerSentEvent serverSentEvent) {
+			requireNonNull(serverSentEvent);
+			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
+			if (b != null) b.broadcastEvent(serverSentEvent);
+		}
+
+		@Override
+		public void broadcastComment(@Nonnull String comment) {
+			requireNonNull(comment);
+			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
+			if (b != null) b.broadcastComment(comment);
+		}
+
+		@Override
+		public <T> void broadcastEvent(@Nonnull Function<Object, T> keySelector,
+																	 @Nonnull Function<T, ServerSentEvent> eventProvider) {
+			requireNonNull(keySelector);
+			requireNonNull(eventProvider);
+			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
+			if (b != null) b.broadcastEvent(keySelector, eventProvider);
+		}
+
+		@Override
+		public <T> void broadcastComment(@Nonnull Function<Object, T> keySelector,
+																		 @Nonnull Function<T, String> commentProvider) {
+			requireNonNull(keySelector);
+			requireNonNull(commentProvider);
+			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
+			if (b != null) b.broadcastComment(keySelector, commentProvider);
+		}
+	}
+
+	DefaultServerSentEventServer(@Nonnull Builder builder) {
 		requireNonNull(builder);
 
 		this.stopPoisonPill = new AtomicBoolean(false);
@@ -2084,7 +2149,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (resourceMethod == null)
 			return Optional.empty();
 
-		return acquireBroadcasterInternal(resourcePath, resourceMethod);
+		return Optional.of(new StableBroadcasterHandle(resourcePath));
 	}
 
 	@Nonnull
