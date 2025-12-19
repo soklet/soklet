@@ -69,9 +69,22 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	@Nonnull
+	private static final Map<String, Class<?>> PRIMITIVE_TYPES_BY_NAME;
+	@Nonnull
 	private static final DefaultResourceMethodResolver DEFAULT_INSTANCE;
 
 	static {
+		PRIMITIVE_TYPES_BY_NAME = Map.of(
+				"boolean", boolean.class,
+				"byte", byte.class,
+				"short", short.class,
+				"char", char.class,
+				"int", int.class,
+				"long", long.class,
+				"float", float.class,
+				"double", double.class,
+				"void", void.class
+		);
 		DEFAULT_INSTANCE = new DefaultResourceMethodResolver();
 	}
 
@@ -226,13 +239,25 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			Class<?> owner = Class.forName(className);
 			Class<?>[] paramTypes = new Class<?>[paramTypeNames.length];
 			for (int i = 0; i < paramTypeNames.length; i++)
-				paramTypes[i] = Class.forName(paramTypeNames[i]);
+				paramTypes[i] = resolveParamType(paramTypeNames[i]);
 			Method m = owner.getMethod(methodName, paramTypes);
 			m.setAccessible(true);
 			return m;
 		} catch (Exception e) {
 			throw new IllegalStateException(format("Unable to resolve Soklet Resource Method %s#%s(%s).", className, methodName, String.join(",", paramTypeNames)), e);
 		}
+	}
+
+	@Nonnull
+	private static Class<?> resolveParamType(@Nonnull String paramTypeName) throws ClassNotFoundException {
+		requireNonNull(paramTypeName);
+
+		Class<?> primitiveType = PRIMITIVE_TYPES_BY_NAME.get(paramTypeName);
+
+		if (primitiveType != null)
+			return primitiveType;
+
+		return Class.forName(paramTypeName);
 	}
 
 	private DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,
