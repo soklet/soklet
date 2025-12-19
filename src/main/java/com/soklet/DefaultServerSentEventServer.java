@@ -1589,50 +1589,46 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		Request.RawBuilder requestBuilder = null;
 		List<String> headerLines = new ArrayList<>();
 
-		for (String line : rawRequest.lines().toList()) {
-			line = trimAggressivelyToNull(line);
+		// Preserve empty lines so we can detect the end-of-headers
+		String[] lines = rawRequest.split("\\R", -1);
 
-			if (line == null)
-				continue;
+		for (int i = 0; i < lines.length; i++) {
+			String rawLine = lines[i];
 
+			// First line: request line
 			if (requestBuilder == null) {
-				// This is the first line.
-				// Example: GET /testing?one=two HTTP/1.1
-				String[] components = line.trim().split("\\s+");
+				String line = trimAggressivelyToNull(rawLine);
+				if (line == null)
+					continue;
 
+				String[] components = line.trim().split("\\s+");
 				if (components.length != 3)
-					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
+					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected 'GET /example HTTP/1.1'", line));
 
 				HttpMethod httpMethod;
 				String rawHttpMethod = components[0];
 				String rawUrl = components[1];
 
-				if (rawHttpMethod == null)
-					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Unable to parse HTTP method. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
-
 				try {
 					httpMethod = HttpMethod.valueOf(rawHttpMethod);
 				} catch (IllegalArgumentException e) {
-					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Unable to parse HTTP method. Expected a format like 'GET /example?one=two HTTP/1.1'", line), e);
+					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Unable to parse HTTP method.", line), e);
 				}
 
-				if (rawUrl == null)
-					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Unable to parse URL. Expected a format like 'GET /example?one=two HTTP/1.1'", line));
-
 				requestBuilder = Request.withRawUrl(httpMethod, rawUrl);
-			} else {
-				if (line.isEmpty())
-					continue;
-
-				// This is a header line.
-				// Example: Accept-Encoding: gzip, deflate, br, zstd
-				int indexOfFirstColon = line.indexOf(":");
-
-				if (indexOfFirstColon == -1)
-					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected a format like 'Header-Name: Value", line));
-
-				headerLines.add(line);
+				continue;
 			}
+
+			// End-of-headers: blank line or whitespace-only line
+			if (rawLine.isEmpty() || rawLine.trim().isEmpty())
+				break;
+
+			// Header line
+			int indexOfFirstColon = rawLine.indexOf(':');
+			if (indexOfFirstColon == -1)
+				throw new IllegalStateException(format("Malformed Server-Sent Event request header line '%s'. Expected 'Header-Name: Value'", rawLine));
+
+			headerLines.add(rawLine);
 		}
 
 		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(headerLines);
@@ -1648,6 +1644,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// We work around this by performing the read in a virtual thread, and use the timeout functionality
 		// built in to Futures to interrupt the thread if it doesn't finish in time.
 		Future<String> readFuture = null;
+
+		// How long to wait for the request to be read (minimum of 1 millisecond)
+		long timeoutMillis = Math.max(1L, getRequestTimeout().toMillis());
 
 		try {
 			ExecutorService requestReaderExecutorService = getRequestReaderExecutorService().orElse(null);
@@ -1717,22 +1716,36 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						throw new RequestTooLargeIOException(format("Request too large (exceeded %d bytes)", getMaximumRequestSizeInBytes()), tooLargeRequest);
 					}
 
-					// Check if the headers are complete (CRLFCRLF or LFLF)
-					if (requestBuilder.indexOf("\r\n\r\n") != -1 || requestBuilder.indexOf("\n\n") != -1)
+					// Check if the headers are complete (CRLFCRLF preferred, else LFLF)
+					// IMPORTANT: we may have read beyond the header terminator in the same read(),
+					// so truncate to exactly the end of headers.
+					int end = -1;
+					int crlf = requestBuilder.indexOf("\r\n\r\n");
+
+					if (crlf != -1) {
+						end = crlf + 4;
+					} else {
+						int lf = requestBuilder.indexOf("\n\n");
+						if (lf != -1) end = lf + 2;
+					}
+
+					if (end != -1) {
+						requestBuilder.setLength(end);
 						headersComplete = true;
+					}
 				}
 
 				return requestBuilder.toString();
 			});
 
 			// Wait up to the specified timeout for reading to complete
-			return readFuture.get(getRequestTimeout().getSeconds(), TimeUnit.SECONDS);
+			return readFuture.get(timeoutMillis, TimeUnit.MILLISECONDS);
 		} catch (TimeoutException e) {
 			// Time's up; cancel the task so the blocking read is interrupted
 			if (readFuture != null)
 				readFuture.cancel(true);
 
-			throw new SocketTimeoutException(format("Reading request took longer than %d seconds", getRequestTimeout().getSeconds()));
+			throw new SocketTimeoutException(format("Reading request took longer than %d ms", timeoutMillis));
 		} catch (InterruptedException e) {
 			if (readFuture != null)
 				readFuture.cancel(true);
