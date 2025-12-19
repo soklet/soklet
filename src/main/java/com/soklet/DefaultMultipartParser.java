@@ -289,13 +289,34 @@ final class DefaultMultipartParser implements MultipartParser {
 
 	protected LinkedCaseInsensitiveMap<String> extractFields(String contentTypeHeader) {
 		LinkedCaseInsensitiveMap<String> fieldsBuilder = new LinkedCaseInsensitiveMap<>();
-		String[] contentTypeHeaderParts = contentTypeHeader.split("[;,]");
-		for (String contentTypeHeaderPart : contentTypeHeaderParts) {
-			String[] kv = contentTypeHeaderPart.split("=");
-			if (kv.length == 2) {
-				fieldsBuilder.put(kv[0].trim().toLowerCase(Locale.US), kv[1].trim());
-			}
+		if (contentTypeHeader == null)
+			return fieldsBuilder;
+
+		int separatorIndex = contentTypeHeader.indexOf(';');
+
+		if (separatorIndex == -1)
+			return fieldsBuilder;
+
+		String parameters = contentTypeHeader.substring(separatorIndex + 1);
+		parameters = trimAggressivelyToNull(parameters);
+
+		if (parameters == null)
+			return fieldsBuilder;
+
+		ParameterParser parser = new ParameterParser();
+		parser.setLowerCaseNames(true);
+
+		Map<String, String> parsedParameters = parser.parse(parameters, ';');
+
+		for (Map.Entry<String, String> entry : parsedParameters.entrySet()) {
+			String key = trimAggressivelyToNull(entry.getKey());
+
+			if (key == null)
+				continue;
+
+			fieldsBuilder.put(key, entry.getValue());
 		}
+
 		return fieldsBuilder;
 	}
 

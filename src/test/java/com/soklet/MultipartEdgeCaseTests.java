@@ -33,9 +33,8 @@ import java.util.Set;
  */
 @ThreadSafe
 public class MultipartEdgeCaseTests {
-	private static byte[] simpleMultipartBody() {
+	private static byte[] multipartBody(String boundary) {
 		// Very small multipart body with exactly one field: a=1
-		String boundary = "----AaB03x";
 		String body = ""
 				+ "--" + boundary + "\r\n"
 				+ "Content-Disposition: form-data; name=\"a\"" + "\r\n"
@@ -43,6 +42,10 @@ public class MultipartEdgeCaseTests {
 				+ "1\r\n"
 				+ "--" + boundary + "--\r\n";
 		return body.getBytes(StandardCharsets.US_ASCII);
+	}
+
+	private static byte[] simpleMultipartBody() {
+		return multipartBody("----AaB03x");
 	}
 
 	@Test
@@ -93,11 +96,39 @@ public class MultipartEdgeCaseTests {
 		});
 	}
 
+	@Test
+	public void comma_in_boundary_is_accepted() {
+		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
+				.lifecycleInterceptor(new LifecycleInterceptor() {
+					@Override
+					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+				})
+				.build();
+
+		Soklet.runSimulator(cfg, simulator -> {
+			String boundary = "----AaB03x,XYZ";
+			byte[] body = multipartBody(boundary);
+			RequestResult r = simulator.performRequest(
+					Request.withPath(HttpMethod.POST, "/upload-commas")
+							.headers(Map.of(
+									"Content-Type", Set.of("multipart/form-data; boundary=" + boundary),
+									"Content-Length", Set.of(String.valueOf(body.length))
+							))
+							.body(body)
+							.build());
+			Assertions.assertEquals(204, r.getMarshaledResponse().getStatusCode());
+		});
+	}
+
 	public static class UploadResource {
 		@POST("/upload")
 		public void upload(@Multipart(name = "b") String requiredB) { /* missing -> 400 */ }
 
 		@POST("/upload-optional")
 		public void uploadOptional(@Multipart(name = "b", optional = true) Optional<String> b) { /* OK */ }
+
+		@POST("/upload-commas")
+		public void uploadCommaBoundary(@Multipart(name = "a") String a) { /* OK */ }
 	}
 }
