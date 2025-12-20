@@ -479,9 +479,11 @@ public interface LifecycleInterceptor {
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method, Soklet will catch it and invoke {@link #didReceiveLogEvent(LogEvent)} with type {@link LogEventType#LIFECYCLE_INTERCEPTOR_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED}.
 	 *
 	 * @param serverSentEventConnection the connection that will be terminated
+	 * @param terminationReason         the reason for termination
 	 * @param throwable                 the exception thrown which caused the connection to terminate (if any)
 	 */
 	default void willTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																											@Nonnull ServerSentEventConnectionTerminationReason terminationReason,
 																											@Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -493,10 +495,12 @@ public interface LifecycleInterceptor {
 	 *
 	 * @param serverSentEventConnection the connection that was terminated
 	 * @param connectionDuration        how long the connection was open for
+	 * @param terminationReason         the reason for termination
 	 * @param throwable                 the exception thrown which caused the connection to terminate (if any)
 	 */
 	default void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																										 @Nonnull Duration connectionDuration,
+																										 @Nonnull ServerSentEventConnectionTerminationReason terminationReason,
 																										 @Nullable Throwable throwable) {
 		// No-op by default
 	}

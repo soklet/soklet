@@ -107,6 +107,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
 	@Nonnull
 	private static final ResourcePathDeclaration NO_MATCH_SENTINEL;
+	@Nonnull
+	private static final String HEARTBEAT_COMMENT_PAYLOAD;
+	@Nonnull
+	private static final Integer REUSABLE_BUILDER_CAPACITY;
+	@Nonnull
+	private static final Integer REUSABLE_BUILDER_MAX_CAPACITY;
+	@Nonnull
+	private static final ThreadLocal<StringBuilder> COMMENT_FORMAT_BUILDER;
+	@Nonnull
+	private static final ThreadLocal<StringBuilder> EVENT_FORMAT_BUILDER;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -132,6 +142,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Create a sentinel ResourcePathDeclaration that represents "no match found".
 		// This allows us to cache negative lookups and avoid repeated O(n) scans.
 		NO_MATCH_SENTINEL = ResourcePathDeclaration.withPath("/__soklet_internal_no_match_sentinel__");
+
+		HEARTBEAT_COMMENT_PAYLOAD = ":\n\n";
+		REUSABLE_BUILDER_CAPACITY = 256;
+		REUSABLE_BUILDER_MAX_CAPACITY = 64 * 1_024;
+		COMMENT_FORMAT_BUILDER = ThreadLocal.withInitial(() -> new StringBuilder(REUSABLE_BUILDER_CAPACITY));
+		EVENT_FORMAT_BUILDER = ThreadLocal.withInitial(() -> new StringBuilder(REUSABLE_BUILDER_CAPACITY));
 	}
 
 	/**
@@ -821,7 +837,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						handshakeAcceptedReference.set(accepted);
 					} else {
 						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
-										format("Rejecting request to %s: Concurrent connection limit (%d) reached", requestForHandler.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
+								format("Rejecting request to %s: Concurrent connection limit (%d) reached", requestForHandler.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
 
 						MarshaledResponse response = getResponseMarshaler().get().forServiceUnavailable(requestForHandler, requestResult.getResourceMethod().orElse(null));
 
@@ -1044,8 +1060,27 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// ...then unregister from broadcaster (prevents race with broadcasts)
 			if (clientSocketChannelRegistration != null) {
+				ServerSentEventConnectionTerminationReason terminationReason =
+						clientSocketChannelRegistration.serverSentEventConnection()
+								.getTerminationReason()
+								.orElse(null);
+
+				if (terminationReason == null) {
+					if (isStopping())
+						terminationReason = ServerSentEventConnectionTerminationReason.SERVER_STOP;
+					else if (throwable != null)
+						terminationReason = ServerSentEventConnectionTerminationReason.ERROR;
+					else
+						terminationReason = ServerSentEventConnectionTerminationReason.UNKNOWN;
+
+					clientSocketChannelRegistration.serverSentEventConnection().setTerminationReason(terminationReason);
+				}
+
 				try {
-					getLifecycleInterceptor().get().willTerminateServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), throwable);
+					getLifecycleInterceptor().get().willTerminateServerSentEventConnection(
+							clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(),
+							terminationReason,
+							throwable);
 				} catch (Throwable t) {
 					safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::willTerminateServerSentEventConnection", LifecycleInterceptor.class.getSimpleName()))
 							.throwable(t)
@@ -1069,7 +1104,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						connectionFinished);
 
 				try {
-					getLifecycleInterceptor().get().didTerminateServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), connectionDuration, throwable);
+					getLifecycleInterceptor().get().didTerminateServerSentEventConnection(
+							clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(),
+							connectionDuration,
+							terminationReason,
+							throwable);
 				} catch (Throwable t) {
 					safelyLog(LogEvent.with(LogEventType.LIFECYCLE_INTERCEPTOR_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::didTerminateServerSentEventConnection", LifecycleInterceptor.class.getSimpleName()))
 							.throwable(t)
@@ -1212,6 +1251,26 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return combined;
 	}
 
+	@Nonnull
+	private static StringBuilder acquireReusableBuilder(@Nonnull ThreadLocal<StringBuilder> builderRef) {
+		requireNonNull(builderRef);
+
+		StringBuilder stringBuilder = builderRef.get();
+
+		if (stringBuilder.capacity() > REUSABLE_BUILDER_MAX_CAPACITY) {
+			stringBuilder = new StringBuilder(REUSABLE_BUILDER_CAPACITY);
+			builderRef.set(stringBuilder);
+		} else {
+			stringBuilder.setLength(0);
+		}
+
+		return stringBuilder;
+	}
+
+	private static boolean isLineBreakChar(char c) {
+		return c == '\n' || c == '\r' || c == '\u0085' || c == '\u2028' || c == '\u2029';
+	}
+
 	private static void writeFully(@Nonnull SocketChannel socketChannel,
 																 @Nonnull byte[] bytes) throws IOException {
 		requireNonNull(socketChannel);
@@ -1258,34 +1317,49 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	protected String formatCommentForResponse(@Nonnull String comment) {
 		requireNonNull(comment);
 
-		String[] lines = comment.split("\\R", -1);
+		if (comment.isEmpty())
+			return HEARTBEAT_COMMENT_PAYLOAD;
 
-		if (lines.length == 0)
-			return ":\n\n";
+		StringBuilder stringBuilder = acquireReusableBuilder(COMMENT_FORMAT_BUILDER);
+		int len = comment.length();
+		int start = 0;
 
-		StringBuilder stringBuilder = new StringBuilder();
+		for (int i = 0; i < len; i++) {
+			char c = comment.charAt(i);
 
-		for (String line : lines) {
-			stringBuilder.append(':');
+			if (isLineBreakChar(c)) {
+				appendCommentLine(stringBuilder, comment, start, i);
 
-			if (!line.isEmpty())
-				stringBuilder.append(' ').append(line);
+				if (c == '\r' && (i + 1) < len && comment.charAt(i + 1) == '\n')
+					i++;
 
-			stringBuilder.append('\n');
+				start = i + 1;
+			}
 		}
 
+		appendCommentLine(stringBuilder, comment, start, len);
 		stringBuilder.append('\n');
 
 		return stringBuilder.toString();
+	}
+
+	private void appendCommentLine(@Nonnull StringBuilder stringBuilder,
+																 @Nonnull String comment,
+																 int start,
+																 int end) {
+		stringBuilder.append(':');
+
+		if (end > start)
+			stringBuilder.append(' ').append(comment, start, end);
+
+		stringBuilder.append('\n');
 	}
 
 	@Nonnull
 	private String formatServerSentEventForResponse(@Nonnull ServerSentEvent serverSentEvent) {
 		requireNonNull(serverSentEvent);
 
-		// Estimate buffer size: 256 bytes covers most typical event/id/short-data payloads
-		// to avoid resizing the internal array.
-		StringBuilder sb = new StringBuilder(256);
+		StringBuilder sb = acquireReusableBuilder(EVENT_FORMAT_BUILDER);
 		boolean hasField = false;
 
 		// 1. Event Name
@@ -1327,7 +1401,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				for (int i = 0; i < len; i++) {
 					char c = data.charAt(i);
 
-					if (c == '\n' || c == '\r') {
+					if (isLineBreakChar(c)) {
 						// Append the current segment
 						sb.append("data: ").append(data, start, i).append('\n');
 
@@ -1350,7 +1424,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// Per SSE spec, an event with no fields is a keep-alive comment.
 		if (!hasField)
-			return ":\n\n";
+			return HEARTBEAT_COMMENT_PAYLOAD;
 
 		// Terminate the block
 		sb.append('\n');
@@ -1414,6 +1488,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final AtomicBoolean closing;
 		@Nonnull
+		private final AtomicReference<ServerSentEventConnectionTerminationReason> terminationReason;
+		@Nonnull
 		private final ServerSentEventConnectionSnapshot snapshot;
 
 		@ThreadSafe
@@ -1475,6 +1551,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.establishedAt = Instant.now();
 			this.socketChannel = socketChannel;
 			this.closing = new AtomicBoolean(false);
+			this.terminationReason = new AtomicReference<>();
 
 			// Cache off an immutable data-only snapshot.
 			// This can be safely exposed to client code without worrying about holding onto internal state (e.g. write queue)
@@ -1514,6 +1591,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		public AtomicBoolean getClosing() {
 			return this.closing;
+		}
+
+		public void setTerminationReason(@Nonnull ServerSentEventConnectionTerminationReason reason) {
+			requireNonNull(reason);
+			this.terminationReason.compareAndSet(null, reason);
+		}
+
+		@Nonnull
+		public Optional<ServerSentEventConnectionTerminationReason> getTerminationReason() {
+			return Optional.ofNullable(this.terminationReason.get());
 		}
 
 		@Nonnull
@@ -1728,6 +1815,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// Header line
 			int indexOfFirstColon = rawLine.indexOf(':');
+
 			if (indexOfFirstColon == -1)
 				throw new IllegalStateException(format("Malformed Server-Sent Event request header line '%s'. Expected 'Header-Name: Value'", rawLine));
 
@@ -1990,6 +2078,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 		}
 
+		List<DefaultServerSentEventConnection> connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
+		for (DefaultServerSentEventConnection connection : connectionsSnapshot)
+			connection.setTerminationReason(ServerSentEventConnectionTerminationReason.SERVER_STOP);
+
 		// Close client connections - sends poison pills to all registered connections
 		for (DefaultServerSentEventBroadcaster broadcaster : new ArrayList<>(getBroadcastersByResourcePath().values())) {
 			try {
@@ -2002,8 +2094,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		// Ensure nothing slipped through the cracks
-		List<DefaultServerSentEventConnection> connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
-
 		for (DefaultServerSentEventConnection connection : connectionsSnapshot) {
 			try {
 				connection.getClosing().compareAndSet(false, true);
@@ -2333,7 +2423,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (!connection.getClosing().compareAndSet(false, true))
 			return;
 
-		// TODO: future releases should propagate out typed information to LifecycleInterceptor::willTerminateServerSentEventConnection indicating why the connection was terminated (in this case, backpressure) - not just an exception
+		connection.setTerminationReason(ServerSentEventConnectionTerminationReason.BACKPRESSURE);
+
 		// String message = format("Closing Server-Sent Event connection due to backpressure (write queue at capacity) while enqueuing %s. {resourcePath=%s, queueSize=%d, remainingCapacity=%d}",
 		//					cause, owner.getResourcePath(), writeQueue.size(), writeQueue.remainingCapacity());
 

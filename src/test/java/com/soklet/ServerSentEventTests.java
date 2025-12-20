@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
@@ -58,6 +59,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
@@ -507,6 +509,57 @@ public class ServerSentEventTests {
 	}
 
 	@Test
+	@Timeout(value = 20, unit = SECONDS)
+	public void sse_backpressure_setsTerminationReason() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		BackpressureLifecycle lifecycle = new BackpressureLifecycle();
+
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestTimeout(Duration.ofSeconds(5))
+				.connectionQueueCapacity(1)
+				.heartbeatInterval(Duration.ofSeconds(30))
+				.verifyConnectionOnceEstablished(false)
+				.build();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.lifecycleInterceptor(lifecycle)
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(12000);
+
+				writeHttpGet(socket, "/tests/backpressure-reason", ssePort);
+				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(hdr);
+
+				ServerSentEventBroadcaster broadcaster = sse.acquireBroadcaster(ResourcePath.withPath("/tests/backpressure-reason")).get();
+				awaitClientConnection(broadcaster, 2000);
+
+				// First event will block in willWriteServerSentEvent.
+				broadcaster.broadcastEvent(ServerSentEvent.withEvent("bp").id("1").data("a").build());
+				Assertions.assertTrue(lifecycle.awaitWriteStarted(5, SECONDS), "Write did not start in time");
+
+				// Fill the queue and then overflow to trigger backpressure.
+				broadcaster.broadcastEvent(ServerSentEvent.withEvent("bp").id("2").data("b").build());
+				broadcaster.broadcastEvent(ServerSentEvent.withEvent("bp").id("3").data("c").build());
+
+				Assertions.assertTrue(lifecycle.awaitTermination(10, SECONDS), "Termination not observed");
+				Assertions.assertEquals(ServerSentEventConnectionTerminationReason.BACKPRESSURE, lifecycle.getReason());
+				lifecycle.releaseWriter();
+			}
+		}
+	}
+
+	@Test
 	@Timeout(value = 15, unit = SECONDS)
 	public void sse_stopClosesConnection() throws Exception {
 		int httpPort = findFreePort();
@@ -546,6 +599,46 @@ public class ServerSentEventTests {
 			boolean sawEof = waitForEof(socket, 6000);
 			socket.close();
 			Assertions.assertTrue(sawEof, "Connection did not close after server stop");
+		}
+	}
+
+	@Test
+	@Timeout(value = 15, unit = SECONDS)
+	public void sse_stop_setsTerminationReason_serverStop() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		TerminationReasonLifecycle lifecycle = new TerminationReasonLifecycle();
+
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestTimeout(Duration.ofSeconds(5))
+				.build();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.lifecycleInterceptor(lifecycle)
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+
+				writeHttpGet(socket, "/tests/terminate", ssePort);
+				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(hdr);
+
+				ServerSentEventBroadcaster broadcaster = sse.acquireBroadcaster(ResourcePath.withPath("/tests/terminate")).get();
+				awaitClientConnection(broadcaster, 2000);
+
+				app.stop();
+				Assertions.assertTrue(lifecycle.awaitTermination(5, SECONDS), "didTerminate not invoked");
+				Assertions.assertEquals(ServerSentEventConnectionTerminationReason.SERVER_STOP, lifecycle.getReason());
+			}
 		}
 	}
 
@@ -1043,6 +1136,16 @@ public class ServerSentEventTests {
 	}
 
 	@Test
+	public void sseCommentFormatting_preservesBlankLinesAndSeparators() {
+		DefaultServerSentEventServer server = (DefaultServerSentEventServer) ServerSentEventServer.withPort(0).build();
+		String comment = "one\r\ntwo\nthree\rfour\n";
+		String formatted = server.formatCommentForResponse(comment);
+
+		Assertions.assertEquals(": one\n: two\n: three\n: four\n:\n\n", formatted);
+		Assertions.assertEquals(":\n\n", server.formatCommentForResponse(""));
+	}
+
+	@Test
 	public void idContainingNull_isRejected() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				ServerSentEvent.withDefaults().id("abc\u0000def").build());
@@ -1295,6 +1398,104 @@ public class ServerSentEventTests {
 		}
 	}
 
+	private static class TerminationReasonLifecycle implements LifecycleInterceptor {
+		private final CountDownLatch establishedLatch;
+		private final CountDownLatch terminatedLatch;
+		private final AtomicReference<ServerSentEventConnectionTerminationReason> reason;
+
+		private TerminationReasonLifecycle() {
+			this.establishedLatch = new CountDownLatch(1);
+			this.terminatedLatch = new CountDownLatch(1);
+			this.reason = new AtomicReference<>();
+		}
+
+		@Override
+		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
+
+		@Override
+		public void didEstablishServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection) {
+			this.establishedLatch.countDown();
+		}
+
+		@Override
+		public void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																											@Nonnull Duration connectionDuration,
+																											@Nonnull ServerSentEventConnectionTerminationReason terminationReason,
+																											@Nullable Throwable throwable) {
+			this.reason.compareAndSet(null, terminationReason);
+			this.terminatedLatch.countDown();
+		}
+
+		boolean awaitEstablished(long timeout, TimeUnit unit) throws InterruptedException {
+			return this.establishedLatch.await(timeout, unit);
+		}
+
+		boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+			return this.terminatedLatch.await(timeout, unit);
+		}
+
+		ServerSentEventConnectionTerminationReason getReason() {
+			return this.reason.get();
+		}
+	}
+
+	private static class BackpressureLifecycle implements LifecycleInterceptor {
+		private final CountDownLatch writeStarted;
+		private final CountDownLatch allowWrite;
+		private final CountDownLatch terminatedLatch;
+		private final AtomicReference<ServerSentEventConnectionTerminationReason> reason;
+		private final AtomicBoolean blocking;
+
+		private BackpressureLifecycle() {
+			this.writeStarted = new CountDownLatch(1);
+			this.allowWrite = new CountDownLatch(1);
+			this.terminatedLatch = new CountDownLatch(1);
+			this.reason = new AtomicReference<>();
+			this.blocking = new AtomicBoolean(false);
+		}
+
+		@Override
+		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
+
+		@Override
+		public void willWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																				 @Nonnull ServerSentEvent serverSentEvent) {
+			if (this.blocking.compareAndSet(false, true)) {
+				this.writeStarted.countDown();
+				try {
+					this.allowWrite.await(5, SECONDS);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}
+		}
+
+		@Override
+		public void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																											@Nonnull Duration connectionDuration,
+																											@Nonnull ServerSentEventConnectionTerminationReason terminationReason,
+																											@Nullable Throwable throwable) {
+			this.reason.compareAndSet(null, terminationReason);
+			this.terminatedLatch.countDown();
+		}
+
+		boolean awaitWriteStarted(long timeout, TimeUnit unit) throws InterruptedException {
+			return this.writeStarted.await(timeout, unit);
+		}
+
+		void releaseWriter() {
+			this.allowWrite.countDown();
+		}
+
+		boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+			return this.terminatedLatch.await(timeout, unit);
+		}
+
+		ServerSentEventConnectionTerminationReason getReason() {
+			return this.reason.get();
+		}
+	}
+
 	private static String readLineCRLF(InputStream in) throws IOException {
 		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
 		int prev = -1, cur;
@@ -1400,6 +1601,16 @@ public class ServerSentEventTests {
 			}
 		}
 		return null;
+	}
+
+	private static void awaitClientConnection(ServerSentEventBroadcaster broadcaster, long timeoutMs) throws InterruptedException {
+		long deadline = System.currentTimeMillis() + timeoutMs;
+		while (System.currentTimeMillis() < deadline) {
+			if (broadcaster.getClientCount() > 0)
+				return;
+			Thread.sleep(10);
+		}
+		throw new IllegalStateException("SSE connection not registered in time");
 	}
 
 	private static boolean waitForEof(Socket socket, int timeoutMs) throws IOException {
