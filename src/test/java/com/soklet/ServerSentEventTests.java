@@ -34,9 +34,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.net.SocketAddress;
+import java.net.SocketOption;
 import java.net.SocketTimeoutException;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
+import java.nio.channels.spi.SelectorProvider;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -45,7 +52,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
@@ -231,6 +243,81 @@ public class ServerSentEventTests {
 			app.start();
 			// if stop hangs due to accept(), this test times out
 		} // try-with-resources stops both HTTP and SSE servers
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sse_stop_allowsIsStartedDuringShutdownWait() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.shutdownTimeout(Duration.ofSeconds(2))
+				.build();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle()) // no noise in test logs
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			DefaultServerSentEventServer internal = (DefaultServerSentEventServer) sse;
+			ExecutorService handlerExecutor = internal.getRequestHandlerExecutorService().orElseThrow();
+
+			CountDownLatch taskStarted = new CountDownLatch(1);
+			AtomicBoolean allowExit = new AtomicBoolean(false);
+
+			handlerExecutor.submit(() -> {
+				taskStarted.countDown();
+				while (!allowExit.get()) {
+					try {
+						Thread.sleep(50);
+					} catch (InterruptedException ignored) {
+						// Keep waiting until allowExit flips.
+					}
+				}
+			});
+
+			Assertions.assertTrue(taskStarted.await(2, SECONDS), "Background task did not start");
+
+			Thread stopThread = new Thread(app::stop, "sse-stop-test");
+			stopThread.start();
+
+			Field stoppingField = DefaultServerSentEventServer.class.getDeclaredField("stopping");
+			stoppingField.setAccessible(true);
+
+			boolean sawStopping = false;
+			long deadline = System.currentTimeMillis() + 1000;
+
+			while (System.currentTimeMillis() < deadline) {
+				Boolean stopping = (Boolean) stoppingField.get(internal);
+				if (Boolean.TRUE.equals(stopping)) {
+					sawStopping = true;
+					break;
+				}
+				Thread.sleep(5);
+			}
+
+			Assertions.assertTrue(sawStopping, "Stop did not enter stopping state in time");
+
+			ExecutorService probe = Executors.newSingleThreadExecutor();
+			try {
+				Future<Boolean> startedFuture = probe.submit(internal::isStarted);
+				Boolean started = startedFuture.get(200, TimeUnit.MILLISECONDS);
+				Assertions.assertTrue(stopThread.isAlive(), "Stop completed before probe");
+				Assertions.assertTrue(started, "Expected isStarted to return while stop is in progress");
+			} finally {
+				probe.shutdownNow();
+			}
+
+			allowExit.set(true);
+			stopThread.join(3000);
+			Assertions.assertFalse(stopThread.isAlive(), "Stop did not complete after releasing task");
+		}
 	}
 
 	@Test
@@ -459,6 +546,60 @@ public class ServerSentEventTests {
 			boolean sawEof = waitForEof(socket, 6000);
 			socket.close();
 			Assertions.assertTrue(sawEof, "Connection did not close after server stop");
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sse_concurrentConnectionLimit_rejectsExtraHandshakes() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		BlockingHandshakeResource.prepare(2);
+
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestTimeout(Duration.ofSeconds(5))
+				.verifyConnectionOnceEstablished(false)
+				.concurrentConnectionLimit(1)
+				.build();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingHandshakeResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket1 = connectWithRetry("127.0.0.1", ssePort, 2000);
+					 Socket socket2 = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket1.setSoTimeout(4000);
+				socket2.setSoTimeout(4000);
+
+				writeHttpGet(socket1, "/sse/limit", ssePort);
+				writeHttpGet(socket2, "/sse/limit", ssePort);
+
+				BlockingHandshakeResource.awaitReady(5, SECONDS);
+				BlockingHandshakeResource.release();
+
+				String h1 = readUntil(socket1.getInputStream(), "\r\n\r\n", 4096);
+				if (h1 == null) h1 = readUntil(socket1.getInputStream(), "\n\n", 4096);
+				String h2 = readUntil(socket2.getInputStream(), "\r\n\r\n", 4096);
+				if (h2 == null) h2 = readUntil(socket2.getInputStream(), "\n\n", 4096);
+
+				Assertions.assertNotNull(h1, "No handshake response on socket1");
+				Assertions.assertNotNull(h2, "No handshake response on socket2");
+
+				boolean h1Ok = h1.startsWith("HTTP/1.1 200");
+				boolean h2Ok = h2.startsWith("HTTP/1.1 200");
+				boolean h1Busy = h1.startsWith("HTTP/1.1 503");
+				boolean h2Busy = h2.startsWith("HTTP/1.1 503");
+
+				Assertions.assertTrue(h1Ok ^ h2Ok, "Expected exactly one 200 handshake");
+				Assertions.assertTrue(h1Busy ^ h2Busy, "Expected exactly one 503 handshake");
+			}
 		}
 	}
 
@@ -781,6 +922,37 @@ public class ServerSentEventTests {
 	}
 
 	@ThreadSafe
+	public static class BlockingHandshakeResource {
+		private static volatile CountDownLatch ready;
+		private static volatile CountDownLatch release;
+
+		static void prepare(int connections) {
+			ready = new CountDownLatch(connections);
+			release = new CountDownLatch(1);
+		}
+
+		static void awaitReady(long timeout, TimeUnit unit) throws InterruptedException {
+			if (!ready.await(timeout, unit))
+				throw new IllegalStateException("Timed out waiting for concurrent handshakes");
+		}
+
+		static void release() {
+			release.countDown();
+		}
+
+		@ServerSentEventSource("/sse/limit")
+		public HandshakeResult sseLimit(@Nonnull Request request) {
+			ready.countDown();
+			try {
+				release.await(5, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			return HandshakeResult.accept();
+		}
+	}
+
+	@ThreadSafe
 	public static class SseBasicHandshakeResource {
 		@ServerSentEventSource("/sse")
 		public HandshakeResult sse() {
@@ -960,6 +1132,166 @@ public class ServerSentEventTests {
 				Assertions.assertNotNull(raw, "No HTTP response headers received");
 				Assertions.assertTrue(raw.startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 			}
+		}
+	}
+
+	@Test
+	public void writeMarshaledResponseToChannel_handlesPartialWrites() throws Exception {
+		DefaultServerSentEventServer server = (DefaultServerSentEventServer) ServerSentEventServer.withPort(0).build();
+		ResponseCookie cookie = ResponseCookie.with("session", "abc").path("/").build();
+
+		MarshaledResponse response = MarshaledResponse.withStatusCode(503)
+				.headers(Map.of(
+						"X-Test", Set.of("one"),
+						"Content-Type", Set.of("text/plain")
+				))
+				.cookies(Set.of(cookie))
+				.body("payload".getBytes(StandardCharsets.UTF_8))
+				.build();
+
+		PartialWriteSocketChannel channel = new PartialWriteSocketChannel(3);
+
+		Method method = DefaultServerSentEventServer.class.getDeclaredMethod("writeMarshaledResponseToChannel", SocketChannel.class, MarshaledResponse.class);
+		method.setAccessible(true);
+		method.invoke(server, channel, response);
+
+		String output = new String(channel.getWrittenBytes(), StandardCharsets.UTF_8);
+		String[] parts = output.split("\\r?\\n\\r?\\n", 2);
+
+		Assertions.assertEquals(2, parts.length, "Missing header/body separator");
+
+		String[] lines = parts[0].split("\\r?\\n");
+		Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 503"), "Expected 503 status line");
+
+		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines).subList(1, lines.length));
+
+		Assertions.assertEquals("one", firstOrEmpty(headers, "x-test"));
+		Assertions.assertEquals("text/plain", firstOrEmpty(headers, "content-type"));
+
+		String setCookie = firstOrEmpty(headers, "set-cookie");
+		Assertions.assertTrue(setCookie.contains("session=abc"), "Missing Set-Cookie header");
+
+		Assertions.assertEquals("payload", parts[1]);
+	}
+
+	private static class PartialWriteSocketChannel extends SocketChannel {
+		private final ByteArrayOutputStream output;
+		private final int maxBytesPerWrite;
+
+		protected PartialWriteSocketChannel(int maxBytesPerWrite) {
+			super(SelectorProvider.provider());
+			this.output = new ByteArrayOutputStream();
+			this.maxBytesPerWrite = maxBytesPerWrite;
+		}
+
+		byte[] getWrittenBytes() {
+			return output.toByteArray();
+		}
+
+		@Override
+		public int write(ByteBuffer src) throws IOException {
+			int remaining = src.remaining();
+			if (remaining == 0)
+				return 0;
+
+			int toWrite = Math.min(remaining, maxBytesPerWrite);
+			byte[] buf = new byte[toWrite];
+			src.get(buf);
+			output.write(buf);
+			return toWrite;
+		}
+
+		@Override
+		public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
+			long total = 0;
+			for (int i = offset; i < offset + length; i++)
+				total += write(srcs[i]);
+			return total;
+		}
+
+		@Override
+		public int read(ByteBuffer dst) throws IOException {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public SocketChannel bind(SocketAddress local) {
+			return this;
+		}
+
+		@Override
+		public <T> SocketChannel setOption(SocketOption<T> name, T value) {
+			return this;
+		}
+
+		@Override
+		public <T> T getOption(SocketOption<T> name) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public Set<SocketOption<?>> supportedOptions() {
+			return Set.of();
+		}
+
+		@Override
+		public SocketChannel shutdownInput() {
+			return this;
+		}
+
+		@Override
+		public SocketChannel shutdownOutput() {
+			return this;
+		}
+
+		@Override
+		public Socket socket() {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public boolean isConnected() {
+			return true;
+		}
+
+		@Override
+		public boolean isConnectionPending() {
+			return false;
+		}
+
+		@Override
+		public boolean connect(SocketAddress remote) {
+			return true;
+		}
+
+		@Override
+		public boolean finishConnect() {
+			return true;
+		}
+
+		@Override
+		public SocketAddress getRemoteAddress() {
+			return null;
+		}
+
+		@Override
+		public SocketAddress getLocalAddress() {
+			return null;
+		}
+
+		@Override
+		protected void implCloseSelectableChannel() {
+			// nothing to close
+		}
+
+		@Override
+		protected void implConfigureBlocking(boolean block) {
+			// no-op
 		}
 	}
 

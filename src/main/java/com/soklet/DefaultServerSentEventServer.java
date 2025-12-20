@@ -62,6 +62,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -166,6 +167,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final ConcurrentLruMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
 	@Nonnull
 	private final ConcurrentHashMap<DefaultServerSentEventConnection, DefaultServerSentEventBroadcaster> globalConnections;
+	@Nonnull
+	private final AtomicInteger activeConnectionCount;
 	@Nonnull
 	private final ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> idleBroadcastersByResourcePath;
 	@Nonnull
@@ -576,6 +579,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Initialize the global LRU map with the specified limit.
 		// We do not need an eviction listener because we will not evict active connections.
 		this.globalConnections = new ConcurrentHashMap<>(getConcurrentConnectionLimit());
+		this.activeConnectionCount = new AtomicInteger(0);
 	}
 
 	@Override
@@ -749,6 +753,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Keep track of whether we should go through the "handshake accepted" flow.
 		// Might change from "accepted" to "rejected" if an error occurs
 		AtomicReference<HandshakeResult.Accepted> handshakeAcceptedReference = new AtomicReference<>();
+		AtomicBoolean connectionSlotReserved = new AtomicBoolean(false);
 
 		try (clientSocketChannel) {
 			try {
@@ -774,8 +779,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (resourcePathDeclaration != null)
 				resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
 
-			// Check to see if we're overloaded (503) - if so, write a response and bail before going further
-			if (resourcePathDeclaration != null && getGlobalConnections().size() >= getConcurrentConnectionLimit()) {
+			// Fast-path check for overload (authoritative limit enforcement occurs after handshake acceptance)
+			if (resourcePathDeclaration != null && getActiveConnectionCount() >= getConcurrentConnectionLimit()) {
 				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
 						format("Rejecting request to %s: Concurrent connection limit (%d) reached", request.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
 
@@ -801,18 +806,36 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// To write the handshake response, we delegate to the Soklet instance, handing it the request we just parsed
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
 			// Subsequent writes to the open socket (those following successful transmission of the "accepted" handshake response) are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
-			getRequestHandler().get().handleRequest(request, (@Nonnull RequestResult requestResult) -> {
+			final Request requestForHandler = request;
+
+			getRequestHandler().get().handleRequest(requestForHandler, (@Nonnull RequestResult requestResult) -> {
 				// Set to the value Soklet processing gives us. Will be the empty Optional if no resource method was matched
 				HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
 
-				// Store a reference to the accepted handshake if we have it
-				if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted accepted)
-					handshakeAcceptedReference.set(accepted);
+				RequestResult effectiveRequestResult = requestResult;
+
+				// Store a reference to the accepted handshake if we have it and there is capacity
+				if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted accepted) {
+					if (reserveConnectionSlot()) {
+						connectionSlotReserved.set(true);
+						handshakeAcceptedReference.set(accepted);
+					} else {
+						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
+										format("Rejecting request to %s: Concurrent connection limit (%d) reached", requestForHandler.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
+
+						MarshaledResponse response = getResponseMarshaler().get().forServiceUnavailable(requestForHandler, requestResult.getResourceMethod().orElse(null));
+
+						effectiveRequestResult = requestResult.copy()
+								.marshaledResponse(response)
+								.handshakeResult(null)
+								.finish();
+					}
+				}
 
 				byte[] handshakeHttpResponse;
 
 				try {
-					handshakeHttpResponse = createHandshakeHttpResponse(requestResult);
+					handshakeHttpResponse = createHandshakeHttpResponse(effectiveRequestResult);
 				} catch (Throwable t) {
 					// Should not happen, but if it does, we fall back to "rejected" handshake mode and write a failsafe 500 response
 					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to generate SSE handshake response")
@@ -821,6 +844,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					// Clear the accepted handshake reference in case it was set
 					handshakeAcceptedReference.set(null);
+					releaseReservedSlot(connectionSlotReserved);
 					handshakeHttpResponse = FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
 				}
 
@@ -838,6 +862,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					// Clear the accepted handshake reference in case it was set
 					handshakeAcceptedReference.set(null);
+					releaseReservedSlot(connectionSlotReserved);
 				}
 			});
 
@@ -859,6 +884,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, handshakeAccepted)
 						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
+				connectionSlotReserved.set(false);
 
 				try {
 					getLifecycleInterceptor().get().didEstablishServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot());
@@ -1050,6 +1076,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.build());
 				}
 			}
+
+			releaseReservedSlot(connectionSlotReserved);
 		}
 	}
 
@@ -1184,6 +1212,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return combined;
 	}
 
+	private static void writeFully(@Nonnull SocketChannel socketChannel,
+																 @Nonnull byte[] bytes) throws IOException {
+		requireNonNull(socketChannel);
+		requireNonNull(bytes);
+
+		ByteBuffer buffer = ByteBuffer.wrap(bytes);
+		while (buffer.hasRemaining())
+			socketChannel.write(buffer);
+	}
+
 	// Helper to write the marshaled response directly to the channel
 	private void writeMarshaledResponseToChannel(@Nonnull SocketChannel socketChannel,
 																							 @Nonnull MarshaledResponse marshaledResponse) throws IOException {
@@ -1192,28 +1230,28 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// Write Status Line
 		String statusLine = format("HTTP/1.1 %d\r\n", marshaledResponse.getStatusCode());
-		socketChannel.write(ByteBuffer.wrap(statusLine.getBytes(StandardCharsets.UTF_8)));
+		writeFully(socketChannel, statusLine.getBytes(StandardCharsets.UTF_8));
 
 		// Write Headers
 		for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 			for (String value : entry.getValue()) {
 				String header = entry.getKey() + ": " + value + "\r\n";
-				socketChannel.write(ByteBuffer.wrap(header.getBytes(StandardCharsets.UTF_8)));
+				writeFully(socketChannel, header.getBytes(StandardCharsets.UTF_8));
 			}
 		}
 
 		// Write Cookies
 		for (ResponseCookie cookie : marshaledResponse.getCookies()) {
 			String header = "Set-Cookie: " + cookie.toSetCookieHeaderRepresentation() + "\r\n";
-			socketChannel.write(ByteBuffer.wrap(header.getBytes(StandardCharsets.UTF_8)));
+			writeFully(socketChannel, header.getBytes(StandardCharsets.UTF_8));
 		}
 
 		// Headers end
-		socketChannel.write(ByteBuffer.wrap(new byte[]{'\r', '\n'}));
+		writeFully(socketChannel, new byte[]{'\r', '\n'});
 
 		// Write Body
 		if (marshaledResponse.getBody().isPresent())
-			socketChannel.write(ByteBuffer.wrap(marshaledResponse.getBody().get()));
+			writeFully(socketChannel, marshaledResponse.getBody().get());
 	}
 
 	@Nonnull
@@ -1921,118 +1959,131 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@Override
 	public void stop() {
-		getLock().lock();
-
+		Thread eventLoopThreadSnapshot;
+		ExecutorService requestHandlerExecutorServiceSnapshot;
+		ExecutorService requestReaderExecutorServiceSnapshot;
+		ServerSocketChannel serverSocketChannelSnapshot;
 		boolean interrupted = false;
 
+		getLock().lock();
 		try {
-			if (!isStarted())
+			if (!this.started)
 				return;
 
 			this.stopping = true;
 			getStopPoisonPill().set(true);
 
-			// Close server socket to unblock accept()
-			if (this.serverSocketChannel != null) {
-				try {
-					this.serverSocketChannel.close();
-				} catch (Exception e) {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event SocketChannel").throwable(e).build());
-				}
-			}
-
-			// Close client connections - sends poison pills to all registered connections
-			for (DefaultServerSentEventBroadcaster broadcaster : getBroadcastersByResourcePath().values()) {
-				try {
-					broadcaster.unregisterAllServerSentEventConnections(true);
-				} catch (Exception e) {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to shut down open Server-Sent Event connections")
-							.throwable(e)
-							.build());
-				}
-			}
-
-			// Ensure nothing slipped through the cracks
-			List<DefaultServerSentEventConnection> connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
-
-			for (DefaultServerSentEventConnection connection : connectionsSnapshot) {
-				try {
-					connection.getClosing().compareAndSet(false, true);
-
-					DefaultServerSentEventBroadcaster b = getGlobalConnections().get(connection);
-					if (b != null) b.unregisterServerSentEventConnection(connection, true);
-
-					connection.getSocketChannel().close();
-				} catch (Throwable ignored) {
-					// Nothing to do
-				}
-			}
-
-			// Clear global connections map for sanity (though it should be empty by this point)
-			getGlobalConnections().clear();
-
-			// Use shutdownNow() immediately for request handlers.
-			// Poison pills handle normal cases; interrupt handles edge cases where
-			// a connection registered after we iterated above.
-			if (this.requestHandlerExecutorService != null)
-				this.requestHandlerExecutorService.shutdownNow();
-
-			if (this.requestReaderExecutorService != null)
-				this.requestReaderExecutorService.shutdownNow();
-
-			// Shared wall-clock deadline
-			final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
-
-			// Await the accept-loop thread and all executors **in parallel**
-			long grace = Math.min(250L, remainingMillis(deadlineNanos));
-
-			List<CompletableFuture<Boolean>> waits = new ArrayList<>(3);
-			waits.add(joinAsync(this.eventLoopThread, grace));
-
-			if (this.requestHandlerExecutorService != null)
-				waits.add(awaitTerminationAsync(this.requestHandlerExecutorService, grace));
-
-			if (this.requestReaderExecutorService != null)
-				waits.add(awaitTerminationAsync(this.requestReaderExecutorService, grace));
-
-			// Wait for all, but no longer than the single budget
-			try {
-				CompletableFuture.allOf(waits.toArray(CompletableFuture[]::new)).get(grace, TimeUnit.MILLISECONDS);
-			} catch (TimeoutException te) {
-				// Budget exhausted; escalate below
-			} catch (InterruptedException e) {
-				interrupted = true;
-				Thread.currentThread().interrupt();
-			} catch (ExecutionException e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Exception while awaiting SSE shutdown").throwable(e).build());
-			}
-
-			// Escalate for any stragglers using remaining time
-			hardenJoin(this.eventLoopThread, remainingMillis(deadlineNanos));
-
-			// Pools already had shutdownNow() called; just await termination
-			if (this.requestHandlerExecutorService != null)
-				awaitPoolTermination(this.requestHandlerExecutorService, remainingMillis(deadlineNanos));
-
-			if (this.requestReaderExecutorService != null)
-				awaitPoolTermination(this.requestReaderExecutorService, remainingMillis(deadlineNanos));
+			eventLoopThreadSnapshot = this.eventLoopThread;
+			requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
+			requestReaderExecutorServiceSnapshot = this.requestReaderExecutorService;
+			serverSocketChannelSnapshot = this.serverSocketChannel;
 		} finally {
-			try {
-				this.started = false;
-				this.stopping = false; // allow future restarts
-				this.eventLoopThread = null;
-				this.requestHandlerExecutorService = null;
-				this.requestReaderExecutorService = null;
-				this.getBroadcastersByResourcePath().clear();
-				this.getIdleBroadcastersByResourcePath().clear();
-				this.getResourcePathDeclarationsByResourcePathCache().clear();
-				getStopPoisonPill().set(false);
+			getLock().unlock();
+		}
 
-				if (interrupted)
-					Thread.currentThread().interrupt();
-			} finally {
-				getLock().unlock();
+		// Close server socket to unblock accept()
+		if (serverSocketChannelSnapshot != null) {
+			try {
+				serverSocketChannelSnapshot.close();
+			} catch (Exception e) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event SocketChannel").throwable(e).build());
 			}
+		}
+
+		// Close client connections - sends poison pills to all registered connections
+		for (DefaultServerSentEventBroadcaster broadcaster : new ArrayList<>(getBroadcastersByResourcePath().values())) {
+			try {
+				broadcaster.unregisterAllServerSentEventConnections(true);
+			} catch (Exception e) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to shut down open Server-Sent Event connections")
+						.throwable(e)
+						.build());
+			}
+		}
+
+		// Ensure nothing slipped through the cracks
+		List<DefaultServerSentEventConnection> connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
+
+		for (DefaultServerSentEventConnection connection : connectionsSnapshot) {
+			try {
+				connection.getClosing().compareAndSet(false, true);
+
+				DefaultServerSentEventBroadcaster b = getGlobalConnections().get(connection);
+				if (b != null) b.unregisterServerSentEventConnection(connection, true);
+
+				connection.getSocketChannel().close();
+			} catch (Throwable ignored) {
+				// Nothing to do
+			}
+		}
+
+		// Clear global connections map for sanity (though it should be empty by this point)
+		getGlobalConnections().clear();
+
+		// Use shutdownNow() immediately for request handlers.
+		// Poison pills handle normal cases; interrupt handles edge cases where
+		// a connection registered after we iterated above.
+		if (requestHandlerExecutorServiceSnapshot != null)
+			requestHandlerExecutorServiceSnapshot.shutdownNow();
+
+		if (requestReaderExecutorServiceSnapshot != null)
+			requestReaderExecutorServiceSnapshot.shutdownNow();
+
+		// Shared wall-clock deadline
+		final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
+
+		// Await the accept-loop thread and all executors **in parallel**
+		long grace = Math.min(250L, remainingMillis(deadlineNanos));
+
+		List<CompletableFuture<Boolean>> waits = new ArrayList<>(3);
+		waits.add(joinAsync(eventLoopThreadSnapshot, grace));
+
+		if (requestHandlerExecutorServiceSnapshot != null)
+			waits.add(awaitTerminationAsync(requestHandlerExecutorServiceSnapshot, grace));
+
+		if (requestReaderExecutorServiceSnapshot != null)
+			waits.add(awaitTerminationAsync(requestReaderExecutorServiceSnapshot, grace));
+
+		// Wait for all, but no longer than the single budget
+		try {
+			CompletableFuture.allOf(waits.toArray(CompletableFuture[]::new)).get(grace, TimeUnit.MILLISECONDS);
+		} catch (TimeoutException te) {
+			// Budget exhausted; escalate below
+		} catch (InterruptedException e) {
+			interrupted = true;
+			Thread.currentThread().interrupt();
+		} catch (ExecutionException e) {
+			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Exception while awaiting SSE shutdown").throwable(e).build());
+		}
+
+		// Escalate for any stragglers using remaining time
+		hardenJoin(eventLoopThreadSnapshot, remainingMillis(deadlineNanos));
+
+		// Pools already had shutdownNow() called; just await termination
+		if (requestHandlerExecutorServiceSnapshot != null)
+			awaitPoolTermination(requestHandlerExecutorServiceSnapshot, remainingMillis(deadlineNanos));
+
+		if (requestReaderExecutorServiceSnapshot != null)
+			awaitPoolTermination(requestReaderExecutorServiceSnapshot, remainingMillis(deadlineNanos));
+
+		getLock().lock();
+		try {
+			this.started = false;
+			this.stopping = false; // allow future restarts
+			this.eventLoopThread = null;
+			this.serverSocketChannel = null;
+			this.requestHandlerExecutorService = null;
+			this.requestReaderExecutorService = null;
+			this.getBroadcastersByResourcePath().clear();
+			this.getIdleBroadcastersByResourcePath().clear();
+			this.getResourcePathDeclarationsByResourcePathCache().clear();
+			this.activeConnectionCount.set(0);
+			getStopPoisonPill().set(false);
+
+			if (interrupted)
+				Thread.currentThread().interrupt();
+		} finally {
+			getLock().unlock();
 		}
 	}
 
@@ -2076,6 +2127,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (thread == null || millis <= 0)
 			return CompletableFuture.completedFuture(true);
 
+		if (thread == Thread.currentThread())
+			return CompletableFuture.completedFuture(true);
+
 		return CompletableFuture.supplyAsync(() -> {
 			try {
 				thread.join(millis);
@@ -2092,7 +2146,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 														@Nonnull Long millis) {
 		requireNonNull(millis);
 
-		if (thread == null || !thread.isAlive())
+		if (thread == null || !thread.isAlive() || thread == Thread.currentThread())
 			return;
 
 		thread.interrupt();
@@ -2185,7 +2239,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				handler,
 				(serverSentEventConnection) -> {
 					// When the broadcaster unregisters a connection it manages, remove it from the global set as well
-					getGlobalConnections().remove(serverSentEventConnection);
+					DefaultServerSentEventBroadcaster removed = getGlobalConnections().remove(serverSentEventConnection);
+					if (removed != null)
+						releaseConnectionSlot();
 				},
 				this::safelyLog
 		);
@@ -2218,6 +2274,29 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			return broadcaster;
 		});
+	}
+
+	private boolean reserveConnectionSlot() {
+		while (true) {
+			int current = this.activeConnectionCount.get();
+
+			if (current >= getConcurrentConnectionLimit())
+				return false;
+
+			if (this.activeConnectionCount.compareAndSet(current, current + 1))
+				return true;
+		}
+	}
+
+	private void releaseConnectionSlot() {
+		this.activeConnectionCount.updateAndGet(current -> Math.max(0, current - 1));
+	}
+
+	private void releaseReservedSlot(@Nonnull AtomicBoolean slotReserved) {
+		requireNonNull(slotReserved);
+
+		if (slotReserved.getAndSet(false))
+			releaseConnectionSlot();
 	}
 
 	@Nonnull
@@ -2408,6 +2487,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected ConcurrentHashMap<DefaultServerSentEventConnection, DefaultServerSentEventBroadcaster> getGlobalConnections() {
 		return this.globalConnections;
+	}
+
+	@Nonnull
+	protected Integer getActiveConnectionCount() {
+		return this.activeConnectionCount.get();
 	}
 
 	@Nonnull
