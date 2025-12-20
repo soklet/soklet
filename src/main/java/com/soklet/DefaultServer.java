@@ -48,6 +48,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -168,6 +169,12 @@ final class DefaultServer implements Server {
 			if (isStarted())
 				return;
 
+			if (getRequestHandler().isEmpty())
+				throw new IllegalStateException(format("No %s was registered for %s", RequestHandler.class, getClass()));
+
+			if (getLifecycleInterceptor().isEmpty())
+				throw new IllegalStateException(format("No %s was registered for %s", LifecycleInterceptor.class, getClass()));
+
 			Options options = OptionsBuilder.newBuilder()
 					.withHost(getHost())
 					.withPort(getPort())
@@ -200,124 +207,155 @@ final class DefaultServer implements Server {
 			Handler handler = ((microhttpRequest, microHttpCallback) -> {
 				ExecutorService requestHandlerExecutorServiceReference = this.requestHandlerExecutorService;
 
-				if (requestHandlerExecutorServiceReference == null)
-					return;
-
-				requestHandlerExecutorServiceReference.submit(() -> {
-					RequestHandler requestHandler = getRequestHandler().orElse(null);
-
-					if (requestHandler == null)
-						return;
-
-					AtomicBoolean shouldWriteFailsafeResponse = new AtomicBoolean(true);
-
+				if (requestHandlerExecutorServiceReference == null) {
+					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Request handler executor service is unavailable").build());
 					try {
-						// Normalize body
-						byte[] body = microhttpRequest.body();
+						microHttpCallback.accept(provideMicrohttpFailsafeResponse(503, microhttpRequest,
+								new IllegalStateException("Request handler executor service is unavailable")));
+					} catch (Throwable t2) {
+						safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+								.throwable(t2)
+								.build());
+					}
+					return;
+				}
 
-						if (body != null && body.length == 0)
-							body = null;
+				try {
+					requestHandlerExecutorServiceReference.submit(() -> {
+						RequestHandler requestHandler = getRequestHandler().orElse(null);
 
-						Map<String, Set<String>> headers = headersFromMicrohttpRequest(microhttpRequest);
+						if (requestHandler == null)
+							return;
 
-						// Special case: look for a poison-pill header that indicates "content too large",
-						// make a note of it, and then remove it from the request.
-						// This header is specially set for Soklet inside of Microhttp's connection event loop.
-						boolean contentTooLarge = false;
-
-						if (headers.containsKey("com.soklet.CONTENT_TOO_LARGE")) {
-							headers.remove("com.soklet.CONTENT_TOO_LARGE");
-							contentTooLarge = true;
-						}
-
-						HttpMethod httpMethod;
+						AtomicBoolean shouldWriteFailsafeResponse = new AtomicBoolean(true);
 
 						try {
-							String normalizedMethod = trimAggressivelyToEmpty(microhttpRequest.method()).toUpperCase(ENGLISH);
+							// Normalize body
+							byte[] body = microhttpRequest.body();
 
-							if (normalizedMethod.equals("PRI"))
-								throw new IllegalRequestException("HTTP/2.0 Connection Preface specified, but Soklet only supports HTTP/1.1");
+							if (body != null && body.length == 0)
+								body = null;
 
-							httpMethod = HttpMethod.valueOf(normalizedMethod);
-						} catch (IllegalArgumentException e) {
-							throw new IllegalRequestException(format("Unsupported HTTP method specified: '%s'", microhttpRequest.method()));
-						}
+							Map<String, Set<String>> headers = headersFromMicrohttpRequest(microhttpRequest);
 
-						Request request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
-								.multipartParser(getMultipartParser())
-								.idGenerator(getIdGenerator())
-								.headers(headers)
-								.body(body)
-								.contentTooLarge(contentTooLarge)
-								.build();
+							// Special case: look for a poison-pill header that indicates "content too large",
+							// make a note of it, and then remove it from the request.
+							// This header is specially set for Soklet inside of Microhttp's connection event loop.
+							boolean contentTooLarge = false;
 
-						requestHandler.handleRequest(request, (requestResult -> {
+							if (headers.containsKey("com.soklet.CONTENT_TOO_LARGE")) {
+								headers.remove("com.soklet.CONTENT_TOO_LARGE");
+								contentTooLarge = true;
+							}
+
+							HttpMethod httpMethod;
+
 							try {
-								MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestResult.getMarshaledResponse());
-								shouldWriteFailsafeResponse.set(false);
+								String normalizedMethod = trimAggressivelyToEmpty(microhttpRequest.method()).toUpperCase(ENGLISH);
 
+								if (normalizedMethod.equals("PRI"))
+									throw new IllegalRequestException("HTTP/2.0 Connection Preface specified, but Soklet only supports HTTP/1.1");
+
+								httpMethod = HttpMethod.valueOf(normalizedMethod);
+							} catch (IllegalArgumentException e) {
+								throw new IllegalRequestException(format("Unsupported HTTP method specified: '%s'", microhttpRequest.method()));
+							}
+
+							Request request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
+									.multipartParser(getMultipartParser())
+									.idGenerator(getIdGenerator())
+									.headers(headers)
+									.body(body)
+									.contentTooLarge(contentTooLarge)
+									.build();
+
+							requestHandler.handleRequest(request, (requestResult -> {
 								try {
-									microHttpCallback.accept(microhttpResponse);
+									MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestResult.getMarshaledResponse());
+									shouldWriteFailsafeResponse.set(false);
+
+									try {
+										microHttpCallback.accept(microhttpResponse);
+									} catch (Throwable t) {
+										safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
+												.throwable(t)
+												.build());
+									}
 								} catch (Throwable t) {
-									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
+									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
 											.throwable(t)
 											.build());
+
+									try {
+										microHttpCallback.accept(provideMicrohttpFailsafeResponse(500, microhttpRequest, t));
+									} catch (Throwable t2) {
+										safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+												.throwable(t2)
+												.build());
+									}
 								}
-							} catch (Throwable t) {
-								safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
+							}));
+						} catch (Throwable t) {
+							Integer failsafeStatusCode = 500;
+
+							if (t instanceof IllegalRequestException) {
+								failsafeStatusCode = 400;
+								safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, t.getMessage())
 										.throwable(t)
 										.build());
+							} else if (t instanceof URISyntaxException) {
+								failsafeStatusCode = 400;
+								safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, format("Unable to parse request URI: %s", microhttpRequest.uri()))
+										.throwable(t)
+										.build());
+							} else {
+								safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
+										.throwable(t)
+										.build());
+							}
 
+							if (shouldWriteFailsafeResponse.get()) {
 								try {
-									microHttpCallback.accept(provideMicrohttpFailsafeResponse(500, microhttpRequest, t));
+									microHttpCallback.accept(provideMicrohttpFailsafeResponse(failsafeStatusCode, microhttpRequest, t));
 								} catch (Throwable t2) {
 									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 											.throwable(t2)
 											.build());
 								}
 							}
-						}));
-					} catch (Throwable t) {
-						Integer failsafeStatusCode = 500;
-
-						if (t instanceof IllegalRequestException) {
-							failsafeStatusCode = 400;
-							safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, t.getMessage())
-									.throwable(t)
-									.build());
-						} else if (t instanceof URISyntaxException) {
-							failsafeStatusCode = 400;
-							safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, format("Unable to parse request URI: %s", microhttpRequest.uri()))
-									.throwable(t)
-									.build());
-						} else {
-							safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
-									.throwable(t)
-									.build());
 						}
+					});
+				} catch (RejectedExecutionException e) {
+					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
+							.throwable(e)
+							.build());
 
-						if (shouldWriteFailsafeResponse.get()) {
-							try {
-								microHttpCallback.accept(provideMicrohttpFailsafeResponse(failsafeStatusCode, microhttpRequest, t));
-							} catch (Throwable t2) {
-								safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
-										.throwable(t2)
-										.build());
-							}
-						}
+					try {
+						microHttpCallback.accept(provideMicrohttpFailsafeResponse(503, microhttpRequest, e));
+					} catch (Throwable t2) {
+						safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+								.throwable(t2)
+								.build());
 					}
-				});
+				}
 			});
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
+			EventLoop eventLoop = null;
 
 			try {
-				this.eventLoop = new EventLoop(options, logger, handler);
+				eventLoop = new EventLoop(options, logger, handler);
 				eventLoop.start();
+				this.eventLoop = eventLoop;
 			} catch (BindException e) {
+				cleanupFailedStart(eventLoop);
 				throw new UncheckedIOException(format("Soklet was unable to start the HTTP server - port %d is already in use.", options.port()), e);
 			} catch (IOException e) {
+				cleanupFailedStart(eventLoop);
 				throw new UncheckedIOException(e);
+			} catch (RuntimeException e) {
+				cleanupFailedStart(eventLoop);
+				throw e;
 			}
 		} finally {
 			getLock().unlock();
@@ -587,6 +625,27 @@ final class DefaultServer implements Server {
 	@Nonnull
 	protected Optional<RequestHandler> getRequestHandler() {
 		return Optional.ofNullable(this.requestHandler);
+	}
+
+	private void cleanupFailedStart(@Nullable EventLoop eventLoop) {
+		if (eventLoop != null) {
+			try {
+				eventLoop.stop();
+			} catch (Exception e) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server event loop after failed start")
+						.throwable(e)
+						.build());
+			}
+		}
+
+		ExecutorService requestHandlerExecutorService = this.requestHandlerExecutorService;
+
+		if (requestHandlerExecutorService != null) {
+			requestHandlerExecutorService.shutdownNow();
+		}
+
+		this.eventLoop = null;
+		this.requestHandlerExecutorService = null;
 	}
 
 	@ThreadSafe

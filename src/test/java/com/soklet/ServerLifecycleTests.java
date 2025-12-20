@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.URL;
@@ -30,6 +31,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /*
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -52,6 +55,8 @@ public class ServerLifecycleTests {
 	private static HttpURLConnection open(String method, URL url, Map<String, String> headers) throws IOException {
 		HttpURLConnection c = (HttpURLConnection) url.openConnection();
 		c.setRequestMethod(method);
+		c.setConnectTimeout(2000);
+		c.setReadTimeout(2000);
 		for (Map.Entry<String, String> e : headers.entrySet()) c.setRequestProperty(e.getKey(), e.getValue());
 		return c;
 	}
@@ -89,8 +94,93 @@ public class ServerLifecycleTests {
 		}
 	}
 
+	@Test
+	public void start_without_initialize_fails_fast() {
+		Server server = Server.withPort(0).build();
+
+		IllegalStateException exception =
+				Assertions.assertThrows(IllegalStateException.class, server::start);
+		Assertions.assertTrue(exception.getMessage().contains("RequestHandler"));
+		Assertions.assertFalse(server.isStarted());
+	}
+
+	@Test
+	public void start_port_in_use_cleans_up_state() throws Exception {
+		int port = findFreePort();
+
+		try (ServerSocket ss = new ServerSocket(port)) {
+			ss.setReuseAddress(true);
+
+			Server server = Server.withPort(port).build();
+
+			SokletConfig cfg = SokletConfig.withServer(server)
+					.lifecycleInterceptor(new QuietLifecycle())
+					.build();
+
+			server.initialize(cfg, (request, consumer) -> {
+				MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+						.headers(Map.of("Content-Type", Set.of("text/plain")))
+						.body("ok".getBytes(StandardCharsets.UTF_8))
+						.build();
+				consumer.accept(RequestResult.withMarshaledResponse(response).build());
+			});
+
+			Assertions.assertThrows(UncheckedIOException.class, server::start);
+			Assertions.assertFalse(server.isStarted());
+
+			DefaultServer internal = (DefaultServer) server;
+			Assertions.assertTrue(internal.getEventLoop().isEmpty());
+			Assertions.assertTrue(internal.getRequestHandlerExecutorService().isEmpty());
+		}
+	}
+
+	@Test
+	public void rejectedExecutor_returns_503() throws Exception {
+		int port = findFreePort();
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		executor.shutdown();
+
+		Server server = Server.withPort(port)
+				.requestTimeout(Duration.ofSeconds(5))
+				.requestHandlerExecutorServiceSupplier(() -> executor)
+				.build();
+
+		SokletConfig cfg = SokletConfig.withServer(server)
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		server.initialize(cfg, (request, consumer) -> {
+			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("text/plain")))
+					.body("ok".getBytes(StandardCharsets.UTF_8))
+					.build();
+			consumer.accept(RequestResult.withMarshaledResponse(response).build());
+		});
+
+		server.start();
+
+		try {
+			URL url = new URL("http://127.0.0.1:" + port + "/health");
+			HttpURLConnection c = open("GET", url, Map.of("Accept", "text/plain"));
+			int status = c.getResponseCode();
+			Assertions.assertEquals(503, status);
+
+			java.io.InputStream in = c.getErrorStream();
+			if (in == null) in = c.getInputStream();
+			String body = new String(readAll(in), StandardCharsets.UTF_8);
+			Assertions.assertTrue(body.contains("HTTP 503"));
+		} finally {
+			server.stop();
+		}
+	}
+
 	public static class HealthResource {
 		@GET("/health")
 		public String health() {return "ok";}
+	}
+
+	private static class QuietLifecycle implements LifecycleInterceptor {
+		@Override
+		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
 	}
 }
