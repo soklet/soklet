@@ -177,6 +177,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 		@Nullable
 		Duration requestTimeout;
 		@Nullable
+		Duration requestHandlerTimeout;
+		@Nullable
 		Duration shutdownTimeout;
 		@Nullable
 		Duration heartbeatInterval;
@@ -221,6 +223,12 @@ public interface ServerSentEventServer extends AutoCloseable {
 		@Nonnull
 		public Builder requestTimeout(@Nullable Duration requestTimeout) {
 			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		@Nonnull
+		public Builder requestHandlerTimeout(@Nullable Duration requestHandlerTimeout) {
+			this.requestHandlerTimeout = requestHandlerTimeout;
 			return this;
 		}
 

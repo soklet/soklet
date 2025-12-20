@@ -87,6 +87,7 @@ class ConnectionEventLoop {
         static final String HEADER_CONTENT_LENGTH = "Content-Length";
 
         static final String KEEP_ALIVE = "Keep-Alive";
+        static final String CLOSE = "close";
 
         final SocketChannel socketChannel;
         final SelectionKey selectionKey;
@@ -97,6 +98,7 @@ class ConnectionEventLoop {
         Cancellable requestTimeoutTask;
         boolean httpOneDotZero;
         boolean keepAlive;
+        boolean closeAfterResponse;
 
         private Connection(SocketChannel socketChannel, SelectionKey selectionKey) throws IOException {
             this.socketChannel = socketChannel;
@@ -209,8 +211,8 @@ class ConnectionEventLoop {
 
                         MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0]);
 
-                        httpOneDotZero = tooLargeRequest.version().equalsIgnoreCase(HTTP_1_0);
-                        keepAlive = tooLargeRequest.hasHeader(HEADER_CONNECTION, KEEP_ALIVE);
+                        applyConnectionPolicy(tooLargeRequest);
+                        closeAfterResponse = true;
                         byteTokenizer.compact();
                         requestParser = new RequestParser(byteTokenizer);
                         handler.handle(tooLargeRequest, this::onResponse);
@@ -230,8 +232,7 @@ class ConnectionEventLoop {
                 requestTimeoutTask = null;
             }
             MicrohttpRequest request = requestParser.request();
-            httpOneDotZero = request.version().equalsIgnoreCase(HTTP_1_0);
-            keepAlive = request.hasHeader(HEADER_CONNECTION, KEEP_ALIVE);
+            applyConnectionPolicy(request);
             byteTokenizer.compact();
             requestParser = new RequestParser(byteTokenizer);
             handler.handle(request, this::onResponse);
@@ -261,9 +262,12 @@ class ConnectionEventLoop {
         }
 
         private void prepareToWriteResponse(MicrohttpResponse microhttpResponse) throws IOException {
+            if (hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
+                closeAfterResponse = true;
+            }
             String version = httpOneDotZero ? HTTP_1_0 : HTTP_1_1;
             List<Header> headers = new ArrayList<>();
-            if (httpOneDotZero && keepAlive) {
+            if (httpOneDotZero && keepAlive && !closeAfterResponse) {
                 headers.add(new Header(HEADER_CONNECTION, KEEP_ALIVE));
             }
             if (!microhttpResponse.hasHeader(HEADER_CONTENT_LENGTH)) {
@@ -312,7 +316,7 @@ class ConnectionEventLoop {
                             new LogEntry("id", id),
                             new LogEntry("num_bytes", Integer.toString(numBytes)));
                 }
-                if (httpOneDotZero && !keepAlive) { // non-persistent connection, close now
+                if (closeAfterResponse) { // non-persistent connection, close now
                     if (logger.enabled()) {
                         logger.log(
                                 new LogEntry("event", "close_after_response"),
@@ -352,6 +356,45 @@ class ConnectionEventLoop {
             }
             selectionKey.cancel();
             CloseUtils.closeQuietly(socketChannel);
+        }
+
+        private void applyConnectionPolicy(MicrohttpRequest request) {
+            closeAfterResponse = false;
+            httpOneDotZero = request.version().equalsIgnoreCase(HTTP_1_0);
+
+            boolean hasClose = hasHeaderToken(request.headers(), HEADER_CONNECTION, CLOSE);
+            boolean hasKeepAlive = hasHeaderToken(request.headers(), HEADER_CONNECTION, KEEP_ALIVE);
+
+            if (hasClose) {
+                keepAlive = false;
+                closeAfterResponse = true;
+            } else if (httpOneDotZero) {
+                keepAlive = hasKeepAlive;
+                closeAfterResponse = !keepAlive;
+            } else {
+                keepAlive = true;
+            }
+        }
+
+        private boolean hasHeaderToken(List<Header> headers, String headerName, String token) {
+            if (headers == null) {
+                return false;
+            }
+            for (Header header : headers) {
+                if (!header.name().equalsIgnoreCase(headerName)) {
+                    continue;
+                }
+                String value = header.value();
+                if (value == null) {
+                    continue;
+                }
+                for (String part : value.split(",")) {
+                    if (token.equalsIgnoreCase(part.trim())) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
     }
 

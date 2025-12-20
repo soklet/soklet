@@ -784,6 +784,113 @@ public class ServerSentEventTests {
 
 	@Test
 	@Timeout(value = 10, unit = SECONDS)
+	public void handshake_rejects_transfer_encoding() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+				String req = "GET /sse/abc HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1:" + ssePort + "\r\n"
+						+ "Accept: text/event-stream\r\n"
+						+ "Transfer-Encoding: chunked\r\n"
+						+ "\r\n";
+				socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
+				socket.getOutputStream().flush();
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for Transfer-Encoding");
+				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void handshake_rejects_nonzero_content_length() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+				String req = "GET /sse/abc HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1:" + ssePort + "\r\n"
+						+ "Accept: text/event-stream\r\n"
+						+ "Content-Length: 1\r\n"
+						+ "\r\n";
+				socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
+				socket.getOutputStream().flush();
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for non-zero Content-Length");
+				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void handshake_times_out_returns_503_and_closes() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		BlockingHandshakeResource.prepare(1);
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.requestHandlerTimeout(Duration.ofMillis(200))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingHandshakeResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+				writeHttpGet(socket, "/sse/limit", ssePort);
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 503"), "Expected 503 on handshake timeout");
+				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after timeout response");
+			}
+		} finally {
+			BlockingHandshakeResource.release();
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
 	public void handshake_rejected_respects_explicit_content_length() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();

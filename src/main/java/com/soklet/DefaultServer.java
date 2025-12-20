@@ -49,10 +49,14 @@ import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -75,6 +79,8 @@ final class DefaultServer implements Server {
 	@Nonnull
 	private static final Duration DEFAULT_REQUEST_TIMEOUT;
 	@Nonnull
+	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
+	@Nonnull
 	private static final Duration DEFAULT_SOCKET_SELECT_TIMEOUT;
 	@Nonnull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
@@ -89,6 +95,7 @@ final class DefaultServer implements Server {
 		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors();
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
+		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024 * 10;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
@@ -104,6 +111,8 @@ final class DefaultServer implements Server {
 	private final Integer concurrency;
 	@Nonnull
 	private final Duration requestTimeout;
+	@Nonnull
+	private final Duration requestHandlerTimeout;
 	@Nonnull
 	private final Duration socketSelectTimeout;
 	@Nonnull
@@ -125,6 +134,8 @@ final class DefaultServer implements Server {
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
+	private volatile ScheduledExecutorService requestHandlerTimeoutExecutorService;
+	@Nullable
 	private volatile RequestHandler requestHandler;
 	@Nullable
 	private volatile LifecycleInterceptor lifecycleInterceptor;
@@ -142,6 +153,7 @@ final class DefaultServer implements Server {
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
+		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
@@ -159,6 +171,9 @@ final class DefaultServer implements Server {
 
 			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
 		};
+
+		if (this.requestHandlerTimeout.isNegative() || this.requestHandlerTimeout.isZero())
+			throw new IllegalArgumentException("Request handler timeout must be > 0");
 	}
 
 	@Override
@@ -206,6 +221,7 @@ final class DefaultServer implements Server {
 
 			Handler handler = ((microhttpRequest, microHttpCallback) -> {
 				ExecutorService requestHandlerExecutorServiceReference = this.requestHandlerExecutorService;
+				ScheduledExecutorService requestHandlerTimeoutExecutorServiceReference = this.requestHandlerTimeoutExecutorService;
 
 				if (requestHandlerExecutorServiceReference == null) {
 					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Request handler executor service is unavailable").build());
@@ -227,7 +243,29 @@ final class DefaultServer implements Server {
 						if (requestHandler == null)
 							return;
 
-						AtomicBoolean shouldWriteFailsafeResponse = new AtomicBoolean(true);
+						AtomicBoolean responseWritten = new AtomicBoolean(false);
+						Thread handlerThread = Thread.currentThread();
+						AtomicReference<ScheduledFuture<?>> timeoutFutureRef = new AtomicReference<>();
+
+						if (requestHandlerTimeoutExecutorServiceReference != null && !requestHandlerTimeoutExecutorServiceReference.isShutdown()) {
+							timeoutFutureRef.set(requestHandlerTimeoutExecutorServiceReference.schedule(() -> {
+								if (!responseWritten.compareAndSet(false, true))
+									return;
+
+								handlerThread.interrupt();
+
+								try {
+									MicrohttpResponse timeoutResponse = withConnectionClose(
+											provideMicrohttpFailsafeResponse(503, microhttpRequest,
+													new TimeoutException("Request handling timed out")));
+									microHttpCallback.accept(timeoutResponse);
+								} catch (Throwable t2) {
+									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a timeout response")
+											.throwable(t2)
+											.build());
+								}
+							}, Math.max(1L, getRequestHandlerTimeout().toMillis()), TimeUnit.MILLISECONDS));
+						}
 
 						try {
 							// Normalize body
@@ -272,26 +310,30 @@ final class DefaultServer implements Server {
 							requestHandler.handleRequest(request, (requestResult -> {
 								try {
 									MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestResult.getMarshaledResponse());
-									shouldWriteFailsafeResponse.set(false);
-
-									try {
-										microHttpCallback.accept(microhttpResponse);
-									} catch (Throwable t) {
-										safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
-												.throwable(t)
-												.build());
+									if (responseWritten.compareAndSet(false, true)) {
+										cancelTimeout(timeoutFutureRef.getAndSet(null));
+										try {
+											microHttpCallback.accept(microhttpResponse);
+										} catch (Throwable t) {
+											safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
+													.throwable(t)
+													.build());
+										}
 									}
 								} catch (Throwable t) {
 									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
 											.throwable(t)
 											.build());
 
-									try {
-										microHttpCallback.accept(provideMicrohttpFailsafeResponse(500, microhttpRequest, t));
-									} catch (Throwable t2) {
-										safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
-												.throwable(t2)
-												.build());
+									if (responseWritten.compareAndSet(false, true)) {
+										cancelTimeout(timeoutFutureRef.getAndSet(null));
+										try {
+											microHttpCallback.accept(provideMicrohttpFailsafeResponse(500, microhttpRequest, t));
+										} catch (Throwable t2) {
+											safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+													.throwable(t2)
+													.build());
+										}
 									}
 								}
 							}));
@@ -314,7 +356,8 @@ final class DefaultServer implements Server {
 										.build());
 							}
 
-							if (shouldWriteFailsafeResponse.get()) {
+							if (responseWritten.compareAndSet(false, true)) {
+								cancelTimeout(timeoutFutureRef.getAndSet(null));
 								try {
 									microHttpCallback.accept(provideMicrohttpFailsafeResponse(failsafeStatusCode, microhttpRequest, t));
 								} catch (Throwable t2) {
@@ -341,6 +384,7 @@ final class DefaultServer implements Server {
 			});
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
+			this.requestHandlerTimeoutExecutorService = Executors.newSingleThreadScheduledExecutor(new NonvirtualThreadFactory("request-handler-timeout"));
 			EventLoop eventLoop = null;
 
 			try {
@@ -403,6 +447,15 @@ final class DefaultServer implements Server {
 						requestHandlerExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
 					}
 				}
+
+				ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
+
+				if (requestHandlerTimeoutExecutorService != null) {
+					requestHandlerTimeoutExecutorService.shutdown();
+					long remMillis = Math.max(0L, getShutdownTimeout().toMillis());
+					requestHandlerTimeoutExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
+					requestHandlerTimeoutExecutorService.shutdownNow();
+				}
 			} catch (InterruptedException e) {
 				interrupted = true;
 			} catch (Exception e) {
@@ -417,6 +470,7 @@ final class DefaultServer implements Server {
 		} finally {
 			this.eventLoop = null;
 			this.requestHandlerExecutorService = null;
+			this.requestHandlerTimeoutExecutorService = null;
 
 			getLock().unlock();
 		}
@@ -436,6 +490,51 @@ final class DefaultServer implements Server {
 		byte[] body = format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(charset);
 
 		return new MicrohttpResponse(statusCode, reasonPhrase, headers, body);
+	}
+
+	private void cancelTimeout(@Nullable ScheduledFuture<?> timeoutFuture) {
+		if (timeoutFuture != null)
+			timeoutFuture.cancel(false);
+	}
+
+	@Nonnull
+	private MicrohttpResponse withConnectionClose(@Nonnull MicrohttpResponse response) {
+		requireNonNull(response);
+
+		if (hasConnectionCloseHeader(response))
+			return response;
+
+		List<Header> headers = new ArrayList<>();
+
+		if (response.headers() != null)
+			headers.addAll(response.headers());
+
+		headers.add(new Header("Connection", "close"));
+		return new MicrohttpResponse(response.status(), response.reason(), headers, response.body());
+	}
+
+	private boolean hasConnectionCloseHeader(@Nonnull MicrohttpResponse response) {
+		requireNonNull(response);
+
+		List<Header> headers = response.headers();
+		if (headers == null)
+			return false;
+
+		for (Header header : headers) {
+			if (!"Connection".equalsIgnoreCase(header.name()))
+				continue;
+
+			String value = header.value();
+			if (value == null)
+				continue;
+
+			for (String part : value.split(",")) {
+				if ("close".equalsIgnoreCase(part.trim()))
+					return true;
+			}
+		}
+
+		return false;
 	}
 
 	@Nonnull
@@ -558,6 +657,11 @@ final class DefaultServer implements Server {
 	}
 
 	@Nonnull
+	protected Duration getRequestHandlerTimeout() {
+		return this.requestHandlerTimeout;
+	}
+
+	@Nonnull
 	protected Duration getSocketSelectTimeout() {
 		return this.socketSelectTimeout;
 	}
@@ -595,6 +699,11 @@ final class DefaultServer implements Server {
 	@Nonnull
 	protected Optional<ExecutorService> getRequestHandlerExecutorService() {
 		return Optional.ofNullable(this.requestHandlerExecutorService);
+	}
+
+	@Nonnull
+	protected Optional<ScheduledExecutorService> getRequestHandlerTimeoutExecutorService() {
+		return Optional.ofNullable(this.requestHandlerTimeoutExecutorService);
 	}
 
 	@Nonnull
@@ -644,8 +753,15 @@ final class DefaultServer implements Server {
 			requestHandlerExecutorService.shutdownNow();
 		}
 
+		ScheduledExecutorService requestHandlerTimeoutExecutorService = this.requestHandlerTimeoutExecutorService;
+
+		if (requestHandlerTimeoutExecutorService != null) {
+			requestHandlerTimeoutExecutorService.shutdownNow();
+		}
+
 		this.eventLoop = null;
 		this.requestHandlerExecutorService = null;
+		this.requestHandlerTimeoutExecutorService = null;
 	}
 
 	@ThreadSafe

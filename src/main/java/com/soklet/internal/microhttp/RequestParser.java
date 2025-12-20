@@ -2,6 +2,7 @@ package com.soklet.internal.microhttp;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -26,7 +27,7 @@ class RequestParser {
         CHUNK_SIZE(p -> p.tokenizer.next(CRLF), RequestParser::parseChunkSize),
         CHUNK_DATA(p -> p.tokenizer.next(p.chunkSize), RequestParser::parseChunkData),
         CHUNK_DATA_END(p -> p.tokenizer.next(CRLF), (rp, token) -> rp.parseChunkDateEnd()),
-        CHUNK_TRAILER(p -> p.tokenizer.next(CRLF), (rp, token) -> rp.parseChunkTrailer()),
+        CHUNK_TRAILER(p -> p.tokenizer.next(CRLF), RequestParser::parseChunkTrailer),
         DONE(null, null);
 
         final Function<RequestParser, byte[]> tokenSupplier;
@@ -87,12 +88,23 @@ class RequestParser {
 
     private void parseHeader(byte[] token) {
         if (token.length == 0) { // CR-LF on own line, end of headers
-            if (hasMultipleTransferLengths()) {
+            Integer contentLength = findContentLength();
+            boolean hasTransferEncodingHeader = hasTransferEncodingHeader();
+            List<String> transferEncodings = findTransferEncodings();
+
+            if (hasTransferEncodingHeader && transferEncodings.isEmpty()) {
+                throw new IllegalStateException("invalid transfer-encoding header value");
+            }
+
+            if (contentLength != null && hasTransferEncodingHeader) {
                 throw new IllegalStateException("multiple message lengths");
             }
-            Integer contentLength = findContentLength();
+
             if (contentLength == null) {
-                if (hasChunkedEncodingHeader()) {
+                if (hasTransferEncodingHeader) {
+                    if (!hasOnlyChunkedEncoding(transferEncodings)) {
+                        throw new IllegalStateException("unsupported transfer-encoding");
+                    }
                     state = State.CHUNK_SIZE;
                 } else {
                     body = EMPTY_BODY;
@@ -131,9 +143,23 @@ class RequestParser {
     }
 
     private void parseChunkSize(byte[] token) {
+        int end = token.length;
+        for (int i = 0; i < token.length; i++) {
+            if (token[i] == ';') {
+                end = i;
+                break;
+            }
+        }
+        String sizeToken = new String(token, 0, end).trim();
+        if (sizeToken.isEmpty()) {
+            throw new IllegalStateException("invalid chunk size");
+        }
         try {
-            chunkSize = Integer.parseInt(new String(token), RADIX_HEX);
+            chunkSize = Integer.parseInt(sizeToken, RADIX_HEX);
         } catch (NumberFormatException e) {
+            throw new IllegalStateException("invalid chunk size");
+        }
+        if (chunkSize < 0) {
             throw new IllegalStateException("invalid chunk size");
         }
         state = chunkSize == 0
@@ -150,9 +176,13 @@ class RequestParser {
         state = State.CHUNK_SIZE;
     }
 
-    private void parseChunkTrailer() {
-        body = chunks.merge();
-        state = State.DONE;
+    private void parseChunkTrailer(byte[] token) {
+        if (token.length == 0) { // blank line indicates end of trailers
+            body = chunks.merge();
+            state = State.DONE;
+        } else {
+            state = State.CHUNK_TRAILER;
+        }
     }
 
     private void parseBody(byte[] token) {
@@ -160,36 +190,76 @@ class RequestParser {
         state = State.DONE;
     }
 
-    private boolean hasMultipleTransferLengths() {
-        int count = 0;
-        for (Header header : headers) {
-            if (header.name().equalsIgnoreCase(HEADER_CONTENT_LENGTH) || header.name().equalsIgnoreCase(HEADER_TRANSFER_ENCODING)) {
-                count++;
-            }
-        }
-        return count > 1;
-    }
-
     private Integer findContentLength() {
         try {
+            Integer contentLength = null;
             for (Header header : headers) {
                 if (header.name().equalsIgnoreCase(HEADER_CONTENT_LENGTH)) {
-                    return Integer.parseInt(header.value());
+                    if (contentLength != null) {
+                        throw new IllegalStateException("multiple content-length headers");
+                    }
+                    String value = header.value() == null ? "" : header.value().trim();
+                    int parsed = Integer.parseInt(value);
+                    if (parsed < 0) {
+                        throw new IllegalStateException("invalid content-length header value");
+                    }
+                    contentLength = parsed;
                 }
             }
-            return null;
+            return contentLength;
         } catch (NumberFormatException e) {
             throw new IllegalStateException("invalid content-length header value");
         }
     }
 
-    private boolean hasChunkedEncodingHeader() {
+    private boolean hasTransferEncodingHeader() {
         for (Header header : headers) {
-            if (header.name().equalsIgnoreCase(HEADER_TRANSFER_ENCODING) && header.value().equalsIgnoreCase(CHUNKED)) {
+            if (header.name().equalsIgnoreCase(HEADER_TRANSFER_ENCODING)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private List<String> findTransferEncodings() {
+        List<String> transferEncodings = new ArrayList<>();
+        for (Header header : headers) {
+            if (!header.name().equalsIgnoreCase(HEADER_TRANSFER_ENCODING)) {
+                continue;
+            }
+            String value = header.value();
+            if (value == null) {
+                continue;
+            }
+            for (String part : value.split(",")) {
+                String normalized = normalizeTransferEncoding(part);
+                if (normalized != null) {
+                    transferEncodings.add(normalized);
+                }
+            }
+        }
+        return transferEncodings;
+    }
+
+    private String normalizeTransferEncoding(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        int semicolon = trimmed.indexOf(';');
+        String token = semicolon == -1 ? trimmed : trimmed.substring(0, semicolon);
+        token = token.trim();
+        if (token.isEmpty()) {
+            return null;
+        }
+        return token.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean hasOnlyChunkedEncoding(List<String> transferEncodings) {
+        return transferEncodings.size() == 1 && CHUNKED.equals(transferEncodings.get(0));
     }
 
 }

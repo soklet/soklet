@@ -57,8 +57,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -84,6 +87,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Duration DEFAULT_REQUEST_TIMEOUT;
 	@Nonnull
+	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
+	@Nonnull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 	@Nonnull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
@@ -104,6 +109,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
 	@Nonnull
+	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE;
+	@Nonnull
 	private static final ResourcePathDeclaration NO_MATCH_SENTINEL;
 	@Nonnull
 	private static final String HEARTBEAT_COMMENT_PAYLOAD;
@@ -115,6 +122,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	static {
 		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
+		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
 		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
@@ -126,7 +134,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED = true;
 
 		// Cache off a special failsafe response
-		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttp500Response();
+		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_500);
+		FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503);
 
 		// Create a sentinel ResourcePathDeclaration that represents "no match found".
 		// This allows us to cache negative lookups and avoid repeated O(n) scans.
@@ -154,6 +163,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final String host;
 	@Nonnull
 	private final Duration requestTimeout;
+	@Nonnull
+	private final Duration requestHandlerTimeout;
 	@Nonnull
 	private final Duration shutdownTimeout;
 	@Nonnull
@@ -188,6 +199,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final AtomicBoolean stopPoisonPill;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
+	@Nullable
+	private volatile ScheduledExecutorService requestHandlerTimeoutExecutorService;
 	@Nullable
 	private volatile ExecutorService requestReaderExecutorService;
 	@Nonnull
@@ -483,6 +496,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.verifyConnectionOnceEstablished = builder.verifyConnectionOnceEstablished != null ? builder.verifyConnectionOnceEstablished : DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
 		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.withDefaults();
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
+		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.heartbeatInterval = builder.heartbeatInterval != null ? builder.heartbeatInterval : DEFAULT_HEARTBEAT_INTERVAL;
 		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
@@ -495,6 +509,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		if (this.requestTimeout.isNegative() || this.requestTimeout.isZero())
 			throw new IllegalArgumentException("Request timeout must be > 0");
+
+		if (this.requestHandlerTimeout.isNegative() || this.requestHandlerTimeout.isZero())
+			throw new IllegalArgumentException("Request handler timeout must be > 0");
 
 		if (this.shutdownTimeout.isNegative())
 			throw new IllegalArgumentException("Shutdown timeout must be >= 0");
@@ -630,6 +647,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				throw new IllegalStateException(format("No %s was registered for %s", LifecycleInterceptor.class, getClass()));
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
+			this.requestHandlerTimeoutExecutorService = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "sse-request-handler-timeout"));
 			this.requestReaderExecutorService = getRequestReaderExecutorServiceSupplier().get();
 			this.stopping = false;
 			this.started = true; // set before thread starts to avoid early exit races
@@ -783,11 +801,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		ResourceMethod resourceMethod = null;
 		Instant writeStarted;
 		Throwable throwable = null;
+		Object channelLock = new Object();
 
 		// Keep track of whether we should go through the "handshake accepted" flow.
 		// Might change from "accepted" to "rejected" if an error occurs
 		AtomicReference<HandshakeResult.Accepted> handshakeAcceptedReference = new AtomicReference<>();
 		AtomicBoolean connectionSlotReserved = new AtomicBoolean(false);
+		AtomicBoolean handshakeResponseWritten = new AtomicBoolean(false);
+		AtomicReference<ScheduledFuture<?>> handshakeTimeoutFutureRef = new AtomicReference<>();
 
 		try (clientSocketChannel) {
 			try {
@@ -807,6 +828,29 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				throw e;
 			}
 
+			try {
+				validateNoRequestBodyHeaders(request);
+			} catch (IllegalRequestException e) {
+				try {
+					MarshaledResponse response = getResponseMarshaler().get().forThrowable(request, e, null);
+					synchronized (channelLock) {
+						writeHandshakeResponseToChannel(clientSocketChannel, response);
+					}
+				} catch (Throwable t) {
+					// best effort
+				} finally {
+					try {
+						synchronized (channelLock) {
+							clientSocketChannel.close();
+						}
+					} catch (IOException ignored) {
+						// Nothing to do
+					}
+				}
+
+				return;
+			}
+
 			// OK, we've successfully parsed the SSE handshake request - now, determine the resource path
 			ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(request.getResourcePath()).orElse(null);
 
@@ -821,12 +865,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				MarshaledResponse response = getResponseMarshaler().get().forServiceUnavailable(request, resourceMethod);
 
 				try {
-					writeMarshaledResponseToChannel(clientSocketChannel, response);
+					synchronized (channelLock) {
+						writeMarshaledResponseToChannel(clientSocketChannel, response);
+					}
 				} catch (Throwable t) {
 					// best effort
 				} finally {
 					try {
-						clientSocketChannel.close();
+						synchronized (channelLock) {
+							clientSocketChannel.close();
+						}
 					} catch (IOException ignored) {
 						// Nothing to do
 					}
@@ -841,8 +889,58 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
 			// Subsequent writes to the open socket (those following successful transmission of the "accepted" handshake response) are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
 			final Request requestForHandler = request;
+			final ResourceMethod resourceMethodForHandler = resourceMethod;
+
+			ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
+			Thread handlerThread = Thread.currentThread();
+
+			if (requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
+				handshakeTimeoutFutureRef.set(requestHandlerTimeoutExecutorService.schedule(() -> {
+					if (!handshakeResponseWritten.compareAndSet(false, true))
+						return;
+
+					byte[] responseBytes = FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE;
+
+					try {
+						ResponseMarshaler responseMarshaler = getResponseMarshaler().orElse(null);
+						if (responseMarshaler != null) {
+							MarshaledResponse response = responseMarshaler.forServiceUnavailable(requestForHandler, resourceMethodForHandler);
+							responseBytes = createHandshakeHttpResponse(RequestResult.withMarshaledResponse(response).build());
+						}
+					} catch (Throwable t) {
+						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to prepare SSE handshake timeout response")
+								.throwable(t)
+								.build());
+					}
+
+					try {
+						synchronized (channelLock) {
+							writeFully(clientSocketChannel, responseBytes);
+						}
+					} catch (Throwable t) {
+						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to write SSE handshake timeout response")
+								.throwable(t)
+								.build());
+					} finally {
+						try {
+							synchronized (channelLock) {
+								clientSocketChannel.close();
+							}
+						} catch (IOException ignored) {
+							// Nothing to do
+						}
+					}
+
+					handlerThread.interrupt();
+				}, Math.max(1L, getRequestHandlerTimeout().toMillis()), TimeUnit.MILLISECONDS));
+			}
 
 			getRequestHandler().get().handleRequest(requestForHandler, (@Nonnull RequestResult requestResult) -> {
+				if (!handshakeResponseWritten.compareAndSet(false, true))
+					return;
+
+				cancelTimeout(handshakeTimeoutFutureRef.getAndSet(null));
+
 				// Set to the value Soklet processing gives us. Will be the empty Optional if no resource method was matched
 				HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
 
@@ -885,8 +983,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				try {
 					ByteBuffer byteBuffer = ByteBuffer.wrap(handshakeHttpResponse);
 
-					while (byteBuffer.hasRemaining())
-						clientSocketChannel.write(byteBuffer);
+					synchronized (channelLock) {
+						while (byteBuffer.hasRemaining())
+							clientSocketChannel.write(byteBuffer);
+					}
 				} catch (Throwable t) {
 					// We couldn't write a response to the client (maybe they disconnected).
 					// Go through the rejected flow and close out the connection
@@ -1072,10 +1172,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (t instanceof InterruptedException)
 				Thread.currentThread().interrupt();
 		} finally {
+			cancelTimeout(handshakeTimeoutFutureRef.getAndSet(null));
+
 			// First, close the channel itself...
 			if (clientSocketChannel != null) {
 				try {
-					clientSocketChannel.close();
+					synchronized (channelLock) {
+						clientSocketChannel.close();
+					}
 				} catch (Exception exception) {
 					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event connection socket channel")
 							.throwable(exception)
@@ -1256,12 +1360,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	private static byte[] createFailsafeHandshakeHttp500Response() {
-		String body = "HTTP 500: Internal Server Error";
+	private static byte[] createFailsafeHandshakeHttpResponse(@Nonnull StatusCode statusCode) {
+		requireNonNull(statusCode);
+
+		String reasonPhrase = statusCode.getReasonPhrase();
+		String body = format("HTTP %d: %s", statusCode.getStatusCode(), reasonPhrase);
 		byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
 
 		String response =
-				"HTTP/1.1 500 Internal Server Error\r\n" +
+				"HTTP/1.1 " + statusCode.getStatusCode() + " " + reasonPhrase + "\r\n" +
 						"Content-Type: text/plain; charset=UTF-8\r\n" +
 						"Content-Length: " + bodyBytes.length + "\r\n" +
 						"Connection: close\r\n" +
@@ -1288,6 +1395,20 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		ByteBuffer buffer = ByteBuffer.wrap(bytes);
 		while (buffer.hasRemaining())
 			socketChannel.write(buffer);
+	}
+
+	private void writeHandshakeResponseToChannel(@Nonnull SocketChannel socketChannel,
+																							 @Nonnull MarshaledResponse marshaledResponse) throws IOException {
+		requireNonNull(socketChannel);
+		requireNonNull(marshaledResponse);
+
+		byte[] responseBytes = createHandshakeHttpResponse(RequestResult.withMarshaledResponse(marshaledResponse).build());
+		writeFully(socketChannel, responseBytes);
+	}
+
+	private void cancelTimeout(@Nullable ScheduledFuture<?> timeoutFuture) {
+		if (timeoutFuture != null)
+			timeoutFuture.cancel(false);
 	}
 
 	// Helper to write the marshaled response directly to the channel
@@ -1883,6 +2004,39 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return requestBuilder.idGenerator(getIdGenerator()).headers(headers).build();
 	}
 
+	protected void validateNoRequestBodyHeaders(@Nonnull Request request) {
+		requireNonNull(request);
+
+		Map<String, Set<String>> headers = request.getHeaders();
+		Set<String> transferEncodingValues = headers.get("Transfer-Encoding");
+
+		if (transferEncodingValues != null && !transferEncodingValues.isEmpty())
+			throw new IllegalRequestException("Transfer-Encoding is not allowed for Server-Sent Event requests");
+
+		Set<String> contentLengthValues = headers.get("Content-Length");
+
+		if (contentLengthValues != null && !contentLengthValues.isEmpty()) {
+			if (contentLengthValues.size() != 1)
+				throw new IllegalRequestException("Multiple Content-Length headers are not allowed for Server-Sent Event requests");
+
+			String contentLengthValue = contentLengthValues.iterator().next();
+
+			if (contentLengthValue == null || contentLengthValue.trim().isEmpty())
+				throw new IllegalRequestException("Invalid Content-Length header value");
+
+			long contentLength;
+
+			try {
+				contentLength = Long.parseLong(contentLengthValue.trim());
+			} catch (NumberFormatException e) {
+				throw new IllegalRequestException("Invalid Content-Length header value", e);
+			}
+
+			if (contentLength != 0)
+				throw new IllegalRequestException("Non-zero Content-Length is not allowed for Server-Sent Event requests");
+		}
+	}
+
 	@Nonnull
 	protected String readRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
 		requireNonNull(clientSocketChannel);
@@ -2105,6 +2259,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	public void stop() {
 		Thread eventLoopThreadSnapshot;
 		ExecutorService requestHandlerExecutorServiceSnapshot;
+		ScheduledExecutorService requestHandlerTimeoutExecutorServiceSnapshot;
 		ExecutorService requestReaderExecutorServiceSnapshot;
 		ServerSocketChannel serverSocketChannelSnapshot;
 		boolean interrupted = false;
@@ -2119,6 +2274,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			eventLoopThreadSnapshot = this.eventLoopThread;
 			requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
+			requestHandlerTimeoutExecutorServiceSnapshot = this.requestHandlerTimeoutExecutorService;
 			requestReaderExecutorServiceSnapshot = this.requestReaderExecutorService;
 			serverSocketChannelSnapshot = this.serverSocketChannel;
 		} finally {
@@ -2172,6 +2328,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (requestHandlerExecutorServiceSnapshot != null)
 			requestHandlerExecutorServiceSnapshot.shutdownNow();
 
+		if (requestHandlerTimeoutExecutorServiceSnapshot != null)
+			requestHandlerTimeoutExecutorServiceSnapshot.shutdownNow();
+
 		if (requestReaderExecutorServiceSnapshot != null)
 			requestReaderExecutorServiceSnapshot.shutdownNow();
 
@@ -2186,6 +2345,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		if (requestHandlerExecutorServiceSnapshot != null)
 			waits.add(awaitTerminationAsync(requestHandlerExecutorServiceSnapshot, grace));
+
+		if (requestHandlerTimeoutExecutorServiceSnapshot != null)
+			waits.add(awaitTerminationAsync(requestHandlerTimeoutExecutorServiceSnapshot, grace));
 
 		if (requestReaderExecutorServiceSnapshot != null)
 			waits.add(awaitTerminationAsync(requestReaderExecutorServiceSnapshot, grace));
@@ -2209,6 +2371,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (requestHandlerExecutorServiceSnapshot != null)
 			awaitPoolTermination(requestHandlerExecutorServiceSnapshot, remainingMillis(deadlineNanos));
 
+		if (requestHandlerTimeoutExecutorServiceSnapshot != null)
+			awaitPoolTermination(requestHandlerTimeoutExecutorServiceSnapshot, remainingMillis(deadlineNanos));
+
 		if (requestReaderExecutorServiceSnapshot != null)
 			awaitPoolTermination(requestReaderExecutorServiceSnapshot, remainingMillis(deadlineNanos));
 
@@ -2219,6 +2384,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.eventLoopThread = null;
 			this.serverSocketChannel = null;
 			this.requestHandlerExecutorService = null;
+			this.requestHandlerTimeoutExecutorService = null;
 			this.requestReaderExecutorService = null;
 			this.getBroadcastersByResourcePath().clear();
 			this.getIdleBroadcastersByResourcePath().clear();
@@ -2556,6 +2722,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
+	protected Duration getRequestHandlerTimeout() {
+		return this.requestHandlerTimeout;
+	}
+
+	@Nonnull
 	protected Duration getShutdownTimeout() {
 		return this.shutdownTimeout;
 	}
@@ -2594,6 +2765,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Optional<ExecutorService> getRequestHandlerExecutorService() {
 		return Optional.ofNullable(this.requestHandlerExecutorService);
+	}
+
+	@Nonnull
+	protected Optional<ScheduledExecutorService> getRequestHandlerTimeoutExecutorService() {
+		return Optional.ofNullable(this.requestHandlerTimeoutExecutorService);
 	}
 
 	@Nonnull

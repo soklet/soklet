@@ -26,12 +26,14 @@ import org.junit.jupiter.api.Test;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -39,6 +41,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -204,6 +207,49 @@ public class IntegrationTests {
 		return buf.toString(StandardCharsets.US_ASCII);
 	}
 
+	private static RawResponse readResponse(InputStream in) throws IOException {
+		String statusLine = readLineCRLF(in);
+		if (statusLine == null)
+			throw new EOFException("Unexpected EOF while reading status line");
+
+		Map<String, String> headers = new LinkedHashMap<>();
+		String line;
+
+		while ((line = readLineCRLF(in)) != null && !line.isEmpty()) {
+			int idx = line.indexOf(':');
+			if (idx <= 0)
+				continue;
+			String name = line.substring(0, idx).trim().toLowerCase(Locale.ROOT);
+			String value = line.substring(idx + 1).trim();
+			headers.put(name, value);
+		}
+
+		int contentLength = 0;
+		String contentLengthValue = headers.get("content-length");
+		if (contentLengthValue != null && !contentLengthValue.isEmpty())
+			contentLength = Integer.parseInt(contentLengthValue);
+
+		byte[] body = readN(in, contentLength);
+		return new RawResponse(statusLine, headers, body);
+	}
+
+	private static byte[] readN(InputStream in, int n) throws IOException {
+		if (n == 0)
+			return new byte[0];
+
+		byte[] out = new byte[n];
+		int off = 0;
+		while (off < n) {
+			int r = in.read(out, off, n - off);
+			if (r == -1)
+				throw new EOFException("short read");
+			off += r;
+		}
+		return out;
+	}
+
+	private record RawResponse(String statusLine, Map<String, String> headers, byte[] body) {}
+
 	@Test
 	public void queryDecoding_plusAndPercent() throws Exception {
 		int port = findFreePort();
@@ -296,6 +342,19 @@ public class IntegrationTests {
 	}
 
 	@ThreadSafe
+	public static class BlockingResource {
+		@GET("/block")
+		public String block() {
+			try {
+				Thread.sleep(10_000);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			return "late";
+		}
+	}
+
+	@ThreadSafe
 	public static class UsersResource {
 		@GET("/users/me")
 		public String me() {return "literal";}
@@ -331,6 +390,86 @@ public class IntegrationTests {
 			Assertions.assertEquals("5", cl); // "hello"
 			byte[] b = readAll(c.getInputStream());
 			Assertions.assertEquals(0, b.length);
+		}
+	}
+
+	@Test
+	public void chunkedExtensionsAndTrailers_areConsumed() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+			try (Socket socket = new Socket("127.0.0.1", port);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(4000);
+
+				out.write((
+						"POST /len HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Transfer-Encoding: chunked\r\n" +
+								"\r\n" +
+								"4;ext=1\r\n" +
+								"ABCD\r\n" +
+								"0\r\n" +
+								"X-Trailer: value\r\n" +
+								"\r\n" +
+								"GET /hello HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse first = readResponse(in);
+				Assertions.assertTrue(first.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals("4", new String(first.body(), StandardCharsets.UTF_8));
+
+				RawResponse second = readResponse(in);
+				Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals("hello", new String(second.body(), StandardCharsets.UTF_8));
+			}
+		}
+	}
+
+	@Test
+	public void requestHandlerTimeout_closesConnection() throws Exception {
+		int port = findFreePort();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
+						.requestTimeout(Duration.ofSeconds(5))
+						.requestHandlerTimeout(Duration.ofMillis(200))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = new Socket("127.0.0.1", port);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(2000);
+				out.write((
+						"GET /block HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Connection: keep-alive\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 503"));
+				String connection = response.headers().get("connection");
+				Assertions.assertNotNull(connection);
+				Assertions.assertTrue(connection.toLowerCase(Locale.ROOT).contains("close"));
+
+				try {
+					int next = in.read();
+					Assertions.assertEquals(-1, next, "Connection did not close after timeout response");
+				} catch (SocketTimeoutException e) {
+					Assertions.fail("Connection did not close after timeout response");
+				}
+			}
 		}
 	}
 
