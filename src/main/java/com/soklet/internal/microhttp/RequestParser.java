@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -72,17 +73,17 @@ class RequestParser {
     }
 
     private void parseMethod(byte[] token) {
-        method = new String(token);
+        method = new String(token, StandardCharsets.US_ASCII);
         state = State.URI;
     }
 
     private void parseUri(byte[] token) {
-        uri = new String(token);
+        uri = new String(token, StandardCharsets.US_ASCII);
         state = State.VERSION;
     }
 
     private void parseVersion(byte[] token) {
-        version = new String(token);
+        version = new String(token, StandardCharsets.US_ASCII);
         state = State.HEADER;
     }
 
@@ -93,17 +94,17 @@ class RequestParser {
             List<String> transferEncodings = findTransferEncodings();
 
             if (hasTransferEncodingHeader && transferEncodings.isEmpty()) {
-                throw new IllegalStateException("invalid transfer-encoding header value");
+                throw new MalformedRequestException("invalid transfer-encoding header value");
             }
 
             if (contentLength != null && hasTransferEncodingHeader) {
-                throw new IllegalStateException("multiple message lengths");
+                throw new MalformedRequestException("multiple message lengths");
             }
 
             if (contentLength == null) {
                 if (hasTransferEncodingHeader) {
                     if (!hasOnlyChunkedEncoding(transferEncodings)) {
-                        throw new IllegalStateException("unsupported transfer-encoding");
+                        throw new MalformedRequestException("unsupported transfer-encoding");
                     }
                     state = State.CHUNK_SIZE;
                 } else {
@@ -122,15 +123,21 @@ class RequestParser {
     private static Header parseHeaderLine(byte[] line) {
         int colonIndex = indexOfColon(line);
         if (colonIndex <= 0) {
-            throw new IllegalStateException("malformed header line");
+            throw new MalformedRequestException("malformed header line");
+        }
+        for (int i = 0; i < colonIndex; i++) {
+            int b = line[i] & 0xFF;
+            if (b > 0x7F) {
+                throw new MalformedRequestException("non-ascii header name");
+            }
         }
         int spaceIndex = colonIndex + 1;
         while (spaceIndex < line.length && line[spaceIndex] == ' ') { // advance beyond variable-length space prefix
             spaceIndex++;
         }
         return new Header(
-                new String(line, 0, colonIndex),
-                new String(line, spaceIndex, line.length - spaceIndex));
+                new String(line, 0, colonIndex, StandardCharsets.US_ASCII),
+                new String(line, spaceIndex, line.length - spaceIndex, StandardCharsets.ISO_8859_1));
     }
 
     private static int indexOfColon(byte[] line) {
@@ -152,15 +159,15 @@ class RequestParser {
         }
         String sizeToken = new String(token, 0, end).trim();
         if (sizeToken.isEmpty()) {
-            throw new IllegalStateException("invalid chunk size");
+            throw new MalformedRequestException("invalid chunk size");
         }
         try {
             chunkSize = Integer.parseInt(sizeToken, RADIX_HEX);
         } catch (NumberFormatException e) {
-            throw new IllegalStateException("invalid chunk size");
+            throw new MalformedRequestException("invalid chunk size");
         }
         if (chunkSize < 0) {
-            throw new IllegalStateException("invalid chunk size");
+            throw new MalformedRequestException("invalid chunk size");
         }
         state = chunkSize == 0
                 ? State.CHUNK_TRAILER
@@ -196,19 +203,19 @@ class RequestParser {
             for (Header header : headers) {
                 if (header.name().equalsIgnoreCase(HEADER_CONTENT_LENGTH)) {
                     if (contentLength != null) {
-                        throw new IllegalStateException("multiple content-length headers");
+                        throw new MalformedRequestException("multiple content-length headers");
                     }
                     String value = header.value() == null ? "" : header.value().trim();
                     int parsed = Integer.parseInt(value);
                     if (parsed < 0) {
-                        throw new IllegalStateException("invalid content-length header value");
+                        throw new MalformedRequestException("invalid content-length header value");
                     }
                     contentLength = parsed;
                 }
             }
             return contentLength;
         } catch (NumberFormatException e) {
-            throw new IllegalStateException("invalid content-length header value");
+            throw new MalformedRequestException("invalid content-length header value");
         }
     }
 

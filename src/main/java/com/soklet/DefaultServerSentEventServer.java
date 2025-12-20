@@ -89,6 +89,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
 	@Nonnull
+	private static final Duration DEFAULT_WRITE_TIMEOUT;
+	@Nonnull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 	@Nonnull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
@@ -123,6 +125,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
+		DEFAULT_WRITE_TIMEOUT = Duration.ZERO;
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
 		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
@@ -165,6 +168,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final Duration requestTimeout;
 	@Nonnull
 	private final Duration requestHandlerTimeout;
+	@Nonnull
+	private final Duration writeTimeout;
 	@Nonnull
 	private final Duration shutdownTimeout;
 	@Nonnull
@@ -497,6 +502,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.withDefaults();
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
+		this.writeTimeout = builder.writeTimeout != null ? builder.writeTimeout : DEFAULT_WRITE_TIMEOUT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.heartbeatInterval = builder.heartbeatInterval != null ? builder.heartbeatInterval : DEFAULT_HEARTBEAT_INTERVAL;
 		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
@@ -512,6 +518,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		if (this.requestHandlerTimeout.isNegative() || this.requestHandlerTimeout.isZero())
 			throw new IllegalArgumentException("Request handler timeout must be > 0");
+
+		if (this.writeTimeout.isNegative())
+			throw new IllegalArgumentException("Write timeout must be >= 0");
 
 		if (this.shutdownTimeout.isNegative())
 			throw new IllegalArgumentException("Shutdown timeout must be >= 0");
@@ -1101,6 +1110,22 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					writeStarted = Instant.now();
 					Throwable writeThrowable = null;
+					AtomicBoolean writeTimedOut = null;
+					ScheduledFuture<?> writeTimeoutFuture = null;
+					long writeTimeoutMillis = getWriteTimeout().toMillis();
+
+					if (writeTimeoutMillis > 0 && requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
+						AtomicBoolean timedOut = new AtomicBoolean(false);
+						writeTimedOut = timedOut;
+						writeTimeoutFuture = requestHandlerTimeoutExecutorService.schedule(() -> {
+							timedOut.set(true);
+							try {
+								clientSocketChannel.close();
+							} catch (IOException ignored) {
+								// Nothing to do
+							}
+						}, Math.max(1L, writeTimeoutMillis), TimeUnit.MILLISECONDS);
+					}
 
 					try {
 						while (byteBuffer.hasRemaining()) {
@@ -1109,6 +1134,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					} catch (Throwable t) {
 						writeThrowable = t;
 					} finally {
+						cancelTimeout(writeTimeoutFuture);
+						if (writeTimedOut != null && writeTimedOut.get()
+								&& (writeThrowable == null || writeThrowable instanceof ClosedChannelException)) {
+							writeThrowable = new SocketTimeoutException("SSE write timed out");
+						}
+
 						Instant writeFinished = Instant.now();
 						Duration writeDuration = Duration.between(writeStarted, writeFinished);
 
@@ -2008,6 +2039,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(request);
 
 		Map<String, Set<String>> headers = request.getHeaders();
+		for (String headerName : headers.keySet()) {
+			if (headerName == null)
+				continue;
+			for (int i = 0; i < headerName.length(); i++) {
+				if (headerName.charAt(i) > 0x7F)
+					throw new IllegalRequestException("Non-ASCII header names are not allowed for Server-Sent Event requests");
+			}
+		}
+
 		Set<String> transferEncodingValues = headers.get("Transfer-Encoding");
 
 		if (transferEncodingValues != null && !transferEncodingValues.isEmpty())
@@ -2058,9 +2098,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			readFuture = requestReaderExecutorService.submit(() -> {
 				ByteBuffer buffer = ByteBuffer.allocate(getRequestReadBufferSizeInBytes());
 
-				// Use a stateful decoder to handle multi-byte characters (e.g. UTF-8) that span buffer boundaries.
-				// This prevents replacement characters from corrupting the stream when a read splits a character.
-				CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+				// Use ISO-8859-1 so HTTP header bytes map 1:1 while remaining deterministic across hosts.
+				CharsetDecoder decoder = StandardCharsets.ISO_8859_1.newDecoder()
 						.onMalformedInput(CodingErrorAction.REPLACE)
 						.onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPLACE);
 
@@ -2724,6 +2763,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	protected Duration getRequestHandlerTimeout() {
 		return this.requestHandlerTimeout;
+	}
+
+	@Nonnull
+	protected Duration getWriteTimeout() {
+		return this.writeTimeout;
 	}
 
 	@Nonnull

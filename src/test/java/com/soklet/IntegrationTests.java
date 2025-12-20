@@ -195,6 +195,35 @@ public class IntegrationTests {
 		}
 	}
 
+	@Test
+	public void malformedRequest_withNonAsciiHeaderName_returns400() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+			try (Socket socket = new Socket("127.0.0.1", port);
+					 OutputStream out = socket.getOutputStream()) {
+				socket.setSoTimeout(3000);
+				String request = "GET /hello HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1\r\n"
+						+ "X-\u00C4: 1\r\n"
+						+ "\r\n";
+				out.write(request.getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse response = readResponse(socket.getInputStream());
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for malformed header name");
+				Assertions.assertEquals("close", response.headers().get("connection"));
+			}
+		}
+	}
+
 	private static String readLineCRLF(InputStream in) throws IOException {
 		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
 		int prev = -1, cur;

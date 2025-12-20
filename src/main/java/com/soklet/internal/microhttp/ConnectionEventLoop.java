@@ -5,6 +5,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -89,6 +90,10 @@ class ConnectionEventLoop {
         static final String KEEP_ALIVE = "Keep-Alive";
         static final String CLOSE = "close";
 
+        static final byte[] BAD_REQUEST_RESPONSE =
+                "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+                        .getBytes(StandardCharsets.US_ASCII);
+
         final SocketChannel socketChannel;
         final SelectionKey selectionKey;
         final ByteTokenizer byteTokenizer;
@@ -121,6 +126,13 @@ class ConnectionEventLoop {
         private void onReadable() {
             try {
                 doOnReadable();
+            } catch (MalformedRequestException e) {
+                if (logger.enabled()) {
+                    logger.log(e,
+                            new LogEntry("event", "malformed_request"),
+                            new LogEntry("id", id));
+                }
+                respondToMalformedRequest();
             } catch (IOException | RuntimeException e) {
                 if (logger.enabled()) {
                     logger.log(e,
@@ -220,6 +232,23 @@ class ConnectionEventLoop {
 
                     // *** END SOKLET CHANGE ***
                 }
+            }
+        }
+
+        private void respondToMalformedRequest() {
+            if (selectionKey.interestOps() != 0) {
+                selectionKey.interestOps(0);
+            }
+            if (requestTimeoutTask != null) {
+                requestTimeoutTask.cancel();
+                requestTimeoutTask = null;
+            }
+            closeAfterResponse = true;
+            writeBuffer = ByteBuffer.wrap(BAD_REQUEST_RESPONSE);
+            try {
+                doOnWritable();
+            } catch (IOException e) {
+                failSafeClose();
             }
         }
 
