@@ -102,21 +102,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final Boolean DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
 	@Nonnull
-	private static final ServerSentEvent SERVER_SENT_EVENT_POISON_PILL;
-	@Nonnull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
 	@Nonnull
 	private static final ResourcePathDeclaration NO_MATCH_SENTINEL;
 	@Nonnull
 	private static final String HEARTBEAT_COMMENT_PAYLOAD;
 	@Nonnull
-	private static final Integer REUSABLE_BUILDER_CAPACITY;
+	private static final byte[] HEARTBEAT_COMMENT_PAYLOAD_BYTES;
 	@Nonnull
-	private static final Integer REUSABLE_BUILDER_MAX_CAPACITY;
-	@Nonnull
-	private static final ThreadLocal<StringBuilder> COMMENT_FORMAT_BUILDER;
-	@Nonnull
-	private static final ThreadLocal<StringBuilder> EVENT_FORMAT_BUILDER;
+	private static final Integer DEFAULT_SSE_BUILDER_CAPACITY;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -131,11 +125,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_RESOURCE_PATH_CACHE_CAPACITY = 8_192;
 		DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED = true;
 
-		// Make a unique "poison pill" server-sent event used to stop a socket listener thread by injecting it into the relevant write queue.
-		// When this event is taken off of the queue, the socket is torn down and the thread finishes running.
-		// The contents don't matter; the object reference is used to determine if it's poison.
-		SERVER_SENT_EVENT_POISON_PILL = ServerSentEvent.withEvent("poison").build();
-
 		// Cache off a special failsafe response
 		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttp500Response();
 
@@ -144,10 +133,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		NO_MATCH_SENTINEL = ResourcePathDeclaration.withPath("/__soklet_internal_no_match_sentinel__");
 
 		HEARTBEAT_COMMENT_PAYLOAD = ":\n\n";
-		REUSABLE_BUILDER_CAPACITY = 256;
-		REUSABLE_BUILDER_MAX_CAPACITY = 64 * 1_024;
-		COMMENT_FORMAT_BUILDER = ThreadLocal.withInitial(() -> new StringBuilder(REUSABLE_BUILDER_CAPACITY));
-		EVENT_FORMAT_BUILDER = ThreadLocal.withInitial(() -> new StringBuilder(REUSABLE_BUILDER_CAPACITY));
+		HEARTBEAT_COMMENT_PAYLOAD_BYTES = HEARTBEAT_COMMENT_PAYLOAD.getBytes(StandardCharsets.UTF_8);
+		DEFAULT_SSE_BUILDER_CAPACITY = 256;
 	}
 
 	/**
@@ -280,10 +267,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		public void broadcastEvent(@Nonnull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
 
+			DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent = preSerializeServerSentEvent(serverSentEvent);
+
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
-				enqueueServerSentEvent(this, serverSentEventConnection, serverSentEvent, getBackpressureHandler());
+				enqueuePreSerializedEvent(this, serverSentEventConnection, preSerializedEvent, getBackpressureHandler());
 		}
 
 		@Override
@@ -302,7 +291,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
 
-			Map<T, ServerSentEvent> payloadCache = new HashMap<>();
+			Map<T, DefaultServerSentEventConnection.PreSerializedEvent> payloadCache = new HashMap<>();
 
 			for (DefaultServerSentEventConnection connection : getServerSentEventConnections()) {
 				Object clientContext = connection.getClientContext().orElse(null);
@@ -312,8 +301,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					T key = keySelector.apply(clientContext);
 
 					// Ask client code to generate payload (if not present in our local cache)
-					ServerSentEvent event = payloadCache.computeIfAbsent(key, eventProvider);
-					enqueueServerSentEvent(this, connection, event, getBackpressureHandler());
+					DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent =
+							payloadCache.computeIfAbsent(key, (cacheKey) -> preSerializeServerSentEvent(eventProvider.apply(cacheKey)));
+					enqueuePreSerializedEvent(this, connection, preSerializedEvent, getBackpressureHandler());
 				} catch (Throwable t) {
 					this.getLogEventConsumer().accept(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
 									format("Failed to generate Server-Sent-Event for connection on %s with client context %s",
@@ -379,7 +369,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Send poison pill regardless of whether we were registered, if requested.
 			// This handles the edge case where eviction happens before registration completes.
 			if (sendPoisonPill)
-				enqueueServerSentEvent(this, serverSentEventConnection, SERVER_SENT_EVENT_POISON_PILL, getBackpressureHandler());
+				enqueuePoisonPill(this, serverSentEventConnection, getBackpressureHandler());
 
 			return unregistered;
 		}
@@ -651,25 +641,53 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	private static Boolean enqueueServerSentEvent(@Nonnull DefaultServerSentEventBroadcaster owner,
-																								@Nonnull DefaultServerSentEventConnection connection,
-																								@Nonnull ServerSentEvent serverSentEvent,
-																								@Nonnull BackpressureHandler handler) {
+	private static DefaultServerSentEventConnection.PreSerializedEvent preSerializeServerSentEvent(@Nonnull ServerSentEvent serverSentEvent) {
+		requireNonNull(serverSentEvent);
+
+		StringBuilder stringBuilder = new StringBuilder(DEFAULT_SSE_BUILDER_CAPACITY);
+		String formatted = formatServerSentEventForResponse(serverSentEvent, stringBuilder);
+		byte[] payloadBytes = formatted == HEARTBEAT_COMMENT_PAYLOAD
+				? HEARTBEAT_COMMENT_PAYLOAD_BYTES
+				: formatted.getBytes(StandardCharsets.UTF_8);
+
+		return new DefaultServerSentEventConnection.PreSerializedEvent(serverSentEvent, payloadBytes);
+	}
+
+	@Nonnull
+	private static Boolean enqueuePreSerializedEvent(@Nonnull DefaultServerSentEventBroadcaster owner,
+																									 @Nonnull DefaultServerSentEventConnection connection,
+																									 @Nonnull DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent,
+																									 @Nonnull BackpressureHandler handler) {
 		requireNonNull(owner);
 		requireNonNull(connection);
-		requireNonNull(serverSentEvent);
+		requireNonNull(preSerializedEvent);
 		requireNonNull(handler);
 
 		BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
-		DefaultServerSentEventConnection.WriteQueueElement e = DefaultServerSentEventConnection.WriteQueueElement.withServerSentEvent(serverSentEvent);
+		DefaultServerSentEventConnection.WriteQueueElement e = DefaultServerSentEventConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent);
 
 		if (writeQueue.offer(e))
 			return true;
 
 		// Queue full — delegate to handler: log + close + unregister.
-		String cause = (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) ? "poison-pill" : "event";
-		handler.onBackpressure(owner, connection, cause);
+		handler.onBackpressure(owner, connection, "event");
+		return false;
+	}
 
+	@Nonnull
+	private static Boolean enqueuePoisonPill(@Nonnull DefaultServerSentEventBroadcaster owner,
+																					 @Nonnull DefaultServerSentEventConnection connection,
+																					 @Nonnull BackpressureHandler handler) {
+		requireNonNull(owner);
+		requireNonNull(connection);
+		requireNonNull(handler);
+
+		BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
+
+		if (writeQueue.offer(DefaultServerSentEventConnection.WriteQueueElement.poisonPill()))
+			return true;
+
+		handler.onBackpressure(owner, connection, "poison-pill");
 		return false;
 	}
 
@@ -932,27 +950,34 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					if (writeQueueElement == null)
 						writeQueueElement = DefaultServerSentEventConnection.WriteQueueElement.withComment("");
 
-					ServerSentEvent serverSentEvent = writeQueueElement.getServerSentEvent().orElse(null);
-					String comment = writeQueueElement.getComment().orElse(null);
-
-					if (serverSentEvent == SERVER_SENT_EVENT_POISON_PILL) {
+					if (writeQueueElement.isPoisonPill()) {
 						// Encountered poison pill, exit...
 						break;
 					}
 
-					String payload;
+					DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent =
+							writeQueueElement.getPreSerializedEvent().orElse(null);
+					String comment = writeQueueElement.getComment().orElse(null);
+					ServerSentEvent serverSentEvent = preSerializedEvent != null
+							? preSerializedEvent.getServerSentEvent()
+							: null;
 
-					if (serverSentEvent != null) {
+					byte[] payloadBytes;
+
+					if (preSerializedEvent != null) {
 						// It's a normal server-sent event
-						payload = formatServerSentEventForResponse(serverSentEvent);
+						payloadBytes = preSerializedEvent.getPayloadBytes();
 					} else if (comment != null) {
 						// It's a comment (includes heartbeats)
-						payload = formatCommentForResponse(comment);
+						String payload = formatCommentForResponse(comment);
+						payloadBytes = payload == HEARTBEAT_COMMENT_PAYLOAD
+								? HEARTBEAT_COMMENT_PAYLOAD_BYTES
+								: payload.getBytes(StandardCharsets.UTF_8);
 					} else {
 						throw new IllegalStateException("Not sure what to do; no Server-Sent Event or comment available");
 					}
 
-					ByteBuffer byteBuffer = ByteBuffer.wrap(payload.getBytes(StandardCharsets.UTF_8));
+					ByteBuffer byteBuffer = ByteBuffer.wrap(payloadBytes);
 
 					if (comment != null) {
 						try {
@@ -1251,24 +1276,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return combined;
 	}
 
-	@Nonnull
-	private static StringBuilder acquireReusableBuilder(@Nonnull ThreadLocal<StringBuilder> builderRef) {
-		requireNonNull(builderRef);
-
-		StringBuilder stringBuilder = builderRef.get();
-
-		if (stringBuilder.capacity() > REUSABLE_BUILDER_MAX_CAPACITY) {
-			stringBuilder = new StringBuilder(REUSABLE_BUILDER_CAPACITY);
-			builderRef.set(stringBuilder);
-		} else {
-			stringBuilder.setLength(0);
-		}
-
-		return stringBuilder;
-	}
-
 	private static boolean isLineBreakChar(char c) {
-		return c == '\n' || c == '\r' || c == '\u0085' || c == '\u2028' || c == '\u2029';
+		return c == '\n' || c == '\r' || c == '\u000B' || c == '\u000C' || c == '\u0085' || c == '\u2028' || c == '\u2029';
 	}
 
 	private static void writeFully(@Nonnull SocketChannel socketChannel,
@@ -1320,7 +1329,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (comment.isEmpty())
 			return HEARTBEAT_COMMENT_PAYLOAD;
 
-		StringBuilder stringBuilder = acquireReusableBuilder(COMMENT_FORMAT_BUILDER);
+		StringBuilder stringBuilder = new StringBuilder(DEFAULT_SSE_BUILDER_CAPACITY);
 		int len = comment.length();
 		int start = 0;
 
@@ -1356,10 +1365,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	private String formatServerSentEventForResponse(@Nonnull ServerSentEvent serverSentEvent) {
+	private static String formatServerSentEventForResponse(@Nonnull ServerSentEvent serverSentEvent,
+																												 @Nonnull StringBuilder sb) {
 		requireNonNull(serverSentEvent);
+		requireNonNull(sb);
 
-		StringBuilder sb = acquireReusableBuilder(EVENT_FORMAT_BUILDER);
+		sb.setLength(0);
 		boolean hasField = false;
 
 		// 1. Event Name
@@ -1493,44 +1504,87 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final ServerSentEventConnectionSnapshot snapshot;
 
 		@ThreadSafe
-		static final class WriteQueueElement {
-			@Nullable
+		static final class PreSerializedEvent {
+			@Nonnull
 			private final ServerSentEvent serverSentEvent;
-			@Nullable
-			private final String comment;
+			@Nonnull
+			private final byte[] payloadBytes;
+
+			PreSerializedEvent(@Nonnull ServerSentEvent serverSentEvent,
+												 @Nonnull byte[] payloadBytes) {
+				this.serverSentEvent = requireNonNull(serverSentEvent);
+				this.payloadBytes = requireNonNull(payloadBytes);
+			}
 
 			@Nonnull
-			public static WriteQueueElement withServerSentEvent(@Nonnull ServerSentEvent serverSentEvent) {
-				requireNonNull(serverSentEvent);
-				return new WriteQueueElement(serverSentEvent, null);
+			public ServerSentEvent getServerSentEvent() {
+				return this.serverSentEvent;
+			}
+
+			@Nonnull
+			public byte[] getPayloadBytes() {
+				return this.payloadBytes;
+			}
+		}
+
+		@ThreadSafe
+		static final class WriteQueueElement {
+			@Nullable
+			private final PreSerializedEvent preSerializedEvent;
+			@Nullable
+			private final String comment;
+			private final boolean poisonPill;
+
+			private static final WriteQueueElement POISON_PILL = new WriteQueueElement(null, null, true);
+
+			@Nonnull
+			public static WriteQueueElement withPreSerializedEvent(@Nonnull PreSerializedEvent preSerializedEvent) {
+				requireNonNull(preSerializedEvent);
+				return new WriteQueueElement(preSerializedEvent, null, false);
 			}
 
 			@Nonnull
 			public static WriteQueueElement withComment(@Nonnull String comment) {
 				requireNonNull(comment);
-				return new WriteQueueElement(null, comment);
-			}
-
-			private WriteQueueElement(@Nullable ServerSentEvent serverSentEvent,
-																@Nullable String comment) {
-				if (serverSentEvent == null && comment == null)
-					throw new IllegalStateException("Must provide either a server-sent event or a comment");
-
-				if (serverSentEvent != null && comment != null)
-					throw new IllegalStateException("Must provide either a server-sent event or a comment; not both");
-
-				this.serverSentEvent = serverSentEvent;
-				this.comment = comment;
+				return new WriteQueueElement(null, comment, false);
 			}
 
 			@Nonnull
-			public Optional<ServerSentEvent> getServerSentEvent() {
-				return Optional.ofNullable(this.serverSentEvent);
+			public static WriteQueueElement poisonPill() {
+				return POISON_PILL;
+			}
+
+			private WriteQueueElement(@Nullable PreSerializedEvent preSerializedEvent,
+																@Nullable String comment,
+																boolean poisonPill) {
+				if (poisonPill) {
+					if (preSerializedEvent != null || comment != null)
+						throw new IllegalStateException("Poison pill cannot include a payload");
+				} else {
+					if (preSerializedEvent == null && comment == null)
+						throw new IllegalStateException("Must provide either a server-sent event or a comment");
+
+					if (preSerializedEvent != null && comment != null)
+						throw new IllegalStateException("Must provide either a server-sent event or a comment; not both");
+				}
+
+				this.preSerializedEvent = preSerializedEvent;
+				this.comment = comment;
+				this.poisonPill = poisonPill;
+			}
+
+			@Nonnull
+			public Optional<PreSerializedEvent> getPreSerializedEvent() {
+				return Optional.ofNullable(this.preSerializedEvent);
 			}
 
 			@Nonnull
 			public Optional<String> getComment() {
 				return Optional.ofNullable(this.comment);
+			}
+
+			public boolean isPoisonPill() {
+				return this.poisonPill;
 			}
 		}
 
@@ -1692,7 +1746,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		public void unicastEvent(@Nonnull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
 
-			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withServerSentEvent(serverSentEvent)))
+			DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent = preSerializeServerSentEvent(serverSentEvent);
+
+			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent)))
 				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 
@@ -2437,7 +2493,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		try {
 			BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
 			writeQueue.clear();
-			writeQueue.offer(DefaultServerSentEventConnection.WriteQueueElement.withServerSentEvent(SERVER_SENT_EVENT_POISON_PILL));
+			writeQueue.offer(DefaultServerSentEventConnection.WriteQueueElement.poisonPill());
 		} catch (Throwable ignored) { /* best-effort */ }
 
 		// Force-close the channel to break any pending I/O
