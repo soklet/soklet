@@ -161,6 +161,8 @@ public interface Server extends AutoCloseable {
 		@Nullable
 		Integer socketPendingConnectionLimit;
 		@Nullable
+		Integer maximumConnections;
+		@Nullable
 		MultipartParser multipartParser;
 		@Nullable
 		Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
@@ -213,6 +215,12 @@ public interface Server extends AutoCloseable {
 		@Nonnull
 		public Builder socketPendingConnectionLimit(@Nullable Integer socketPendingConnectionLimit) {
 			this.socketPendingConnectionLimit = socketPendingConnectionLimit;
+			return this;
+		}
+
+		@Nonnull
+		public Builder maximumConnections(@Nullable Integer maximumConnections) {
+			this.maximumConnections = maximumConnections;
 			return this;
 		}
 

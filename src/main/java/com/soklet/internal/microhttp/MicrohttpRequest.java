@@ -11,7 +11,8 @@ public record MicrohttpRequest(
         String uri,
         String version,
         List<Header> headers,
-        byte[] body) {
+        byte[] body,
+        boolean contentTooLarge) {
 
     public String header(String name) {
         for (Header header : headers) {

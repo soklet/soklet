@@ -113,6 +113,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nonnull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE;
 	@Nonnull
+	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE;
+	@Nonnull
 	private static final ResourcePathDeclaration NO_MATCH_SENTINEL;
 	@Nonnull
 	private static final String HEARTBEAT_COMMENT_PAYLOAD;
@@ -137,6 +139,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED = true;
 
 		// Cache off a special failsafe response
+		FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_400);
 		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_500);
 		FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503);
 
@@ -827,6 +830,28 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			} catch (RequestTooLargeIOException e) {
 				// Exception provides a "too large"-flagged request with whatever data we could pull out of it
 				request = e.getTooLargeRequest();
+			} catch (IllegalRequestException e) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
+						.throwable(e)
+						.build());
+
+				try {
+					synchronized (channelLock) {
+						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE);
+					}
+				} catch (Throwable t) {
+					// best effort
+				} finally {
+					try {
+						synchronized (channelLock) {
+							clientSocketChannel.close();
+						}
+					} catch (IOException ignored) {
+						// Nothing to do
+					}
+				}
+
+				return;
 			} catch (SocketTimeoutException e) {
 				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "request timed out"
 				throw e;
@@ -838,7 +863,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			try {
-				validateNoRequestBodyHeaders(request);
+				if (request.getHttpMethod() == HttpMethod.GET)
+					validateNoRequestBodyHeaders(request);
 			} catch (IllegalRequestException e) {
 				try {
 					MarshaledResponse response = getResponseMarshaler().get().forThrowable(request, e, null);
@@ -944,70 +970,85 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				}, Math.max(1L, getRequestHandlerTimeout().toMillis()), TimeUnit.MILLISECONDS));
 			}
 
-			getRequestHandler().get().handleRequest(requestForHandler, (@Nonnull RequestResult requestResult) -> {
-				if (!handshakeResponseWritten.compareAndSet(false, true))
-					return;
+			try {
+				getRequestHandler().get().handleRequest(requestForHandler, (@Nonnull RequestResult requestResult) -> {
+					if (!handshakeResponseWritten.compareAndSet(false, true))
+						return;
 
-				cancelTimeout(handshakeTimeoutFutureRef.getAndSet(null));
+					cancelTimeout(handshakeTimeoutFutureRef.getAndSet(null));
 
-				// Set to the value Soklet processing gives us. Will be the empty Optional if no resource method was matched
-				HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
+					// Set to the value Soklet processing gives us. Will be the empty Optional if no resource method was matched
+					HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
 
-				RequestResult effectiveRequestResult = requestResult;
+					RequestResult effectiveRequestResult = requestResult;
 
-				// Store a reference to the accepted handshake if we have it and there is capacity
-				if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted accepted) {
-					if (reserveConnectionSlot()) {
-						connectionSlotReserved.set(true);
-						handshakeAcceptedReference.set(accepted);
-					} else {
-						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
-								format("Rejecting request to %s: Concurrent connection limit (%d) reached", requestForHandler.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
+					// Store a reference to the accepted handshake if we have it and there is capacity
+					if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted accepted) {
+						if (reserveConnectionSlot()) {
+							connectionSlotReserved.set(true);
+							handshakeAcceptedReference.set(accepted);
+						} else {
+							safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
+									format("Rejecting request to %s: Concurrent connection limit (%d) reached", requestForHandler.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
 
-						MarshaledResponse response = getResponseMarshaler().get().forServiceUnavailable(requestForHandler, requestResult.getResourceMethod().orElse(null));
+							MarshaledResponse response = getResponseMarshaler().get().forServiceUnavailable(requestForHandler, requestResult.getResourceMethod().orElse(null));
 
-						effectiveRequestResult = requestResult.copy()
-								.marshaledResponse(response)
-								.handshakeResult(null)
-								.finish();
+							effectiveRequestResult = requestResult.copy()
+									.marshaledResponse(response)
+									.handshakeResult(null)
+									.finish();
+						}
+					}
+
+					byte[] handshakeHttpResponse;
+
+					try {
+						handshakeHttpResponse = createHandshakeHttpResponse(effectiveRequestResult);
+					} catch (Throwable t) {
+						// Should not happen, but if it does, we fall back to "rejected" handshake mode and write a failsafe 500 response
+						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to generate SSE handshake response")
+								.throwable(t)
+								.build());
+
+						// Clear the accepted handshake reference in case it was set
+						handshakeAcceptedReference.set(null);
+						releaseReservedSlot(connectionSlotReserved);
+						handshakeHttpResponse = FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
+					}
+
+					try {
+						ByteBuffer byteBuffer = ByteBuffer.wrap(handshakeHttpResponse);
+
+						synchronized (channelLock) {
+							while (byteBuffer.hasRemaining())
+								clientSocketChannel.write(byteBuffer);
+						}
+					} catch (Throwable t) {
+						// We couldn't write a response to the client (maybe they disconnected).
+						// Go through the rejected flow and close out the connection
+						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED, "Unable to write SSE handshake response")
+								.throwable(t)
+								.build());
+
+						// Clear the accepted handshake reference in case it was set
+						handshakeAcceptedReference.set(null);
+						releaseReservedSlot(connectionSlotReserved);
+					}
+				});
+			} catch (Throwable t) {
+				if (handshakeResponseWritten.compareAndSet(false, true)) {
+					cancelTimeout(handshakeTimeoutFutureRef.getAndSet(null));
+					try {
+						synchronized (channelLock) {
+							writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE);
+						}
+					} catch (Throwable t2) {
+						// best effort
 					}
 				}
 
-				byte[] handshakeHttpResponse;
-
-				try {
-					handshakeHttpResponse = createHandshakeHttpResponse(effectiveRequestResult);
-				} catch (Throwable t) {
-					// Should not happen, but if it does, we fall back to "rejected" handshake mode and write a failsafe 500 response
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to generate SSE handshake response")
-							.throwable(t)
-							.build());
-
-					// Clear the accepted handshake reference in case it was set
-					handshakeAcceptedReference.set(null);
-					releaseReservedSlot(connectionSlotReserved);
-					handshakeHttpResponse = FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
-				}
-
-				try {
-					ByteBuffer byteBuffer = ByteBuffer.wrap(handshakeHttpResponse);
-
-					synchronized (channelLock) {
-						while (byteBuffer.hasRemaining())
-							clientSocketChannel.write(byteBuffer);
-					}
-				} catch (Throwable t) {
-					// We couldn't write a response to the client (maybe they disconnected).
-					// Go through the rejected flow and close out the connection
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED, "Unable to write SSE handshake response")
-							.throwable(t)
-							.build());
-
-					// Clear the accepted handshake reference in case it was set
-					handshakeAcceptedReference.set(null);
-					releaseReservedSlot(connectionSlotReserved);
-				}
-			});
+				throw t;
+			}
 
 			// Happy path: register the channel for future ServerSentEvent writes and keep it open.
 			// Otherwise, we're done immediately now that initial data has been written - shut it all down.
@@ -1957,7 +1998,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		rawRequest = trimAggressivelyToNull(rawRequest);
 
 		if (rawRequest == null)
-			throw new IllegalStateException("Server-Sent Event HTTP request has no data");
+			throw new IllegalRequestException("Server-Sent Event HTTP request has no data");
 
 		// Example request structure:
 		//
@@ -1977,7 +2018,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Accept-Encoding: gzip, deflate, br, zstd
 		// Accept-Language: en-US,en;q=0.9,fr-CA;q=0.8,fr;q=0.7
 
-		// We know any EventSource request must be a GET.  As a result, we know there is no request body.
+		// Server-Sent Event handshakes are GET requests. We only read headers and let Soklet
+		// generate a 405 for non-GET methods.
 
 		// First line is the URL and the rest are headers.
 		// Line 1: GET /testing?one=two HTTP/1.1
@@ -2001,14 +2043,24 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				String[] components = line.trim().split("\\s+");
 				if (components.length != 3)
-					throw new IllegalStateException(format("Malformed Server-Sent Event request line '%s'. Expected 'GET /example HTTP/1.1'", line));
+					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Expected '<METHOD> <request-target> HTTP/1.1'", line));
 
-				HttpMethod httpMethod;
 				String rawHttpMethod = components[0];
 				String rawUrl = components[1];
+				String rawVersion = components[2];
+
+				requireAsciiToken(rawHttpMethod, "HTTP method");
+				requireAsciiToken(rawUrl, "request target");
+				requireAsciiToken(rawVersion, "HTTP version");
+
+				if (!"HTTP/1.1".equalsIgnoreCase(rawVersion))
+					throw new IllegalRequestException(format("Unsupported HTTP version '%s' for Server-Sent Event requests", rawVersion));
+
+				HttpMethod httpMethod;
+				String normalizedMethod = rawHttpMethod.toUpperCase(Locale.ENGLISH);
 
 				try {
-					httpMethod = HttpMethod.valueOf(rawHttpMethod);
+					httpMethod = HttpMethod.valueOf(normalizedMethod);
 				} catch (IllegalArgumentException e) {
 					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Unable to parse HTTP method.", line), e);
 				}
@@ -2021,11 +2073,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (rawLine.isEmpty() || rawLine.trim().isEmpty())
 				break;
 
+			if (rawLine.charAt(0) == ' ' || rawLine.charAt(0) == '\t')
+				throw new IllegalRequestException("Header folding is not supported for Server-Sent Event requests");
+
 			// Header line
 			int indexOfFirstColon = rawLine.indexOf(':');
 
-			if (indexOfFirstColon == -1)
-				throw new IllegalStateException(format("Malformed Server-Sent Event request header line '%s'. Expected 'Header-Name: Value'", rawLine));
+			if (indexOfFirstColon <= 0)
+				throw new IllegalRequestException(format("Malformed Server-Sent Event request header line '%s'. Expected 'Header-Name: Value'", rawLine));
+
+			String headerName = rawLine.substring(0, indexOfFirstColon);
+			validateHeaderName(headerName);
 
 			headerLines.add(rawLine);
 		}
@@ -2033,6 +2091,33 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(headerLines);
 
 		return requestBuilder.idGenerator(getIdGenerator()).headers(headers).build();
+	}
+
+	private static void requireAsciiToken(@Nonnull String value, @Nonnull String field) {
+		if (value.isEmpty())
+			throw new IllegalRequestException(format("Missing %s in Server-Sent Event request line", field));
+
+		for (int i = 0; i < value.length(); i++) {
+			if (value.charAt(i) > 0x7F)
+				throw new IllegalRequestException(format("Non-ASCII %s in Server-Sent Event request line", field));
+		}
+	}
+
+	private static void validateHeaderName(@Nonnull String name) {
+		if (name.isEmpty())
+			throw new IllegalRequestException("Header name is blank");
+
+		for (int i = 0; i < name.length(); i++) {
+			char c = name.charAt(i);
+			if (c > 0x7F || !isTchar(c))
+				throw new IllegalRequestException(format("Illegal header name '%s'. Offending character: '%s'", name, Utilities.printableChar(c)));
+		}
+	}
+
+	private static boolean isTchar(char c) {
+		return c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
+				c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~' ||
+				Character.isLetterOrDigit(c);
 	}
 
 	protected void validateNoRequestBodyHeaders(@Nonnull Request request) {

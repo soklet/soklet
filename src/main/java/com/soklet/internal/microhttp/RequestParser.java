@@ -69,20 +69,23 @@ class RequestParser {
     }
 
     MicrohttpRequest request() {
-        return new MicrohttpRequest(method, uri, version, headers, body);
+        return new MicrohttpRequest(method, uri, version, headers, body, false);
     }
 
     private void parseMethod(byte[] token) {
+        requireAscii(token, "method");
         method = new String(token, StandardCharsets.US_ASCII);
         state = State.URI;
     }
 
     private void parseUri(byte[] token) {
+        requireAscii(token, "uri");
         uri = new String(token, StandardCharsets.US_ASCII);
         state = State.VERSION;
     }
 
     private void parseVersion(byte[] token) {
+        requireAscii(token, "version");
         version = new String(token, StandardCharsets.US_ASCII);
         state = State.HEADER;
     }
@@ -147,6 +150,14 @@ class RequestParser {
             }
         }
         return -1;
+    }
+
+    private static void requireAscii(byte[] token, String field) {
+        for (byte b : token) {
+            if ((b & 0x80) != 0) {
+                throw new MalformedRequestException("non-ascii " + field);
+            }
+        }
     }
 
     private void parseChunkSize(byte[] token) {

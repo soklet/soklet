@@ -12,6 +12,7 @@ public class OptionsBuilder {
     private int readBufferSize;
     private int acceptLength;
     private int maxRequestSize;
+    private int maxConnections;
     private int concurrency;
 
     private OptionsBuilder() {
@@ -24,6 +25,7 @@ public class OptionsBuilder {
         this.readBufferSize = 1_024 * 64;
         this.acceptLength = 0;
         this.maxRequestSize = 1_024 * 1_024;
+        this.maxConnections = 0;
         this.concurrency = Runtime.getRuntime().availableProcessors();
     }
 
@@ -41,6 +43,7 @@ public class OptionsBuilder {
             this.readBufferSize,
             this.acceptLength,
             this.maxRequestSize,
+            this.maxConnections,
             this.concurrency);
     }
 
@@ -86,6 +89,11 @@ public class OptionsBuilder {
 
     public OptionsBuilder withMaxRequestSize(int maxRequestSize) {
         this.maxRequestSize = maxRequestSize;
+        return this;
+    }
+
+    public OptionsBuilder withMaxConnections(int maxConnections) {
+        this.maxConnections = maxConnections;
         return this;
     }
 

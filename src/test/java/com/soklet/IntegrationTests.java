@@ -224,6 +224,40 @@ public class IntegrationTests {
 		}
 	}
 
+	@Test
+	public void maximumConnections_rejectsExcessConnections() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
+						.requestTimeout(Duration.ofSeconds(5))
+						.maximumConnections(1)
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket1 = new Socket("127.0.0.1", port)) {
+				socket1.setSoTimeout(3000);
+				OutputStream out1 = socket1.getOutputStream();
+				out1.write(("GET /hello HTTP/1.1\r\n").getBytes(StandardCharsets.UTF_8));
+				out1.write(("Host: 127.0.0.1\r\n").getBytes(StandardCharsets.UTF_8));
+				out1.write("Connection: keep-alive\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+				out1.flush();
+
+				RawResponse response1 = readResponse(socket1.getInputStream());
+				Assertions.assertTrue(response1.statusLine().startsWith("HTTP/1.1 200"), "Expected first connection to succeed");
+
+				try (Socket socket2 = new Socket("127.0.0.1", port)) {
+					socket2.setSoTimeout(2000);
+					int b = socket2.getInputStream().read();
+					Assertions.assertEquals(-1, b, "Expected second connection to be closed when max connections reached");
+				}
+			}
+		}
+	}
+
 	private static String readLineCRLF(InputStream in) throws IOException {
 		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
 		int prev = -1, cur;
@@ -320,10 +354,19 @@ public class IntegrationTests {
 		int port = findFreePort();
 		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
 			// We expect /files/a/b/../c -> "a/c" after normalization
-			URL u = new URL("http://127.0.0.1:" + port + "/files/a/b/../c");
-			HttpURLConnection c = open("GET", u, Map.of("Accept", "text/plain"));
-			Assertions.assertEquals(200, c.getResponseCode());
-			Assertions.assertEquals("a/c", new String(readAll(c.getInputStream()), StandardCharsets.UTF_8));
+			try (Socket socket = new Socket("127.0.0.1", port)) {
+				socket.setSoTimeout(3000);
+				OutputStream out = socket.getOutputStream();
+				out.write(("GET /files/a/b/../c HTTP/1.1\r\n").getBytes(StandardCharsets.UTF_8));
+				out.write(("Host: 127.0.0.1:" + port + "\r\n").getBytes(StandardCharsets.UTF_8));
+				out.write(("Accept: text/plain\r\n").getBytes(StandardCharsets.UTF_8));
+				out.write("Connection: close\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse response = readResponse(socket.getInputStream());
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), "Expected 200 OK");
+				Assertions.assertEquals("a/c", new String(response.body(), StandardCharsets.UTF_8));
+			}
 		}
 	}
 

@@ -89,6 +89,8 @@ final class DefaultServer implements Server {
 	@Nonnull
 	private static final Integer DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 	@Nonnull
+	private static final Integer DEFAULT_MAXIMUM_CONNECTIONS;
+	@Nonnull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 
 	static {
@@ -100,6 +102,7 @@ final class DefaultServer implements Server {
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024 * 10;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
+		DEFAULT_MAXIMUM_CONNECTIONS = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 	}
 
@@ -123,6 +126,8 @@ final class DefaultServer implements Server {
 	private final Integer requestReadBufferSizeInBytes;
 	@Nonnull
 	private final Integer socketPendingConnectionLimit;
+	@Nonnull
+	private final Integer maximumConnections;
 	@Nonnull
 	private final MultipartParser multipartParser;
 	@Nonnull
@@ -156,6 +161,7 @@ final class DefaultServer implements Server {
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
+		this.maximumConnections = builder.maximumConnections != null ? builder.maximumConnections : DEFAULT_MAXIMUM_CONNECTIONS;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.defaultInstance();
 		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.withDefaults();
@@ -174,6 +180,9 @@ final class DefaultServer implements Server {
 
 		if (this.requestHandlerTimeout.isNegative() || this.requestHandlerTimeout.isZero())
 			throw new IllegalArgumentException("Request handler timeout must be > 0");
+
+		if (this.maximumConnections < 0)
+			throw new IllegalArgumentException("Maximum connections must be >= 0");
 	}
 
 	@Override
@@ -190,16 +199,17 @@ final class DefaultServer implements Server {
 			if (getLifecycleInterceptor().isEmpty())
 				throw new IllegalStateException(format("No %s was registered for %s", LifecycleInterceptor.class, getClass()));
 
-			Options options = OptionsBuilder.newBuilder()
-					.withHost(getHost())
-					.withPort(getPort())
-					.withConcurrency(getConcurrency())
-					.withRequestTimeout(getRequestTimeout())
-					.withResolution(getSocketSelectTimeout())
-					.withReadBufferSize(getRequestReadBufferSizeInBytes())
-					.withMaxRequestSize(getMaximumRequestSizeInBytes())
-					.withAcceptLength(getSocketPendingConnectionLimit())
-					.build();
+				Options options = OptionsBuilder.newBuilder()
+						.withHost(getHost())
+						.withPort(getPort())
+						.withConcurrency(getConcurrency())
+						.withRequestTimeout(getRequestTimeout())
+						.withResolution(getSocketSelectTimeout())
+						.withReadBufferSize(getRequestReadBufferSizeInBytes())
+						.withMaxRequestSize(getMaximumRequestSizeInBytes())
+						.withAcceptLength(getSocketPendingConnectionLimit())
+						.withMaxConnections(getMaximumConnections())
+						.build();
 
 			Logger logger = new Logger() {
 				@Override
@@ -276,15 +286,7 @@ final class DefaultServer implements Server {
 
 							Map<String, Set<String>> headers = headersFromMicrohttpRequest(microhttpRequest);
 
-							// Special case: look for a poison-pill header that indicates "content too large",
-							// make a note of it, and then remove it from the request.
-							// This header is specially set for Soklet inside of Microhttp's connection event loop.
-							boolean contentTooLarge = false;
-
-							if (headers.containsKey("com.soklet.CONTENT_TOO_LARGE")) {
-								headers.remove("com.soklet.CONTENT_TOO_LARGE");
-								contentTooLarge = true;
-							}
+							boolean contentTooLarge = microhttpRequest.contentTooLarge();
 
 							HttpMethod httpMethod;
 
@@ -684,6 +686,11 @@ final class DefaultServer implements Server {
 	@Nonnull
 	protected Integer getSocketPendingConnectionLimit() {
 		return this.socketPendingConnectionLimit;
+	}
+
+	@Nonnull
+	protected Integer getMaximumConnections() {
+		return this.maximumConnections;
 	}
 
 	@Nonnull

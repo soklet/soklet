@@ -25,6 +25,7 @@ import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.converter.ValueConversionException;
 import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.exception.IllegalRequestBodyException;
+import com.soklet.exception.IllegalRequestException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -776,17 +777,31 @@ public class AdvancedTests {
 
 		for (String injection : injectionAttempts) {
 			String testPath = "/api/" + URLEncoder.encode(injection, StandardCharsets.UTF_8);
-			ResourcePath resourcePath = ResourcePath.withPath(testPath);
+			Request request;
 
-			// TODO: finish up
-//
-//			String extractedParam = resourcePath.getPathParameters().get("param");
-//
-//			// Parameter should be properly decoded/sanitized
-//			Assertions.assertNotNull(extractedParam, "Parameter extraction failed");
-//
-//			// Verify no directory traversal
-//			Assertions.assertFalse(extractedParam.contains(".."), "Path traversal in parameter");
+			try {
+				request = Request.withRawUrl(HttpMethod.GET, testPath).build();
+			} catch (IllegalRequestException e) {
+				String message = e.getMessage() == null ? "" : e.getMessage();
+				Assertions.assertTrue(message.contains("null byte"), "Unexpected parse failure for: " + injection);
+				continue;
+			}
+
+			String normalizedPath = request.getPath();
+			ResourcePath resourcePath = request.getResourcePath();
+			boolean shouldMatch = normalizedPath.startsWith("/api/")
+					&& normalizedPath.indexOf('/', "/api/".length()) == -1;
+			boolean matched = declaration.matches(resourcePath);
+
+			Assertions.assertEquals(shouldMatch, matched, "Unexpected path match result for: " + injection);
+
+			if (matched) {
+				String extractedParam = resourcePath.extractPlaceholders(declaration).get("param");
+				Assertions.assertNotNull(extractedParam, "Parameter extraction failed");
+				Assertions.assertEquals(normalizedPath.substring("/api/".length()), extractedParam, "Extracted parameter mismatch");
+				Assertions.assertFalse(extractedParam.contains(".."), "Path traversal in parameter");
+				Assertions.assertFalse(extractedParam.contains("/"), "Path separator in parameter");
+			}
 		}
 	}
 

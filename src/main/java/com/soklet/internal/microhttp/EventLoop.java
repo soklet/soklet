@@ -6,6 +6,7 @@ import java.net.StandardSocketOptions;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -99,8 +100,23 @@ public class EventLoop {
             while (it.hasNext()) {
                 SelectionKey selKey = it.next();
                 if (selKey.isAcceptable()) {
+                    SocketChannel socketChannel = serverSocketChannel.accept();
+                    if (socketChannel == null) {
+                        it.remove();
+                        continue;
+                    }
+                    if (options.maxConnections() > 0 && totalConnections() >= options.maxConnections()) {
+                        if (logger.enabled()) {
+                            logger.log(
+                                    new LogEntry("event", "accept_reject_max_connections"),
+                                    new LogEntry("max_connections", Integer.toString(options.maxConnections())));
+                        }
+                        CloseUtils.closeQuietly(socketChannel);
+                        it.remove();
+                        continue;
+                    }
                     ConnectionEventLoop connectionEventLoop = leastConnections();
-                    connectionEventLoop.register(serverSocketChannel.accept());
+                    connectionEventLoop.register(socketChannel);
                 }
                 it.remove();
             }
@@ -111,6 +127,14 @@ public class EventLoop {
         return connectionEventLoops.stream()
                 .min(Comparator.comparing(ConnectionEventLoop::numConnections))
                 .get();
+    }
+
+    private int totalConnections() {
+        int total = 0;
+        for (ConnectionEventLoop loop : connectionEventLoops) {
+            total += loop.numConnections();
+        }
+        return total;
     }
 
     public void stop() {

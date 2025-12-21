@@ -194,11 +194,8 @@ class ConnectionEventLoop {
                     // failSafeClose();
 
                     // Updated:
-                    // Perform the actions of onParseRequest() but inject a "poison pill" header.
+                    // Perform the actions of onParseRequest() but mark the request as too large.
                     // This lets Soklet code know the request was stopped for being too large.
-                    //
-                    // Alternative would be to, for example, modify MicrohttpRequest to include an additional field.
-                    // Current approach was chosen because it keeps surface area of Microhttp modifications small.
 
                     if (selectionKey.interestOps() != 0) {
                         selectionKey.interestOps(0);
@@ -218,10 +215,9 @@ class ConnectionEventLoop {
                     } else {
                         // OK, we at least have a method, URI, and HTTP version.
                         // We make our own request with its own copy of headers - including our poison pill - and an empty body.
-                        List<Header> headers = request.headers() == null ? new ArrayList<>(1) : new ArrayList<>(request.headers());
-                        headers.add(new Header("com.soklet.CONTENT_TOO_LARGE", String.valueOf(options.maxRequestSize())));
+                        List<Header> headers = request.headers() == null ? new ArrayList<>(0) : new ArrayList<>(request.headers());
 
-                        MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0]);
+                        MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0], true);
 
                         applyConnectionPolicy(tooLargeRequest);
                         closeAfterResponse = true;
