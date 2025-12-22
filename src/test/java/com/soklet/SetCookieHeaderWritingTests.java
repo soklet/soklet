@@ -20,10 +20,8 @@ import com.soklet.annotation.GET;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
-import java.io.IOException;
 import java.net.HttpCookie;
 import java.net.HttpURLConnection;
-import java.net.ServerSocket;
 import java.net.URL;
 import java.time.Duration;
 import java.util.List;
@@ -31,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.soklet.TestSupport.findFreePort;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -352,10 +351,4 @@ public class SetCookieHeaderWritingTests {
 		return app;
 	}
 
-	private static int findFreePort() throws IOException {
-		try (ServerSocket ss = new ServerSocket(0)) {
-			ss.setReuseAddress(true);
-			return ss.getLocalPort();
-		}
-	}
 }

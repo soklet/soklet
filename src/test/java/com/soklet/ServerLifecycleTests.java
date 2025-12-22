@@ -34,24 +34,14 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static com.soklet.TestSupport.findFreePort;
+import static com.soklet.TestSupport.readAll;
+
 /*
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public class ServerLifecycleTests {
-	private static int findFreePort() throws IOException {
-		try (ServerSocket ss = new ServerSocket(0)) {
-			ss.setReuseAddress(true);
-			return ss.getLocalPort();
-		}
-	}
-
-	private static byte[] readAll(java.io.InputStream in) throws IOException {
-		try (var is = in) {
-			return is.readAllBytes();
-		}
-	}
-
 	private static HttpURLConnection open(String method, URL url, Map<String, String> headers) throws IOException {
 		HttpURLConnection c = (HttpURLConnection) url.openConnection();
 		c.setRequestMethod(method);

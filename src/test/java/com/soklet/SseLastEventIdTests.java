@@ -26,11 +26,13 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+
+import static com.soklet.TestSupport.connectWithRetry;
+import static com.soklet.TestSupport.findFreePort;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -55,7 +57,7 @@ public class SseLastEventIdTests {
 		try (Soklet soklet = Soklet.withConfig(config)) {
 			soklet.start();
 
-			try (Socket socket = new Socket("127.0.0.1", ssePort)) {
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				writeHttpGet(socket, "/sse/abc", ssePort,
 						"Accept: text/event-stream\r\n" +
 								"Last-Event-ID: 123\r\n");
@@ -102,13 +104,6 @@ public class SseLastEventIdTests {
 			}).start();
 
 			return HandshakeResult.accept();
-		}
-	}
-
-	private static int findFreePort() throws IOException {
-		try (ServerSocket ss = new ServerSocket(0)) {
-			ss.setReuseAddress(true);
-			return ss.getLocalPort();
 		}
 	}
 

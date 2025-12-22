@@ -30,10 +30,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nonnull;
-import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -64,6 +62,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.soklet.TestSupport.connectWithRetry;
+import static com.soklet.TestSupport.findFreePort;
 import static java.lang.String.format;
 
 /**
@@ -890,13 +890,6 @@ public class AdvancedTests {
 		}
 	}
 
-	private static int findFreePort() throws IOException {
-		try (ServerSocket ss = new ServerSocket(0)) {
-			ss.setReuseAddress(true);
-			return ss.getLocalPort();
-		}
-	}
-
 	private SokletConfig config(int port) {
 		return SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(2)).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
@@ -928,7 +921,7 @@ public class AdvancedTests {
 
 		try (Soklet app = Soklet.withConfig(config)) {
 			app.start();
-			try (Socket socket = new Socket("localhost", port)) {
+			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
 				// RFC 7230: A server MUST accept the absolute-form in requests
 				String request = "GET http://localhost:" + port + "/test HTTP/1.1\r\n" +
 						"Host: localhost\r\n\r\n";
@@ -949,7 +942,7 @@ public class AdvancedTests {
 
 		try (Soklet app = Soklet.withConfig(config)) {
 			app.start();
-			try (Socket socket = new Socket("localhost", port)) {
+			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
 				// Standard server health check
 				String request = "OPTIONS * HTTP/1.1\r\n" +
 						"Host: localhost\r\n\r\n";
@@ -969,7 +962,7 @@ public class AdvancedTests {
 
 		try (Soklet app = Soklet.withConfig(config)) {
 			app.start();
-			try (Socket socket = new Socket("localhost", port)) {
+			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
 				// Attack: try to access file with null byte terminator
 				String request = "GET /hello%00.png HTTP/1.1\r\n" +
 						"Host: localhost\r\n\r\n";

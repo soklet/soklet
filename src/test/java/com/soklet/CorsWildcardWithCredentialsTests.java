@@ -22,8 +22,6 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
-import java.io.IOException;
-import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -31,6 +29,8 @@ import java.net.http.HttpResponse;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+
+import static com.soklet.TestSupport.findFreePort;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -99,10 +99,4 @@ public class CorsWildcardWithCredentialsTests {
 		public String hello() {return "ok";}
 	}
 
-	private static int findFreePort() throws IOException {
-		try (ServerSocket ss = new ServerSocket(0)) {
-			ss.setReuseAddress(true);
-			return ss.getLocalPort();
-		}
-	}
 }

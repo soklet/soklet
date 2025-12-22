@@ -34,6 +34,8 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketOption;
@@ -43,8 +45,6 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -62,6 +62,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import static com.soklet.TestSupport.connectWithRetry;
+import static com.soklet.TestSupport.findFreePort;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -1178,7 +1180,7 @@ public class ServerSentEventTests {
 			soklet.start();
 
 			// handshake
-			try (Socket socket = new Socket("127.0.0.1", ssePort)) {
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(3000);
 				OutputStream out = socket.getOutputStream();
 				InputStream in = socket.getInputStream();
@@ -1273,7 +1275,7 @@ public class ServerSentEventTests {
 			soklet.start();
 
 			// handshake
-			try (Socket socket = new Socket("127.0.0.1", ssePort)) {
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(3000);
 				OutputStream out = socket.getOutputStream();
 				out.write((
@@ -1675,22 +1677,6 @@ public class ServerSentEventTests {
 		socket.getOutputStream().flush();
 	}
 
-	private static Socket connectWithRetry(String host, int port, int timeoutMs) throws IOException, InterruptedException {
-		long deadline = System.currentTimeMillis() + timeoutMs;
-		IOException last = null;
-		while (System.currentTimeMillis() < deadline) {
-			try {
-				Socket s = new Socket();
-				s.connect(new java.net.InetSocketAddress(host, port), Math.max(250, timeoutMs / 2));
-				return s;
-			} catch (IOException e) {
-				last = e;
-				Thread.sleep(30);
-			}
-		}
-		throw (last != null ? last : new IOException("Unable to connect to " + host + ":" + port));
-	}
-
 	private static String readUntil(java.io.InputStream in, String terminator, int maxBytes) throws IOException {
 		byte[] term = terminator.getBytes(StandardCharsets.UTF_8);
 		java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
@@ -1758,10 +1744,4 @@ public class ServerSentEventTests {
 		return values;
 	}
 
-	private static int findFreePort() throws IOException {
-		try (java.net.ServerSocket ss = new java.net.ServerSocket(0)) {
-			ss.setReuseAddress(true);
-			return ss.getLocalPort();
-		}
-	}
 }

@@ -31,7 +31,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URL;
@@ -45,6 +44,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.soklet.TestSupport.connectWithRetry;
+import static com.soklet.TestSupport.findFreePort;
+import static com.soklet.TestSupport.readAll;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -93,13 +96,6 @@ public class IntegrationTests {
 		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
 	}
 
-	private static int findFreePort() throws IOException {
-		try (ServerSocket ss = new ServerSocket(0)) {
-			ss.setReuseAddress(true);
-			return ss.getLocalPort();
-		}
-	}
-
 	private static HttpURLConnection open(String method, URL url, Map<String, String> headers) throws IOException {
 		HttpURLConnection c = (HttpURLConnection) url.openConnection();
 		c.setRequestMethod(method);
@@ -113,17 +109,6 @@ public class IntegrationTests {
 			c.setDoOutput(true);
 		}
 		return c;
-	}
-
-	private static byte[] readAll(InputStream in) throws IOException {
-		if (in == null) return new byte[0];
-		try (in) {
-			ByteArrayOutputStream bos = new ByteArrayOutputStream();
-			byte[] buf = new byte[8192];
-			int n;
-			while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
-			return bos.toByteArray();
-		}
 	}
 
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
@@ -158,7 +143,7 @@ public class IntegrationTests {
 			String host = "127.0.0.1";
 			String path = "/multivalued-headers";
 
-			try (Socket socket = new Socket(host, port);
+			try (Socket socket = connectWithRetry(host, port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				// Send raw HTTP request
 				out.write(("GET " + path + " HTTP/1.1\r\n").getBytes(StandardCharsets.UTF_8));
@@ -207,7 +192,7 @@ public class IntegrationTests {
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
 			app.start();
-			try (Socket socket = new Socket("127.0.0.1", port);
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				socket.setSoTimeout(3000);
 				String request = "GET /hello HTTP/1.1\r\n"
@@ -238,7 +223,7 @@ public class IntegrationTests {
 		try (Soklet app = Soklet.withConfig(cfg)) {
 			app.start();
 
-			try (Socket socket1 = new Socket("127.0.0.1", port)) {
+			try (Socket socket1 = connectWithRetry("127.0.0.1", port, 2000)) {
 				socket1.setSoTimeout(3000);
 				OutputStream out1 = socket1.getOutputStream();
 				out1.write(("GET /hello HTTP/1.1\r\n").getBytes(StandardCharsets.UTF_8));
@@ -249,7 +234,7 @@ public class IntegrationTests {
 				RawResponse response1 = readResponse(socket1.getInputStream());
 				Assertions.assertTrue(response1.statusLine().startsWith("HTTP/1.1 200"), "Expected first connection to succeed");
 
-				try (Socket socket2 = new Socket("127.0.0.1", port)) {
+				try (Socket socket2 = connectWithRetry("127.0.0.1", port, 2000)) {
 					socket2.setSoTimeout(2000);
 					int b = socket2.getInputStream().read();
 					Assertions.assertEquals(-1, b, "Expected second connection to be closed when max connections reached");
@@ -354,7 +339,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
 			// We expect /files/a/b/../c -> "a/c" after normalization
-			try (Socket socket = new Socket("127.0.0.1", port)) {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 				socket.setSoTimeout(3000);
 				OutputStream out = socket.getOutputStream();
 				out.write(("GET /files/a/b/../c HTTP/1.1\r\n").getBytes(StandardCharsets.UTF_8));
@@ -469,7 +454,7 @@ public class IntegrationTests {
 	public void chunkedExtensionsAndTrailers_areConsumed() throws Exception {
 		int port = findFreePort();
 		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
-			try (Socket socket = new Socket("127.0.0.1", port);
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
 				socket.setSoTimeout(4000);
@@ -517,7 +502,7 @@ public class IntegrationTests {
 		try (Soklet app = Soklet.withConfig(cfg)) {
 			app.start();
 
-			try (Socket socket = new Socket("127.0.0.1", port);
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
 				socket.setSoTimeout(2000);
