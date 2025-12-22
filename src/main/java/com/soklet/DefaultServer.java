@@ -199,17 +199,17 @@ final class DefaultServer implements Server {
 			if (getLifecycleInterceptor().isEmpty())
 				throw new IllegalStateException(format("No %s was registered for %s", LifecycleInterceptor.class, getClass()));
 
-				Options options = OptionsBuilder.newBuilder()
-						.withHost(getHost())
-						.withPort(getPort())
-						.withConcurrency(getConcurrency())
-						.withRequestTimeout(getRequestTimeout())
-						.withResolution(getSocketSelectTimeout())
-						.withReadBufferSize(getRequestReadBufferSizeInBytes())
-						.withMaxRequestSize(getMaximumRequestSizeInBytes())
-						.withAcceptLength(getSocketPendingConnectionLimit())
-						.withMaxConnections(getMaximumConnections())
-						.build();
+			Options options = OptionsBuilder.newBuilder()
+					.withHost(getHost())
+					.withPort(getPort())
+					.withConcurrency(getConcurrency())
+					.withRequestTimeout(getRequestTimeout())
+					.withResolution(getSocketSelectTimeout())
+					.withReadBufferSize(getRequestReadBufferSizeInBytes())
+					.withMaxRequestSize(getMaximumRequestSizeInBytes())
+					.withAcceptLength(getSocketPendingConnectionLimit())
+					.withMaxConnections(getMaximumConnections())
+					.build();
 
 			Logger logger = new Logger() {
 				@Override
@@ -488,7 +488,9 @@ final class DefaultServer implements Server {
 		requireNonNull(throwable);
 
 		Charset charset = StandardCharsets.UTF_8;
-		String reasonPhrase = StatusCode.fromStatusCode(statusCode).get().getReasonPhrase();
+		String reasonPhrase = StatusCode.fromStatusCode(statusCode)
+				.map(StatusCode::getReasonPhrase)
+				.orElse("Unknown");
 		List<Header> headers = List.of(new Header("Content-Type", format("text/plain; charset=%s", charset.name())));
 		byte[] body = format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(charset);
 
