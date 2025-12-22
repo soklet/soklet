@@ -85,6 +85,14 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void responseRejectsNonLatin1HeaderValue() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				Response.withStatusCode(200)
+						.headers(Map.of("X-Test", Set.of("\u2713")))
+						.build());
+	}
+
+	@Test
 	public void clientUrlPrefixFromHeaders() {
 		String clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of()).orElse(null);
 		assertEquals(null, clientUrlPrefix, "Client URL prefix erroneously detected from incomplete header data");

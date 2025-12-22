@@ -1330,7 +1330,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// Shared buffer for building the header section
 		try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream(1024);
-				 OutputStreamWriter outputStreamWriter = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8);
+				 OutputStreamWriter outputStreamWriter = new OutputStreamWriter(outputStream, StandardCharsets.ISO_8859_1);
 				 PrintWriter printWriter = new PrintWriter(outputStreamWriter, false)) {
 
 			if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted) {
@@ -2028,6 +2028,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		Request.RawBuilder requestBuilder = null;
 		List<String> headerLines = new ArrayList<>();
+		int hostHeaderCount = 0;
+		String hostHeaderValue = null;
 
 		// Preserve empty lines so we can detect the end-of-headers
 		List<String> lines = splitRequestLines(rawRequest);
@@ -2088,8 +2090,23 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			String headerValue = rawLine.substring(indexOfFirstColon + 1);
 			validateHeaderValue(headerName, headerValue);
 
+			if ("Host".equalsIgnoreCase(headerName)) {
+				hostHeaderCount++;
+				if (hostHeaderCount == 1)
+					hostHeaderValue = headerValue;
+			}
+
 			headerLines.add(rawLine);
 		}
+
+		if (hostHeaderCount == 0)
+			throw new IllegalRequestException("Missing Host header");
+
+		if (hostHeaderCount > 1)
+			throw new IllegalRequestException("Multiple Host headers are not allowed");
+
+		if (!isValidHostHeaderValue(hostHeaderValue))
+			throw new IllegalRequestException("Invalid Host header value");
 
 		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(headerLines);
 
@@ -2133,6 +2150,21 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (c == '\r' || c == '\n' || c == 0x00 || (c < 0x20 && c != '\t') || c == 0x7F)
 				throw new IllegalRequestException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", value, name, Utilities.printableChar(c)));
 		}
+	}
+
+	private static boolean isValidHostHeaderValue(@Nullable String value) {
+		String trimmed = trimAggressivelyToNull(value);
+
+		if (trimmed == null)
+			return false;
+
+		for (int i = 0; i < trimmed.length(); i++) {
+			char c = trimmed.charAt(i);
+			if (c == ',' || c == ' ' || c == '\t' || c > 0x7F)
+				return false;
+		}
+
+		return true;
 	}
 
 	@Nonnull

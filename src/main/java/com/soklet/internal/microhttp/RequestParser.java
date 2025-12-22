@@ -14,6 +14,7 @@ class RequestParser {
 
     private static final String HEADER_CONTENT_LENGTH = "Content-Length";
     private static final String HEADER_TRANSFER_ENCODING = "Transfer-Encoding";
+    private static final String HEADER_HOST = "Host";
     private static final String CHUNKED = "chunked";
     private static final byte[] EMPTY_BODY = new byte[]{};
 
@@ -92,6 +93,7 @@ class RequestParser {
 
     private void parseHeader(byte[] token) {
         if (token.length == 0) { // CR-LF on own line, end of headers
+            validateHostHeaderIfRequired();
             Integer contentLength = findContentLength();
             boolean hasTransferEncodingHeader = hasTransferEncodingHeader();
             List<String> transferEncodings = findTransferEncodings();
@@ -167,6 +169,56 @@ class RequestParser {
                 throw new MalformedRequestException("non-ascii " + field);
             }
         }
+    }
+
+    private void validateHostHeaderIfRequired() {
+        if (version == null || !version.equalsIgnoreCase("HTTP/1.1")) {
+            return;
+        }
+
+        int hostCount = 0;
+        String hostValue = null;
+
+        for (Header header : headers) {
+            if (header.name().equalsIgnoreCase(HEADER_HOST)) {
+                hostCount++;
+                if (hostCount == 1) {
+                    hostValue = header.value();
+                }
+            }
+        }
+
+        if (hostCount == 0) {
+            throw new MalformedRequestException("missing host header");
+        }
+
+        if (hostCount > 1) {
+            throw new MalformedRequestException("multiple host headers");
+        }
+
+        if (!isValidHostValue(hostValue)) {
+            throw new MalformedRequestException("invalid host header value");
+        }
+    }
+
+    private static boolean isValidHostValue(String value) {
+        if (value == null) {
+            return false;
+        }
+
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return false;
+        }
+
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            if (c == ',' || c == ' ' || c == '\t' || c > 0x7F) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static boolean isTchar(int b) {

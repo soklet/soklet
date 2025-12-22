@@ -1328,7 +1328,7 @@ public final class Utilities {
 
 		for (int i = 0; i < value.length(); i++) {
 			char c = value.charAt(i);
-			if (c == '\r' || c == '\n' || c == 0x00 || (c >= 0x00 && c < 0x20 && c != '\t')) {
+			if (c == '\r' || c == '\n' || c == 0x00 || c > 0xFF || (c >= 0x00 && c < 0x20 && c != '\t')) {
 				throw new IllegalArgumentException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", value, name, printableChar(c)));
 			}
 		}
