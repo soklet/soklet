@@ -25,11 +25,11 @@ import javax.annotation.concurrent.ThreadSafe;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class HeaderValueTests {
+public class ParameterizedHeaderValueTests {
 	@Test
 	public void quotedEscapesBackslashAndQuote() {
-		String value = HeaderValue.with("attachment")
-				.quoted("filename", "a\"b\\c")
+		String value = ParameterizedHeaderValue.withName("attachment")
+				.quotedParameter("filename", "a\"b\\c")
 				.stringValue();
 
 		Assertions.assertEquals("attachment; filename=\"a\\\"b\\\\c\"", value);
@@ -37,29 +37,29 @@ public class HeaderValueTests {
 
 	@Test
 	public void rfc8187EncodesUtf8() {
-		String value = HeaderValue.with("attachment")
-				.rfc8187("filename", "r\u00E9sum\u00E9.txt")
+		String value = ParameterizedHeaderValue.withName("attachment")
+				.rfc8187Parameter("filename", "r\u00E9sum\u00E9.txt")
 				.stringValue();
 
 		Assertions.assertEquals("attachment; filename*=UTF-8''r%C3%A9sum%C3%A9.txt", value);
 	}
 
 	@Test
-	public void rfc8187RejectsParameterNameWithAsterisk() {
+	public void rfc8187RejectsParameterNameWithNameAsterisk() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				HeaderValue.with("attachment")
-						.rfc8187("filename*", "report.txt"));
+				ParameterizedHeaderValue.withName("attachment")
+						.rfc8187Parameter("filename*", "report.txt"));
 	}
 
 	@Test
 	public void primaryValueRejectsSemicolon() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				HeaderValue.with("text/plain; charset=UTF-8").build());
+				ParameterizedHeaderValue.withName("text/plain; charset=UTF-8").build());
 	}
 
 	@Test
 	public void primaryValueRejectsNonLatin1() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				HeaderValue.with("ok\u2713").build());
+				ParameterizedHeaderValue.withName("ok\u2713").build());
 	}
 }

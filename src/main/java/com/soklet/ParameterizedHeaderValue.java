@@ -29,78 +29,78 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Represents a single HTTP header field value that may include semicolon-delimited parameters and enforces encoding rules per RFC specifications.
+ * Represents a single HTTP header field value that includes a name and may include semicolon-delimited parameters - encoding rules per RFC specifications are strictly enforced.
  * <p>
  * Many HTTP header field values are of the form:
  * <pre>
- * primary-value *( OWS ";" OWS parameter )
+ * name *( OWS ";" OWS parameter )
  * </pre>
  * where each {@code parameter} is a {@code name=value} pair.
  * <p>
  * This class provides a small builder that makes it easy to construct parameterized header values
  * using the formal HTTP grammar terms:
  * <ul>
- *   <li>{@link Builder#token(String, String)} adds a parameter whose value is a {@code token} (RFC 9110).</li>
- *   <li>{@link Builder#quoted(String, String)} adds a parameter whose value is a {@code quoted-string} (RFC 9110).</li>
- *   <li>{@link Builder#rfc8187(String, String)} adds an <em>extended parameter</em> ({@code name*=})
+ *   <li>{@link Builder#tokenParameter(String, String)} adds a parameter whose value is a {@code token} (RFC 9110).</li>
+ *   <li>{@link Builder#quotedParameter(String, String)} adds a parameter whose value is a {@code quoted-string} (RFC 9110).</li>
+ *   <li>{@link Builder#rfc8187Parameter(String, String)} adds an <em>extended parameter</em> ({@code name*=})
  *       whose value is an {@code ext-value} encoded per RFC 8187 (UTF-8, percent-encoded).</li>
  * </ul>
  * <p>
  * Example {@code Content-Disposition} header value:
  * <pre>{@code
- * String contentDisposition = HeaderValue.with("attachment")
- *     .quoted("filename", "resume.pdf")
- *     .rfc8187("filename", "résumé.pdf")
+ * String contentDisposition = ParameterizedHeaderValue.withName("attachment")
+ *     .quotedParameter("filename", "resume.pdf")
+ *     .rfc8187Parameter("filename", "résumé.pdf")
  *     .stringValue();
  *
  * // contentDisposition =>
  * // attachment; filename="resume.pdf"; filename*=UTF-8''r%C3%A9sum%C3%A9.pdf
  * }</pre>
  * <p>
- * The {@code primary-value} must be ISO-8859-1 and must not contain the {@code ';'} parameter delimiter.
+ * The {@code name} must be ISO-8859-1 and must not contain the {@code ';'} parameter delimiter.
  * <p>
  * This class is immutable and thread-safe. The {@link Builder} is not thread-safe.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class HeaderValue {
+public final class ParameterizedHeaderValue {
 	@Nonnull
-	private final String value;
+	private final String name;
 	@Nonnull
 	private final List<Parameter> parameters;
 
 	@Nonnull
-	public static Builder with(@Nonnull String value) {
+	public static Builder withName(@Nonnull String value) {
 		requireNonNull(value);
 		return new Builder(value);
 	}
 
-	private HeaderValue(@Nonnull Builder builder) {
+	private ParameterizedHeaderValue(@Nonnull Builder builder) {
 		requireNonNull(builder);
-		this.value = requireNonNull(builder.value);
+		this.name = requireNonNull(builder.name);
 		this.parameters = Collections.unmodifiableList(new ArrayList<>(builder.parameters));
 	}
 
 	/**
-	 * Returns the primary (non-parameter) portion of this header value.
+	 * Returns the name (non-parameter) portion of this header value.
 	 */
 	@Nonnull
-	public String getValue() {
-		return this.value;
+	public String getName() {
+		return this.name;
 	}
 
 	/**
-	 * Returns the HTTP <em>wire format</em> string for this header field value: the primary value followed by any
+	 * Returns the HTTP <em>wire format</em> string for this header field value: the name followed by any
 	 * semicolon-delimited parameters.
 	 * <p>
-	 * This is the official string form of {@link HeaderValue}. No guarantees are made about {@link #toString()}.
+	 * This is the official string form of {@link ParameterizedHeaderValue}. No guarantees are made about {@link #toString()}.
 	 *
 	 * @return the wire-format header field value
 	 */
 	@Nonnull
 	public String getStringValue() {
-		return render(this.value, this.parameters);
+		return render(this.name, this.parameters);
 	}
 
 	/**
@@ -122,24 +122,24 @@ public final class HeaderValue {
 	@Override
 	@Nonnull
 	public String toString() {
-		return format("HeaderValue{value=%s, parameters=%s}", getValue(), getParameters());
+		return format("ParameterizedHeaderValue{name=%s, parameters=%s}", getName(), getParameters());
 	}
 
 	@Override
 	public boolean equals(Object other) {
 		if (this == other)
 			return true;
-		if (!(other instanceof HeaderValue))
+		if (!(other instanceof ParameterizedHeaderValue))
 			return false;
 
-		HeaderValue that = (HeaderValue) other;
-		return this.value.equals(that.value)
+		ParameterizedHeaderValue that = (ParameterizedHeaderValue) other;
+		return this.name.equals(that.name)
 				&& this.parameters.equals(that.parameters);
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(this.value, this.parameters);
+		return Objects.hash(this.name, this.parameters);
 	}
 
 	@Nonnull
@@ -274,7 +274,7 @@ public final class HeaderValue {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link HeaderValue} via {@link HeaderValue#with(String)}.
+	 * Builder used to construct instances of {@link ParameterizedHeaderValue} via {@link ParameterizedHeaderValue#withName(String)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -283,13 +283,13 @@ public final class HeaderValue {
 	@NotThreadSafe
 	public static final class Builder {
 		@Nonnull
-		private final String value;
+		private final String name;
 		@Nonnull
 		private final List<Parameter> parameters;
 
-		private Builder(@Nonnull String value) {
-			requireNonNull(value);
-			this.value = sanitizeValue(value);
+		private Builder(@Nonnull String name) {
+			requireNonNull(name);
+			this.name = sanitizeValue(name);
 			this.parameters = new ArrayList<>();
 		}
 
@@ -305,7 +305,8 @@ public final class HeaderValue {
 		 * @throws IllegalArgumentException if {@code name} or {@code value} are not valid tokens or contain control chars
 		 */
 		@Nonnull
-		public Builder token(@Nonnull String name, @Nonnull String value) {
+		public Builder tokenParameter(@Nonnull String name,
+																	@Nonnull String value) {
 			requireNonNull(name);
 			requireNonNull(value);
 
@@ -323,7 +324,7 @@ public final class HeaderValue {
 		 * The parameter name must be a valid {@code token}. The value must be ASCII and must not contain control
 		 * characters. Double-quotes and backslashes are escaped as required for {@code quoted-string}.
 		 * <p>
-		 * This method fails fast if illegal data is provided. For non-ASCII values, use {@link #rfc8187(String, String)}.
+		 * This method fails fast if illegal data is provided. For non-ASCII values, use {@link #rfc8187Parameter(String, String)}.
 		 *
 		 * @param name  parameter name (token)
 		 * @param value parameter value (quoted-string content)
@@ -331,7 +332,8 @@ public final class HeaderValue {
 		 * @throws IllegalArgumentException if {@code name} is not a valid token or {@code value} is non-ASCII or contains control chars
 		 */
 		@Nonnull
-		public Builder quoted(@Nonnull String name, @Nonnull String value) {
+		public Builder quotedParameter(@Nonnull String name,
+																	 @Nonnull String value) {
 			requireNonNull(name);
 			requireNonNull(value);
 
@@ -361,7 +363,8 @@ public final class HeaderValue {
 		 * @throws IllegalArgumentException if {@code name} is not a valid token or {@code value} contains control chars
 		 */
 		@Nonnull
-		public Builder rfc8187(@Nonnull String name, @Nonnull String value) {
+		public Builder rfc8187Parameter(@Nonnull String name,
+																		@Nonnull String value) {
 			requireNonNull(name);
 			requireNonNull(value);
 
@@ -378,23 +381,23 @@ public final class HeaderValue {
 		}
 
 		/**
-		 * Builds an immutable {@link HeaderValue}.
+		 * Builds an immutable {@link ParameterizedHeaderValue}.
 		 */
 		@Nonnull
-		public HeaderValue build() {
-			return new HeaderValue(this);
+		public ParameterizedHeaderValue build() {
+			return new ParameterizedHeaderValue(this);
 		}
 
 		/**
 		 * Returns the HTTP wire-format string for this header field value.
 		 * <p>
-		 * This is equivalent to {@code build().getStringValue()} but avoids creating an intermediate {@link HeaderValue}.
+		 * This is equivalent to {@code build().getStringValue()} but avoids creating an intermediate {@link ParameterizedHeaderValue}.
 		 *
 		 * @return the wire-format header field value
 		 */
 		@Nonnull
 		public String stringValue() {
-			return HeaderValue.render(this.value, this.parameters);
+			return ParameterizedHeaderValue.render(this.name, this.parameters);
 		}
 
 		/* --------------------------- internals --------------------------- */
