@@ -59,6 +59,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -175,6 +176,43 @@ public class ServerSentEventTests {
 		Assertions.assertEquals("data", events.get(1).getData().get(), "Unexpected broadcast event data");
 		Assertions.assertEquals("Unicast comment", comments.get(0), "Unexpected unicast comment");
 		Assertions.assertEquals("just a test", comments.get(1), "Unexpected broadcast comment");
+	}
+
+	@Test
+	public void serverSentEventServerSimulator_unicastErrorHandler() {
+		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ServerSentEventSimulatorResource.class)))
+				.build();
+
+		AtomicInteger errorCount = new AtomicInteger();
+
+		Soklet.runSimulator(configuration, (simulator -> {
+			simulator.onUnicastError((throwable) -> errorCount.incrementAndGet());
+
+			Request request = Request.withPath(HttpMethod.GET, "/examples/abc")
+					.build();
+
+			ServerSentEventRequestResult requestResult = simulator.performServerSentEventRequest(request);
+
+			if (requestResult instanceof HandshakeAccepted handshakeAccepted) {
+				handshakeAccepted.registerEventConsumer((event) -> {
+					throw new IllegalStateException("Unicast event error");
+				});
+
+				handshakeAccepted.registerCommentConsumer((comment) -> {
+					throw new IllegalStateException("Unicast comment error");
+				});
+			} else if (requestResult instanceof HandshakeRejected handshakeRejected) {
+				Assertions.fail("SSE handshake rejected: " + handshakeRejected);
+			} else if (requestResult instanceof RequestFailed requestFailed) {
+				Assertions.fail("SSE request failed: " + requestFailed);
+			} else {
+				// Should never happen
+				throw new IllegalStateException(format("Unexpected SSE result: %s", requestResult.getClass()));
+			}
+		}));
+
+		Assertions.assertEquals(2, errorCount.get(), "Unexpected number of unicast errors");
 	}
 
 	@ThreadSafe

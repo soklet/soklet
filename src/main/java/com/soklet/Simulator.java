@@ -17,6 +17,7 @@
 package com.soklet;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.function.Consumer;
 
 /**
@@ -122,4 +123,30 @@ public interface Simulator {
 	 */
 	@Nonnull
 	ServerSentEventRequestResult performServerSentEventRequest(@Nonnull Request request);
+
+	/**
+	 * Registers a handler for exceptions thrown by simulated Server-Sent Event consumers.
+	 * <p>
+	 * This only applies to simulator-mode SSE broadcasts.
+	 *
+	 * @param onBroadcastError handler for broadcast errors, or {@code null} to clear
+	 * @return this simulator
+	 */
+	@Nonnull
+	default Simulator onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
+		return this;
+	}
+
+	/**
+	 * Registers a handler for exceptions thrown by simulated Server-Sent Event unicast consumers.
+	 * <p>
+	 * This only applies to simulator-mode SSE unicast deliveries (including client initializers).
+	 *
+	 * @param onUnicastError handler for unicast errors, or {@code null} to clear
+	 * @return this simulator
+	 */
+	@Nonnull
+	default Simulator onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
+		return this;
+	}
 }

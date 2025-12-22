@@ -1378,6 +1378,28 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Nonnull
+		@Override
+		public Simulator onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
+			MockServerSentEventServer serverSentEventServer = getServerSentEventServer().orElse(null);
+
+			if (serverSentEventServer != null)
+				serverSentEventServer.onBroadcastError(onBroadcastError);
+
+			return this;
+		}
+
+		@Nonnull
+		@Override
+		public Simulator onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
+			MockServerSentEventServer serverSentEventServer = getServerSentEventServer().orElse(null);
+
+			if (serverSentEventServer != null)
+				serverSentEventServer.onUnicastError(onUnicastError);
+
+			return this;
+		}
+
+		@Nonnull
 		MockServer getServer() {
 			return this.server;
 		}
@@ -1447,29 +1469,42 @@ public final class Soklet implements AutoCloseable {
 		private final Consumer<ServerSentEvent> eventConsumer;
 		@Nonnull
 		private final Consumer<String> commentConsumer;
+		@Nonnull
+		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
 
 		public MockServerSentEventUnicaster(@Nonnull ResourcePath resourcePath,
 																				@Nonnull Consumer<ServerSentEvent> eventConsumer,
-																				@Nonnull Consumer<String> commentConsumer) {
+																				@Nonnull Consumer<String> commentConsumer,
+																				@Nonnull AtomicReference<Consumer<Throwable>> unicastErrorHandler) {
 			requireNonNull(resourcePath);
 			requireNonNull(eventConsumer);
 			requireNonNull(commentConsumer);
+			requireNonNull(unicastErrorHandler);
 
 			this.resourcePath = resourcePath;
 			this.eventConsumer = eventConsumer;
 			this.commentConsumer = commentConsumer;
+			this.unicastErrorHandler = unicastErrorHandler;
 		}
 
 		@Override
 		public void unicastEvent(@Nonnull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
-			getEventConsumer().accept(serverSentEvent);
+			try {
+				getEventConsumer().accept(serverSentEvent);
+			} catch (Throwable throwable) {
+				handleUnicastError(throwable);
+			}
 		}
 
 		@Override
 		public void unicastComment(@Nonnull String comment) {
 			requireNonNull(comment);
-			getCommentConsumer().accept(comment);
+			try {
+				getCommentConsumer().accept(comment);
+			} catch (Throwable throwable) {
+				handleUnicastError(throwable);
+			}
 		}
 
 		@Nonnull
@@ -1486,6 +1521,22 @@ public final class Soklet implements AutoCloseable {
 		@Nonnull
 		protected Consumer<String> getCommentConsumer() {
 			return this.commentConsumer;
+		}
+
+		protected void handleUnicastError(@Nonnull Throwable throwable) {
+			requireNonNull(throwable);
+			Consumer<Throwable> handler = this.unicastErrorHandler.get();
+
+			if (handler != null) {
+				try {
+					handler.accept(throwable);
+					return;
+				} catch (Throwable ignored) {
+					// Fall through to default behavior
+				}
+			}
+
+			throwable.printStackTrace();
 		}
 	}
 
@@ -1509,13 +1560,18 @@ public final class Soklet implements AutoCloseable {
 		// Same goes for comments
 		@Nonnull
 		private final Map<Consumer<String>, Object> commentConsumers;
+		@Nonnull
+		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
 
-		public MockServerSentEventBroadcaster(@Nonnull ResourcePath resourcePath) {
+		public MockServerSentEventBroadcaster(@Nonnull ResourcePath resourcePath,
+																					@Nonnull AtomicReference<Consumer<Throwable>> broadcastErrorHandler) {
 			requireNonNull(resourcePath);
+			requireNonNull(broadcastErrorHandler);
 
 			this.resourcePath = resourcePath;
 			this.eventConsumers = new ConcurrentHashMap<>();
 			this.commentConsumers = new ConcurrentHashMap<>();
+			this.broadcastErrorHandler = broadcastErrorHandler;
 		}
 
 		@Nonnull
@@ -1538,9 +1594,7 @@ public final class Soklet implements AutoCloseable {
 				try {
 					eventConsumer.accept(serverSentEvent);
 				} catch (Throwable throwable) {
-					// TODO: revisit this - should we communicate back exceptions, and should we fire these on separate threads for "realism" (probably not)?
-					// TODO: should probably tie this and other mock SSE types into LifecycleInterceptor for parity once we fully implement metric tracking
-					throwable.printStackTrace();
+					handleBroadcastError(throwable);
 				}
 			}
 		}
@@ -1553,9 +1607,7 @@ public final class Soklet implements AutoCloseable {
 				try {
 					commentConsumer.accept(comment);
 				} catch (Throwable throwable) {
-					// TODO: revisit this - should we communicate back exceptions, and should we fire these on separate threads for "realism" (probably not)?
-					// TODO: should probably tie this and other mock SSE types into LifecycleInterceptor for parity once we fully implement metric tracking
-					throwable.printStackTrace();
+					handleBroadcastError(throwable);
 				}
 			}
 		}
@@ -1583,9 +1635,7 @@ public final class Soklet implements AutoCloseable {
 					// 4. Dispatch
 					consumer.accept(event);
 				} catch (Throwable throwable) {
-					// TODO: revisit this - should we communicate back exceptions, and should we fire these on separate threads for "realism" (probably not)?
-					// TODO: should probably tie this and other mock SSE types into LifecycleInterceptor for parity once we fully implement metric tracking
-					throwable.printStackTrace();
+					handleBroadcastError(throwable);
 				}
 			});
 		}
@@ -1612,9 +1662,7 @@ public final class Soklet implements AutoCloseable {
 					// 4. Dispatch
 					consumer.accept(comment);
 				} catch (Throwable throwable) {
-					// TODO: revisit this - should we communicate back exceptions, and should we fire these on separate threads for "realism" (probably not)?
-					// TODO: should probably tie this and other mock SSE types into LifecycleInterceptor for parity once we fully implement metric tracking
-					throwable.printStackTrace();
+					handleBroadcastError(throwable);
 				}
 			});
 		}
@@ -1669,6 +1717,22 @@ public final class Soklet implements AutoCloseable {
 		protected Map<Consumer<String>, Object> getCommentConsumers() {
 			return this.commentConsumers;
 		}
+
+		protected void handleBroadcastError(@Nonnull Throwable throwable) {
+			requireNonNull(throwable);
+			Consumer<Throwable> handler = this.broadcastErrorHandler.get();
+
+			if (handler != null) {
+				try {
+					handler.accept(throwable);
+					return;
+				} catch (Throwable ignored) {
+					// Fall through to default behavior
+				}
+			}
+
+			throwable.printStackTrace();
+		}
 	}
 
 	/**
@@ -1684,9 +1748,15 @@ public final class Soklet implements AutoCloseable {
 		private ServerSentEventServer.RequestHandler requestHandler;
 		@Nonnull
 		private final ConcurrentHashMap<ResourcePath, MockServerSentEventBroadcaster> broadcastersByResourcePath;
+		@Nonnull
+		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
+		@Nonnull
+		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
 
 		public MockServerSentEventServer() {
 			this.broadcastersByResourcePath = new ConcurrentHashMap<>();
+			this.broadcastErrorHandler = new AtomicReference<>();
+			this.unicastErrorHandler = new AtomicReference<>();
 		}
 
 		@Override
@@ -1712,7 +1782,7 @@ public final class Soklet implements AutoCloseable {
 				return Optional.empty();
 
 			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
-					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp));
+					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp, broadcastErrorHandler));
 
 			return Optional.of(broadcaster);
 		}
@@ -1723,7 +1793,7 @@ public final class Soklet implements AutoCloseable {
 			requireNonNull(eventConsumer);
 
 			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
-					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp));
+					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp, broadcastErrorHandler));
 
 			broadcaster.registerEventConsumer(eventConsumer);
 		}
@@ -1748,7 +1818,7 @@ public final class Soklet implements AutoCloseable {
 			requireNonNull(commentConsumer);
 
 			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
-					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp));
+					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp, broadcastErrorHandler));
 
 			broadcaster.registerCommentConsumer(commentConsumer);
 		}
@@ -1777,12 +1847,20 @@ public final class Soklet implements AutoCloseable {
 			this.requestHandler = requestHandler;
 		}
 
-		@Nullable
+		public void onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
+			this.broadcastErrorHandler.set(onBroadcastError);
+		}
+
+		public void onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
+			this.unicastErrorHandler.set(onUnicastError);
+		}
+
+		@Nonnull
 		protected Optional<SokletConfig> getSokletConfig() {
 			return Optional.ofNullable(this.sokletConfig);
 		}
 
-		@Nullable
+		@Nonnull
 		protected Optional<ServerSentEventServer.RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
 		}
@@ -1790,6 +1868,11 @@ public final class Soklet implements AutoCloseable {
 		@Nonnull
 		protected ConcurrentHashMap<ResourcePath, MockServerSentEventBroadcaster> getBroadcastersByResourcePath() {
 			return this.broadcastersByResourcePath;
+		}
+
+		@Nonnull
+		protected AtomicReference<Consumer<Throwable>> getUnicastErrorHandler() {
+			return this.unicastErrorHandler;
 		}
 	}
 

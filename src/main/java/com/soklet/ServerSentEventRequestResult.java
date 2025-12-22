@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
@@ -58,6 +59,8 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		@Nonnull
 		private final DefaultSimulator simulator;
 		@Nonnull
+		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
+		@Nonnull
 		private List<ServerSentEvent> clientInitializerEvents;
 		@Nonnull
 		private List<String> clientInitializerComments;
@@ -82,6 +85,9 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			this.resourcePath = resourcePath;
 			this.requestResult = requestResult;
 			this.simulator = simulator;
+			this.unicastErrorHandler = simulator.getServerSentEventServer()
+					.map(serverSentEventServer -> serverSentEventServer.getUnicastErrorHandler())
+					.orElseGet(AtomicReference::new);
 			this.eventConsumer = null;
 			this.commentConsumer = null;
 			this.lock = new ReentrantLock();
@@ -101,8 +107,13 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 
 							if (eventConsumer == null)
 								clientInitializerEvents.add(serverSentEvent);
-							else
-								eventConsumer.accept(serverSentEvent);
+							else {
+								try {
+									eventConsumer.accept(serverSentEvent);
+								} catch (Throwable throwable) {
+									handleUnicastError(throwable);
+								}
+							}
 						},
 						(comment) -> {
 							requireNonNull(comment);
@@ -113,9 +124,15 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 
 							if (commentConsumer == null)
 								clientInitializerComments.add(comment);
-							else
-								commentConsumer.accept(comment);
-						})
+							else {
+								try {
+									commentConsumer.accept(comment);
+								} catch (Throwable throwable) {
+									handleUnicastError(throwable);
+								}
+							}
+						},
+						getUnicastErrorHandler())
 				);
 			}
 		}
@@ -142,8 +159,13 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 				this.eventConsumer = eventConsumer;
 
 				// Send client initializer unicast events immediately, before any broadcasts can make it through
-				for (ServerSentEvent event : getClientInitializerEvents())
-					eventConsumer.accept(event);
+				for (ServerSentEvent event : getClientInitializerEvents()) {
+					try {
+						eventConsumer.accept(event);
+					} catch (Throwable throwable) {
+						handleUnicastError(throwable);
+					}
+				}
 
 				// Register with the mock SSE server broadcaster
 				getSimulator().getServerSentEventServer().get().registerEventConsumer(getResourcePath(), eventConsumer);
@@ -174,8 +196,13 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 				this.commentConsumer = commentConsumer;
 
 				// Send client initializer unicast comments immediately, before any broadcasts can make it through
-				for (String comment : getClientInitializerComments())
-					commentConsumer.accept(comment);
+				for (String comment : getClientInitializerComments()) {
+					try {
+						commentConsumer.accept(comment);
+					} catch (Throwable throwable) {
+						handleUnicastError(throwable);
+					}
+				}
 
 				// Register with the mock SSE server broadcaster
 				getSimulator().getServerSentEventServer().get().registerCommentConsumer(getResourcePath(), commentConsumer);
@@ -233,6 +260,27 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		@Nonnull
 		private DefaultSimulator getSimulator() {
 			return this.simulator;
+		}
+
+		@Nonnull
+		private AtomicReference<Consumer<Throwable>> getUnicastErrorHandler() {
+			return this.unicastErrorHandler;
+		}
+
+		private void handleUnicastError(@Nonnull Throwable throwable) {
+			requireNonNull(throwable);
+			Consumer<Throwable> handler = getUnicastErrorHandler().get();
+
+			if (handler != null) {
+				try {
+					handler.accept(throwable);
+					return;
+				} catch (Throwable ignored) {
+					// Fall through to default behavior
+				}
+			}
+
+			throwable.printStackTrace();
 		}
 
 		@Nonnull
