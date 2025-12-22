@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.exception.IllegalRequestException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -217,18 +218,15 @@ public class UtilitiesTests {
 	}
 
 	@Test
-	public void invalidEscapeDoesNotThrow() {
-		Assertions.assertDoesNotThrow(() -> Utilities.extractQueryParametersFromUrl("/?a=%ZZ", QueryFormat.X_WWW_FORM_URLENCODED));
+	public void invalidEscapeThrows() {
+		assertThrows(IllegalRequestException.class,
+				() -> Utilities.extractQueryParametersFromUrl("/?a=%ZZ", QueryFormat.X_WWW_FORM_URLENCODED));
 	}
 
 	@Test
-	public void invalidEscapeIsLeftLiteralOrSkipped() {
-		Map<String, Set<String>> qp = Utilities.extractQueryParametersFromUrl("/?a=%ZZ", QueryFormat.X_WWW_FORM_URLENCODED);
-		// Implementation choice: either literal "%ZZ" or skip parameter entirely.
-		// For literal behavior:
-		// Assertions.assertEquals(Set.of("%ZZ"), qp.get("a"));
-		// For skip behavior:
-		assertTrue(qp.isEmpty() || qp.get("a").contains("%ZZ"));
+	public void invalidEscapeInQueryStringThrows() {
+		assertThrows(IllegalRequestException.class,
+				() -> Utilities.extractQueryParametersFromQuery("a=%ZZ", QueryFormat.X_WWW_FORM_URLENCODED));
 	}
 
 	@Test

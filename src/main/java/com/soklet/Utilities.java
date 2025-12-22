@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
 import javax.annotation.Nonnull;
@@ -227,6 +228,7 @@ public final class Utilities {
 	 * @param query       a raw query string such as {@code "a=1&b=2&c=%20"}
 	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
+	 * @throws IllegalRequestException if the query string contains malformed percent-encoding
 	 */
 	@Nonnull
 	public static Map<String, Set<String>> extractQueryParametersFromQuery(@Nonnull String query,
@@ -250,6 +252,7 @@ public final class Utilities {
 	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
 	 * @param charset     the charset to use when decoding percent-escapes
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
+	 * @throws IllegalRequestException if the query string contains malformed percent-encoding
 	 */
 	@Nonnull
 	public static Map<String, Set<String>> extractQueryParametersFromQuery(@Nonnull String query,
@@ -275,7 +278,8 @@ public final class Utilities {
 	 *
 	 * @param url         a relative or absolute URL/URI string
 	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
-	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none/invalid
+	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
+	 * @throws IllegalRequestException if the URL or query contains malformed percent-encoding
 	 */
 	@Nonnull
 	public static Map<String, Set<String>> extractQueryParametersFromUrl(@Nonnull String url,
@@ -298,7 +302,8 @@ public final class Utilities {
 	 * @param url         a relative or absolute URL/URI string
 	 * @param queryFormat how to decode: {@code application/x-www-form-urlencoded} or "strict" RFC 3986
 	 * @param charset     the charset to use when decoding percent-escapes
-	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none/invalid
+	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
+	 * @throws IllegalRequestException if the URL or query contains malformed percent-encoding
 	 */
 	@Nonnull
 	public static Map<String, Set<String>> extractQueryParametersFromUrl(@Nonnull String url,
@@ -313,7 +318,7 @@ public final class Utilities {
 		try {
 			uri = new URI(url);
 		} catch (URISyntaxException e) {
-			return Map.of();
+			throw new IllegalRequestException(format("Invalid URL '%s'", url), e);
 		}
 
 		String query = trimAggressivelyToNull(uri.getRawQuery());
@@ -368,7 +373,7 @@ public final class Utilities {
 
 	/**
 	 * Percent-decodes a string into bytes, then constructs a String using the provided charset.
-	 * One pass only: invalid %xy sequences are left as literal '%' + chars.
+	 * One pass only: invalid %xy sequences trigger an exception.
 	 */
 	@Nonnull
 	private static String percentDecode(@Nonnull String s, @Nonnull Charset charset) {
@@ -384,30 +389,30 @@ public final class Utilities {
 		for (int i = 0; i < s.length(); ) {
 			char c = s.charAt(i);
 
-			if (c == '%' && i + 2 < s.length()) {
+			if (c == '%') {
 				// Consume one or more consecutive %xx triplets into bytes
 				bytes.reset();
 				int j = i;
 
-				while (j + 2 < s.length() && s.charAt(j) == '%') {
+				while (j < s.length() && s.charAt(j) == '%') {
+					if (j + 2 >= s.length())
+						throw new IllegalRequestException("Invalid percent-encoding in URL component");
+
 					int hi = hex(s.charAt(j + 1));
 					int lo = hex(s.charAt(j + 2));
 					if (hi < 0 || lo < 0)
-						break;
+						throw new IllegalRequestException("Invalid percent-encoding in URL component");
+
 					bytes.write((hi << 4) | lo);
 					j += 3;
 				}
 
-				// If we decoded at least one triplet, append decoded chars and advance
-				if (bytes.size() > 0) {
-					sb.append(new String(bytes.toByteArray(), charset));
-					i = j;
-					continue;
-				}
-				// else: invalid % sequence, fall through and treat '%' literally
+				sb.append(new String(bytes.toByteArray(), charset));
+				i = j;
+				continue;
 			}
 
-			// Non-'%' char (or invalid '%' sequence): append it as-is.
+			// Non-'%' char: append it as-is.
 			// This preserves surrogate pairs naturally as the loop hits both chars.
 			sb.append(c);
 			i++;
@@ -625,6 +630,7 @@ public final class Utilities {
 	 *   <li>Safely normalizes path traversals, e.g. path {@code '/a/../b'} would be normalized to {@code '/b'}</li>
 	 *   <li>Strips any query string.</li>
 	 *   <li>Applies aggressive trimming of Unicode whitespace.</li>
+	 *   <li>Rejects malformed percent-encoding when decoding is enabled.</li>
 	 * </ul>
 	 *
 	 * @param url             a URL or path to normalize

@@ -131,8 +131,10 @@ public final class Request {
 	 * Note: request targets are normalized to origin-form. For example, if a client sends an absolute-form URL like {@code http://example.com/path?query}, only the path and query components are retained.
 	 * <p>
 	 * Paths will be percent-decoded. Percent-encoded slashes (e.g. {@code %2F}) are rejected.
+	 * Malformed percent-encoding is rejected.
 	 * <p>
 	 * Query parameters are parsed and decoded using RFC 3986 semantics - see {@link QueryFormat#RFC_3986_STRICT}.
+	 * Query decoding always uses UTF-8, regardless of any {@code Content-Type} charset.
 	 * <p>
 	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded by using {@link QueryFormat#X_WWW_FORM_URLENCODED}.
 	 *
@@ -240,8 +242,9 @@ public final class Request {
 				if (rawUrl.contains("?")) {
 					// We always assume RFC_3986_STRICT for query parameters because Soklet is for modern systems - HTML Form "GET" submissions are rare/legacy.
 					// This means we leave "+" as "+" (not decode to " ") and then apply any percent-decoding rules.
+					// Query parameters are decoded as UTF-8 regardless of Content-Type.
 					// In the future, we might expose a way to let applications prefer QueryFormat.X_WWW_FORM_URLENCODED instead, which treats "+" as a space
-					this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(rawUrl, QueryFormat.RFC_3986_STRICT, getCharset().orElse(DEFAULT_CHARSET)));
+					this.queryParameters = Collections.unmodifiableMap(Utilities.extractQueryParametersFromUrl(rawUrl, QueryFormat.RFC_3986_STRICT, DEFAULT_CHARSET));
 				} else {
 					this.queryParameters = Map.of();
 				}

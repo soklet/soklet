@@ -133,6 +133,9 @@ class RequestParser {
             if (b > 0x7F) {
                 throw new MalformedRequestException("non-ascii header name");
             }
+            if (!isTchar(b)) {
+                throw new MalformedRequestException("invalid header name");
+            }
         }
         int spaceIndex = colonIndex + 1;
         while (spaceIndex < line.length && (line[spaceIndex] == ' ' || line[spaceIndex] == '\t')) { // advance beyond variable-length space prefix
@@ -164,6 +167,15 @@ class RequestParser {
                 throw new MalformedRequestException("non-ascii " + field);
             }
         }
+    }
+
+    private static boolean isTchar(int b) {
+        char c = (char) b;
+        return c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
+                c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~' ||
+                (c >= '0' && c <= '9') ||
+                (c >= 'A' && c <= 'Z') ||
+                (c >= 'a' && c <= 'z');
     }
 
     private void parseChunkSize(byte[] token) {
