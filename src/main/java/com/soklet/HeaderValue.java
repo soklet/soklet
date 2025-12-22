@@ -29,7 +29,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Represents a single HTTP header field value that may include semicolon-delimited parameters.
+ * Represents a single HTTP header field value that may include semicolon-delimited parameters and enforces encoding rules per RFC specifications.
  * <p>
  * Many HTTP header field values are of the form:
  * <pre>
@@ -45,6 +45,17 @@ import static java.util.Objects.requireNonNull;
  *   <li>{@link Builder#rfc8187(String, String)} adds an <em>extended parameter</em> ({@code name*=})
  *       whose value is an {@code ext-value} encoded per RFC 8187 (UTF-8, percent-encoded).</li>
  * </ul>
+ * <p>
+ * Example {@code Content-Disposition} header value:
+ * <pre>{@code
+ * String contentDisposition = HeaderValue.with("attachment")
+ *     .quoted("filename", "resume.pdf")
+ *     .rfc8187("filename", "résumé.pdf")
+ *     .stringValue();
+ *
+ * // contentDisposition =>
+ * // attachment; filename="resume.pdf"; filename*=UTF-8''r%C3%A9sum%C3%A9.pdf
+ * }</pre>
  * <p>
  * The {@code primary-value} must be ISO-8859-1 and must not contain the {@code ';'} parameter delimiter.
  * <p>
@@ -150,7 +161,7 @@ public final class HeaderValue {
 	}
 
 	/**
-	 * A single header-value parameter.
+	 * A single header-value parameter: given a header value like {@code attachment; filename="resume.pdf"; filename*=UTF-8''r%C3%A9sum%C3%A9.pdf}, there are two {@code filename} parameter name-value pairs.
 	 */
 	@ThreadSafe
 	public static final class Parameter {
@@ -159,15 +170,15 @@ public final class HeaderValue {
 		 */
 		public enum Kind {
 			/**
-			 * name=value where value is an HTTP token (RFC 9110).
+			 * {@code name=value} where value is an HTTP token (RFC 9110).
 			 */
 			TOKEN,
 			/**
-			 * name="value" where value is an HTTP quoted-string (RFC 9110).
+			 * {@code name="value"} where value is an HTTP quoted-string (RFC 9110).
 			 */
 			QUOTED,
 			/**
-			 * name*=UTF-8''... where value is an RFC 8187 ext-value.
+			 * {@code name*=UTF-8''...} where value is an RFC 8187 ext-value.
 			 */
 			RFC_8187
 		}
@@ -191,21 +202,41 @@ public final class HeaderValue {
 			this.encodedFragment = requireNonNull(encodedFragment);
 		}
 
+		/**
+		 * Gets the kind of this parameter.
+		 *
+		 * @return the parameter kind
+		 */
 		@Nonnull
 		public Kind getKind() {
 			return kind;
 		}
 
+		/**
+		 * Gets the parameter name.
+		 *
+		 * @return the parameter name
+		 */
 		@Nonnull
 		public String getName() {
 			return name;
 		}
 
+		/**
+		 * Gets the unencoded/original parameter value.
+		 *
+		 * @return the parameter value
+		 */
 		@Nonnull
 		public String getValue() {
 			return value;
 		}
 
+		/**
+		 * Gets the encoded fragment in wire format (e.g. {@code name=value} or {@code name*=...}).
+		 *
+		 * @return the encoded parameter fragment
+		 */
 		@Nonnull
 		String getEncodedFragment() {
 			return encodedFragment;
@@ -242,11 +273,17 @@ public final class HeaderValue {
 		}
 	}
 
+	/**
+	 * Builder used to construct instances of {@link HeaderValue} via {@link HeaderValue#with(String)}.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
 	@NotThreadSafe
 	public static final class Builder {
 		@Nonnull
 		private final String value;
-
 		@Nonnull
 		private final List<Parameter> parameters;
 
