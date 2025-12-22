@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Set;
 
@@ -37,5 +38,16 @@ public class RequestTests {
 				.build();
 
 		Assertions.assertEquals(Set.of("\u00E9"), request.getQueryParameters().get("q"));
+	}
+
+	@Test
+	public void remoteAddressIsPreservedOnBuild() {
+		InetSocketAddress address = new InetSocketAddress("127.0.0.1", 1234);
+
+		Request request = Request.withPath(HttpMethod.GET, "/")
+				.remoteAddress(address)
+				.build();
+
+		Assertions.assertEquals(address, request.getRemoteAddress().orElse(null));
 	}
 }

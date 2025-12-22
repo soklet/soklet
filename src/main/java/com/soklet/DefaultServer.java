@@ -306,6 +306,7 @@ final class DefaultServer implements Server {
 									.idGenerator(getIdGenerator())
 									.headers(headers)
 									.body(body)
+									.remoteAddress(microhttpRequest.remoteAddress())
 									.contentTooLarge(contentTooLarge)
 									.build();
 

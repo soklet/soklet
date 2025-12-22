@@ -2,6 +2,7 @@ package com.soklet.internal.microhttp;
 
 import com.soklet.internal.util.HostHeaderValidator;
 
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +46,7 @@ class RequestParser {
     }
 
     private final ByteTokenizer tokenizer;
+    private final InetSocketAddress remoteAddress;
 
     private State state = State.METHOD;
     private int contentLength;
@@ -58,7 +60,12 @@ class RequestParser {
     private byte[] body;
 
     RequestParser(ByteTokenizer tokenizer) {
+        this(tokenizer, null);
+    }
+
+    RequestParser(ByteTokenizer tokenizer, InetSocketAddress remoteAddress) {
         this.tokenizer = tokenizer;
+        this.remoteAddress = remoteAddress;
     }
 
     boolean parse() {
@@ -73,7 +80,7 @@ class RequestParser {
     }
 
     MicrohttpRequest request() {
-        return new MicrohttpRequest(method, uri, version, headers, body, false);
+        return new MicrohttpRequest(method, uri, version, headers, body, false, remoteAddress);
     }
 
     private void parseMethod(byte[] token) {
@@ -91,6 +98,9 @@ class RequestParser {
     private void parseVersion(byte[] token) {
         requireAscii(token, "version");
         version = new String(token, StandardCharsets.US_ASCII);
+        if (!version.equalsIgnoreCase("HTTP/1.0") && !version.equalsIgnoreCase("HTTP/1.1")) {
+            throw new MalformedRequestException("unsupported http version");
+        }
         state = State.HEADER;
     }
 

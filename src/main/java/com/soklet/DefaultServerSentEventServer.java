@@ -32,6 +32,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -822,15 +823,25 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		AtomicBoolean connectionSlotReserved = new AtomicBoolean(false);
 		AtomicBoolean handshakeResponseWritten = new AtomicBoolean(false);
 		AtomicReference<ScheduledFuture<?>> handshakeTimeoutFutureRef = new AtomicReference<>();
+		InetSocketAddress remoteAddress = null;
 
 		try (clientSocketChannel) {
 			try {
+				try {
+					SocketAddress socketAddress = clientSocketChannel.getRemoteAddress();
+					if (socketAddress instanceof InetSocketAddress)
+						remoteAddress = (InetSocketAddress) socketAddress;
+				} catch (IOException ignored) {
+					// Best effort
+				}
 				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "will/didInitiateConnection"
 				String rawRequest = readRequest(clientSocketChannel);
-				request = parseRequest(rawRequest);
+				request = parseRequest(rawRequest, remoteAddress);
 			} catch (RequestTooLargeIOException e) {
 				// Exception provides a "too large"-flagged request with whatever data we could pull out of it
 				request = e.getTooLargeRequest();
+				if (remoteAddress != null)
+					request = request.copy().remoteAddress(remoteAddress).finish();
 			} catch (IllegalRequestException e) {
 				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
 						.throwable(e)
@@ -1993,7 +2004,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Nonnull
-	protected Request parseRequest(@Nonnull String rawRequest) {
+	protected Request parseRequest(@Nonnull String rawRequest,
+																 @Nullable InetSocketAddress remoteAddress) {
 		requireNonNull(rawRequest);
 
 		rawRequest = trimAggressivelyToNull(rawRequest);
@@ -2114,7 +2126,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(headerLines);
 
-		return requestBuilder.idGenerator(getIdGenerator()).headers(headers).build();
+		return requestBuilder.idGenerator(getIdGenerator()).headers(headers).remoteAddress(remoteAddress).build();
 	}
 
 	private static void requireAsciiToken(@Nonnull String value, @Nonnull String field) {

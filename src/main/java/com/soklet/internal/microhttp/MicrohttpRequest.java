@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import java.net.InetSocketAddress;
 import java.util.List;
 
 /**
@@ -12,7 +13,8 @@ public record MicrohttpRequest(
         String version,
         List<Header> headers,
         byte[] body,
-        boolean contentTooLarge) {
+        boolean contentTooLarge,
+        InetSocketAddress remoteAddress) {
 
     public String header(String name) {
         for (Header header : headers) {

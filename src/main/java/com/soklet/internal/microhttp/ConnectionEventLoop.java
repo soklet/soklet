@@ -1,6 +1,8 @@
 package com.soklet.internal.microhttp;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -98,6 +100,7 @@ class ConnectionEventLoop {
         final SelectionKey selectionKey;
         final ByteTokenizer byteTokenizer;
         final String id;
+        final InetSocketAddress remoteAddress;
         RequestParser requestParser;
         ByteBuffer writeBuffer;
         Cancellable requestTimeoutTask;
@@ -105,12 +108,13 @@ class ConnectionEventLoop {
         boolean keepAlive;
         boolean closeAfterResponse;
 
-        private Connection(SocketChannel socketChannel, SelectionKey selectionKey) throws IOException {
+        private Connection(SocketChannel socketChannel, SelectionKey selectionKey, InetSocketAddress remoteAddress) throws IOException {
             this.socketChannel = socketChannel;
             this.selectionKey = selectionKey;
             byteTokenizer = new ByteTokenizer();
             id = Long.toString(connectionCounter.getAndIncrement());
-            requestParser = new RequestParser(byteTokenizer);
+            this.remoteAddress = remoteAddress;
+            requestParser = new RequestParser(byteTokenizer, remoteAddress);
             requestTimeoutTask = timeoutQueue.schedule(this::onRequestTimeout, options.requestTimeout());
         }
 
@@ -217,12 +221,12 @@ class ConnectionEventLoop {
                         // We make our own request with its own copy of headers - including our poison pill - and an empty body.
                         List<Header> headers = request.headers() == null ? new ArrayList<>(0) : new ArrayList<>(request.headers());
 
-                        MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0], true);
+                        MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0], true, remoteAddress);
 
                         applyConnectionPolicy(tooLargeRequest);
                         closeAfterResponse = true;
                         byteTokenizer.compact();
-                        requestParser = new RequestParser(byteTokenizer);
+                        requestParser = new RequestParser(byteTokenizer, remoteAddress);
                         handler.handle(tooLargeRequest, this::onResponse);
                     }
 
@@ -259,7 +263,7 @@ class ConnectionEventLoop {
             MicrohttpRequest request = requestParser.request();
             applyConnectionPolicy(request);
             byteTokenizer.compact();
-            requestParser = new RequestParser(byteTokenizer);
+            requestParser = new RequestParser(byteTokenizer, remoteAddress);
             handler.handle(request, this::onResponse);
         }
 
@@ -491,12 +495,19 @@ class ConnectionEventLoop {
     private void doRegister(SocketChannel socketChannel) throws IOException {
         socketChannel.configureBlocking(false);
         SelectionKey selectionKey = socketChannel.register(selector, SelectionKey.OP_READ);
-        Connection connection = new Connection(socketChannel, selectionKey);
+        SocketAddress socketAddress = socketChannel.getRemoteAddress();
+        InetSocketAddress remoteAddress = socketAddress instanceof InetSocketAddress
+                ? (InetSocketAddress) socketAddress
+                : null;
+        Connection connection = new Connection(socketChannel, selectionKey, remoteAddress);
         selectionKey.attach(connection);
         if (logger.enabled()) {
+            String remoteAddressString = remoteAddress != null
+                    ? remoteAddress.toString()
+                    : (socketAddress != null ? socketAddress.toString() : "unknown");
             logger.log(
                     new LogEntry("event", "accept"),
-                    new LogEntry("remote_address", socketChannel.getRemoteAddress().toString()),
+                    new LogEntry("remote_address", remoteAddressString),
                     new LogEntry("id", connection.id));
         }
     }

@@ -28,6 +28,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -93,6 +94,8 @@ public final class Request {
 	private final Charset charset;
 	@Nonnull
 	private final Map<String, Set<String>> headers;
+	@Nullable
+	private final InetSocketAddress remoteAddress;
 	@Nullable
 	private final Cors cors;
 	@Nullable
@@ -196,6 +199,7 @@ public final class Request {
 		MultipartParser builderMultipartParser = rawBuilder == null ? pathBuilder.multipartParser : rawBuilder.multipartParser;
 		Boolean builderContentTooLarge = rawBuilder == null ? pathBuilder.contentTooLarge : rawBuilder.contentTooLarge;
 		Map<String, Set<String>> builderHeaders = rawBuilder == null ? pathBuilder.headers : rawBuilder.headers;
+		InetSocketAddress builderRemoteAddress = rawBuilder == null ? pathBuilder.remoteAddress : rawBuilder.remoteAddress;
 
 		if (builderHeaders == null)
 			builderHeaders = Map.of();
@@ -208,6 +212,7 @@ public final class Request {
 		this.headers = Collections.unmodifiableMap(caseInsensitiveHeaders);
 		this.contentType = Utilities.extractContentTypeFromHeaders(this.headers).orElse(null);
 		this.charset = Utilities.extractCharsetFromHeaders(this.headers).orElse(null);
+		this.remoteAddress = builderRemoteAddress;
 
 		String path;
 
@@ -529,6 +534,16 @@ public final class Request {
 			return this.rawPath;
 
 		return this.rawPath + "?" + this.rawQuery;
+	}
+
+	/**
+	 * The remote network address for the client connection, if available.
+	 *
+	 * @return the remote address for this request, or {@link Optional#empty()} if unavailable
+	 */
+	@Nonnull
+	public Optional<InetSocketAddress> getRemoteAddress() {
+		return Optional.ofNullable(this.remoteAddress);
 	}
 
 	/**
@@ -1023,6 +1038,8 @@ public final class Request {
 		@Nullable
 		private Map<String, Set<String>> headers;
 		@Nullable
+		private InetSocketAddress remoteAddress;
+		@Nullable
 		private byte[] body;
 		@Nullable
 		private Boolean contentTooLarge;
@@ -1075,6 +1092,12 @@ public final class Request {
 		}
 
 		@Nonnull
+		public RawBuilder remoteAddress(@Nullable InetSocketAddress remoteAddress) {
+			this.remoteAddress = remoteAddress;
+			return this;
+		}
+
+		@Nonnull
 		public RawBuilder body(@Nullable byte[] body) {
 			this.body = body;
 			return this;
@@ -1119,6 +1142,8 @@ public final class Request {
 		private Map<String, Set<String>> queryParameters;
 		@Nullable
 		private Map<String, Set<String>> headers;
+		@Nullable
+		private InetSocketAddress remoteAddress;
 		@Nullable
 		private byte[] body;
 		@Nullable
@@ -1192,6 +1217,12 @@ public final class Request {
 		}
 
 		@Nonnull
+		public PathBuilder remoteAddress(@Nullable InetSocketAddress remoteAddress) {
+			this.remoteAddress = remoteAddress;
+			return this;
+		}
+
+		@Nonnull
 		public PathBuilder body(@Nullable byte[] body) {
 			this.body = body;
 			return this;
@@ -1226,6 +1257,8 @@ public final class Request {
 		private String originalRawPath;
 		@Nullable
 		private String originalRawQuery;
+		@Nullable
+		private InetSocketAddress originalRemoteAddress;
 		@Nonnull
 		private Boolean pathModified = false;
 		@Nonnull
@@ -1236,6 +1269,7 @@ public final class Request {
 
 			this.originalRawPath = request.getRawPath();
 			this.originalRawQuery = request.rawQuery; // Direct field access
+			this.originalRemoteAddress = request.getRemoteAddress().orElse(null);
 
 			this.builder = new PathBuilder(request.getHttpMethod(), request.getPath())
 					.id(request.getId())
@@ -1245,6 +1279,7 @@ public final class Request {
 					.multipartParser(request.getMultipartParser())
 					.idGenerator(request.getIdGenerator())
 					.contentTooLarge(request.isContentTooLarge())
+					.remoteAddress(this.originalRemoteAddress)
 					// Preserve original raw values initially
 					.rawPath(this.originalRawPath)
 					.rawQuery(this.originalRawQuery);
@@ -1300,6 +1335,12 @@ public final class Request {
 		@Nonnull
 		public Copier headers(@Nullable Map<String, Set<String>> headers) {
 			this.builder.headers(headers);
+			return this;
+		}
+
+		@Nonnull
+		public Copier remoteAddress(@Nullable InetSocketAddress remoteAddress) {
+			this.builder.remoteAddress(remoteAddress);
 			return this;
 		}
 
