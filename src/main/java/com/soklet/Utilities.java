@@ -1309,7 +1309,7 @@ public final class Utilities {
 		for (int i = 0; i < name.length(); i++) {
 			char c = name.charAt(i);
 			// RFC 9110 tchar: "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
-			if (!(c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
+			if (c > 0x7F || !(c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
 					c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~' ||
 					Character.isLetterOrDigit(c))) {
 				throw new IllegalArgumentException(format("Illegal header name '%s'. Offending character: '%s'", name, printableChar(c)));

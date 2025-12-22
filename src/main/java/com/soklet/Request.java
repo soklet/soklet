@@ -130,7 +130,7 @@ public final class Request {
 	 * <p>
 	 * Note: request targets are normalized to origin-form. For example, if a client sends an absolute-form URL like {@code http://example.com/path?query}, only the path and query components are retained.
 	 * <p>
-	 * Paths will be percent-decoded.
+	 * Paths will be percent-decoded. Percent-encoded slashes (e.g. {@code %2F}) are rejected.
 	 * <p>
 	 * Query parameters are parsed and decoded using RFC 3986 semantics - see {@link QueryFormat#RFC_3986_STRICT}.
 	 * <p>
@@ -288,6 +288,8 @@ public final class Request {
 				rawQuery = null;
 			} else {
 				rawPath = Utilities.extractPathFromUrl(rawUrl, false);
+				if (containsEncodedSlash(rawPath))
+					throw new IllegalRequestException("Encoded slashes are not allowed in request paths");
 				rawQuery = Utilities.extractRawQueryFromUrl(rawUrl).orElse(null);
 			}
 		}
@@ -337,6 +339,11 @@ public final class Request {
 	@Override
 	public int hashCode() {
 		return Objects.hash(getId(), getHttpMethod(), getPath(), getQueryParameters(), getHeaders(), Arrays.hashCode(this.body), isContentTooLarge());
+	}
+
+	private static boolean containsEncodedSlash(@Nonnull String rawPath) {
+		requireNonNull(rawPath);
+		return rawPath.toLowerCase(Locale.ROOT).contains("%2f");
 	}
 
 	/**

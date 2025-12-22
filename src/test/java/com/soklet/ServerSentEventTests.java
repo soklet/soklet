@@ -858,6 +858,81 @@ public class ServerSentEventTests {
 
 	@Test
 	@Timeout(value = 10, unit = SECONDS)
+	public void handshake_rejects_control_char_header_value() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+				ByteArrayOutputStream req = new ByteArrayOutputStream();
+				req.write(("GET /sse/abc HTTP/1.1\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				req.write(("Host: 127.0.0.1:" + ssePort + "\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				req.write(("Accept: text/event-stream\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				req.write(("X-Test: ok").getBytes(StandardCharsets.ISO_8859_1));
+				req.write(0x01); // control character
+				req.write(("bad\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				socket.getOutputStream().write(req.toByteArray());
+				socket.getOutputStream().flush();
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for control character in header value");
+				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void handshake_allows_obsText_in_header_value() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+				ByteArrayOutputStream req = new ByteArrayOutputStream();
+				req.write(("GET /sse/abc HTTP/1.1\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				req.write(("Host: 127.0.0.1:" + ssePort + "\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				req.write(("Accept: text/event-stream\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				req.write(("X-Obs: a").getBytes(StandardCharsets.ISO_8859_1));
+				req.write(0x85); // obs-text (NEL)
+				req.write(("b\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				socket.getOutputStream().write(req.toByteArray());
+				socket.getOutputStream().flush();
+
+				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 200"), "Expected 200 for obs-text in header value");
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
 	public void handshake_times_out_returns_503_and_closes() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();

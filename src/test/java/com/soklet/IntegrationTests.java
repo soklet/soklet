@@ -210,6 +210,37 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void malformedRequest_withControlCharHeaderValue_returns400() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream()) {
+				socket.setSoTimeout(3000);
+				ByteArrayOutputStream req = new ByteArrayOutputStream();
+				req.write("GET /hello HTTP/1.1\r\n".getBytes(StandardCharsets.ISO_8859_1));
+				req.write("Host: 127.0.0.1\r\n".getBytes(StandardCharsets.ISO_8859_1));
+				req.write("X-Test: ok".getBytes(StandardCharsets.ISO_8859_1));
+				req.write(0x01); // control character
+				req.write("bad\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
+				out.write(req.toByteArray());
+				out.flush();
+
+				RawResponse response = readResponse(socket.getInputStream());
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for malformed header value");
+				Assertions.assertEquals("close", response.headers().get("connection"));
+			}
+		}
+	}
+
+	@Test
 	public void maximumConnections_rejectsExcessConnections() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
@@ -331,6 +362,25 @@ public class IntegrationTests {
 			HttpURLConnection c2 = open("GET", u2, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, c2.getResponseCode());
 			Assertions.assertEquals("a+b", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
+		}
+	}
+
+	@Test
+	public void pathDecoding_encodedSlashIsRejected() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
+				socket.setSoTimeout(3000);
+				OutputStream out = socket.getOutputStream();
+				out.write(("GET /files/a%2Fb HTTP/1.1\r\n").getBytes(StandardCharsets.UTF_8));
+				out.write(("Host: 127.0.0.1:" + port + "\r\n").getBytes(StandardCharsets.UTF_8));
+				out.write(("Accept: text/plain\r\n").getBytes(StandardCharsets.UTF_8));
+				out.write("Connection: close\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse response = readResponse(socket.getInputStream());
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for encoded slash in path");
+			}
 		}
 	}
 

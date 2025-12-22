@@ -76,6 +76,14 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void responseRejectsNonAsciiHeaderName() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				Response.withStatusCode(200)
+						.headers(Map.of("X-\u00C4", Set.of("1")))
+						.build());
+	}
+
+	@Test
 	public void clientUrlPrefixFromHeaders() {
 		String clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of()).orElse(null);
 		assertEquals(null, clientUrlPrefix, "Client URL prefix erroneously detected from incomplete header data");

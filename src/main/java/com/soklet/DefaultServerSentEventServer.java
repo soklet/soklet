@@ -2030,10 +2030,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		List<String> headerLines = new ArrayList<>();
 
 		// Preserve empty lines so we can detect the end-of-headers
-		String[] lines = rawRequest.split("\\R", -1);
+		List<String> lines = splitRequestLines(rawRequest);
 
-		for (int i = 0; i < lines.length; i++) {
-			String rawLine = lines[i];
+		for (int i = 0; i < lines.size(); i++) {
+			String rawLine = lines.get(i);
 
 			// First line: request line
 			if (requestBuilder == null) {
@@ -2085,6 +2085,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			String headerName = rawLine.substring(0, indexOfFirstColon);
 			validateHeaderName(headerName);
 
+			String headerValue = rawLine.substring(indexOfFirstColon + 1);
+			validateHeaderValue(headerName, headerValue);
+
 			headerLines.add(rawLine);
 		}
 
@@ -2118,6 +2121,49 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
 				c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~' ||
 				Character.isLetterOrDigit(c);
+	}
+
+	private static void validateHeaderValue(@Nonnull String name, @Nonnull String value) {
+		requireNonNull(name);
+		requireNonNull(value);
+
+		// Reject control characters; obs-text (0x80-0xFF) is allowed.
+		for (int i = 0; i < value.length(); i++) {
+			char c = value.charAt(i);
+			if (c == '\r' || c == '\n' || c == 0x00 || (c < 0x20 && c != '\t') || c == 0x7F)
+				throw new IllegalRequestException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", value, name, Utilities.printableChar(c)));
+		}
+	}
+
+	@Nonnull
+	private static List<String> splitRequestLines(@Nonnull String rawRequest) {
+		requireNonNull(rawRequest);
+
+		List<String> lines = new ArrayList<>();
+		StringBuilder current = new StringBuilder();
+
+		for (int i = 0; i < rawRequest.length(); i++) {
+			char c = rawRequest.charAt(i);
+
+			if (c == '\r') {
+				lines.add(current.toString());
+				current.setLength(0);
+				if (i + 1 < rawRequest.length() && rawRequest.charAt(i + 1) == '\n')
+					i++;
+				continue;
+			}
+
+			if (c == '\n') {
+				lines.add(current.toString());
+				current.setLength(0);
+				continue;
+			}
+
+			current.append(c);
+		}
+
+		lines.add(current.toString());
+		return lines;
 	}
 
 	protected void validateNoRequestBodyHeaders(@Nonnull Request request) {

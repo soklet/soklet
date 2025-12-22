@@ -48,6 +48,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -776,16 +777,29 @@ public class AdvancedTests {
 		};
 
 		for (String injection : injectionAttempts) {
-			String testPath = "/api/" + URLEncoder.encode(injection, StandardCharsets.UTF_8);
+			String encodedInjection = URLEncoder.encode(injection, StandardCharsets.UTF_8);
+			String testPath = "/api/" + encodedInjection;
+			boolean expectsEncodedSlashRejection = encodedInjection.toLowerCase(Locale.ROOT).contains("%2f");
+			boolean expectsNullByteRejection = "%00".equals(injection);
+			boolean expectsParseFailure = expectsEncodedSlashRejection || expectsNullByteRejection;
 			Request request;
 
 			try {
 				request = Request.withRawUrl(HttpMethod.GET, testPath).build();
 			} catch (IllegalRequestException e) {
-				String message = e.getMessage() == null ? "" : e.getMessage();
-				Assertions.assertTrue(message.contains("null byte"), "Unexpected parse failure for: " + injection);
+				if (!expectsParseFailure)
+					Assertions.fail("Unexpected parse failure for: " + injection, e);
+
+				if (expectsNullByteRejection) {
+					String message = e.getMessage() == null ? "" : e.getMessage();
+					Assertions.assertTrue(message.contains("null byte"), "Unexpected parse failure for: " + injection);
+				}
+
 				continue;
 			}
+
+			if (expectsParseFailure)
+				Assertions.fail("Expected parse failure for: " + injection);
 
 			String normalizedPath = request.getPath();
 			ResourcePath resourcePath = request.getResourcePath();

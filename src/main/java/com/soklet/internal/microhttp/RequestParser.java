@@ -135,8 +135,14 @@ class RequestParser {
             }
         }
         int spaceIndex = colonIndex + 1;
-        while (spaceIndex < line.length && line[spaceIndex] == ' ') { // advance beyond variable-length space prefix
+        while (spaceIndex < line.length && (line[spaceIndex] == ' ' || line[spaceIndex] == '\t')) { // advance beyond variable-length space prefix
             spaceIndex++;
+        }
+        for (int i = spaceIndex; i < line.length; i++) {
+            int b = line[i] & 0xFF;
+            if ((b < 0x20 && b != '\t') || b == 0x7F) {
+                throw new MalformedRequestException("invalid header value");
+            }
         }
         return new Header(
                 new String(line, 0, colonIndex, StandardCharsets.US_ASCII),
