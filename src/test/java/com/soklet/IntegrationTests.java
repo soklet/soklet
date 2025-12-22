@@ -269,6 +269,65 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void malformedRequest_invalidHost_returns400() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream()) {
+				socket.setSoTimeout(3000);
+				String request = "GET /hello HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1:99999\r\n"
+						+ "Connection: close\r\n"
+						+ "\r\n";
+				out.write(request.getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse response = readResponse(socket.getInputStream());
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for invalid Host header");
+				Assertions.assertEquals("close", response.headers().get("connection"));
+			}
+		}
+	}
+
+	@Test
+	public void malformedRequest_expect100Continue_returns400() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.lifecycleInterceptor(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream()) {
+				socket.setSoTimeout(3000);
+				String request = "POST /hello HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1\r\n"
+						+ "Expect: 100-continue\r\n"
+						+ "Content-Length: 5\r\n"
+						+ "\r\n";
+				out.write(request.getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse response = readResponse(socket.getInputStream());
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for Expect: 100-continue");
+				Assertions.assertEquals("close", response.headers().get("connection"));
+			}
+		}
+	}
+
+	@Test
 	public void maximumConnections_rejectsExcessConnections() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)

@@ -1,5 +1,7 @@
 package com.soklet.internal.microhttp;
 
+import com.soklet.internal.util.HostHeaderValidator;
+
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +17,7 @@ class RequestParser {
     private static final String HEADER_CONTENT_LENGTH = "Content-Length";
     private static final String HEADER_TRANSFER_ENCODING = "Transfer-Encoding";
     private static final String HEADER_HOST = "Host";
+    private static final String HEADER_EXPECT = "Expect";
     private static final String CHUNKED = "chunked";
     private static final byte[] EMPTY_BODY = new byte[]{};
 
@@ -94,6 +97,7 @@ class RequestParser {
     private void parseHeader(byte[] token) {
         if (token.length == 0) { // CR-LF on own line, end of headers
             validateHostHeaderIfRequired();
+            rejectExpectHeaderIfPresent();
             Integer contentLength = findContentLength();
             boolean hasTransferEncodingHeader = hasTransferEncodingHeader();
             List<String> transferEncodings = findTransferEncodings();
@@ -196,29 +200,17 @@ class RequestParser {
             throw new MalformedRequestException("multiple host headers");
         }
 
-        if (!isValidHostValue(hostValue)) {
+        if (!HostHeaderValidator.isValidHostHeaderValue(hostValue)) {
             throw new MalformedRequestException("invalid host header value");
         }
     }
 
-    private static boolean isValidHostValue(String value) {
-        if (value == null) {
-            return false;
-        }
-
-        String trimmed = value.trim();
-        if (trimmed.isEmpty()) {
-            return false;
-        }
-
-        for (int i = 0; i < trimmed.length(); i++) {
-            char c = trimmed.charAt(i);
-            if (c == ',' || c == ' ' || c == '\t' || c > 0x7F) {
-                return false;
+    private void rejectExpectHeaderIfPresent() {
+        for (Header header : headers) {
+            if (header.name().equalsIgnoreCase(HEADER_EXPECT)) {
+                throw new MalformedRequestException("unsupported expect header");
             }
         }
-
-        return true;
     }
 
     private static boolean isTchar(int b) {
