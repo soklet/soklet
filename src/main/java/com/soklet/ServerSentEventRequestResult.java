@@ -167,8 +167,9 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 					}
 				}
 
-				// Register with the mock SSE server broadcaster
-				getSimulator().getServerSentEventServer().get().registerEventConsumer(getResourcePath(), eventConsumer);
+				// Register with the mock SSE server broadcaster, preserving client context
+				Object clientContext = getHandshakeResult().getClientContext().orElse(null);
+				getSimulator().getServerSentEventServer().get().registerEventConsumer(getResourcePath(), eventConsumer, clientContext);
 			} finally {
 				getLock().unlock();
 			}
@@ -204,8 +205,9 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 					}
 				}
 
-				// Register with the mock SSE server broadcaster
-				getSimulator().getServerSentEventServer().get().registerCommentConsumer(getResourcePath(), commentConsumer);
+				// Register with the mock SSE server broadcaster, preserving client context
+				Object clientContext = getHandshakeResult().getClientContext().orElse(null);
+				getSimulator().getServerSentEventServer().get().registerCommentConsumer(getResourcePath(), commentConsumer, clientContext);
 			} finally {
 				getLock().unlock();
 			}

@@ -1789,13 +1789,19 @@ public final class Soklet implements AutoCloseable {
 
 		public void registerEventConsumer(@Nonnull ResourcePath resourcePath,
 																			@Nonnull Consumer<ServerSentEvent> eventConsumer) {
+			registerEventConsumer(resourcePath, eventConsumer, null);
+		}
+
+		public void registerEventConsumer(@Nonnull ResourcePath resourcePath,
+																			@Nonnull Consumer<ServerSentEvent> eventConsumer,
+																			@Nullable Object context) {
 			requireNonNull(resourcePath);
 			requireNonNull(eventConsumer);
 
 			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
 					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp, broadcastErrorHandler));
 
-			broadcaster.registerEventConsumer(eventConsumer);
+			broadcaster.registerEventConsumer(eventConsumer, context);
 		}
 
 		@Nonnull
@@ -1814,13 +1820,19 @@ public final class Soklet implements AutoCloseable {
 
 		public void registerCommentConsumer(@Nonnull ResourcePath resourcePath,
 																				@Nonnull Consumer<String> commentConsumer) {
+			registerCommentConsumer(resourcePath, commentConsumer, null);
+		}
+
+		public void registerCommentConsumer(@Nonnull ResourcePath resourcePath,
+																				@Nonnull Consumer<String> commentConsumer,
+																				@Nullable Object context) {
 			requireNonNull(resourcePath);
 			requireNonNull(commentConsumer);
 
 			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
 					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp, broadcastErrorHandler));
 
-			broadcaster.registerCommentConsumer(commentConsumer);
+			broadcaster.registerCommentConsumer(commentConsumer, context);
 		}
 
 		@Nonnull
