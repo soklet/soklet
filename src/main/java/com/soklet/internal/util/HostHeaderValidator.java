@@ -18,8 +18,6 @@ package com.soklet.internal.util;
 
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
-import java.net.Inet6Address;
-import java.net.InetAddress;
 
 /**
  * Validates HTTP/1.1 Host header values against RFC 3986 uri-host grammar.
@@ -166,12 +164,83 @@ public final class HostHeaderValidator {
 	}
 
 	private static boolean isValidIpv6Address(String literal) {
-		try {
-			InetAddress address = InetAddress.getByName(literal);
-			return address instanceof Inet6Address;
-		} catch (Exception e) {
+		if (literal.isEmpty())
 			return false;
+
+		int doubleColon = literal.indexOf("::");
+		if (doubleColon != -1 && literal.indexOf("::", doubleColon + 1) != -1)
+			return false;
+
+		if (doubleColon == -1) {
+			String[] parts = literal.split(":", -1);
+			if (parts.length == 0)
+				return false;
+
+			for (String part : parts) {
+				if (part.isEmpty())
+					return false;
+			}
+
+			boolean lastIsIpv4 = isValidIpv4Address(parts[parts.length - 1]);
+			int expectedParts = lastIsIpv4 ? 7 : 8;
+
+			if (parts.length != expectedParts)
+				return false;
+
+			for (int i = 0; i < parts.length; i++) {
+				if (i == parts.length - 1 && lastIsIpv4)
+					continue;
+				if (!isValidH16(parts[i]))
+					return false;
+			}
+
+			return true;
 		}
+
+		String left = literal.substring(0, doubleColon);
+		String right = literal.substring(doubleColon + 2);
+
+		String[] leftParts = left.isEmpty() ? new String[0] : left.split(":", -1);
+		String[] rightParts = right.isEmpty() ? new String[0] : right.split(":", -1);
+
+		for (String part : leftParts) {
+			if (part.isEmpty() || !isValidH16(part))
+				return false;
+		}
+
+		int segments = leftParts.length;
+
+		for (int i = 0; i < rightParts.length; i++) {
+			String part = rightParts[i];
+			if (part.isEmpty())
+				return false;
+
+			boolean last = (i == rightParts.length - 1);
+
+			if (isValidIpv4Address(part)) {
+				if (!last)
+					return false;
+				segments += 2;
+			} else if (isValidH16(part)) {
+				segments += 1;
+			} else {
+				return false;
+			}
+		}
+
+		return segments < 8;
+	}
+
+	private static boolean isValidH16(String part) {
+		if (part.isEmpty() || part.length() > 4)
+			return false;
+
+		for (int i = 0; i < part.length(); i++) {
+			if (!isHex(part.charAt(i)))
+				return false;
+		}
+
+		return true;
 	}
 
 	private static boolean isValidIpvFuture(String literal) {

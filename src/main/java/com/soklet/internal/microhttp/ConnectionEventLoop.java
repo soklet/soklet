@@ -15,6 +15,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -62,6 +63,7 @@ class ConnectionEventLoop {
     private final ByteBuffer buffer;
     private final Selector selector;
     private final Thread thread;
+    private final AtomicInteger connectionCount;
 
     ConnectionEventLoop(
             Options options,
@@ -75,6 +77,7 @@ class ConnectionEventLoop {
         this.connectionCounter = connectionCounter;
         this.stop = stop;
 
+        connectionCount = new AtomicInteger();
         timeoutQueue = new Scheduler();
         taskQueue = new ConcurrentLinkedQueue<>();
         buffer = ByteBuffer.allocateDirect(options.readBufferSize());
@@ -107,6 +110,7 @@ class ConnectionEventLoop {
         boolean httpOneDotZero;
         boolean keepAlive;
         boolean closeAfterResponse;
+        final AtomicBoolean closed;
 
         private Connection(SocketChannel socketChannel, SelectionKey selectionKey, InetSocketAddress remoteAddress) throws IOException {
             this.socketChannel = socketChannel;
@@ -116,6 +120,7 @@ class ConnectionEventLoop {
             this.remoteAddress = remoteAddress;
             requestParser = new RequestParser(byteTokenizer, remoteAddress);
             requestTimeoutTask = timeoutQueue.schedule(this::onRequestTimeout, options.requestTimeout());
+            closed = new AtomicBoolean(false);
         }
 
         private void onRequestTimeout() {
@@ -380,11 +385,14 @@ class ConnectionEventLoop {
         }
 
         private void failSafeClose() {
+            if (!closed.compareAndSet(false, true))
+                return;
             if (requestTimeoutTask != null) {
                 requestTimeoutTask.cancel();
             }
             selectionKey.cancel();
             CloseUtils.closeQuietly(socketChannel);
+            connectionCount.decrementAndGet();
         }
 
         private void applyConnectionPolicy(MicrohttpRequest request) {
@@ -428,7 +436,7 @@ class ConnectionEventLoop {
     }
 
     int numConnections() {
-        return selector.keys().size();
+        return connectionCount.get();
     }
 
     void start() {
@@ -500,6 +508,7 @@ class ConnectionEventLoop {
                 ? (InetSocketAddress) socketAddress
                 : null;
         Connection connection = new Connection(socketChannel, selectionKey, remoteAddress);
+        connectionCount.incrementAndGet();
         selectionKey.attach(connection);
         if (logger.enabled()) {
             String remoteAddressString = remoteAddress != null

@@ -950,6 +950,46 @@ public class AdvancedTests {
 	}
 
 	@Test
+	public void absoluteUriRequestFormConflictingHostIsRejected() throws Exception {
+		int port = findFreePort();
+		SokletConfig config = config(port);
+
+		try (Soklet app = Soklet.withConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
+				String request = "GET http://localhost:" + port + "/test HTTP/1.1\r\n" +
+						"Host: evil.example\r\n\r\n";
+
+				write(socket, request);
+				String response = readResponse(socket);
+
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 400"),
+						"Server should reject conflicting Host header: " + firstLine(response));
+			}
+		}
+	}
+
+	@Test
+	public void absoluteUriRequestFormConflictingPortIsRejected() throws Exception {
+		int port = findFreePort();
+		SokletConfig config = config(port);
+
+		try (Soklet app = Soklet.withConfig(config)) {
+			app.start();
+			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
+				String request = "GET http://localhost:" + port + "/test HTTP/1.1\r\n" +
+						"Host: localhost:12345\r\n\r\n";
+
+				write(socket, request);
+				String response = readResponse(socket);
+
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 400"),
+						"Server should reject conflicting Host port: " + firstLine(response));
+			}
+		}
+	}
+
+	@Test
 	public void bug_optionsAsteriskIsRejected() throws Exception {
 		int port = findFreePort();
 		SokletConfig config = config(port);
