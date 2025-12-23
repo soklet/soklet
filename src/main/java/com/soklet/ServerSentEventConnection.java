@@ -81,6 +81,10 @@ public interface ServerSentEventConnection {
 		 */
 		ERROR,
 		/**
+		 * Connection ended because the remote peer closed the socket.
+		 */
+		REMOTE_CLOSE,
+		/**
 		 * Connection ended for an unspecified reason.
 		 */
 		UNKNOWN

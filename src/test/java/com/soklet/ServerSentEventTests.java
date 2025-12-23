@@ -683,6 +683,47 @@ public class ServerSentEventTests {
 	}
 
 	@Test
+	@Timeout(value = 15, unit = SECONDS)
+	public void sse_clientClose_setsTerminationReason_remoteClose() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		TerminationReasonLifecycle lifecycle = new TerminationReasonLifecycle();
+
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestTimeout(Duration.ofSeconds(5))
+				.heartbeatInterval(Duration.ofSeconds(1))
+				.verifyConnectionOnceEstablished(false)
+				.build();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.lifecycleInterceptor(lifecycle)
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+
+				writeHttpGet(socket, "/tests/remote-close", ssePort);
+				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(hdr);
+
+				Assertions.assertTrue(lifecycle.awaitEstablished(5, SECONDS), "didEstablish not invoked");
+
+				socket.close();
+				Assertions.assertTrue(lifecycle.awaitTermination(8, SECONDS), "didTerminate not invoked");
+				Assertions.assertEquals(ServerSentEventConnection.TerminationReason.REMOTE_CLOSE, lifecycle.getReason());
+			}
+		}
+	}
+
+	@Test
 	@Timeout(value = 10, unit = SECONDS)
 	public void sse_concurrentConnectionLimit_rejectsExtraHandshakes() throws Exception {
 		int httpPort = findFreePort();

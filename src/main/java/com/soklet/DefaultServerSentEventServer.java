@@ -26,6 +26,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.OutputStreamWriter;
@@ -685,6 +686,36 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return new DefaultServerSentEventConnection.PreSerializedEvent(serverSentEvent, payloadBytes);
 	}
 
+	private static boolean isRemoteClose(@Nullable Throwable throwable) {
+		if (throwable == null)
+			return false;
+
+		Throwable current = throwable;
+
+		while (current != null) {
+			if (current instanceof ClosedChannelException)
+				return true;
+			if (current instanceof EOFException)
+				return true;
+			if (current instanceof IOException) {
+				String message = current.getMessage();
+				if (message != null) {
+					String normalized = message.toLowerCase(Locale.ROOT);
+					if (normalized.contains("broken pipe")
+							|| normalized.contains("connection reset")
+							|| normalized.contains("connection aborted")
+							|| normalized.contains("connection reset by peer")
+							|| normalized.contains("software caused connection abort"))
+						return true;
+				}
+			}
+
+			current = current.getCause();
+		}
+
+		return false;
+	}
+
 	@Nonnull
 	private static Boolean enqueuePreSerializedEvent(@Nonnull DefaultServerSentEventBroadcaster owner,
 																									 @Nonnull DefaultServerSentEventConnection connection,
@@ -1281,6 +1312,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (terminationReason == null) {
 					if (isStopping())
 						terminationReason = ServerSentEventConnection.TerminationReason.SERVER_STOP;
+					else if (isRemoteClose(throwable))
+						terminationReason = ServerSentEventConnection.TerminationReason.REMOTE_CLOSE;
 					else if (throwable != null)
 						terminationReason = ServerSentEventConnection.TerminationReason.ERROR;
 					else
