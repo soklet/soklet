@@ -483,7 +483,7 @@ public interface LifecycleInterceptor {
 	 * @param throwable                 the exception thrown which caused the connection to terminate (if any)
 	 */
 	default void willTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																											@Nonnull ServerSentEventConnectionTerminationReason terminationReason,
+																											@Nonnull ServerSentEventConnection.TerminationReason terminationReason,
 																											@Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -500,7 +500,7 @@ public interface LifecycleInterceptor {
 	 */
 	default void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																										 @Nonnull Duration connectionDuration,
-																										 @Nonnull ServerSentEventConnectionTerminationReason terminationReason,
+																										 @Nonnull ServerSentEventConnection.TerminationReason terminationReason,
 																										 @Nullable Throwable throwable) {
 		// No-op by default
 	}

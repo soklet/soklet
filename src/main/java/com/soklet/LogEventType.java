@@ -68,11 +68,11 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_INTERCEPTOR_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#willTerminateServerSentEventConnection(ServerSentEventConnection, ServerSentEventConnectionTerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleInterceptor#willTerminateServerSentEventConnection(ServerSentEventConnection, ServerSentEventConnection.TerminationReason, Throwable)} threw an exception.
 	 */
 	LIFECYCLE_INTERCEPTOR_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#didTerminateServerSentEventConnection(ServerSentEventConnection, Duration, ServerSentEventConnectionTerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleInterceptor#didTerminateServerSentEventConnection(ServerSentEventConnection, Duration, ServerSentEventConnection.TerminationReason, Throwable)} threw an exception.
 	 */
 	LIFECYCLE_INTERCEPTOR_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
 	/**

@@ -63,4 +63,26 @@ public interface ServerSentEventConnection {
 	 */
 	@Nonnull
 	Optional<Object> getClientContext();
+
+	/**
+	 * Categorizes why a Server-Sent Event connection terminated.
+	 */
+	enum TerminationReason {
+		/**
+		 * Connection was closed due to backpressure (write queue at capacity).
+		 */
+		BACKPRESSURE,
+		/**
+		 * Connection was closed during server shutdown.
+		 */
+		SERVER_STOP,
+		/**
+		 * Connection ended due to an error while processing or writing.
+		 */
+		ERROR,
+		/**
+		 * Connection ended for an unspecified reason.
+		 */
+		UNKNOWN
+	}
 }

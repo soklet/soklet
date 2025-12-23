@@ -1273,18 +1273,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// ...then unregister from broadcaster (prevents race with broadcasts)
 			if (clientSocketChannelRegistration != null) {
-				ServerSentEventConnectionTerminationReason terminationReason =
+				ServerSentEventConnection.TerminationReason terminationReason =
 						clientSocketChannelRegistration.serverSentEventConnection()
 								.getTerminationReason()
 								.orElse(null);
 
 				if (terminationReason == null) {
 					if (isStopping())
-						terminationReason = ServerSentEventConnectionTerminationReason.SERVER_STOP;
+						terminationReason = ServerSentEventConnection.TerminationReason.SERVER_STOP;
 					else if (throwable != null)
-						terminationReason = ServerSentEventConnectionTerminationReason.ERROR;
+						terminationReason = ServerSentEventConnection.TerminationReason.ERROR;
 					else
-						terminationReason = ServerSentEventConnectionTerminationReason.UNKNOWN;
+						terminationReason = ServerSentEventConnection.TerminationReason.UNKNOWN;
 
 					clientSocketChannelRegistration.serverSentEventConnection().setTerminationReason(terminationReason);
 				}
@@ -1704,7 +1704,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Nonnull
 		private final AtomicBoolean closing;
 		@Nonnull
-		private final AtomicReference<ServerSentEventConnectionTerminationReason> terminationReason;
+		private final AtomicReference<ServerSentEventConnection.TerminationReason> terminationReason;
 		@Nonnull
 		private final ServerSentEventConnectionSnapshot snapshot;
 
@@ -1852,13 +1852,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			return this.closing;
 		}
 
-		public void setTerminationReason(@Nonnull ServerSentEventConnectionTerminationReason reason) {
+		public void setTerminationReason(@Nonnull ServerSentEventConnection.TerminationReason reason) {
 			requireNonNull(reason);
 			this.terminationReason.compareAndSet(null, reason);
 		}
 
 		@Nonnull
-		public Optional<ServerSentEventConnectionTerminationReason> getTerminationReason() {
+		public Optional<ServerSentEventConnection.TerminationReason> getTerminationReason() {
 			return Optional.ofNullable(this.terminationReason.get());
 		}
 
@@ -2495,7 +2495,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		List<DefaultServerSentEventConnection> connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
 		for (DefaultServerSentEventConnection connection : connectionsSnapshot)
-			connection.setTerminationReason(ServerSentEventConnectionTerminationReason.SERVER_STOP);
+			connection.setTerminationReason(ServerSentEventConnection.TerminationReason.SERVER_STOP);
 
 		// Close client connections - sends poison pills to all registered connections
 		for (DefaultServerSentEventBroadcaster broadcaster : new ArrayList<>(getBroadcastersByResourcePath().values())) {
@@ -2848,7 +2848,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (!connection.getClosing().compareAndSet(false, true))
 			return;
 
-		connection.setTerminationReason(ServerSentEventConnectionTerminationReason.BACKPRESSURE);
+		connection.setTerminationReason(ServerSentEventConnection.TerminationReason.BACKPRESSURE);
 
 		// String message = format("Closing Server-Sent Event connection due to backpressure (write queue at capacity) while enqueuing %s. {resourcePath=%s, queueSize=%d, remainingCapacity=%d}",
 		//					cause, owner.getResourcePath(), writeQueue.size(), writeQueue.remainingCapacity());

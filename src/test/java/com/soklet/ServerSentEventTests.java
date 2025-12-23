@@ -593,7 +593,7 @@ public class ServerSentEventTests {
 				broadcaster.broadcastEvent(ServerSentEvent.withEvent("bp").id("3").data("c").build());
 
 				Assertions.assertTrue(lifecycle.awaitTermination(10, SECONDS), "Termination not observed");
-				Assertions.assertEquals(ServerSentEventConnectionTerminationReason.BACKPRESSURE, lifecycle.getReason());
+				Assertions.assertEquals(ServerSentEventConnection.TerminationReason.BACKPRESSURE, lifecycle.getReason());
 				lifecycle.releaseWriter();
 			}
 		}
@@ -677,7 +677,7 @@ public class ServerSentEventTests {
 
 				app.stop();
 				Assertions.assertTrue(lifecycle.awaitTermination(5, SECONDS), "didTerminate not invoked");
-				Assertions.assertEquals(ServerSentEventConnectionTerminationReason.SERVER_STOP, lifecycle.getReason());
+				Assertions.assertEquals(ServerSentEventConnection.TerminationReason.SERVER_STOP, lifecycle.getReason());
 			}
 		}
 	}
@@ -1728,7 +1728,7 @@ public class ServerSentEventTests {
 	private static class TerminationReasonLifecycle implements LifecycleInterceptor {
 		private final CountDownLatch establishedLatch;
 		private final CountDownLatch terminatedLatch;
-		private final AtomicReference<ServerSentEventConnectionTerminationReason> reason;
+		private final AtomicReference<ServerSentEventConnection.TerminationReason> reason;
 
 		private TerminationReasonLifecycle() {
 			this.establishedLatch = new CountDownLatch(1);
@@ -1747,7 +1747,7 @@ public class ServerSentEventTests {
 		@Override
 		public void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																											@Nonnull Duration connectionDuration,
-																											@Nonnull ServerSentEventConnectionTerminationReason terminationReason,
+																											@Nonnull ServerSentEventConnection.TerminationReason terminationReason,
 																											@Nullable Throwable throwable) {
 			this.reason.compareAndSet(null, terminationReason);
 			this.terminatedLatch.countDown();
@@ -1761,7 +1761,7 @@ public class ServerSentEventTests {
 			return this.terminatedLatch.await(timeout, unit);
 		}
 
-		ServerSentEventConnectionTerminationReason getReason() {
+		ServerSentEventConnection.TerminationReason getReason() {
 			return this.reason.get();
 		}
 	}
@@ -1770,7 +1770,7 @@ public class ServerSentEventTests {
 		private final CountDownLatch writeStarted;
 		private final CountDownLatch allowWrite;
 		private final CountDownLatch terminatedLatch;
-		private final AtomicReference<ServerSentEventConnectionTerminationReason> reason;
+		private final AtomicReference<ServerSentEventConnection.TerminationReason> reason;
 		private final AtomicBoolean blocking;
 
 		private BackpressureLifecycle() {
@@ -1800,7 +1800,7 @@ public class ServerSentEventTests {
 		@Override
 		public void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
 																											@Nonnull Duration connectionDuration,
-																											@Nonnull ServerSentEventConnectionTerminationReason terminationReason,
+																											@Nonnull ServerSentEventConnection.TerminationReason terminationReason,
 																											@Nullable Throwable throwable) {
 			this.reason.compareAndSet(null, terminationReason);
 			this.terminatedLatch.countDown();
@@ -1818,7 +1818,7 @@ public class ServerSentEventTests {
 			return this.terminatedLatch.await(timeout, unit);
 		}
 
-		ServerSentEventConnectionTerminationReason getReason() {
+		ServerSentEventConnection.TerminationReason getReason() {
 			return this.reason.get();
 		}
 	}
