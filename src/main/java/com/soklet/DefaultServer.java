@@ -143,7 +143,7 @@ final class DefaultServer implements Server {
 	@Nullable
 	private volatile RequestHandler requestHandler;
 	@Nullable
-	private volatile LifecycleInterceptor lifecycleInterceptor;
+	private volatile LifecycleObserver lifecycleObserver;
 	@Nullable
 	private volatile EventLoop eventLoop;
 
@@ -196,8 +196,8 @@ final class DefaultServer implements Server {
 			if (getRequestHandler().isEmpty())
 				throw new IllegalStateException(format("No %s was registered for %s", RequestHandler.class, getClass()));
 
-			if (getLifecycleInterceptor().isEmpty())
-				throw new IllegalStateException(format("No %s was registered for %s", LifecycleInterceptor.class, getClass()));
+			if (getLifecycleObserver().isEmpty())
+				throw new IllegalStateException(format("No %s was registered for %s", LifecycleObserver.class, getClass()));
 
 			Options options = OptionsBuilder.newBuilder()
 					.withHost(getHost())
@@ -561,7 +561,7 @@ final class DefaultServer implements Server {
 		requireNonNull(sokletConfig);
 
 		this.requestHandler = requestHandler;
-		this.lifecycleInterceptor = sokletConfig.getLifecycleInterceptor();
+		this.lifecycleObserver = sokletConfig.getLifecycleObserver();
 	}
 
 	@Nonnull
@@ -633,9 +633,9 @@ final class DefaultServer implements Server {
 		requireNonNull(logEvent);
 
 		try {
-			getLifecycleInterceptor().ifPresent(lifecycleInterceptor -> lifecycleInterceptor.didReceiveLogEvent(logEvent));
+			getLifecycleObserver().ifPresent(lifecycleObserver -> lifecycleObserver.didReceiveLogEvent(logEvent));
 		} catch (Throwable throwable) {
-			// The LifecycleInterceptor implementation errored out, but we can't let that affect us - swallow its exception.
+			// The LifecycleObserver implementation errored out, but we can't let that affect us - swallow its exception.
 			// Not much else we can do here but dump to stderr
 			throwable.printStackTrace(System.err);
 		}
@@ -737,8 +737,8 @@ final class DefaultServer implements Server {
 	}
 
 	@Nonnull
-	protected Optional<LifecycleInterceptor> getLifecycleInterceptor() {
-		return Optional.ofNullable(this.lifecycleInterceptor);
+	protected Optional<LifecycleObserver> getLifecycleObserver() {
+		return Optional.ofNullable(this.lifecycleObserver);
 	}
 
 	@Nonnull

@@ -91,7 +91,7 @@ public class IntegrationTests {
 		}
 	}
 
-	private static class QuietLifecycle implements LifecycleInterceptor {
+	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
 		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
 	}
@@ -114,7 +114,7 @@ public class IntegrationTests {
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(5)).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(resourceClasses))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 		Soklet app = Soklet.withConfig(cfg);
 		app.start();
@@ -187,7 +187,7 @@ public class IntegrationTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -216,7 +216,7 @@ public class IntegrationTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -247,7 +247,7 @@ public class IntegrationTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -275,7 +275,7 @@ public class IntegrationTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -304,7 +304,7 @@ public class IntegrationTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -333,7 +333,7 @@ public class IntegrationTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -364,7 +364,7 @@ public class IntegrationTests {
 						.maximumConnections(1)
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -662,7 +662,7 @@ public class IntegrationTests {
 						.requestHandlerTimeout(Duration.ofMillis(200))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {

@@ -29,7 +29,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * An informational "loggable" event that occurs during Soklet's internal processing - for example, if an error occurs while handling a request.
  * <p>
- * These events are exposed via {@link LifecycleInterceptor#didReceiveLogEvent(LogEvent)}.
+ * These events are exposed via {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}.
  * <p>
  * Instances can be acquired via the {@link #with(LogEventType, String)} builder factory method.
  * <p>

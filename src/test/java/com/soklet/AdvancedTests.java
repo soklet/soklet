@@ -1225,7 +1225,7 @@ public class AdvancedTests {
 	private SokletConfig config(int port) {
 		return SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(2)).build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
-				.lifecycleInterceptor(new LifecycleInterceptor() {
+				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(LogEvent e) {} // quiet
 				}).build();
@@ -1449,7 +1449,7 @@ public class AdvancedTests {
 				.serverSentEventServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(LimitTestResource.class)))
 				.responseMarshaler(customMarshaler)
-				.lifecycleInterceptor(new LifecycleInterceptor() {
+				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
 						// Ignore the SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED log event

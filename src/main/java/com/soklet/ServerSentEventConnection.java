@@ -23,7 +23,7 @@ import java.util.Optional;
 /**
  * Represents characteristics of a long-running connection that has been established with a {@link ServerSentEventServer}.
  * <p>
- * Instances are exposed via {@link LifecycleInterceptor}, which enables you to monitor events that occur on the connection over time (established, SSE payload written, terminated, etc.)
+ * Instances are exposed via {@link LifecycleObserver}, which enables you to monitor events that occur on the connection over time (established, SSE payload written, terminated, etc.)
  * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for general Server-Sent Event documentation and <a href="https://www.soklet.com/docs/request-lifecycle#server-sent-events">https://www.soklet.com/docs/request-lifecycle#server-sent-events</a> for lifecycle-specific documentation.
  *

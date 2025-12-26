@@ -58,7 +58,7 @@ public class ServerLifecycleTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(HealthResource.class)))
-				.lifecycleInterceptor(new LifecycleInterceptor() {
+				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
 				})
@@ -104,7 +104,7 @@ public class ServerLifecycleTests {
 			Server server = Server.withPort(port).build();
 
 			SokletConfig cfg = SokletConfig.withServer(server)
-					.lifecycleInterceptor(new QuietLifecycle())
+					.lifecycleObserver(new QuietLifecycle())
 					.build();
 
 			server.initialize(cfg, (request, consumer) -> {
@@ -136,7 +136,7 @@ public class ServerLifecycleTests {
 				.build();
 
 		SokletConfig cfg = SokletConfig.withServer(server)
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		server.initialize(cfg, (request, consumer) -> {
@@ -169,7 +169,7 @@ public class ServerLifecycleTests {
 		public String health() {return "ok";}
 	}
 
-	private static class QuietLifecycle implements LifecycleInterceptor {
+	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
 		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
 	}

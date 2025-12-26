@@ -1,0 +1,345 @@
+/*
+ * Copyright 2022-2025 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.soklet;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.time.Duration;
+import java.util.List;
+
+/**
+ * Read-only hook methods for observing system and request lifecycle events.
+ * <p>
+ * Note: some of these methods are "fail-fast" - exceptions thrown will bubble out and stop execution - and for others,
+ * Soklet will catch exceptions and surface separately via {@link #didReceiveLogEvent(LogEvent)}.
+ * <p>
+ * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
+ * <p>
+ * Full documentation is available at <a href="https://www.soklet.com/docs/request-lifecycle">https://www.soklet.com/docs/request-lifecycle</a>.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+public interface LifecycleObserver {
+	/**
+	 * Called before a {@link Soklet} instance starts.
+	 */
+	default void willStartSoklet(@Nonnull Soklet soklet) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link Soklet} instance starts.
+	 */
+	default void didStartSoklet(@Nonnull Soklet soklet) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link Soklet} instance was asked to start, but failed due to an exception.
+	 */
+	default void didFailToStartSoklet(@Nonnull Soklet soklet,
+																		@Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before a {@link Soklet} instance stops.
+	 */
+	default void willStopSoklet(@Nonnull Soklet soklet) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link Soklet} instance stops.
+	 */
+	default void didStopSoklet(@Nonnull Soklet soklet) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link Soklet} instance was asked to stop, but failed due to an exception.
+	 */
+	default void didFailToStopSoklet(@Nonnull Soklet soklet,
+																	 @Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before the server starts.
+	 */
+	default void willStartServer(@Nonnull Server server) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the server starts.
+	 */
+	default void didStartServer(@Nonnull Server server) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link Server} instance was asked to start, but failed due to an exception.
+	 */
+	default void didFailToStartServer(@Nonnull Server server,
+																		@Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before the server stops.
+	 */
+	default void willStopServer(@Nonnull Server server) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the server stops.
+	 */
+	default void didStopServer(@Nonnull Server server) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link Server} instance was asked to stop, but failed due to an exception.
+	 */
+	default void didFailToStopServer(@Nonnull Server server,
+																	 @Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
+	 */
+	default void didStartRequestHandling(@Nonnull Request request,
+																			 @Nullable ResourceMethod resourceMethod) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a request finishes processing.
+	 */
+	default void didFinishRequestHandling(@Nonnull Request request,
+																				@Nullable ResourceMethod resourceMethod,
+																				@Nonnull MarshaledResponse marshaledResponse,
+																				@Nonnull Duration duration,
+																				@Nonnull List<Throwable> throwables) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before response data is written.
+	 */
+	default void willWriteResponse(@Nonnull Request request,
+															 @Nullable ResourceMethod resourceMethod,
+															 @Nonnull MarshaledResponse marshaledResponse) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after response data is written.
+	 */
+	default void didWriteResponse(@Nonnull Request request,
+															@Nullable ResourceMethod resourceMethod,
+															@Nonnull MarshaledResponse marshaledResponse,
+															@Nonnull Duration responseWriteDuration) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after response data fails to write.
+	 */
+	default void didFailToWriteResponse(@Nonnull Request request,
+																			@Nullable ResourceMethod resourceMethod,
+																			@Nonnull MarshaledResponse marshaledResponse,
+																			@Nonnull Duration responseWriteDuration,
+																			@Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before the SSE server starts.
+	 */
+	default void willStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the SSE server starts.
+	 */
+	default void didStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link ServerSentEventServer} instance was asked to start, but failed due to an exception.
+	 */
+	default void didFailToStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer,
+																									 @Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before the SSE server stops.
+	 */
+	default void willStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the SSE server stops.
+	 */
+	default void didStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a {@link ServerSentEventServer} instance was asked to stop, but failed due to an exception.
+	 */
+	default void didFailToStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer,
+																									@Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before an SSE connection is established.
+	 */
+	default void willEstablishServerSentEventConnection(@Nonnull Request request,
+																											@Nullable ResourceMethod resourceMethod) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an SSE connection is established.
+	 */
+	default void didEstablishServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection) {
+		// No-op by default
+	}
+
+	/**
+	 * Called if an SSE connection fails to establish.
+	 */
+	default void didFailToEstablishServerSentEventConnection(@Nonnull Request request,
+																												 @Nullable ResourceMethod resourceMethod,
+																												 @Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before an SSE connection is terminated.
+	 */
+	default void willTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																											@Nonnull ServerSentEventConnection.TerminationReason terminationReason,
+																											@Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an SSE connection is terminated.
+	 */
+	default void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																										 @Nonnull Duration connectionDuration,
+																										 @Nonnull ServerSentEventConnection.TerminationReason terminationReason,
+																										 @Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before an SSE event is written.
+	 */
+	default void willWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																			 @Nonnull ServerSentEvent serverSentEvent) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an SSE event is written.
+	 */
+	default void didWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																		 @Nonnull ServerSentEvent serverSentEvent,
+																		 @Nonnull Duration writeDuration) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an SSE event fails to write.
+	 */
+	default void didFailToWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																						 @Nonnull ServerSentEvent serverSentEvent,
+																						 @Nonnull Duration writeDuration,
+																						 @Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before an SSE comment is written.
+	 */
+	default void willWriteServerSentEventComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																						 @Nonnull String comment) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an SSE comment is written.
+	 */
+	default void didWriteServerSentEventComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																							@Nonnull String comment,
+																							@Nonnull Duration writeDuration) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an SSE comment fails to write.
+	 */
+	default void didFailToWriteServerSentEventComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
+																										@Nonnull String comment,
+																										@Nonnull Duration writeDuration,
+																										@Nonnull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when Soklet emits a log event.
+	 */
+	default void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
+		String message = logEvent.getMessage();
+		Throwable throwable = logEvent.getThrowable().orElse(null);
+
+		if (throwable == null) {
+			System.err.printf("%s::didReceiveLogEvent [%s]: %s", LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(), message);
+		} else {
+			StringWriter stringWriter = new StringWriter();
+			PrintWriter printWriter = new PrintWriter(stringWriter);
+			throwable.printStackTrace(printWriter);
+			String throwableWithStackTrace = stringWriter.toString();
+
+			System.err.printf("%s::didReceiveLogEvent [%s]: %s\n%s\n", LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(), message, throwableWithStackTrace);
+		}
+	}
+
+	/**
+	 * Acquires a threadsafe {@link LifecycleObserver} instance with sensible defaults.
+	 *
+	 * @return a {@code LifecycleObserver} with default settings
+	 */
+	@Nonnull
+	static LifecycleObserver defaultInstance() {
+		return DefaultLifecycleObserver.defaultInstance();
+	}
+}

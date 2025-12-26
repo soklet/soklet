@@ -419,7 +419,7 @@ public class SokletTests {
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(resourceClasses))
 				// Quiet logging to keep the console clean
-				.lifecycleInterceptor(new LifecycleInterceptor() {
+				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
 						// No-op
@@ -672,7 +672,7 @@ public class SokletTests {
 	public void duplicateValueTests() {
 		SokletConfig config = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(DuplicateValueResource.class)))
-				.lifecycleInterceptor(new LifecycleInterceptor() {
+				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
 						// Quiet logging

@@ -23,16 +23,16 @@ import javax.annotation.concurrent.ThreadSafe;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class DefaultLifecycleInterceptor implements LifecycleInterceptor {
+final class DefaultRequestInterceptor implements RequestInterceptor {
 	@Nonnull
-	private static final DefaultLifecycleInterceptor DEFAULT_INSTANCE;
+	private static final DefaultRequestInterceptor DEFAULT_INSTANCE;
 
 	static {
-		DEFAULT_INSTANCE = new DefaultLifecycleInterceptor();
+		DEFAULT_INSTANCE = new DefaultRequestInterceptor();
 	}
 
 	@Nonnull
-	public static DefaultLifecycleInterceptor defaultInstance() {
+	public static DefaultRequestInterceptor defaultInstance() {
 		return DEFAULT_INSTANCE;
 	}
 

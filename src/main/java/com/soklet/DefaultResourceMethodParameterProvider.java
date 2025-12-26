@@ -156,8 +156,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		if (basicParameterType.isAssignableFrom(ResourceMethodParameterProvider.class))
 			return sokletConfig.getResourceMethodParameterProvider();
 
-		if (basicParameterType.isAssignableFrom(LifecycleInterceptor.class))
-			return sokletConfig.getLifecycleInterceptor();
+		if (basicParameterType.isAssignableFrom(LifecycleObserver.class))
+			return sokletConfig.getLifecycleObserver();
+
+		if (basicParameterType.isAssignableFrom(RequestInterceptor.class))
+			return sokletConfig.getRequestInterceptor();
 
 		if (basicParameterType.isAssignableFrom(CorsAuthorizer.class))
 			return sokletConfig.getCorsAuthorizer();

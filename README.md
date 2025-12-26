@@ -637,7 +637,7 @@ Server Start/Stop: execute code immediately before and after server startup and 
 ```java
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
-).lifecycleInterceptor(new LifecycleInterceptor() {
+).requestInterceptor(new RequestInterceptor() {
   @Override
   public void willStartServer(@Nonnull Server server) {
     // Perform startup tasks required prior to server launch
@@ -669,7 +669,7 @@ Request Handling: these methods are fired at the very start of request processin
 ```java
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
-).lifecycleInterceptor(new LifecycleInterceptor() {
+).requestInterceptor(new RequestInterceptor() {
   @Override
   public void didStartRequestHandling(
     @Nonnull Request request,
@@ -719,7 +719,7 @@ static {
 
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
-).lifecycleInterceptor(new LifecycleInterceptor() {
+).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void wrapRequest(
     @Nonnull Request request,
@@ -756,7 +756,7 @@ Request Intercepting: provides programmatic control over two processing steps.
 ```java
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
-).lifecycleInterceptor(new LifecycleInterceptor() {
+).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void interceptRequest(
     @Nonnull Request request,
@@ -791,7 +791,7 @@ Response Writing: monitor the response writing process - sending bytes over the 
 ```java
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
-).lifecycleInterceptor(new LifecycleInterceptor() {
+).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void willStartResponseWriting(
     @Nonnull Request request,

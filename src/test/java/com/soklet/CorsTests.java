@@ -41,7 +41,7 @@ public class CorsTests {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
-				.lifecycleInterceptor(new LifecycleInterceptor() {
+				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
 				})
@@ -73,7 +73,7 @@ public class CorsTests {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withRejectAllPolicy())
-				.lifecycleInterceptor(new LifecycleInterceptor() {
+				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
 				})
@@ -98,7 +98,7 @@ public class CorsTests {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
-				.lifecycleInterceptor(new LifecycleInterceptor() {
+				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
 				})
@@ -281,7 +281,7 @@ public class CorsTests {
 		var config = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of(GOOD), origin -> true))
-				.lifecycleInterceptor(new LifecycleInterceptor() {
+				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
 				})

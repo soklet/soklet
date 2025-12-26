@@ -48,7 +48,9 @@ public final class SokletConfig {
 	@Nonnull
 	private final ResponseMarshaler responseMarshaler;
 	@Nonnull
-	private final LifecycleInterceptor lifecycleInterceptor;
+	private final RequestInterceptor requestInterceptor;
+	@Nonnull
+	private final LifecycleObserver lifecycleObserver;
 	@Nonnull
 	private final CorsAuthorizer corsAuthorizer;
 	@Nonnull
@@ -90,7 +92,8 @@ public final class SokletConfig {
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.withValueConverterRegistry(getValueConverterRegistry());
 		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : ResourceMethodResolver.fromClasspathIntrospection();
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : ResponseMarshaler.defaultInstance();
-		this.lifecycleInterceptor = builder.lifecycleInterceptor != null ? builder.lifecycleInterceptor : LifecycleInterceptor.defaultInstance();
+		this.requestInterceptor = builder.requestInterceptor != null ? builder.requestInterceptor : RequestInterceptor.defaultInstance();
+		this.lifecycleObserver = builder.lifecycleObserver != null ? builder.lifecycleObserver : LifecycleObserver.defaultInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : CorsAuthorizer.withRejectAllPolicy();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(this);
 	}
@@ -166,13 +169,23 @@ public final class SokletConfig {
 	}
 
 	/**
-	 * How Soklet will <a href="https://www.soklet.com/docs/request-lifecycle">perform custom behavior during server and request lifecycle events</a>.
+	 * How Soklet will <a href="https://www.soklet.com/docs/request-lifecycle">perform custom behavior during request handling</a>.
 	 *
-	 * @return the instance responsible for performing lifecycle event customization
+	 * @return the instance responsible for request interceptor behavior
 	 */
 	@Nonnull
-	public LifecycleInterceptor getLifecycleInterceptor() {
-		return this.lifecycleInterceptor;
+	public RequestInterceptor getRequestInterceptor() {
+		return this.requestInterceptor;
+	}
+
+	/**
+	 * How Soklet will <a href="https://www.soklet.com/docs/request-lifecycle">observe server and request lifecycle events</a>.
+	 *
+	 * @return the instance responsible for lifecycle observation
+	 */
+	@Nonnull
+	public LifecycleObserver getLifecycleObserver() {
+		return this.lifecycleObserver;
 	}
 
 	/**
@@ -233,7 +246,9 @@ public final class SokletConfig {
 		@Nullable
 		private ResponseMarshaler responseMarshaler;
 		@Nullable
-		private LifecycleInterceptor lifecycleInterceptor;
+		private RequestInterceptor requestInterceptor;
+		@Nullable
+		private LifecycleObserver lifecycleObserver;
 		@Nullable
 		private CorsAuthorizer corsAuthorizer;
 
@@ -293,8 +308,14 @@ public final class SokletConfig {
 		}
 
 		@Nonnull
-		public Builder lifecycleInterceptor(@Nullable LifecycleInterceptor lifecycleInterceptor) {
-			this.lifecycleInterceptor = lifecycleInterceptor;
+		public Builder requestInterceptor(@Nullable RequestInterceptor requestInterceptor) {
+			this.requestInterceptor = requestInterceptor;
+			return this;
+		}
+
+		@Nonnull
+		public Builder lifecycleObserver(@Nullable LifecycleObserver lifecycleObserver) {
+			this.lifecycleObserver = lifecycleObserver;
 			return this;
 		}
 
@@ -367,7 +388,8 @@ public final class SokletConfig {
 					.resourceMethodResolver(sokletConfig.resourceMethodResolver)
 					.resourceMethodParameterProvider(sokletConfig.resourceMethodParameterProvider)
 					.responseMarshaler(sokletConfig.responseMarshaler)
-					.lifecycleInterceptor(sokletConfig.lifecycleInterceptor)
+					.requestInterceptor(sokletConfig.requestInterceptor)
+					.lifecycleObserver(sokletConfig.lifecycleObserver)
 					.corsAuthorizer(sokletConfig.corsAuthorizer);
 		}
 
@@ -421,8 +443,14 @@ public final class SokletConfig {
 		}
 
 		@Nonnull
-		public Copier lifecycleInterceptor(@Nullable LifecycleInterceptor lifecycleInterceptor) {
-			this.builder.lifecycleInterceptor(lifecycleInterceptor);
+		public Copier requestInterceptor(@Nullable RequestInterceptor requestInterceptor) {
+			this.builder.requestInterceptor(requestInterceptor);
+			return this;
+		}
+
+		@Nonnull
+		public Copier lifecycleObserver(@Nullable LifecycleObserver lifecycleObserver) {
+			this.builder.lifecycleObserver(lifecycleObserver);
 			return this;
 		}
 

@@ -278,7 +278,7 @@ public class ServerSentEventTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(1)).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle()) // no noise in test logs
+				.lifecycleObserver(new QuietLifecycle()) // no noise in test logs
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -301,7 +301,7 @@ public class ServerSentEventTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle()) // no noise in test logs
+				.lifecycleObserver(new QuietLifecycle()) // no noise in test logs
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -377,7 +377,7 @@ public class ServerSentEventTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -440,7 +440,7 @@ public class ServerSentEventTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -494,7 +494,7 @@ public class ServerSentEventTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -567,7 +567,7 @@ public class ServerSentEventTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
-				.lifecycleInterceptor(lifecycle)
+				.lifecycleObserver(lifecycle)
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -613,7 +613,7 @@ public class ServerSentEventTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -658,7 +658,7 @@ public class ServerSentEventTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
-				.lifecycleInterceptor(lifecycle)
+				.lifecycleObserver(lifecycle)
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -700,7 +700,7 @@ public class ServerSentEventTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
-				.lifecycleInterceptor(lifecycle)
+				.lifecycleObserver(lifecycle)
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -741,7 +741,7 @@ public class ServerSentEventTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingHandshakeResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -790,7 +790,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RejectingSseResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -840,7 +840,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -875,7 +875,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -911,7 +911,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -947,7 +947,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -981,7 +981,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -1016,7 +1016,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -1052,7 +1052,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -1090,7 +1090,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -1130,7 +1130,7 @@ public class ServerSentEventTests {
 						.requestHandlerTimeout(Duration.ofMillis(200))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingHandshakeResource.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -1162,7 +1162,7 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RejectWithExplicitContentLength.class)))
-				.lifecycleInterceptor(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
 		try (Soklet app = Soklet.withConfig(cfg)) {
@@ -1766,7 +1766,7 @@ public class ServerSentEventTests {
 		}
 	}
 
-	private static class TerminationReasonLifecycle implements LifecycleInterceptor {
+	private static class TerminationReasonLifecycle implements LifecycleObserver {
 		private final CountDownLatch establishedLatch;
 		private final CountDownLatch terminatedLatch;
 		private final AtomicReference<ServerSentEventConnection.TerminationReason> reason;
@@ -1807,7 +1807,7 @@ public class ServerSentEventTests {
 		}
 	}
 
-	private static class BackpressureLifecycle implements LifecycleInterceptor {
+	private static class BackpressureLifecycle implements LifecycleObserver {
 		private final CountDownLatch writeStarted;
 		private final CountDownLatch allowWrite;
 		private final CountDownLatch terminatedLatch;
@@ -1892,7 +1892,7 @@ public class ServerSentEventTests {
 		}
 	}
 
-	private static class QuietLifecycle implements LifecycleInterceptor {
+	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
 		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
 	}

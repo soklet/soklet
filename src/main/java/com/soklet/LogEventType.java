@@ -36,61 +36,61 @@ public enum LogEventType {
 	 */
 	REQUEST_PROCESSING_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#wrapRequest(Request, ResourceMethod, Consumer)} threw an exception.
+	 * Indicates {@link RequestInterceptor#wrapRequest(Request, ResourceMethod, Consumer)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_WRAP_REQUEST_FAILED,
+	REQUEST_INTERCEPTOR_WRAP_REQUEST_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#interceptRequest(Request, ResourceMethod, Function, Consumer)} threw an exception.
+	 * Indicates {@link RequestInterceptor#interceptRequest(Request, ResourceMethod, Function, Consumer)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_INTERCEPT_REQUEST_FAILED,
+	REQUEST_INTERCEPTOR_INTERCEPT_REQUEST_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#didStartRequestHandling(Request, ResourceMethod)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didStartRequestHandling(Request, ResourceMethod)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_DID_START_REQUEST_HANDLING_FAILED,
+	LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#didFinishRequestHandling(Request, ResourceMethod, MarshaledResponse, Duration, List)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didFinishRequestHandling(Request, ResourceMethod, MarshaledResponse, Duration, List)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_DID_FINISH_REQUEST_HANDLING_FAILED,
+	LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#willWriteResponse(Request, ResourceMethod, MarshaledResponse)}  threw an exception.
+	 * Indicates {@link LifecycleObserver#willWriteResponse(Request, ResourceMethod, MarshaledResponse)}  threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_WILL_WRITE_RESPONSE_FAILED,
+	LIFECYCLE_OBSERVER_WILL_WRITE_RESPONSE_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#didWriteResponse(Request, ResourceMethod, MarshaledResponse, Duration)}  or {@link LifecycleInterceptor#didFailToWriteResponse(Request, ResourceMethod, MarshaledResponse, Duration, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didWriteResponse(Request, ResourceMethod, MarshaledResponse, Duration)}  or {@link LifecycleObserver#didFailToWriteResponse(Request, ResourceMethod, MarshaledResponse, Duration, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_DID_WRITE_RESPONSE_FAILED,
+	LIFECYCLE_OBSERVER_DID_WRITE_RESPONSE_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#willEstablishServerSentEventConnection(Request, ResourceMethod)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willEstablishServerSentEventConnection(Request, ResourceMethod)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_WILL_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	LIFECYCLE_OBSERVER_WILL_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#didEstablishServerSentEventConnection(ServerSentEventConnection)} or {@link LifecycleInterceptor#didFailToEstablishServerSentEventConnection(Request, ResourceMethod, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didEstablishServerSentEventConnection(ServerSentEventConnection)} or {@link LifecycleObserver#didFailToEstablishServerSentEventConnection(Request, ResourceMethod, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	LIFECYCLE_OBSERVER_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#willTerminateServerSentEventConnection(ServerSentEventConnection, ServerSentEventConnection.TerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willTerminateServerSentEventConnection(ServerSentEventConnection, ServerSentEventConnection.TerminationReason, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	LIFECYCLE_OBSERVER_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#didTerminateServerSentEventConnection(ServerSentEventConnection, Duration, ServerSentEventConnection.TerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didTerminateServerSentEventConnection(ServerSentEventConnection, Duration, ServerSentEventConnection.TerminationReason, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	LIFECYCLE_OBSERVER_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#willWriteServerSentEvent(ServerSentEventConnection, ServerSentEvent)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willWriteServerSentEvent(ServerSentEventConnection, ServerSentEvent)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_WILL_WRITE_SERVER_SENT_EVENT_FAILED,
+	LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#didWriteServerSentEvent(ServerSentEventConnection, ServerSentEvent, Duration)} or {@link LifecycleInterceptor#didFailToWriteServerSentEvent(ServerSentEventConnection, ServerSentEvent, Duration, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didWriteServerSentEvent(ServerSentEventConnection, ServerSentEvent, Duration)} or {@link LifecycleObserver#didFailToWriteServerSentEvent(ServerSentEventConnection, ServerSentEvent, Duration, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_FAILED,
+	LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#willWriteServerSentEventComment(ServerSentEventConnection, String)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willWriteServerSentEventComment(ServerSentEventConnection, String)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED,
+	LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED,
 	/**
-	 * Indicates {@link LifecycleInterceptor#didWriteServerSentEventComment(ServerSentEventConnection, String, Duration)} or {@link LifecycleInterceptor#didFailToWriteServerSentEventComment(ServerSentEventConnection, String, Duration, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didWriteServerSentEventComment(ServerSentEventConnection, String, Duration)} or {@link LifecycleObserver#didFailToWriteServerSentEventComment(ServerSentEventConnection, String, Duration, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_INTERCEPTOR_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED,
+	LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED,
 	/**
 	 * Indicates {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)} threw an exception.
 	 */
