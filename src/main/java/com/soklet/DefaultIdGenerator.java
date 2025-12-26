@@ -154,7 +154,8 @@ final class DefaultIdGenerator implements IdGenerator<String> {
 
 	@Nonnull
 	@Override
-	public String generateId() {
+	public String generateId(@Nonnull Request request) {
+		requireNonNull(request);
 		return format("%s%s", getIdPrefix(), getIdGenerator().getAndAccumulate(getMaximumId(),
 				(currentId, ignored) -> currentId < getMaximumId() ? ++currentId : getMinimumId()));
 	}

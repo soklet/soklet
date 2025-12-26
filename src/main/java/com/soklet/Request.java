@@ -306,7 +306,6 @@ public final class Request {
 		this.rawQuery = rawQuery;
 
 		this.lock = new ReentrantLock();
-		this.id = builderId == null ? this.idGenerator.generateId() : builderId;
 		this.httpMethod = builderHttpMethod;
 		this.corsPreflight = this.httpMethod == HttpMethod.OPTIONS ? CorsPreflight.fromHeaders(this.headers).orElse(null) : null;
 		this.cors = this.corsPreflight == null ? Cors.fromHeaders(this.httpMethod, this.headers).orElse(null) : null;
@@ -317,7 +316,10 @@ public final class Request {
 		// It's illegal to specify a body if the request is marked "content too large"
 		this.body = this.contentTooLarge ? null : builderBody;
 
-		// Cookies, form parameters, and multipart data are lazily parsed/instantiated when callers try to access them
+		// Last step of ctor: generate an ID (if necessary) using this fully-constructed Request
+		this.id = builderId == null ? this.idGenerator.generateId(this) : builderId;
+
+		// Note that cookies, form parameters, and multipart data are lazily parsed/instantiated when callers try to access them
 	}
 
 	@Override

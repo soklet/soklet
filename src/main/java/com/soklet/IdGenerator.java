@@ -21,7 +21,9 @@ import javax.annotation.Nonnull;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Contract for generating identifiers of a particular type (for example, sequential {@link Long} values, random {@link java.util.UUID}s, etc.)
+ * Contract for generating {@link Request} identifiers of a particular type (for example, sequential {@link Long} values, random {@link java.util.UUID}s, etc.)
+ * <p>
+ * Useful for incorporating request data in nonlocal deployment environments (e.g. a tracing header like <a href="https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-request-tracing.html" target="_blank">{@code X-Amzn-Trace-Id}</a>).
  * <p>
  * Implementations may or may not guarantee uniqueness, ordering, or repeatability of generated identifiers. Callers should not assume any such guarantees unless documented by the implementation.
  * <p>
@@ -39,14 +41,18 @@ import static java.util.Objects.requireNonNull;
 @FunctionalInterface
 public interface IdGenerator<T> {
 	/**
-	 * Generates an identifier.
+	 * Generates an identifier for the given {@link Request}.
 	 * <p>
-	 * Implementations may choose different strategies (sequential, random, host-based, etc.) and are not required to guarantee uniqueness unless explicitly documented.
+	 * Implementations may choose different strategies (sequential, random, host-based, etc.)
+	 * and are not required to guarantee uniqueness unless explicitly documented.
+	 * <p>
+	 * Implementations may override to incorporate request data (e.g. a tracing header like {@code X-Amzn-Trace-Id}).
 	 *
+	 * @param request the request for which an identifier is being generated
 	 * @return the generated identifier (never {@code null})
 	 */
 	@Nonnull
-	T generateId();
+	T generateId(@Nonnull Request request);
 
 	/**
 	 * Acquires a threadsafe {@link IdGenerator} with a default numeric ID range (values will wrap once maximum is reached) and a best-effort local IP prefix.
