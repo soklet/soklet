@@ -26,7 +26,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * {@link IdGenerator} implementation which includes a wraparound-enabled sequence number and a best-effort attempt to extract local IP address.
+ * {@link IdGenerator} implementation which includes a sequence number and a best-effort attempt to extract local IP address.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -56,17 +56,12 @@ final class DefaultIdGenerator implements IdGenerator<String> {
 	}
 
 	@Nonnull
-	private final Long minimumId;
-	@Nonnull
-	private final Long maximumId;
-	@Nonnull
 	private final AtomicLong idGenerator;
 	@Nonnull
 	private final String idPrefix;
 
 	/**
-	 * Returns a {@link DefaultIdGenerator} with the default ID range
-	 * (1 through 9,999,999) and a best-effort local IP prefix.
+	 * Returns a {@link DefaultIdGenerator} with a best-effort local IP prefix.
 	 * <p>
 	 * Callers should not rely on reference identity; this method may
 	 * return a new or cached instance.
@@ -75,46 +70,11 @@ final class DefaultIdGenerator implements IdGenerator<String> {
 	 */
 	@Nonnull
 	public static DefaultIdGenerator withDefaults() {
-		return new DefaultIdGenerator(1L, 9_999_999L, null);
+		return new DefaultIdGenerator(null);
 	}
 
 	/**
-	 * Returns a {@link DefaultIdGenerator} with the given minimum and maximum ID values, and a best-effort local IP prefix.
-	 * <p>
-	 * Callers should not rely on reference identity; this method may return a new or cached instance.
-	 *
-	 * @param minimumId the lowest ID that may be generated (inclusive)
-	 * @param maximumId the highest ID that may be generated (inclusive)
-	 * @return a {@code DefaultIdGenerator} configured with the given range
-	 * @throws IllegalArgumentException if the range is invalid
-	 */
-	@Nonnull
-	public static DefaultIdGenerator withRange(@Nonnull Long minimumId,
-																						 @Nonnull Long maximumId) {
-		return new DefaultIdGenerator(requireNonNull(minimumId), requireNonNull(maximumId), null);
-	}
-
-	/**
-	 * Returns a {@link DefaultIdGenerator} with the given minimum and maximum ID values, and the specified prefix.
-	 * <p>
-	 * Callers should not rely on reference identity; this method may return a new or cached instance.
-	 *
-	 * @param minimumId the lowest ID that may be generated (inclusive)
-	 * @param maximumId the highest ID that may be generated (inclusive)
-	 * @param prefix    an optional string to prepend to generated IDs, or {@code null} to use the default host-based prefix
-	 * @return a {@code DefaultIdGenerator} configured with the given range and prefix
-	 * @throws IllegalArgumentException if the range is invalid
-	 */
-	@Nonnull
-	public static DefaultIdGenerator withRangeAndPrefix(@Nonnull Long minimumId,
-																											@Nonnull Long maximumId,
-																											@Nullable String prefix) {
-		return new DefaultIdGenerator(requireNonNull(minimumId), requireNonNull(maximumId), prefix);
-	}
-
-	/**
-	 * Returns a {@link DefaultIdGenerator} with the default ID range
-	 * (1 through 9,999,999) and the given prefix.
+	 * Returns a {@link DefaultIdGenerator} with the given prefix.
 	 * <p>
 	 * Callers should not rely on reference identity; this method may
 	 * return a new or cached instance.
@@ -125,63 +85,36 @@ final class DefaultIdGenerator implements IdGenerator<String> {
 	 */
 	@Nonnull
 	public static DefaultIdGenerator withPrefix(@Nullable String prefix) {
-		return new DefaultIdGenerator(1L, 9_999_999L, prefix);
+		return new DefaultIdGenerator(prefix);
 	}
 
-	protected DefaultIdGenerator(@Nonnull Long minimumId,
-															 @Nonnull Long maximumId,
-															 @Nullable String idPrefix) {
-		requireNonNull(minimumId);
-		requireNonNull(maximumId);
-
-		if (minimumId < 0)
-			throw new IllegalArgumentException(format("Minimum ID (%s) cannot be negative", minimumId));
-
-		if (maximumId < 1)
-			throw new IllegalArgumentException(format("Maximum ID (%s) must be greater than zero", maximumId));
-
-		if (minimumId >= maximumId)
-			throw new IllegalArgumentException(format("Minimum ID (%s) must be less than maximum ID (%s)", minimumId, maximumId));
-
+	private DefaultIdGenerator(@Nullable String idPrefix) {
 		if (idPrefix == null)
 			idPrefix = getDefaultIdPrefix();
 
-		this.minimumId = minimumId;
-		this.maximumId = maximumId;
 		this.idPrefix = idPrefix;
-		this.idGenerator = new AtomicLong(getMinimumId());
+		this.idGenerator = new AtomicLong(0L);
 	}
 
 	@Nonnull
 	@Override
 	public String generateId(@Nonnull Request request) {
 		requireNonNull(request);
-		return format("%s%s", getIdPrefix(), getIdGenerator().getAndAccumulate(getMaximumId(),
-				(currentId, ignored) -> currentId < getMaximumId() ? ++currentId : getMinimumId()));
+		return format("%s%s", getIdPrefix(), getIdGenerator().getAndIncrement());
 	}
 
 	@Nonnull
-	protected String getDefaultIdPrefix() {
+	private String getDefaultIdPrefix() {
 		return DEFAULT_ID_PREFIX;
 	}
 
 	@Nonnull
-	protected AtomicLong getIdGenerator() {
+	private AtomicLong getIdGenerator() {
 		return this.idGenerator;
 	}
 
 	@Nonnull
-	protected Long getMinimumId() {
-		return this.minimumId;
-	}
-
-	@Nonnull
-	protected Long getMaximumId() {
-		return this.maximumId;
-	}
-
-	@Nonnull
-	protected String getIdPrefix() {
+	private String getIdPrefix() {
 		return this.idPrefix;
 	}
 }
