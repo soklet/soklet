@@ -27,9 +27,13 @@ import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.exception.IllegalRequestBodyException;
 import com.soklet.exception.IllegalRequestException;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nonnull;
+import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.net.Socket;
@@ -621,6 +625,320 @@ public class AdvancedTests {
 	}
 
 	@Test
+	public void testDefaultServerReleasesExecutorsOnStop() throws Exception {
+		int port = findFreePort();
+		Server server = Server.withPort(port).build();
+
+		SokletConfig config = SokletConfig.withServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
+				.build();
+
+		try (Soklet soklet = Soklet.withConfig(config)) {
+			soklet.start();
+
+			for (int i = 0; i < 5; i++) {
+				try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
+					socket.setSoTimeout(2000);
+					write(socket, "GET /test HTTP/1.1\r\n" +
+							"Host: 127.0.0.1:" + port + "\r\n" +
+							"Connection: close\r\n" +
+							"\r\n");
+					String response = readResponse(socket);
+					Assertions.assertTrue(response.startsWith("HTTP/1.1 200"),
+							"Unexpected response: " + firstLine(response));
+				}
+			}
+		}
+
+		DefaultServer defaultServer = (DefaultServer) server;
+		Assertions.assertTrue(defaultServer.getEventLoop().isEmpty(), "Event loop should be cleared after stop");
+		Assertions.assertTrue(defaultServer.getRequestHandlerExecutorService().isEmpty(),
+				"Request handler executor should be cleared after stop");
+		Assertions.assertTrue(defaultServer.getRequestHandlerTimeoutExecutorService().isEmpty(),
+				"Timeout executor should be cleared after stop");
+	}
+
+	@Test
+	public void testSseServerClearsCachesOnStop() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		Server server = Server.withPort(httpPort).build();
+		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
+				.broadcasterCacheCapacity(4)
+				.resourcePathCacheCapacity(4)
+				.build();
+		DefaultServerSentEventServer defaultSseServer = (DefaultServerSentEventServer) sseServer;
+
+		SokletConfig config = SokletConfig.withServer(server)
+				.serverSentEventServer(sseServer)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SSETestResource.class)))
+				.build();
+
+		try (Soklet soklet = Soklet.withConfig(config)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(2000);
+				write(socket, "GET /events HTTP/1.1\r\n" +
+						"Host: 127.0.0.1:" + ssePort + "\r\n" +
+						"Accept: text/event-stream\r\n" +
+						"\r\n");
+				readResponse(socket);
+
+				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+				while (defaultSseServer.getActiveConnectionCount() == 0 && System.nanoTime() < deadline)
+					Thread.sleep(10);
+
+				Assertions.assertTrue(defaultSseServer.getActiveConnectionCount() > 0,
+						"SSE connection did not register");
+			}
+		}
+
+		Assertions.assertTrue(defaultSseServer.getGlobalConnections().isEmpty(),
+				"Global SSE connections should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getBroadcastersByResourcePath().isEmpty(),
+				"SSE broadcaster cache should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getIdleBroadcastersByResourcePath().isEmpty(),
+				"Idle SSE broadcaster cache should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getResourcePathDeclarationsByResourcePathCache().isEmpty(),
+				"SSE resource path cache should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getRequestHandlerExecutorService().isEmpty(),
+				"SSE request handler executor should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getRequestHandlerTimeoutExecutorService().isEmpty(),
+				"SSE timeout executor should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getRequestReaderExecutorService().isEmpty(),
+				"SSE request reader executor should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getEventLoopThread().isEmpty(),
+				"SSE event loop thread should be cleared after stop");
+	}
+
+	@Disabled("Long-running memory stability test")
+	@Test
+	public void testDefaultServerMemoryStabilityUnderLoad() throws Exception {
+		int port = findFreePort();
+		Server server = Server.withPort(port).build();
+
+		SokletConfig config = SokletConfig.withServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
+				.build();
+
+		try (Soklet soklet = Soklet.withConfig(config)) {
+			soklet.start();
+
+			forceGc();
+			long memoryBefore = usedMemory();
+
+			for (int i = 0; i < 2000; i++) {
+				try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
+					socket.setSoTimeout(2000);
+					write(socket, "GET /test HTTP/1.1\r\n" +
+							"Host: 127.0.0.1:" + port + "\r\n" +
+							"Connection: close\r\n" +
+							"\r\n");
+					readResponse(socket);
+				}
+			}
+
+			forceGc();
+			long memoryAfter = usedMemory();
+			long memoryIncrease = memoryAfter - memoryBefore;
+
+			Assertions.assertTrue(memoryIncrease < 64L * 1024 * 1024,
+					"Unexpected memory growth: " + (memoryIncrease / 1024 / 1024) + "MB");
+		}
+	}
+
+	@Disabled("Long-running memory stability test")
+	@Test
+	public void testSseServerMemoryStabilityUnderLoad() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		Server server = Server.withPort(httpPort).build();
+		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
+				.broadcasterCacheCapacity(32)
+				.resourcePathCacheCapacity(64)
+				.build();
+		DefaultServerSentEventServer defaultSseServer = (DefaultServerSentEventServer) sseServer;
+
+		SokletConfig config = SokletConfig.withServer(server)
+				.serverSentEventServer(sseServer)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SSETestResource.class)))
+				.build();
+
+		try (Soklet soklet = Soklet.withConfig(config)) {
+			soklet.start();
+
+			forceGc();
+			long memoryBefore = usedMemory();
+
+			for (int i = 0; i < 500; i++) {
+				try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+					socket.setSoTimeout(2000);
+					write(socket, "GET /events HTTP/1.1\r\n" +
+							"Host: 127.0.0.1:" + ssePort + "\r\n" +
+							"Accept: text/event-stream\r\n" +
+							"\r\n");
+					readResponse(socket);
+				}
+			}
+
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+			while (defaultSseServer.getActiveConnectionCount() > 0 && System.nanoTime() < deadline)
+				Thread.sleep(10);
+
+			soklet.stop();
+
+			forceGc();
+			long memoryAfter = usedMemory();
+			long memoryIncrease = memoryAfter - memoryBefore;
+
+			Assertions.assertTrue(memoryIncrease < 64L * 1024 * 1024,
+					"Unexpected memory growth: " + (memoryIncrease / 1024 / 1024) + "MB");
+		}
+
+		Assertions.assertTrue(defaultSseServer.getGlobalConnections().isEmpty(),
+				"SSE connections should be drained after load test");
+	}
+
+	@Disabled("Heavy load test; enable manually")
+	@Test
+	public void testDefaultServerHeavyLoad() throws Exception {
+		int durationSeconds = 45;
+		int loadThreads = 200;
+
+		int port = findFreePort();
+		Server server = Server.withPort(port).build();
+
+		SokletConfig config = SokletConfig.withServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
+				.build();
+
+		AtomicInteger requestCount = new AtomicInteger();
+		AtomicInteger errors = new AtomicInteger();
+		ConcurrentHashMap<String, AtomicInteger> errorCounts = new ConcurrentHashMap<>();
+		ConcurrentHashMap<String, String> errorSamples = new ConcurrentHashMap<>();
+
+		try (Soklet soklet = Soklet.withConfig(config)) {
+			soklet.start();
+
+			ExecutorService executor = Executors.newFixedThreadPool(loadThreads);
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(durationSeconds);
+
+			for (int i = 0; i < loadThreads; i++) {
+				executor.submit(() -> {
+					Socket socket = null;
+					InputStream in = null;
+					while (System.nanoTime() < deadline) {
+						try {
+							if (socket == null || socket.isClosed() || !socket.isConnected()) {
+								socket = connectWithRetry("127.0.0.1", port, 2000);
+								socket.setSoTimeout(2000);
+								in = socket.getInputStream();
+							}
+
+							write(socket, "GET /test HTTP/1.1\r\n" +
+									"Host: 127.0.0.1:" + port + "\r\n" +
+									"\r\n");
+							int statusCode = readHttpStatusAndDrainBody(in);
+							if (statusCode != 200) {
+								errors.incrementAndGet();
+								recordError(errorCounts, errorSamples,
+										new IOException("Unexpected status code " + statusCode));
+								closeQuietly(socket);
+								socket = null;
+								in = null;
+							} else {
+								requestCount.incrementAndGet();
+							}
+						} catch (Exception e) {
+							errors.incrementAndGet();
+							recordError(errorCounts, errorSamples, e);
+							closeQuietly(socket);
+							socket = null;
+							in = null;
+						}
+					}
+
+					closeQuietly(socket);
+					in = null;
+				});
+			}
+
+			executor.shutdown();
+			executor.awaitTermination(durationSeconds + 10L, TimeUnit.SECONDS);
+		}
+
+		Assertions.assertTrue(requestCount.get() > 0, "No requests completed");
+		Assertions.assertEquals(0, errors.get(),
+				"Request errors detected: " + formatErrorSummary(errorCounts, errorSamples));
+	}
+
+	@Disabled("Heavy load test; enable manually")
+	@Test
+	public void testSseServerHeavyLoad() throws Exception {
+		int durationSeconds = 45;
+		int concurrentConnections = 1000;
+		int loadThreads = 200;
+
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		Server server = Server.withPort(httpPort).build();
+		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
+				.concurrentConnectionLimit(Math.max(0, concurrentConnections * 2))
+				.build();
+
+		SokletConfig config = SokletConfig.withServer(server)
+				.serverSentEventServer(sseServer)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SSETestResource.class)))
+				.build();
+
+		List<Socket> sockets = Collections.synchronizedList(new ArrayList<>());
+		AtomicInteger errors = new AtomicInteger();
+
+		try (Soklet soklet = Soklet.withConfig(config)) {
+			soklet.start();
+
+			ExecutorService executor = Executors.newFixedThreadPool(Math.min(loadThreads, concurrentConnections));
+			CountDownLatch latch = new CountDownLatch(concurrentConnections);
+
+			for (int i = 0; i < concurrentConnections; i++) {
+				executor.submit(() -> {
+					try {
+						Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000);
+						socket.setSoTimeout(2000);
+						write(socket, "GET /events HTTP/1.1\r\n" +
+								"Host: 127.0.0.1:" + ssePort + "\r\n" +
+								"Accept: text/event-stream\r\n" +
+								"\r\n");
+						readResponse(socket);
+						sockets.add(socket);
+					} catch (Exception e) {
+						errors.incrementAndGet();
+					} finally {
+						latch.countDown();
+					}
+				});
+			}
+
+			latch.await(Math.max(10L, durationSeconds / 2L), TimeUnit.SECONDS);
+			executor.shutdown();
+
+			Thread.sleep(TimeUnit.SECONDS.toMillis(durationSeconds));
+		} finally {
+			for (Socket socket : sockets) {
+				try {
+					socket.close();
+				} catch (Exception ignored) {
+					// best effort
+				}
+			}
+		}
+
+		Assertions.assertTrue(sockets.size() > 0, "No SSE connections established");
+		Assertions.assertEquals(0, errors.get(), "SSE connection errors detected");
+	}
+
+	@Test
 	public void testLargeRequestBodyMemoryHandling() throws Exception {
 		// Test memory handling for large request bodies
 		Server server = Server.withPort(findFreePort())
@@ -926,6 +1244,117 @@ public class AdvancedTests {
 
 	private String firstLine(String resp) {
 		return resp.lines().findFirst().orElse("empty");
+	}
+
+	private void forceGc() throws InterruptedException {
+		System.gc();
+		Thread.sleep(100);
+		System.gc();
+	}
+
+	private long usedMemory() {
+		Runtime runtime = Runtime.getRuntime();
+		return runtime.totalMemory() - runtime.freeMemory();
+	}
+
+	private int readHttpStatusAndDrainBody(InputStream in) throws IOException {
+		String statusLine = readLineCRLF(in);
+		if (statusLine.isEmpty())
+			throw new IOException("Empty status line");
+
+		String[] parts = statusLine.split(" ", 3);
+		if (parts.length < 2)
+			throw new IOException("Malformed status line: " + statusLine);
+
+		int statusCode = Integer.parseInt(parts[1]);
+		int contentLength = 0;
+
+		while (true) {
+			String line = readLineCRLF(in);
+			if (line.isEmpty())
+				break;
+
+			int idx = line.indexOf(':');
+			if (idx <= 0)
+				continue;
+
+			String name = line.substring(0, idx).trim().toLowerCase(Locale.ROOT);
+			String value = line.substring(idx + 1).trim();
+			if ("content-length".equals(name)) {
+				try {
+					contentLength = Integer.parseInt(value);
+				} catch (NumberFormatException ignored) {
+					contentLength = 0;
+				}
+			}
+		}
+
+		if (contentLength > 0)
+			readN(in, contentLength);
+
+		return statusCode;
+	}
+
+	private String readLineCRLF(InputStream in) throws IOException {
+		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
+		int prev = -1;
+		int cur;
+		while ((cur = in.read()) != -1) {
+			if (prev == '\r' && cur == '\n')
+				break;
+			if (cur != '\r')
+				buf.write(cur);
+			prev = cur;
+		}
+		return buf.toString(StandardCharsets.US_ASCII);
+	}
+
+	private byte[] readN(InputStream in, int n) throws IOException {
+		byte[] out = new byte[n];
+		int off = 0;
+		while (off < n) {
+			int r = in.read(out, off, n - off);
+			if (r == -1)
+				throw new EOFException("short read");
+			off += r;
+		}
+		return out;
+	}
+
+	private void closeQuietly(Socket socket) {
+		if (socket == null)
+			return;
+		try {
+			socket.close();
+		} catch (Exception ignored) {
+			// best effort
+		}
+	}
+
+	private void recordError(ConcurrentHashMap<String, AtomicInteger> errorCounts,
+													 ConcurrentHashMap<String, String> errorSamples,
+													 Throwable error) {
+		String key = error.getClass().getSimpleName();
+		errorCounts.computeIfAbsent(key, __ -> new AtomicInteger()).incrementAndGet();
+		errorSamples.computeIfAbsent(key, __ -> error.toString());
+	}
+
+	private String formatErrorSummary(ConcurrentHashMap<String, AtomicInteger> errorCounts,
+																		ConcurrentHashMap<String, String> errorSamples) {
+		if (errorCounts.isEmpty())
+			return "none";
+
+		StringBuilder sb = new StringBuilder();
+		for (Map.Entry<String, AtomicInteger> entry : errorCounts.entrySet()) {
+			if (sb.length() > 0)
+				sb.append(", ");
+			String key = entry.getKey();
+			sb.append(key).append("=").append(entry.getValue().get());
+			String sample = errorSamples.get(key);
+			if (sample != null)
+				sb.append(" (e.g. ").append(sample).append(")");
+		}
+		return sb.toString();
 	}
 
 	@Test
