@@ -94,13 +94,13 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	public static DefaultResourceMethodResolver withClasses(@Nullable Set<Class<?>> resourceClasses) {
+	public static DefaultResourceMethodResolver withClasses(@Nullable Set<@NonNull Class<?>> resourceClasses) {
 		requireNonNull(resourceClasses);
 		return new DefaultResourceMethodResolver(resourceClasses, null);
 	}
 
 	@NonNull
-	public static DefaultResourceMethodResolver withMethods(@NonNull Set<Method> methods) {
+	public static DefaultResourceMethodResolver withMethods(@NonNull Set<@NonNull Method> methods) {
 		requireNonNull(methods);
 		return new DefaultResourceMethodResolver(null, methods);
 	}
@@ -310,8 +310,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	@NonNull
 	@Override
-	public Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
-																													 @NonNull ServerType serverType) {
+	public Optional<@NonNull ResourceMethod> resourceMethodForRequest(@NonNull Request request,
+																																	 @NonNull ServerType serverType) {
 		requireNonNull(request);
 		requireNonNull(serverType);
 
@@ -565,12 +565,12 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	@NonNull
 	@Override
-	public Set<ResourceMethod> getResourceMethods() {
+	public Set<@NonNull ResourceMethod> getResourceMethods() {
 		return this.resourceMethods;
 	}
 
 	@NonNull
-	public Set<Method> getMethods() {
+	public Set<@NonNull Method> getMethods() {
 		return this.methods;
 	}
 

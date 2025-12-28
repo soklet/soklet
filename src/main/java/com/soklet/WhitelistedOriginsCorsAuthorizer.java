@@ -63,12 +63,12 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	 * @return an instance of {@link WhitelistedOriginsCorsAuthorizer}
 	 */
 	@NonNull
-	public static WhitelistedOriginsCorsAuthorizer withOrigins(@NonNull Set<String> origins,
+	public static WhitelistedOriginsCorsAuthorizer withOrigins(@NonNull Set<@NonNull String> origins,
 																														 @NonNull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(origins);
 		requireNonNull(allowCredentialsResolver);
 
-		Set<String> normalizedOrigins = Collections.unmodifiableSet(new TreeSet<>(origins.stream()
+		Set<@NonNull String> normalizedOrigins = Collections.unmodifiableSet(new TreeSet<>(origins.stream()
 				.map(origin -> normalizeOrigin(origin))
 				.collect(Collectors.toSet())));
 
@@ -104,8 +104,8 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@NonNull
 	@Override
-	public Optional<CorsResponse> authorize(@NonNull Request request,
-																					@NonNull Cors cors) {
+	public Optional<@NonNull CorsResponse> authorize(@NonNull Request request,
+																								@NonNull Cors cors) {
 		requireNonNull(request);
 		requireNonNull(cors);
 
@@ -130,9 +130,9 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@NonNull
 	@Override
-	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
-																														@NonNull CorsPreflight corsPreflight,
-																														@NonNull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
+	public Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																																		@NonNull CorsPreflight corsPreflight,
+																																		@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);
 		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);

@@ -46,7 +46,7 @@ public final class CorsResponse {
 	@Nullable
 	private final Boolean accessControlAllowCredentials;
 	@NonNull
-	private final Set<String> accessControlExposeHeaders;
+	private final Set<@NonNull String> accessControlExposeHeaders;
 
 	/**
 	 * Acquires a builder for {@link CorsResponse} instances.
@@ -121,7 +121,7 @@ public final class CorsResponse {
 	 * @return the header value
 	 */
 	@NonNull
-	public Optional<Boolean> getAccessControlAllowCredentials() {
+	public Optional<@NonNull Boolean> getAccessControlAllowCredentials() {
 		return Optional.ofNullable(this.accessControlAllowCredentials);
 	}
 
@@ -131,7 +131,7 @@ public final class CorsResponse {
 	 * @return the header value
 	 */
 	@NonNull
-	public Set<String> getAccessControlExposeHeaders() {
+	public Set<@NonNull String> getAccessControlExposeHeaders() {
 		return this.accessControlExposeHeaders;
 	}
 
@@ -149,7 +149,7 @@ public final class CorsResponse {
 		@Nullable
 		private Boolean accessControlAllowCredentials;
 		@Nullable
-		private Set<String> accessControlExposeHeaders;
+		private Set<@NonNull String> accessControlExposeHeaders;
 
 		protected Builder(@NonNull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
@@ -170,7 +170,7 @@ public final class CorsResponse {
 		}
 
 		@NonNull
-		public Builder accessControlExposeHeaders(@Nullable Set<String> accessControlExposeHeaders) {
+		public Builder accessControlExposeHeaders(@Nullable Set<@NonNull String> accessControlExposeHeaders) {
 			this.accessControlExposeHeaders = accessControlExposeHeaders;
 			return this;
 		}
@@ -215,14 +215,14 @@ public final class CorsResponse {
 		}
 
 		@NonNull
-		public Copier accessControlExposeHeaders(@Nullable Set<String> accessControlExposeHeaders) {
+		public Copier accessControlExposeHeaders(@Nullable Set<@NonNull String> accessControlExposeHeaders) {
 			this.builder.accessControlExposeHeaders(accessControlExposeHeaders);
 			return this;
 		}
 
 		// Convenience method for mutation
 		@NonNull
-		public Copier accessControlExposeHeaders(@NonNull Consumer<Set<String>> accessControlExposeHeadersConsumer) {
+		public Copier accessControlExposeHeaders(@NonNull Consumer<Set<@NonNull String>> accessControlExposeHeadersConsumer) {
 			requireNonNull(accessControlExposeHeadersConsumer);
 
 			if (this.builder.accessControlExposeHeaders == null)

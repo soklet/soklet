@@ -59,7 +59,7 @@ public final class ResourcePath {
 	@NonNull
 	private final String path;
 	@NonNull
-	private final List<String> components;
+	private final List<@NonNull String> components;
 
 	/**
 	 * Vends an instance that represents a runtime representation of a resource path, for example {@code /users/123}.
@@ -150,7 +150,7 @@ public final class ResourcePath {
 	 * @throws IllegalArgumentException if the provided resource path declaration does not match this resource path, i.e. {@link #matches(ResourcePathDeclaration)} is {@code false}
 	 */
 	@NonNull
-	public Map<String, String> extractPlaceholders(@NonNull ResourcePathDeclaration resourcePathDeclaration) {
+	public Map<@NonNull String, @NonNull String> extractPlaceholders(@NonNull ResourcePathDeclaration resourcePathDeclaration) {
 		requireNonNull(resourcePathDeclaration);
 
 		if (!matches(resourcePathDeclaration))
@@ -198,7 +198,7 @@ public final class ResourcePath {
 	 * @return the components, or the empty list if this path is equal to {@code /}
 	 */
 	@NonNull
-	public List<String> getComponents() {
+	public List<@NonNull String> getComponents() {
 		return this.components;
 	}
 
@@ -209,7 +209,7 @@ public final class ResourcePath {
 	 * @return Logical components of the supplied {@code path}
 	 */
 	@NonNull
-	protected List<String> extractComponents(@NonNull String path) {
+	protected List<@NonNull String> extractComponents(@NonNull String path) {
 		requireNonNull(path);
 
 		if ("/".equals(path))

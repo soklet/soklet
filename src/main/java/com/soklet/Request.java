@@ -87,13 +87,13 @@ public final class Request {
 	@NonNull
 	private final ResourcePath resourcePath;
 	@NonNull
-	private final Map<String, Set<String>> queryParameters;
+	private final Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters;
 	@Nullable
 	private final String contentType;
 	@Nullable
 	private final Charset charset;
 	@NonNull
-	private final Map<String, Set<String>> headers;
+	private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
 	@Nullable
 	private final InetSocketAddress remoteAddress;
 	@Nullable
@@ -115,15 +115,15 @@ public final class Request {
 	@Nullable
 	private volatile String bodyAsString = null;
 	@Nullable
-	private volatile List<Locale> locales = null;
+	private volatile List<@NonNull Locale> locales = null;
 	@Nullable
-	private volatile List<LanguageRange> languageRanges = null;
+	private volatile List<@NonNull LanguageRange> languageRanges = null;
 	@Nullable
-	private volatile Map<String, Set<String>> cookies = null;
+	private volatile Map<@NonNull String, @NonNull Set<@NonNull String>> cookies = null;
 	@Nullable
-	private volatile Map<String, Set<MultipartField>> multipartFields = null;
+	private volatile Map<@NonNull String, @NonNull Set<@NonNull MultipartField>> multipartFields = null;
 	@Nullable
-	private volatile Map<String, Set<String>> formParameters = null;
+	private volatile Map<@NonNull String, @NonNull Set<@NonNull String>> formParameters = null;
 
 	/**
 	 * Acquires a builder for {@link Request} instances from the URL provided by clients on a "raw" HTTP/1.1 request line.
@@ -411,7 +411,7 @@ public final class Request {
 	 * @return the request's cookies
 	 */
 	@NonNull
-	public Map<String, Set<String>> getCookies() {
+	public Map<@NonNull String, @NonNull Set<@NonNull String>> getCookies() {
 		Map<String, Set<String>> result = this.cookies;
 
 		if (result == null) {
@@ -445,7 +445,7 @@ public final class Request {
 	 * @return the request's query parameters
 	 */
 	@NonNull
-	public Map<String, Set<String>> getQueryParameters() {
+	public Map<@NonNull String, @NonNull Set<@NonNull String>> getQueryParameters() {
 		return this.queryParameters;
 	}
 
@@ -462,7 +462,7 @@ public final class Request {
 	 * @return the request's form parameters
 	 */
 	@NonNull
-	public Map<String, Set<String>> getFormParameters() {
+	public Map<@NonNull String, @NonNull Set<@NonNull String>> getFormParameters() {
 		Map<String, Set<String>> result = this.formParameters;
 
 		if (result == null) {
@@ -516,7 +516,7 @@ public final class Request {
 	 * @return the raw query for this request, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	public Optional<String> getRawQuery() {
+	public Optional<@NonNull String> getRawQuery() {
 		return Optional.ofNullable(this.rawQuery);
 	}
 
@@ -544,7 +544,7 @@ public final class Request {
 	 * @return the remote address for this request, or {@link Optional#empty()} if unavailable
 	 */
 	@NonNull
-	public Optional<InetSocketAddress> getRemoteAddress() {
+	public Optional<@NonNull InetSocketAddress> getRemoteAddress() {
 		return Optional.ofNullable(this.remoteAddress);
 	}
 
@@ -561,7 +561,7 @@ public final class Request {
 	 * @return the request's headers
 	 */
 	@NonNull
-	public Map<String, Set<String>> getHeaders() {
+	public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
 		return this.headers;
 	}
 
@@ -571,7 +571,7 @@ public final class Request {
 	 * @return the request's {@code Content-Type} header value, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<String> getContentType() {
+	public Optional<@NonNull String> getContentType() {
 		return Optional.ofNullable(this.contentType);
 	}
 
@@ -581,7 +581,7 @@ public final class Request {
 	 * @return the request's character encoding, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<Charset> getCharset() {
+	public Optional<@NonNull Charset> getCharset() {
 		return Optional.ofNullable(this.charset);
 	}
 
@@ -610,7 +610,7 @@ public final class Request {
 	 * @return the request's multipart fields, or the empty map if none are present
 	 */
 	@NonNull
-	public Map<String, Set<MultipartField>> getMultipartFields() {
+	public Map<@NonNull String, @NonNull Set<@NonNull MultipartField>> getMultipartFields() {
 		if (!isMultipart())
 			return Map.of();
 
@@ -641,7 +641,7 @@ public final class Request {
 	 * @return the request body bytes, or {@link Optional#empty()} if none was supplied
 	 */
 	@NonNull
-	public Optional<byte[]> getBody() {
+	public Optional<@NonNull byte[]> getBody() {
 		return Optional.ofNullable(this.body);
 
 		// Note: it would be nice to defensively copy, but it's inefficient
@@ -676,7 +676,7 @@ public final class Request {
 	 * @return a {@link String} representation of this request's body, or {@link Optional#empty()} if no request body was specified by the client
 	 */
 	@NonNull
-	public Optional<String> getBodyAsString() {
+	public Optional<@NonNull String> getBodyAsString() {
 		// Lazily instantiate a string instance using double-checked locking
 		String result = this.bodyAsString;
 
@@ -706,7 +706,7 @@ public final class Request {
 	 * @return non-preflight CORS request data, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	public Optional<Cors> getCors() {
+	public Optional<@NonNull Cors> getCors() {
 		return Optional.ofNullable(this.cors);
 	}
 
@@ -718,7 +718,7 @@ public final class Request {
 	 * @return preflight CORS request data, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	public Optional<CorsPreflight> getCorsPreflight() {
+	public Optional<@NonNull CorsPreflight> getCorsPreflight() {
 		return Optional.ofNullable(this.corsPreflight);
 	}
 
@@ -734,7 +734,7 @@ public final class Request {
 	 * @return locale information for this request, or the empty list if none was specified
 	 */
 	@NonNull
-	public List<Locale> getLocales() {
+	public List<@NonNull Locale> getLocales() {
 		// Lazily instantiate our parsed locales using double-checked locking
 		List<Locale> result = this.locales;
 
@@ -785,7 +785,7 @@ public final class Request {
 	 * @return language range information for this request, or the empty list if none was specified
 	 */
 	@NonNull
-	public List<LanguageRange> getLanguageRanges() {
+	public List<@NonNull LanguageRange> getLanguageRanges() {
 		// Lazily instantiate our parsed language ranges using double-checked locking
 		List<LanguageRange> result = this.languageRanges;
 
@@ -837,7 +837,7 @@ public final class Request {
 	 * @throws IllegalQueryParameterException if the query parameter with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<String> getQueryParameter(@NonNull String name) {
+	public Optional<@NonNull String> getQueryParameter(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -863,7 +863,7 @@ public final class Request {
 	 * @throws IllegalFormParameterException if the form parameter with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<String> getFormParameter(@NonNull String name) {
+	public Optional<@NonNull String> getFormParameter(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -889,7 +889,7 @@ public final class Request {
 	 * @throws IllegalRequestHeaderException if the header with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<String> getHeader(@NonNull String name) {
+	public Optional<@NonNull String> getHeader(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -915,7 +915,7 @@ public final class Request {
 	 * @throws IllegalRequestCookieException if the cookie with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<String> getCookie(@NonNull String name) {
+	public Optional<@NonNull String> getCookie(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -941,7 +941,7 @@ public final class Request {
 	 * @throws IllegalMultipartFieldException if the multipart field with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<MultipartField> getMultipartField(@NonNull String name) {
+	public Optional<@NonNull MultipartField> getMultipartField(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -1038,7 +1038,7 @@ public final class Request {
 		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
-		private Map<String, Set<String>> headers;
+		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
 		@Nullable
 		private InetSocketAddress remoteAddress;
 		@Nullable
@@ -1088,7 +1088,7 @@ public final class Request {
 		}
 
 		@NonNull
-		public RawBuilder headers(@Nullable Map<String, Set<String>> headers) {
+		public RawBuilder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.headers = headers;
 			return this;
 		}
@@ -1141,9 +1141,9 @@ public final class Request {
 		@Nullable
 		private MultipartParser multipartParser;
 		@Nullable
-		private Map<String, Set<String>> queryParameters;
+		private Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters;
 		@Nullable
-		private Map<String, Set<String>> headers;
+		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
 		@Nullable
 		private InetSocketAddress remoteAddress;
 		@Nullable
@@ -1207,13 +1207,13 @@ public final class Request {
 		}
 
 		@NonNull
-		public PathBuilder queryParameters(@Nullable Map<String, Set<String>> queryParameters) {
+		public PathBuilder queryParameters(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters) {
 			this.queryParameters = queryParameters;
 			return this;
 		}
 
 		@NonNull
-		public PathBuilder headers(@Nullable Map<String, Set<String>> headers) {
+		public PathBuilder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.headers = headers;
 			return this;
 		}
@@ -1311,7 +1311,7 @@ public final class Request {
 		}
 
 		@NonNull
-		public Copier queryParameters(@Nullable Map<String, Set<String>> queryParameters) {
+		public Copier queryParameters(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters) {
 			this.builder.queryParameters(queryParameters);
 			this.queryParametersModified = true;
 			// Clear preserved raw query since decoded query parameters changed
@@ -1321,7 +1321,7 @@ public final class Request {
 
 		// Convenience method for mutation
 		@NonNull
-		public Copier queryParameters(@NonNull Consumer<Map<String, Set<String>>> queryParametersConsumer) {
+		public Copier queryParameters(@NonNull Consumer<Map<@NonNull String, @NonNull Set<@NonNull String>>> queryParametersConsumer) {
 			requireNonNull(queryParametersConsumer);
 
 			if (this.builder.queryParameters == null)
@@ -1335,7 +1335,7 @@ public final class Request {
 		}
 
 		@NonNull
-		public Copier headers(@Nullable Map<String, Set<String>> headers) {
+		public Copier headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
@@ -1348,7 +1348,7 @@ public final class Request {
 
 		// Convenience method for mutation
 		@NonNull
-		public Copier headers(@NonNull Consumer<Map<String, Set<String>>> headersConsumer) {
+		public Copier headers(@NonNull Consumer<Map<@NonNull String, @NonNull Set<@NonNull String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
 			if (this.builder.headers == null)

@@ -58,11 +58,11 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		@NonNull
 		private final DefaultSimulator simulator;
 		@NonNull
-		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
+		private final AtomicReference<@Nullable Consumer<Throwable>> unicastErrorHandler;
 		@NonNull
-		private List<ServerSentEvent> clientInitializerEvents;
+		private List<@NonNull ServerSentEvent> clientInitializerEvents;
 		@NonNull
-		private List<String> clientInitializerComments;
+		private List<@NonNull String> clientInitializerComments;
 		@NonNull
 		private final ReentrantLock lock;
 		@Nullable
@@ -263,7 +263,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 
 		@NonNull
-		private AtomicReference<Consumer<Throwable>> getUnicastErrorHandler() {
+		private AtomicReference<@Nullable Consumer<Throwable>> getUnicastErrorHandler() {
 			return this.unicastErrorHandler;
 		}
 
@@ -284,22 +284,22 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 
 		@NonNull
-		private List<ServerSentEvent> getClientInitializerEvents() {
+		private List<@NonNull ServerSentEvent> getClientInitializerEvents() {
 			return this.clientInitializerEvents;
 		}
 
 		@NonNull
-		private List<String> getClientInitializerComments() {
+		private List<@NonNull String> getClientInitializerComments() {
 			return this.clientInitializerComments;
 		}
 
 		@NonNull
-		private Optional<Consumer<ServerSentEvent>> getEventConsumer() {
+		private Optional<@NonNull Consumer<ServerSentEvent>> getEventConsumer() {
 			return Optional.ofNullable(this.eventConsumer);
 		}
 
 		@NonNull
-		private Optional<Consumer<String>> getCommentConsumer() {
+		private Optional<@NonNull Consumer<String>> getCommentConsumer() {
 			return Optional.ofNullable(this.commentConsumer);
 		}
 

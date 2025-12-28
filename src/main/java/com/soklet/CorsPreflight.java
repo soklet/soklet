@@ -57,7 +57,7 @@ public final class CorsPreflight {
 	@Nullable
 	private final HttpMethod accessControlRequestMethod;
 	@NonNull
-	private final Set<String> accessControlRequestHeaders;
+	private final Set<@NonNull String> accessControlRequestHeaders;
 
 	/**
 	 * Acquires a CORS <strong>preflight</strong> request representation for the given HTTP request data.
@@ -92,7 +92,7 @@ public final class CorsPreflight {
 	@NonNull
 	public static CorsPreflight with(@NonNull String origin,
 																	 @NonNull HttpMethod accessControlRequestMethod,
-																	 @Nullable Set<String> accessControlRequestHeaders) {
+																	 @Nullable Set<@NonNull String> accessControlRequestHeaders) {
 		requireNonNull(origin);
 		requireNonNull(accessControlRequestMethod);
 
@@ -108,7 +108,7 @@ public final class CorsPreflight {
 	 * @return the CORS preflight data for this request, or {@link Optional#empty()} if insufficient data is present
 	 */
 	@NonNull
-	public static Optional<CorsPreflight> fromHeaders(@NonNull Map<String, Set<String>> headers) {
+	public static Optional<@NonNull CorsPreflight> fromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		// Build a lowercase-key view of headers for case-insensitive lookups
@@ -169,7 +169,7 @@ public final class CorsPreflight {
 
 	private CorsPreflight(@NonNull String origin,
 												@NonNull HttpMethod accessControlRequestMethod,
-												@Nullable Set<String> accessControlRequestHeaders) {
+												@Nullable Set<@NonNull String> accessControlRequestHeaders) {
 		requireNonNull(origin);
 		requireNonNull(accessControlRequestMethod);
 
@@ -230,7 +230,7 @@ public final class CorsPreflight {
 	 * @return the set of header values, or the empty set if not present
 	 */
 	@NonNull
-	public Set<String> getAccessControlRequestHeaders() {
+	public Set<@NonNull String> getAccessControlRequestHeaders() {
 		return this.accessControlRequestHeaders;
 	}
 }

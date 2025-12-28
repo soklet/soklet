@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
@@ -42,6 +43,6 @@ public interface ResourceMethodParameterProvider {
 	 * @return the list of parameters to use when performing Java method invocation, or the empty list if no parameters are necessary
 	 */
 	@NonNull
-	List<Object> parameterValuesForResourceMethod(@NonNull Request request,
-																								@NonNull ResourceMethod resourceMethod);
+	List<@Nullable Object> parameterValuesForResourceMethod(@NonNull Request request,
+																														@NonNull ResourceMethod resourceMethod);
 }

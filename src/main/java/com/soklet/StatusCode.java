@@ -362,7 +362,7 @@ public enum StatusCode {
 	HTTP_511(511, "Network Authentication Required");
 
 	@NonNull
-	private static final Map<Integer, StatusCode> STATUS_CODES_BY_NUMBER;
+	private static final Map<@NonNull Integer, @NonNull StatusCode> STATUS_CODES_BY_NUMBER;
 
 	static {
 		Map<Integer, StatusCode> statusCodesByNumber = new HashMap<>();
@@ -394,7 +394,7 @@ public enum StatusCode {
 	 * @return the enum value that corresponds to the provided HTTP status code, or {@link Optional#empty()} if none exists
 	 */
 	@NonNull
-	public static Optional<StatusCode> fromStatusCode(@NonNull Integer statusCode) {
+	public static Optional<@NonNull StatusCode> fromStatusCode(@NonNull Integer statusCode) {
 		return Optional.ofNullable(STATUS_CODES_BY_NUMBER.get(statusCode));
 	}
 

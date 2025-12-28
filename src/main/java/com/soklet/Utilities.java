@@ -71,7 +71,7 @@ public final class Utilities {
 	@NonNull
 	private static final byte[] EMPTY_BYTE_ARRAY;
 	@NonNull
-	private static final Map<String, Locale> LOCALES_BY_LANGUAGE_RANGE_RANGE;
+	private static final Map<@NonNull String, @NonNull Locale> LOCALES_BY_LANGUAGE_RANGE_RANGE;
 	@NonNull
 	private static final Pattern HEAD_WHITESPACE_PATTERN;
 	@NonNull
@@ -231,7 +231,7 @@ public final class Utilities {
 	 * @throws IllegalRequestException if the query string contains malformed percent-encoding
 	 */
 	@NonNull
-	public static Map<String, Set<String>> extractQueryParametersFromQuery(@NonNull String query,
+	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromQuery(@NonNull String query,
 																																				 @NonNull QueryFormat queryFormat) {
 		requireNonNull(query);
 		requireNonNull(queryFormat);
@@ -255,7 +255,7 @@ public final class Utilities {
 	 * @throws IllegalRequestException if the query string contains malformed percent-encoding
 	 */
 	@NonNull
-	public static Map<String, Set<String>> extractQueryParametersFromQuery(@NonNull String query,
+	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromQuery(@NonNull String query,
 																																				 @NonNull QueryFormat queryFormat,
 																																				 @NonNull Charset charset) {
 		requireNonNull(query);
@@ -282,7 +282,7 @@ public final class Utilities {
 	 * @throws IllegalRequestException if the URL or query contains malformed percent-encoding
 	 */
 	@NonNull
-	public static Map<String, Set<String>> extractQueryParametersFromUrl(@NonNull String url,
+	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromUrl(@NonNull String url,
 																																			 @NonNull QueryFormat queryFormat) {
 		requireNonNull(url);
 		requireNonNull(queryFormat);
@@ -306,7 +306,7 @@ public final class Utilities {
 	 * @throws IllegalRequestException if the URL or query contains malformed percent-encoding
 	 */
 	@NonNull
-	public static Map<String, Set<String>> extractQueryParametersFromUrl(@NonNull String url,
+	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromUrl(@NonNull String url,
 																																			 @NonNull QueryFormat queryFormat,
 																																			 @NonNull Charset charset) {
 		requireNonNull(url);
@@ -444,7 +444,7 @@ public final class Utilities {
 	 * @return a map of cookie name to distinct values; empty if no valid cookies are present
 	 */
 	@NonNull
-	public static Map<String, Set<String>> extractCookiesFromHeaders(@NonNull Map<String, Set<String>> headers) {
+	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractCookiesFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		// Cookie *names* must be case-sensitive; keep LinkedHashMap (NOT case-insensitive)
@@ -527,7 +527,7 @@ public final class Utilities {
 	 * Splits a Cookie header string into components on ';' but ONLY when not inside a quoted value.
 	 * Supports backslash-escaped quotes within quoted strings.
 	 */
-	private static List<String> splitCookieHeaderRespectingQuotes(@NonNull String headerValue) {
+	private static List<@NonNull String> splitCookieHeaderRespectingQuotes(@NonNull String headerValue) {
 		List<String> parts = new ArrayList<>();
 		StringBuilder cur = new StringBuilder(headerValue.length());
 		boolean inQuotes = false;
@@ -704,7 +704,7 @@ public final class Utilities {
 	 * @return the raw query component, or {@link Optional#empty()} if none
 	 */
 	@NonNull
-	public static Optional<String> extractRawQueryFromUrl(@NonNull String url) {
+	public static Optional<@NonNull String> extractRawQueryFromUrl(@NonNull String url) {
 		requireNonNull(url);
 
 		url = trimAggressivelyToEmpty(url);
@@ -737,7 +737,7 @@ public final class Utilities {
 	 * @return the encoded query string, or the empty string if no parameters
 	 */
 	@NonNull
-	public static String encodeQueryParameters(@NonNull Map<String, Set<String>> queryParameters,
+	public static String encodeQueryParameters(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters,
 																						 @NonNull QueryFormat queryFormat) {
 		requireNonNull(queryParameters);
 		requireNonNull(queryFormat);
@@ -804,7 +804,7 @@ public final class Utilities {
 	 * @return locales in descending preference order; empty if none could be resolved
 	 */
 	@NonNull
-	public static List<Locale> extractLocalesFromAcceptLanguageHeaderValue(@NonNull String acceptLanguageHeaderValue) {
+	public static List<@NonNull Locale> extractLocalesFromAcceptLanguageHeaderValue(@NonNull String acceptLanguageHeaderValue) {
 		requireNonNull(acceptLanguageHeaderValue);
 
 		try {
@@ -861,7 +861,7 @@ public final class Utilities {
 	 * @return the URL prefix, or {@link Optional#empty()} if it could not be determined
 	 */
 	@NonNull
-	public static Optional<String> extractClientUrlPrefixFromHeaders(@NonNull Map<String, Set<String>> headers) {
+	public static Optional<@NonNull String> extractClientUrlPrefixFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		// Host                   developer.mozilla.org OR developer.mozilla.org:443 OR [2001:db8::1]:8443
@@ -1093,7 +1093,7 @@ public final class Utilities {
 	 * @see #extractContentTypeFromHeaderValue(String)
 	 */
 	@NonNull
-	public static Optional<String> extractContentTypeFromHeaders(@NonNull Map<String, Set<String>> headers) {
+	public static Optional<@NonNull String> extractContentTypeFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		Set<String> contentTypeHeaderValues = headers.get("Content-Type");
@@ -1113,7 +1113,7 @@ public final class Utilities {
 	 * @return the media type if present; otherwise {@link Optional#empty()}
 	 */
 	@NonNull
-	public static Optional<String> extractContentTypeFromHeaderValue(@Nullable String contentTypeHeaderValue) {
+	public static Optional<@NonNull String> extractContentTypeFromHeaderValue(@Nullable String contentTypeHeaderValue) {
 		contentTypeHeaderValue = trimAggressivelyToNull(contentTypeHeaderValue);
 
 		if (contentTypeHeaderValue == null)
@@ -1143,7 +1143,7 @@ public final class Utilities {
 	 * @see #extractCharsetFromHeaderValue(String)
 	 */
 	@NonNull
-	public static Optional<Charset> extractCharsetFromHeaders(@NonNull Map<String, Set<String>> headers) {
+	public static Optional<@NonNull Charset> extractCharsetFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		Set<String> contentTypeHeaderValues = headers.get("Content-Type");
@@ -1164,7 +1164,7 @@ public final class Utilities {
 	 * @return the resolved charset if present and valid; otherwise {@link Optional#empty()}
 	 */
 	@NonNull
-	public static Optional<Charset> extractCharsetFromHeaderValue(@Nullable String contentTypeHeaderValue) {
+	public static Optional<@NonNull Charset> extractCharsetFromHeaderValue(@Nullable String contentTypeHeaderValue) {
 		contentTypeHeaderValue = trimAggressivelyToNull(contentTypeHeaderValue);
 
 		if (contentTypeHeaderValue == null)
@@ -1424,7 +1424,7 @@ public final class Utilities {
 	 * @return a normalized mapping of header name keys to values
 	 */
 	@NonNull
-	public static Map<String, Set<String>> extractHeadersFromRawHeaderLines(@NonNull List<String> rawHeaderLines) {
+	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractHeadersFromRawHeaderLines(@NonNull List<@NonNull String> rawHeaderLines) {
 		requireNonNull(rawHeaderLines);
 
 		// 1) Unfold obsolete folded lines (obs-fold): lines beginning with SP/HT are continuations

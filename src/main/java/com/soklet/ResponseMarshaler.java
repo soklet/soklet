@@ -171,7 +171,7 @@ public interface ResponseMarshaler {
 	 */
 	@NonNull
 	MarshaledResponse forMethodNotAllowed(@NonNull Request request,
-																				@NonNull Set<HttpMethod> allowedHttpMethods);
+																				@NonNull Set<@NonNull HttpMethod> allowedHttpMethods);
 
 	/**
 	 * Prepares a response for a request that triggers an <a href="https://httpwg.org/specs/rfc9110.html#status.413">HTTP 413 Content Too Large</a>.
@@ -213,7 +213,7 @@ public interface ResponseMarshaler {
 	 */
 	@NonNull
 	MarshaledResponse forOptions(@NonNull Request request,
-															 @NonNull Set<HttpMethod> allowedHttpMethods);
+															 @NonNull Set<@NonNull HttpMethod> allowedHttpMethods);
 
 	/**
 	 * Prepares a response for an HTTP {@code OPTIONS *} (colloquially, "{@code OPTIONS} Splat") request.
@@ -408,7 +408,7 @@ public interface ResponseMarshaler {
 			 */
 			@NonNull
 			MarshaledResponse handle(@NonNull Request request,
-															 @NonNull Set<HttpMethod> allowedHttpMethods);
+															 @NonNull Set<@NonNull HttpMethod> allowedHttpMethods);
 		}
 
 		/**
@@ -468,7 +468,7 @@ public interface ResponseMarshaler {
 			 */
 			@NonNull
 			MarshaledResponse handle(@NonNull Request request,
-															 @NonNull Set<HttpMethod> allowedHttpMethods);
+															 @NonNull Set<@NonNull HttpMethod> allowedHttpMethods);
 		}
 
 		/**

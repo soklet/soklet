@@ -153,7 +153,7 @@ public final class RequestResult {
 	 * @return the logical response
 	 */
 	@NonNull
-	public Optional<Response> getResponse() {
+	public Optional<@NonNull Response> getResponse() {
 		return Optional.ofNullable(this.response);
 	}
 
@@ -163,7 +163,7 @@ public final class RequestResult {
 	 * @return the CORS preflight logical response
 	 */
 	@NonNull
-	public Optional<CorsPreflightResponse> getCorsPreflightResponse() {
+	public Optional<@NonNull CorsPreflightResponse> getCorsPreflightResponse() {
 		return Optional.ofNullable(this.corsPreflightResponse);
 	}
 
@@ -173,7 +173,7 @@ public final class RequestResult {
 	 * @return the <em>Resource Method</em> that handled the request
 	 */
 	@NonNull
-	public Optional<ResourceMethod> getResourceMethod() {
+	public Optional<@NonNull ResourceMethod> getResourceMethod() {
 		return Optional.ofNullable(this.resourceMethod);
 	}
 
@@ -184,7 +184,7 @@ public final class RequestResult {
 	 * @return the SSE handshake result
 	 */
 	@NonNull
-	Optional<HandshakeResult> getHandshakeResult() {
+	Optional<@NonNull HandshakeResult> getHandshakeResult() {
 		return Optional.ofNullable(this.handshakeResult);
 	}
 

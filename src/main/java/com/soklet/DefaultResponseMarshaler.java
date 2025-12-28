@@ -198,7 +198,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	@NonNull
 	@Override
 	public MarshaledResponse forMethodNotAllowed(@NonNull Request request,
-																							 @NonNull Set<HttpMethod> allowedHttpMethods) {
+																							 @NonNull Set<@NonNull HttpMethod> allowedHttpMethods) {
 		requireNonNull(request);
 		requireNonNull(allowedHttpMethods);
 
@@ -293,7 +293,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	@NonNull
 	@Override
 	public MarshaledResponse forOptions(@NonNull Request request,
-																			@NonNull Set<HttpMethod> allowedHttpMethods) {
+																			@NonNull Set<@NonNull HttpMethod> allowedHttpMethods) {
 		requireNonNull(request);
 		requireNonNull(allowedHttpMethods);
 

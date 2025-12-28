@@ -49,9 +49,9 @@ public final class CorsPreflightResponse {
 	@Nullable
 	private final Duration accessControlMaxAge;
 	@NonNull
-	private final Set<HttpMethod> accessControlAllowMethods;
+	private final Set<@NonNull HttpMethod> accessControlAllowMethods;
 	@NonNull
-	private final Set<String> accessControlAllowHeaders;
+	private final Set<@NonNull String> accessControlAllowHeaders;
 
 	/**
 	 * Acquires a builder for {@link CorsPreflightResponse} instances.
@@ -132,7 +132,7 @@ public final class CorsPreflightResponse {
 	 * @return the header value, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<Boolean> getAccessControlAllowCredentials() {
+	public Optional<@NonNull Boolean> getAccessControlAllowCredentials() {
 		return Optional.ofNullable(this.accessControlAllowCredentials);
 	}
 
@@ -142,7 +142,7 @@ public final class CorsPreflightResponse {
 	 * @return the header value, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<Duration> getAccessControlMaxAge() {
+	public Optional<@NonNull Duration> getAccessControlMaxAge() {
 		return Optional.ofNullable(this.accessControlMaxAge);
 	}
 
@@ -152,7 +152,7 @@ public final class CorsPreflightResponse {
 	 * @return the header values, or the empty set if not specified
 	 */
 	@NonNull
-	public Set<HttpMethod> getAccessControlAllowMethods() {
+	public Set<@NonNull HttpMethod> getAccessControlAllowMethods() {
 		return this.accessControlAllowMethods;
 	}
 
@@ -162,7 +162,7 @@ public final class CorsPreflightResponse {
 	 * @return the header values, or the empty set if not specified
 	 */
 	@NonNull
-	public Set<String> getAccessControlAllowHeaders() {
+	public Set<@NonNull String> getAccessControlAllowHeaders() {
 		return this.accessControlAllowHeaders;
 	}
 
@@ -182,9 +182,9 @@ public final class CorsPreflightResponse {
 		@Nullable
 		private Duration accessControlMaxAge;
 		@Nullable
-		private Set<HttpMethod> accessControlAllowMethods;
+		private Set<@NonNull HttpMethod> accessControlAllowMethods;
 		@Nullable
-		private Set<String> accessControlAllowHeaders;
+		private Set<@NonNull String> accessControlAllowHeaders;
 
 		protected Builder(@NonNull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
@@ -211,13 +211,13 @@ public final class CorsPreflightResponse {
 		}
 
 		@NonNull
-		public Builder accessControlAllowMethods(@Nullable Set<HttpMethod> accessControlAllowMethods) {
+		public Builder accessControlAllowMethods(@Nullable Set<@NonNull HttpMethod> accessControlAllowMethods) {
 			this.accessControlAllowMethods = accessControlAllowMethods;
 			return this;
 		}
 
 		@NonNull
-		public Builder accessControlAllowHeaders(@Nullable Set<String> accessControlAllowHeaders) {
+		public Builder accessControlAllowHeaders(@Nullable Set<@NonNull String> accessControlAllowHeaders) {
 			this.accessControlAllowHeaders = accessControlAllowHeaders;
 			return this;
 		}
@@ -270,14 +270,14 @@ public final class CorsPreflightResponse {
 		}
 
 		@NonNull
-		public Copier accessControlAllowMethods(@Nullable Set<HttpMethod> accessControlAllowMethods) {
+		public Copier accessControlAllowMethods(@Nullable Set<@NonNull HttpMethod> accessControlAllowMethods) {
 			this.builder.accessControlAllowMethods(accessControlAllowMethods);
 			return this;
 		}
 
 		// Convenience method for mutation
 		@NonNull
-		public Copier accessControlAllowMethods(@NonNull Consumer<Set<HttpMethod>> accessControlAllowMethodsConsumer) {
+		public Copier accessControlAllowMethods(@NonNull Consumer<Set<@NonNull HttpMethod>> accessControlAllowMethodsConsumer) {
 			requireNonNull(accessControlAllowMethodsConsumer);
 
 			if (this.builder.accessControlAllowMethods == null)
@@ -288,14 +288,14 @@ public final class CorsPreflightResponse {
 		}
 
 		@NonNull
-		public Copier accessControlAllowHeaders(@Nullable Set<String> accessControlAllowHeaders) {
+		public Copier accessControlAllowHeaders(@Nullable Set<@NonNull String> accessControlAllowHeaders) {
 			this.builder.accessControlAllowHeaders(accessControlAllowHeaders);
 			return this;
 		}
 
 		// Convenience method for mutation
 		@NonNull
-		public Copier accessControlAllowHeaders(@NonNull Consumer<Set<String>> accessControlAllowHeadersConsumer) {
+		public Copier accessControlAllowHeaders(@NonNull Consumer<Set<@NonNull String>> accessControlAllowHeadersConsumer) {
 			requireNonNull(accessControlAllowHeadersConsumer);
 
 			if (this.builder.accessControlAllowHeaders == null)

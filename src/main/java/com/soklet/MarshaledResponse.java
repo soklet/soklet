@@ -55,9 +55,9 @@ public final class MarshaledResponse {
 	@NonNull
 	private final Integer statusCode;
 	@NonNull
-	private final Map<String, Set<String>> headers;
+	private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
 	@NonNull
-	private final Set<ResponseCookie> cookies;
+	private final Set<@NonNull ResponseCookie> cookies;
 	@Nullable
 	private final byte[] body;
 
@@ -146,7 +146,7 @@ public final class MarshaledResponse {
 	 * @return the headers to write
 	 */
 	@NonNull
-	public Map<String, Set<String>> getHeaders() {
+	public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
 		return this.headers;
 	}
 
@@ -156,7 +156,7 @@ public final class MarshaledResponse {
 	 * @return the cookies to write
 	 */
 	@NonNull
-	public Set<ResponseCookie> getCookies() {
+	public Set<@NonNull ResponseCookie> getCookies() {
 		return this.cookies;
 	}
 
@@ -166,7 +166,7 @@ public final class MarshaledResponse {
 	 * @return the response body to write, or {@link Optional#empty()}) if no body should be written
 	 */
 	@NonNull
-	public Optional<byte[]> getBody() {
+	public Optional<@NonNull byte[]> getBody() {
 		return Optional.ofNullable(this.body);
 	}
 
@@ -182,9 +182,9 @@ public final class MarshaledResponse {
 		@NonNull
 		private Integer statusCode;
 		@Nullable
-		private Set<ResponseCookie> cookies;
+		private Set<@NonNull ResponseCookie> cookies;
 		@Nullable
-		private Map<String, Set<String>> headers;
+		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
 		@Nullable
 		private byte[] body;
 
@@ -201,13 +201,13 @@ public final class MarshaledResponse {
 		}
 
 		@NonNull
-		public Builder cookies(@Nullable Set<ResponseCookie> cookies) {
+		public Builder cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
 
 		@NonNull
-		public Builder headers(@Nullable Map<String, Set<String>> headers) {
+		public Builder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.headers = headers;
 			return this;
 		}
@@ -253,14 +253,14 @@ public final class MarshaledResponse {
 		}
 
 		@NonNull
-		public Copier headers(@NonNull Map<String, Set<String>> headers) {
+		public Copier headers(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
 
 		// Convenience method for mutation
 		@NonNull
-		public Copier headers(@NonNull Consumer<Map<String, Set<String>>> headersConsumer) {
+		public Copier headers(@NonNull Consumer<Map<@NonNull String, @NonNull Set<@NonNull String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
 			if (this.builder.headers == null)
@@ -271,14 +271,14 @@ public final class MarshaledResponse {
 		}
 
 		@NonNull
-		public Copier cookies(@Nullable Set<ResponseCookie> cookies) {
+		public Copier cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
 			this.builder.cookies(cookies);
 			return this;
 		}
 
 		// Convenience method for mutation
 		@NonNull
-		public Copier cookies(@NonNull Consumer<Set<ResponseCookie>> cookiesConsumer) {
+		public Copier cookies(@NonNull Consumer<Set<@NonNull ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
 			if (this.builder.cookies == null)

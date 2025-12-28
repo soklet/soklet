@@ -58,7 +58,7 @@ public enum HttpMethod {
 	DELETE;
 
 	@NonNull
-	private static final Set<HttpMethod> VALUES_AS_SET;
+	private static final Set<@NonNull HttpMethod> VALUES_AS_SET;
 
 	static {
 		VALUES_AS_SET = Arrays.stream(HttpMethod.values()).collect(Collectors.toUnmodifiableSet());
@@ -70,7 +70,7 @@ public enum HttpMethod {
 	 * @return a {@link Set} representation of this enum's values
 	 */
 	@NonNull
-	public static Set<HttpMethod> valuesAsSet() {
+	public static Set<@NonNull HttpMethod> valuesAsSet() {
 		return VALUES_AS_SET;
 	}
 }

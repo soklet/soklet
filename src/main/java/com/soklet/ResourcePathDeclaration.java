@@ -100,7 +100,7 @@ public final class ResourcePathDeclaration {
 	@NonNull
 	private final String path;
 	@NonNull
-	private final List<Component> components;
+	private final List<@NonNull Component> components;
 
 	/**
 	 * Vends an instance that represents a compile-time path declaration, for example {@code /users/{userId}}.
@@ -150,7 +150,7 @@ public final class ResourcePathDeclaration {
 	 * @return the {@link ComponentType#VARARGS} component in this declaration, or {@link Optional#empty()} if none exists.
 	 */
 	@NonNull
-	public Optional<Component> getVarargsComponent() {
+	public Optional<@NonNull Component> getVarargsComponent() {
 		if (getComponents().size() == 0)
 			return Optional.empty();
 
@@ -226,7 +226,7 @@ public final class ResourcePathDeclaration {
 	 * @throws IllegalArgumentException if the provided resource path does not match this resource path declaration, i.e. {@link #matches(ResourcePath)} is {@code false}
 	 */
 	@NonNull
-	public Map<String, String> extractPlaceholders(@NonNull ResourcePath resourcePath) {
+	public Map<@NonNull String, @NonNull String> extractPlaceholders(@NonNull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
 
 		if (!matches(resourcePath))
@@ -279,7 +279,7 @@ public final class ResourcePathDeclaration {
 	 * @return the components, or the empty list if this path is equal to {@code /}
 	 */
 	@NonNull
-	public List<Component> getComponents() {
+	public List<@NonNull Component> getComponents() {
 		return this.components;
 	}
 
@@ -330,7 +330,7 @@ public final class ResourcePathDeclaration {
 	 * @return logical components of the supplied {@code path}
 	 */
 	@NonNull
-	protected List<Component> extractComponents(@NonNull String path) {
+	protected List<@NonNull Component> extractComponents(@NonNull String path) {
 		requireNonNull(path);
 
 		if ("/".equals(path))

@@ -63,7 +63,7 @@ public interface ServerSentEventConnection {
 	 * @return the connection-specific context, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	Optional<Object> getClientContext();
+	Optional<@NonNull Object> getClientContext();
 
 	/**
 	 * Categorizes why a Server-Sent Event connection terminated.

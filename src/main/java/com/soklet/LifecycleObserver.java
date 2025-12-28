@@ -140,7 +140,7 @@ public interface LifecycleObserver {
 																				@Nullable ResourceMethod resourceMethod,
 																				@NonNull MarshaledResponse marshaledResponse,
 																				@NonNull Duration duration,
-																				@NonNull List<Throwable> throwables) {
+																				@NonNull List<@NonNull Throwable> throwables) {
 		// No-op by default
 	}
 

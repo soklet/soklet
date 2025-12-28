@@ -53,8 +53,8 @@ public interface ResourceMethodResolver {
 	 * @return the matching <em>Resource Method</em>, or {@link Optional#empty()} if no match was found
 	 */
 	@NonNull
-	Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
-																										@NonNull ServerType serverType);
+	Optional<@NonNull ResourceMethod> resourceMethodForRequest(@NonNull Request request,
+																															@NonNull ServerType serverType);
 
 	/**
 	 * Vends the set of all <em>Resource Methods</em> registered in the system.
@@ -62,7 +62,7 @@ public interface ResourceMethodResolver {
 	 * @return the set of all <em>Resource Methods</em> in the system
 	 */
 	@NonNull
-	Set<ResourceMethod> getResourceMethods();
+	Set<@NonNull ResourceMethod> getResourceMethods();
 
 	/**
 	 * Acquires a threadsafe {@link ResourceMethodResolver} implementation which locates <em>Resource Methods</em> by examining a lookup table of Java {@link Method} declarations that are annotated with {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, {@link com.soklet.annotation.ServerSentEventSource}, etc.
@@ -89,7 +89,7 @@ public interface ResourceMethodResolver {
 	 * @return a {@code ResourceMethodResolver} backed by the given {@code classes}
 	 */
 	@NonNull
-	static ResourceMethodResolver withClasses(@NonNull Set<Class<?>> classes) {
+	static ResourceMethodResolver withClasses(@NonNull Set<@NonNull Class<?>> classes) {
 		requireNonNull(classes);
 		return DefaultResourceMethodResolver.withClasses(classes);
 	}
@@ -103,7 +103,7 @@ public interface ResourceMethodResolver {
 	 * @return a {@code ResourceMethodResolver} backed by the given {@code methods}
 	 */
 	@NonNull
-	static ResourceMethodResolver withMethods(@NonNull Set<Method> methods) {
+	static ResourceMethodResolver withMethods(@NonNull Set<@NonNull Method> methods) {
 		requireNonNull(methods);
 		return DefaultResourceMethodResolver.withMethods(methods);
 	}

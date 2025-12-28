@@ -68,7 +68,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class DefaultResourceMethodParameterProvider implements ResourceMethodParameterProvider {
 	@NonNull
-	private static final Map<Type, Object> DEFAULT_VALUES_BY_PRIMITIVE_TYPE;
+	private static final Map<@NonNull Type, @NonNull Object> DEFAULT_VALUES_BY_PRIMITIVE_TYPE;
 
 	static {
 		// See https://docs.oracle.com/javase/tutorial/java/nutsandbolts/datatypes.html
@@ -94,14 +94,14 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 	@NonNull
 	@Override
-	public List<Object> parameterValuesForResourceMethod(@NonNull Request request,
-																											 @NonNull ResourceMethod resourceMethod) {
+	public List<@Nullable Object> parameterValuesForResourceMethod(@NonNull Request request,
+																																 @NonNull ResourceMethod resourceMethod) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(sokletConfig);
 
 		Parameter[] parameters = resourceMethod.getMethod().getParameters();
-		List<Object> parametersToPass = new ArrayList<>(parameters.length);
+		List<@Nullable Object> parametersToPass = new ArrayList<>(parameters.length);
 
 		for (int i = 0; i < parameters.length; ++i) {
 			Parameter parameter = parameters[i];

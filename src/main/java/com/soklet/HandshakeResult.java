@@ -156,9 +156,9 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		@NotThreadSafe
 		public static final class Builder {
 			@Nullable
-			private Map<String, Set<String>> headers;
+			private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
 			@Nullable
-			private Set<ResponseCookie> cookies;
+			private Set<@NonNull ResponseCookie> cookies;
 			@Nullable
 			private Object clientContext;
 			@Nullable
@@ -175,7 +175,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			 * @return this builder, for chaining
 			 */
 			@NonNull
-			public Builder headers(@Nullable Map<String, Set<String>> headers) {
+			public Builder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 				this.headers = headers;
 				return this;
 			}
@@ -187,7 +187,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			 * @return this builder, for chaining
 			 */
 			@NonNull
-			public Builder cookies(@Nullable Set<ResponseCookie> cookies) {
+			public Builder cookies(@Nullable Set<@NonNull ResponseCookie> cookies) {
 				this.cookies = cookies;
 				return this;
 			}
@@ -231,9 +231,9 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		}
 
 		@Nullable
-		private final Map<String, Set<String>> headers;
+		private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
 		@Nullable
-		private final Set<ResponseCookie> cookies;
+		private final Set<@NonNull ResponseCookie> cookies;
 		@Nullable
 		private final Object clientContext;
 		@Nullable
@@ -258,7 +258,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		 * @return the headers explicitly specified when this handshake was accepted
 		 */
 		@Nullable
-		public Map<String, Set<String>> getHeaders() {
+		public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
 			return this.headers;
 		}
 
@@ -268,7 +268,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		 * @return the cookies explicitly specified when this handshake was accepted
 		 */
 		@Nullable
-		public Set<ResponseCookie> getCookies() {
+		public Set<@NonNull ResponseCookie> getCookies() {
 			return this.cookies;
 		}
 
@@ -280,7 +280,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		 * @return the client context, or {@link Optional#empty()} if none was specified
 		 */
 		@NonNull
-		public Optional<Object> getClientContext() {
+		public Optional<@NonNull Object> getClientContext() {
 			return Optional.ofNullable(this.clientContext);
 		}
 
@@ -290,7 +290,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		 * @return the client initialization function, or {@link Optional#empty()} if none was specified
 		 */
 		@NonNull
-		public Optional<Consumer<ServerSentEventUnicaster>> getClientInitializer() {
+		public Optional<@NonNull Consumer<ServerSentEventUnicaster>> getClientInitializer() {
 			return Optional.ofNullable(this.clientInitializer);
 		}
 
