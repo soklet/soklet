@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -35,7 +35,7 @@ public interface ServerSentEventConnection {
 	 *
 	 * @return the request made by the client to the <em>Event Source Method</em>
 	 */
-	@Nonnull
+	@NonNull
 	Request getRequest();
 
 	/**
@@ -43,7 +43,7 @@ public interface ServerSentEventConnection {
 	 *
 	 * @return the <em>Event Source Method</em> that provided the accepted handshake for this connection
 	 */
-	@Nonnull
+	@NonNull
 	ResourceMethod getResourceMethod();
 
 	/**
@@ -51,7 +51,7 @@ public interface ServerSentEventConnection {
 	 *
 	 * @return the moment at which this connection was established.
 	 */
-	@Nonnull
+	@NonNull
 	Instant getEstablishedAt();
 
 	/**
@@ -61,7 +61,7 @@ public interface ServerSentEventConnection {
 	 *
 	 * @return the connection-specific context, or {@link Optional#empty()} if none was specified
 	 */
-	@Nonnull
+	@NonNull
 	Optional<Object> getClientContext();
 
 	/**

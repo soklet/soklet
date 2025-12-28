@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
@@ -41,15 +41,15 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class CorsPreflightResponse {
-	@Nonnull
+	@NonNull
 	private final String accessControlAllowOrigin;
 	@Nullable
 	private final Boolean accessControlAllowCredentials;
 	@Nullable
 	private final Duration accessControlMaxAge;
-	@Nonnull
+	@NonNull
 	private final Set<HttpMethod> accessControlAllowMethods;
-	@Nonnull
+	@NonNull
 	private final Set<String> accessControlAllowHeaders;
 
 	/**
@@ -58,8 +58,8 @@ public final class CorsPreflightResponse {
 	 * @param accessControlAllowOrigin the required <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin">{@code Access-Control-Allow-Origin}</a> response header value
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder withAccessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+	@NonNull
+	public static Builder withAccessControlAllowOrigin(@NonNull String accessControlAllowOrigin) {
 		requireNonNull(accessControlAllowOrigin);
 		return new Builder(accessControlAllowOrigin);
 	}
@@ -69,12 +69,12 @@ public final class CorsPreflightResponse {
 	 *
 	 * @return a copier for this instance
 	 */
-	@Nonnull
+	@NonNull
 	public Copier copy() {
 		return new Copier(this);
 	}
 
-	protected CorsPreflightResponse(@Nonnull Builder builder) {
+	protected CorsPreflightResponse(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.accessControlAllowOrigin = builder.accessControlAllowOrigin;
@@ -120,7 +120,7 @@ public final class CorsPreflightResponse {
 	 *
 	 * @return the header value
 	 */
-	@Nonnull
+	@NonNull
 	public String getAccessControlAllowOrigin() {
 		return this.accessControlAllowOrigin;
 	}
@@ -130,7 +130,7 @@ public final class CorsPreflightResponse {
 	 *
 	 * @return the header value, or {@link Optional#empty()} if not specified
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Boolean> getAccessControlAllowCredentials() {
 		return Optional.ofNullable(this.accessControlAllowCredentials);
 	}
@@ -140,7 +140,7 @@ public final class CorsPreflightResponse {
 	 *
 	 * @return the header value, or {@link Optional#empty()} if not specified
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Duration> getAccessControlMaxAge() {
 		return Optional.ofNullable(this.accessControlMaxAge);
 	}
@@ -150,7 +150,7 @@ public final class CorsPreflightResponse {
 	 *
 	 * @return the header values, or the empty set if not specified
 	 */
-	@Nonnull
+	@NonNull
 	public Set<HttpMethod> getAccessControlAllowMethods() {
 		return this.accessControlAllowMethods;
 	}
@@ -160,7 +160,7 @@ public final class CorsPreflightResponse {
 	 *
 	 * @return the header values, or the empty set if not specified
 	 */
-	@Nonnull
+	@NonNull
 	public Set<String> getAccessControlAllowHeaders() {
 		return this.accessControlAllowHeaders;
 	}
@@ -174,7 +174,7 @@ public final class CorsPreflightResponse {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nonnull
+		@NonNull
 		private String accessControlAllowOrigin;
 		@Nullable
 		private Boolean accessControlAllowCredentials;
@@ -185,43 +185,43 @@ public final class CorsPreflightResponse {
 		@Nullable
 		private Set<String> accessControlAllowHeaders;
 
-		protected Builder(@Nonnull String accessControlAllowOrigin) {
+		protected Builder(@NonNull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
 			this.accessControlAllowOrigin = accessControlAllowOrigin;
 		}
 
-		@Nonnull
-		public Builder accessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+		@NonNull
+		public Builder accessControlAllowOrigin(@NonNull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
 			this.accessControlAllowOrigin = accessControlAllowOrigin;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
 			this.accessControlAllowCredentials = accessControlAllowCredentials;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder accessControlMaxAge(@Nullable Duration accessControlMaxAge) {
 			this.accessControlMaxAge = accessControlMaxAge;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder accessControlAllowMethods(@Nullable Set<HttpMethod> accessControlAllowMethods) {
 			this.accessControlAllowMethods = accessControlAllowMethods;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder accessControlAllowHeaders(@Nullable Set<String> accessControlAllowHeaders) {
 			this.accessControlAllowHeaders = accessControlAllowHeaders;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public CorsPreflightResponse build() {
 			return new CorsPreflightResponse(this);
 		}
@@ -236,10 +236,10 @@ public final class CorsPreflightResponse {
 	 */
 	@NotThreadSafe
 	public static final class Copier {
-		@Nonnull
+		@NonNull
 		private final Builder builder;
 
-		Copier(@Nonnull CorsPreflightResponse corsPreflightResponse) {
+		Copier(@NonNull CorsPreflightResponse corsPreflightResponse) {
 			requireNonNull(corsPreflightResponse);
 
 			this.builder = new Builder(corsPreflightResponse.getAccessControlAllowOrigin())
@@ -249,34 +249,34 @@ public final class CorsPreflightResponse {
 					.accessControlAllowHeaders(new LinkedHashSet<>(corsPreflightResponse.getAccessControlAllowHeaders()));
 		}
 
-		@Nonnull
-		public Copier accessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+		@NonNull
+		public Copier accessControlAllowOrigin(@NonNull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
 			this.builder.accessControlAllowOrigin(accessControlAllowOrigin);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
 			this.builder.accessControlAllowCredentials(accessControlAllowCredentials);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier accessControlMaxAge(@Nullable Duration accessControlMaxAge) {
 			this.builder.accessControlMaxAge(accessControlMaxAge);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier accessControlAllowMethods(@Nullable Set<HttpMethod> accessControlAllowMethods) {
 			this.builder.accessControlAllowMethods(accessControlAllowMethods);
 			return this;
 		}
 
 		// Convenience method for mutation
-		@Nonnull
-		public Copier accessControlAllowMethods(@Nonnull Consumer<Set<HttpMethod>> accessControlAllowMethodsConsumer) {
+		@NonNull
+		public Copier accessControlAllowMethods(@NonNull Consumer<Set<HttpMethod>> accessControlAllowMethodsConsumer) {
 			requireNonNull(accessControlAllowMethodsConsumer);
 
 			if (this.builder.accessControlAllowMethods == null)
@@ -286,15 +286,15 @@ public final class CorsPreflightResponse {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier accessControlAllowHeaders(@Nullable Set<String> accessControlAllowHeaders) {
 			this.builder.accessControlAllowHeaders(accessControlAllowHeaders);
 			return this;
 		}
 
 		// Convenience method for mutation
-		@Nonnull
-		public Copier accessControlAllowHeaders(@Nonnull Consumer<Set<String>> accessControlAllowHeadersConsumer) {
+		@NonNull
+		public Copier accessControlAllowHeaders(@NonNull Consumer<Set<String>> accessControlAllowHeadersConsumer) {
 			requireNonNull(accessControlAllowHeadersConsumer);
 
 			if (this.builder.accessControlAllowHeaders == null)
@@ -304,7 +304,7 @@ public final class CorsPreflightResponse {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public CorsPreflightResponse finish() {
 			return this.builder.build();
 		}

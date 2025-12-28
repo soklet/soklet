@@ -20,7 +20,7 @@ import com.soklet.annotation.GET;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -60,7 +60,7 @@ public class ServerLifecycleTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(HealthResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 
@@ -171,6 +171,6 @@ public class ServerLifecycleTests {
 
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
-		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
 	}
 }

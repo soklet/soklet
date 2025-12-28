@@ -16,8 +16,8 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import static java.util.Objects.requireNonNull;
@@ -29,16 +29,16 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class MissingFormParameterException extends BadRequestException {
-	@Nonnull
+	@NonNull
 	private final String formParameterName;
 
 	public MissingFormParameterException(@Nullable String message,
-																			 @Nonnull String formParameterName) {
+																			 @NonNull String formParameterName) {
 		super(message);
 		this.formParameterName = requireNonNull(formParameterName);
 	}
 
-	@Nonnull
+	@NonNull
 	public String getFormParameterName() {
 		return this.formParameterName;
 	}

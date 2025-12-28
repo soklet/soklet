@@ -41,8 +41,8 @@ import com.soklet.exception.MissingRequestBodyException;
 import com.soklet.exception.MissingRequestCookieException;
 import com.soklet.exception.MissingRequestHeaderException;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.annotation.Annotation;
@@ -67,7 +67,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultResourceMethodParameterProvider implements ResourceMethodParameterProvider {
-	@Nonnull
+	@NonNull
 	private static final Map<Type, Object> DEFAULT_VALUES_BY_PRIMITIVE_TYPE;
 
 	static {
@@ -84,18 +84,18 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		);
 	}
 
-	@Nonnull
+	@NonNull
 	private final SokletConfig sokletConfig;
 
-	public DefaultResourceMethodParameterProvider(@Nonnull SokletConfig sokletConfig) {
+	public DefaultResourceMethodParameterProvider(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
 		this.sokletConfig = sokletConfig;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public List<Object> parameterValuesForResourceMethod(@Nonnull Request request,
-																											 @Nonnull ResourceMethod resourceMethod) {
+	public List<Object> parameterValuesForResourceMethod(@NonNull Request request,
+																											 @NonNull ResourceMethod resourceMethod) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(sokletConfig);
@@ -120,9 +120,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	}
 
 	@Nullable
-	protected Object extractParameterValueToPassToResourceMethod(@Nonnull Request request,
-																															 @Nonnull ResourceMethod resourceMethod,
-																															 @Nonnull Parameter parameter) {
+	protected Object extractParameterValueToPassToResourceMethod(@NonNull Request request,
+																															 @NonNull ResourceMethod resourceMethod,
+																															 @NonNull Parameter parameter) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -341,7 +341,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	 * @param type the type whose default value we'd like to know
 	 * @return the default value for the type, or an empty optional if no default exists (i.e. is null)
 	 */
-	@Nonnull
+	@NonNull
 	protected Optional<Object> defaultValueForType(@Nullable Type type) {
 		if (type == null)
 			return Optional.empty();
@@ -349,9 +349,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		return Optional.ofNullable(DEFAULT_VALUES_BY_PRIMITIVE_TYPE.get(type));
 	}
 
-	@Nonnull
-	protected String extractParameterName(@Nonnull ResourceMethod resourceMethod,
-																				@Nonnull Parameter parameter,
+	@NonNull
+	protected String extractParameterName(@NonNull ResourceMethod resourceMethod,
+																				@NonNull Parameter parameter,
 																				@Nullable Annotation annotation,
 																				@Nullable String annotationValue) {
 		requireNonNull(resourceMethod);
@@ -385,11 +385,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 	@Nullable
 	@SuppressWarnings("unchecked")
-	protected Object extractQueryParameterValue(@Nonnull Request request,
-																							@Nonnull ResourceMethod resourceMethod,
-																							@Nonnull Parameter parameter,
-																							@Nonnull QueryParameter queryParameter,
-																							@Nonnull ParameterType parameterType) {
+	protected Object extractQueryParameterValue(@NonNull Request request,
+																							@NonNull ResourceMethod resourceMethod,
+																							@NonNull Parameter parameter,
+																							@NonNull QueryParameter queryParameter,
+																							@NonNull ParameterType parameterType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -415,11 +415,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 	@Nullable
 	@SuppressWarnings("unchecked")
-	protected Object extractFormParameterValue(@Nonnull Request request,
-																						 @Nonnull ResourceMethod resourceMethod,
-																						 @Nonnull Parameter parameter,
-																						 @Nonnull FormParameter formParameter,
-																						 @Nonnull ParameterType parameterType) {
+	protected Object extractFormParameterValue(@NonNull Request request,
+																						 @NonNull ResourceMethod resourceMethod,
+																						 @NonNull Parameter parameter,
+																						 @NonNull FormParameter formParameter,
+																						 @NonNull ParameterType parameterType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -445,11 +445,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 	@Nullable
 	@SuppressWarnings("unchecked")
-	protected Object extractRequestHeaderValue(@Nonnull Request request,
-																						 @Nonnull ResourceMethod resourceMethod,
-																						 @Nonnull Parameter parameter,
-																						 @Nonnull RequestHeader requestHeader,
-																						 @Nonnull ParameterType parameterType) {
+	protected Object extractRequestHeaderValue(@NonNull Request request,
+																						 @NonNull ResourceMethod resourceMethod,
+																						 @NonNull Parameter parameter,
+																						 @NonNull RequestHeader requestHeader,
+																						 @NonNull ParameterType parameterType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -475,11 +475,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 	@Nullable
 	@SuppressWarnings("unchecked")
-	protected Object extractRequestCookieValue(@Nonnull Request request,
-																						 @Nonnull ResourceMethod resourceMethod,
-																						 @Nonnull Parameter parameter,
-																						 @Nonnull RequestCookie requestCookie,
-																						 @Nonnull ParameterType parameterType) {
+	protected Object extractRequestCookieValue(@NonNull Request request,
+																						 @NonNull ResourceMethod resourceMethod,
+																						 @NonNull Parameter parameter,
+																						 @NonNull RequestCookie requestCookie,
+																						 @NonNull ParameterType parameterType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -503,13 +503,13 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		return extractRequestValue(requestValueExtractionConfig);
 	}
 
-	@Nonnull
+	@NonNull
 	@SuppressWarnings("unchecked")
-	protected Object extractRequestMultipartValue(@Nonnull Request request,
-																								@Nonnull ResourceMethod resourceMethod,
-																								@Nonnull Parameter parameter,
+	protected Object extractRequestMultipartValue(@NonNull Request request,
+																								@NonNull ResourceMethod resourceMethod,
+																								@NonNull Parameter parameter,
 																								@Nullable Multipart multipart,
-																								@Nonnull ParameterType parameterType) {
+																								@NonNull ParameterType parameterType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -560,9 +560,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		return extractRequestValue(requestValueExtractionConfig);
 	}
 
-	@Nonnull
+	@NonNull
 	@SuppressWarnings("unchecked")
-	protected <T> Object extractRequestValue(@Nonnull RequestValueExtractionConfig<T> requestValueExtractionConfig) {
+	protected <T> Object extractRequestValue(@NonNull RequestValueExtractionConfig<T> requestValueExtractionConfig) {
 		requireNonNull(requestValueExtractionConfig);
 
 		ResourceMethod resourceMethod = requestValueExtractionConfig.getResourceMethod();
@@ -698,10 +698,10 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		return parameterType.isWrappedInOptional() ? Optional.ofNullable(result) : result;
 	}
 
-	protected void throwValueConverterMissingException(@Nonnull Parameter parameter,
-																										 @Nonnull Type fromType,
-																										 @Nonnull Type toType,
-																										 @Nonnull ResourceMethod resourceMethod) {
+	protected void throwValueConverterMissingException(@NonNull Parameter parameter,
+																										 @NonNull Type fromType,
+																										 @NonNull Type toType,
+																										 @NonNull ResourceMethod resourceMethod) {
 		requireNonNull(parameter);
 		requireNonNull(fromType);
 		requireNonNull(toType);
@@ -712,63 +712,63 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				ValueConverter.class.getSimpleName(), fromType, toType, parameter, resourceMethod));
 	}
 
-	@Nonnull
+	@NonNull
 	protected SokletConfig getSokletConfig() {
 		return this.sokletConfig;
 	}
 
 	@FunctionalInterface
 	protected interface MissingExceptionProvider {
-		@Nonnull
-		RuntimeException provide(@Nonnull String message,
-														 @Nonnull String name);
+		@NonNull
+		RuntimeException provide(@NonNull String message,
+														 @NonNull String name);
 	}
 
 	@FunctionalInterface
 	protected interface IllegalExceptionProvider<T> {
-		@Nonnull
-		RuntimeException provide(@Nonnull String message,
-														 @Nonnull Exception cause,
-														 @Nonnull String name,
+		@NonNull
+		RuntimeException provide(@NonNull String message,
+														 @NonNull Exception cause,
+														 @NonNull String name,
 														 @Nullable String value,
 														 @Nullable T valueMetadatum);
 	}
 
 	@FunctionalInterface
 	protected interface ValueMetadatumConverter<T> {
-		@Nonnull
-		Object convert(@Nonnull T valueMetadatum,
-									 @Nonnull Type toType,
-									 @Nonnull ValueConverter<Object, Object> valueConverter) throws ValueConversionException;
+		@NonNull
+		Object convert(@NonNull T valueMetadatum,
+									 @NonNull Type toType,
+									 @NonNull ValueConverter<Object, Object> valueConverter) throws ValueConversionException;
 	}
 
 	@NotThreadSafe
 	protected static class RequestValueExtractionConfig<T> {
-		@Nonnull
+		@NonNull
 		private final ResourceMethod resourceMethod;
-		@Nonnull
+		@NonNull
 		private final Parameter parameter;
-		@Nonnull
+		@NonNull
 		private final ParameterType parameterType;
-		@Nonnull
+		@NonNull
 		private final String parameterName;
-		@Nonnull
+		@NonNull
 		private final String parameterDescription;
-		@Nonnull
+		@NonNull
 		private final Boolean optional;
-		@Nonnull
+		@NonNull
 		private final List<String> values;
-		@Nonnull
+		@NonNull
 		private final List<T> valuesMetadata;
 		@Nullable
 		private ValueMetadatumConverter<T> valueMetadatumConverter;
-		@Nonnull
+		@NonNull
 		private final MissingExceptionProvider missingExceptionProvider;
-		@Nonnull
+		@NonNull
 		private final IllegalExceptionProvider illegalExceptionProvider;
 
 		@SuppressWarnings("unchecked")
-		protected RequestValueExtractionConfig(@Nonnull Builder builder) {
+		protected RequestValueExtractionConfig(@NonNull Builder builder) {
 			requireNonNull(builder);
 
 			this.resourceMethod = requireNonNull(builder.resourceMethod);
@@ -786,15 +786,15 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		@NotThreadSafe
 		protected static final class Builder<T> {
-			@Nonnull
+			@NonNull
 			private final ResourceMethod resourceMethod;
-			@Nonnull
+			@NonNull
 			private final Parameter parameter;
-			@Nonnull
+			@NonNull
 			private final ParameterType parameterType;
-			@Nonnull
+			@NonNull
 			private final String parameterName;
-			@Nonnull
+			@NonNull
 			private String parameterDescription;
 			@Nullable
 			private Boolean optional;
@@ -809,11 +809,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			@Nullable
 			private IllegalExceptionProvider illegalExceptionProvider;
 
-			public Builder(@Nonnull ResourceMethod resourceMethod,
-										 @Nonnull Parameter parameter,
-										 @Nonnull ParameterType parameterType,
-										 @Nonnull String parameterName,
-										 @Nonnull String parameterDescription) {
+			public Builder(@NonNull ResourceMethod resourceMethod,
+										 @NonNull Parameter parameter,
+										 @NonNull ParameterType parameterType,
+										 @NonNull String parameterName,
+										 @NonNull String parameterDescription) {
 				requireNonNull(resourceMethod);
 				requireNonNull(parameter);
 				requireNonNull(parameterType);
@@ -827,99 +827,99 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				this.parameterDescription = parameterDescription;
 			}
 
-			@Nonnull
+			@NonNull
 			public Builder optional(@Nullable Boolean optional) {
 				this.optional = optional;
 				return this;
 			}
 
-			@Nonnull
+			@NonNull
 			public Builder values(@Nullable List<String> values) {
 				this.values = values;
 				return this;
 			}
 
-			@Nonnull
+			@NonNull
 			public Builder valuesMetadata(@Nullable List<T> valuesMetadata) {
 				this.valuesMetadata = valuesMetadata;
 				return this;
 			}
 
-			@Nonnull
+			@NonNull
 			public Builder valueMetadatumConverter(@Nullable ValueMetadatumConverter<T> valueMetadatumConverter) {
 				this.valueMetadatumConverter = valueMetadatumConverter;
 				return this;
 			}
 
-			@Nonnull
+			@NonNull
 			public Builder missingExceptionProvider(@Nullable MissingExceptionProvider missingExceptionProvider) {
 				this.missingExceptionProvider = missingExceptionProvider;
 				return this;
 			}
 
-			@Nonnull
+			@NonNull
 			public Builder illegalExceptionProvider(@Nullable IllegalExceptionProvider illegalExceptionProvider) {
 				this.illegalExceptionProvider = illegalExceptionProvider;
 				return this;
 			}
 
-			@Nonnull
+			@NonNull
 			public RequestValueExtractionConfig build() {
 				return new RequestValueExtractionConfig(this);
 			}
 		}
 
-		@Nonnull
+		@NonNull
 		public ResourceMethod getResourceMethod() {
 			return this.resourceMethod;
 		}
 
-		@Nonnull
+		@NonNull
 		public Parameter getParameter() {
 			return this.parameter;
 		}
 
-		@Nonnull
+		@NonNull
 		public ParameterType getParameterType() {
 			return this.parameterType;
 		}
 
-		@Nonnull
+		@NonNull
 		public String getParameterName() {
 			return this.parameterName;
 		}
 
-		@Nonnull
+		@NonNull
 		public String getParameterDescription() {
 			return this.parameterDescription;
 		}
 
-		@Nonnull
+		@NonNull
 		public Boolean getOptional() {
 			return this.optional;
 		}
 
-		@Nonnull
+		@NonNull
 		public List<String> getValues() {
 			return this.values;
 		}
 
-		@Nonnull
+		@NonNull
 		public List<T> getValuesMetadata() {
 			return this.valuesMetadata;
 		}
 
-		@Nonnull
+		@NonNull
 		public Optional<ValueMetadatumConverter<T>> getValueMetadatumConverter() {
 			return Optional.ofNullable(this.valueMetadatumConverter);
 		}
 
-		@Nonnull
+		@NonNull
 		public MissingExceptionProvider getMissingExceptionProvider() {
 			return this.missingExceptionProvider;
 		}
 
-		@Nonnull
+		@NonNull
 		public IllegalExceptionProvider getIllegalExceptionProvider() {
 			return this.illegalExceptionProvider;
 		}
@@ -935,14 +935,14 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	 */
 	@ThreadSafe
 	protected static class ParameterType {
-		@Nonnull
+		@NonNull
 		private final Type normalizedType;
 		@Nullable
 		private final Type listElementType;
-		@Nonnull
+		@NonNull
 		private final Boolean wrappedInOptional;
 
-		public ParameterType(@Nonnull Parameter parameter) {
+		public ParameterType(@NonNull Parameter parameter) {
 			requireNonNull(parameter);
 
 			Type normalizedType = parameter.getParameterizedType();
@@ -967,22 +967,22 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			this.wrappedInOptional = wrappedInOptional;
 		}
 
-		@Nonnull
+		@NonNull
 		public Type getNormalizedType() {
 			return this.normalizedType;
 		}
 
-		@Nonnull
+		@NonNull
 		public Optional<Type> getListElementType() {
 			return Optional.ofNullable(this.listElementType);
 		}
 
-		@Nonnull
+		@NonNull
 		public Boolean isList() {
 			return getListElementType().isPresent();
 		}
 
-		@Nonnull
+		@NonNull
 		public Boolean isWrappedInOptional() {
 			return this.wrappedInOptional;
 		}

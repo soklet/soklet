@@ -19,8 +19,8 @@ package com.soklet;
 import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.lang.Thread.UncaughtExceptionHandler;
@@ -66,17 +66,17 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class Utilities {
-	@Nonnull
+	@NonNull
 	private static final boolean VIRTUAL_THREADS_AVAILABLE;
-	@Nonnull
+	@NonNull
 	private static final byte[] EMPTY_BYTE_ARRAY;
-	@Nonnull
+	@NonNull
 	private static final Map<String, Locale> LOCALES_BY_LANGUAGE_RANGE_RANGE;
-	@Nonnull
+	@NonNull
 	private static final Pattern HEAD_WHITESPACE_PATTERN;
-	@Nonnull
+	@NonNull
 	private static final Pattern TAIL_WHITESPACE_PATTERN;
-	@Nonnull
+	@NonNull
 	private static final Pattern HEADER_PERCENT_ENCODING_PATTERN;
 
 	static {
@@ -126,7 +126,7 @@ public final class Utilities {
 	 *
 	 * @return {@code true} if the runtime supports virtual threads, {@code false} otherwise
 	 */
-	@Nonnull
+	@NonNull
 	static Boolean virtualThreadsAvailable() {
 		return VIRTUAL_THREADS_AVAILABLE;
 	}
@@ -151,9 +151,9 @@ public final class Utilities {
 	 * @return a virtual-thread-per-task executor service
 	 * @throws IllegalStateException if the runtime environment does not support virtual threads
 	 */
-	@Nonnull
-	static ExecutorService createVirtualThreadsNewThreadPerTaskExecutor(@Nonnull String threadNamePrefix,
-																																			@Nonnull UncaughtExceptionHandler uncaughtExceptionHandler) {
+	@NonNull
+	static ExecutorService createVirtualThreadsNewThreadPerTaskExecutor(@NonNull String threadNamePrefix,
+																																			@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
 		requireNonNull(threadNamePrefix);
 		requireNonNull(uncaughtExceptionHandler);
 
@@ -211,7 +211,7 @@ public final class Utilities {
 	 *
 	 * @return a zero-length byte array (never {@code null})
 	 */
-	@Nonnull
+	@NonNull
 	static byte[] emptyByteArray() {
 		return EMPTY_BYTE_ARRAY;
 	}
@@ -230,9 +230,9 @@ public final class Utilities {
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
 	 * @throws IllegalRequestException if the query string contains malformed percent-encoding
 	 */
-	@Nonnull
-	public static Map<String, Set<String>> extractQueryParametersFromQuery(@Nonnull String query,
-																																				 @Nonnull QueryFormat queryFormat) {
+	@NonNull
+	public static Map<String, Set<String>> extractQueryParametersFromQuery(@NonNull String query,
+																																				 @NonNull QueryFormat queryFormat) {
 		requireNonNull(query);
 		requireNonNull(queryFormat);
 
@@ -254,10 +254,10 @@ public final class Utilities {
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
 	 * @throws IllegalRequestException if the query string contains malformed percent-encoding
 	 */
-	@Nonnull
-	public static Map<String, Set<String>> extractQueryParametersFromQuery(@Nonnull String query,
-																																				 @Nonnull QueryFormat queryFormat,
-																																				 @Nonnull Charset charset) {
+	@NonNull
+	public static Map<String, Set<String>> extractQueryParametersFromQuery(@NonNull String query,
+																																				 @NonNull QueryFormat queryFormat,
+																																				 @NonNull Charset charset) {
 		requireNonNull(query);
 		requireNonNull(queryFormat);
 		requireNonNull(charset);
@@ -281,9 +281,9 @@ public final class Utilities {
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
 	 * @throws IllegalRequestException if the URL or query contains malformed percent-encoding
 	 */
-	@Nonnull
-	public static Map<String, Set<String>> extractQueryParametersFromUrl(@Nonnull String url,
-																																			 @Nonnull QueryFormat queryFormat) {
+	@NonNull
+	public static Map<String, Set<String>> extractQueryParametersFromUrl(@NonNull String url,
+																																			 @NonNull QueryFormat queryFormat) {
 		requireNonNull(url);
 		requireNonNull(queryFormat);
 
@@ -305,10 +305,10 @@ public final class Utilities {
 	 * @return a map of parameter names to their distinct values, preserving first-seen name order; empty if none
 	 * @throws IllegalRequestException if the URL or query contains malformed percent-encoding
 	 */
-	@Nonnull
-	public static Map<String, Set<String>> extractQueryParametersFromUrl(@Nonnull String url,
-																																			 @Nonnull QueryFormat queryFormat,
-																																			 @Nonnull Charset charset) {
+	@NonNull
+	public static Map<String, Set<String>> extractQueryParametersFromUrl(@NonNull String url,
+																																			 @NonNull QueryFormat queryFormat,
+																																			 @NonNull Charset charset) {
 		requireNonNull(url);
 		requireNonNull(queryFormat);
 		requireNonNull(charset);
@@ -354,10 +354,10 @@ public final class Utilities {
 	/**
 	 * Decodes a single key or value using the given mode and charset.
 	 */
-	@Nonnull
-	private static String decodeQueryComponent(@Nonnull String string,
-																						 @Nonnull QueryFormat queryFormat,
-																						 @Nonnull Charset charset) {
+	@NonNull
+	private static String decodeQueryComponent(@NonNull String string,
+																						 @NonNull QueryFormat queryFormat,
+																						 @NonNull Charset charset) {
 		requireNonNull(string);
 		requireNonNull(queryFormat);
 		requireNonNull(charset);
@@ -375,8 +375,8 @@ public final class Utilities {
 	 * Percent-decodes a string into bytes, then constructs a String using the provided charset.
 	 * One pass only: invalid %xy sequences trigger an exception.
 	 */
-	@Nonnull
-	private static String percentDecode(@Nonnull String s, @Nonnull Charset charset) {
+	@NonNull
+	private static String percentDecode(@NonNull String s, @NonNull Charset charset) {
 		requireNonNull(s);
 		requireNonNull(charset);
 
@@ -443,8 +443,8 @@ public final class Utilities {
 	 * @param headers request headers as a multimap of header name to values (must be non-{@code null})
 	 * @return a map of cookie name to distinct values; empty if no valid cookies are present
 	 */
-	@Nonnull
-	public static Map<String, Set<String>> extractCookiesFromHeaders(@Nonnull Map<String, Set<String>> headers) {
+	@NonNull
+	public static Map<String, Set<String>> extractCookiesFromHeaders(@NonNull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 
 		// Cookie *names* must be case-sensitive; keep LinkedHashMap (NOT case-insensitive)
@@ -498,8 +498,8 @@ public final class Utilities {
 	/**
 	 * Percent-decodes %HH to bytes->UTF-8. Does NOT treat '+' specially.
 	 */
-	@Nonnull
-	private static String percentDecodeCookieValue(@Nonnull String cookieValue) {
+	@NonNull
+	private static String percentDecodeCookieValue(@NonNull String cookieValue) {
 		requireNonNull(cookieValue);
 
 		ByteArrayOutputStream out = new ByteArrayOutputStream(cookieValue.length());
@@ -527,7 +527,7 @@ public final class Utilities {
 	 * Splits a Cookie header string into components on ';' but ONLY when not inside a quoted value.
 	 * Supports backslash-escaped quotes within quoted strings.
 	 */
-	private static List<String> splitCookieHeaderRespectingQuotes(@Nonnull String headerValue) {
+	private static List<String> splitCookieHeaderRespectingQuotes(@NonNull String headerValue) {
 		List<String> parts = new ArrayList<>();
 		StringBuilder cur = new StringBuilder(headerValue.length());
 		boolean inQuotes = false;
@@ -575,8 +575,8 @@ public final class Utilities {
 	 * If the cookie value is a quoted-string, remove surrounding quotes and unescape \" \\ and \; .
 	 * Otherwise returns the input as-is.
 	 */
-	@Nonnull
-	private static String unquoteCookieValueIfNeeded(@Nonnull String rawValue) {
+	@NonNull
+	private static String unquoteCookieValueIfNeeded(@NonNull String rawValue) {
 		requireNonNull(rawValue);
 
 		if (rawValue.length() >= 2 && rawValue.charAt(0) == '"' && rawValue.charAt(rawValue.length() - 1) == '"') {
@@ -637,9 +637,9 @@ public final class Utilities {
 	 * @param performDecoding {@code true} if decoding should be performed on the path (e.g. replace {@code %20} with a space character), {@code false} otherwise
 	 * @return the normalized path, {@code "/"} for empty input
 	 */
-	@Nonnull
-	public static String extractPathFromUrl(@Nonnull String url,
-																					@Nonnull Boolean performDecoding) {
+	@NonNull
+	public static String extractPathFromUrl(@NonNull String url,
+																					@NonNull Boolean performDecoding) {
 		requireNonNull(url);
 
 		url = trimAggressivelyToEmpty(url);
@@ -703,8 +703,8 @@ public final class Utilities {
 	 * @param url a raw URL or path
 	 * @return the raw query component, or {@link Optional#empty()} if none
 	 */
-	@Nonnull
-	public static Optional<String> extractRawQueryFromUrl(@Nonnull String url) {
+	@NonNull
+	public static Optional<String> extractRawQueryFromUrl(@NonNull String url) {
 		requireNonNull(url);
 
 		url = trimAggressivelyToEmpty(url);
@@ -736,9 +736,9 @@ public final class Utilities {
 	 * @param queryFormat     the encoding strategy
 	 * @return the encoded query string, or the empty string if no parameters
 	 */
-	@Nonnull
-	public static String encodeQueryParameters(@Nonnull Map<String, Set<String>> queryParameters,
-																						 @Nonnull QueryFormat queryFormat) {
+	@NonNull
+	public static String encodeQueryParameters(@NonNull Map<String, Set<String>> queryParameters,
+																						 @NonNull QueryFormat queryFormat) {
 		requireNonNull(queryParameters);
 		requireNonNull(queryFormat);
 
@@ -766,9 +766,9 @@ public final class Utilities {
 		return sb.toString();
 	}
 
-	@Nonnull
-	static String encodeQueryComponent(@Nonnull String queryComponent,
-																		 @Nonnull QueryFormat queryFormat) {
+	@NonNull
+	static String encodeQueryComponent(@NonNull String queryComponent,
+																		 @NonNull QueryFormat queryFormat) {
 		requireNonNull(queryComponent);
 		requireNonNull(queryFormat);
 
@@ -780,8 +780,8 @@ public final class Utilities {
 		return encoded;
 	}
 
-	@Nonnull
-	static String encodePath(@Nonnull String path) {
+	@NonNull
+	static String encodePath(@NonNull String path) {
 		requireNonNull(path);
 
 		if ("*".equals(path))
@@ -803,8 +803,8 @@ public final class Utilities {
 	 * @param acceptLanguageHeaderValue the raw header value (must be non-{@code null})
 	 * @return locales in descending preference order; empty if none could be resolved
 	 */
-	@Nonnull
-	public static List<Locale> extractLocalesFromAcceptLanguageHeaderValue(@Nonnull String acceptLanguageHeaderValue) {
+	@NonNull
+	public static List<Locale> extractLocalesFromAcceptLanguageHeaderValue(@NonNull String acceptLanguageHeaderValue) {
 		requireNonNull(acceptLanguageHeaderValue);
 
 		try {
@@ -860,8 +860,8 @@ public final class Utilities {
 	 * @param headers HTTP request headers
 	 * @return the URL prefix, or {@link Optional#empty()} if it could not be determined
 	 */
-	@Nonnull
-	public static Optional<String> extractClientUrlPrefixFromHeaders(@Nonnull Map<String, Set<String>> headers) {
+	@NonNull
+	public static Optional<String> extractClientUrlPrefixFromHeaders(@NonNull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 
 		// Host                   developer.mozilla.org OR developer.mozilla.org:443 OR [2001:db8::1]:8443
@@ -1092,8 +1092,8 @@ public final class Utilities {
 	 * @return the media type if present; otherwise {@link Optional#empty()}
 	 * @see #extractContentTypeFromHeaderValue(String)
 	 */
-	@Nonnull
-	public static Optional<String> extractContentTypeFromHeaders(@Nonnull Map<String, Set<String>> headers) {
+	@NonNull
+	public static Optional<String> extractContentTypeFromHeaders(@NonNull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 
 		Set<String> contentTypeHeaderValues = headers.get("Content-Type");
@@ -1112,7 +1112,7 @@ public final class Utilities {
 	 * @param contentTypeHeaderValue the raw header value; may be {@code null} or blank
 	 * @return the media type if present; otherwise {@link Optional#empty()}
 	 */
-	@Nonnull
+	@NonNull
 	public static Optional<String> extractContentTypeFromHeaderValue(@Nullable String contentTypeHeaderValue) {
 		contentTypeHeaderValue = trimAggressivelyToNull(contentTypeHeaderValue);
 
@@ -1142,8 +1142,8 @@ public final class Utilities {
 	 * @return the charset declared by the header; otherwise {@link Optional#empty()}
 	 * @see #extractCharsetFromHeaderValue(String)
 	 */
-	@Nonnull
-	public static Optional<Charset> extractCharsetFromHeaders(@Nonnull Map<String, Set<String>> headers) {
+	@NonNull
+	public static Optional<Charset> extractCharsetFromHeaders(@NonNull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 
 		Set<String> contentTypeHeaderValues = headers.get("Content-Type");
@@ -1163,7 +1163,7 @@ public final class Utilities {
 	 * @param contentTypeHeaderValue the raw header value; may be {@code null} or blank
 	 * @return the resolved charset if present and valid; otherwise {@link Optional#empty()}
 	 */
-	@Nonnull
+	@NonNull
 	public static Optional<Charset> extractCharsetFromHeaderValue(@Nullable String contentTypeHeaderValue) {
 		contentTypeHeaderValue = trimAggressivelyToNull(contentTypeHeaderValue);
 
@@ -1296,7 +1296,7 @@ public final class Utilities {
 	 * @param string the input string; may be {@code null}
 	 * @return a trimmed string (never {@code null}); {@code ""} if input was {@code null}
 	 */
-	@Nonnull
+	@NonNull
 	public static String trimAggressivelyToEmpty(@Nullable String string) {
 		if (string == null)
 			return "";
@@ -1346,8 +1346,8 @@ public final class Utilities {
 		}
 	}
 
-	@Nonnull
-	static String printableString(@Nonnull String input) {
+	@NonNull
+	static String printableString(@NonNull String input) {
 		requireNonNull(input);
 
 		StringBuilder out = new StringBuilder(input.length() + 16);
@@ -1358,7 +1358,7 @@ public final class Utilities {
 		return out.toString();
 	}
 
-	@Nonnull
+	@NonNull
 	static String printableChar(char c) {
 		if (c == '\r') return "\\r";
 		if (c == '\n') return "\\n";
@@ -1379,7 +1379,7 @@ public final class Utilities {
 		return String.valueOf(c);
 	}
 
-	@Nonnull
+	@NonNull
 	private static final Set<String> COMMA_JOINABLE_HEADER_NAMES = Set.of(
 			// Common list-type headers (RFC 7230/9110)
 			"accept",
@@ -1423,8 +1423,8 @@ public final class Utilities {
 	 * @param rawHeaderLines the raw HTTP header lines to parse
 	 * @return a normalized mapping of header name keys to values
 	 */
-	@Nonnull
-	public static Map<String, Set<String>> extractHeadersFromRawHeaderLines(@Nonnull List<String> rawHeaderLines) {
+	@NonNull
+	public static Map<String, Set<String>> extractHeadersFromRawHeaderLines(@NonNull List<String> rawHeaderLines) {
 		requireNonNull(rawHeaderLines);
 
 		// 1) Unfold obsolete folded lines (obs-fold): lines beginning with SP/HT are continuations
@@ -1470,8 +1470,8 @@ public final class Utilities {
 	/**
 	 * Header parsing helper
 	 */
-	@Nonnull
-	private static List<String> unfold(@Nonnull List<String> raw) {
+	@NonNull
+	private static List<String> unfold(@NonNull List<String> raw) {
 		requireNonNull(raw);
 		if (raw.isEmpty()) return List.of();
 
@@ -1505,8 +1505,8 @@ public final class Utilities {
 	/**
 	 * Header parsing helper: split on commas that are not inside a quoted-string; supports \" escapes inside quotes.
 	 */
-	@Nonnull
-	private static List<String> splitCommaAware(@Nonnull String string) {
+	@NonNull
+	private static List<String> splitCommaAware(@NonNull String string) {
 		requireNonNull(string);
 
 		List<String> out = new ArrayList<>(4);
@@ -1546,8 +1546,8 @@ public final class Utilities {
 	/**
 	 * Remove a single pair of surrounding quotes if present.
 	 */
-	@Nonnull
-	private static String stripOptionalQuotes(@Nonnull String string) {
+	@NonNull
+	private static String stripOptionalQuotes(@NonNull String string) {
 		requireNonNull(string);
 
 		if (string.length() >= 2) {
@@ -1566,29 +1566,29 @@ public final class Utilities {
 	 */
 	@ThreadSafe
 	private static final class HostPort {
-		@Nonnull
+		@NonNull
 		private final String host;
 		@Nullable
 		private final Integer port;
 
-		HostPort(@Nonnull String host,
+		HostPort(@NonNull String host,
 						 @Nullable Integer port) {
 			this.host = host;
 			this.port = port;
 		}
 
-		@Nonnull
+		@NonNull
 		public String getHost() {
 			return this.host;
 		}
 
-		@Nonnull
+		@NonNull
 		public Optional<Integer> getPort() {
 			return Optional.ofNullable(this.port);
 		}
 	}
 
-	@Nonnull
+	@NonNull
 	private static Optional<HostPort> parseHostPort(@Nullable String input) {
 		input = trimAggressivelyToNull(input);
 
@@ -1644,8 +1644,8 @@ public final class Utilities {
 		return Optional.of(new HostPort(input, null));
 	}
 
-	@Nonnull
-	private static String removeDotSegments(@Nonnull String path) {
+	@NonNull
+	private static String removeDotSegments(@NonNull String path) {
 		requireNonNull(path);
 
 		Deque<String> stack = new ArrayDeque<>();

@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import java.util.function.Consumer;
 
 /**
@@ -110,8 +110,8 @@ public interface Simulator {
 	 * @param request the standard HTTP request to process
 	 * @return the result (logical response, marshaled response, etc.) that corresponds to the request
 	 */
-	@Nonnull
-	RequestResult performRequest(@Nonnull Request request);
+	@NonNull
+	RequestResult performRequest(@NonNull Request request);
 
 	/**
 	 * Given a request that would normally be handled by your {@link ServerSentEventServer} (that is, for a <em>Resource Method</em> decorated with the {@link com.soklet.annotation.ServerSentEventSource} annotation), process it and return response data ({@link com.soklet.ServerSentEventRequestResult.HandshakeAccepted}, {@link com.soklet.ServerSentEventRequestResult.HandshakeRejected}, or {@link com.soklet.ServerSentEventRequestResult.RequestFailed});
@@ -121,8 +121,8 @@ public interface Simulator {
 	 * @param request the Server-Sent Event HTTP request to process
 	 * @return the result (handshake outcode, etc.) that corresponds to the request
 	 */
-	@Nonnull
-	ServerSentEventRequestResult performServerSentEventRequest(@Nonnull Request request);
+	@NonNull
+	ServerSentEventRequestResult performServerSentEventRequest(@NonNull Request request);
 
 	/**
 	 * Registers a handler for exceptions thrown by simulated Server-Sent Event consumers.
@@ -132,7 +132,7 @@ public interface Simulator {
 	 * @param onBroadcastError handler for broadcast errors, or {@code null} to clear
 	 * @return this simulator
 	 */
-	@Nonnull
+	@NonNull
 	default Simulator onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
 		return this;
 	}
@@ -145,7 +145,7 @@ public interface Simulator {
 	 * @param onUnicastError handler for unicast errors, or {@code null} to clear
 	 * @return this simulator
 	 */
-	@Nonnull
+	@NonNull
 	default Simulator onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
 		return this;
 	}

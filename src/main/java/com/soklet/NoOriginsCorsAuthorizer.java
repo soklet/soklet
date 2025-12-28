@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Map;
 import java.util.Optional;
@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 class NoOriginsCorsAuthorizer implements CorsAuthorizer {
-	@Nonnull
+	@NonNull
 	private static final NoOriginsCorsAuthorizer DEFAULT_INSTANCE;
 
 	static {
@@ -46,7 +46,7 @@ class NoOriginsCorsAuthorizer implements CorsAuthorizer {
 	 *
 	 * @return an instance of {@link NoOriginsCorsAuthorizer}
 	 */
-	@Nonnull
+	@NonNull
 	public static NoOriginsCorsAuthorizer defaultInstance() {
 		return DEFAULT_INSTANCE;
 	}
@@ -55,21 +55,21 @@ class NoOriginsCorsAuthorizer implements CorsAuthorizer {
 		// Nothing to do
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public Optional<CorsResponse> authorize(@Nonnull Request request,
-																					@Nonnull Cors cors) {
+	public Optional<CorsResponse> authorize(@NonNull Request request,
+																					@NonNull Cors cors) {
 		requireNonNull(request);
 		requireNonNull(cors);
 
 		return Optional.empty();
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
-																														@Nonnull CorsPreflight corsPreflight,
-																														@Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
+	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																														@NonNull CorsPreflight corsPreflight,
+																														@NonNull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);
 		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);

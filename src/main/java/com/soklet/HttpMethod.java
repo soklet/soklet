@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -56,7 +56,7 @@ public enum HttpMethod {
 	 */
 	DELETE;
 
-	@Nonnull
+	@NonNull
 	private static final Set<HttpMethod> VALUES_AS_SET;
 
 	static {
@@ -68,7 +68,7 @@ public enum HttpMethod {
 	 *
 	 * @return a {@link Set} representation of this enum's values
 	 */
-	@Nonnull
+	@NonNull
 	public static Set<HttpMethod> valuesAsSet() {
 		return VALUES_AS_SET;
 	}

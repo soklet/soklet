@@ -16,8 +16,8 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import static java.util.Objects.requireNonNull;
@@ -29,16 +29,16 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class MissingQueryParameterException extends BadRequestException {
-	@Nonnull
+	@NonNull
 	private final String queryParameterName;
 
 	public MissingQueryParameterException(@Nullable String message,
-																				@Nonnull String queryParameterName) {
+																				@NonNull String queryParameterName) {
 		super(message);
 		this.queryParameterName = requireNonNull(queryParameterName);
 	}
 
-	@Nonnull
+	@NonNull
 	public String getQueryParameterName() {
 		return this.queryParameterName;
 	}

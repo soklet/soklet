@@ -21,8 +21,8 @@ import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.util.ConcurrentLruMap;
 import com.soklet.internal.util.HostHeaderValidator;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
@@ -85,45 +85,45 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultServerSentEventServer implements ServerSentEventServer {
-	@Nonnull
+	@NonNull
 	private static final String DEFAULT_HOST;
-	@Nonnull
+	@NonNull
 	private static final Duration DEFAULT_REQUEST_TIMEOUT;
-	@Nonnull
+	@NonNull
 	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
-	@Nonnull
+	@NonNull
 	private static final Duration DEFAULT_WRITE_TIMEOUT;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
-	@Nonnull
+	@NonNull
 	private static final Duration DEFAULT_HEARTBEAT_INTERVAL;
-	@Nonnull
+	@NonNull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_CONNECTION_QUEUE_CAPACITY;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_CONCURRENT_CONNECTION_LIMIT;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_BROADCASTER_CACHE_CAPACITY;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_RESOURCE_PATH_CACHE_CAPACITY;
-	@Nonnull
+	@NonNull
 	private static final Boolean DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
-	@Nonnull
+	@NonNull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
-	@Nonnull
+	@NonNull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE;
-	@Nonnull
+	@NonNull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE;
-	@Nonnull
+	@NonNull
 	private static final ResourcePathDeclaration NO_MATCH_SENTINEL;
-	@Nonnull
+	@NonNull
 	private static final String HEARTBEAT_COMMENT_PAYLOAD;
-	@Nonnull
+	@NonNull
 	private static final byte[] HEARTBEAT_COMMENT_PAYLOAD_BYTES;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_SSE_BUILDER_CAPACITY;
 
 	static {
@@ -161,52 +161,52 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	 */
 	@FunctionalInterface
 	private interface BackpressureHandler {
-		void onBackpressure(@Nonnull DefaultServerSentEventBroadcaster owner,
-												@Nonnull DefaultServerSentEventConnection connection,
-												@Nonnull String cause);
+		void onBackpressure(@NonNull DefaultServerSentEventBroadcaster owner,
+												@NonNull DefaultServerSentEventConnection connection,
+												@NonNull String cause);
 	}
 
-	@Nonnull
+	@NonNull
 	private final Integer port;
-	@Nonnull
+	@NonNull
 	private final String host;
-	@Nonnull
+	@NonNull
 	private final Duration requestTimeout;
-	@Nonnull
+	@NonNull
 	private final Duration requestHandlerTimeout;
-	@Nonnull
+	@NonNull
 	private final Duration writeTimeout;
-	@Nonnull
+	@NonNull
 	private final Duration shutdownTimeout;
-	@Nonnull
+	@NonNull
 	private final Duration heartbeatInterval;
-	@Nonnull
+	@NonNull
 	private final Integer maximumRequestSizeInBytes;
-	@Nonnull
+	@NonNull
 	private final Integer requestReadBufferSizeInBytes;
-	@Nonnull
+	@NonNull
 	private final Boolean verifyConnectionOnceEstablished;
-	@Nonnull
+	@NonNull
 	private final ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
-	@Nonnull
+	@NonNull
 	private final ConcurrentLruMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
-	@Nonnull
+	@NonNull
 	private final ConcurrentHashMap<DefaultServerSentEventConnection, DefaultServerSentEventBroadcaster> globalConnections;
-	@Nonnull
+	@NonNull
 	private final AtomicInteger activeConnectionCount;
-	@Nonnull
+	@NonNull
 	private final ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> idleBroadcastersByResourcePath;
-	@Nonnull
+	@NonNull
 	private final ReentrantLock lock;
-	@Nonnull
+	@NonNull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
-	@Nonnull
+	@NonNull
 	private final Supplier<ExecutorService> requestReaderExecutorServiceSupplier;
-	@Nonnull
+	@NonNull
 	private final Integer concurrentConnectionLimit;
-	@Nonnull
+	@NonNull
 	private final Integer connectionQueueCapacity;
-	@Nonnull
+	@NonNull
 	private final AtomicBoolean stopPoisonPill;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
@@ -214,16 +214,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private volatile ScheduledExecutorService requestHandlerTimeoutExecutorService;
 	@Nullable
 	private volatile ExecutorService requestReaderExecutorService;
-	@Nonnull
+	@NonNull
 	private volatile Boolean started;
-	@Nonnull
+	@NonNull
 	private volatile Boolean stopping;
 	@Nullable
 	private Thread eventLoopThread;
 	@Nullable
 	private volatile ServerSocketChannel serverSocketChannel;
 	// Does not need to be concurrent because it's calculated just once at initialization time and is never modified after
-	@Nonnull
+	@NonNull
 	private volatile Map<ResourcePathDeclaration, ResourceMethod> resourceMethodsByResourcePathDeclaration;
 	@Nullable
 	private RequestHandler requestHandler;
@@ -236,25 +236,25 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@ThreadSafe
 	private static class DefaultServerSentEventBroadcaster implements ServerSentEventBroadcaster {
-		@Nonnull
+		@NonNull
 		private final ResourceMethod resourceMethod;
-		@Nonnull
+		@NonNull
 		private final ResourcePath resourcePath;
-		@Nonnull
+		@NonNull
 		private final BackpressureHandler backpressureHandler;
-		@Nonnull
+		@NonNull
 		private final Consumer<DefaultServerSentEventConnection> connectionUnregisteredListener;
-		@Nonnull
+		@NonNull
 		private final Consumer<LogEvent> logEventConsumer;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
-		@Nonnull
+		@NonNull
 		private final Set<DefaultServerSentEventConnection> serverSentEventConnections;
 
-		public DefaultServerSentEventBroadcaster(@Nonnull ResourceMethod resourceMethod,
-																						 @Nonnull ResourcePath resourcePath,
-																						 @Nonnull BackpressureHandler backpressureHandler,
-																						 @Nonnull Consumer<DefaultServerSentEventConnection> connectionUnregisteredListener,
-																						 @Nonnull Consumer<LogEvent> logEventConsumer) {
+		public DefaultServerSentEventBroadcaster(@NonNull ResourceMethod resourceMethod,
+																						 @NonNull ResourcePath resourcePath,
+																						 @NonNull BackpressureHandler backpressureHandler,
+																						 @NonNull Consumer<DefaultServerSentEventConnection> connectionUnregisteredListener,
+																						 @NonNull Consumer<LogEvent> logEventConsumer) {
 			requireNonNull(resourceMethod);
 			requireNonNull(resourcePath);
 			requireNonNull(backpressureHandler);
@@ -270,25 +270,25 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(256);
 		}
 
-		@Nonnull
+		@NonNull
 		public ResourceMethod getResourceMethod() {
 			return this.resourceMethod;
 		}
 
-		@Nonnull
+		@NonNull
 		@Override
 		public ResourcePath getResourcePath() {
 			return this.resourcePath;
 		}
 
-		@Nonnull
+		@NonNull
 		@Override
 		public Long getClientCount() {
 			return (long) getServerSentEventConnections().size();
 		}
 
 		@Override
-		public void broadcastEvent(@Nonnull ServerSentEvent serverSentEvent) {
+		public void broadcastEvent(@NonNull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
 
 			DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent = preSerializeServerSentEvent(serverSentEvent);
@@ -300,7 +300,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void broadcastComment(@Nonnull String comment) {
+		public void broadcastComment(@NonNull String comment) {
 			requireNonNull(comment);
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
@@ -310,8 +310,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public <T> void broadcastEvent(@Nonnull Function<Object, T> keySelector,
-																	 @Nonnull Function<T, ServerSentEvent> eventProvider) {
+		public <T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
+																	 @NonNull Function<T, ServerSentEvent> eventProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
 
@@ -339,8 +339,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public <T> void broadcastComment(@Nonnull Function<Object, T> keySelector,
-																		 @Nonnull Function<T, String> commentProvider) {
+		public <T> void broadcastComment(@NonNull Function<Object, T> keySelector,
+																		 @NonNull Function<T, String> commentProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 
@@ -367,7 +367,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 		}
 
-		@Nonnull
+		@NonNull
 		public Boolean registerServerSentEventConnection(@Nullable DefaultServerSentEventConnection serverSentEventConnection) {
 			if (serverSentEventConnection == null)
 				return false;
@@ -376,9 +376,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			return getServerSentEventConnections().add(serverSentEventConnection);
 		}
 
-		@Nonnull
+		@NonNull
 		public Boolean unregisterServerSentEventConnection(@Nullable DefaultServerSentEventConnection serverSentEventConnection,
-																											 @Nonnull Boolean sendPoisonPill) {
+																											 @NonNull Boolean sendPoisonPill) {
 			requireNonNull(sendPoisonPill);
 
 			if (serverSentEventConnection == null)
@@ -398,8 +398,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			return unregistered;
 		}
 
-		@Nonnull
-		public void unregisterAllServerSentEventConnections(@Nonnull Boolean sendPoisonPill) {
+		public void unregisterAllServerSentEventConnections(@NonNull Boolean sendPoisonPill) {
 			requireNonNull(sendPoisonPill);
 
 			// Snapshot list for consistency during unregister process
@@ -407,22 +406,22 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				unregisterServerSentEventConnection(serverSentEventConnection, sendPoisonPill);
 		}
 
-		@Nonnull
+		@NonNull
 		private BackpressureHandler getBackpressureHandler() {
 			return this.backpressureHandler;
 		}
 
-		@Nonnull
+		@NonNull
 		private Set<DefaultServerSentEventConnection> getServerSentEventConnections() {
 			return this.serverSentEventConnections;
 		}
 
-		@Nonnull
+		@NonNull
 		private Consumer<DefaultServerSentEventConnection> getConnectionUnregisteredListener() {
 			return this.connectionUnregisteredListener;
 		}
 
-		@Nonnull
+		@NonNull
 		private Consumer<LogEvent> getLogEventConsumer() {
 			return this.logEventConsumer;
 		}
@@ -440,43 +439,43 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	 */
 	@ThreadSafe
 	private final class StableBroadcasterHandle implements ServerSentEventBroadcaster {
-		@Nonnull
+		@NonNull
 		private final ResourcePath resourcePath;
 
-		private StableBroadcasterHandle(@Nonnull ResourcePath resourcePath) {
+		private StableBroadcasterHandle(@NonNull ResourcePath resourcePath) {
 			this.resourcePath = requireNonNull(resourcePath);
 		}
 
 		@Override
-		@Nonnull
+		@NonNull
 		public ResourcePath getResourcePath() {
 			return this.resourcePath;
 		}
 
 		@Override
-		@Nonnull
+		@NonNull
 		public Long getClientCount() {
 			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
 			return b != null ? b.getClientCount() : 0L;
 		}
 
 		@Override
-		public void broadcastEvent(@Nonnull ServerSentEvent serverSentEvent) {
+		public void broadcastEvent(@NonNull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
 			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
 			if (b != null) b.broadcastEvent(serverSentEvent);
 		}
 
 		@Override
-		public void broadcastComment(@Nonnull String comment) {
+		public void broadcastComment(@NonNull String comment) {
 			requireNonNull(comment);
 			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
 			if (b != null) b.broadcastComment(comment);
 		}
 
 		@Override
-		public <T> void broadcastEvent(@Nonnull Function<Object, T> keySelector,
-																	 @Nonnull Function<T, ServerSentEvent> eventProvider) {
+		public <T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
+																	 @NonNull Function<T, ServerSentEvent> eventProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
 			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
@@ -484,8 +483,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public <T> void broadcastComment(@Nonnull Function<Object, T> keySelector,
-																		 @Nonnull Function<T, String> commentProvider) {
+		public <T> void broadcastComment(@NonNull Function<Object, T> keySelector,
+																		 @NonNull Function<T, String> commentProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
@@ -493,7 +492,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	DefaultServerSentEventServer(@Nonnull Builder builder) {
+	DefaultServerSentEventServer(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.stopPoisonPill = new AtomicBoolean(false);
@@ -621,8 +620,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@Override
-	public void initialize(@Nonnull SokletConfig sokletConfig,
-												 @Nonnull RequestHandler requestHandler) {
+	public void initialize(@NonNull SokletConfig sokletConfig,
+												 @NonNull RequestHandler requestHandler) {
 		requireNonNull(sokletConfig);
 		requireNonNull(requestHandler);
 
@@ -673,8 +672,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
-	private static DefaultServerSentEventConnection.PreSerializedEvent preSerializeServerSentEvent(@Nonnull ServerSentEvent serverSentEvent) {
+	private static DefaultServerSentEventConnection.@NonNull PreSerializedEvent preSerializeServerSentEvent(@NonNull ServerSentEvent serverSentEvent) {
 		requireNonNull(serverSentEvent);
 
 		StringBuilder stringBuilder = new StringBuilder(DEFAULT_SSE_BUILDER_CAPACITY);
@@ -716,11 +714,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return false;
 	}
 
-	@Nonnull
-	private static Boolean enqueuePreSerializedEvent(@Nonnull DefaultServerSentEventBroadcaster owner,
-																									 @Nonnull DefaultServerSentEventConnection connection,
-																									 @Nonnull DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent,
-																									 @Nonnull BackpressureHandler handler) {
+	@NonNull
+	private static Boolean enqueuePreSerializedEvent(@NonNull DefaultServerSentEventBroadcaster owner,
+																									 @NonNull DefaultServerSentEventConnection connection,
+																									 DefaultServerSentEventConnection.@NonNull PreSerializedEvent preSerializedEvent,
+																									 @NonNull BackpressureHandler handler) {
 		requireNonNull(owner);
 		requireNonNull(connection);
 		requireNonNull(preSerializedEvent);
@@ -737,10 +735,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return false;
 	}
 
-	@Nonnull
-	private static Boolean enqueuePoisonPill(@Nonnull DefaultServerSentEventBroadcaster owner,
-																					 @Nonnull DefaultServerSentEventConnection connection,
-																					 @Nonnull BackpressureHandler handler) {
+	@NonNull
+	private static Boolean enqueuePoisonPill(@NonNull DefaultServerSentEventBroadcaster owner,
+																					 @NonNull DefaultServerSentEventConnection connection,
+																					 @NonNull BackpressureHandler handler) {
 		requireNonNull(owner);
 		requireNonNull(connection);
 		requireNonNull(handler);
@@ -754,11 +752,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return false;
 	}
 
-	@Nonnull
-	private static Boolean enqueueComment(@Nonnull DefaultServerSentEventBroadcaster owner,
-																				@Nonnull DefaultServerSentEventConnection connection,
-																				@Nonnull String comment,
-																				@Nonnull BackpressureHandler handler) {
+	@NonNull
+	private static Boolean enqueueComment(@NonNull DefaultServerSentEventBroadcaster owner,
+																				@NonNull DefaultServerSentEventConnection connection,
+																				@NonNull String comment,
+																				@NonNull BackpressureHandler handler) {
 		requireNonNull(owner);
 		requireNonNull(connection);
 		requireNonNull(comment);
@@ -838,7 +836,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	protected void handleClientSocketChannel(@Nonnull SocketChannel clientSocketChannel) {
+	protected void handleClientSocketChannel(@NonNull SocketChannel clientSocketChannel) {
 		requireNonNull(clientSocketChannel);
 
 		ClientSocketChannelRegistration clientSocketChannelRegistration = null;
@@ -1014,7 +1012,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			try {
-				getRequestHandler().get().handleRequest(requestForHandler, (@Nonnull RequestResult requestResult) -> {
+				getRequestHandler().get().handleRequest(requestForHandler, (@NonNull RequestResult requestResult) -> {
 					if (!handshakeResponseWritten.compareAndSet(false, true))
 						return;
 
@@ -1366,8 +1364,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
-	private byte[] createHandshakeHttpResponse(@Nonnull RequestResult requestResult) throws IOException {
+	@NonNull
+	private byte[] createHandshakeHttpResponse(@NonNull RequestResult requestResult) throws IOException {
 		requireNonNull(requestResult);
 
 		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
@@ -1476,8 +1474,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
-	private static byte[] createFailsafeHandshakeHttpResponse(@Nonnull StatusCode statusCode) {
+	@NonNull
+	private static byte[] createFailsafeHandshakeHttpResponse(@NonNull StatusCode statusCode) {
 		requireNonNull(statusCode);
 
 		String reasonPhrase = statusCode.getReasonPhrase();
@@ -1504,8 +1502,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return c == '\n' || c == '\r' || c == '\u000B' || c == '\u000C' || c == '\u0085' || c == '\u2028' || c == '\u2029';
 	}
 
-	private static void writeFully(@Nonnull SocketChannel socketChannel,
-																 @Nonnull byte[] bytes) throws IOException {
+	private static void writeFully(@NonNull SocketChannel socketChannel,
+																 @NonNull byte[] bytes) throws IOException {
 		requireNonNull(socketChannel);
 		requireNonNull(bytes);
 
@@ -1514,8 +1512,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			socketChannel.write(buffer);
 	}
 
-	private void writeHandshakeResponseToChannel(@Nonnull SocketChannel socketChannel,
-																							 @Nonnull MarshaledResponse marshaledResponse) throws IOException {
+	private void writeHandshakeResponseToChannel(@NonNull SocketChannel socketChannel,
+																							 @NonNull MarshaledResponse marshaledResponse) throws IOException {
 		requireNonNull(socketChannel);
 		requireNonNull(marshaledResponse);
 
@@ -1529,8 +1527,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	// Helper to write the marshaled response directly to the channel
-	private void writeMarshaledResponseToChannel(@Nonnull SocketChannel socketChannel,
-																							 @Nonnull MarshaledResponse marshaledResponse) throws IOException {
+	private void writeMarshaledResponseToChannel(@NonNull SocketChannel socketChannel,
+																							 @NonNull MarshaledResponse marshaledResponse) throws IOException {
 		requireNonNull(socketChannel);
 		requireNonNull(marshaledResponse);
 
@@ -1560,8 +1558,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			writeFully(socketChannel, marshaledResponse.getBody().get());
 	}
 
-	@Nonnull
-	protected String formatCommentForResponse(@Nonnull String comment) {
+	@NonNull
+	protected String formatCommentForResponse(@NonNull String comment) {
 		requireNonNull(comment);
 
 		if (comment.isEmpty())
@@ -1590,8 +1588,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return stringBuilder.toString();
 	}
 
-	private void appendCommentLine(@Nonnull StringBuilder stringBuilder,
-																 @Nonnull String comment,
+	private void appendCommentLine(@NonNull StringBuilder stringBuilder,
+																 @NonNull String comment,
 																 int start,
 																 int end) {
 		stringBuilder.append(':');
@@ -1602,9 +1600,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		stringBuilder.append('\n');
 	}
 
-	@Nonnull
-	private static String formatServerSentEventForResponse(@Nonnull ServerSentEvent serverSentEvent,
-																												 @Nonnull StringBuilder sb) {
+	@NonNull
+	private static String formatServerSentEventForResponse(@NonNull ServerSentEvent serverSentEvent,
+																												 @NonNull StringBuilder sb) {
 		requireNonNull(serverSentEvent);
 		requireNonNull(sb);
 
@@ -1683,9 +1681,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	// Internal snapshot - the only implementation users ever see
 	private record ServerSentEventConnectionSnapshot(
-			@Nonnull Request request,
-			@Nonnull ResourceMethod resourceMethod,
-			@Nonnull Instant establishedAt,
+			@NonNull Request request,
+			@NonNull ResourceMethod resourceMethod,
+			@NonNull Instant establishedAt,
 			@Nullable Object clientContext
 	) implements ServerSentEventConnection {
 		public ServerSentEventConnectionSnapshot {
@@ -1695,24 +1693,24 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		@Nonnull
+		@NonNull
 		public Request getRequest() {
 			return this.request;
 		}
 
 		@Override
-		@Nonnull
+		@NonNull
 		public ResourceMethod getResourceMethod() {
 			return this.resourceMethod;
 		}
 
 		@Override
-		@Nonnull
+		@NonNull
 		public Instant getEstablishedAt() {
 			return this.establishedAt;
 		}
 
-		@Nonnull
+		@NonNull
 		@Override
 		public Optional<Object> getClientContext() {
 			return Optional.ofNullable(clientContext);
@@ -1722,44 +1720,44 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	// We deliberately don't explicitly implement the ServerSentEventConnection interface - we never want a direct ref to this to leak out to clients.
 	@ThreadSafe
 	private static final class DefaultServerSentEventConnection /* implements ServerSentEventConnection */ {
-		@Nonnull
+		@NonNull
 		private final Request request;
-		@Nonnull
+		@NonNull
 		private final ResourceMethod resourceMethod;
 		@Nullable
 		private final Object clientContext;
-		@Nonnull
+		@NonNull
 		private final BlockingQueue<WriteQueueElement> writeQueue;
-		@Nonnull
+		@NonNull
 		private final Instant establishedAt;
-		@Nonnull
+		@NonNull
 		private final SocketChannel socketChannel;
-		@Nonnull
+		@NonNull
 		private final AtomicBoolean closing;
-		@Nonnull
+		@NonNull
 		private final AtomicReference<ServerSentEventConnection.TerminationReason> terminationReason;
-		@Nonnull
+		@NonNull
 		private final ServerSentEventConnectionSnapshot snapshot;
 
 		@ThreadSafe
 		static final class PreSerializedEvent {
-			@Nonnull
+			@NonNull
 			private final ServerSentEvent serverSentEvent;
-			@Nonnull
+			@NonNull
 			private final byte[] payloadBytes;
 
-			PreSerializedEvent(@Nonnull ServerSentEvent serverSentEvent,
-												 @Nonnull byte[] payloadBytes) {
+			PreSerializedEvent(@NonNull ServerSentEvent serverSentEvent,
+												 @NonNull byte[] payloadBytes) {
 				this.serverSentEvent = requireNonNull(serverSentEvent);
 				this.payloadBytes = requireNonNull(payloadBytes);
 			}
 
-			@Nonnull
+			@NonNull
 			public ServerSentEvent getServerSentEvent() {
 				return this.serverSentEvent;
 			}
 
-			@Nonnull
+			@NonNull
 			public byte[] getPayloadBytes() {
 				return this.payloadBytes;
 			}
@@ -1775,19 +1773,19 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			private static final WriteQueueElement POISON_PILL = new WriteQueueElement(null, null, true);
 
-			@Nonnull
-			public static WriteQueueElement withPreSerializedEvent(@Nonnull PreSerializedEvent preSerializedEvent) {
+			@NonNull
+			public static WriteQueueElement withPreSerializedEvent(@NonNull PreSerializedEvent preSerializedEvent) {
 				requireNonNull(preSerializedEvent);
 				return new WriteQueueElement(preSerializedEvent, null, false);
 			}
 
-			@Nonnull
-			public static WriteQueueElement withComment(@Nonnull String comment) {
+			@NonNull
+			public static WriteQueueElement withComment(@NonNull String comment) {
 				requireNonNull(comment);
 				return new WriteQueueElement(null, comment, false);
 			}
 
-			@Nonnull
+			@NonNull
 			public static WriteQueueElement poisonPill() {
 				return POISON_PILL;
 			}
@@ -1811,12 +1809,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				this.poisonPill = poisonPill;
 			}
 
-			@Nonnull
+			@NonNull
 			public Optional<PreSerializedEvent> getPreSerializedEvent() {
 				return Optional.ofNullable(this.preSerializedEvent);
 			}
 
-			@Nonnull
+			@NonNull
 			public Optional<String> getComment() {
 				return Optional.ofNullable(this.comment);
 			}
@@ -1826,11 +1824,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 		}
 
-		public DefaultServerSentEventConnection(@Nonnull Request request,
-																						@Nonnull ResourceMethod resourceMethod,
+		public DefaultServerSentEventConnection(@NonNull Request request,
+																						@NonNull ResourceMethod resourceMethod,
 																						@Nullable Object clientContext,
-																						@Nonnull Integer connectionQueueCapacity,
-																						@Nonnull SocketChannel socketChannel) {
+																						@NonNull Integer connectionQueueCapacity,
+																						@NonNull SocketChannel socketChannel) {
 			requireNonNull(request);
 			requireNonNull(resourceMethod);
 			requireNonNull(connectionQueueCapacity);
@@ -1850,69 +1848,69 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.snapshot = new ServerSentEventConnectionSnapshot(request, resourceMethod, establishedAt, clientContext);
 		}
 
-		@Nonnull
+		@NonNull
 		public Request getRequest() {
 			return this.request;
 		}
 
-		@Nonnull
+		@NonNull
 		public ResourceMethod getResourceMethod() {
 			return this.resourceMethod;
 		}
 
-		@Nonnull
+		@NonNull
 		public Optional<Object> getClientContext() {
 			return Optional.ofNullable(this.clientContext);
 		}
 
-		@Nonnull
+		@NonNull
 		public Instant getEstablishedAt() {
 			return this.establishedAt;
 		}
 
-		@Nonnull
+		@NonNull
 		public BlockingQueue<WriteQueueElement> getWriteQueue() {
 			return this.writeQueue;
 		}
 
-		@Nonnull
+		@NonNull
 		public SocketChannel getSocketChannel() {
 			return this.socketChannel;
 		}
 
-		@Nonnull
+		@NonNull
 		public AtomicBoolean getClosing() {
 			return this.closing;
 		}
 
-		public void setTerminationReason(@Nonnull ServerSentEventConnection.TerminationReason reason) {
+		public void setTerminationReason(ServerSentEventConnection.@NonNull TerminationReason reason) {
 			requireNonNull(reason);
 			this.terminationReason.compareAndSet(null, reason);
 		}
 
-		@Nonnull
+		@NonNull
 		public Optional<ServerSentEventConnection.TerminationReason> getTerminationReason() {
 			return Optional.ofNullable(this.terminationReason.get());
 		}
 
-		@Nonnull
+		@NonNull
 		public ServerSentEventConnectionSnapshot getSnapshot() {
 			return this.snapshot;
 		}
 	}
 
-	private record ClientSocketChannelRegistration(@Nonnull DefaultServerSentEventConnection serverSentEventConnection,
-																								 @Nonnull DefaultServerSentEventBroadcaster broadcaster) {
+	private record ClientSocketChannelRegistration(@NonNull DefaultServerSentEventConnection serverSentEventConnection,
+																								 @NonNull DefaultServerSentEventBroadcaster broadcaster) {
 		public ClientSocketChannelRegistration {
 			requireNonNull(serverSentEventConnection);
 			requireNonNull(broadcaster);
 		}
 	}
 
-	@Nonnull
-	private Optional<ClientSocketChannelRegistration> registerClientSocketChannel(@Nonnull SocketChannel clientSocketChannel,
-																																								@Nonnull Request request,
-																																								@Nonnull HandshakeResult.Accepted handshakeAccepted) {
+	@NonNull
+	private Optional<ClientSocketChannelRegistration> registerClientSocketChannel(@NonNull SocketChannel clientSocketChannel,
+																																									@NonNull Request request,
+																																									HandshakeResult.@NonNull Accepted handshakeAccepted) {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
 		requireNonNull(handshakeAccepted);
@@ -1966,13 +1964,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@ThreadSafe
 	protected static class DefaultServerSentEventUnicaster implements ServerSentEventUnicaster {
-		@Nonnull
+		@NonNull
 		private final ResourcePath resourcePath;
-		@Nonnull
+		@NonNull
 		private final BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue;
 
-		public DefaultServerSentEventUnicaster(@Nonnull ResourcePath resourcePath,
-																					 @Nonnull BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue) {
+		public DefaultServerSentEventUnicaster(@NonNull ResourcePath resourcePath,
+																					 @NonNull BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue) {
 			requireNonNull(resourcePath);
 			requireNonNull(writeQueue);
 
@@ -1981,7 +1979,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void unicastEvent(@Nonnull ServerSentEvent serverSentEvent) {
+		public void unicastEvent(@NonNull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
 
 			DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent = preSerializeServerSentEvent(serverSentEvent);
@@ -1991,26 +1989,26 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void unicastComment(@Nonnull String comment) {
+		public void unicastComment(@NonNull String comment) {
 			requireNonNull(comment);
 
 			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withComment(comment)))
 				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 
-		@Nonnull
+		@NonNull
 		@Override
 		public ResourcePath getResourcePath() {
 			return this.resourcePath;
 		}
 
-		@Nonnull
+		@NonNull
 		protected BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> getWriteQueue() {
 			return this.writeQueue;
 		}
 	}
 
-	protected void maybeCleanupBroadcaster(@Nonnull DefaultServerSentEventBroadcaster broadcaster) {
+	protected void maybeCleanupBroadcaster(@NonNull DefaultServerSentEventBroadcaster broadcaster) {
 		requireNonNull(broadcaster);
 
 		try {
@@ -2036,8 +2034,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
-	protected Request parseRequest(@Nonnull String rawRequest,
+	@NonNull
+	protected Request parseRequest(@NonNull String rawRequest,
 																 @Nullable InetSocketAddress remoteAddress) {
 		requireNonNull(rawRequest);
 
@@ -2162,7 +2160,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return requestBuilder.idGenerator(getIdGenerator()).headers(headers).remoteAddress(remoteAddress).build();
 	}
 
-	private static void requireAsciiToken(@Nonnull String value, @Nonnull String field) {
+	private static void requireAsciiToken(@NonNull String value, @NonNull String field) {
 		if (value.isEmpty())
 			throw new IllegalRequestException(format("Missing %s in Server-Sent Event request line", field));
 
@@ -2172,7 +2170,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	private static void validateHeaderName(@Nonnull String name) {
+	private static void validateHeaderName(@NonNull String name) {
 		if (name.isEmpty())
 			throw new IllegalRequestException("Header name is blank");
 
@@ -2189,7 +2187,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				Character.isLetterOrDigit(c);
 	}
 
-	private static void validateHeaderValue(@Nonnull String name, @Nonnull String value) {
+	private static void validateHeaderValue(@NonNull String name, @NonNull String value) {
 		requireNonNull(name);
 		requireNonNull(value);
 
@@ -2201,8 +2199,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
-	private static List<String> splitRequestLines(@Nonnull String rawRequest) {
+	@NonNull
+	private static List<String> splitRequestLines(@NonNull String rawRequest) {
 		requireNonNull(rawRequest);
 
 		List<String> lines = new ArrayList<>();
@@ -2232,7 +2230,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return lines;
 	}
 
-	protected void validateNoRequestBodyHeaders(@Nonnull Request request) {
+	protected void validateNoRequestBodyHeaders(@NonNull Request request) {
 		requireNonNull(request);
 
 		Map<String, Set<String>> headers = request.getHeaders();
@@ -2274,8 +2272,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
-	protected String readRequest(@Nonnull SocketChannel clientSocketChannel) throws IOException {
+	@NonNull
+	protected String readRequest(@NonNull SocketChannel clientSocketChannel) throws IOException {
 		requireNonNull(clientSocketChannel);
 
 		// Because reads from the socket channel are blocking, there is no way to specify a timeout for it.
@@ -2408,8 +2406,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	 * <p>
 	 * If there isn't sufficient data to parse into a request (or if the data is malformed), then return the empty value.
 	 */
-	@Nonnull
-	protected Optional<Request> parseTooLargeRequestForRawRequest(@Nonnull String rawRequest) {
+	@NonNull
+	protected Optional<Request> parseTooLargeRequestForRawRequest(@NonNull String rawRequest) {
 		requireNonNull(rawRequest);
 
 		// Supports both relative and absolute paths.
@@ -2476,16 +2474,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@NotThreadSafe
 	protected static class RequestTooLargeIOException extends IOException {
-		@Nonnull
+		@NonNull
 		private final Request tooLargeRequest;
 
 		public RequestTooLargeIOException(@Nullable String message,
-																			@Nonnull Request tooLargeRequest) {
+																			@NonNull Request tooLargeRequest) {
 			super(message);
 			this.tooLargeRequest = requireNonNull(tooLargeRequest);
 		}
 
-		@Nonnull
+		@NonNull
 		public Request getTooLargeRequest() {
 			return this.tooLargeRequest;
 		}
@@ -2636,7 +2634,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	private void awaitPoolTermination(@Nullable ExecutorService executorService,
-																		@Nonnull Long millis) {
+																		@NonNull Long millis) {
 		requireNonNull(millis);
 
 		if (executorService == null || executorService.isTerminated())
@@ -2649,9 +2647,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
+	@NonNull
 	protected CompletableFuture<Boolean> awaitTerminationAsync(@Nullable ExecutorService executorService,
-																														 @Nonnull Long millis) {
+																														 @NonNull Long millis) {
 		requireNonNull(millis);
 
 		if (executorService == null || millis <= 0)
@@ -2667,9 +2665,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		});
 	}
 
-	@Nonnull
+	@NonNull
 	protected CompletableFuture<Boolean> joinAsync(@Nullable Thread thread,
-																								 @Nonnull Long millis) {
+																								 @NonNull Long millis) {
 		requireNonNull(millis);
 
 		if (thread == null || millis <= 0)
@@ -2691,7 +2689,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	protected void hardenJoin(@Nullable Thread thread,
-														@Nonnull Long millis) {
+														@NonNull Long millis) {
 		requireNonNull(millis);
 
 		if (thread == null || !thread.isAlive() || thread == Thread.currentThread())
@@ -2706,15 +2704,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
-	protected Long remainingMillis(@Nonnull Long deadlineNanos) {
+	@NonNull
+	protected Long remainingMillis(@NonNull Long deadlineNanos) {
 		requireNonNull(deadlineNanos);
 
 		long rem = TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
 		return Math.max(0L, rem);
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
 	public Boolean isStarted() {
 		getLock().lock();
@@ -2726,7 +2724,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
+	@NonNull
 	protected Boolean isStopping() {
 		getLock().lock();
 
@@ -2737,7 +2735,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
 	public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
 		if (resourcePath == null)
@@ -2754,8 +2752,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return Optional.of(new StableBroadcasterHandle(resourcePath));
 	}
 
-	@Nonnull
-	protected Optional<ResourceMethod> resourceMethodForResourcePath(@Nonnull ResourcePath resourcePath) {
+	@NonNull
+	protected Optional<ResourceMethod> resourceMethodForResourcePath(@NonNull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
 
 		ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(resourcePath).orElse(null);
@@ -2772,9 +2770,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return Optional.of(resourceMethod);
 	}
 
-	@Nonnull
-	private DefaultServerSentEventBroadcaster newBroadcaster(@Nonnull ResourceMethod resourceMethod,
-																													 @Nonnull ResourcePath resourcePath) {
+	@NonNull
+	private DefaultServerSentEventBroadcaster newBroadcaster(@NonNull ResourceMethod resourceMethod,
+																													 @NonNull ResourcePath resourcePath) {
 		requireNonNull(resourceMethod);
 		requireNonNull(resourcePath);
 
@@ -2795,11 +2793,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		);
 	}
 
-	@Nonnull
+	@NonNull
 	private DefaultServerSentEventBroadcaster registerConnectionWithBroadcaster(
-			@Nonnull ResourcePath resourcePath,
-			@Nonnull ResourceMethod resourceMethod,
-			@Nonnull DefaultServerSentEventConnection connection) {
+			@NonNull ResourcePath resourcePath,
+			@NonNull ResourceMethod resourceMethod,
+			@NonNull DefaultServerSentEventConnection connection) {
 		requireNonNull(resourcePath);
 		requireNonNull(resourceMethod);
 		requireNonNull(connection);
@@ -2840,16 +2838,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.activeConnectionCount.updateAndGet(current -> Math.max(0, current - 1));
 	}
 
-	private void releaseReservedSlot(@Nonnull AtomicBoolean slotReserved) {
+	private void releaseReservedSlot(@NonNull AtomicBoolean slotReserved) {
 		requireNonNull(slotReserved);
 
 		if (slotReserved.getAndSet(false))
 			releaseConnectionSlot();
 	}
 
-	@Nonnull
-	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@Nonnull ResourcePath resourcePath,
-																																									 @Nonnull ResourceMethod resourceMethod) {
+	@NonNull
+	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@NonNull ResourcePath resourcePath,
+																																									 @NonNull ResourceMethod resourceMethod) {
 		requireNonNull(resourcePath);
 		requireNonNull(resourceMethod);
 
@@ -2870,9 +2868,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return Optional.of(broadcaster);
 	}
 
-	protected void closeConnectionDueToBackpressure(@Nonnull DefaultServerSentEventBroadcaster owner,
-																									@Nonnull DefaultServerSentEventConnection connection,
-																									@Nonnull String cause) {
+	protected void closeConnectionDueToBackpressure(@NonNull DefaultServerSentEventBroadcaster owner,
+																									@NonNull DefaultServerSentEventConnection connection,
+																									@NonNull String cause) {
 		requireNonNull(owner);
 		requireNonNull(connection);
 		requireNonNull(cause);
@@ -2908,7 +2906,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		} catch (Throwable ignored) { /* channel may already be closed */ }
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ResourcePathDeclaration> matchingResourcePath(@Nullable ResourcePath resourcePath) {
 		if (resourcePath == null)
 			return Optional.empty();
@@ -2930,7 +2928,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return Optional.of(resourcePathDeclaration);
 	}
 
-	protected void safelyLog(@Nonnull LogEvent logEvent) {
+	protected void safelyLog(@NonNull LogEvent logEvent) {
 		requireNonNull(logEvent);
 
 		try {
@@ -2942,148 +2940,148 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getPort() {
 		return this.port;
 	}
 
-	@Nonnull
+	@NonNull
 	protected String getHost() {
 		return this.host;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Duration getRequestTimeout() {
 		return this.requestTimeout;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Duration getRequestHandlerTimeout() {
 		return this.requestHandlerTimeout;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Duration getWriteTimeout() {
 		return this.writeTimeout;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Duration getShutdownTimeout() {
 		return this.shutdownTimeout;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Duration getHeartbeatInterval() {
 		return this.heartbeatInterval;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getMaximumRequestSizeInBytes() {
 		return this.maximumRequestSizeInBytes;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getRequestReadBufferSizeInBytes() {
 		return this.requestReadBufferSizeInBytes;
 	}
 
-	@Nonnull
+	@NonNull
 	public Map<ResourcePathDeclaration, ResourceMethod> getResourceMethodsByResourcePathDeclaration() {
 		return this.resourceMethodsByResourcePathDeclaration;
 	}
 
 	// Package-private for test hook
-	@Nonnull
+	@NonNull
 	ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
 		return this.broadcastersByResourcePath;
 	}
 
-	@Nonnull
+	@NonNull
 	protected ConcurrentLruMap<ResourcePath, ResourcePathDeclaration> getResourcePathDeclarationsByResourcePathCache() {
 		return this.resourcePathDeclarationsByResourcePathCache;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ExecutorService> getRequestHandlerExecutorService() {
 		return Optional.ofNullable(this.requestHandlerExecutorService);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ScheduledExecutorService> getRequestHandlerTimeoutExecutorService() {
 		return Optional.ofNullable(this.requestHandlerTimeoutExecutorService);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ExecutorService> getRequestReaderExecutorService() {
 		return Optional.ofNullable(this.requestReaderExecutorService);
 	}
 
-	@Nonnull
+	@NonNull
 	protected ReentrantLock getLock() {
 		return this.lock;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Supplier<ExecutorService> getRequestHandlerExecutorServiceSupplier() {
 		return this.requestHandlerExecutorServiceSupplier;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Supplier<ExecutorService> getRequestReaderExecutorServiceSupplier() {
 		return this.requestReaderExecutorServiceSupplier;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getConcurrentConnectionLimit() {
 		return this.concurrentConnectionLimit;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getConnectionQueueCapacity() {
 		return this.connectionQueueCapacity;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Boolean getVerifyConnectionOnceEstablished() {
 		return this.verifyConnectionOnceEstablished;
 	}
 
-	@Nonnull
+	@NonNull
 	protected ConcurrentHashMap<DefaultServerSentEventConnection, DefaultServerSentEventBroadcaster> getGlobalConnections() {
 		return this.globalConnections;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getActiveConnectionCount() {
 		return this.activeConnectionCount.get();
 	}
 
-	@Nonnull
+	@NonNull
 	protected ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> getIdleBroadcastersByResourcePath() {
 		return this.idleBroadcastersByResourcePath;
 	}
 
-	@Nonnull
+	@NonNull
 	protected AtomicBoolean getStopPoisonPill() {
 		return this.stopPoisonPill;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<Thread> getEventLoopThread() {
 		return Optional.ofNullable(this.eventLoopThread);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<RequestHandler> getRequestHandler() {
 		return Optional.ofNullable(this.requestHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<LifecycleObserver> getLifecycleObserver() {
 		return Optional.ofNullable(this.lifecycleObserver);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ResponseMarshaler> getResponseMarshaler() {
 		return Optional.ofNullable(this.responseMarshaler);
 	}

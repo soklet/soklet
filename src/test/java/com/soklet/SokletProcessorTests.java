@@ -35,14 +35,14 @@ public class SokletProcessorTests {
 	void validEndpointCompiles() {
 		JavaFileObject src = JavaFileObjects.forSourceString("example.Ok",
 				"""
-						import javax.annotation.Nonnull;
+						import org.jspecify.annotations.NonNull;
 						import com.soklet.annotation.ServerSentEventSource;
 						import com.soklet.annotation.PathParameter;
 						import com.soklet.HandshakeResult;
 						
 						public class Ok {
 							@ServerSentEventSource("/widgets/{id}")
-							public HandshakeResult sse(@Nonnull @PathParameter(name="id") Integer id) {
+							public HandshakeResult sse(@NonNull @PathParameter(name="id") Integer id) {
 								return HandshakeResult.acceptWithDefaults().build();
 							}
 						}
@@ -228,13 +228,13 @@ public class SokletProcessorTests {
 	void supportsVarargPathParameter() {
 		JavaFileObject src = JavaFileObjects.forSourceString("example.VarargOk",
 				"""
-						import javax.annotation.Nonnull;
+						import org.jspecify.annotations.NonNull;
 						import com.soklet.annotation.GET;
 						import com.soklet.annotation.PathParameter;
 						
 						public class VarargOk {
 							@GET("/static/css/{cssPath*}")
-							public void staticCssFile(@Nonnull @PathParameter String cssPath) {
+							public void staticCssFile(@NonNull @PathParameter String cssPath) {
 								/* ok */
 							}
 						}
@@ -251,13 +251,13 @@ public class SokletProcessorTests {
 	void rejectsUnboundVarargPlaceholder() {
 		JavaFileObject src = JavaFileObjects.forSourceString("example.VarargBad",
 				"""
-						import javax.annotation.Nonnull;
+						import org.jspecify.annotations.NonNull;
 						import com.soklet.annotation.GET;
 						import com.soklet.annotation.PathParameter;
 						
 						public class VarargBad {
 							@GET("/static/css/{cssPath*}")
-							public void staticCssFile(@Nonnull @PathParameter String other) {
+							public void staticCssFile(@NonNull @PathParameter String other) {
 								/* name mismatch: 'other' != 'cssPath' */
 							}
 						}

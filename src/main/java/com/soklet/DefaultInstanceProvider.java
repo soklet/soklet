@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.InvocationTargetException;
 
@@ -28,21 +28,21 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultInstanceProvider implements InstanceProvider {
-	@Nonnull
+	@NonNull
 	private static final DefaultInstanceProvider DEFAULT_INSTANCE;
 
 	static {
 		DEFAULT_INSTANCE = new DefaultInstanceProvider();
 	}
 
-	@Nonnull
+	@NonNull
 	public static DefaultInstanceProvider defaultInstance() {
 		return DEFAULT_INSTANCE;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public <T> T provide(@Nonnull Class<T> instanceClass) {
+	public <T> T provide(@NonNull Class<T> instanceClass) {
 		requireNonNull(instanceClass);
 
 		try {

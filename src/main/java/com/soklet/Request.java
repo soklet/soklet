@@ -24,8 +24,8 @@ import com.soklet.exception.IllegalRequestException;
 import com.soklet.exception.IllegalRequestHeaderException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.InetSocketAddress;
@@ -64,9 +64,9 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class Request {
-	@Nonnull
+	@NonNull
 	private static final Charset DEFAULT_CHARSET;
-	@Nonnull
+	@NonNull
 	private static final IdGenerator DEFAULT_ID_GENERATOR;
 
 	static {
@@ -74,25 +74,25 @@ public final class Request {
 		DEFAULT_ID_GENERATOR = DefaultIdGenerator.withDefaults();
 	}
 
-	@Nonnull
+	@NonNull
 	private final Object id;
-	@Nonnull
+	@NonNull
 	private final HttpMethod httpMethod;
-	@Nonnull
+	@NonNull
 	private final String rawPath;
 	@Nullable
 	private final String rawQuery;
-	@Nonnull
+	@NonNull
 	private final String path;
-	@Nonnull
+	@NonNull
 	private final ResourcePath resourcePath;
-	@Nonnull
+	@NonNull
 	private final Map<String, Set<String>> queryParameters;
 	@Nullable
 	private final String contentType;
 	@Nullable
 	private final Charset charset;
-	@Nonnull
+	@NonNull
 	private final Map<String, Set<String>> headers;
 	@Nullable
 	private final InetSocketAddress remoteAddress;
@@ -102,15 +102,15 @@ public final class Request {
 	private final CorsPreflight corsPreflight;
 	@Nullable
 	private final byte[] body;
-	@Nonnull
+	@NonNull
 	private final Boolean multipart;
-	@Nonnull
+	@NonNull
 	private final Boolean contentTooLarge;
-	@Nonnull
+	@NonNull
 	private final MultipartParser multipartParser;
-	@Nonnull
+	@NonNull
 	private final IdGenerator<?> idGenerator;
-	@Nonnull
+	@NonNull
 	private final ReentrantLock lock;
 	@Nullable
 	private volatile String bodyAsString = null;
@@ -145,9 +145,9 @@ public final class Request {
 	 * @param rawUrl     the raw (un-decoded) URL for this request
 	 * @return the builder
 	 */
-	@Nonnull
-	public static RawBuilder withRawUrl(@Nonnull HttpMethod httpMethod,
-																			@Nonnull String rawUrl) {
+	@NonNull
+	public static RawBuilder withRawUrl(@NonNull HttpMethod httpMethod,
+																			@NonNull String rawUrl) {
 		requireNonNull(httpMethod);
 		requireNonNull(rawUrl);
 
@@ -167,9 +167,9 @@ public final class Request {
 	 * @param path       the decoded URL path for this request
 	 * @return the builder
 	 */
-	@Nonnull
-	public static PathBuilder withPath(@Nonnull HttpMethod httpMethod,
-																		 @Nonnull String path) {
+	@NonNull
+	public static PathBuilder withPath(@NonNull HttpMethod httpMethod,
+																		 @NonNull String path) {
 		requireNonNull(httpMethod);
 		requireNonNull(path);
 
@@ -181,7 +181,7 @@ public final class Request {
 	 *
 	 * @return a copier for this instance
 	 */
-	@Nonnull
+	@NonNull
 	public Copier copy() {
 		return new Copier(this);
 	}
@@ -351,7 +351,7 @@ public final class Request {
 		return Objects.hash(getId(), getHttpMethod(), getPath(), getQueryParameters(), getHeaders(), Arrays.hashCode(this.body), isContentTooLarge());
 	}
 
-	private static boolean containsEncodedSlash(@Nonnull String rawPath) {
+	private static boolean containsEncodedSlash(@NonNull String rawPath) {
 		requireNonNull(rawPath);
 		return rawPath.toLowerCase(Locale.ROOT).contains("%2f");
 	}
@@ -363,7 +363,7 @@ public final class Request {
 	 *
 	 * @return the request's identifier
 	 */
-	@Nonnull
+	@NonNull
 	public Object getId() {
 		return this.id;
 	}
@@ -373,7 +373,7 @@ public final class Request {
 	 *
 	 * @return the request's HTTP method
 	 */
-	@Nonnull
+	@NonNull
 	public HttpMethod getHttpMethod() {
 		return this.httpMethod;
 	}
@@ -383,7 +383,7 @@ public final class Request {
 	 *
 	 * @return the path for this request
 	 */
-	@Nonnull
+	@NonNull
 	public String getPath() {
 		return this.path;
 	}
@@ -393,7 +393,7 @@ public final class Request {
 	 *
 	 * @return the resource path for this request
 	 */
-	@Nonnull
+	@NonNull
 	public ResourcePath getResourcePath() {
 		return this.resourcePath;
 	}
@@ -410,7 +410,7 @@ public final class Request {
 	 *
 	 * @return the request's cookies
 	 */
-	@Nonnull
+	@NonNull
 	public Map<String, Set<String>> getCookies() {
 		Map<String, Set<String>> result = this.cookies;
 
@@ -444,7 +444,7 @@ public final class Request {
 	 *
 	 * @return the request's query parameters
 	 */
-	@Nonnull
+	@NonNull
 	public Map<String, Set<String>> getQueryParameters() {
 		return this.queryParameters;
 	}
@@ -461,7 +461,7 @@ public final class Request {
 	 *
 	 * @return the request's form parameters
 	 */
-	@Nonnull
+	@NonNull
 	public Map<String, Set<String>> getFormParameters() {
 		Map<String, Set<String>> result = this.formParameters;
 
@@ -498,7 +498,7 @@ public final class Request {
 	 *
 	 * @return the raw path for this request
 	 */
-	@Nonnull
+	@NonNull
 	public String getRawPath() {
 		return this.rawPath;
 	}
@@ -515,7 +515,7 @@ public final class Request {
 	 *
 	 * @return the raw query for this request, or {@link Optional#empty()} if none was specified
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getRawQuery() {
 		return Optional.ofNullable(this.rawQuery);
 	}
@@ -530,7 +530,7 @@ public final class Request {
 	 *
 	 * @return the raw path and query for this request
 	 */
-	@Nonnull
+	@NonNull
 	public String getRawPathAndQuery() {
 		if (this.rawQuery == null)
 			return this.rawPath;
@@ -543,7 +543,7 @@ public final class Request {
 	 *
 	 * @return the remote address for this request, or {@link Optional#empty()} if unavailable
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<InetSocketAddress> getRemoteAddress() {
 		return Optional.ofNullable(this.remoteAddress);
 	}
@@ -560,7 +560,7 @@ public final class Request {
 	 *
 	 * @return the request's headers
 	 */
-	@Nonnull
+	@NonNull
 	public Map<String, Set<String>> getHeaders() {
 		return this.headers;
 	}
@@ -570,7 +570,7 @@ public final class Request {
 	 *
 	 * @return the request's {@code Content-Type} header value, or {@link Optional#empty()} if not specified
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getContentType() {
 		return Optional.ofNullable(this.contentType);
 	}
@@ -580,7 +580,7 @@ public final class Request {
 	 *
 	 * @return the request's character encoding, or {@link Optional#empty()} if not specified
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Charset> getCharset() {
 		return Optional.ofNullable(this.charset);
 	}
@@ -590,7 +590,7 @@ public final class Request {
 	 *
 	 * @return {@code true} if this is a {@code multipart/form-data} request, {@code false} otherwise
 	 */
-	@Nonnull
+	@NonNull
 	public Boolean isMultipart() {
 		return this.multipart;
 	}
@@ -609,7 +609,7 @@ public final class Request {
 	 *
 	 * @return the request's multipart fields, or the empty map if none are present
 	 */
-	@Nonnull
+	@NonNull
 	public Map<String, Set<MultipartField>> getMultipartFields() {
 		if (!isMultipart())
 			return Map.of();
@@ -640,7 +640,7 @@ public final class Request {
 	 *
 	 * @return the request body bytes, or {@link Optional#empty()} if none was supplied
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<byte[]> getBody() {
 		return Optional.ofNullable(this.body);
 
@@ -659,7 +659,7 @@ public final class Request {
 	 *
 	 * @return {@code true} if this request is larger than the server is able to handle, {@code false} otherwise
 	 */
-	@Nonnull
+	@NonNull
 	public Boolean isContentTooLarge() {
 		return this.contentTooLarge;
 	}
@@ -675,7 +675,7 @@ public final class Request {
 	 *
 	 * @return a {@link String} representation of this request's body, or {@link Optional#empty()} if no request body was specified by the client
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getBodyAsString() {
 		// Lazily instantiate a string instance using double-checked locking
 		String result = this.bodyAsString;
@@ -705,7 +705,7 @@ public final class Request {
 	 *
 	 * @return non-preflight CORS request data, or {@link Optional#empty()} if none was specified
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Cors> getCors() {
 		return Optional.ofNullable(this.cors);
 	}
@@ -717,7 +717,7 @@ public final class Request {
 	 *
 	 * @return preflight CORS request data, or {@link Optional#empty()} if none was specified
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<CorsPreflight> getCorsPreflight() {
 		return Optional.ofNullable(this.corsPreflight);
 	}
@@ -733,7 +733,7 @@ public final class Request {
 	 *
 	 * @return locale information for this request, or the empty list if none was specified
 	 */
-	@Nonnull
+	@NonNull
 	public List<Locale> getLocales() {
 		// Lazily instantiate our parsed locales using double-checked locking
 		List<Locale> result = this.locales;
@@ -784,7 +784,7 @@ public final class Request {
 	 *
 	 * @return language range information for this request, or the empty list if none was specified
 	 */
-	@Nonnull
+	@NonNull
 	public List<LanguageRange> getLanguageRanges() {
 		// Lazily instantiate our parsed language ranges using double-checked locking
 		List<LanguageRange> result = this.languageRanges;
@@ -836,8 +836,8 @@ public final class Request {
 	 * @return the value for the query parameter, or {@link Optional#empty()} if none is present
 	 * @throws IllegalQueryParameterException if the query parameter with the given {@code name} has multiple values
 	 */
-	@Nonnull
-	public Optional<String> getQueryParameter(@Nonnull String name) {
+	@NonNull
+	public Optional<String> getQueryParameter(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -862,8 +862,8 @@ public final class Request {
 	 * @return the value for the form parameter, or {@link Optional#empty()} if none is present
 	 * @throws IllegalFormParameterException if the form parameter with the given {@code name} has multiple values
 	 */
-	@Nonnull
-	public Optional<String> getFormParameter(@Nonnull String name) {
+	@NonNull
+	public Optional<String> getFormParameter(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -888,8 +888,8 @@ public final class Request {
 	 * @return the value for the header, or {@link Optional#empty()} if none is present
 	 * @throws IllegalRequestHeaderException if the header with the given {@code name} has multiple values
 	 */
-	@Nonnull
-	public Optional<String> getHeader(@Nonnull String name) {
+	@NonNull
+	public Optional<String> getHeader(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -914,8 +914,8 @@ public final class Request {
 	 * @return the value for the cookie, or {@link Optional#empty()} if none is present
 	 * @throws IllegalRequestCookieException if the cookie with the given {@code name} has multiple values
 	 */
-	@Nonnull
-	public Optional<String> getCookie(@Nonnull String name) {
+	@NonNull
+	public Optional<String> getCookie(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -940,8 +940,8 @@ public final class Request {
 	 * @return the multipart field value, or {@link Optional#empty()} if none is present
 	 * @throws IllegalMultipartFieldException if the multipart field with the given {@code name} has multiple values
 	 */
-	@Nonnull
-	public Optional<MultipartField> getMultipartField(@Nonnull String name) {
+	@NonNull
+	public Optional<MultipartField> getMultipartField(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -957,23 +957,23 @@ public final class Request {
 		}
 	}
 
-	@Nonnull
+	@NonNull
 	private MultipartParser getMultipartParser() {
 		return this.multipartParser;
 	}
 
-	@Nonnull
+	@NonNull
 	private IdGenerator<?> getIdGenerator() {
 		return this.idGenerator;
 	}
 
-	@Nonnull
+	@NonNull
 	private ReentrantLock getLock() {
 		return this.lock;
 	}
 
-	@Nonnull
-	private <T> Optional<T> singleValueForName(@Nonnull String name,
+	@NonNull
+	private <T> Optional<T> singleValueForName(@NonNull String name,
 																						 @Nullable Map<String, Set<T>> valuesByName) throws MultipleValuesException {
 		if (valuesByName == null)
 			return Optional.empty();
@@ -991,13 +991,13 @@ public final class Request {
 
 	@NotThreadSafe
 	private static class MultipleValuesException extends Exception {
-		@Nonnull
+		@NonNull
 		private final String name;
-		@Nonnull
+		@NonNull
 		private final Set<?> values;
 
-		private MultipleValuesException(@Nonnull String name,
-																		@Nonnull Set<?> values) {
+		private MultipleValuesException(@NonNull String name,
+																		@NonNull Set<?> values) {
 			super(format("Expected single value but found %d values for '%s': %s", values.size(), name, values));
 
 			requireNonNull(name);
@@ -1007,12 +1007,12 @@ public final class Request {
 			this.values = Collections.unmodifiableSet(new LinkedHashSet<>(values));
 		}
 
-		@Nonnull
+		@NonNull
 		public String getName() {
 			return this.name;
 		}
 
-		@Nonnull
+		@NonNull
 		public Set<?> getValues() {
 			return this.values;
 		}
@@ -1027,9 +1027,9 @@ public final class Request {
 	 */
 	@NotThreadSafe
 	public static final class RawBuilder {
-		@Nonnull
+		@NonNull
 		private HttpMethod httpMethod;
-		@Nonnull
+		@NonNull
 		private String rawUrl;
 		@Nullable
 		private Object id;
@@ -1046,8 +1046,8 @@ public final class Request {
 		@Nullable
 		private Boolean contentTooLarge;
 
-		protected RawBuilder(@Nonnull HttpMethod httpMethod,
-												 @Nonnull String rawUrl) {
+		protected RawBuilder(@NonNull HttpMethod httpMethod,
+												 @NonNull String rawUrl) {
 			requireNonNull(httpMethod);
 			requireNonNull(rawUrl);
 
@@ -1055,63 +1055,63 @@ public final class Request {
 			this.rawUrl = rawUrl;
 		}
 
-		@Nonnull
-		public RawBuilder httpMethod(@Nonnull HttpMethod httpMethod) {
+		@NonNull
+		public RawBuilder httpMethod(@NonNull HttpMethod httpMethod) {
 			requireNonNull(httpMethod);
 			this.httpMethod = httpMethod;
 			return this;
 		}
 
-		@Nonnull
-		public RawBuilder rawUrl(@Nonnull String rawUrl) {
+		@NonNull
+		public RawBuilder rawUrl(@NonNull String rawUrl) {
 			requireNonNull(rawUrl);
 			this.rawUrl = rawUrl;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public RawBuilder id(@Nullable Object id) {
 			this.id = id;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public RawBuilder idGenerator(@Nullable IdGenerator idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public RawBuilder multipartParser(@Nullable MultipartParser multipartParser) {
 			this.multipartParser = multipartParser;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public RawBuilder headers(@Nullable Map<String, Set<String>> headers) {
 			this.headers = headers;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public RawBuilder remoteAddress(@Nullable InetSocketAddress remoteAddress) {
 			this.remoteAddress = remoteAddress;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public RawBuilder body(@Nullable byte[] body) {
 			this.body = body;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public RawBuilder contentTooLarge(@Nullable Boolean contentTooLarge) {
 			this.contentTooLarge = contentTooLarge;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Request build() {
 			return new Request(this, null);
 		}
@@ -1126,9 +1126,9 @@ public final class Request {
 	 */
 	@NotThreadSafe
 	public static final class PathBuilder {
-		@Nonnull
+		@NonNull
 		private HttpMethod httpMethod;
-		@Nonnull
+		@NonNull
 		private String path;
 		@Nullable
 		private String rawPath;
@@ -1151,8 +1151,8 @@ public final class Request {
 		@Nullable
 		private Boolean contentTooLarge;
 
-		protected PathBuilder(@Nonnull HttpMethod httpMethod,
-													@Nonnull String path) {
+		protected PathBuilder(@NonNull HttpMethod httpMethod,
+													@NonNull String path) {
 			requireNonNull(httpMethod);
 			requireNonNull(path);
 
@@ -1160,83 +1160,83 @@ public final class Request {
 			this.path = path;
 		}
 
-		@Nonnull
-		public PathBuilder httpMethod(@Nonnull HttpMethod httpMethod) {
+		@NonNull
+		public PathBuilder httpMethod(@NonNull HttpMethod httpMethod) {
 			requireNonNull(httpMethod);
 			this.httpMethod = httpMethod;
 			return this;
 		}
 
-		@Nonnull
-		public PathBuilder path(@Nonnull String path) {
+		@NonNull
+		public PathBuilder path(@NonNull String path) {
 			requireNonNull(path);
 			this.path = path;
 			return this;
 		}
 
 		// Package-private setter for raw value (used by Copier)
-		@Nonnull
+		@NonNull
 		PathBuilder rawPath(@Nullable String rawPath) {
 			this.rawPath = rawPath;
 			return this;
 		}
 
 		// Package-private setter for raw value (used by Copier)
-		@Nonnull
+		@NonNull
 		PathBuilder rawQuery(@Nullable String rawQuery) {
 			this.rawQuery = rawQuery;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public PathBuilder id(@Nullable Object id) {
 			this.id = id;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public PathBuilder idGenerator(@Nullable IdGenerator idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public PathBuilder multipartParser(@Nullable MultipartParser multipartParser) {
 			this.multipartParser = multipartParser;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public PathBuilder queryParameters(@Nullable Map<String, Set<String>> queryParameters) {
 			this.queryParameters = queryParameters;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public PathBuilder headers(@Nullable Map<String, Set<String>> headers) {
 			this.headers = headers;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public PathBuilder remoteAddress(@Nullable InetSocketAddress remoteAddress) {
 			this.remoteAddress = remoteAddress;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public PathBuilder body(@Nullable byte[] body) {
 			this.body = body;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public PathBuilder contentTooLarge(@Nullable Boolean contentTooLarge) {
 			this.contentTooLarge = contentTooLarge;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Request build() {
 			return new Request(null, this);
 		}
@@ -1251,7 +1251,7 @@ public final class Request {
 	 */
 	@NotThreadSafe
 	public static final class Copier {
-		@Nonnull
+		@NonNull
 		private final PathBuilder builder;
 
 		// Track original raw values and modification state
@@ -1261,12 +1261,12 @@ public final class Request {
 		private String originalRawQuery;
 		@Nullable
 		private InetSocketAddress originalRemoteAddress;
-		@Nonnull
+		@NonNull
 		private Boolean pathModified = false;
-		@Nonnull
+		@NonNull
 		private Boolean queryParametersModified = false;
 
-		Copier(@Nonnull Request request) {
+		Copier(@NonNull Request request) {
 			requireNonNull(request);
 
 			this.originalRawPath = request.getRawPath();
@@ -1287,15 +1287,15 @@ public final class Request {
 					.rawQuery(this.originalRawQuery);
 		}
 
-		@Nonnull
-		public Copier httpMethod(@Nonnull HttpMethod httpMethod) {
+		@NonNull
+		public Copier httpMethod(@NonNull HttpMethod httpMethod) {
 			requireNonNull(httpMethod);
 			this.builder.httpMethod(httpMethod);
 			return this;
 		}
 
-		@Nonnull
-		public Copier path(@Nonnull String path) {
+		@NonNull
+		public Copier path(@NonNull String path) {
 			requireNonNull(path);
 			this.builder.path(path);
 			this.pathModified = true;
@@ -1304,13 +1304,13 @@ public final class Request {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier id(@Nullable Object id) {
 			this.builder.id(id);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier queryParameters(@Nullable Map<String, Set<String>> queryParameters) {
 			this.builder.queryParameters(queryParameters);
 			this.queryParametersModified = true;
@@ -1320,8 +1320,8 @@ public final class Request {
 		}
 
 		// Convenience method for mutation
-		@Nonnull
-		public Copier queryParameters(@Nonnull Consumer<Map<String, Set<String>>> queryParametersConsumer) {
+		@NonNull
+		public Copier queryParameters(@NonNull Consumer<Map<String, Set<String>>> queryParametersConsumer) {
 			requireNonNull(queryParametersConsumer);
 
 			if (this.builder.queryParameters == null)
@@ -1334,21 +1334,21 @@ public final class Request {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier headers(@Nullable Map<String, Set<String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier remoteAddress(@Nullable InetSocketAddress remoteAddress) {
 			this.builder.remoteAddress(remoteAddress);
 			return this;
 		}
 
 		// Convenience method for mutation
-		@Nonnull
-		public Copier headers(@Nonnull Consumer<Map<String, Set<String>>> headersConsumer) {
+		@NonNull
+		public Copier headers(@NonNull Consumer<Map<String, Set<String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
 			if (this.builder.headers == null)
@@ -1358,19 +1358,19 @@ public final class Request {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier body(@Nullable byte[] body) {
 			this.builder.body(body);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier contentTooLarge(@Nullable Boolean contentTooLarge) {
 			this.builder.contentTooLarge(contentTooLarge);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Request finish() {
 			return this.builder.build();
 		}

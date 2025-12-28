@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
@@ -65,18 +65,18 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class ParameterizedHeaderValue {
-	@Nonnull
+	@NonNull
 	private final String name;
-	@Nonnull
+	@NonNull
 	private final List<Parameter> parameters;
 
-	@Nonnull
-	public static Builder withName(@Nonnull String value) {
+	@NonNull
+	public static Builder withName(@NonNull String value) {
 		requireNonNull(value);
 		return new Builder(value);
 	}
 
-	private ParameterizedHeaderValue(@Nonnull Builder builder) {
+	private ParameterizedHeaderValue(@NonNull Builder builder) {
 		requireNonNull(builder);
 		this.name = requireNonNull(builder.name);
 		this.parameters = Collections.unmodifiableList(new ArrayList<>(builder.parameters));
@@ -85,7 +85,7 @@ public final class ParameterizedHeaderValue {
 	/**
 	 * Returns the name (non-parameter) portion of this header value.
 	 */
-	@Nonnull
+	@NonNull
 	public String getName() {
 		return this.name;
 	}
@@ -98,7 +98,7 @@ public final class ParameterizedHeaderValue {
 	 *
 	 * @return the wire-format header field value
 	 */
-	@Nonnull
+	@NonNull
 	public String getStringValue() {
 		return render(this.name, this.parameters);
 	}
@@ -108,7 +108,7 @@ public final class ParameterizedHeaderValue {
 	 * <p>
 	 * The returned list is immutable.
 	 */
-	@Nonnull
+	@NonNull
 	public List<Parameter> getParameters() {
 		return this.parameters;
 	}
@@ -120,7 +120,7 @@ public final class ParameterizedHeaderValue {
 	 * wire-format header field value.
 	 */
 	@Override
-	@Nonnull
+	@NonNull
 	public String toString() {
 		return format("ParameterizedHeaderValue{name=%s, parameters=%s}", getName(), getParameters());
 	}
@@ -142,9 +142,9 @@ public final class ParameterizedHeaderValue {
 		return Objects.hash(this.name, this.parameters);
 	}
 
-	@Nonnull
-	private static String render(@Nonnull String value,
-															 @Nonnull List<Parameter> parameters) {
+	@NonNull
+	private static String render(@NonNull String value,
+															 @NonNull List<Parameter> parameters) {
 		requireNonNull(value);
 		requireNonNull(parameters);
 
@@ -183,19 +183,19 @@ public final class ParameterizedHeaderValue {
 			RFC_8187
 		}
 
-		@Nonnull
+		@NonNull
 		private final Kind kind;
-		@Nonnull
+		@NonNull
 		private final String name;
-		@Nonnull
+		@NonNull
 		private final String value; // unencoded/original value (for debugging/state)
-		@Nonnull
+		@NonNull
 		private final String encodedFragment; // already encoded "name=value" or "name*=ext-value"
 
-		private Parameter(@Nonnull Kind kind,
-											@Nonnull String name,
-											@Nonnull String value,
-											@Nonnull String encodedFragment) {
+		private Parameter(@NonNull Kind kind,
+											@NonNull String name,
+											@NonNull String value,
+											@NonNull String encodedFragment) {
 			this.kind = requireNonNull(kind);
 			this.name = requireNonNull(name);
 			this.value = requireNonNull(value);
@@ -207,7 +207,7 @@ public final class ParameterizedHeaderValue {
 		 *
 		 * @return the parameter kind
 		 */
-		@Nonnull
+		@NonNull
 		public Kind getKind() {
 			return kind;
 		}
@@ -217,7 +217,7 @@ public final class ParameterizedHeaderValue {
 		 *
 		 * @return the parameter name
 		 */
-		@Nonnull
+		@NonNull
 		public String getName() {
 			return name;
 		}
@@ -227,7 +227,7 @@ public final class ParameterizedHeaderValue {
 		 *
 		 * @return the parameter value
 		 */
-		@Nonnull
+		@NonNull
 		public String getValue() {
 			return value;
 		}
@@ -237,13 +237,13 @@ public final class ParameterizedHeaderValue {
 		 *
 		 * @return the encoded parameter fragment
 		 */
-		@Nonnull
+		@NonNull
 		String getEncodedFragment() {
 			return encodedFragment;
 		}
 
 		@Override
-		@Nonnull
+		@NonNull
 		public String toString() {
 			return "Parameter{"
 					+ "kind=" + kind
@@ -282,12 +282,12 @@ public final class ParameterizedHeaderValue {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nonnull
+		@NonNull
 		private final String name;
-		@Nonnull
+		@NonNull
 		private final List<Parameter> parameters;
 
-		private Builder(@Nonnull String name) {
+		private Builder(@NonNull String name) {
 			requireNonNull(name);
 			this.name = sanitizeValue(name);
 			this.parameters = new ArrayList<>();
@@ -304,9 +304,9 @@ public final class ParameterizedHeaderValue {
 		 * @return this builder
 		 * @throws IllegalArgumentException if {@code name} or {@code value} are not valid tokens or contain control chars
 		 */
-		@Nonnull
-		public Builder tokenParameter(@Nonnull String name,
-																	@Nonnull String value) {
+		@NonNull
+		public Builder tokenParameter(@NonNull String name,
+																	@NonNull String value) {
 			requireNonNull(name);
 			requireNonNull(value);
 
@@ -331,9 +331,9 @@ public final class ParameterizedHeaderValue {
 		 * @return this builder
 		 * @throws IllegalArgumentException if {@code name} is not a valid token or {@code value} is non-ASCII or contains control chars
 		 */
-		@Nonnull
-		public Builder quotedParameter(@Nonnull String name,
-																	 @Nonnull String value) {
+		@NonNull
+		public Builder quotedParameter(@NonNull String name,
+																	 @NonNull String value) {
 			requireNonNull(name);
 			requireNonNull(value);
 
@@ -362,9 +362,9 @@ public final class ParameterizedHeaderValue {
 		 * @return this builder
 		 * @throws IllegalArgumentException if {@code name} is not a valid token or {@code value} contains control chars
 		 */
-		@Nonnull
-		public Builder rfc8187Parameter(@Nonnull String name,
-																		@Nonnull String value) {
+		@NonNull
+		public Builder rfc8187Parameter(@NonNull String name,
+																		@NonNull String value) {
 			requireNonNull(name);
 			requireNonNull(value);
 
@@ -383,7 +383,7 @@ public final class ParameterizedHeaderValue {
 		/**
 		 * Builds an immutable {@link ParameterizedHeaderValue}.
 		 */
-		@Nonnull
+		@NonNull
 		public ParameterizedHeaderValue build() {
 			return new ParameterizedHeaderValue(this);
 		}
@@ -395,15 +395,15 @@ public final class ParameterizedHeaderValue {
 		 *
 		 * @return the wire-format header field value
 		 */
-		@Nonnull
+		@NonNull
 		public String stringValue() {
 			return ParameterizedHeaderValue.render(this.name, this.parameters);
 		}
 
 		/* --------------------------- internals --------------------------- */
 
-		@Nonnull
-		private static String sanitizeValue(@Nonnull String string) {
+		@NonNull
+		private static String sanitizeValue(@NonNull String string) {
 			requireNonNull(string);
 
 			// We don't attempt to fully validate "primary-value" because its grammar is header-specific.
@@ -426,8 +426,8 @@ public final class ParameterizedHeaderValue {
 			return trimmed;
 		}
 
-		@Nonnull
-		private static String sanitizeParameterName(@Nonnull String name) {
+		@NonNull
+		private static String sanitizeParameterName(@NonNull String name) {
 			requireNonNull(name);
 
 			assertNoControlCharacters(name, "name");
@@ -443,8 +443,8 @@ public final class ParameterizedHeaderValue {
 			return trimmed;
 		}
 
-		@Nonnull
-		private static String sanitizeTokenValue(@Nonnull String value) {
+		@NonNull
+		private static String sanitizeTokenValue(@NonNull String value) {
 			requireNonNull(value);
 
 			assertNoControlCharacters(value, "value");
@@ -460,8 +460,8 @@ public final class ParameterizedHeaderValue {
 			return trimmed;
 		}
 
-		@Nonnull
-		private static String sanitizeQuotedValue(@Nonnull String value) {
+		@NonNull
+		private static String sanitizeQuotedValue(@NonNull String value) {
 			requireNonNull(value);
 
 			// Fail-fast: quoted-string values should be ASCII and must not include CTLs.
@@ -483,16 +483,16 @@ public final class ParameterizedHeaderValue {
 			return value;
 		}
 
-		@Nonnull
-		private static String sanitizeRfc8187Value(@Nonnull String value) {
+		@NonNull
+		private static String sanitizeRfc8187Value(@NonNull String value) {
 			// RFC 8187 values are encoded as UTF-8 bytes + percent-encoding.
 			// We still fail-fast on ASCII control characters to prevent header injection.
 			assertNoControlCharacters(value, "value");
 			return value;
 		}
 
-		@Nonnull
-		private static String encodeQuotedString(@Nonnull String value) {
+		@NonNull
+		private static String encodeQuotedString(@NonNull String value) {
 			// RFC 9110 quoted-string: DQUOTE *( qdtext / quoted-pair ) DQUOTE
 			// We implement a safe subset: escape backslash and double quote.
 			String escaped = value
@@ -502,8 +502,8 @@ public final class ParameterizedHeaderValue {
 			return "\"" + escaped + "\"";
 		}
 
-		@Nonnull
-		private static String encodeRfc8187ExtValue(@Nonnull String value) {
+		@NonNull
+		private static String encodeRfc8187ExtValue(@NonNull String value) {
 			requireNonNull(value);
 
 			// RFC 8187 ext-value: charset "'" [ language ] "'" value-chars
@@ -528,8 +528,8 @@ public final class ParameterizedHeaderValue {
 			return sb.toString();
 		}
 
-		private static void assertNoControlCharacters(@Nonnull String string,
-																									@Nonnull String fieldName) {
+		private static void assertNoControlCharacters(@NonNull String string,
+																									@NonNull String fieldName) {
 			requireNonNull(string);
 			requireNonNull(fieldName);
 
@@ -544,7 +544,7 @@ public final class ParameterizedHeaderValue {
 		/**
 		 * Returns {@code true} if {@code string} is an HTTP {@code token} per RFC 9110.
 		 */
-		private static boolean isToken(@Nonnull String string) {
+		private static boolean isToken(@NonNull String string) {
 			requireNonNull(string);
 
 			if (string.isEmpty())

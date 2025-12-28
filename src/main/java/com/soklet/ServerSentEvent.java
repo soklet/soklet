@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
@@ -74,7 +74,7 @@ public final class ServerSentEvent {
 	 * @param event the {@code event} value for the instance
 	 * @return the builder
 	 */
-	@Nonnull
+	@NonNull
 	public static Builder withEvent(@Nullable String event) {
 		return new Builder().event(event);
 	}
@@ -85,7 +85,7 @@ public final class ServerSentEvent {
 	 * @param data the {@code data} value for the instance
 	 * @return the builder
 	 */
-	@Nonnull
+	@NonNull
 	public static Builder withData(@Nullable String data) {
 		return new Builder().data(data);
 	}
@@ -95,12 +95,12 @@ public final class ServerSentEvent {
 	 *
 	 * @return the builder
 	 */
-	@Nonnull
+	@NonNull
 	public static Builder withDefaults() {
 		return new Builder();
 	}
 
-	protected ServerSentEvent(@Nonnull Builder builder) {
+	protected ServerSentEvent(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.id = builder.id;
@@ -123,8 +123,8 @@ public final class ServerSentEvent {
 					ServerSentEvent.class.getSimpleName(), Utilities.printableString(this.id)));
 	}
 
-	@Nonnull
-	private Boolean containsLineBreaks(@Nonnull String string) {
+	@NonNull
+	private Boolean containsLineBreaks(@NonNull String string) {
 		requireNonNull(string);
 		return string.indexOf('\n') >= 0 || string.indexOf('\r') >= 0;
 	}
@@ -151,38 +151,38 @@ public final class ServerSentEvent {
 			// Nothing to do
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder id(@Nullable String id) {
 			this.id = id;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder event(@Nullable String event) {
 			this.event = event;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder data(@Nullable String data) {
 			this.data = data;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder retry(@Nullable Duration retry) {
 			this.retry = retry;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public ServerSentEvent build() {
 			return new ServerSentEvent(this);
 		}
 	}
 
 	@Override
-	@Nonnull
+	@NonNull
 	public String toString() {
 		List<String> components = new ArrayList<>(4);
 
@@ -205,7 +205,7 @@ public final class ServerSentEvent {
 	 *
 	 * @return the optional {@code id} for this Server-Sent Event
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getId() {
 		return Optional.ofNullable(this.id);
 	}
@@ -217,7 +217,7 @@ public final class ServerSentEvent {
 	 *
 	 * @return the optional {@code event} value for this Server-Sent Event
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getEvent() {
 		return Optional.ofNullable(this.event);
 	}
@@ -229,7 +229,7 @@ public final class ServerSentEvent {
 	 *
 	 * @return the optional {@code data} payload for this Server-Sent Event
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getData() {
 		return Optional.ofNullable(this.data);
 	}
@@ -241,7 +241,7 @@ public final class ServerSentEvent {
 	 *
 	 * @return the optional {@code retry} duration for this Server-Sent Event
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Duration> getRetry() {
 		return Optional.ofNullable(this.retry);
 	}

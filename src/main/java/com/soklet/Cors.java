@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Map;
 import java.util.Objects;
@@ -47,7 +47,7 @@ import static java.util.Objects.requireNonNull;
 public final class Cors {
 	@Nullable
 	private final HttpMethod httpMethod;
-	@Nonnull
+	@NonNull
 	private final String origin;
 
 	/**
@@ -57,9 +57,9 @@ public final class Cors {
 	 * @param origin     HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin">{@code Origin}</a> request header value
 	 * @return a {@link Cors} instance
 	 */
-	@Nonnull
-	public static Cors withOrigin(@Nonnull HttpMethod httpMethod,
-																@Nonnull String origin) {
+	@NonNull
+	public static Cors withOrigin(@NonNull HttpMethod httpMethod,
+																@NonNull String origin) {
 		requireNonNull(httpMethod);
 		requireNonNull(origin);
 
@@ -73,9 +73,9 @@ public final class Cors {
 	 * @param headers    the request headers
 	 * @return the CORS non-preflight data for this request, or {@link Optional#empty()} if insufficent data is present
 	 */
-	@Nonnull
-	public static Optional<Cors> fromHeaders(@Nonnull HttpMethod httpMethod,
-																					 @Nonnull Map<String, Set<String>> headers) {
+	@NonNull
+	public static Optional<Cors> fromHeaders(@NonNull HttpMethod httpMethod,
+																					 @NonNull Map<String, Set<String>> headers) {
 		requireNonNull(httpMethod);
 		requireNonNull(headers);
 
@@ -97,8 +97,8 @@ public final class Cors {
 		return Optional.of(new Cors(httpMethod, originHeaderValue));
 	}
 
-	private Cors(@Nonnull HttpMethod httpMethod,
-							 @Nonnull String origin) {
+	private Cors(@NonNull HttpMethod httpMethod,
+							 @NonNull String origin) {
 		requireNonNull(httpMethod);
 		requireNonNull(origin);
 
@@ -107,7 +107,7 @@ public final class Cors {
 	}
 
 	@Override
-	@Nonnull
+	@NonNull
 	public String toString() {
 		return String.format("%s{httpMethod=%s, origin=%s}", getClass().getSimpleName(), getHttpMethod().name(), getOrigin());
 	}
@@ -144,7 +144,7 @@ public final class Cors {
 	 *
 	 * @return the header value
 	 */
-	@Nonnull
+	@NonNull
 	public String getOrigin() {
 		return this.origin;
 	}

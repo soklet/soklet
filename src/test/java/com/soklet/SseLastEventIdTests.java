@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -87,8 +87,8 @@ public class SseLastEventIdTests {
 
 	public static class SseResource {
 		@ServerSentEventSource("/sse/{id}")
-		public HandshakeResult sse(@Nonnull Request request,
-															 @Nonnull ServerSentEventServer serverSentEventServer) {
+		public HandshakeResult sse(@NonNull Request request,
+															 @NonNull ServerSentEventServer serverSentEventServer) {
 			String last = request.getHeaders().getOrDefault("Last-Event-ID", Set.of()).stream().findFirst().orElse("none");
 
 			// Wait a bit and then broadcast

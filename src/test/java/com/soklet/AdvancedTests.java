@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -1451,7 +1451,7 @@ public class AdvancedTests {
 				.responseMarshaler(customMarshaler)
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 						// Ignore the SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED log event
 					}
 				})

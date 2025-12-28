@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Method;
 import java.util.Objects;
@@ -36,13 +36,13 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class ResourceMethod {
-	@Nonnull
+	@NonNull
 	private final HttpMethod httpMethod;
-	@Nonnull
+	@NonNull
 	private final ResourcePathDeclaration resourcePathDeclaration;
-	@Nonnull
+	@NonNull
 	private final Method method;
-	@Nonnull
+	@NonNull
 	private final Boolean serverSentEventSource;
 
 	/**
@@ -54,11 +54,11 @@ public final class ResourceMethod {
 	 * @param serverSentEventSource   is this <em>Resource Method</em> configured as a Server-Sent Event source?
 	 * @return a <em>Resource Method</em> for the supplied components
 	 */
-	@Nonnull
-	public static ResourceMethod withComponents(@Nonnull HttpMethod httpMethod,
-																							@Nonnull ResourcePathDeclaration resourcePathDeclaration,
-																							@Nonnull Method method,
-																							@Nonnull Boolean serverSentEventSource) {
+	@NonNull
+	public static ResourceMethod withComponents(@NonNull HttpMethod httpMethod,
+																							@NonNull ResourcePathDeclaration resourcePathDeclaration,
+																							@NonNull Method method,
+																							@NonNull Boolean serverSentEventSource) {
 		requireNonNull(httpMethod);
 		requireNonNull(resourcePathDeclaration);
 		requireNonNull(method);
@@ -67,10 +67,10 @@ public final class ResourceMethod {
 		return new ResourceMethod(httpMethod, resourcePathDeclaration, method, serverSentEventSource);
 	}
 
-	private ResourceMethod(@Nonnull HttpMethod httpMethod,
-												 @Nonnull ResourcePathDeclaration resourcePathDeclaration,
-												 @Nonnull Method method,
-												 @Nonnull Boolean serverSentEventSource) {
+	private ResourceMethod(@NonNull HttpMethod httpMethod,
+												 @NonNull ResourcePathDeclaration resourcePathDeclaration,
+												 @NonNull Method method,
+												 @NonNull Boolean serverSentEventSource) {
 		requireNonNull(httpMethod);
 		requireNonNull(resourcePathDeclaration);
 		requireNonNull(method);
@@ -112,7 +112,7 @@ public final class ResourceMethod {
 	 *
 	 * @return the HTTP method
 	 */
-	@Nonnull
+	@NonNull
 	public HttpMethod getHttpMethod() {
 		return this.httpMethod;
 	}
@@ -122,7 +122,7 @@ public final class ResourceMethod {
 	 *
 	 * @return the HTTP path
 	 */
-	@Nonnull
+	@NonNull
 	public ResourcePathDeclaration getResourcePathDeclaration() {
 		return this.resourcePathDeclaration;
 	}
@@ -132,7 +132,7 @@ public final class ResourceMethod {
 	 *
 	 * @return the Java method to invoke
 	 */
-	@Nonnull
+	@NonNull
 	public Method getMethod() {
 		return this.method;
 	}
@@ -142,7 +142,7 @@ public final class ResourceMethod {
 	 *
 	 * @return {@code true} if this <em>Resource Method</em> functions as a Server-Sent Event Source, {@code false} otherwise
 	 */
-	@Nonnull
+	@NonNull
 	public Boolean isServerSentEventSource() {
 		return this.serverSentEventSource;
 	}

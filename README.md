@@ -295,13 +295,13 @@ SokletConfig config = SokletConfig.withServer(
   // This example uses Google's GSON
   static final Gson GSON = new Gson();
 
-  @Nonnull
+  @NonNull
   @Override
   public Optional<Object> marshalRequestBody(
-    @Nonnull Request request,
-    @Nonnull ResourceMethod resourceMethod,
-    @Nonnull Parameter parameter,
-    @Nonnull Type requestBodyType
+    @NonNull Request request,
+    @NonNull ResourceMethod resourceMethod,
+    @NonNull Parameter parameter,
+    @NonNull Type requestBodyType
   ) {
     // Let GSON turn the request body into an instance
     // of the specified type.
@@ -346,9 +346,9 @@ final Gson GSON = new Gson();
 
 // The request was matched to a Resource Method and executed non-exceptionally
 ResourceMethodHandler resourceMethodHandler = (
-  @Nonnull Request request,
-  @Nonnull Response response,
-  @Nonnull ResourceMethod resourceMethod		
+  @NonNull Request request,
+  @NonNull Response response,
+  @NonNull ResourceMethod resourceMethod		
 ) -> {
   // Turn response body into JSON bytes with Gson
   Object bodyObject = response.getBody().orElse(null);
@@ -369,8 +369,8 @@ ResourceMethodHandler resourceMethodHandler = (
 
 // Function to create responses for exceptions that bubble out
 ThrowableHandler throwableHandler = (
-  @Nonnull Request request,
-  @Nonnull Throwable throwable,
+  @NonNull Request request,
+  @NonNull Throwable throwable,
   @Nullable ResourceMethod resourceMethod
 ) -> {
   // Keep track of what to write to the response
@@ -603,9 +603,9 @@ Injector injector = Guice.createInjector(new MyExampleAppModule());
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
 ).instanceProvider(new InstanceProvider() {
-  @Nonnull
+  @NonNull
   @Override  
-  public <T> T provide(@Nonnull Class<T> instanceClass) {
+  public <T> T provide(@NonNull Class<T> instanceClass) {
     // Have Soklet ask the Guice Injector for the instance
     return injector.getInstance(instanceClass);     
   }
@@ -639,25 +639,25 @@ SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
 ).requestInterceptor(new RequestInterceptor() {
   @Override
-  public void willStartServer(@Nonnull Server server) {
+  public void willStartServer(@NonNull Server server) {
     // Perform startup tasks required prior to server launch
     MyPayrollSystem.INSTANCE.startLengthyWarmupProcess();
   }
 
   @Override
-  public void didStartServer(@Nonnull Server server) {
+  public void didStartServer(@NonNull Server server) {
     // Server has fully started up and is listening
     System.out.println("Server started.");
   }
 
   @Override
-  public void willStopServer(@Nonnull Server server) {
+  public void willStopServer(@NonNull Server server) {
     // Perform shutdown tasks required prior to server teardown
     MyPayrollSystem.INSTANCE.destroy();    
   }
 
   @Override
-  public void didStopServer(@Nonnull Server server) {
+  public void didStopServer(@NonNull Server server) {
     // Server has fully shut down
     System.out.println("Server stopped.");
   }
@@ -672,7 +672,7 @@ SokletConfig config = SokletConfig.withServer(
 ).requestInterceptor(new RequestInterceptor() {
   @Override
   public void didStartRequestHandling(
-    @Nonnull Request request,
+    @NonNull Request request,
     @Nullable ResourceMethod resourceMethod
   ) {
     System.out.printf("Received request: %s\n", request);
@@ -686,11 +686,11 @@ SokletConfig config = SokletConfig.withServer(
 
   @Override
   public void didFinishRequestHandling(
-    @Nonnull Request request,
+    @NonNull Request request,
     @Nullable ResourceMethod resourceMethod,
-    @Nonnull MarshaledResponse marshaledResponse,
-    @Nonnull Duration processingDuration,
-    @Nonnull List<Throwable> throwables
+    @NonNull MarshaledResponse marshaledResponse,
+    @NonNull Duration processingDuration,
+    @NonNull List<Throwable> throwables
   ) {
     // We have access to a few things here...
     // * marshaledResponse is what was ultimately sent
@@ -722,9 +722,9 @@ SokletConfig config = SokletConfig.withServer(
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void wrapRequest(
-    @Nonnull Request request,
+    @NonNull Request request,
     @Nullable ResourceMethod resourceMethod,
-    @Nonnull Consumer<Request> requestProcessor
+    @NonNull Consumer<Request> requestProcessor
   ) {
     // Make the locale accessible by other code during this request...
     Locale locale = request.getLocales().get(0);
@@ -759,10 +759,10 @@ SokletConfig config = SokletConfig.withServer(
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void interceptRequest(
-    @Nonnull Request request,
+    @NonNull Request request,
     @Nullable ResourceMethod resourceMethod,
-    @Nonnull Function<Request, MarshaledResponse> responseProducer,
-    @Nonnull Consumer<MarshaledResponse> responseWriter
+    @NonNull Function<Request, MarshaledResponse> responseProducer,
+    @NonNull Consumer<MarshaledResponse> responseWriter
   ) {
     // Here's where you might start a DB transaction.
     // (MyDatabase is a hypothetical construct)
@@ -794,9 +794,9 @@ SokletConfig config = SokletConfig.withServer(
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void willStartResponseWriting(
-    @Nonnull Request request,
+    @NonNull Request request,
     @Nullable ResourceMethod resourceMethod,
-    @Nonnull MarshaledResponse marshaledResponse
+    @NonNull MarshaledResponse marshaledResponse
   ) {
     // Access to marshaledResponse here lets us see exactly
     // what will be going over the wire
@@ -807,10 +807,10 @@ SokletConfig config = SokletConfig.withServer(
 
   @Override
   public void didFinishResponseWriting(
-    @Nonnull Request request,
+    @NonNull Request request,
     @Nullable ResourceMethod resourceMethod,
-    @Nonnull MarshaledResponse marshaledResponse,
-    @Nonnull Duration responseWriteDuration,
+    @NonNull MarshaledResponse marshaledResponse,
+    @NonNull Duration responseWriteDuration,
     @Nullable Throwable throwable
   ) {
     long millis = processingDuration.toNanos() / 1_000_000.0;
@@ -864,15 +864,15 @@ Custom CORS logic:
 SokletConfig config = SokletConfig.withServer(server)
   .corsAuthorizer(new CorsAuthorizer() {
     // Any subdomain under soklet.com is permitted
-    boolean originMatchesValidSubdomain(@Nonnull Cors cors) {
+    boolean originMatchesValidSubdomain(@NonNull Cors cors) {
       return cors.getOrigin().matches("https://(.+)\\.soklet\\.com");
     }
 
-    @Nonnull
+    @NonNull
     @Override
     public Optional<CorsPreflightResponse> authorizePreflight(
-      @Nonnull Request request,
-      @Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod
+      @NonNull Request request,
+      @NonNull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod
     ) {
       // Requests here are guaranteed to have the Cors value set
       Cors cors = request.getCors().get();
@@ -891,9 +891,9 @@ SokletConfig config = SokletConfig.withServer(server)
       return Optional.empty();
     }    
 
-    @Nonnull
+    @NonNull
     @Override
-    public Optional<CorsResponse> authorize(@Nonnull Request request) {
+    public Optional<CorsResponse> authorize(@NonNull Request request) {
       // Requests here are guaranteed to have the Cors value set
       Cors cors = request.getCors().get();
 

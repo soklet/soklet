@@ -16,8 +16,8 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import static java.util.Objects.requireNonNull;
@@ -29,11 +29,11 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class IllegalRequestException extends BadRequestException {
-	public IllegalRequestException(@Nonnull String message) {
+	public IllegalRequestException(@NonNull String message) {
 		super(requireNonNull(message));
 	}
 
-	public IllegalRequestException(@Nonnull String message,
+	public IllegalRequestException(@NonNull String message,
 																 @Nullable Throwable cause) {
 		super(requireNonNull(message), cause);
 	}

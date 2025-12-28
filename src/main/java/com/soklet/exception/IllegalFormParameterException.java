@@ -16,8 +16,8 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Optional;
 
@@ -30,13 +30,13 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class IllegalFormParameterException extends BadRequestException {
-	@Nonnull
+	@NonNull
 	private final String formParameterName;
 	@Nullable
 	private final String formParameterValue;
 
 	public IllegalFormParameterException(@Nullable String message,
-																			 @Nonnull String formParameterName,
+																			 @NonNull String formParameterName,
 																			 @Nullable String formParameterValue) {
 		super(message);
 		this.formParameterName = requireNonNull(formParameterName);
@@ -45,19 +45,19 @@ public final class IllegalFormParameterException extends BadRequestException {
 
 	public IllegalFormParameterException(@Nullable String message,
 																			 @Nullable Throwable cause,
-																			 @Nonnull String formParameterName,
+																			 @NonNull String formParameterName,
 																			 @Nullable String formParameterValue) {
 		super(message, cause);
 		this.formParameterName = requireNonNull(formParameterName);
 		this.formParameterValue = formParameterValue;
 	}
 
-	@Nonnull
+	@NonNull
 	public String getFormParameterName() {
 		return this.formParameterName;
 	}
 
-	@Nonnull
+	@NonNull
 	public Optional<String> getFormParameterValue() {
 		return Optional.ofNullable(this.formParameterValue);
 	}

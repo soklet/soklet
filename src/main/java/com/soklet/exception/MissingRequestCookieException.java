@@ -16,8 +16,8 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import static java.util.Objects.requireNonNull;
@@ -29,16 +29,16 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class MissingRequestCookieException extends BadRequestException {
-	@Nonnull
+	@NonNull
 	private final String requestCookieName;
 
 	public MissingRequestCookieException(@Nullable String message,
-																			 @Nonnull String requestCookieName) {
+																			 @NonNull String requestCookieName) {
 		super(message);
 		this.requestCookieName = requireNonNull(requestCookieName);
 	}
 
-	@Nonnull
+	@NonNull
 	public String getRequestCookieName() {
 		return this.requestCookieName;
 	}

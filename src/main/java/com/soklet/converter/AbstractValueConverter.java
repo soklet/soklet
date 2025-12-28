@@ -16,8 +16,8 @@
 
 package com.soklet.converter;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -37,9 +37,9 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, T> {
-	@Nonnull
+	@NonNull
 	private final Type fromType;
-	@Nonnull
+	@NonNull
 	private final Type toType;
 
 	/**
@@ -69,7 +69,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	 *
 	 * @param fromType an explicitly-provided 'from' type
 	 */
-	public AbstractValueConverter(@Nonnull Type fromType) {
+	public AbstractValueConverter(@NonNull Type fromType) {
 		requireNonNull(fromType);
 
 		List<Type> genericTypes = genericTypesForClass(getClass());
@@ -87,7 +87,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 		this.toType = toType;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
 	@SuppressWarnings("unchecked")
 	public final Optional<T> convert(@Nullable F from) throws ValueConversionException {
@@ -105,7 +105,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 		}
 	}
 
-	@Nonnull
+	@NonNull
 	protected Boolean shouldTrimFromValues() {
 		return true;
 	}
@@ -117,28 +117,28 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	 * @return an instance that was converted to
 	 * @throws Exception if an error occured during conversion
 	 */
-	@Nonnull
+	@NonNull
 	public abstract Optional<T> performConversion(@Nullable F from) throws Exception;
 
 	@Override
-	@Nonnull
+	@NonNull
 	public Type getFromType() {
 		return this.fromType;
 	}
 
 	@Override
-	@Nonnull
+	@NonNull
 	public Type getToType() {
 		return this.toType;
 	}
 
 	@Override
-	@Nonnull
+	@NonNull
 	public String toString() {
 		return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), getFromType(), getToType());
 	}
 
-	@Nonnull
+	@NonNull
 	static List<Type> genericTypesForClass(@Nullable Class<?> valueConverterClass) {
 		if (valueConverterClass == null)
 			return List.of();

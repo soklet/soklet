@@ -27,8 +27,8 @@ import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.Options;
 import com.soklet.internal.microhttp.OptionsBuilder;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -72,25 +72,25 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultServer implements Server {
-	@Nonnull
+	@NonNull
 	private static final String DEFAULT_HOST;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_CONCURRENCY;
-	@Nonnull
+	@NonNull
 	private static final Duration DEFAULT_REQUEST_TIMEOUT;
-	@Nonnull
+	@NonNull
 	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
-	@Nonnull
+	@NonNull
 	private static final Duration DEFAULT_SOCKET_SELECT_TIMEOUT;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
-	@Nonnull
+	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_CONNECTIONS;
-	@Nonnull
+	@NonNull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 
 	static {
@@ -106,35 +106,35 @@ final class DefaultServer implements Server {
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 	}
 
-	@Nonnull
+	@NonNull
 	private final Integer port;
-	@Nonnull
+	@NonNull
 	private final String host;
-	@Nonnull
+	@NonNull
 	private final Integer concurrency;
-	@Nonnull
+	@NonNull
 	private final Duration requestTimeout;
-	@Nonnull
+	@NonNull
 	private final Duration requestHandlerTimeout;
-	@Nonnull
+	@NonNull
 	private final Duration socketSelectTimeout;
-	@Nonnull
+	@NonNull
 	private final Duration shutdownTimeout;
-	@Nonnull
+	@NonNull
 	private final Integer maximumRequestSizeInBytes;
-	@Nonnull
+	@NonNull
 	private final Integer requestReadBufferSizeInBytes;
-	@Nonnull
+	@NonNull
 	private final Integer socketPendingConnectionLimit;
-	@Nonnull
+	@NonNull
 	private final Integer maximumConnections;
-	@Nonnull
+	@NonNull
 	private final MultipartParser multipartParser;
-	@Nonnull
+	@NonNull
 	private final IdGenerator<?> idGenerator;
-	@Nonnull
+	@NonNull
 	private final ReentrantLock lock;
-	@Nonnull
+	@NonNull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
@@ -147,7 +147,7 @@ final class DefaultServer implements Server {
 	@Nullable
 	private volatile EventLoop eventLoop;
 
-	protected DefaultServer(@Nonnull Builder builder) {
+	protected DefaultServer(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.lock = new ReentrantLock();
@@ -479,10 +479,10 @@ final class DefaultServer implements Server {
 		}
 	}
 
-	@Nonnull
-	protected MicrohttpResponse provideMicrohttpFailsafeResponse(@Nonnull Integer statusCode,
-																															 @Nonnull MicrohttpRequest microhttpRequest,
-																															 @Nonnull Throwable throwable) {
+	@NonNull
+	protected MicrohttpResponse provideMicrohttpFailsafeResponse(@NonNull Integer statusCode,
+																															 @NonNull MicrohttpRequest microhttpRequest,
+																															 @NonNull Throwable throwable) {
 		requireNonNull(statusCode);
 		requireNonNull(microhttpRequest);
 		requireNonNull(throwable);
@@ -502,8 +502,8 @@ final class DefaultServer implements Server {
 			timeoutFuture.cancel(false);
 	}
 
-	@Nonnull
-	private MicrohttpResponse withConnectionClose(@Nonnull MicrohttpResponse response) {
+	@NonNull
+	private MicrohttpResponse withConnectionClose(@NonNull MicrohttpResponse response) {
 		requireNonNull(response);
 
 		if (hasConnectionCloseHeader(response))
@@ -518,7 +518,7 @@ final class DefaultServer implements Server {
 		return new MicrohttpResponse(response.status(), response.reason(), headers, response.body());
 	}
 
-	private boolean hasConnectionCloseHeader(@Nonnull MicrohttpResponse response) {
+	private boolean hasConnectionCloseHeader(@NonNull MicrohttpResponse response) {
 		requireNonNull(response);
 
 		List<Header> headers = response.headers();
@@ -542,7 +542,7 @@ final class DefaultServer implements Server {
 		return false;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
 	public Boolean isStarted() {
 		getLock().lock();
@@ -555,8 +555,8 @@ final class DefaultServer implements Server {
 	}
 
 	@Override
-	public void initialize(@Nonnull SokletConfig sokletConfig,
-												 @Nonnull RequestHandler requestHandler) {
+	public void initialize(@NonNull SokletConfig sokletConfig,
+												 @NonNull RequestHandler requestHandler) {
 		requireNonNull(requestHandler);
 		requireNonNull(sokletConfig);
 
@@ -564,8 +564,8 @@ final class DefaultServer implements Server {
 		this.lifecycleObserver = sokletConfig.getLifecycleObserver();
 	}
 
-	@Nonnull
-	protected Map<String, Set<String>> headersFromMicrohttpRequest(@Nonnull MicrohttpRequest microhttpRequest) {
+	@NonNull
+	protected Map<String, Set<String>> headersFromMicrohttpRequest(@NonNull MicrohttpRequest microhttpRequest) {
 		requireNonNull(microhttpRequest);
 
 		// Turn Microhttp headers back into "name: value" lines for consumption by the Soklet parser/normalizer
@@ -576,8 +576,8 @@ final class DefaultServer implements Server {
 		return Utilities.extractHeadersFromRawHeaderLines(rawHeaderLines);
 	}
 
-	@Nonnull
-	protected MicrohttpResponse toMicrohttpResponse(@Nonnull MarshaledResponse marshaledResponse) {
+	@NonNull
+	protected MicrohttpResponse toMicrohttpResponse(@NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(marshaledResponse);
 
 		List<Header> headers = new ArrayList<>();
@@ -615,21 +615,21 @@ final class DefaultServer implements Server {
 		return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, body);
 	}
 
-	@Nonnull
-	protected String reasonPhraseForStatusCode(@Nonnull Integer statusCode) {
+	@NonNull
+	protected String reasonPhraseForStatusCode(@NonNull Integer statusCode) {
 		requireNonNull(statusCode);
 
 		StatusCode formalStatusCode = StatusCode.fromStatusCode(statusCode).orElse(null);
 		return formalStatusCode == null ? "Unknown" : formalStatusCode.getReasonPhrase();
 	}
 
-	@Nonnull
-	protected Boolean isAlreadySorted(@Nonnull Set<?> set) {
+	@NonNull
+	protected Boolean isAlreadySorted(@NonNull Set<?> set) {
 		requireNonNull(set);
 		return set instanceof SortedSet || set instanceof LinkedHashSet;
 	}
 
-	protected void safelyLog(@Nonnull LogEvent logEvent) {
+	protected void safelyLog(@NonNull LogEvent logEvent) {
 		requireNonNull(logEvent);
 
 		try {
@@ -641,107 +641,107 @@ final class DefaultServer implements Server {
 		}
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getPort() {
 		return this.port;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getConcurrency() {
 		return this.concurrency;
 	}
 
-	@Nonnull
+	@NonNull
 	protected String getHost() {
 		return this.host;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Duration getRequestTimeout() {
 		return this.requestTimeout;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Duration getRequestHandlerTimeout() {
 		return this.requestHandlerTimeout;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Duration getSocketSelectTimeout() {
 		return this.socketSelectTimeout;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Duration getShutdownTimeout() {
 		return this.shutdownTimeout;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getMaximumRequestSizeInBytes() {
 		return this.maximumRequestSizeInBytes;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getRequestReadBufferSizeInBytes() {
 		return this.requestReadBufferSizeInBytes;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getSocketPendingConnectionLimit() {
 		return this.socketPendingConnectionLimit;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Integer getMaximumConnections() {
 		return this.maximumConnections;
 	}
 
-	@Nonnull
+	@NonNull
 	protected MultipartParser getMultipartParser() {
 		return this.multipartParser;
 	}
 
-	@Nonnull
+	@NonNull
 	protected IdGenerator<?> getIdGenerator() {
 		return this.idGenerator;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ExecutorService> getRequestHandlerExecutorService() {
 		return Optional.ofNullable(this.requestHandlerExecutorService);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ScheduledExecutorService> getRequestHandlerTimeoutExecutorService() {
 		return Optional.ofNullable(this.requestHandlerTimeoutExecutorService);
 	}
 
-	@Nonnull
+	@NonNull
 	protected ReentrantLock getLock() {
 		return this.lock;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<RequestHandler> getServerListener() {
 		return Optional.ofNullable(this.requestHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<EventLoop> getEventLoop() {
 		return Optional.ofNullable(this.eventLoop);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Supplier<ExecutorService> getRequestHandlerExecutorServiceSupplier() {
 		return this.requestHandlerExecutorServiceSupplier;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<LifecycleObserver> getLifecycleObserver() {
 		return Optional.ofNullable(this.lifecycleObserver);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<RequestHandler> getRequestHandler() {
 		return Optional.ofNullable(this.requestHandler);
 	}
@@ -776,12 +776,12 @@ final class DefaultServer implements Server {
 
 	@ThreadSafe
 	protected static class NonvirtualThreadFactory implements ThreadFactory {
-		@Nonnull
+		@NonNull
 		private final String namePrefix;
-		@Nonnull
+		@NonNull
 		private final AtomicInteger idGenerator;
 
-		public NonvirtualThreadFactory(@Nonnull String namePrefix) {
+		public NonvirtualThreadFactory(@NonNull String namePrefix) {
 			requireNonNull(namePrefix);
 
 			this.namePrefix = namePrefix;
@@ -789,18 +789,18 @@ final class DefaultServer implements Server {
 		}
 
 		@Override
-		@Nonnull
-		public Thread newThread(@Nonnull Runnable runnable) {
+		@NonNull
+		public Thread newThread(@NonNull Runnable runnable) {
 			String name = format("%s-%s", getNamePrefix(), getIdGenerator().incrementAndGet());
 			return new Thread(runnable, name);
 		}
 
-		@Nonnull
+		@NonNull
 		protected String getNamePrefix() {
 			return this.namePrefix;
 		}
 
-		@Nonnull
+		@NonNull
 		protected AtomicInteger getIdGenerator() {
 			return this.idGenerator;
 		}

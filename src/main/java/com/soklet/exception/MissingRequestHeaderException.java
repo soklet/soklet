@@ -16,8 +16,8 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import static java.util.Objects.requireNonNull;
@@ -29,16 +29,16 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class MissingRequestHeaderException extends BadRequestException {
-	@Nonnull
+	@NonNull
 	private final String requestHeaderName;
 
 	public MissingRequestHeaderException(@Nullable String message,
-																			 @Nonnull String requestHeaderName) {
+																			 @NonNull String requestHeaderName) {
 		super(message);
 		this.requestHeaderName = requireNonNull(requestHeaderName);
 	}
 
-	@Nonnull
+	@NonNull
 	public String getRequestHeaderName() {
 		return this.requestHeaderName;
 	}

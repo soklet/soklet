@@ -18,8 +18,8 @@ package com.soklet;
 
 import com.soklet.converter.ValueConverterRegistry;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
@@ -35,25 +35,25 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class SokletConfig {
-	@Nonnull
+	@NonNull
 	private final InstanceProvider instanceProvider;
-	@Nonnull
+	@NonNull
 	private final ValueConverterRegistry valueConverterRegistry;
-	@Nonnull
+	@NonNull
 	private final RequestBodyMarshaler requestBodyMarshaler;
-	@Nonnull
+	@NonNull
 	private final ResourceMethodResolver resourceMethodResolver;
-	@Nonnull
+	@NonNull
 	private final ResourceMethodParameterProvider resourceMethodParameterProvider;
-	@Nonnull
+	@NonNull
 	private final ResponseMarshaler responseMarshaler;
-	@Nonnull
+	@NonNull
 	private final RequestInterceptor requestInterceptor;
-	@Nonnull
+	@NonNull
 	private final LifecycleObserver lifecycleObserver;
-	@Nonnull
+	@NonNull
 	private final CorsAuthorizer corsAuthorizer;
-	@Nonnull
+	@NonNull
 	private final Server server;
 	@Nullable
 	private final ServerSentEventServer serverSentEventServer;
@@ -64,8 +64,8 @@ public final class SokletConfig {
 	 * @param server the server necessary for construction
 	 * @return a builder for {@link SokletConfig} instances
 	 */
-	@Nonnull
-	public static Builder withServer(@Nonnull Server server) {
+	@NonNull
+	public static Builder withServer(@NonNull Server server) {
 		requireNonNull(server);
 		return new Builder(server);
 	}
@@ -73,12 +73,12 @@ public final class SokletConfig {
 	/**
 	 * Package-private - used for internal Soklet tests.
 	 */
-	@Nonnull
+	@NonNull
 	static Builder forSimulatorTesting() {
 		return SokletConfig.withServer(Server.withPort(0).build()).serverSentEventServer(ServerSentEventServer.withPort(0).build());
 	}
 
-	protected SokletConfig(@Nonnull Builder builder) {
+	protected SokletConfig(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		// Wrap servers in proxies transparently
@@ -103,7 +103,7 @@ public final class SokletConfig {
 	 *
 	 * @return a mutable copy of this instance's configuration
 	 */
-	@Nonnull
+	@NonNull
 	public Copier copy() {
 		return new Copier(this);
 	}
@@ -113,7 +113,7 @@ public final class SokletConfig {
 	 *
 	 * @return the instance responsible for instance creation
 	 */
-	@Nonnull
+	@NonNull
 	public InstanceProvider getInstanceProvider() {
 		return this.instanceProvider;
 	}
@@ -123,7 +123,7 @@ public final class SokletConfig {
 	 *
 	 * @return the instance responsible for value conversions
 	 */
-	@Nonnull
+	@NonNull
 	public ValueConverterRegistry getValueConverterRegistry() {
 		return this.valueConverterRegistry;
 	}
@@ -133,7 +133,7 @@ public final class SokletConfig {
 	 *
 	 * @return the instance responsible for request body marshaling
 	 */
-	@Nonnull
+	@NonNull
 	public RequestBodyMarshaler getRequestBodyMarshaler() {
 		return this.requestBodyMarshaler;
 	}
@@ -143,7 +143,7 @@ public final class SokletConfig {
 	 *
 	 * @return the instance responsible for <em>Resource Method</em> resolution
 	 */
-	@Nonnull
+	@NonNull
 	public ResourceMethodResolver getResourceMethodResolver() {
 		return this.resourceMethodResolver;
 	}
@@ -153,7 +153,7 @@ public final class SokletConfig {
 	 *
 	 * @return the instance responsible for <em>Resource Method</em> parameter injection
 	 */
-	@Nonnull
+	@NonNull
 	public ResourceMethodParameterProvider getResourceMethodParameterProvider() {
 		return this.resourceMethodParameterProvider;
 	}
@@ -163,7 +163,7 @@ public final class SokletConfig {
 	 *
 	 * @return the instance responsible for response body marshaling
 	 */
-	@Nonnull
+	@NonNull
 	public ResponseMarshaler getResponseMarshaler() {
 		return this.responseMarshaler;
 	}
@@ -173,7 +173,7 @@ public final class SokletConfig {
 	 *
 	 * @return the instance responsible for request interceptor behavior
 	 */
-	@Nonnull
+	@NonNull
 	public RequestInterceptor getRequestInterceptor() {
 		return this.requestInterceptor;
 	}
@@ -183,7 +183,7 @@ public final class SokletConfig {
 	 *
 	 * @return the instance responsible for lifecycle observation
 	 */
-	@Nonnull
+	@NonNull
 	public LifecycleObserver getLifecycleObserver() {
 		return this.lifecycleObserver;
 	}
@@ -193,7 +193,7 @@ public final class SokletConfig {
 	 *
 	 * @return the instance responsible for CORS-related processing
 	 */
-	@Nonnull
+	@NonNull
 	public CorsAuthorizer getCorsAuthorizer() {
 		return this.corsAuthorizer;
 	}
@@ -203,7 +203,7 @@ public final class SokletConfig {
 	 *
 	 * @return the server instance
 	 */
-	@Nonnull
+	@NonNull
 	public Server getServer() {
 		return this.server;
 	}
@@ -213,7 +213,7 @@ public final class SokletConfig {
 	 *
 	 * @return the SSE server instance, or {@link Optional#empty()} is none was configured
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<ServerSentEventServer> getServerSentEventServer() {
 		return Optional.ofNullable(this.serverSentEventServer);
 	}
@@ -229,7 +229,7 @@ public final class SokletConfig {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nonnull
+		@NonNull
 		private Server server;
 		@Nullable
 		private ServerSentEventServer serverSentEventServer;
@@ -252,80 +252,80 @@ public final class SokletConfig {
 		@Nullable
 		private CorsAuthorizer corsAuthorizer;
 
-		@Nonnull
-		Builder(@Nonnull Server server) {
+		@NonNull
+		Builder(@NonNull Server server) {
 			requireNonNull(server);
 			this.server = server;
 		}
 
-		@Nonnull
-		public Builder server(@Nonnull Server server) {
+		@NonNull
+		public Builder server(@NonNull Server server) {
 			requireNonNull(server);
 			this.server = server;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
 			this.serverSentEventServer = serverSentEventServer;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder instanceProvider(@Nullable InstanceProvider instanceProvider) {
 			this.instanceProvider = instanceProvider;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder valueConverterRegistry(@Nullable ValueConverterRegistry valueConverterRegistry) {
 			this.valueConverterRegistry = valueConverterRegistry;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder requestBodyMarshaler(@Nullable RequestBodyMarshaler requestBodyMarshaler) {
 			this.requestBodyMarshaler = requestBodyMarshaler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder resourceMethodResolver(@Nullable ResourceMethodResolver resourceMethodResolver) {
 			this.resourceMethodResolver = resourceMethodResolver;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder resourceMethodParameterProvider(@Nullable ResourceMethodParameterProvider resourceMethodParameterProvider) {
 			this.resourceMethodParameterProvider = resourceMethodParameterProvider;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder responseMarshaler(@Nullable ResponseMarshaler responseMarshaler) {
 			this.responseMarshaler = responseMarshaler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder requestInterceptor(@Nullable RequestInterceptor requestInterceptor) {
 			this.requestInterceptor = requestInterceptor;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder lifecycleObserver(@Nullable LifecycleObserver lifecycleObserver) {
 			this.lifecycleObserver = lifecycleObserver;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder corsAuthorizer(@Nullable CorsAuthorizer corsAuthorizer) {
 			this.corsAuthorizer = corsAuthorizer;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public SokletConfig build() {
 			return new SokletConfig(this);
 		}
@@ -342,14 +342,14 @@ public final class SokletConfig {
 	 */
 	@NotThreadSafe
 	public static final class Copier {
-		@Nonnull
+		@NonNull
 		private final Builder builder;
 
 		/**
 		 * Unwraps a Server proxy to get the underlying real implementation.
 		 */
-		@Nonnull
-		private static Server unwrapServer(@Nonnull Server server) {
+		@NonNull
+		private static Server unwrapServer(@NonNull Server server) {
 			requireNonNull(server);
 
 			if (server instanceof ServerProxy)
@@ -361,8 +361,8 @@ public final class SokletConfig {
 		/**
 		 * Unwraps a ServerSentEventServer proxy to get the underlying real implementation.
 		 */
-		@Nonnull
-		private static ServerSentEventServer unwrapServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+		@NonNull
+		private static ServerSentEventServer unwrapServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
 			requireNonNull(serverSentEventServer);
 
 			if (serverSentEventServer instanceof ServerSentEventServerProxy)
@@ -371,7 +371,7 @@ public final class SokletConfig {
 			return serverSentEventServer;
 		}
 
-		Copier(@Nonnull SokletConfig sokletConfig) {
+		Copier(@NonNull SokletConfig sokletConfig) {
 			requireNonNull(sokletConfig);
 
 			// Unwrap proxies to get the real implementations for copying
@@ -393,74 +393,74 @@ public final class SokletConfig {
 					.corsAuthorizer(sokletConfig.corsAuthorizer);
 		}
 
-		@Nonnull
-		public Copier server(@Nonnull Server server) {
+		@NonNull
+		public Copier server(@NonNull Server server) {
 			requireNonNull(server);
 			this.builder.server(server);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
 			this.builder.serverSentEventServer(serverSentEventServer);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier instanceProvider(@Nullable InstanceProvider instanceProvider) {
 			this.builder.instanceProvider(instanceProvider);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier valueConverterRegistry(@Nullable ValueConverterRegistry valueConverterRegistry) {
 			this.builder.valueConverterRegistry(valueConverterRegistry);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier requestBodyMarshaler(@Nullable RequestBodyMarshaler requestBodyMarshaler) {
 			this.builder.requestBodyMarshaler(requestBodyMarshaler);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier resourceMethodResolver(@Nullable ResourceMethodResolver resourceMethodResolver) {
 			this.builder.resourceMethodResolver(resourceMethodResolver);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier resourceMethodParameterProvider(@Nullable ResourceMethodParameterProvider resourceMethodParameterProvider) {
 			this.builder.resourceMethodParameterProvider(resourceMethodParameterProvider);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier responseMarshaler(@Nullable ResponseMarshaler responseMarshaler) {
 			this.builder.responseMarshaler(responseMarshaler);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier requestInterceptor(@Nullable RequestInterceptor requestInterceptor) {
 			this.builder.requestInterceptor(requestInterceptor);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier lifecycleObserver(@Nullable LifecycleObserver lifecycleObserver) {
 			this.builder.lifecycleObserver(lifecycleObserver);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier corsAuthorizer(@Nullable CorsAuthorizer corsAuthorizer) {
 			this.builder.corsAuthorizer(corsAuthorizer);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public SokletConfig finish() {
 			return this.builder.build();
 		}

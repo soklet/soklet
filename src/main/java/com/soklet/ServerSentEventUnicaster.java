@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 
 /**
  * Unicasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> or comment payload to a specific client listening on a {@link ResourcePath}.
@@ -75,7 +75,7 @@ public interface ServerSentEventUnicaster {
 	 *
 	 * @param serverSentEvent the Server-Sent Event payload to unicast
 	 */
-	void unicastEvent(@Nonnull ServerSentEvent serverSentEvent);
+	void unicastEvent(@NonNull ServerSentEvent serverSentEvent);
 
 	/**
 	 * Unicasts a single Server-Sent Event comment to a specific client listening to this unicaster's {@link ResourcePath}.
@@ -88,7 +88,7 @@ public interface ServerSentEventUnicaster {
 	 *
 	 * @param comment the comment payload to unicast
 	 */
-	void unicastComment(@Nonnull String comment);
+	void unicastComment(@NonNull String comment);
 
 	/**
 	 * The runtime Resource Path with which this unicaster is associated.
@@ -99,6 +99,6 @@ public interface ServerSentEventUnicaster {
 	 *
 	 * @return the runtime Resource Path instance with which this unicaster is associated
 	 */
-	@Nonnull
+	@NonNull
 	ResourcePath getResourcePath();
 }

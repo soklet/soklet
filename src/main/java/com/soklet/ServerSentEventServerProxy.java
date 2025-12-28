@@ -18,8 +18,8 @@ package com.soklet;
 
 import com.soklet.Soklet.MockServerSentEventServer;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -33,19 +33,19 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class ServerSentEventServerProxy implements ServerSentEventServer {
-	@Nonnull
+	@NonNull
 	private final ServerSentEventServer realImplementation;
-	@Nonnull
+	@NonNull
 	private final AtomicReference<ServerSentEventServer> activeImplementation;
 
-	ServerSentEventServerProxy(@Nonnull ServerSentEventServer realImplementation) {
+	ServerSentEventServerProxy(@NonNull ServerSentEventServer realImplementation) {
 		requireNonNull(realImplementation);
 
 		this.realImplementation = realImplementation;
 		this.activeImplementation = new AtomicReference<>(realImplementation);
 	}
 
-	void enableSimulatorMode(@Nonnull MockServerSentEventServer mockServerSentEventServer) {
+	void enableSimulatorMode(@NonNull MockServerSentEventServer mockServerSentEventServer) {
 		requireNonNull(mockServerSentEventServer);
 		this.activeImplementation.set(mockServerSentEventServer);
 	}
@@ -54,15 +54,15 @@ final class ServerSentEventServerProxy implements ServerSentEventServer {
 		this.activeImplementation.set(getRealImplementation());
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
 	public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
 		return getActiveImplementation().acquireBroadcaster(resourcePath);
 	}
 
 	@Override
-	public void initialize(@Nonnull SokletConfig sokletConfig,
-												 @Nonnull RequestHandler requestHandler) {
+	public void initialize(@NonNull SokletConfig sokletConfig,
+												 @NonNull RequestHandler requestHandler) {
 		getRealImplementation().initialize(sokletConfig, requestHandler);
 	}
 
@@ -71,7 +71,7 @@ final class ServerSentEventServerProxy implements ServerSentEventServer {
 		getActiveImplementation().close();
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
 	public Boolean isStarted() {
 		return getActiveImplementation().isStarted();
@@ -87,12 +87,12 @@ final class ServerSentEventServerProxy implements ServerSentEventServer {
 		getActiveImplementation().start();
 	}
 
-	@Nonnull
+	@NonNull
 	ServerSentEventServer getRealImplementation() {
 		return this.realImplementation;
 	}
 
-	@Nonnull
+	@NonNull
 	ServerSentEventServer getActiveImplementation() {
 		return this.activeImplementation.get();
 	}

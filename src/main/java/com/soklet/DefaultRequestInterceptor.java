@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -24,14 +24,14 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 final class DefaultRequestInterceptor implements RequestInterceptor {
-	@Nonnull
+	@NonNull
 	private static final DefaultRequestInterceptor DEFAULT_INSTANCE;
 
 	static {
 		DEFAULT_INSTANCE = new DefaultRequestInterceptor();
 	}
 
-	@Nonnull
+	@NonNull
 	public static DefaultRequestInterceptor defaultInstance() {
 		return DEFAULT_INSTANCE;
 	}

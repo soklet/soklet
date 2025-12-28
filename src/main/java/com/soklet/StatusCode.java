@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -360,7 +360,7 @@ public enum StatusCode {
 	 */
 	HTTP_511(511, "Network Authentication Required");
 
-	@Nonnull
+	@NonNull
 	private static final Map<Integer, StatusCode> STATUS_CODES_BY_NUMBER;
 
 	static {
@@ -372,13 +372,13 @@ public enum StatusCode {
 		STATUS_CODES_BY_NUMBER = Collections.unmodifiableMap(statusCodesByNumber);
 	}
 
-	@Nonnull
+	@NonNull
 	private final Integer statusCode;
-	@Nonnull
+	@NonNull
 	private final String reasonPhrase;
 
-	StatusCode(@Nonnull Integer statusCode,
-						 @Nonnull String reasonPhrase) {
+	StatusCode(@NonNull Integer statusCode,
+						 @NonNull String reasonPhrase) {
 		requireNonNull(statusCode);
 		requireNonNull(reasonPhrase);
 
@@ -392,8 +392,8 @@ public enum StatusCode {
 	 * @param statusCode the HTTP status code
 	 * @return the enum value that corresponds to the provided HTTP status code, or {@link Optional#empty()} if none exists
 	 */
-	@Nonnull
-	public static Optional<StatusCode> fromStatusCode(@Nonnull Integer statusCode) {
+	@NonNull
+	public static Optional<StatusCode> fromStatusCode(@NonNull Integer statusCode) {
 		return Optional.ofNullable(STATUS_CODES_BY_NUMBER.get(statusCode));
 	}
 
@@ -407,7 +407,7 @@ public enum StatusCode {
 	 *
 	 * @return the HTTP status code
 	 */
-	@Nonnull
+	@NonNull
 	public Integer getStatusCode() {
 		return this.statusCode;
 	}
@@ -419,7 +419,7 @@ public enum StatusCode {
 	 *
 	 * @return English description for this HTTP status code
 	 */
-	@Nonnull
+	@NonNull
 	public String getReasonPhrase() {
 		return this.reasonPhrase;
 	}

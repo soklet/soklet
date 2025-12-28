@@ -26,8 +26,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
@@ -77,8 +77,8 @@ public class ServerSentEventTests {
 	@ThreadSafe
 	public static class ServerSentEventSimulatorResource {
 		@ServerSentEventSource("/examples/{exampleId}")
-		public HandshakeResult example(@Nonnull Request request,
-																	 @Nonnull @PathParameter String exampleId) {
+		public HandshakeResult example(@NonNull Request request,
+																	 @NonNull @PathParameter String exampleId) {
 			return HandshakeResult.acceptWithDefaults()
 					.headers(Map.of(
 							"X-Soklet-Example", Set.of(exampleId)
@@ -217,13 +217,13 @@ public class ServerSentEventTests {
 
 	@ThreadSafe
 	protected static class ServerSentEventResource {
-		@Nonnull
+		@NonNull
 		private final ServerSentEventServer serverSentEventServer;
-		@Nonnull
+		@NonNull
 		private final Runnable sokletStopper;
 
-		public ServerSentEventResource(@Nonnull ServerSentEventServer serverSentEventServer,
-																	 @Nonnull Runnable sokletStopper) {
+		public ServerSentEventResource(@NonNull ServerSentEventServer serverSentEventServer,
+																	 @NonNull Runnable sokletStopper) {
 			requireNonNull(serverSentEventServer);
 			requireNonNull(sokletStopper);
 
@@ -232,8 +232,8 @@ public class ServerSentEventTests {
 		}
 
 		@ServerSentEventSource("/examples/{exampleId}")
-		public HandshakeResult exampleServerSentEventSource(@Nonnull Request request,
-																												@Nonnull @PathParameter String exampleId) {
+		public HandshakeResult exampleServerSentEventSource(@NonNull Request request,
+																												@NonNull @PathParameter String exampleId) {
 			System.out.printf("Server-Sent Event Source connection initiated for %s with exampleId value %s\n", request.getId(), exampleId);
 			return HandshakeResult.accept();
 		}
@@ -1321,7 +1321,7 @@ public class ServerSentEventTests {
 
 	public static class AcceptingSseCorsResource {
 		@ServerSentEventSource("/sse/cors-ok")
-		public HandshakeResult ok(@Nonnull Request request) {
+		public HandshakeResult ok(@NonNull Request request) {
 			// Standard SSE accepted handshake
 			return HandshakeResult.accept();
 		}
@@ -1329,7 +1329,7 @@ public class ServerSentEventTests {
 
 	public static class RejectingSseCorsResource {
 		@ServerSentEventSource("/sse/cors-reject")
-		public HandshakeResult reject(@Nonnull Request request) {
+		public HandshakeResult reject(@NonNull Request request) {
 			// Reject with a simple body; CORS should still be applied
 			return HandshakeResult.rejectWithResponse(
 					Response.withStatusCode(403)
@@ -1342,7 +1342,7 @@ public class ServerSentEventTests {
 
 	public static class RejectingSseResource {
 		@ServerSentEventSource("/sse/reject")
-		public HandshakeResult handshake(@Nonnull Request request) {
+		public HandshakeResult handshake(@NonNull Request request) {
 			// Rejected SSE handshake with a body, header, and a cookie
 			ResponseCookie cookie = ResponseCookie.with("session", "sse-reject").path("/").build();
 			Response response = Response.withStatusCode(403)
@@ -1357,14 +1357,14 @@ public class ServerSentEventTests {
 
 	public static class AcceptingSseResource {
 		@ServerSentEventSource("/sse/{id}")
-		public HandshakeResult ok(@Nonnull Request request, @Nonnull @PathParameter String id) {
+		public HandshakeResult ok(@NonNull Request request, @NonNull @PathParameter String id) {
 			return HandshakeResult.accept();
 		}
 	}
 
 	public static class RejectWithExplicitContentLength {
 		@ServerSentEventSource("/sse/reject-explicit-cl")
-		public HandshakeResult reject(@Nonnull Request request) {
+		public HandshakeResult reject(@NonNull Request request) {
 			Response response = Response.withStatusCode(418)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8"),
 							"Content-Length", Set.of("3")))
@@ -1377,7 +1377,7 @@ public class ServerSentEventTests {
 	@ThreadSafe
 	public static class SseNetworkResource {
 		@ServerSentEventSource("/tests/{id}")
-		public HandshakeResult sseSource(@Nonnull Request request, @Nonnull @PathParameter String id) {
+		public HandshakeResult sseSource(@NonNull Request request, @NonNull @PathParameter String id) {
 			return HandshakeResult.accept();
 		}
 	}
@@ -1402,7 +1402,7 @@ public class ServerSentEventTests {
 		}
 
 		@ServerSentEventSource("/sse/limit")
-		public HandshakeResult sseLimit(@Nonnull Request request) {
+		public HandshakeResult sseLimit(@NonNull Request request) {
 			ready.countDown();
 			try {
 				release.await(5, TimeUnit.SECONDS);
@@ -1778,17 +1778,17 @@ public class ServerSentEventTests {
 		}
 
 		@Override
-		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
 
 		@Override
-		public void didEstablishServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection) {
+		public void didEstablishServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection) {
 			this.establishedLatch.countDown();
 		}
 
 		@Override
-		public void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																											@Nonnull Duration connectionDuration,
-																											@Nonnull ServerSentEventConnection.TerminationReason terminationReason,
+		public void didTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
+																											@NonNull Duration connectionDuration,
+																											ServerSentEventConnection.@NonNull TerminationReason terminationReason,
 																											@Nullable Throwable throwable) {
 			this.reason.compareAndSet(null, terminationReason);
 			this.terminatedLatch.countDown();
@@ -1823,11 +1823,11 @@ public class ServerSentEventTests {
 		}
 
 		@Override
-		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
 
 		@Override
-		public void willWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																				 @Nonnull ServerSentEvent serverSentEvent) {
+		public void willWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
+																				 @NonNull ServerSentEvent serverSentEvent) {
 			if (this.blocking.compareAndSet(false, true)) {
 				this.writeStarted.countDown();
 				try {
@@ -1839,9 +1839,9 @@ public class ServerSentEventTests {
 		}
 
 		@Override
-		public void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																											@Nonnull Duration connectionDuration,
-																											@Nonnull ServerSentEventConnection.TerminationReason terminationReason,
+		public void didTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
+																											@NonNull Duration connectionDuration,
+																											ServerSentEventConnection.@NonNull TerminationReason terminationReason,
 																											@Nullable Throwable throwable) {
 			this.reason.compareAndSet(null, terminationReason);
 			this.terminatedLatch.countDown();
@@ -1894,7 +1894,7 @@ public class ServerSentEventTests {
 
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
-		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
 	}
 
 	private static byte[] readN(InputStream in, int n, int timeoutMs) throws IOException {
@@ -1980,7 +1980,7 @@ public class ServerSentEventTests {
 		return false;
 	}
 
-	@Nonnull
+	@NonNull
 	private static Optional<String> singleHeaderValue(String name, Map<String, Set<String>> headers) {
 		Set<String> values = headers.get(name);
 
@@ -1993,7 +1993,7 @@ public class ServerSentEventTests {
 		return Optional.of(new ArrayList<>(values).get(0));
 	}
 
-	@Nonnull
+	@NonNull
 	private static Set<String> headerValues(String name, Map<String, Set<String>> headers) {
 		Set<String> values = headers.get(name);
 

@@ -21,7 +21,7 @@ import com.soklet.annotation.QueryParameter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.LocalDate;
 import java.util.List;
@@ -45,7 +45,7 @@ public class ValueConversionTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ConversionResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 

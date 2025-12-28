@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.lang.reflect.Parameter;
 
 import static java.util.Objects.requireNonNull;
@@ -41,8 +41,8 @@ public interface InstanceProvider {
 	 * @param <T>           the type of class to instantiate
 	 * @return an instance of {@code T}
 	 */
-	@Nonnull
-	<T> T provide(@Nonnull Class<T> instanceClass);
+	@NonNull
+	<T> T provide(@NonNull Class<T> instanceClass);
 
 	/**
 	 * Vends an instance appropriate for the supplied {@link Parameter}.
@@ -66,7 +66,7 @@ public interface InstanceProvider {
 	 * Your implementation might look like this:
 	 * <pre>{@code @Override
 	 * @SuppressWarnings("unchecked")
-	 * public <T> T provide(@Nonnull Parameter parameter) {
+	 * public <T> T provide(@NonNull Parameter parameter) {
 	 *   Class<T> type = (Class<T>) parameter.getType();
 	 *
 	 *   // Pick the appropriate LegFactory by inspecting annotations
@@ -89,9 +89,9 @@ public interface InstanceProvider {
 	 * @param <T>       the type of class to instantiate (by default, the value of {@link Parameter#getType()})
 	 * @return an instance of {@code T}
 	 */
-	@Nonnull
+	@NonNull
 	@SuppressWarnings("unchecked")
-	default <T> T provide(@Nonnull Parameter parameter) {
+	default <T> T provide(@NonNull Parameter parameter) {
 		requireNonNull(parameter);
 		return provide((Class<T>) parameter.getType());
 	}
@@ -103,7 +103,7 @@ public interface InstanceProvider {
 	 *
 	 * @return an {@code InstanceProvider} with a reflection-based instantiation strategy
 	 */
-	@Nonnull
+	@NonNull
 	static InstanceProvider defaultInstance() {
 		return DefaultInstanceProvider.defaultInstance();
 	}

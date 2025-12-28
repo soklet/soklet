@@ -16,7 +16,7 @@
 
 package com.soklet.annotation;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Repeatable;
 import java.lang.annotation.Retention;
@@ -39,6 +39,6 @@ public @interface PATCH {
 	 *
 	 * @return the {@code PATCH} URL that should be handled by this <em>Resource Method</em>
 	 */
-	@Nonnull
+	@NonNull
 	String value();
 }

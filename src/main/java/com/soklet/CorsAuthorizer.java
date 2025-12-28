@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -48,9 +48,9 @@ public interface CorsAuthorizer {
 	 * @param cors    the CORS data provided in the request
 	 * @return a {@link CorsResponse} if authorized, or {@link Optional#empty()} if not authorized
 	 */
-	@Nonnull
-	Optional<CorsResponse> authorize(@Nonnull Request request,
-																	 @Nonnull Cors cors);
+	@NonNull
+	Optional<CorsResponse> authorize(@NonNull Request request,
+																	 @NonNull Cors cors);
 
 	/**
 	 * Authorizes a <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">CORS preflight</a> request.
@@ -60,10 +60,10 @@ public interface CorsAuthorizer {
 	 * @param availableResourceMethodsByHttpMethod <em>Resource Methods</em> that are available to serve requests according to parameters specified by the preflight data
 	 * @return a {@link CorsPreflightResponse} if authorized, or {@link Optional#empty()} if not authorized
 	 */
-	@Nonnull
-	Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
-																										 @Nonnull CorsPreflight corsPreflight,
-																										 @Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod);
+	@NonNull
+	Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																										 @NonNull CorsPreflight corsPreflight,
+																										 @NonNull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod);
 
 	/**
 	 * Acquires a threadsafe {@link CorsAuthorizer} configured to permit all cross-domain requests <strong>regardless of {@code Origin}</strong>.
@@ -74,7 +74,7 @@ public interface CorsAuthorizer {
 	 *
 	 * @return a {@code CorsAuthorizer} configured to permit all cross-domain requests
 	 */
-	@Nonnull
+	@NonNull
 	static CorsAuthorizer withAcceptAllPolicy() {
 		return AllOriginsCorsAuthorizer.defaultInstance();
 	}
@@ -86,7 +86,7 @@ public interface CorsAuthorizer {
 	 *
 	 * @return a {@code CorsAuthorizer} configured to reject all cross-domain requests
 	 */
-	@Nonnull
+	@NonNull
 	static CorsAuthorizer withRejectAllPolicy() {
 		return NoOriginsCorsAuthorizer.defaultInstance();
 	}
@@ -101,8 +101,8 @@ public interface CorsAuthorizer {
 	 * @param whitelistedOrigins the set of whitelisted origins
 	 * @return a credentials-allowed {@code CorsAuthorizer} configured to accept only the specified {@code whitelistedOrigins}
 	 */
-	@Nonnull
-	static CorsAuthorizer withWhitelistedOrigins(@Nonnull Set<String> whitelistedOrigins) {
+	@NonNull
+	static CorsAuthorizer withWhitelistedOrigins(@NonNull Set<String> whitelistedOrigins) {
 		requireNonNull(whitelistedOrigins);
 		return WhitelistedOriginsCorsAuthorizer.withOrigins(whitelistedOrigins, (origin) -> false);
 	}
@@ -120,9 +120,9 @@ public interface CorsAuthorizer {
 	 * @param allowCredentialsResolver function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise
 	 * @return a {@code CorsAuthorizer} configured to accept only the specified {@code whitelistedOrigins}, with {@code allowCredentialsResolver} dictating whether credentials are allowed
 	 */
-	@Nonnull
-	static CorsAuthorizer withWhitelistedOrigins(@Nonnull Set<String> whitelistedOrigins,
-																							 @Nonnull Function<String, Boolean> allowCredentialsResolver) {
+	@NonNull
+	static CorsAuthorizer withWhitelistedOrigins(@NonNull Set<String> whitelistedOrigins,
+																							 @NonNull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(whitelistedOrigins);
 		requireNonNull(allowCredentialsResolver);
 
@@ -141,8 +141,8 @@ public interface CorsAuthorizer {
 	 * @param whitelistAuthorizer a function that returns {@code true} if the input is a whitelisted origin and {@code false} otherwise
 	 * @return a credentials-allowed {@code CorsAuthorizer} configured to accept only the origins permitted by {@code whitelistAuthorizer}
 	 */
-	@Nonnull
-	static CorsAuthorizer withWhitelistAuthorizer(@Nonnull Function<String, Boolean> whitelistAuthorizer) {
+	@NonNull
+	static CorsAuthorizer withWhitelistAuthorizer(@NonNull Function<String, Boolean> whitelistAuthorizer) {
 		requireNonNull(whitelistAuthorizer);
 		return WhitelistedOriginsCorsAuthorizer.withAuthorizer(whitelistAuthorizer, (origin) -> false);
 	}
@@ -160,9 +160,9 @@ public interface CorsAuthorizer {
 	 * @param allowCredentialsResolver function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise
 	 * @return a {@code CorsAuthorizer} configured to accept only the origins permitted by {@code whitelistAuthorizer}, with {@code allowCredentialsResolver} dictating whether credentials are allowed
 	 */
-	@Nonnull
-	static CorsAuthorizer withWhitelistAuthorizer(@Nonnull Function<String, Boolean> whitelistAuthorizer,
-																								@Nonnull Function<String, Boolean> allowCredentialsResolver) {
+	@NonNull
+	static CorsAuthorizer withWhitelistAuthorizer(@NonNull Function<String, Boolean> whitelistAuthorizer,
+																								@NonNull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(whitelistAuthorizer);
 		requireNonNull(allowCredentialsResolver);
 

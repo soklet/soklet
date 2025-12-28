@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.HttpCookie;
@@ -45,7 +45,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class ResponseCookie {
-	@Nonnull
+	@NonNull
 	private final String name;
 	@Nullable
 	private final String value;
@@ -55,9 +55,9 @@ public final class ResponseCookie {
 	private final String domain;
 	@Nullable
 	private final String path;
-	@Nonnull
+	@NonNull
 	private final Boolean secure;
-	@Nonnull
+	@NonNull
 	private final Boolean httpOnly;
 	@Nullable
 	private final SameSite sameSite;
@@ -69,8 +69,8 @@ public final class ResponseCookie {
 	 * @param value the cookie value
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder with(@Nonnull String name,
+	@NonNull
+	public static Builder with(@NonNull String name,
 														 @Nullable String value) {
 		requireNonNull(name);
 		return new Builder(name, value);
@@ -82,8 +82,8 @@ public final class ResponseCookie {
 	 * @param name the cookie name
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder withName(@Nonnull String name) {
+	@NonNull
+	public static Builder withName(@NonNull String name) {
 		requireNonNull(name);
 		return new Builder(name);
 	}
@@ -93,7 +93,7 @@ public final class ResponseCookie {
 	 *
 	 * @return a copier for this instance
 	 */
-	@Nonnull
+	@NonNull
 	public Copier copy() {
 		return new Copier(this);
 	}
@@ -111,7 +111,7 @@ public final class ResponseCookie {
 	 * @return a {@link ResponseCookie} representation of the {@code Set-Cookie} header, or {@link Optional#empty()} if the header is null, empty, or does not include cookie data
 	 * @throws IllegalArgumentException if the {@code Set-Cookie} header representation is malformed
 	 */
-	@Nonnull
+	@NonNull
 	public static Optional<ResponseCookie> fromSetCookieHeaderRepresentation(@Nullable String setCookieHeaderRepresentation) {
 		setCookieHeaderRepresentation = setCookieHeaderRepresentation == null ? null : setCookieHeaderRepresentation.trim();
 
@@ -140,7 +140,7 @@ public final class ResponseCookie {
 				.build());
 	}
 
-	private ResponseCookie(@Nonnull Builder builder) {
+	private ResponseCookie(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.name = builder.name;
@@ -171,7 +171,7 @@ public final class ResponseCookie {
 	 *
 	 * @return this response cookie in {@code Set-Cookie} header format
 	 */
-	@Nonnull
+	@NonNull
 	public String toSetCookieHeaderRepresentation() {
 		List<String> components = new ArrayList<>(8);
 
@@ -233,7 +233,7 @@ public final class ResponseCookie {
 	}
 
 	@Override
-	@Nonnull
+	@NonNull
 	public String toString() {
 		return toSetCookieHeaderRepresentation();
 	}
@@ -243,7 +243,7 @@ public final class ResponseCookie {
 	 *
 	 * @return the name of the cookie
 	 */
-	@Nonnull
+	@NonNull
 	public String getName() {
 		return this.name;
 	}
@@ -253,7 +253,7 @@ public final class ResponseCookie {
 	 *
 	 * @return the value of the cookie, or {@link Optional#empty()} if there is none
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getValue() {
 		return Optional.ofNullable(this.value);
 	}
@@ -263,7 +263,7 @@ public final class ResponseCookie {
 	 *
 	 * @return the {@code Max-Age} value of the cookie, or {@link Optional#empty()} if there is none
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Duration> getMaxAge() {
 		return Optional.ofNullable(this.maxAge);
 	}
@@ -273,7 +273,7 @@ public final class ResponseCookie {
 	 *
 	 * @return the {@code Domain} value of the cookie, or {@link Optional#empty()} if there is none
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getDomain() {
 		return Optional.ofNullable(this.domain);
 	}
@@ -283,7 +283,7 @@ public final class ResponseCookie {
 	 *
 	 * @return the {@code Path} value of the cookie, or {@link Optional#empty()} if there is none
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getPath() {
 		return Optional.ofNullable(this.path);
 	}
@@ -293,7 +293,7 @@ public final class ResponseCookie {
 	 *
 	 * @return {@code true} if the {@code Secure} flag of the cookie is present, {@code false} otherwise
 	 */
-	@Nonnull
+	@NonNull
 	public Boolean getSecure() {
 		return this.secure;
 	}
@@ -303,7 +303,7 @@ public final class ResponseCookie {
 	 *
 	 * @return {@code true} if the {@code HttpOnly} flag of the cookie is present, {@code false} otherwise
 	 */
-	@Nonnull
+	@NonNull
 	public Boolean getHttpOnly() {
 		return this.httpOnly;
 	}
@@ -313,7 +313,7 @@ public final class ResponseCookie {
 	 *
 	 * @return the {@code SameSite} value of the cookie, or {@link Optional#empty()} if there is none
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<SameSite> getSameSite() {
 		return Optional.ofNullable(this.sameSite);
 	}
@@ -342,10 +342,10 @@ public final class ResponseCookie {
 		 */
 		NONE("None");
 
-		@Nonnull
+		@NonNull
 		private final String headerRepresentation;
 
-		SameSite(@Nonnull String headerRepresentation) {
+		SameSite(@NonNull String headerRepresentation) {
 			requireNonNull(headerRepresentation);
 			this.headerRepresentation = headerRepresentation;
 		}
@@ -356,8 +356,8 @@ public final class ResponseCookie {
 		 * @param headerRepresentation a case-insensitive HTTP header value - one of {@code Strict}, {@code Lax}, or {@code None}
 		 * @return the enum value that corresponds to the given the header representation, or {@link Optional#empty()} if none matches
 		 */
-		@Nonnull
-		public static Optional<SameSite> fromHeaderRepresentation(@Nonnull String headerRepresentation) {
+		@NonNull
+		public static Optional<SameSite> fromHeaderRepresentation(@NonNull String headerRepresentation) {
 			requireNonNull(headerRepresentation);
 
 			headerRepresentation = headerRepresentation.trim();
@@ -374,7 +374,7 @@ public final class ResponseCookie {
 		 *
 		 * @return the HTTP header value for this enum
 		 */
-		@Nonnull
+		@NonNull
 		public String getHeaderRepresentation() {
 			return this.headerRepresentation;
 		}
@@ -390,7 +390,7 @@ public final class ResponseCookie {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nonnull
+		@NonNull
 		private String name;
 		@Nullable
 		private String value;
@@ -407,68 +407,68 @@ public final class ResponseCookie {
 		@Nullable
 		private SameSite sameSite;
 
-		protected Builder(@Nonnull String name) {
+		protected Builder(@NonNull String name) {
 			requireNonNull(name);
 			this.name = name;
 		}
 
-		protected Builder(@Nonnull String name,
+		protected Builder(@NonNull String name,
 											@Nullable String value) {
 			requireNonNull(name);
 			this.name = name;
 			this.value = value;
 		}
 
-		@Nonnull
-		public Builder name(@Nonnull String name) {
+		@NonNull
+		public Builder name(@NonNull String name) {
 			requireNonNull(name);
 			this.name = name;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder value(@Nullable String value) {
 			this.value = value;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder maxAge(@Nullable Duration maxAge) {
 			this.maxAge = maxAge;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder domain(@Nullable String domain) {
 			this.domain = domain;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder path(@Nullable String path) {
 			this.path = path;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder secure(@Nullable Boolean secure) {
 			this.secure = secure;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder httpOnly(@Nullable Boolean httpOnly) {
 			this.httpOnly = httpOnly;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder sameSite(@Nullable SameSite sameSite) {
 			this.sameSite = sameSite;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public ResponseCookie build() {
 			return new ResponseCookie(this);
 		}
@@ -483,10 +483,10 @@ public final class ResponseCookie {
 	 */
 	@NotThreadSafe
 	public static final class Copier {
-		@Nonnull
+		@NonNull
 		private final Builder builder;
 
-		Copier(@Nonnull ResponseCookie responseCookie) {
+		Copier(@NonNull ResponseCookie responseCookie) {
 			requireNonNull(responseCookie);
 
 			this.builder = new Builder(responseCookie.getName())
@@ -499,56 +499,56 @@ public final class ResponseCookie {
 					.sameSite(responseCookie.getSameSite().orElse(null));
 		}
 
-		@Nonnull
-		public Copier name(@Nonnull String name) {
+		@NonNull
+		public Copier name(@NonNull String name) {
 			requireNonNull(name);
 			this.builder.name(name);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier value(@Nullable String value) {
 			this.builder.value(value);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier maxAge(@Nullable Duration maxAge) {
 			this.builder.maxAge(maxAge);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier domain(@Nullable String domain) {
 			this.builder.domain(domain);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier path(@Nullable String path) {
 			this.builder.path(path);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier secure(@Nullable Boolean secure) {
 			this.builder.secure(secure);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier httpOnly(@Nullable Boolean httpOnly) {
 			this.builder.httpOnly(httpOnly);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier sameSite(@Nullable SameSite sameSite) {
 			this.builder.sameSite(sameSite);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public ResponseCookie finish() {
 			return this.builder.build();
 		}
@@ -577,16 +577,16 @@ public final class ResponseCookie {
 	 */
 	@ThreadSafe
 	private static class Rfc6265Utils {
-		@Nonnull
+		@NonNull
 		private static final String SEPARATOR_CHARS = new String(new char[]{
 				'(', ')', '<', '>', '@', ',', ';', ':', '\\', '"', '/', '[', ']', '?', '=', '{', '}', ' '
 		});
 
-		@Nonnull
+		@NonNull
 		private static final String DOMAIN_CHARS =
 				"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-";
 
-		public static void validateCookieName(@Nonnull String name) {
+		public static void validateCookieName(@NonNull String name) {
 			requireNonNull(name);
 
 			for (int i = 0; i < name.length(); i++) {

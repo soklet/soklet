@@ -16,8 +16,8 @@
 
 package com.soklet.converter;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
@@ -50,7 +50,7 @@ import static java.lang.String.format;
  */
 @ThreadSafe
 public final class ValueConverters {
-	@Nonnull
+	@NonNull
 	private static final Set<ValueConverter<?, ?>> DEFAULT_VALUE_CONVERTERS;
 
 	static {
@@ -68,12 +68,12 @@ public final class ValueConverters {
 	 *
 	 * @return the default set of converters
 	 */
-	@Nonnull
+	@NonNull
 	public static Set<ValueConverter<?, ?>> defaultValueConverters() {
 		return DEFAULT_VALUE_CONVERTERS;
 	}
 
-	@Nonnull
+	@NonNull
 	private static Set<ValueConverter<?, ?>> createDefaultValueConverters() {
 		Set<ValueConverter<?, ?>> defaultValueConverters = new HashSet<>();
 
@@ -108,7 +108,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToIntegerValueConverter extends FromStringValueConverter<Integer> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Integer> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -120,7 +120,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToLongValueConverter extends FromStringValueConverter<Long> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Long> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -132,7 +132,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToDoubleValueConverter extends FromStringValueConverter<Double> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Double> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -144,7 +144,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToFloatValueConverter extends FromStringValueConverter<Float> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Float> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -156,7 +156,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToByteValueConverter extends FromStringValueConverter<Byte> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Byte> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -168,7 +168,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToShortValueConverter extends FromStringValueConverter<Short> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Short> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -179,7 +179,7 @@ public final class ValueConverters {
 
 	@ThreadSafe
 	private static final class StringToCharacterValueConverter extends FromStringValueConverter<Character> {
-		@Nonnull
+		@NonNull
 		@Override
 		public Optional<Character> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
@@ -200,20 +200,20 @@ public final class ValueConverters {
 			return Optional.of(trimmedFrom.charAt(0));
 		}
 
-		@Nonnull
+		@NonNull
 		@Override
 		protected Boolean shouldTrimFromValues() {
 			// Special handling: we want to handle trimming ourselves
 			return false;
 		}
 
-		@Nonnull
+		@NonNull
 		@Override
 		public Type getFromType() {
 			return String.class;
 		}
 
-		@Nonnull
+		@NonNull
 		@Override
 		public Type getToType() {
 			return Character.class;
@@ -223,7 +223,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToBooleanValueConverter extends FromStringValueConverter<Boolean> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Boolean> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -247,7 +247,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToBigIntegerValueConverter extends FromStringValueConverter<BigInteger> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<BigInteger> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -259,7 +259,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToBigDecimalValueConverter extends FromStringValueConverter<BigDecimal> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<BigDecimal> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -271,7 +271,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToNumberValueConverter extends FromStringValueConverter<Number> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Number> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -283,7 +283,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToUuidValueConverter extends FromStringValueConverter<UUID> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<UUID> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -295,7 +295,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToDateValueConverter extends FromStringValueConverter<Date> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Date> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -311,7 +311,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToInstantValueConverter extends FromStringValueConverter<Instant> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Instant> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -327,7 +327,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToLocalDateValueConverter extends FromStringValueConverter<LocalDate> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<LocalDate> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -339,7 +339,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToLocalTimeValueConverter extends FromStringValueConverter<LocalTime> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<LocalTime> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -351,7 +351,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToLocalDateTimeValueConverter extends FromStringValueConverter<LocalDateTime> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<LocalDateTime> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -363,7 +363,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToZoneIdValueConverter extends FromStringValueConverter<ZoneId> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<ZoneId> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -375,7 +375,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToTimeZoneValueConverter extends FromStringValueConverter<TimeZone> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<TimeZone> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -389,7 +389,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToLocaleValueConverter extends FromStringValueConverter<Locale> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Locale> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
@@ -401,7 +401,7 @@ public final class ValueConverters {
 	@ThreadSafe
 	private static final class StringToCurrencyValueConverter extends FromStringValueConverter<Currency> {
 		@Override
-		@Nonnull
+		@NonNull
 		public Optional<Currency> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();

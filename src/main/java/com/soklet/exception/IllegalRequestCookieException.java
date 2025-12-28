@@ -16,8 +16,8 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Optional;
 
@@ -30,13 +30,13 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class IllegalRequestCookieException extends BadRequestException {
-	@Nonnull
+	@NonNull
 	private final String name;
 	@Nullable
 	private final String value;
 
 	public IllegalRequestCookieException(@Nullable String message,
-																			 @Nonnull String name,
+																			 @NonNull String name,
 																			 @Nullable String value) {
 		super(message);
 		this.name = requireNonNull(name);
@@ -45,19 +45,19 @@ public final class IllegalRequestCookieException extends BadRequestException {
 
 	public IllegalRequestCookieException(@Nullable String message,
 																			 @Nullable Throwable cause,
-																			 @Nonnull String name,
+																			 @NonNull String name,
 																			 @Nullable String value) {
 		super(message, cause);
 		this.name = requireNonNull(name);
 		this.value = value;
 	}
 
-	@Nonnull
+	@NonNull
 	public String getName() {
 		return this.name;
 	}
 
-	@Nonnull
+	@NonNull
 	public Optional<String> getValue() {
 		return Optional.ofNullable(this.value);
 	}

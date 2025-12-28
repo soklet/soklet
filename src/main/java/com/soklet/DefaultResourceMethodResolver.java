@@ -33,8 +33,8 @@ import com.soklet.annotation.PUTs;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.annotation.ServerSentEventSources;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -68,9 +68,9 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultResourceMethodResolver implements ResourceMethodResolver {
-	@Nonnull
+	@NonNull
 	private static final Map<String, Class<?>> PRIMITIVE_TYPES_BY_NAME;
-	@Nonnull
+	@NonNull
 	private static final DefaultResourceMethodResolver DEFAULT_INSTANCE;
 
 	static {
@@ -88,30 +88,30 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		DEFAULT_INSTANCE = new DefaultResourceMethodResolver();
 	}
 
-	@Nonnull
+	@NonNull
 	public static DefaultResourceMethodResolver fromClasspathIntrospection() {
 		return DEFAULT_INSTANCE;
 	}
 
-	@Nonnull
+	@NonNull
 	public static DefaultResourceMethodResolver withClasses(@Nullable Set<Class<?>> resourceClasses) {
 		requireNonNull(resourceClasses);
 		return new DefaultResourceMethodResolver(resourceClasses, null);
 	}
 
-	@Nonnull
-	public static DefaultResourceMethodResolver withMethods(@Nonnull Set<Method> methods) {
+	@NonNull
+	public static DefaultResourceMethodResolver withMethods(@NonNull Set<Method> methods) {
 		requireNonNull(methods);
 		return new DefaultResourceMethodResolver(null, methods);
 	}
 
-	@Nonnull
+	@NonNull
 	private final Set<Method> methods;
-	@Nonnull
+	@NonNull
 	private final Map<HttpMethod, Set<Method>> methodsByHttpMethod;
-	@Nonnull
+	@NonNull
 	private final Map<Method, Set<HttpMethodResourcePathDeclaration>> httpMethodResourcePathDeclarationsByMethod;
-	@Nonnull
+	@NonNull
 	private final Set<ResourceMethod> resourceMethods;
 
 	private DefaultResourceMethodResolver() {
@@ -227,10 +227,10 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 	}
 
-	@Nonnull
-	private Method resolveMethod(@Nonnull String className,
-															 @Nonnull String methodName,
-															 @Nonnull String[] paramTypeNames) {
+	@NonNull
+	private Method resolveMethod(@NonNull String className,
+															 @NonNull String methodName,
+															 @NonNull String[] paramTypeNames) {
 		requireNonNull(className);
 		requireNonNull(methodName);
 		requireNonNull(paramTypeNames);
@@ -248,8 +248,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 	}
 
-	@Nonnull
-	private static Class<?> resolveParamType(@Nonnull String paramTypeName) throws ClassNotFoundException {
+	@NonNull
+	private static Class<?> resolveParamType(@NonNull String paramTypeName) throws ClassNotFoundException {
 		requireNonNull(paramTypeName);
 
 		Class<?> primitiveType = PRIMITIVE_TYPES_BY_NAME.get(paramTypeName);
@@ -308,10 +308,10 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public Optional<ResourceMethod> resourceMethodForRequest(@Nonnull Request request,
-																													 @Nonnull ServerType serverType) {
+	public Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
+																													 @NonNull ServerType serverType) {
 		requireNonNull(request);
 		requireNonNull(serverType);
 
@@ -375,8 +375,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		return Optional.empty();
 	}
 
-	@Nonnull
-	protected Map<Method, Set<HttpMethodResourcePathDeclaration>> createHttpMethodResourcePathDeclarationsByMethod(@Nonnull Set<Method> methods) {
+	@NonNull
+	protected Map<Method, Set<HttpMethodResourcePathDeclaration>> createHttpMethodResourcePathDeclarationsByMethod(@NonNull Set<Method> methods) {
 		requireNonNull(methods);
 
 		Map<Method, Set<HttpMethodResourcePathDeclaration>> httpMethodResourcePathDeclarationsByMethod = new HashMap<>();
@@ -452,9 +452,9 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		return httpMethodResourcePathDeclarationsByMethod;
 	}
 
-	@Nonnull
-	protected Set<ResourceMethod> mostSpecificResourceMethods(@Nonnull Request request,
-																														@Nonnull Set<ResourceMethod> resourceMethods) {
+	@NonNull
+	protected Set<ResourceMethod> mostSpecificResourceMethods(@NonNull Request request,
+																														@NonNull Set<ResourceMethod> resourceMethods) {
 		requireNonNull(request);
 		requireNonNull(resourceMethods);
 
@@ -495,8 +495,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				: resourceMethodsByPlaceholderCount.get(resourceMethodsByPlaceholderCount.firstKey());
 	}
 
-	@Nonnull
-	protected Map<HttpMethod, Set<Method>> createMethodsByHttpMethod(@Nonnull Set<Method> methods) {
+	@NonNull
+	protected Map<HttpMethod, Set<Method>> createMethodsByHttpMethod(@NonNull Set<Method> methods) {
 		requireNonNull(methods);
 
 		Map<HttpMethod, Set<Method>> methodsByMethod = new HashMap<>();
@@ -533,8 +533,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		return methodsByMethod;
 	}
 
-	@Nonnull
-	protected Set<Method> extractMethods(@Nonnull Set<Class<?>> resourceClasses) {
+	@NonNull
+	protected Set<Method> extractMethods(@NonNull Set<Class<?>> resourceClasses) {
 		requireNonNull(resourceClasses);
 
 		Set<Method> methods = new HashSet<>();
@@ -563,44 +563,44 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		return methods;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
 	public Set<ResourceMethod> getResourceMethods() {
 		return this.resourceMethods;
 	}
 
-	@Nonnull
+	@NonNull
 	public Set<Method> getMethods() {
 		return this.methods;
 	}
 
-	@Nonnull
+	@NonNull
 	public Map<Method, Set<HttpMethodResourcePathDeclaration>> getHttpMethodResourcePathDeclarationsByMethod() {
 		return this.httpMethodResourcePathDeclarationsByMethod;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Map<HttpMethod, Set<Method>> getMethodsByHttpMethod() {
 		return this.methodsByHttpMethod;
 	}
 
 	@ThreadSafe
 	protected static class HttpMethodResourcePathDeclaration {
-		@Nonnull
+		@NonNull
 		private final HttpMethod httpMethod;
-		@Nonnull
+		@NonNull
 		private final ResourcePathDeclaration resourcePathDeclaration;
-		@Nonnull
+		@NonNull
 		private final Boolean serverSentEventSource;
 
-		public HttpMethodResourcePathDeclaration(@Nonnull HttpMethod httpMethod,
-																						 @Nonnull ResourcePathDeclaration resourcePathDeclaration) {
+		public HttpMethodResourcePathDeclaration(@NonNull HttpMethod httpMethod,
+																						 @NonNull ResourcePathDeclaration resourcePathDeclaration) {
 			this(httpMethod, resourcePathDeclaration, false);
 		}
 
-		public HttpMethodResourcePathDeclaration(@Nonnull HttpMethod httpMethod,
-																						 @Nonnull ResourcePathDeclaration resourcePathDeclaration,
-																						 @Nonnull Boolean serverSentEventSource) {
+		public HttpMethodResourcePathDeclaration(@NonNull HttpMethod httpMethod,
+																						 @NonNull ResourcePathDeclaration resourcePathDeclaration,
+																						 @NonNull Boolean serverSentEventSource) {
 			requireNonNull(httpMethod);
 			requireNonNull(resourcePathDeclaration);
 			requireNonNull(serverSentEventSource);
@@ -634,17 +634,17 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			return Objects.hash(getHttpMethod(), getResourcePathDeclaration(), isServerSentEventSource());
 		}
 
-		@Nonnull
+		@NonNull
 		public HttpMethod getHttpMethod() {
 			return this.httpMethod;
 		}
 
-		@Nonnull
+		@NonNull
 		public ResourcePathDeclaration getResourcePathDeclaration() {
 			return this.resourcePathDeclaration;
 		}
 
-		@Nonnull
+		@NonNull
 		public Boolean isServerSentEventSource() {
 			return this.serverSentEventSource;
 		}

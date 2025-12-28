@@ -32,8 +32,8 @@ import com.soklet.ResponseMarshaler.Builder.ThrowableHandler;
 import com.soklet.exception.BadRequestException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -58,19 +58,19 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultResponseMarshaler implements ResponseMarshaler {
-	@Nonnull
+	@NonNull
 	private static final DefaultResponseMarshaler DEFAULT_INSTANCE;
 
 	static {
 		DEFAULT_INSTANCE = new DefaultResponseMarshaler(ResponseMarshaler.withCharset(StandardCharsets.UTF_8));
 	}
 
-	@Nonnull
+	@NonNull
 	public static DefaultResponseMarshaler defaultInstance() {
 		return DEFAULT_INSTANCE;
 	}
 
-	@Nonnull
+	@NonNull
 	private final Charset charset;
 	@Nullable
 	private final ResourceMethodHandler resourceMethodHandler;
@@ -99,7 +99,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	@Nullable
 	private final PostProcessor postProcessor;
 
-	public DefaultResponseMarshaler(@Nonnull ResponseMarshaler.Builder builder) {
+	public DefaultResponseMarshaler(ResponseMarshaler.@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.charset = builder.charset;
@@ -118,11 +118,11 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		this.postProcessor = builder.postProcessor;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forResourceMethod(@Nonnull Request request,
-																						 @Nonnull Response response,
-																						 @Nonnull ResourceMethod resourceMethod) {
+	public MarshaledResponse forResourceMethod(@NonNull Request request,
+																						 @NonNull Response response,
+																						 @NonNull ResourceMethod resourceMethod) {
 		requireNonNull(request);
 		requireNonNull(response);
 		requireNonNull(resourceMethod);
@@ -169,9 +169,9 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forNotFound(@Nonnull Request request) {
+	public MarshaledResponse forNotFound(@NonNull Request request) {
 		requireNonNull(request);
 
 		NotFoundHandler notFoundHandler = getNotFoundHandler().orElse(null);
@@ -195,10 +195,10 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forMethodNotAllowed(@Nonnull Request request,
-																							 @Nonnull Set<HttpMethod> allowedHttpMethods) {
+	public MarshaledResponse forMethodNotAllowed(@NonNull Request request,
+																							 @NonNull Set<HttpMethod> allowedHttpMethods) {
 		requireNonNull(request);
 		requireNonNull(allowedHttpMethods);
 
@@ -233,9 +233,9 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forContentTooLarge(@Nonnull Request request,
+	public MarshaledResponse forContentTooLarge(@NonNull Request request,
 																							@Nullable ResourceMethod resourceMethod) {
 		requireNonNull(request);
 
@@ -260,9 +260,9 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forServiceUnavailable(@Nonnull Request request,
+	public MarshaledResponse forServiceUnavailable(@NonNull Request request,
 																								 @Nullable ResourceMethod resourceMethod) {
 		requireNonNull(request);
 
@@ -290,10 +290,10 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forOptions(@Nonnull Request request,
-																			@Nonnull Set<HttpMethod> allowedHttpMethods) {
+	public MarshaledResponse forOptions(@NonNull Request request,
+																			@NonNull Set<HttpMethod> allowedHttpMethods) {
 		requireNonNull(request);
 		requireNonNull(allowedHttpMethods);
 
@@ -319,9 +319,9 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forOptionsSplat(@Nonnull Request request) {
+	public MarshaledResponse forOptionsSplat(@NonNull Request request) {
 		requireNonNull(request);
 
 		OptionsSplatHandler optionsSplatHandler = getOptionsSplatHandler().orElse(null);
@@ -347,10 +347,10 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forHead(@Nonnull Request request,
-																	 @Nonnull MarshaledResponse getMethodMarshaledResponse) {
+	public MarshaledResponse forHead(@NonNull Request request,
+																	 @NonNull MarshaledResponse getMethodMarshaledResponse) {
 		requireNonNull(request);
 		requireNonNull(getMethodMarshaledResponse);
 
@@ -378,10 +378,10 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forThrowable(@Nonnull Request request,
-																				@Nonnull Throwable throwable,
+	public MarshaledResponse forThrowable(@NonNull Request request,
+																				@NonNull Throwable throwable,
 																				@Nullable ResourceMethod resourceMethod) {
 		requireNonNull(request);
 		requireNonNull(throwable);
@@ -407,11 +407,11 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,
-																									 @Nonnull CorsPreflight corsPreflight,
-																									 @Nonnull CorsPreflightResponse corsPreflightResponse) {
+	public MarshaledResponse forCorsPreflightAllowed(@NonNull Request request,
+																									 @NonNull CorsPreflight corsPreflight,
+																									 @NonNull CorsPreflightResponse corsPreflightResponse) {
 		requireNonNull(request);
 		requireNonNull(corsPreflight);
 		requireNonNull(corsPreflightResponse);
@@ -478,10 +478,10 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forCorsPreflightRejected(@Nonnull Request request,
-																										@Nonnull CorsPreflight corsPreflight) {
+	public MarshaledResponse forCorsPreflightRejected(@NonNull Request request,
+																										@NonNull CorsPreflight corsPreflight) {
 		requireNonNull(request);
 		requireNonNull(corsPreflight);
 
@@ -507,12 +507,12 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return marshaledResponse;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public MarshaledResponse forCorsAllowed(@Nonnull Request request,
-																					@Nonnull Cors cors,
-																					@Nonnull CorsResponse corsResponse,
-																					@Nonnull MarshaledResponse marshaledResponse) {
+	public MarshaledResponse forCorsAllowed(@NonNull Request request,
+																					@NonNull Cors cors,
+																					@NonNull CorsResponse corsResponse,
+																					@NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(request);
 		requireNonNull(cors);
 		requireNonNull(corsResponse);
@@ -565,9 +565,9 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return finalMarshaledResponse;
 	}
 
-	@Nonnull
-	private String normalizedAccessControlAllowOrigin(@Nonnull String origin,
-																										@Nonnull String accessControlAllowOrigin,
+	@NonNull
+	private String normalizedAccessControlAllowOrigin(@NonNull String origin,
+																										@NonNull String accessControlAllowOrigin,
 																										@Nullable Boolean accessControlAllowCredentials) {
 		requireNonNull(origin);
 		requireNonNull(accessControlAllowOrigin);
@@ -579,72 +579,72 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		return accessControlAllowOrigin;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Charset getCharset() {
 		return this.charset;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ResourceMethodHandler> getResourceMethodHandler() {
 		return Optional.ofNullable(this.resourceMethodHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<NotFoundHandler> getNotFoundHandler() {
 		return Optional.ofNullable(this.notFoundHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<MethodNotAllowedHandler> getMethodNotAllowedHandler() {
 		return Optional.ofNullable(this.methodNotAllowedHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ContentTooLargeHandler> getContentTooLargeHandler() {
 		return Optional.ofNullable(this.contentTooLargeHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ServiceUnavailableHandler> getServiceUnavailableHandler() {
 		return Optional.ofNullable(this.serviceUnavailableHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<OptionsHandler> getOptionsHandler() {
 		return Optional.ofNullable(this.optionsHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<OptionsSplatHandler> getOptionsSplatHandler() {
 		return Optional.ofNullable(this.optionsSplatHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<ThrowableHandler> getThrowableHandler() {
 		return Optional.ofNullable(this.throwableHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<HeadHandler> getHeadHandler() {
 		return Optional.ofNullable(this.headHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<CorsPreflightAllowedHandler> getCorsPreflightAllowedHandler() {
 		return Optional.ofNullable(this.corsPreflightAllowedHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<CorsPreflightRejectedHandler> getCorsPreflightRejectedHandler() {
 		return Optional.ofNullable(this.corsPreflightRejectedHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<CorsAllowedHandler> getCorsAllowedHandler() {
 		return Optional.ofNullable(this.corsAllowedHandler);
 	}
 
-	@Nonnull
+	@NonNull
 	protected Optional<PostProcessor> getPostProcessor() {
 		return Optional.ofNullable(this.postProcessor);
 	}

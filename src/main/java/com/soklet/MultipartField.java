@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.Charset;
@@ -45,14 +45,14 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class MultipartField {
-	@Nonnull
+	@NonNull
 	private static final Charset DEFAULT_CHARSET;
 
 	static {
 		DEFAULT_CHARSET = StandardCharsets.UTF_8;
 	}
 
-	@Nonnull
+	@NonNull
 	private final String name;
 	@Nullable
 	private final byte[] data;
@@ -64,7 +64,7 @@ public final class MultipartField {
 	private final String contentType;
 	@Nullable
 	private final Charset charset;
-	@Nonnull
+	@NonNull
 	private final ReentrantLock lock;
 
 	/**
@@ -73,8 +73,8 @@ public final class MultipartField {
 	 * @param name the name of this field
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder withName(@Nonnull String name) {
+	@NonNull
+	public static Builder withName(@NonNull String name) {
 		requireNonNull(name);
 		return new Builder(name);
 	}
@@ -86,8 +86,8 @@ public final class MultipartField {
 	 * @param value the optional value for this field
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder with(@Nonnull String name,
+	@NonNull
+	public static Builder with(@NonNull String name,
 														 @Nullable byte[] value) {
 		requireNonNull(name);
 		return new Builder(name, value);
@@ -98,12 +98,12 @@ public final class MultipartField {
 	 *
 	 * @return a copier for this instance
 	 */
-	@Nonnull
+	@NonNull
 	public Copier copy() {
 		return new Copier(this);
 	}
 
-	protected MultipartField(@Nonnull Builder builder) {
+	protected MultipartField(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		String name = trimAggressivelyToNull(builder.name);
@@ -163,7 +163,7 @@ public final class MultipartField {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nonnull
+		@NonNull
 		private String name;
 		@Nullable
 		private byte[] data;
@@ -174,11 +174,11 @@ public final class MultipartField {
 		@Nullable
 		private Charset charset;
 
-		protected Builder(@Nonnull String name) {
+		protected Builder(@NonNull String name) {
 			this(name, null);
 		}
 
-		protected Builder(@Nonnull String name,
+		protected Builder(@NonNull String name,
 											@Nullable byte[] data) {
 			requireNonNull(name);
 			requireNonNull(data);
@@ -187,38 +187,38 @@ public final class MultipartField {
 			this.data = data;
 		}
 
-		@Nonnull
-		public Builder name(@Nonnull String name) {
+		@NonNull
+		public Builder name(@NonNull String name) {
 			requireNonNull(name);
 			this.name = name;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder data(@Nullable byte[] data) {
 			this.data = data;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder filename(@Nullable String filename) {
 			this.filename = filename;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder contentType(@Nullable String contentType) {
 			this.contentType = contentType;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder charset(@Nullable Charset charset) {
 			this.charset = charset;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public MultipartField build() {
 			return new MultipartField(this);
 		}
@@ -233,10 +233,10 @@ public final class MultipartField {
 	 */
 	@NotThreadSafe
 	public static final class Copier {
-		@Nonnull
+		@NonNull
 		private final Builder builder;
 
-		Copier(@Nonnull MultipartField multipartField) {
+		Copier(@NonNull MultipartField multipartField) {
 			requireNonNull(multipartField);
 
 			this.builder = new Builder(multipartField.getName(), multipartField.getData().orElse(null))
@@ -245,38 +245,38 @@ public final class MultipartField {
 					.charset(multipartField.getCharset().orElse(null));
 		}
 
-		@Nonnull
-		public Copier name(@Nonnull String name) {
+		@NonNull
+		public Copier name(@NonNull String name) {
 			requireNonNull(name);
 			this.builder.name(name);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier data(@Nullable byte[] data) {
 			this.builder.data(data);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier filename(@Nullable String filename) {
 			this.builder.filename(filename);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier contentType(@Nullable String contentType) {
 			this.builder.contentType(contentType);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier contentType(@Nullable Charset charset) {
 			this.builder.charset(charset);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public MultipartField finish() {
 			return this.builder.build();
 		}
@@ -287,7 +287,7 @@ public final class MultipartField {
 	 *
 	 * @return the string value, or {@link Optional#empty()} if not available
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getDataAsString() {
 		// Lazily instantiate a string instance using double-checked locking
 		if (this.data != null && this.dataAsString == null) {
@@ -308,7 +308,7 @@ public final class MultipartField {
 	 *
 	 * @return the name of this field
 	 */
-	@Nonnull
+	@NonNull
 	public String getName() {
 		return this.name;
 	}
@@ -318,7 +318,7 @@ public final class MultipartField {
 	 *
 	 * @return the filename, or {@link Optional#empty()} if not available
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getFilename() {
 		return Optional.ofNullable(this.filename);
 	}
@@ -328,7 +328,7 @@ public final class MultipartField {
 	 *
 	 * @return the content type, or {@link Optional#empty()} if not available
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<String> getContentType() {
 		return Optional.ofNullable(this.contentType);
 	}
@@ -338,7 +338,7 @@ public final class MultipartField {
 	 *
 	 * @return the charset, or {@link Optional#empty()} if not available
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Charset> getCharset() {
 		return Optional.ofNullable(this.charset);
 	}
@@ -348,12 +348,12 @@ public final class MultipartField {
 	 *
 	 * @return the binary value, or {@link Optional#empty()} if not available
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<byte[]> getData() {
 		return Optional.ofNullable(this.data);
 	}
 
-	@Nonnull
+	@NonNull
 	protected ReentrantLock getLock() {
 		return this.lock;
 	}

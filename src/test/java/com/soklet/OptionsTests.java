@@ -20,7 +20,7 @@ import com.soklet.annotation.GET;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Map;
 import java.util.Set;
@@ -36,7 +36,7 @@ public class OptionsTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 

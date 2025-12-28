@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Objects;
@@ -39,9 +39,9 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class LogEvent {
-	@Nonnull
+	@NonNull
 	private final LogEventType logEventType;
-	@Nonnull
+	@NonNull
 	private final String message;
 	@Nullable
 	private final Throwable throwable;
@@ -59,9 +59,9 @@ public final class LogEvent {
 	 * @param message      the message for this log event
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder with(@Nonnull LogEventType logEventType,
-														 @Nonnull String message) {
+	@NonNull
+	public static Builder with(@NonNull LogEventType logEventType,
+														 @NonNull String message) {
 		requireNonNull(logEventType);
 		requireNonNull(message);
 
@@ -73,12 +73,12 @@ public final class LogEvent {
 	 *
 	 * @return a copier for this instance
 	 */
-	@Nonnull
+	@NonNull
 	public Copier copy() {
 		return new Copier(this);
 	}
 
-	protected LogEvent(@Nonnull Builder builder) {
+	protected LogEvent(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.logEventType = builder.logEventType;
@@ -90,7 +90,7 @@ public final class LogEvent {
 	}
 
 	@Override
-	@Nonnull
+	@NonNull
 	public String toString() {
 		return format("%s{logEventType=%s, message=%s, throwable=%s}", getClass().getSimpleName(),
 				getLogEventType(), getMessage(), getThrowable().orElse(null));
@@ -122,7 +122,7 @@ public final class LogEvent {
 	 *
 	 * @return the log event type
 	 */
-	@Nonnull
+	@NonNull
 	public LogEventType getLogEventType() {
 		return this.logEventType;
 	}
@@ -132,7 +132,7 @@ public final class LogEvent {
 	 *
 	 * @return the message
 	 */
-	@Nonnull
+	@NonNull
 	public String getMessage() {
 		return this.message;
 	}
@@ -142,7 +142,7 @@ public final class LogEvent {
 	 *
 	 * @return the throwable, or {@link Optional#empty()} if not available
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Throwable> getThrowable() {
 		return Optional.ofNullable(this.throwable);
 	}
@@ -152,7 +152,7 @@ public final class LogEvent {
 	 *
 	 * @return the request, or {@link Optional#empty()} if not available
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Request> getRequest() {
 		return Optional.ofNullable(this.request);
 	}
@@ -162,7 +162,7 @@ public final class LogEvent {
 	 *
 	 * @return the <em>Resource Method</em>, or {@link Optional#empty()} if not available
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<ResourceMethod> getResourceMethod() {
 		return Optional.ofNullable(this.resourceMethod);
 	}
@@ -172,7 +172,7 @@ public final class LogEvent {
 	 *
 	 * @return the response, or {@link Optional#empty()} if not available
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<MarshaledResponse> getMarshaledResponse() {
 		return Optional.ofNullable(this.marshaledResponse);
 	}
@@ -186,9 +186,9 @@ public final class LogEvent {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nonnull
+		@NonNull
 		private LogEventType logEventType;
-		@Nonnull
+		@NonNull
 		private String message;
 		@Nullable
 		private Throwable throwable;
@@ -199,8 +199,8 @@ public final class LogEvent {
 		@Nullable
 		private MarshaledResponse marshaledResponse;
 
-		protected Builder(@Nonnull LogEventType logEventType,
-											@Nonnull String message) {
+		protected Builder(@NonNull LogEventType logEventType,
+											@NonNull String message) {
 			requireNonNull(logEventType);
 			requireNonNull(message);
 
@@ -208,45 +208,45 @@ public final class LogEvent {
 			this.message = message;
 		}
 
-		@Nonnull
-		public Builder logEventType(@Nonnull LogEventType logEventType) {
+		@NonNull
+		public Builder logEventType(@NonNull LogEventType logEventType) {
 			requireNonNull(logEventType);
 			this.logEventType = logEventType;
 			return this;
 		}
 
-		@Nonnull
-		public Builder message(@Nonnull String message) {
+		@NonNull
+		public Builder message(@NonNull String message) {
 			requireNonNull(message);
 			this.message = message;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder throwable(@Nullable Throwable throwable) {
 			this.throwable = throwable;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder request(@Nullable Request request) {
 			this.request = request;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder resourceMethod(@Nullable ResourceMethod resourceMethod) {
 			this.resourceMethod = resourceMethod;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder marshaledResponse(@Nullable MarshaledResponse marshaledResponse) {
 			this.marshaledResponse = marshaledResponse;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public LogEvent build() {
 			return new LogEvent(this);
 		}
@@ -261,10 +261,10 @@ public final class LogEvent {
 	 */
 	@NotThreadSafe
 	public static final class Copier {
-		@Nonnull
+		@NonNull
 		private final Builder builder;
 
-		Copier(@Nonnull LogEvent logEvent) {
+		Copier(@NonNull LogEvent logEvent) {
 			requireNonNull(logEvent);
 
 			this.builder = new Builder(logEvent.getLogEventType(), logEvent.getMessage())
@@ -274,45 +274,45 @@ public final class LogEvent {
 					.marshaledResponse(logEvent.getMarshaledResponse().orElse(null));
 		}
 
-		@Nonnull
-		public Copier logEventType(@Nonnull LogEventType logEventType) {
+		@NonNull
+		public Copier logEventType(@NonNull LogEventType logEventType) {
 			requireNonNull(logEventType);
 			this.builder.logEventType(logEventType);
 			return this;
 		}
 
-		@Nonnull
-		public Copier message(@Nonnull String message) {
+		@NonNull
+		public Copier message(@NonNull String message) {
 			requireNonNull(message);
 			this.builder.message(message);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier throwable(@Nullable Throwable throwable) {
 			this.builder.throwable(throwable);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier request(@Nullable Request request) {
 			this.builder.request(request);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier resourceMethod(@Nullable ResourceMethod resourceMethod) {
 			this.builder.resourceMethod(resourceMethod);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier marshaledResponse(@Nullable MarshaledResponse marshaledResponse) {
 			this.builder.marshaledResponse(marshaledResponse);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public LogEvent finish() {
 			return this.builder.build();
 		}

@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -44,9 +44,9 @@ import static java.util.Objects.requireNonNull;
  *
  * // The request was matched to a Resource Method and executed non-exceptionally
  * ResourceMethodHandler resourceMethodHandler = (
- *   @Nonnull Request request,
- *   @Nonnull Response response,
- *   @Nonnull ResourceMethod resourceMethod
+ *   @NonNull Request request,
+ *   @NonNull Response response,
+ *   @NonNull ResourceMethod resourceMethod
  * ) -> {
  *   // Turn response body into JSON bytes with Gson
  *   Object bodyObject = response.getBody().orElse(null);
@@ -67,8 +67,8 @@ import static java.util.Objects.requireNonNull;
  *
  * // Function to create responses for exceptions that bubble out
  * ThrowableHandler throwableHandler = (
- *   @Nonnull Request request,
- *   @Nonnull Throwable throwable,
+ *   @NonNull Request request,
+ *   @NonNull Throwable throwable,
  *   @Nullable ResourceMethod resourceMethod
  * ) -> {
  *   // Keep track of what to write to the response
@@ -142,10 +142,10 @@ public interface ResponseMarshaler {
 	 * @param resourceMethod the <em>Resource Method</em> that handled the request
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forResourceMethod(@Nonnull Request request,
-																			@Nonnull Response response,
-																			@Nonnull ResourceMethod resourceMethod);
+	@NonNull
+	MarshaledResponse forResourceMethod(@NonNull Request request,
+																			@NonNull Response response,
+																			@NonNull ResourceMethod resourceMethod);
 
 	/**
 	 * Prepares a response for a request that does not have a matching <em>Resource Method</em>, which triggers an <a href="https://httpwg.org/specs/rfc9110.html#status.404">HTTP 404 Not Found</a>.
@@ -155,8 +155,8 @@ public interface ResponseMarshaler {
 	 * @param request the HTTP request
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forNotFound(@Nonnull Request request);
+	@NonNull
+	MarshaledResponse forNotFound(@NonNull Request request);
 
 	/**
 	 * Prepares a response for a request that triggers an
@@ -168,9 +168,9 @@ public interface ResponseMarshaler {
 	 * @param allowedHttpMethods appropriate HTTP methods to write to the {@code Allow} response header
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forMethodNotAllowed(@Nonnull Request request,
-																				@Nonnull Set<HttpMethod> allowedHttpMethods);
+	@NonNull
+	MarshaledResponse forMethodNotAllowed(@NonNull Request request,
+																				@NonNull Set<HttpMethod> allowedHttpMethods);
 
 	/**
 	 * Prepares a response for a request that triggers an <a href="https://httpwg.org/specs/rfc9110.html#status.413">HTTP 413 Content Too Large</a>.
@@ -181,8 +181,8 @@ public interface ResponseMarshaler {
 	 * @param resourceMethod the <em>Resource Method</em> that would have handled the request, if available
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forContentTooLarge(@Nonnull Request request,
+	@NonNull
+	MarshaledResponse forContentTooLarge(@NonNull Request request,
 																			 @Nullable ResourceMethod resourceMethod);
 
 	/**
@@ -194,8 +194,8 @@ public interface ResponseMarshaler {
 	 * @param resourceMethod the <em>Resource Method</em> that would have handled the request, if available
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forServiceUnavailable(@Nonnull Request request,
+	@NonNull
+	MarshaledResponse forServiceUnavailable(@NonNull Request request,
 																					@Nullable ResourceMethod resourceMethod);
 
 	/**
@@ -210,9 +210,9 @@ public interface ResponseMarshaler {
 	 * @param allowedHttpMethods appropriate HTTP methods to write to the {@code Allow} response header
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forOptions(@Nonnull Request request,
-															 @Nonnull Set<HttpMethod> allowedHttpMethods);
+	@NonNull
+	MarshaledResponse forOptions(@NonNull Request request,
+															 @NonNull Set<HttpMethod> allowedHttpMethods);
 
 	/**
 	 * Prepares a response for an HTTP {@code OPTIONS *} (colloquially, "{@code OPTIONS} Splat") request.
@@ -224,8 +224,8 @@ public interface ResponseMarshaler {
 	 * @param request the HTTP request
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forOptionsSplat(@Nonnull Request request);
+	@NonNull
+	MarshaledResponse forOptionsSplat(@NonNull Request request);
 
 	/**
 	 * Prepares a response for scenarios in which an uncaught exception is encountered.
@@ -237,9 +237,9 @@ public interface ResponseMarshaler {
 	 * @param resourceMethod the <em>Resource Method</em> that would have handled the request, if available
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forThrowable(@Nonnull Request request,
-																 @Nonnull Throwable throwable,
+	@NonNull
+	MarshaledResponse forThrowable(@NonNull Request request,
+																 @NonNull Throwable throwable,
 																 @Nullable ResourceMethod resourceMethod);
 
 	/**
@@ -251,9 +251,9 @@ public interface ResponseMarshaler {
 	 * @param getMethodMarshaledResponse the binary data that would have been sent over the wire for an equivalent {@code GET} request (necessary in order to write the {@code Content-Length} header for a {@code HEAD} response)
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forHead(@Nonnull Request request,
-														@Nonnull MarshaledResponse getMethodMarshaledResponse);
+	@NonNull
+	MarshaledResponse forHead(@NonNull Request request,
+														@NonNull MarshaledResponse getMethodMarshaledResponse);
 
 	/**
 	 * Prepares a response for "CORS preflight allowed" scenario when your {@link CorsAuthorizer} approves a preflight request.
@@ -265,10 +265,10 @@ public interface ResponseMarshaler {
 	 * @param corsPreflightResponse the data that should be included in this CORS preflight response
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forCorsPreflightAllowed(@Nonnull Request request,
-																						@Nonnull CorsPreflight corsPreflight,
-																						@Nonnull CorsPreflightResponse corsPreflightResponse);
+	@NonNull
+	MarshaledResponse forCorsPreflightAllowed(@NonNull Request request,
+																						@NonNull CorsPreflight corsPreflight,
+																						@NonNull CorsPreflightResponse corsPreflightResponse);
 
 	/**
 	 * Prepares a response for "CORS preflight rejected" scenario when your {@link CorsAuthorizer} denies a preflight request.
@@ -279,9 +279,9 @@ public interface ResponseMarshaler {
 	 * @param corsPreflight the CORS preflight request data
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forCorsPreflightRejected(@Nonnull Request request,
-																						 @Nonnull CorsPreflight corsPreflight);
+	@NonNull
+	MarshaledResponse forCorsPreflightRejected(@NonNull Request request,
+																						 @NonNull CorsPreflight corsPreflight);
 
 	/**
 	 * Applies "CORS is permitted for this request" data to a response.
@@ -302,11 +302,11 @@ public interface ResponseMarshaler {
 	 * @param marshaledResponse the existing response to which we should apply relevant CORS headers
 	 * @return the response to be sent over the wire
 	 */
-	@Nonnull
-	MarshaledResponse forCorsAllowed(@Nonnull Request request,
-																	 @Nonnull Cors cors,
-																	 @Nonnull CorsResponse corsResponse,
-																	 @Nonnull MarshaledResponse marshaledResponse);
+	@NonNull
+	MarshaledResponse forCorsAllowed(@NonNull Request request,
+																	 @NonNull Cors cors,
+																	 @NonNull CorsResponse corsResponse,
+																	 @NonNull MarshaledResponse marshaledResponse);
 
 	/**
 	 * Acquires a threadsafe {@link ResponseMarshaler} with a reasonable "out of the box" configuration that uses UTF-8 to write character data.
@@ -315,7 +315,7 @@ public interface ResponseMarshaler {
 	 *
 	 * @return a UTF-8 {@code ResponseMarshaler} with default settings
 	 */
-	@Nonnull
+	@NonNull
 	static ResponseMarshaler defaultInstance() {
 		return DefaultResponseMarshaler.defaultInstance();
 	}
@@ -325,7 +325,7 @@ public interface ResponseMarshaler {
 	 *
 	 * @return a {@code ResponseMarshaler} builder
 	 */
-	@Nonnull
+	@NonNull
 	static Builder withDefaults() {
 		return new Builder(StandardCharsets.UTF_8);
 	}
@@ -336,8 +336,8 @@ public interface ResponseMarshaler {
 	 * @param charset the default charset to use when writing response data
 	 * @return a {@code ResponseMarshaler} builder
 	 */
-	@Nonnull
-	static Builder withCharset(@Nonnull Charset charset) {
+	@NonNull
+	static Builder withCharset(@NonNull Charset charset) {
 		requireNonNull(charset);
 		return new Builder(charset);
 	}
@@ -366,10 +366,10 @@ public interface ResponseMarshaler {
 			 * @param resourceMethod the <em>Resource Method</em> that handled the request
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request,
-															 @Nonnull Response response,
-															 @Nonnull ResourceMethod resourceMethod);
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request,
+															 @NonNull Response response,
+															 @NonNull ResourceMethod resourceMethod);
 		}
 
 		/**
@@ -386,8 +386,8 @@ public interface ResponseMarshaler {
 			 * @param request the HTTP request
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request);
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request);
 		}
 
 		/**
@@ -405,9 +405,9 @@ public interface ResponseMarshaler {
 			 * @param allowedHttpMethods appropriate HTTP methods to write to the {@code Allow} response header
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request,
-															 @Nonnull Set<HttpMethod> allowedHttpMethods);
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request,
+															 @NonNull Set<HttpMethod> allowedHttpMethods);
 		}
 
 		/**
@@ -424,8 +424,8 @@ public interface ResponseMarshaler {
 			 * @param resourceMethod the <em>Resource Method</em> that would have handled the request, if available
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request,
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request,
 															 @Nullable ResourceMethod resourceMethod);
 		}
 
@@ -443,8 +443,8 @@ public interface ResponseMarshaler {
 			 * @param resourceMethod the <em>Resource Method</em> that would have handled the request, if available
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request,
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request,
 															 @Nullable ResourceMethod resourceMethod);
 		}
 
@@ -465,9 +465,9 @@ public interface ResponseMarshaler {
 			 * @param allowedHttpMethods appropriate HTTP methods to write to the {@code Allow} response header
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request,
-															 @Nonnull Set<HttpMethod> allowedHttpMethods);
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request,
+															 @NonNull Set<HttpMethod> allowedHttpMethods);
 		}
 
 		/**
@@ -485,8 +485,8 @@ public interface ResponseMarshaler {
 			 * @param request the HTTP request
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request);
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request);
 		}
 
 		/**
@@ -504,9 +504,9 @@ public interface ResponseMarshaler {
 			 * @param resourceMethod the <em>Resource Method</em> that would have handled the request, if available
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request,
-															 @Nonnull Throwable throwable,
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request,
+															 @NonNull Throwable throwable,
 															 @Nullable ResourceMethod resourceMethod);
 		}
 
@@ -524,9 +524,9 @@ public interface ResponseMarshaler {
 			 * @param getMethodMarshaledResponse the binary data that would have been sent over the wire for an equivalent {@code GET} request (necessary in order to write the {@code Content-Length} header for a {@code HEAD} response)
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request,
-															 @Nonnull MarshaledResponse getMethodMarshaledResponse);
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request,
+															 @NonNull MarshaledResponse getMethodMarshaledResponse);
 		}
 
 		/**
@@ -544,10 +544,10 @@ public interface ResponseMarshaler {
 			 * @param corsPreflightResponse the data that should be included in this CORS preflight response
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request,
-															 @Nonnull CorsPreflight corsPreflight,
-															 @Nonnull CorsPreflightResponse corsPreflightResponse);
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request,
+															 @NonNull CorsPreflight corsPreflight,
+															 @NonNull CorsPreflightResponse corsPreflightResponse);
 		}
 
 		/**
@@ -564,9 +564,9 @@ public interface ResponseMarshaler {
 			 * @param corsPreflight the CORS preflight request data
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request,
-															 @Nonnull CorsPreflight corsPreflight);
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request,
+															 @NonNull CorsPreflight corsPreflight);
 		}
 
 		/**
@@ -593,11 +593,11 @@ public interface ResponseMarshaler {
 			 * @param marshaledResponse the existing response to which we should apply relevant CORS headers
 			 * @return the response to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse handle(@Nonnull Request request,
-															 @Nonnull Cors cors,
-															 @Nonnull CorsResponse corsResponse,
-															 @Nonnull MarshaledResponse marshaledResponse);
+			@NonNull
+			MarshaledResponse handle(@NonNull Request request,
+															 @NonNull Cors cors,
+															 @NonNull CorsResponse corsResponse,
+															 @NonNull MarshaledResponse marshaledResponse);
 		}
 
 		/**
@@ -611,11 +611,11 @@ public interface ResponseMarshaler {
 			 * @param marshaledResponse the response data generated by the appropriate handler function, but not yet sent over the wire
 			 * @return the response data (possibly customized) to be sent over the wire
 			 */
-			@Nonnull
-			MarshaledResponse postProcess(@Nonnull MarshaledResponse marshaledResponse);
+			@NonNull
+			MarshaledResponse postProcess(@NonNull MarshaledResponse marshaledResponse);
 		}
 
-		@Nonnull
+		@NonNull
 		Charset charset;
 		@Nullable
 		ResourceMethodHandler resourceMethodHandler;
@@ -644,97 +644,97 @@ public interface ResponseMarshaler {
 		@Nullable
 		PostProcessor postProcessor;
 
-		private Builder(@Nonnull Charset charset) {
+		private Builder(@NonNull Charset charset) {
 			requireNonNull(charset);
 			this.charset = charset;
 		}
 
-		@Nonnull
-		public Builder charset(@Nonnull Charset charset) {
+		@NonNull
+		public Builder charset(@NonNull Charset charset) {
 			requireNonNull(charset);
 			this.charset = charset;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder resourceMethodHandler(@Nullable ResourceMethodHandler resourceMethodHandler) {
 			this.resourceMethodHandler = resourceMethodHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder notFoundHandler(@Nullable NotFoundHandler notFoundHandler) {
 			this.notFoundHandler = notFoundHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder methodNotAllowedHandler(@Nullable MethodNotAllowedHandler methodNotAllowedHandler) {
 			this.methodNotAllowedHandler = methodNotAllowedHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder contentTooLargeHandler(@Nullable ContentTooLargeHandler contentTooLargeHandler) {
 			this.contentTooLargeHandler = contentTooLargeHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder serviceUnavailableHandler(@Nullable ServiceUnavailableHandler serviceUnavailableHandler) {
 			this.serviceUnavailableHandler = serviceUnavailableHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder optionsHandler(@Nullable OptionsHandler optionsHandler) {
 			this.optionsHandler = optionsHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder optionsSplatHandler(@Nullable OptionsSplatHandler optionsSplatHandler) {
 			this.optionsSplatHandler = optionsSplatHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder throwableHandler(@Nullable ThrowableHandler throwableHandler) {
 			this.throwableHandler = throwableHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder headHandler(@Nullable HeadHandler headHandler) {
 			this.headHandler = headHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder corsPreflightAllowedHandler(@Nullable CorsPreflightAllowedHandler corsPreflightAllowedHandler) {
 			this.corsPreflightAllowedHandler = corsPreflightAllowedHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder corsPreflightRejectedHandler(@Nullable CorsPreflightRejectedHandler corsPreflightRejectedHandler) {
 			this.corsPreflightRejectedHandler = corsPreflightRejectedHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder corsAllowedHandler(@Nullable CorsAllowedHandler corsAllowedHandler) {
 			this.corsAllowedHandler = corsAllowedHandler;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder postProcessor(@Nullable PostProcessor postProcessor) {
 			this.postProcessor = postProcessor;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public ResponseMarshaler build() {
 			return new DefaultResponseMarshaler(this);
 		}

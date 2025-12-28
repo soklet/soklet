@@ -16,8 +16,8 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Optional;
 
@@ -30,13 +30,13 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class IllegalPathParameterException extends BadRequestException {
-	@Nonnull
+	@NonNull
 	private final String pathParameterName;
 	@Nullable
 	private final String pathParameterValue;
 
 	public IllegalPathParameterException(@Nullable String message,
-																			 @Nonnull String pathParameterName,
+																			 @NonNull String pathParameterName,
 																			 @Nullable String pathParameterValue) {
 		super(message);
 		this.pathParameterName = requireNonNull(pathParameterName);
@@ -45,19 +45,19 @@ public final class IllegalPathParameterException extends BadRequestException {
 
 	public IllegalPathParameterException(@Nullable String message,
 																			 @Nullable Throwable cause,
-																			 @Nonnull String pathParameterName,
+																			 @NonNull String pathParameterName,
 																			 @Nullable String pathParameterValue) {
 		super(message, cause);
 		this.pathParameterName = requireNonNull(pathParameterName);
 		this.pathParameterValue = pathParameterValue;
 	}
 
-	@Nonnull
+	@NonNull
 	public String getPathParameterName() {
 		return this.pathParameterName;
 	}
 
-	@Nonnull
+	@NonNull
 	public Optional<String> getPathParameterValue() {
 		return Optional.ofNullable(this.pathParameterValue);
 	}

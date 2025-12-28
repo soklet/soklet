@@ -16,7 +16,7 @@
 
 package com.soklet.annotation;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -35,6 +35,6 @@ public @interface HEADs {
 	/**
 	 * @return the {@link HEAD} annotations on this <em>Resource Method</em>
 	 */
-	@Nonnull
+	@NonNull
 	HEAD[] value() default {};
 }

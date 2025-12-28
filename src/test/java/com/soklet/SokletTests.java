@@ -28,8 +28,8 @@ import com.soklet.exception.IllegalRequestBodyException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
@@ -268,20 +268,20 @@ public class SokletTests {
 		}
 
 		@GET("/integer-query-param")
-		public Response integerQueryParam(@Nonnull @QueryParameter Integer intQueryParam) {
+		public Response integerQueryParam(@NonNull @QueryParameter Integer intQueryParam) {
 			requireNonNull(intQueryParam);
 			return Response.withStatusCode(204).build();
 		}
 
 		@GET("/query-param-custom-name")
-		public Response queryParamCustomName(@Nonnull @QueryParameter(name = "local_date") LocalDate localDate) {
+		public Response queryParamCustomName(@NonNull @QueryParameter(name = "local_date") LocalDate localDate) {
 			requireNonNull(localDate);
 			// Echoes back date in ISO yyyy-MM-dd format
 			return Response.withStatusCode(200).body(DateTimeFormatter.ISO_DATE.format(localDate)).build();
 		}
 
 		@POST("/optional-query-param")
-		public Response optionalQueryParam(@Nonnull @QueryParameter Optional<BigDecimal> optionalQueryParam) {
+		public Response optionalQueryParam(@NonNull @QueryParameter Optional<BigDecimal> optionalQueryParam) {
 			requireNonNull(optionalQueryParam);
 
 			if (optionalQueryParam.isPresent())
@@ -293,13 +293,13 @@ public class SokletTests {
 		}
 
 		@POST("/echo-integer-request-body")
-		public Integer echoIntegerRequestBody(@Nonnull @RequestBody Integer requestBody) {
+		public Integer echoIntegerRequestBody(@NonNull @RequestBody Integer requestBody) {
 			requireNonNull(requestBody);
 			return requestBody;
 		}
 
 		@POST("/echo-integer-optional-request-body-1")
-		public void echoIntegerOptionalRequestBody1(@Nonnull @RequestBody Optional<Integer> requestBody) {
+		public void echoIntegerOptionalRequestBody1(@NonNull @RequestBody Optional<Integer> requestBody) {
 			requireNonNull(requestBody);
 		}
 
@@ -413,15 +413,15 @@ public class SokletTests {
 		}
 	}
 
-	@Nonnull
-	protected SokletConfig configurationForResourceClasses(@Nonnull Set<Class<?>> resourceClasses) {
+	@NonNull
+	protected SokletConfig configurationForResourceClasses(@NonNull Set<Class<?>> resourceClasses) {
 		return SokletConfig.forSimulatorTesting()
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(resourceClasses))
 				// Quiet logging to keep the console clean
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 						// No-op
 					}
 				})
@@ -674,7 +674,7 @@ public class SokletTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(DuplicateValueResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 						// Quiet logging
 					}
 				})

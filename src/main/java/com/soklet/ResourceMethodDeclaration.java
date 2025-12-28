@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 
 import static java.util.Objects.requireNonNull;
@@ -28,17 +28,17 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 record ResourceMethodDeclaration(
-		@Nonnull
+		@NonNull
 		HttpMethod httpMethod,
-		@Nonnull
+		@NonNull
 		String path,
-		@Nonnull
+		@NonNull
 		String className,
-		@Nonnull
+		@NonNull
 		String methodName,
-		@Nonnull
+		@NonNull
 		String[] parameterTypes,
-		@Nonnull
+		@NonNull
 		Boolean serverSentEventSource
 ) {
 	ResourceMethodDeclaration {

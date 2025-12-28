@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -40,9 +40,9 @@ public interface RequestInterceptor {
 	 * @param resourceMethod the <em>Resource Method</em> that will handle the request
 	 * @param requestConsumer receives the request to use for subsequent processing
 	 */
-	default void wrapRequest(@Nonnull Request request,
+	default void wrapRequest(@NonNull Request request,
 													 @Nullable ResourceMethod resourceMethod,
-													 @Nonnull Consumer<Request> requestConsumer) {
+													 @NonNull Consumer<Request> requestConsumer) {
 		requestConsumer.accept(request);
 	}
 
@@ -58,10 +58,10 @@ public interface RequestInterceptor {
 	 * @param requestHandler          function that performs standard request handling and returns a response
 	 * @param marshaledResponseConsumer receives the response to send to the client
 	 */
-	default void interceptRequest(@Nonnull Request request,
+	default void interceptRequest(@NonNull Request request,
 																@Nullable ResourceMethod resourceMethod,
-																@Nonnull Function<Request, MarshaledResponse> requestHandler,
-																@Nonnull Consumer<MarshaledResponse> marshaledResponseConsumer) {
+																@NonNull Function<Request, MarshaledResponse> requestHandler,
+																@NonNull Consumer<MarshaledResponse> marshaledResponseConsumer) {
 		marshaledResponseConsumer.accept(requestHandler.apply(request));
 	}
 
@@ -70,7 +70,7 @@ public interface RequestInterceptor {
 	 *
 	 * @return a {@code RequestInterceptor} with default settings
 	 */
-	@Nonnull
+	@NonNull
 	static RequestInterceptor defaultInstance() {
 		return DefaultRequestInterceptor.defaultInstance();
 	}

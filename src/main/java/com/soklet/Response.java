@@ -18,8 +18,8 @@ package com.soklet;
 
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
@@ -52,11 +52,11 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class Response {
-	@Nonnull
+	@NonNull
 	private final Integer statusCode;
-	@Nonnull
+	@NonNull
 	private final Set<ResponseCookie> cookies;
-	@Nonnull
+	@NonNull
 	private final Map<String, Set<String>> headers;
 	@Nullable
 	private final Object body;
@@ -67,8 +67,8 @@ public final class Response {
 	 * @param statusCode the HTTP status code for this request ({@code 200, 201, etc.})
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder withStatusCode(@Nonnull Integer statusCode) {
+	@NonNull
+	public static Builder withStatusCode(@NonNull Integer statusCode) {
 		requireNonNull(statusCode);
 		return new Builder(statusCode);
 	}
@@ -80,15 +80,15 @@ public final class Response {
 	 * @param location     the URL to redirect to
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder withRedirect(@Nonnull RedirectType redirectType,
-																		 @Nonnull String location) {
+	@NonNull
+	public static Builder withRedirect(@NonNull RedirectType redirectType,
+																		 @NonNull String location) {
 		requireNonNull(redirectType);
 		requireNonNull(location);
 		return new Builder(redirectType, location);
 	}
 
-	private Response(@Nonnull Builder builder) {
+	private Response(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		Map<String, Set<String>> headers = builder.headers == null
@@ -147,7 +147,7 @@ public final class Response {
 	 *
 	 * @return a copier for this instance
 	 */
-	@Nonnull
+	@NonNull
 	public Copier copy() {
 		return new Copier(this);
 	}
@@ -159,7 +159,7 @@ public final class Response {
 	 *
 	 * @return the HTTP status code to write to the response
 	 */
-	@Nonnull
+	@NonNull
 	public Integer getStatusCode() {
 		return this.statusCode;
 	}
@@ -173,7 +173,7 @@ public final class Response {
 	 *
 	 * @return the cookies to write to the response
 	 */
-	@Nonnull
+	@NonNull
 	public Set<ResponseCookie> getCookies() {
 		return this.cookies;
 	}
@@ -188,7 +188,7 @@ public final class Response {
 	 *
 	 * @return the headers to write to the response
 	 */
-	@Nonnull
+	@NonNull
 	public Map<String, Set<String>> getHeaders() {
 		return this.headers;
 	}
@@ -200,7 +200,7 @@ public final class Response {
 	 *
 	 * @return the object representing the response body, or {@link Optional#empty()} if no response body should be written
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Object> getBody() {
 		return Optional.ofNullable(this.body);
 	}
@@ -215,7 +215,7 @@ public final class Response {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nonnull
+		@NonNull
 		private Integer statusCode;
 		@Nullable
 		private String location;
@@ -226,15 +226,15 @@ public final class Response {
 		@Nullable
 		private Object body;
 
-		protected Builder(@Nonnull Integer statusCode) {
+		protected Builder(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
 
 			this.statusCode = statusCode;
 			this.location = null;
 		}
 
-		protected Builder(@Nonnull RedirectType redirectType,
-											@Nonnull String location) {
+		protected Builder(@NonNull RedirectType redirectType,
+											@NonNull String location) {
 			requireNonNull(redirectType);
 			requireNonNull(location);
 
@@ -242,8 +242,8 @@ public final class Response {
 			this.location = location;
 		}
 
-		@Nonnull
-		public Builder statusCode(@Nonnull Integer statusCode) {
+		@NonNull
+		public Builder statusCode(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
 
 			this.statusCode = statusCode;
@@ -251,9 +251,9 @@ public final class Response {
 			return this;
 		}
 
-		@Nonnull
-		public Builder redirect(@Nonnull RedirectType redirectType,
-														@Nonnull String location) {
+		@NonNull
+		public Builder redirect(@NonNull RedirectType redirectType,
+														@NonNull String location) {
 			requireNonNull(redirectType);
 			requireNonNull(location);
 
@@ -262,25 +262,25 @@ public final class Response {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder cookies(@Nullable Set<ResponseCookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder headers(@Nullable Map<String, Set<String>> headers) {
 			this.headers = headers;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder body(@Nullable Object body) {
 			this.body = body;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Response build() {
 			return new Response(this);
 		}
@@ -295,10 +295,10 @@ public final class Response {
 	 */
 	@NotThreadSafe
 	public static final class Copier {
-		@Nonnull
+		@NonNull
 		private final Builder builder;
 
-		Copier(@Nonnull Response response) {
+		Copier(@NonNull Response response) {
 			requireNonNull(response);
 
 			this.builder = new Builder(response.getStatusCode())
@@ -307,22 +307,22 @@ public final class Response {
 					.body(response.getBody().orElse(null));
 		}
 
-		@Nonnull
-		public Copier statusCode(@Nonnull Integer statusCode) {
+		@NonNull
+		public Copier statusCode(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
 			this.builder.statusCode(statusCode);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier headers(@Nullable Map<String, Set<String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
 
 		// Convenience method for mutation
-		@Nonnull
-		public Copier headers(@Nonnull Consumer<Map<String, Set<String>>> headersConsumer) {
+		@NonNull
+		public Copier headers(@NonNull Consumer<Map<String, Set<String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
 			if (this.builder.headers == null)
@@ -332,15 +332,15 @@ public final class Response {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier cookies(@Nullable Set<ResponseCookie> cookies) {
 			this.builder.cookies(cookies);
 			return this;
 		}
 
 		// Convenience method for mutation
-		@Nonnull
-		public Copier cookies(@Nonnull Consumer<Set<ResponseCookie>> cookiesConsumer) {
+		@NonNull
+		public Copier cookies(@NonNull Consumer<Set<ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
 			if (this.builder.cookies == null)
@@ -350,13 +350,13 @@ public final class Response {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier body(@Nullable Object body) {
 			this.builder.body(body);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Response finish() {
 			return this.builder.build();
 		}

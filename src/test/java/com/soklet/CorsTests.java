@@ -20,7 +20,7 @@ import com.soklet.annotation.GET;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -43,7 +43,7 @@ public class CorsTests {
 				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 
@@ -75,7 +75,7 @@ public class CorsTests {
 				.corsAuthorizer(CorsAuthorizer.withRejectAllPolicy())
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 
@@ -100,7 +100,7 @@ public class CorsTests {
 				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 
@@ -283,7 +283,7 @@ public class CorsTests {
 				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of(GOOD), origin -> true))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 

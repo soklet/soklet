@@ -19,8 +19,8 @@ package com.soklet;
 import com.soklet.ResourcePathDeclaration.Component;
 import com.soklet.ResourcePathDeclaration.ComponentType;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Arrays;
 import java.util.Collections;
@@ -49,16 +49,16 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class ResourcePath {
-	@Nonnull
+	@NonNull
 	final static ResourcePath OPTIONS_SPLAT_RESOURCE_PATH;
 
 	static {
 		OPTIONS_SPLAT_RESOURCE_PATH = new ResourcePath();
 	}
 
-	@Nonnull
+	@NonNull
 	private final String path;
-	@Nonnull
+	@NonNull
 	private final List<String> components;
 
 	/**
@@ -69,8 +69,8 @@ public final class ResourcePath {
 	 *
 	 * @param path a runtime path (no placeholders) e.g. {@code /users/123}
 	 */
-	@Nonnull
-	public static ResourcePath withPath(@Nonnull String path) {
+	@NonNull
+	public static ResourcePath withPath(@NonNull String path) {
 		requireNonNull(path);
 		return new ResourcePath(path);
 	}
@@ -81,7 +81,7 @@ public final class ResourcePath {
 		this.components = List.of();
 	}
 
-	private ResourcePath(@Nonnull String path) {
+	private ResourcePath(@NonNull String path) {
 		requireNonNull(path);
 		this.path = ResourcePathDeclaration.normalizePath(path);
 		this.components = unmodifiableList(extractComponents(this.path));
@@ -95,8 +95,8 @@ public final class ResourcePath {
 	 * @param resourcePathDeclaration the compile-time declaration to match against
 	 * @return {@code true} if this resource path matches, {@code false} otherwise
 	 */
-	@Nonnull
-	public Boolean matches(@Nonnull ResourcePathDeclaration resourcePathDeclaration) {
+	@NonNull
+	public Boolean matches(@NonNull ResourcePathDeclaration resourcePathDeclaration) {
 		requireNonNull(resourcePathDeclaration);
 
 		if (this == OPTIONS_SPLAT_RESOURCE_PATH)
@@ -149,8 +149,8 @@ public final class ResourcePath {
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
 	 * @throws IllegalArgumentException if the provided resource path declaration does not match this resource path, i.e. {@link #matches(ResourcePathDeclaration)} is {@code false}
 	 */
-	@Nonnull
-	public Map<String, String> extractPlaceholders(@Nonnull ResourcePathDeclaration resourcePathDeclaration) {
+	@NonNull
+	public Map<String, String> extractPlaceholders(@NonNull ResourcePathDeclaration resourcePathDeclaration) {
 		requireNonNull(resourcePathDeclaration);
 
 		if (!matches(resourcePathDeclaration))
@@ -187,7 +187,7 @@ public final class ResourcePath {
 	 *
 	 * @return the string representation of this resource path, which must start with {@code /}
 	 */
-	@Nonnull
+	@NonNull
 	public String getPath() {
 		return this.path;
 	}
@@ -197,7 +197,7 @@ public final class ResourcePath {
 	 *
 	 * @return the components, or the empty list if this path is equal to {@code /}
 	 */
-	@Nonnull
+	@NonNull
 	public List<String> getComponents() {
 		return this.components;
 	}
@@ -208,8 +208,8 @@ public final class ResourcePath {
 	 * @param path (nonnull) Path from which components are extracted
 	 * @return Logical components of the supplied {@code path}
 	 */
-	@Nonnull
-	protected List<String> extractComponents(@Nonnull String path) {
+	@NonNull
+	protected List<String> extractComponents(@NonNull String path) {
 		requireNonNull(path);
 
 		if ("/".equals(path))

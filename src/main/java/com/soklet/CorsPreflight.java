@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -51,11 +51,11 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class CorsPreflight {
-	@Nonnull
+	@NonNull
 	private final String origin;
 	@Nullable
 	private final HttpMethod accessControlRequestMethod;
-	@Nonnull
+	@NonNull
 	private final Set<String> accessControlRequestHeaders;
 
 	/**
@@ -68,9 +68,9 @@ public final class CorsPreflight {
 	 * @param accessControlRequestMethod HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Method">{@code Access-Control-Request-Method}</a> request header value
 	 * @return a {@link CorsPreflight} instance
 	 */
-	@Nonnull
-	public static CorsPreflight with(@Nonnull String origin,
-																	 @Nonnull HttpMethod accessControlRequestMethod) {
+	@NonNull
+	public static CorsPreflight with(@NonNull String origin,
+																	 @NonNull HttpMethod accessControlRequestMethod) {
 		requireNonNull(origin);
 		requireNonNull(accessControlRequestMethod);
 
@@ -88,9 +88,9 @@ public final class CorsPreflight {
 	 * @param accessControlRequestHeaders the optional set of HTTP <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Request-Headers">{@code Access-Control-Request-Headers}</a> request header values
 	 * @return a {@link CorsPreflight} instance
 	 */
-	@Nonnull
-	public static CorsPreflight with(@Nonnull String origin,
-																	 @Nonnull HttpMethod accessControlRequestMethod,
+	@NonNull
+	public static CorsPreflight with(@NonNull String origin,
+																	 @NonNull HttpMethod accessControlRequestMethod,
 																	 @Nullable Set<String> accessControlRequestHeaders) {
 		requireNonNull(origin);
 		requireNonNull(accessControlRequestMethod);
@@ -106,8 +106,8 @@ public final class CorsPreflight {
 	 * @param headers the request headers
 	 * @return the CORS preflight data for this request, or {@link Optional#empty()} if insufficient data is present
 	 */
-	@Nonnull
-	public static Optional<CorsPreflight> fromHeaders(@Nonnull Map<String, Set<String>> headers) {
+	@NonNull
+	public static Optional<CorsPreflight> fromHeaders(@NonNull Map<String, Set<String>> headers) {
 		requireNonNull(headers);
 
 		// Build a lowercase-key view of headers for case-insensitive lookups
@@ -166,8 +166,8 @@ public final class CorsPreflight {
 		return Optional.of(new CorsPreflight(originHeaderValue, accessControlRequestMethods.get(0), accessControlRequestHeaderValues));
 	}
 
-	private CorsPreflight(@Nonnull String origin,
-												@Nonnull HttpMethod accessControlRequestMethod,
+	private CorsPreflight(@NonNull String origin,
+												@NonNull HttpMethod accessControlRequestMethod,
 												@Nullable Set<String> accessControlRequestHeaders) {
 		requireNonNull(origin);
 		requireNonNull(accessControlRequestMethod);
@@ -179,7 +179,7 @@ public final class CorsPreflight {
 	}
 
 	@Override
-	@Nonnull
+	@NonNull
 	public String toString() {
 		return format("%s{origin=%s, accessControlRequestMethod=%s, accessControlRequestHeaders=%s}",
 				getClass().getSimpleName(), getOrigin(), getAccessControlRequestMethod(), getAccessControlRequestHeaders());
@@ -208,7 +208,7 @@ public final class CorsPreflight {
 	 *
 	 * @return the header value
 	 */
-	@Nonnull
+	@NonNull
 	public String getOrigin() {
 		return this.origin;
 	}
@@ -218,7 +218,7 @@ public final class CorsPreflight {
 	 *
 	 * @return the header value
 	 */
-	@Nonnull
+	@NonNull
 	public HttpMethod getAccessControlRequestMethod() {
 		return this.accessControlRequestMethod;
 	}
@@ -228,7 +228,7 @@ public final class CorsPreflight {
 	 *
 	 * @return the set of header values, or the empty set if not present
 	 */
-	@Nonnull
+	@NonNull
 	public Set<String> getAccessControlRequestHeaders() {
 		return this.accessControlRequestHeaders;
 	}

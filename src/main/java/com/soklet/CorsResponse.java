@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.LinkedHashSet;
@@ -40,11 +40,11 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class CorsResponse {
-	@Nonnull
+	@NonNull
 	private final String accessControlAllowOrigin;
 	@Nullable
 	private final Boolean accessControlAllowCredentials;
-	@Nonnull
+	@NonNull
 	private final Set<String> accessControlExposeHeaders;
 
 	/**
@@ -53,8 +53,8 @@ public final class CorsResponse {
 	 * @param accessControlAllowOrigin the required <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin">{@code Access-Control-Allow-Origin}</a> response header value
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder withAccessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+	@NonNull
+	public static Builder withAccessControlAllowOrigin(@NonNull String accessControlAllowOrigin) {
 		requireNonNull(accessControlAllowOrigin);
 		return new Builder(accessControlAllowOrigin);
 	}
@@ -64,12 +64,12 @@ public final class CorsResponse {
 	 *
 	 * @return a copier for this instance
 	 */
-	@Nonnull
+	@NonNull
 	public Copier copy() {
 		return new Copier(this);
 	}
 
-	protected CorsResponse(@Nonnull Builder builder) {
+	protected CorsResponse(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.accessControlAllowOrigin = builder.accessControlAllowOrigin;
@@ -109,7 +109,7 @@ public final class CorsResponse {
 	 *
 	 * @return the header value
 	 */
-	@Nonnull
+	@NonNull
 	public String getAccessControlAllowOrigin() {
 		return this.accessControlAllowOrigin;
 	}
@@ -119,7 +119,7 @@ public final class CorsResponse {
 	 *
 	 * @return the header value
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Boolean> getAccessControlAllowCredentials() {
 		return Optional.ofNullable(this.accessControlAllowCredentials);
 	}
@@ -129,7 +129,7 @@ public final class CorsResponse {
 	 *
 	 * @return the header value
 	 */
-	@Nonnull
+	@NonNull
 	public Set<String> getAccessControlExposeHeaders() {
 		return this.accessControlExposeHeaders;
 	}
@@ -143,38 +143,38 @@ public final class CorsResponse {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nonnull
+		@NonNull
 		private String accessControlAllowOrigin;
 		@Nullable
 		private Boolean accessControlAllowCredentials;
 		@Nullable
 		private Set<String> accessControlExposeHeaders;
 
-		protected Builder(@Nonnull String accessControlAllowOrigin) {
+		protected Builder(@NonNull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
 			this.accessControlAllowOrigin = accessControlAllowOrigin;
 		}
 
-		@Nonnull
-		public Builder accessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+		@NonNull
+		public Builder accessControlAllowOrigin(@NonNull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
 			this.accessControlAllowOrigin = accessControlAllowOrigin;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
 			this.accessControlAllowCredentials = accessControlAllowCredentials;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder accessControlExposeHeaders(@Nullable Set<String> accessControlExposeHeaders) {
 			this.accessControlExposeHeaders = accessControlExposeHeaders;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public CorsResponse build() {
 			return new CorsResponse(this);
 		}
@@ -189,10 +189,10 @@ public final class CorsResponse {
 	 */
 	@NotThreadSafe
 	public static final class Copier {
-		@Nonnull
+		@NonNull
 		private final Builder builder;
 
-		Copier(@Nonnull CorsResponse corsResponse) {
+		Copier(@NonNull CorsResponse corsResponse) {
 			requireNonNull(corsResponse);
 
 			this.builder = new Builder(corsResponse.getAccessControlAllowOrigin())
@@ -200,28 +200,28 @@ public final class CorsResponse {
 					.accessControlExposeHeaders(new LinkedHashSet<>(corsResponse.getAccessControlExposeHeaders()));
 		}
 
-		@Nonnull
-		public Copier accessControlAllowOrigin(@Nonnull String accessControlAllowOrigin) {
+		@NonNull
+		public Copier accessControlAllowOrigin(@NonNull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
 			this.builder.accessControlAllowOrigin(accessControlAllowOrigin);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier accessControlAllowCredentials(@Nullable Boolean accessControlAllowCredentials) {
 			this.builder.accessControlAllowCredentials(accessControlAllowCredentials);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier accessControlExposeHeaders(@Nullable Set<String> accessControlExposeHeaders) {
 			this.builder.accessControlExposeHeaders(accessControlExposeHeaders);
 			return this;
 		}
 
 		// Convenience method for mutation
-		@Nonnull
-		public Copier accessControlExposeHeaders(@Nonnull Consumer<Set<String>> accessControlExposeHeadersConsumer) {
+		@NonNull
+		public Copier accessControlExposeHeaders(@NonNull Consumer<Set<String>> accessControlExposeHeadersConsumer) {
 			requireNonNull(accessControlExposeHeadersConsumer);
 
 			if (this.builder.accessControlExposeHeaders == null)
@@ -231,7 +231,7 @@ public final class CorsResponse {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public CorsResponse finish() {
 			return this.builder.build();
 		}

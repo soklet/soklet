@@ -19,8 +19,8 @@ package com.soklet;
 import com.soklet.Soklet.DefaultSimulator;
 import com.soklet.Soklet.MockServerSentEventUnicaster;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Objects;
@@ -50,31 +50,30 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 	 */
 	@ThreadSafe
 	final class HandshakeAccepted implements ServerSentEventRequestResult {
-		@Nonnull
-		private final HandshakeResult.Accepted handshakeResult;
-		@Nonnull
+		private final HandshakeResult.@NonNull Accepted handshakeResult;
+		@NonNull
 		private final ResourcePath resourcePath;
-		@Nonnull
+		@NonNull
 		private final RequestResult requestResult;
-		@Nonnull
+		@NonNull
 		private final DefaultSimulator simulator;
-		@Nonnull
+		@NonNull
 		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
-		@Nonnull
+		@NonNull
 		private List<ServerSentEvent> clientInitializerEvents;
-		@Nonnull
+		@NonNull
 		private List<String> clientInitializerComments;
-		@Nonnull
+		@NonNull
 		private final ReentrantLock lock;
 		@Nullable
 		private Consumer<ServerSentEvent> eventConsumer;
 		@Nullable
 		private Consumer<String> commentConsumer;
 
-		HandshakeAccepted(@Nonnull HandshakeResult.Accepted handshakeResult,
-											@Nonnull ResourcePath resourcePath,
-											@Nonnull RequestResult requestResult,
-											@Nonnull DefaultSimulator simulator,
+		HandshakeAccepted(HandshakeResult.@NonNull Accepted handshakeResult,
+											@NonNull ResourcePath resourcePath,
+											@NonNull RequestResult requestResult,
+											@NonNull DefaultSimulator simulator,
 											@Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
 			requireNonNull(handshakeResult);
 			requireNonNull(resourcePath);
@@ -147,7 +146,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 * @param eventConsumer function to be invoked when a Server-Sent Event has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 event consumer
 		 */
-		public void registerEventConsumer(@Nonnull Consumer<ServerSentEvent> eventConsumer) {
+		public void registerEventConsumer(@NonNull Consumer<ServerSentEvent> eventConsumer) {
 			requireNonNull(eventConsumer);
 
 			getLock().lock();
@@ -185,7 +184,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 * @param commentConsumer function to be invoked when a Server-Sent comment has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 comment consumer
 		 */
-		public void registerCommentConsumer(@Nonnull Consumer<String> commentConsumer) {
+		public void registerCommentConsumer(@NonNull Consumer<String> commentConsumer) {
 			requireNonNull(commentConsumer);
 
 			getLock().lock();
@@ -232,8 +231,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 *
 		 * @return the data provided when the handshake was accepted
 		 */
-		@Nonnull
-		public HandshakeResult.Accepted getHandshakeResult() {
+		public HandshakeResult.@NonNull Accepted getHandshakeResult() {
 			return this.handshakeResult;
 		}
 
@@ -249,27 +247,27 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 *
 		 * @return the result of this request
 		 */
-		@Nonnull
+		@NonNull
 		public RequestResult getRequestResult() {
 			return this.requestResult;
 		}
 
-		@Nonnull
+		@NonNull
 		private ResourcePath getResourcePath() {
 			return this.resourcePath;
 		}
 
-		@Nonnull
+		@NonNull
 		private DefaultSimulator getSimulator() {
 			return this.simulator;
 		}
 
-		@Nonnull
+		@NonNull
 		private AtomicReference<Consumer<Throwable>> getUnicastErrorHandler() {
 			return this.unicastErrorHandler;
 		}
 
-		private void handleUnicastError(@Nonnull Throwable throwable) {
+		private void handleUnicastError(@NonNull Throwable throwable) {
 			requireNonNull(throwable);
 			Consumer<Throwable> handler = getUnicastErrorHandler().get();
 
@@ -285,27 +283,27 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			throwable.printStackTrace();
 		}
 
-		@Nonnull
+		@NonNull
 		private List<ServerSentEvent> getClientInitializerEvents() {
 			return this.clientInitializerEvents;
 		}
 
-		@Nonnull
+		@NonNull
 		private List<String> getClientInitializerComments() {
 			return this.clientInitializerComments;
 		}
 
-		@Nonnull
+		@NonNull
 		private Optional<Consumer<ServerSentEvent>> getEventConsumer() {
 			return Optional.ofNullable(this.eventConsumer);
 		}
 
-		@Nonnull
+		@NonNull
 		private Optional<Consumer<String>> getCommentConsumer() {
 			return Optional.ofNullable(this.commentConsumer);
 		}
 
-		@Nonnull
+		@NonNull
 		private ReentrantLock getLock() {
 			return this.lock;
 		}
@@ -318,13 +316,12 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 	 */
 	@ThreadSafe
 	final class HandshakeRejected implements ServerSentEventRequestResult {
-		@Nonnull
-		private final HandshakeResult.Rejected handshakeResult;
-		@Nonnull
+		private final HandshakeResult.@NonNull Rejected handshakeResult;
+		@NonNull
 		private final RequestResult requestResult;
 
-		HandshakeRejected(@Nonnull HandshakeResult.Rejected handshakeResult,
-											@Nonnull RequestResult requestResult) {
+		HandshakeRejected(HandshakeResult.@NonNull Rejected handshakeResult,
+											@NonNull RequestResult requestResult) {
 			requireNonNull(handshakeResult);
 			requireNonNull(requestResult);
 
@@ -337,8 +334,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 *
 		 * @return the data provided when the handshake was rejected
 		 */
-		@Nonnull
-		public HandshakeResult.Rejected getHandshakeResult() {
+		public HandshakeResult.@NonNull Rejected getHandshakeResult() {
 			return this.handshakeResult;
 		}
 
@@ -347,7 +343,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 *
 		 * @return the result of this request
 		 */
-		@Nonnull
+		@NonNull
 		public RequestResult getRequestResult() {
 			return this.requestResult;
 		}
@@ -382,10 +378,10 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 	 */
 	@ThreadSafe
 	final class RequestFailed implements ServerSentEventRequestResult {
-		@Nonnull
+		@NonNull
 		private final RequestResult requestResult;
 
-		RequestFailed(@Nonnull RequestResult requestResult) {
+		RequestFailed(@NonNull RequestResult requestResult) {
 			requireNonNull(requestResult);
 			this.requestResult = requestResult;
 		}
@@ -395,7 +391,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 *
 		 * @return the result of this request
 		 */
-		@Nonnull
+		@NonNull
 		public RequestResult getRequestResult() {
 			return this.requestResult;
 		}

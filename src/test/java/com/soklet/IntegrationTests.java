@@ -23,7 +23,7 @@ import com.soklet.annotation.QueryParameter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
@@ -62,25 +62,25 @@ public class IntegrationTests {
 		}
 
 		@GET("/q")
-		public String echoQuery(@Nonnull @QueryParameter String q) {
+		public String echoQuery(@NonNull @QueryParameter String q) {
 			return q;
 		}
 
 		// Varargs echo to observe decoded path
 		@GET("/files/{path*}")
-		public String echoVarargs(@Nonnull @PathParameter String path) {
+		public String echoVarargs(@NonNull @PathParameter String path) {
 			return path;
 		}
 
 		// A route that just returns all cookie names it sees
 		@GET("/cookie-echo")
-		public String cookieEcho(@Nonnull Request request) {
+		public String cookieEcho(@NonNull Request request) {
 			Map<String, Set<String>> cookies = request.getCookies();
 			return cookies.keySet().stream().sorted().collect(Collectors.joining(","));
 		}
 
 		@GET("/multivalued-headers")
-		public Response multivaluedHeaders(@Nonnull Request request) {
+		public Response multivaluedHeaders(@NonNull Request request) {
 			return Response.withStatusCode(200)
 					.headers(Map.of("multi", Set.of("one", "two")))
 					.cookies(Set.of(
@@ -93,7 +93,7 @@ public class IntegrationTests {
 
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
-		public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* no-op */ }
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
 	}
 
 	private static HttpURLConnection open(String method, URL url, Map<String, String> headers) throws IOException {
@@ -545,19 +545,19 @@ public class IntegrationTests {
 		public String hello() {return "hello";}
 
 		@GET("/q")
-		public String echoQuery(@Nonnull @QueryParameter String q) {return q;}
+		public String echoQuery(@NonNull @QueryParameter String q) {return q;}
 
 		@GET("/files/{path*}")
-		public String echoVarargs(@Nonnull @PathParameter String path) {return path;}
+		public String echoVarargs(@NonNull @PathParameter String path) {return path;}
 
 		@POST("/len")
-		public String len(@Nonnull Request request) {
+		public String len(@NonNull Request request) {
 			byte[] b = request.getBody().orElse(new byte[0]);
 			return Integer.toString(b.length);
 		}
 
 		@GET("/cookie-value")
-		public String cookieValue(@Nonnull Request request, @Nonnull @QueryParameter String name) {
+		public String cookieValue(@NonNull Request request, @NonNull @QueryParameter String name) {
 			Map<String, Set<String>> cookies = request.getCookies();
 			Set<String> values = cookies.getOrDefault(name, Collections.emptySet());
 			return values.stream().sorted().collect(Collectors.joining("|"));
@@ -583,7 +583,7 @@ public class IntegrationTests {
 		public String me() {return "literal";}
 
 		@GET("/users/{id}")
-		public String byId(@Nonnull @PathParameter String id) {return "param:" + id;}
+		public String byId(@NonNull @PathParameter String id) {return "param:" + id;}
 	}
 
 	@Test

@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 
 import static java.util.Objects.requireNonNull;
 
@@ -49,10 +49,10 @@ public enum RedirectType {
 	 */
 	HTTP_308_PERMANENT_REDIRECT(StatusCode.HTTP_308);
 
-	@Nonnull
+	@NonNull
 	private final StatusCode statusCode;
 
-	RedirectType(@Nonnull StatusCode statusCode) {
+	RedirectType(@NonNull StatusCode statusCode) {
 		requireNonNull(statusCode);
 		this.statusCode = statusCode;
 	}
@@ -62,7 +62,7 @@ public enum RedirectType {
 	 *
 	 * @return the status code
 	 */
-	@Nonnull
+	@NonNull
 	public StatusCode getStatusCode() {
 		return this.statusCode;
 	}

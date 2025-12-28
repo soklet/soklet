@@ -16,8 +16,8 @@
 
 package com.soklet.converter;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Type;
@@ -47,9 +47,9 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class ValueConverterRegistry {
-	@Nonnull
+	@NonNull
 	private static final ValueConverter<?, ?> REFLEXIVE_VALUE_CONVERTER;
-	@Nonnull
+	@NonNull
 	private static final Map<Type, Type> PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS;
 
 	static {
@@ -74,7 +74,7 @@ public final class ValueConverterRegistry {
 	// Use case: as new enum types are encountered, ValueConverter instances are generated and cached off.
 	// From a user's perspective, it would be burdensome to register converters for these ahead of time -
 	// it's preferable to have enum conversion "just work" for string names, which is almost always what's desired.
-	@Nonnull
+	@NonNull
 	private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey;
 
 	/**
@@ -84,7 +84,7 @@ public final class ValueConverterRegistry {
 	 *
 	 * @return a registry instance with sensible defaults
 	 */
-	@Nonnull
+	@NonNull
 	public static ValueConverterRegistry withDefaults() {
 		return withDefaultsSupplementedBy(Set.of());
 	}
@@ -97,8 +97,8 @@ public final class ValueConverterRegistry {
 	 * @param customValueConverters the custom value converters to include in the registry
 	 * @return a registry instance with sensible defaults, supplemented with custom converters
 	 */
-	@Nonnull
-	public static ValueConverterRegistry withDefaultsSupplementedBy(@Nonnull Set<ValueConverter<?, ?>> customValueConverters) {
+	@NonNull
+	public static ValueConverterRegistry withDefaultsSupplementedBy(@NonNull Set<ValueConverter<?, ?>> customValueConverters) {
 		requireNonNull(customValueConverters);
 
 		Set<ValueConverter<?, ?>> defaultValueConverters = ValueConverters.defaultValueConverters();
@@ -126,13 +126,13 @@ public final class ValueConverterRegistry {
 
 	// TODO: we might add a factory method in the future that creates a totally-blank-slate registry that doesn't use defaults at all, doesn't create new ones for enums automatically, etc.
 
-	@Nonnull
-	private static CacheKey extractCacheKeyFromValueConverter(@Nonnull ValueConverter<?, ?> valueConverter) {
+	@NonNull
+	private static CacheKey extractCacheKeyFromValueConverter(@NonNull ValueConverter<?, ?> valueConverter) {
 		requireNonNull(valueConverter);
 		return new CacheKey(valueConverter.getFromType(), valueConverter.getToType());
 	}
 
-	private ValueConverterRegistry(@Nonnull ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey) {
+	private ValueConverterRegistry(@NonNull ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey) {
 		requireNonNull(valueConvertersByCacheKey);
 		this.valueConvertersByCacheKey = valueConvertersByCacheKey;
 	}
@@ -149,9 +149,9 @@ public final class ValueConverterRegistry {
 	 * @param <T>               the 'to' type
 	 * @return a matching {@link ValueConverter}, or {@link Optional#empty()} if not found
 	 */
-	@Nonnull
-	public <F, T> Optional<ValueConverter<F, T>> get(@Nonnull TypeReference<F> fromTypeReference,
-																									 @Nonnull TypeReference<T> toTypeReference) {
+	@NonNull
+	public <F, T> Optional<ValueConverter<F, T>> get(@NonNull TypeReference<F> fromTypeReference,
+																									 @NonNull TypeReference<T> toTypeReference) {
 		requireNonNull(fromTypeReference);
 		requireNonNull(toTypeReference);
 
@@ -165,9 +165,9 @@ public final class ValueConverterRegistry {
 	 * @param toType   the 'to' type
 	 * @return a matching {@link ValueConverter}, or {@link Optional#empty()} if not found
 	 */
-	@Nonnull
-	public Optional<ValueConverter<Object, Object>> get(@Nonnull Type fromType,
-																											@Nonnull Type toType) {
+	@NonNull
+	public Optional<ValueConverter<Object, Object>> get(@NonNull Type fromType,
+																											@NonNull Type toType) {
 		requireNonNull(fromType);
 		requireNonNull(toType);
 
@@ -175,9 +175,9 @@ public final class ValueConverterRegistry {
 	}
 
 	@SuppressWarnings("unchecked")
-	@Nonnull
-	protected <F, T> Optional<ValueConverter<F, T>> getInternal(@Nonnull Type fromType,
-																															@Nonnull Type toType) {
+	@NonNull
+	protected <F, T> Optional<ValueConverter<F, T>> getInternal(@NonNull Type fromType,
+																															@NonNull Type toType) {
 		requireNonNull(fromType);
 		requireNonNull(toType);
 
@@ -197,7 +197,7 @@ public final class ValueConverterRegistry {
 			if (toClass.isEnum()) {
 				valueConverter = new ValueConverter<>() {
 					@Override
-					@Nonnull
+					@NonNull
 					public Optional<T> convert(@Nullable Object from) throws ValueConversionException {
 						if (from == null)
 							return Optional.empty();
@@ -211,19 +211,19 @@ public final class ValueConverterRegistry {
 					}
 
 					@Override
-					@Nonnull
+					@NonNull
 					public Type getFromType() {
 						return normalizedFromType;
 					}
 
 					@Override
-					@Nonnull
+					@NonNull
 					public Type getToType() {
 						return normalizedToType;
 					}
 
 					@Override
-					@Nonnull
+					@NonNull
 					public String toString() {
 						return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), getFromType(), getToType());
 					}
@@ -236,23 +236,23 @@ public final class ValueConverterRegistry {
 		return Optional.ofNullable(valueConverter);
 	}
 
-	@Nonnull
-	protected Type normalizePrimitiveTypeIfNecessary(@Nonnull Type type) {
+	@NonNull
+	protected Type normalizePrimitiveTypeIfNecessary(@NonNull Type type) {
 		requireNonNull(type);
 
 		Type nonprimitiveEquivalent = PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS.get(type);
 		return nonprimitiveEquivalent == null ? type : nonprimitiveEquivalent;
 	}
 
-	@Nonnull
+	@NonNull
 	protected Map<CacheKey, ValueConverter<?, ?>> getValueConvertersByCacheKey() {
 		return this.valueConvertersByCacheKey;
 	}
 
-	@Nonnull
+	@NonNull
 	@Immutable
 	private static final class ReflexiveValueConverter<T> extends AbstractValueConverter<T, T> {
-		@Nonnull
+		@NonNull
 		@Override
 		public Optional<T> performConversion(@Nullable T from) throws Exception {
 			return Optional.ofNullable(from);
@@ -261,13 +261,13 @@ public final class ValueConverterRegistry {
 
 	@ThreadSafe
 	protected static final class CacheKey {
-		@Nonnull
+		@NonNull
 		private final Type fromType;
-		@Nonnull
+		@NonNull
 		private final Type toType;
 
-		public CacheKey(@Nonnull Type fromType,
-										@Nonnull Type toType) {
+		public CacheKey(@NonNull Type fromType,
+										@NonNull Type toType) {
 			requireNonNull(fromType);
 			requireNonNull(toType);
 
@@ -295,12 +295,12 @@ public final class ValueConverterRegistry {
 			return Objects.hash(getFromType(), getToType());
 		}
 
-		@Nonnull
+		@NonNull
 		public Type getFromType() {
 			return this.fromType;
 		}
 
-		@Nonnull
+		@NonNull
 		public Type getToType() {
 			return this.toType;
 		}

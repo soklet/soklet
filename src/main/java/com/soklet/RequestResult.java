@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
@@ -42,7 +42,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class RequestResult {
-	@Nonnull
+	@NonNull
 	private final MarshaledResponse marshaledResponse;
 	@Nullable
 	private final Response response;
@@ -59,8 +59,8 @@ public final class RequestResult {
 	 * @param marshaledResponse the bytes that will ultimately be written over the wire
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder withMarshaledResponse(@Nonnull MarshaledResponse marshaledResponse) {
+	@NonNull
+	public static Builder withMarshaledResponse(@NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(marshaledResponse);
 		return new Builder(marshaledResponse);
 	}
@@ -70,12 +70,12 @@ public final class RequestResult {
 	 *
 	 * @return a copier for this instance
 	 */
-	@Nonnull
+	@NonNull
 	public Copier copy() {
 		return new Copier(this);
 	}
 
-	protected RequestResult(@Nonnull Builder builder) {
+	protected RequestResult(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.marshaledResponse = builder.marshaledResponse;
@@ -141,7 +141,7 @@ public final class RequestResult {
 	 *
 	 * @return the response to be written over the wire
 	 */
-	@Nonnull
+	@NonNull
 	public MarshaledResponse getMarshaledResponse() {
 		return this.marshaledResponse;
 	}
@@ -151,7 +151,7 @@ public final class RequestResult {
 	 *
 	 * @return the logical response
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Response> getResponse() {
 		return Optional.ofNullable(this.response);
 	}
@@ -161,7 +161,7 @@ public final class RequestResult {
 	 *
 	 * @return the CORS preflight logical response
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<CorsPreflightResponse> getCorsPreflightResponse() {
 		return Optional.ofNullable(this.corsPreflightResponse);
 	}
@@ -171,7 +171,7 @@ public final class RequestResult {
 	 *
 	 * @return the <em>Resource Method</em> that handled the request
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<ResourceMethod> getResourceMethod() {
 		return Optional.ofNullable(this.resourceMethod);
 	}
@@ -182,7 +182,7 @@ public final class RequestResult {
 	 *
 	 * @return the SSE handshake result
 	 */
-	@Nonnull
+	@NonNull
 	Optional<HandshakeResult> getHandshakeResult() {
 		return Optional.ofNullable(this.handshakeResult);
 	}
@@ -196,7 +196,7 @@ public final class RequestResult {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nonnull
+		@NonNull
 		private MarshaledResponse marshaledResponse;
 		@Nullable
 		private Response response;
@@ -207,43 +207,43 @@ public final class RequestResult {
 		@Nullable
 		private HandshakeResult handshakeResult;
 
-		protected Builder(@Nonnull MarshaledResponse marshaledResponse) {
+		protected Builder(@NonNull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
 			this.marshaledResponse = marshaledResponse;
 		}
 
-		@Nonnull
-		public Builder marshaledResponse(@Nonnull MarshaledResponse marshaledResponse) {
+		@NonNull
+		public Builder marshaledResponse(@NonNull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
 			this.marshaledResponse = marshaledResponse;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder response(@Nullable Response response) {
 			this.response = response;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder corsPreflightResponse(@Nullable CorsPreflightResponse corsPreflightResponse) {
 			this.corsPreflightResponse = corsPreflightResponse;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder resourceMethod(@Nullable ResourceMethod resourceMethod) {
 			this.resourceMethod = resourceMethod;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		Builder handshakeResult(@Nullable HandshakeResult handshakeResult) {
 			this.handshakeResult = handshakeResult;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public RequestResult build() {
 			return new RequestResult(this);
 		}
@@ -258,10 +258,10 @@ public final class RequestResult {
 	 */
 	@NotThreadSafe
 	public static final class Copier {
-		@Nonnull
+		@NonNull
 		private final Builder builder;
 
-		Copier(@Nonnull RequestResult requestResult) {
+		Copier(@NonNull RequestResult requestResult) {
 			requireNonNull(requestResult);
 
 			this.builder = new Builder(requestResult.getMarshaledResponse())
@@ -271,38 +271,38 @@ public final class RequestResult {
 					.handshakeResult(requestResult.getHandshakeResult().orElse(null));
 		}
 
-		@Nonnull
-		public Copier marshaledResponse(@Nonnull MarshaledResponse marshaledResponse) {
+		@NonNull
+		public Copier marshaledResponse(@NonNull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
 			this.builder.marshaledResponse(marshaledResponse);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier response(@Nullable Response response) {
 			this.builder.response(response);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier corsPreflightResponse(@Nullable CorsPreflightResponse corsPreflightResponse) {
 			this.builder.corsPreflightResponse(corsPreflightResponse);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier resourceMethod(@Nullable ResourceMethod resourceMethod) {
 			this.builder.resourceMethod(resourceMethod);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		Copier handshakeResult(@Nullable HandshakeResult handshakeResult) {
 			this.builder.handshakeResult(handshakeResult);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public RequestResult finish() {
 			return this.builder.build();
 		}

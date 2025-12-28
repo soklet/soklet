@@ -16,8 +16,8 @@
 
 package com.soklet.converter;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.lang.reflect.Type;
 import java.util.Optional;
@@ -34,11 +34,11 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public class ValueConversionException extends Exception {
-	@Nonnull
+	@NonNull
 	private final Type fromType;
 	@Nullable
 	private final Object fromValue;
-	@Nonnull
+	@NonNull
 	private final Type toType;
 
 	/**
@@ -50,9 +50,9 @@ public class ValueConversionException extends Exception {
 	 * @param toType    the 'to' type
 	 */
 	public ValueConversionException(@Nullable String message,
-																	@Nonnull Type fromType,
+																	@NonNull Type fromType,
 																	@Nullable Object fromValue,
-																	@Nonnull Type toType) {
+																	@NonNull Type toType) {
 		super(message);
 
 		requireNonNull(fromType);
@@ -72,9 +72,9 @@ public class ValueConversionException extends Exception {
 	 * @param toType    the 'to' type
 	 */
 	public ValueConversionException(@Nullable Throwable cause,
-																	@Nonnull Type fromType,
+																	@NonNull Type fromType,
 																	@Nullable Object fromValue,
-																	@Nonnull Type toType) {
+																	@NonNull Type toType) {
 		super(cause);
 
 		requireNonNull(fromType);
@@ -96,9 +96,9 @@ public class ValueConversionException extends Exception {
 	 */
 	public ValueConversionException(@Nullable String message,
 																	@Nullable Throwable cause,
-																	@Nonnull Type fromType,
+																	@NonNull Type fromType,
 																	@Nullable Object fromValue,
-																	@Nonnull Type toType) {
+																	@NonNull Type toType) {
 		super(message, cause);
 
 		requireNonNull(fromType);
@@ -114,7 +114,7 @@ public class ValueConversionException extends Exception {
 	 *
 	 * @return the 'from' type
 	 */
-	@Nonnull
+	@NonNull
 	public Type getFromType() {
 		return this.fromType;
 	}
@@ -124,7 +124,7 @@ public class ValueConversionException extends Exception {
 	 *
 	 * @return the 'from' value that could not be converted to the 'to' type
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Object> getFromValue() {
 		return Optional.ofNullable(this.fromValue);
 	}
@@ -134,7 +134,7 @@ public class ValueConversionException extends Exception {
 	 *
 	 * @return the 'to' type
 	 */
-	@Nonnull
+	@NonNull
 	public Type getToType() {
 		return this.toType;
 	}

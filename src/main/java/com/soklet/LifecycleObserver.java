@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.time.Duration;
@@ -39,95 +39,95 @@ public interface LifecycleObserver {
 	/**
 	 * Called before a {@link Soklet} instance starts.
 	 */
-	default void willStartSoklet(@Nonnull Soklet soklet) {
+	default void willStartSoklet(@NonNull Soklet soklet) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after a {@link Soklet} instance starts.
 	 */
-	default void didStartSoklet(@Nonnull Soklet soklet) {
+	default void didStartSoklet(@NonNull Soklet soklet) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after a {@link Soklet} instance was asked to start, but failed due to an exception.
 	 */
-	default void didFailToStartSoklet(@Nonnull Soklet soklet,
-																		@Nonnull Throwable throwable) {
+	default void didFailToStartSoklet(@NonNull Soklet soklet,
+																		@NonNull Throwable throwable) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before a {@link Soklet} instance stops.
 	 */
-	default void willStopSoklet(@Nonnull Soklet soklet) {
+	default void willStopSoklet(@NonNull Soklet soklet) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after a {@link Soklet} instance stops.
 	 */
-	default void didStopSoklet(@Nonnull Soklet soklet) {
+	default void didStopSoklet(@NonNull Soklet soklet) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after a {@link Soklet} instance was asked to stop, but failed due to an exception.
 	 */
-	default void didFailToStopSoklet(@Nonnull Soklet soklet,
-																	 @Nonnull Throwable throwable) {
+	default void didFailToStopSoklet(@NonNull Soklet soklet,
+																	 @NonNull Throwable throwable) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before the server starts.
 	 */
-	default void willStartServer(@Nonnull Server server) {
+	default void willStartServer(@NonNull Server server) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after the server starts.
 	 */
-	default void didStartServer(@Nonnull Server server) {
+	default void didStartServer(@NonNull Server server) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after a {@link Server} instance was asked to start, but failed due to an exception.
 	 */
-	default void didFailToStartServer(@Nonnull Server server,
-																		@Nonnull Throwable throwable) {
+	default void didFailToStartServer(@NonNull Server server,
+																		@NonNull Throwable throwable) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before the server stops.
 	 */
-	default void willStopServer(@Nonnull Server server) {
+	default void willStopServer(@NonNull Server server) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after the server stops.
 	 */
-	default void didStopServer(@Nonnull Server server) {
+	default void didStopServer(@NonNull Server server) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after a {@link Server} instance was asked to stop, but failed due to an exception.
 	 */
-	default void didFailToStopServer(@Nonnull Server server,
-																	 @Nonnull Throwable throwable) {
+	default void didFailToStopServer(@NonNull Server server,
+																	 @NonNull Throwable throwable) {
 		// No-op by default
 	}
 
 	/**
 	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
 	 */
-	default void didStartRequestHandling(@Nonnull Request request,
+	default void didStartRequestHandling(@NonNull Request request,
 																			 @Nullable ResourceMethod resourceMethod) {
 		// No-op by default
 	}
@@ -135,92 +135,92 @@ public interface LifecycleObserver {
 	/**
 	 * Called after a request finishes processing.
 	 */
-	default void didFinishRequestHandling(@Nonnull Request request,
+	default void didFinishRequestHandling(@NonNull Request request,
 																				@Nullable ResourceMethod resourceMethod,
-																				@Nonnull MarshaledResponse marshaledResponse,
-																				@Nonnull Duration duration,
-																				@Nonnull List<Throwable> throwables) {
+																				@NonNull MarshaledResponse marshaledResponse,
+																				@NonNull Duration duration,
+																				@NonNull List<Throwable> throwables) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before response data is written.
 	 */
-	default void willWriteResponse(@Nonnull Request request,
+	default void willWriteResponse(@NonNull Request request,
 															 @Nullable ResourceMethod resourceMethod,
-															 @Nonnull MarshaledResponse marshaledResponse) {
+															 @NonNull MarshaledResponse marshaledResponse) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after response data is written.
 	 */
-	default void didWriteResponse(@Nonnull Request request,
+	default void didWriteResponse(@NonNull Request request,
 															@Nullable ResourceMethod resourceMethod,
-															@Nonnull MarshaledResponse marshaledResponse,
-															@Nonnull Duration responseWriteDuration) {
+															@NonNull MarshaledResponse marshaledResponse,
+															@NonNull Duration responseWriteDuration) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after response data fails to write.
 	 */
-	default void didFailToWriteResponse(@Nonnull Request request,
+	default void didFailToWriteResponse(@NonNull Request request,
 																			@Nullable ResourceMethod resourceMethod,
-																			@Nonnull MarshaledResponse marshaledResponse,
-																			@Nonnull Duration responseWriteDuration,
-																			@Nonnull Throwable throwable) {
+																			@NonNull MarshaledResponse marshaledResponse,
+																			@NonNull Duration responseWriteDuration,
+																			@NonNull Throwable throwable) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before the SSE server starts.
 	 */
-	default void willStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+	default void willStartServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after the SSE server starts.
 	 */
-	default void didStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+	default void didStartServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after a {@link ServerSentEventServer} instance was asked to start, but failed due to an exception.
 	 */
-	default void didFailToStartServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer,
-																									 @Nonnull Throwable throwable) {
+	default void didFailToStartServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer,
+																									 @NonNull Throwable throwable) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before the SSE server stops.
 	 */
-	default void willStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+	default void willStopServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after the SSE server stops.
 	 */
-	default void didStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer) {
+	default void didStopServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after a {@link ServerSentEventServer} instance was asked to stop, but failed due to an exception.
 	 */
-	default void didFailToStopServerSentEventServer(@Nonnull ServerSentEventServer serverSentEventServer,
-																									@Nonnull Throwable throwable) {
+	default void didFailToStopServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer,
+																									@NonNull Throwable throwable) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before an SSE connection is established.
 	 */
-	default void willEstablishServerSentEventConnection(@Nonnull Request request,
+	default void willEstablishServerSentEventConnection(@NonNull Request request,
 																											@Nullable ResourceMethod resourceMethod) {
 		// No-op by default
 	}
@@ -228,24 +228,24 @@ public interface LifecycleObserver {
 	/**
 	 * Called after an SSE connection is established.
 	 */
-	default void didEstablishServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection) {
+	default void didEstablishServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection) {
 		// No-op by default
 	}
 
 	/**
 	 * Called if an SSE connection fails to establish.
 	 */
-	default void didFailToEstablishServerSentEventConnection(@Nonnull Request request,
+	default void didFailToEstablishServerSentEventConnection(@NonNull Request request,
 																												 @Nullable ResourceMethod resourceMethod,
-																												 @Nonnull Throwable throwable) {
+																												 @NonNull Throwable throwable) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before an SSE connection is terminated.
 	 */
-	default void willTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																											@Nonnull ServerSentEventConnection.TerminationReason terminationReason,
+	default void willTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
+																											ServerSentEventConnection.@NonNull TerminationReason terminationReason,
 																											@Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -253,9 +253,9 @@ public interface LifecycleObserver {
 	/**
 	 * Called after an SSE connection is terminated.
 	 */
-	default void didTerminateServerSentEventConnection(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																										 @Nonnull Duration connectionDuration,
-																										 @Nonnull ServerSentEventConnection.TerminationReason terminationReason,
+	default void didTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
+																										 @NonNull Duration connectionDuration,
+																										 ServerSentEventConnection.@NonNull TerminationReason terminationReason,
 																										 @Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -263,61 +263,61 @@ public interface LifecycleObserver {
 	/**
 	 * Called before an SSE event is written.
 	 */
-	default void willWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																			 @Nonnull ServerSentEvent serverSentEvent) {
+	default void willWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
+																			 @NonNull ServerSentEvent serverSentEvent) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an SSE event is written.
 	 */
-	default void didWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																		 @Nonnull ServerSentEvent serverSentEvent,
-																		 @Nonnull Duration writeDuration) {
+	default void didWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
+																		 @NonNull ServerSentEvent serverSentEvent,
+																		 @NonNull Duration writeDuration) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an SSE event fails to write.
 	 */
-	default void didFailToWriteServerSentEvent(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																						 @Nonnull ServerSentEvent serverSentEvent,
-																						 @Nonnull Duration writeDuration,
-																						 @Nonnull Throwable throwable) {
+	default void didFailToWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
+																						 @NonNull ServerSentEvent serverSentEvent,
+																						 @NonNull Duration writeDuration,
+																						 @NonNull Throwable throwable) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before an SSE comment is written.
 	 */
-	default void willWriteServerSentEventComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																						 @Nonnull String comment) {
+	default void willWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
+																						 @NonNull String comment) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an SSE comment is written.
 	 */
-	default void didWriteServerSentEventComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																							@Nonnull String comment,
-																							@Nonnull Duration writeDuration) {
+	default void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
+																							@NonNull String comment,
+																							@NonNull Duration writeDuration) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an SSE comment fails to write.
 	 */
-	default void didFailToWriteServerSentEventComment(@Nonnull ServerSentEventConnection serverSentEventConnection,
-																										@Nonnull String comment,
-																										@Nonnull Duration writeDuration,
-																										@Nonnull Throwable throwable) {
+	default void didFailToWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
+																										@NonNull String comment,
+																										@NonNull Duration writeDuration,
+																										@NonNull Throwable throwable) {
 		// No-op by default
 	}
 
 	/**
 	 * Called when Soklet emits a log event.
 	 */
-	default void didReceiveLogEvent(@Nonnull LogEvent logEvent) {
+	default void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 		String message = logEvent.getMessage();
 		Throwable throwable = logEvent.getThrowable().orElse(null);
 
@@ -338,7 +338,7 @@ public interface LifecycleObserver {
 	 *
 	 * @return a {@code LifecycleObserver} with default settings
 	 */
-	@Nonnull
+	@NonNull
 	static LifecycleObserver defaultInstance() {
 		return DefaultLifecycleObserver.defaultInstance();
 	}

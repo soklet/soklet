@@ -16,8 +16,8 @@
 
 package com.soklet.internal.util;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.AbstractCollection;
@@ -403,7 +403,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	// Read Buffer (Lossy)
 	// ===================================================================================
 
-	private void recordRead(@Nonnull Node<K, V> node) {
+	private void recordRead(@NonNull Node<K, V> node) {
 		// Claim a slot in the ring buffer
 		int writeIndex = readBufferWriteIndex.getAndIncrement();
 		int slot = writeIndex & READ_BUFFER_MASK;
@@ -421,7 +421,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	// Write Buffer (Lossless)
 	// ===================================================================================
 
-	private void scheduleWrite(@Nonnull WriteTask<K, V> task) {
+	private void scheduleWrite(@NonNull WriteTask<K, V> task) {
 		// Increment first to avoid "poll before increment" going negative.
 		int pending = writeBufferSize.incrementAndGet();
 		writeBuffer.offer(task);
@@ -432,7 +432,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			tryMaintenance();
 	}
 
-	private void retire(@Nonnull Node<K, V> node) {
+	private void retire(@NonNull Node<K, V> node) {
 		node.state = RETIRED;
 		scheduleWrite(WriteTask.remove(node));
 	}
@@ -494,7 +494,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@GuardedBy("maintenanceLock")
-	private void processWriteTaskLocked(@Nonnull WriteTask<K, V> task) {
+	private void processWriteTaskLocked(@NonNull WriteTask<K, V> task) {
 		switch (task.type) {
 			case ADD:
 				// Idempotent: promotes whether or not already linked
@@ -534,7 +534,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		return evicted;
 	}
 
-	private void notifyEvictionListener(@Nonnull List<Node<K, V>> evicted) {
+	private void notifyEvictionListener(@NonNull List<Node<K, V>> evicted) {
 		if (evicted.isEmpty())
 			return;
 
@@ -564,7 +564,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * Safe to call for nodes that are not yet linked, already linked, or linked in the wrong place.
 	 */
 	@GuardedBy("maintenanceLock")
-	private void promoteToHeadLocked(@Nonnull Node<K, V> node) {
+	private void promoteToHeadLocked(@NonNull Node<K, V> node) {
 		if (node.state != ALIVE)
 			return;
 
@@ -587,7 +587,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@GuardedBy("maintenanceLock")
-	private void unlinkNodeLocked(@Nonnull Node<K, V> node) {
+	private void unlinkNodeLocked(@NonNull Node<K, V> node) {
 		if (node.state == DEAD)
 			return;
 
@@ -631,21 +631,21 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		final Node<K, V> node;
 		final Node<K, V> oldNode; // only for UPDATE
 
-		private WriteTask(@Nonnull Type type, @Nonnull Node<K, V> node, @Nullable Node<K, V> oldNode) {
+		private WriteTask(@NonNull Type type, @NonNull Node<K, V> node, @Nullable Node<K, V> oldNode) {
 			this.type = type;
 			this.node = node;
 			this.oldNode = oldNode;
 		}
 
-		static <K, V> WriteTask<K, V> add(@Nonnull Node<K, V> node) {
+		static <K, V> WriteTask<K, V> add(@NonNull Node<K, V> node) {
 			return new WriteTask<>(Type.ADD, node, null);
 		}
 
-		static <K, V> WriteTask<K, V> remove(@Nonnull Node<K, V> node) {
+		static <K, V> WriteTask<K, V> remove(@NonNull Node<K, V> node) {
 			return new WriteTask<>(Type.REMOVE, node, null);
 		}
 
-		static <K, V> WriteTask<K, V> update(@Nonnull Node<K, V> oldNode, @Nonnull Node<K, V> newNode) {
+		static <K, V> WriteTask<K, V> update(@NonNull Node<K, V> oldNode, @NonNull Node<K, V> newNode) {
 			return new WriteTask<>(Type.UPDATE, newNode, oldNode);
 		}
 	}
@@ -928,7 +928,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	/**
 	 * Snapshot of keys in (approximate) MRU->LRU order. Primarily for tests/debugging.
 	 */
-	@Nonnull
+	@NonNull
 	public List<K> keysInAccessOrder() {
 		List<K> keys = new ArrayList<>();
 		List<Node<K, V>> evicted;
@@ -951,7 +951,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		return keys;
 	}
 
-	@Nonnull
+	@NonNull
 	private BiConsumer<K, V> getEvictionListener() {
 		return this.evictionListener;
 	}

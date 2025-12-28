@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.util.List;
 
 /**
@@ -40,7 +40,7 @@ public interface ResourceMethodParameterProvider {
 	 * @param resourceMethod the <em>Resource Method</em> associated with the HTTP request
 	 * @return the list of parameters to use when performing Java method invocation, or the empty list if no parameters are necessary
 	 */
-	@Nonnull
-	List<Object> parameterValuesForResourceMethod(@Nonnull Request request,
-																								@Nonnull ResourceMethod resourceMethod);
+	@NonNull
+	List<Object> parameterValuesForResourceMethod(@NonNull Request request,
+																								@NonNull ResourceMethod resourceMethod);
 }

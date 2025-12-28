@@ -16,8 +16,8 @@
 
 package com.soklet.converter;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -43,7 +43,7 @@ import static java.lang.String.format;
  */
 @ThreadSafe
 public abstract class TypeReference<T> {
-	@Nonnull
+	@NonNull
 	private final Type type;
 
 	protected TypeReference() {
@@ -56,7 +56,7 @@ public abstract class TypeReference<T> {
 	}
 
 	@Override
-	@Nonnull
+	@NonNull
 	public String toString() {
 		return format("%s{type=%s}", getClass().getSimpleName(), getType());
 	}
@@ -77,7 +77,7 @@ public abstract class TypeReference<T> {
 		return Objects.hash(getType());
 	}
 
-	@Nonnull
+	@NonNull
 	public Type getType() {
 		return this.type;
 	}

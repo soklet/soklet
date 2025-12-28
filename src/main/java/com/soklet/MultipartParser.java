@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.util.Map;
 import java.util.Set;
 
@@ -37,8 +37,8 @@ public interface MultipartParser {
 	 * @param request the request to parse
 	 * @return a mapping of form field names to corresponding sets of form field values
 	 */
-	@Nonnull
-	Map<String, Set<MultipartField>> extractMultipartFields(@Nonnull Request request);
+	@NonNull
+	Map<String, Set<MultipartField>> extractMultipartFields(@NonNull Request request);
 
 	/**
 	 * Acquires a threadsafe {@link MultipartParser}.
@@ -47,7 +47,7 @@ public interface MultipartParser {
 	 *
 	 * @return a {@code MultipartParser} instance
 	 */
-	@Nonnull
+	@NonNull
 	static MultipartParser defaultInstance() {
 		return DefaultMultipartParser.defaultInstance();
 	}

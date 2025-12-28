@@ -19,8 +19,8 @@ package com.soklet;
 import com.soklet.HandshakeResult.Accepted.Builder;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
@@ -99,7 +99,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 *
 	 * @return an instance that indicates a successful handshake
 	 */
-	@Nonnull
+	@NonNull
 	static Accepted accept() {
 		return Accepted.DEFAULT_INSTANCE;
 	}
@@ -111,7 +111,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 *
 	 * @return a builder for an instance that indicates a successful handshake
 	 */
-	@Nonnull
+	@NonNull
 	static Builder acceptWithDefaults() {
 		return new Builder();
 	}
@@ -122,8 +122,8 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 * @param response the response to send to the client
 	 * @return an instance that indicates a rejected handshake
 	 */
-	@Nonnull
-	static Rejected rejectWithResponse(@Nonnull Response response) {
+	@NonNull
+	static Rejected rejectWithResponse(@NonNull Response response) {
 		requireNonNull(response);
 		return new Rejected(response);
 	}
@@ -139,7 +139,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 */
 	@ThreadSafe
 	final class Accepted implements HandshakeResult {
-		@Nonnull
+		@NonNull
 		static final Accepted DEFAULT_INSTANCE;
 
 		static {
@@ -174,7 +174,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			 * @param headers custom response headers to send
 			 * @return this builder, for chaining
 			 */
-			@Nonnull
+			@NonNull
 			public Builder headers(@Nullable Map<String, Set<String>> headers) {
 				this.headers = headers;
 				return this;
@@ -186,7 +186,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			 * @param cookies custom response cookies to send
 			 * @return this builder, for chaining
 			 */
-			@Nonnull
+			@NonNull
 			public Builder cookies(@Nullable Set<ResponseCookie> cookies) {
 				this.cookies = cookies;
 				return this;
@@ -202,7 +202,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			 * @param clientContext custom context
 			 * @return this builder, for chaining
 			 */
-			@Nonnull
+			@NonNull
 			public Builder clientContext(@Nullable Object clientContext) {
 				this.clientContext = clientContext;
 				return this;
@@ -218,13 +218,13 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			 * @param clientInitializer custom function to run to initialize the client
 			 * @return this builder, for chaining
 			 */
-			@Nonnull
+			@NonNull
 			public Builder clientInitializer(@Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
 				this.clientInitializer = clientInitializer;
 				return this;
 			}
 
-			@Nonnull
+			@NonNull
 			public Accepted build() {
 				return new Accepted(this);
 			}
@@ -239,7 +239,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		@Nullable
 		private final Consumer<ServerSentEventUnicaster> clientInitializer;
 
-		private Accepted(@Nonnull Builder builder) {
+		private Accepted(@NonNull Builder builder) {
 			requireNonNull(builder);
 
 			// Defensive copies
@@ -279,7 +279,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		 *
 		 * @return the client context, or {@link Optional#empty()} if none was specified
 		 */
-		@Nonnull
+		@NonNull
 		public Optional<Object> getClientContext() {
 			return Optional.ofNullable(this.clientContext);
 		}
@@ -289,7 +289,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		 *
 		 * @return the client initialization function, or {@link Optional#empty()} if none was specified
 		 */
-		@Nonnull
+		@NonNull
 		public Optional<Consumer<ServerSentEventUnicaster>> getClientInitializer() {
 			return Optional.ofNullable(this.clientInitializer);
 		}
@@ -334,10 +334,10 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	 */
 	@ThreadSafe
 	final class Rejected implements HandshakeResult {
-		@Nonnull
+		@NonNull
 		private final Response response;
 
-		private Rejected(@Nonnull Response response) {
+		private Rejected(@NonNull Response response) {
 			requireNonNull(response);
 			this.response = response;
 		}
@@ -347,7 +347,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		 *
 		 * @return the logical response for this handshake rejection
 		 */
-		@Nonnull
+		@NonNull
 		public Response getResponse() {
 			return this.response;
 		}

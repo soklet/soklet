@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
@@ -51,16 +51,16 @@ public interface ResourceMethodResolver {
 	 * @param serverType the type of server that's handling the request
 	 * @return the matching <em>Resource Method</em>, or {@link Optional#empty()} if no match was found
 	 */
-	@Nonnull
-	Optional<ResourceMethod> resourceMethodForRequest(@Nonnull Request request,
-																										@Nonnull ServerType serverType);
+	@NonNull
+	Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
+																										@NonNull ServerType serverType);
 
 	/**
 	 * Vends the set of all <em>Resource Methods</em> registered in the system.
 	 *
 	 * @return the set of all <em>Resource Methods</em> in the system
 	 */
-	@Nonnull
+	@NonNull
 	Set<ResourceMethod> getResourceMethods();
 
 	/**
@@ -74,7 +74,7 @@ public interface ResourceMethodResolver {
 	 *
 	 * @return a {@code ResourceMethodResolver} which performs classpath introspection against the annotation processor's lookup table
 	 */
-	@Nonnull
+	@NonNull
 	static ResourceMethodResolver fromClasspathIntrospection() {
 		return DefaultResourceMethodResolver.fromClasspathIntrospection();
 	}
@@ -87,8 +87,8 @@ public interface ResourceMethodResolver {
 	 * @param classes the classes to inspect for <em>Resource Methods</em>
 	 * @return a {@code ResourceMethodResolver} backed by the given {@code classes}
 	 */
-	@Nonnull
-	static ResourceMethodResolver withClasses(@Nonnull Set<Class<?>> classes) {
+	@NonNull
+	static ResourceMethodResolver withClasses(@NonNull Set<Class<?>> classes) {
 		requireNonNull(classes);
 		return DefaultResourceMethodResolver.withClasses(classes);
 	}
@@ -101,8 +101,8 @@ public interface ResourceMethodResolver {
 	 * @param methods the methods to inspect for <em>Resource Method</em> annotations
 	 * @return a {@code ResourceMethodResolver} backed by the given {@code methods}
 	 */
-	@Nonnull
-	static ResourceMethodResolver withMethods(@Nonnull Set<Method> methods) {
+	@NonNull
+	static ResourceMethodResolver withMethods(@NonNull Set<Method> methods) {
 		requireNonNull(methods);
 		return DefaultResourceMethodResolver.withMethods(methods);
 	}

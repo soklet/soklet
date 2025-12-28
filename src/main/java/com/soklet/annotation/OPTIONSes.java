@@ -16,7 +16,7 @@
 
 package com.soklet.annotation;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -35,6 +35,6 @@ public @interface OPTIONSes {
 	/**
 	 * @return the {@link OPTIONS} annotations on this <em>Resource Method</em>
 	 */
-	@Nonnull
+	@NonNull
 	OPTIONS[] value() default {};
 }

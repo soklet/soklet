@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -24,14 +24,14 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 final class DefaultLifecycleObserver implements LifecycleObserver {
-	@Nonnull
+	@NonNull
 	private static final DefaultLifecycleObserver DEFAULT_INSTANCE;
 
 	static {
 		DEFAULT_INSTANCE = new DefaultLifecycleObserver();
 	}
 
-	@Nonnull
+	@NonNull
 	public static DefaultLifecycleObserver defaultInstance() {
 		return DEFAULT_INSTANCE;
 	}

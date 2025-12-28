@@ -20,7 +20,7 @@ import com.soklet.annotation.GET;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -42,18 +42,18 @@ public class CorsWildcardWithCredentialsTests {
 		int port = findFreePort();
 
 		CorsAuthorizer authorizer = new CorsAuthorizer() {
-			@Nonnull
+			@NonNull
 			@Override
-			public Optional<CorsResponse> authorize(@Nonnull Request request,
-																							@Nonnull Cors cors) {
+			public Optional<CorsResponse> authorize(@NonNull Request request,
+																							@NonNull Cors cors) {
 				return Optional.empty();
 			}
 
-			@Nonnull
+			@NonNull
 			@Override
-			public Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
-																																@Nonnull CorsPreflight preflight,
-																																@Nonnull Map<HttpMethod, ResourceMethod> methods) {
+			public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																																@NonNull CorsPreflight preflight,
+																																@NonNull Map<HttpMethod, ResourceMethod> methods) {
 				return Optional.of(
 						CorsPreflightResponse.withAccessControlAllowOrigin("*")
 								.accessControlAllowCredentials(Boolean.TRUE)

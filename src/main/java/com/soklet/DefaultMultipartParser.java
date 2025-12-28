@@ -24,7 +24,7 @@ import com.soklet.exception.IllegalRequestBodyException;
 import com.soklet.exception.MissingRequestHeaderException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -55,9 +55,9 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultMultipartParser implements MultipartParser {
-	@Nonnull
+	@NonNull
 	private static final Integer MAX_MULTIPART_FIELDS;
-	@Nonnull
+	@NonNull
 	private static final DefaultMultipartParser DEFAULT_INSTANCE;
 
 	static {
@@ -65,7 +65,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		DEFAULT_INSTANCE = new DefaultMultipartParser();
 	}
 
-	@Nonnull
+	@NonNull
 	public static DefaultMultipartParser defaultInstance() {
 		return DEFAULT_INSTANCE;
 	}
@@ -73,8 +73,8 @@ final class DefaultMultipartParser implements MultipartParser {
 	/**
 	 * Validate boundary characters per RFC 2046.
 	 */
-	@Nonnull
-	private Boolean isValidBoundary(@Nonnull String boundary) {
+	@NonNull
+	private Boolean isValidBoundary(@NonNull String boundary) {
 		requireNonNull(boundary);
 
 		for (int i = 0; i < boundary.length(); i++) {
@@ -96,8 +96,8 @@ final class DefaultMultipartParser implements MultipartParser {
 		return true;
 	}
 
-	@Nonnull
-	private String stripOptionalQuotes(@Nonnull String value) {
+	@NonNull
+	private String stripOptionalQuotes(@NonNull String value) {
 		requireNonNull(value);
 
 		value = value.trim();
@@ -132,8 +132,8 @@ final class DefaultMultipartParser implements MultipartParser {
 	}
 
 	@Override
-	@Nonnull
-	public Map<String, Set<MultipartField>> extractMultipartFields(@Nonnull Request request) {
+	@NonNull
+	public Map<String, Set<MultipartField>> extractMultipartFields(@NonNull Request request) {
 		byte[] requestBody = request.getBody().orElse(null);
 
 		if (requestBody == null)

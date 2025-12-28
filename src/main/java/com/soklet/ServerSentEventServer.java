@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.time.Duration;
 import java.util.Optional;
@@ -77,7 +77,7 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 *
 	 * @return {@code true} if the server is started, {@code false} otherwise
 	 */
-	@Nonnull
+	@NonNull
 	Boolean isStarted();
 
 	/**
@@ -104,7 +104,7 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * @param resourcePath the {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em> for which to acquire a broadcaster
 	 * @return a broadcaster for the given {@link ResourcePath}, or {@link Optional#empty()} if there is no broadcaster available
 	 */
-	@Nonnull
+	@NonNull
 	Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath);
 
 	/**
@@ -115,8 +115,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * @param sokletConfig   configuration for the Soklet instance that controls this server
 	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link ServerSentEventServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link ServerSentEventServer} to write back to the client
 	 */
-	void initialize(@Nonnull SokletConfig sokletConfig,
-									@Nonnull RequestHandler requestHandler);
+	void initialize(@NonNull SokletConfig sokletConfig,
+									@NonNull RequestHandler requestHandler);
 
 	/**
 	 * Request/response processing contract for {@link ServerSentEventServer} implementations.
@@ -145,8 +145,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 		 * @param request               a Soklet {@link Request} representation of the {@link ServerSentEventServer}'s internal HTTP request data
 		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link ServerSentEventServer} to write HTTP response data to the client
 		 */
-		void handleRequest(@Nonnull Request request,
-											 @Nonnull Consumer<RequestResult> requestResultConsumer);
+		void handleRequest(@NonNull Request request,
+											 @NonNull Consumer<RequestResult> requestResultConsumer);
 	}
 
 	/**
@@ -155,8 +155,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 * @param port the port number on which the server should listen
 	 * @return the builder
 	 */
-	@Nonnull
-	static Builder withPort(@Nonnull Integer port) {
+	@NonNull
+	static Builder withPort(@NonNull Integer port) {
 		requireNonNull(port);
 		return new Builder(port);
 	}
@@ -170,7 +170,7 @@ public interface ServerSentEventServer extends AutoCloseable {
 	 */
 	@NotThreadSafe
 	final class Builder {
-		@Nonnull
+		@NonNull
 		Integer port;
 		@Nullable
 		String host;
@@ -203,110 +203,110 @@ public interface ServerSentEventServer extends AutoCloseable {
 		@Nullable
 		IdGenerator<?> idGenerator;
 
-		@Nonnull
-		protected Builder(@Nonnull Integer port) {
+		@NonNull
+		protected Builder(@NonNull Integer port) {
 			requireNonNull(port);
 			this.port = port;
 		}
 
-		@Nonnull
-		public Builder port(@Nonnull Integer port) {
+		@NonNull
+		public Builder port(@NonNull Integer port) {
 			requireNonNull(port);
 			this.port = port;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder host(@Nullable String host) {
 			this.host = host;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder requestTimeout(@Nullable Duration requestTimeout) {
 			this.requestTimeout = requestTimeout;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder requestHandlerTimeout(@Nullable Duration requestHandlerTimeout) {
 			this.requestHandlerTimeout = requestHandlerTimeout;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder writeTimeout(@Nullable Duration writeTimeout) {
 			this.writeTimeout = writeTimeout;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
 			this.shutdownTimeout = shutdownTimeout;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder heartbeatInterval(@Nullable Duration heartbeatInterval) {
 			this.heartbeatInterval = heartbeatInterval;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
 			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder requestReadBufferSizeInBytes(@Nullable Integer requestReadBufferSizeInBytes) {
 			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
 			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder concurrentConnectionLimit(@Nullable Integer concurrentConnectionLimit) {
 			this.concurrentConnectionLimit = concurrentConnectionLimit;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder broadcasterCacheCapacity(@Nullable Integer broadcasterCacheCapacity) {
 			this.broadcasterCacheCapacity = broadcasterCacheCapacity;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder resourcePathCacheCapacity(@Nullable Integer resourcePathCacheCapacity) {
 			this.resourcePathCacheCapacity = resourcePathCacheCapacity;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder connectionQueueCapacity(@Nullable Integer connectionQueueCapacity) {
 			this.connectionQueueCapacity = connectionQueueCapacity;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder verifyConnectionOnceEstablished(@Nullable Boolean verifyConnectionOnceEstablished) {
 			this.verifyConnectionOnceEstablished = verifyConnectionOnceEstablished;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder idGenerator(@Nullable IdGenerator<?> idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public ServerSentEventServer build() {
 			return new DefaultServerSentEventServer(this);
 		}

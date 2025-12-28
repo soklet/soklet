@@ -16,8 +16,8 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Optional;
 
@@ -30,13 +30,13 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class IllegalQueryParameterException extends BadRequestException {
-	@Nonnull
+	@NonNull
 	private final String queryParameterName;
 	@Nullable
 	private final String queryParameterValue;
 
 	public IllegalQueryParameterException(@Nullable String message,
-																				@Nonnull String queryParameterName,
+																				@NonNull String queryParameterName,
 																				@Nullable String queryParameterValue) {
 		super(message);
 		this.queryParameterName = requireNonNull(queryParameterName);
@@ -45,19 +45,19 @@ public final class IllegalQueryParameterException extends BadRequestException {
 
 	public IllegalQueryParameterException(@Nullable String message,
 																				@Nullable Throwable cause,
-																				@Nonnull String queryParameterName,
+																				@NonNull String queryParameterName,
 																				@Nullable String queryParameterValue) {
 		super(message, cause);
 		this.queryParameterName = requireNonNull(queryParameterName);
 		this.queryParameterValue = queryParameterValue;
 	}
 
-	@Nonnull
+	@NonNull
 	public String getQueryParameterName() {
 		return this.queryParameterName;
 	}
 
-	@Nonnull
+	@NonNull
 	public Optional<String> getQueryParameterValue() {
 		return Optional.ofNullable(this.queryParameterValue);
 	}

@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.InetAddress;
 import java.util.concurrent.atomic.AtomicLong;
@@ -32,7 +32,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultIdGenerator implements IdGenerator<String> {
-	@Nonnull
+	@NonNull
 	private static final String DEFAULT_ID_PREFIX;
 
 	static {
@@ -55,9 +55,9 @@ final class DefaultIdGenerator implements IdGenerator<String> {
 		DEFAULT_ID_PREFIX = idPrefix;
 	}
 
-	@Nonnull
+	@NonNull
 	private final AtomicLong idGenerator;
-	@Nonnull
+	@NonNull
 	private final String idPrefix;
 
 	/**
@@ -68,7 +68,7 @@ final class DefaultIdGenerator implements IdGenerator<String> {
 	 *
 	 * @return a {@code DefaultIdGenerator} with default settings
 	 */
-	@Nonnull
+	@NonNull
 	public static DefaultIdGenerator withDefaults() {
 		return new DefaultIdGenerator(null);
 	}
@@ -83,7 +83,7 @@ final class DefaultIdGenerator implements IdGenerator<String> {
 	 *               or {@code null} to use the default host-based prefix
 	 * @return a {@code DefaultIdGenerator} configured with the given prefix
 	 */
-	@Nonnull
+	@NonNull
 	public static DefaultIdGenerator withPrefix(@Nullable String prefix) {
 		return new DefaultIdGenerator(prefix);
 	}
@@ -96,24 +96,24 @@ final class DefaultIdGenerator implements IdGenerator<String> {
 		this.idGenerator = new AtomicLong(0L);
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public String generateId(@Nonnull Request request) {
+	public String generateId(@NonNull Request request) {
 		requireNonNull(request);
 		return format("%s%s", getIdPrefix(), getIdGenerator().getAndIncrement());
 	}
 
-	@Nonnull
+	@NonNull
 	private String getDefaultIdPrefix() {
 		return DEFAULT_ID_PREFIX;
 	}
 
-	@Nonnull
+	@NonNull
 	private AtomicLong getIdGenerator() {
 		return this.idGenerator;
 	}
 
-	@Nonnull
+	@NonNull
 	private String getIdPrefix() {
 		return this.idPrefix;
 	}

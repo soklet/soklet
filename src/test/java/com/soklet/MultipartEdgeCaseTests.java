@@ -21,7 +21,7 @@ import com.soklet.annotation.POST;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -54,7 +54,7 @@ public class MultipartEdgeCaseTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 
@@ -78,7 +78,7 @@ public class MultipartEdgeCaseTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 
@@ -102,7 +102,7 @@ public class MultipartEdgeCaseTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
-					public void didReceiveLogEvent(@Nonnull LogEvent logEvent) { /* quiet */ }
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 

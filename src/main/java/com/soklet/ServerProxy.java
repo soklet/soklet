@@ -18,7 +18,7 @@ package com.soklet;
 
 import com.soklet.Soklet.MockServer;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -31,19 +31,19 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class ServerProxy implements Server {
-	@Nonnull
+	@NonNull
 	private final Server realImplementation;
-	@Nonnull
+	@NonNull
 	private final AtomicReference<Server> activeImplementation;
 
-	ServerProxy(@Nonnull Server realImplementation) {
+	ServerProxy(@NonNull Server realImplementation) {
 		requireNonNull(realImplementation);
 
 		this.realImplementation = realImplementation;
 		this.activeImplementation = new AtomicReference<>(realImplementation);
 	}
 
-	void enableSimulatorMode(@Nonnull MockServer mockServer) {
+	void enableSimulatorMode(@NonNull MockServer mockServer) {
 		requireNonNull(mockServer);
 		this.activeImplementation.set(mockServer);
 	}
@@ -53,8 +53,8 @@ final class ServerProxy implements Server {
 	}
 
 	@Override
-	public void initialize(@Nonnull SokletConfig sokletConfig,
-												 @Nonnull RequestHandler requestHandler) {
+	public void initialize(@NonNull SokletConfig sokletConfig,
+												 @NonNull RequestHandler requestHandler) {
 		getRealImplementation().initialize(sokletConfig, requestHandler);
 	}
 
@@ -63,7 +63,7 @@ final class ServerProxy implements Server {
 		getActiveImplementation().close();
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
 	public Boolean isStarted() {
 		return getActiveImplementation().isStarted();
@@ -79,12 +79,12 @@ final class ServerProxy implements Server {
 		getActiveImplementation().start();
 	}
 
-	@Nonnull
+	@NonNull
 	Server getRealImplementation() {
 		return this.realImplementation;
 	}
 
-	@Nonnull
+	@NonNull
 	Server getActiveImplementation() {
 		return this.activeImplementation.get();
 	}

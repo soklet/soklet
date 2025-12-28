@@ -16,7 +16,7 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**

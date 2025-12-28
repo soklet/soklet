@@ -16,8 +16,8 @@
 
 package com.soklet.converter;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import java.lang.reflect.Type;
 import java.util.Optional;
 
@@ -39,7 +39,7 @@ public interface ValueConverter<F, T> {
 	 * @return the {@code T} representation of {@code from}
 	 * @throws ValueConversionException if an error occurs during conversion
 	 */
-	@Nonnull
+	@NonNull
 	Optional<T> convert(@Nullable F from) throws ValueConversionException;
 
 	/**
@@ -47,7 +47,7 @@ public interface ValueConverter<F, T> {
 	 *
 	 * @return the type represented by {@code F}
 	 */
-	@Nonnull
+	@NonNull
 	Type getFromType();
 
 	/**
@@ -55,6 +55,6 @@ public interface ValueConverter<F, T> {
 	 *
 	 * @return the type represented by {@code T}
 	 */
-	@Nonnull
+	@NonNull
 	Type getToType();
 }

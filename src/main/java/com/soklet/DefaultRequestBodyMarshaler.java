@@ -22,7 +22,7 @@ import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.exception.IllegalRequestBodyException;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
@@ -36,20 +36,20 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
-	@Nonnull
+	@NonNull
 	private final ValueConverterRegistry valueConverterRegistry;
 
-	public DefaultRequestBodyMarshaler(@Nonnull ValueConverterRegistry valueConverterRegistry) {
+	public DefaultRequestBodyMarshaler(@NonNull ValueConverterRegistry valueConverterRegistry) {
 		requireNonNull(valueConverterRegistry);
 		this.valueConverterRegistry = valueConverterRegistry;
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public Optional<Object> marshalRequestBody(@Nonnull Request request,
-																						 @Nonnull ResourceMethod resourceMethod,
-																						 @Nonnull Parameter parameter,
-																						 @Nonnull Type requestBodyType) {
+	public Optional<Object> marshalRequestBody(@NonNull Request request,
+																						 @NonNull ResourceMethod resourceMethod,
+																						 @NonNull Parameter parameter,
+																						 @NonNull Type requestBodyType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
@@ -75,7 +75,7 @@ final class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 		}
 	}
 
-	@Nonnull
+	@NonNull
 	protected ValueConverterRegistry getValueConverterRegistry() {
 		return this.valueConverterRegistry;
 	}

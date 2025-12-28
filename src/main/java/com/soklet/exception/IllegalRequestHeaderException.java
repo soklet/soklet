@@ -16,8 +16,8 @@
 
 package com.soklet.exception;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Optional;
 
@@ -30,13 +30,13 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class IllegalRequestHeaderException extends BadRequestException {
-	@Nonnull
+	@NonNull
 	private final String requestHeaderName;
 	@Nullable
 	private final String requestHeaderValue;
 
 	public IllegalRequestHeaderException(@Nullable String message,
-																			 @Nonnull String requestHeaderName,
+																			 @NonNull String requestHeaderName,
 																			 @Nullable String requestHeaderValue) {
 		super(message);
 		this.requestHeaderName = requireNonNull(requestHeaderName);
@@ -45,19 +45,19 @@ public final class IllegalRequestHeaderException extends BadRequestException {
 
 	public IllegalRequestHeaderException(@Nullable String message,
 																			 @Nullable Throwable cause,
-																			 @Nonnull String requestHeaderName,
+																			 @NonNull String requestHeaderName,
 																			 @Nullable String requestHeaderValue) {
 		super(message, cause);
 		this.requestHeaderName = requireNonNull(requestHeaderName);
 		this.requestHeaderValue = requestHeaderValue;
 	}
 
-	@Nonnull
+	@NonNull
 	public String getRequestHeaderName() {
 		return this.requestHeaderName;
 	}
 
-	@Nonnull
+	@NonNull
 	public Optional<String> getRequestHeaderValue() {
 		return Optional.ofNullable(this.requestHeaderValue);
 	}

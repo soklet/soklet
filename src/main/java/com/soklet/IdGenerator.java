@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 
 import static java.util.Objects.requireNonNull;
 
@@ -49,8 +49,8 @@ public interface IdGenerator<T> {
 	 * @param request the request for which an identifier is being generated
 	 * @return the generated identifier (never {@code null})
 	 */
-	@Nonnull
-	T generateId(@Nonnull Request request);
+	@NonNull
+	T generateId(@NonNull Request request);
 
 	/**
 	 * Acquires a threadsafe {@link IdGenerator} with a best-effort local IP prefix.
@@ -59,7 +59,7 @@ public interface IdGenerator<T> {
 	 *
 	 * @return an {@code IdGenerator} with default settings
 	 */
-	@Nonnull
+	@NonNull
 	static IdGenerator<String> withDefaults() {
 		return DefaultIdGenerator.withDefaults();
 	}
@@ -73,8 +73,8 @@ public interface IdGenerator<T> {
 	 * @param prefix a string to prepend to the generated numeric ID
 	 * @return an {@code IdGenerator} configured with the given prefix
 	 */
-	@Nonnull
-	static IdGenerator<String> withPrefix(@Nonnull String prefix) {
+	@NonNull
+	static IdGenerator<String> withPrefix(@NonNull String prefix) {
 		requireNonNull(prefix);
 		return DefaultIdGenerator.withPrefix(prefix);
 	}

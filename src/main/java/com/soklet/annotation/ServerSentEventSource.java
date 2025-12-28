@@ -16,7 +16,7 @@
 
 package com.soklet.annotation;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Repeatable;
 import java.lang.annotation.Retention;
@@ -41,6 +41,6 @@ public @interface ServerSentEventSource {
 	 *
 	 * @return the Server-Sent Event Source {@code GET} URL that should be handled by this Resource Method
 	 */
-	@Nonnull
+	@NonNull
 	String value();
 }

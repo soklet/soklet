@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
@@ -68,7 +68,7 @@ public interface Server extends AutoCloseable {
 	 *
 	 * @return {@code true} if the server is started, {@code false} otherwise
 	 */
-	@Nonnull
+	@NonNull
 	Boolean isStarted();
 
 	/**
@@ -79,8 +79,8 @@ public interface Server extends AutoCloseable {
 	 * @param sokletConfig   configuration for the Soklet instance that controls this server
 	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link Server}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link Server} to write back to the client
 	 */
-	void initialize(@Nonnull SokletConfig sokletConfig,
-									@Nonnull RequestHandler requestHandler);
+	void initialize(@NonNull SokletConfig sokletConfig,
+									@NonNull RequestHandler requestHandler);
 
 	/**
 	 * {@link AutoCloseable}-enabled synonym for {@link #stop()}.
@@ -115,8 +115,8 @@ public interface Server extends AutoCloseable {
 		 * @param request               a Soklet {@link Request} representation of the {@link Server}'s internal HTTP request data
 		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link Server} to write HTTP response data to the client
 		 */
-		void handleRequest(@Nonnull Request request,
-											 @Nonnull Consumer<RequestResult> requestResultConsumer);
+		void handleRequest(@NonNull Request request,
+											 @NonNull Consumer<RequestResult> requestResultConsumer);
 	}
 
 	/**
@@ -125,8 +125,8 @@ public interface Server extends AutoCloseable {
 	 * @param port the port number on which the server should listen
 	 * @return the builder
 	 */
-	@Nonnull
-	static Builder withPort(@Nonnull Integer port) {
+	@NonNull
+	static Builder withPort(@NonNull Integer port) {
 		requireNonNull(port);
 		return new Builder(port);
 	}
@@ -140,7 +140,7 @@ public interface Server extends AutoCloseable {
 	 */
 	@NotThreadSafe
 	final class Builder {
-		@Nonnull
+		@NonNull
 		Integer port;
 		@Nullable
 		String host;
@@ -169,98 +169,98 @@ public interface Server extends AutoCloseable {
 		@Nullable
 		IdGenerator<?> idGenerator;
 
-		@Nonnull
-		private Builder(@Nonnull Integer port) {
+		@NonNull
+		private Builder(@NonNull Integer port) {
 			requireNonNull(port);
 			this.port = port;
 		}
 
-		@Nonnull
-		public Builder port(@Nonnull Integer port) {
+		@NonNull
+		public Builder port(@NonNull Integer port) {
 			requireNonNull(port);
 			this.port = port;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder host(@Nullable String host) {
 			this.host = host;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder concurrency(@Nullable Integer concurrency) {
 			this.concurrency = concurrency;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder requestTimeout(@Nullable Duration requestTimeout) {
 			this.requestTimeout = requestTimeout;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder requestHandlerTimeout(@Nullable Duration requestHandlerTimeout) {
 			this.requestHandlerTimeout = requestHandlerTimeout;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder socketSelectTimeout(@Nullable Duration socketSelectTimeout) {
 			this.socketSelectTimeout = socketSelectTimeout;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder socketPendingConnectionLimit(@Nullable Integer socketPendingConnectionLimit) {
 			this.socketPendingConnectionLimit = socketPendingConnectionLimit;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder maximumConnections(@Nullable Integer maximumConnections) {
 			this.maximumConnections = maximumConnections;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
 			this.shutdownTimeout = shutdownTimeout;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
 			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder requestReadBufferSizeInBytes(@Nullable Integer requestReadBufferSizeInBytes) {
 			this.requestReadBufferSizeInBytes = requestReadBufferSizeInBytes;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder multipartParser(@Nullable MultipartParser multipartParser) {
 			this.multipartParser = multipartParser;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
 			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder idGenerator(@Nullable IdGenerator<?> idGenerator) {
 			this.idGenerator = idGenerator;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Server build() {
 			return new DefaultServer(this);
 		}

@@ -18,8 +18,8 @@ package com.soklet.exception;
 
 import com.soklet.MultipartField;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import static java.util.Objects.requireNonNull;
@@ -31,23 +31,23 @@ import static java.util.Objects.requireNonNull;
  */
 @NotThreadSafe
 public final class IllegalMultipartFieldException extends BadRequestException {
-	@Nonnull
+	@NonNull
 	private final MultipartField multipartField;
 
 	public IllegalMultipartFieldException(@Nullable String message,
-																				@Nonnull MultipartField multipartField) {
+																				@NonNull MultipartField multipartField) {
 		super(message);
 		this.multipartField = requireNonNull(multipartField);
 	}
 
 	public IllegalMultipartFieldException(@Nullable String message,
 																				@Nullable Throwable cause,
-																				@Nonnull MultipartField multipartField) {
+																				@NonNull MultipartField multipartField) {
 		super(message, cause);
 		this.multipartField = requireNonNull(multipartField);
 	}
 
-	@Nonnull
+	@NonNull
 	public MultipartField getMultipartField() {
 		return this.multipartField;
 	}

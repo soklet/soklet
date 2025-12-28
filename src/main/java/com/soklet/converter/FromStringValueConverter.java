@@ -29,7 +29,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * ) {}
  *
  * ValueConverter<String, Jwt> jwtVc = new FromStringValueConverter<>() {
- *   @Nonnull
+ *   @NonNull
  *   public Optional<Jwt> performConversion(@Nullable String from) throws Exception {
  *     if(from == null)
  *       return Optional.empty();

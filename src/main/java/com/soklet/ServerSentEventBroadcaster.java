@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.util.function.Function;
 
 /**
@@ -57,7 +57,7 @@ public interface ServerSentEventBroadcaster {
 	 *
 	 * @return the runtime Resource Path instance with which this broadcaster is associated
 	 */
-	@Nonnull
+	@NonNull
 	ResourcePath getResourcePath();
 
 	/**
@@ -68,7 +68,7 @@ public interface ServerSentEventBroadcaster {
 	 *
 	 * @return the approximate number of clients who will receive a broadcasted event
 	 */
-	@Nonnull
+	@NonNull
 	Long getClientCount();
 
 	/**
@@ -80,7 +80,7 @@ public interface ServerSentEventBroadcaster {
 	 *
 	 * @param serverSentEvent the Server-Sent Event payload to broadcast
 	 */
-	void broadcastEvent(@Nonnull ServerSentEvent serverSentEvent);
+	void broadcastEvent(@NonNull ServerSentEvent serverSentEvent);
 
 	/**
 	 * Broadcasts a Server-Sent Event where the payload is dynamically generated and memoized based on a specific trait of the client (e.g. {@link java.util.Locale} or User Role).
@@ -98,8 +98,8 @@ public interface ServerSentEventBroadcaster {
 	 *                      (If the client has no context, the implementation passes {@code null})
 	 * @param eventProvider a function that provides the {@link ServerSentEvent} for a given key
 	 */
-	<T> void broadcastEvent(@Nonnull Function<Object, T> keySelector,
-													@Nonnull Function<T, ServerSentEvent> eventProvider);
+	<T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
+													@NonNull Function<T, ServerSentEvent> eventProvider);
 
 	/**
 	 * Broadcasts a single Server-Sent Event comment to all clients listening to this broadcaster's {@link ResourcePath}.
@@ -112,7 +112,7 @@ public interface ServerSentEventBroadcaster {
 	 *
 	 * @param comment the comment payload to broadcast
 	 */
-	void broadcastComment(@Nonnull String comment);
+	void broadcastComment(@NonNull String comment);
 
 	/**
 	 * Broadcasts a Server-Sent Event comment where the payload is dynamically generated and memoized based on a specific trait of the client (e.g. {@link java.util.Locale} or User Role).
@@ -129,6 +129,6 @@ public interface ServerSentEventBroadcaster {
 	 * @param keySelector     a function that derives a grouping key from the client's associated context object
 	 * @param commentProvider a function that provides the comment string for a given key
 	 */
-	<T> void broadcastComment(@Nonnull Function<Object, T> keySelector,
-														@Nonnull Function<T, String> commentProvider);
+	<T> void broadcastComment(@NonNull Function<Object, T> keySelector,
+														@NonNull Function<T, String> commentProvider);
 }

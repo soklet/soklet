@@ -18,8 +18,8 @@ package com.soklet;
 
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.LinkedHashSet;
@@ -52,11 +52,11 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class MarshaledResponse {
-	@Nonnull
+	@NonNull
 	private final Integer statusCode;
-	@Nonnull
+	@NonNull
 	private final Map<String, Set<String>> headers;
-	@Nonnull
+	@NonNull
 	private final Set<ResponseCookie> cookies;
 	@Nullable
 	private final byte[] body;
@@ -67,8 +67,8 @@ public final class MarshaledResponse {
 	 * @param response the logical response whose values are used to prime this builder
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder withResponse(@Nonnull Response response) {
+	@NonNull
+	public static Builder withResponse(@NonNull Response response) {
 		requireNonNull(response);
 
 		Object rawBody = response.getBody().orElse(null);
@@ -89,8 +89,8 @@ public final class MarshaledResponse {
 	 * @param statusCode the HTTP status code for this response
 	 * @return the builder
 	 */
-	@Nonnull
-	public static Builder withStatusCode(@Nonnull Integer statusCode) {
+	@NonNull
+	public static Builder withStatusCode(@NonNull Integer statusCode) {
 		requireNonNull(statusCode);
 		return new Builder(statusCode);
 	}
@@ -100,12 +100,12 @@ public final class MarshaledResponse {
 	 *
 	 * @return a copier for this instance
 	 */
-	@Nonnull
+	@NonNull
 	public Copier copy() {
 		return new Copier(this);
 	}
 
-	protected MarshaledResponse(@Nonnull Builder builder) {
+	protected MarshaledResponse(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.statusCode = builder.statusCode;
@@ -135,7 +135,7 @@ public final class MarshaledResponse {
 	 *
 	 * @return the status code
 	 */
-	@Nonnull
+	@NonNull
 	public Integer getStatusCode() {
 		return this.statusCode;
 	}
@@ -145,7 +145,7 @@ public final class MarshaledResponse {
 	 *
 	 * @return the headers to write
 	 */
-	@Nonnull
+	@NonNull
 	public Map<String, Set<String>> getHeaders() {
 		return this.headers;
 	}
@@ -155,7 +155,7 @@ public final class MarshaledResponse {
 	 *
 	 * @return the cookies to write
 	 */
-	@Nonnull
+	@NonNull
 	public Set<ResponseCookie> getCookies() {
 		return this.cookies;
 	}
@@ -165,7 +165,7 @@ public final class MarshaledResponse {
 	 *
 	 * @return the response body to write, or {@link Optional#empty()}) if no body should be written
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<byte[]> getBody() {
 		return Optional.ofNullable(this.body);
 	}
@@ -179,7 +179,7 @@ public final class MarshaledResponse {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nonnull
+		@NonNull
 		private Integer statusCode;
 		@Nullable
 		private Set<ResponseCookie> cookies;
@@ -188,37 +188,37 @@ public final class MarshaledResponse {
 		@Nullable
 		private byte[] body;
 
-		protected Builder(@Nonnull Integer statusCode) {
+		protected Builder(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
 			this.statusCode = statusCode;
 		}
 
-		@Nonnull
-		public Builder statusCode(@Nonnull Integer statusCode) {
+		@NonNull
+		public Builder statusCode(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
 			this.statusCode = statusCode;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder cookies(@Nullable Set<ResponseCookie> cookies) {
 			this.cookies = cookies;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder headers(@Nullable Map<String, Set<String>> headers) {
 			this.headers = headers;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Builder body(@Nullable byte[] body) {
 			this.body = body;
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public MarshaledResponse build() {
 			return new MarshaledResponse(this);
 		}
@@ -233,10 +233,10 @@ public final class MarshaledResponse {
 	 */
 	@NotThreadSafe
 	public static final class Copier {
-		@Nonnull
+		@NonNull
 		private final Builder builder;
 
-		Copier(@Nonnull MarshaledResponse marshaledResponse) {
+		Copier(@NonNull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
 
 			this.builder = new Builder(marshaledResponse.getStatusCode())
@@ -245,22 +245,22 @@ public final class MarshaledResponse {
 					.body(marshaledResponse.getBody().orElse(null));
 		}
 
-		@Nonnull
-		public Copier statusCode(@Nonnull Integer statusCode) {
+		@NonNull
+		public Copier statusCode(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
 			this.builder.statusCode(statusCode);
 			return this;
 		}
 
-		@Nonnull
-		public Copier headers(@Nonnull Map<String, Set<String>> headers) {
+		@NonNull
+		public Copier headers(@NonNull Map<String, Set<String>> headers) {
 			this.builder.headers(headers);
 			return this;
 		}
 
 		// Convenience method for mutation
-		@Nonnull
-		public Copier headers(@Nonnull Consumer<Map<String, Set<String>>> headersConsumer) {
+		@NonNull
+		public Copier headers(@NonNull Consumer<Map<String, Set<String>>> headersConsumer) {
 			requireNonNull(headersConsumer);
 
 			if (this.builder.headers == null)
@@ -270,15 +270,15 @@ public final class MarshaledResponse {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier cookies(@Nullable Set<ResponseCookie> cookies) {
 			this.builder.cookies(cookies);
 			return this;
 		}
 
 		// Convenience method for mutation
-		@Nonnull
-		public Copier cookies(@Nonnull Consumer<Set<ResponseCookie>> cookiesConsumer) {
+		@NonNull
+		public Copier cookies(@NonNull Consumer<Set<ResponseCookie>> cookiesConsumer) {
 			requireNonNull(cookiesConsumer);
 
 			if (this.builder.cookies == null)
@@ -288,13 +288,13 @@ public final class MarshaledResponse {
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public Copier body(@Nullable byte[] body) {
 			this.builder.body(body);
 			return this;
 		}
 
-		@Nonnull
+		@NonNull
 		public MarshaledResponse finish() {
 			return this.builder.build();
 		}

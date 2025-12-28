@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
@@ -89,16 +89,16 @@ public final class ResourcePathDeclaration {
 	 * A path component is either literal text or a placeholder. There is no concept of multiple placeholders in a
 	 * component.
 	 */
-	@Nonnull
+	@NonNull
 	private static final Pattern COMPONENT_PLACEHOLDER_PATTERN;
 
 	static {
 		COMPONENT_PLACEHOLDER_PATTERN = Pattern.compile("^\\{.+\\}$");
 	}
 
-	@Nonnull
+	@NonNull
 	private final String path;
-	@Nonnull
+	@NonNull
 	private final List<Component> components;
 
 	/**
@@ -106,13 +106,13 @@ public final class ResourcePathDeclaration {
 	 *
 	 * @param path a compile-time path declaration that may include placeholders
 	 */
-	@Nonnull
-	public static ResourcePathDeclaration withPath(@Nonnull String path) {
+	@NonNull
+	public static ResourcePathDeclaration withPath(@NonNull String path) {
 		requireNonNull(path);
 		return new ResourcePathDeclaration(path);
 	}
 
-	private ResourcePathDeclaration(@Nonnull String path) {
+	private ResourcePathDeclaration(@NonNull String path) {
 		requireNonNull(path);
 		this.path = normalizePath(path);
 
@@ -148,7 +148,7 @@ public final class ResourcePathDeclaration {
 	 *
 	 * @return the {@link ComponentType#VARARGS} component in this declaration, or {@link Optional#empty()} if none exists.
 	 */
-	@Nonnull
+	@NonNull
 	public Optional<Component> getVarargsComponent() {
 		if (getComponents().size() == 0)
 			return Optional.empty();
@@ -169,8 +169,8 @@ public final class ResourcePathDeclaration {
 	 * @param resourcePath the resource path against which to match
 	 * @return {@code true} if the paths match, {@code false} otherwise
 	 */
-	@Nonnull
-	public Boolean matches(@Nonnull ResourcePath resourcePath) {
+	@NonNull
+	public Boolean matches(@NonNull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
 
 		if (resourcePath == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH)
@@ -224,8 +224,8 @@ public final class ResourcePathDeclaration {
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
 	 * @throws IllegalArgumentException if the provided resource path does not match this resource path declaration, i.e. {@link #matches(ResourcePath)} is {@code false}
 	 */
-	@Nonnull
-	public Map<String, String> extractPlaceholders(@Nonnull ResourcePath resourcePath) {
+	@NonNull
+	public Map<String, String> extractPlaceholders(@NonNull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
 
 		if (!matches(resourcePath))
@@ -267,7 +267,7 @@ public final class ResourcePathDeclaration {
 	 *
 	 * @return the string representation of this resource path declaration, which must start with {@code /}
 	 */
-	@Nonnull
+	@NonNull
 	public String getPath() {
 		return this.path;
 	}
@@ -277,7 +277,7 @@ public final class ResourcePathDeclaration {
 	 *
 	 * @return the components, or the empty list if this path is equal to {@code /}
 	 */
-	@Nonnull
+	@NonNull
 	public List<Component> getComponents() {
 		return this.components;
 	}
@@ -287,7 +287,7 @@ public final class ResourcePathDeclaration {
 	 *
 	 * @return {@code true} if this resource path declaration is entirely literal, {@code false} otherwise
 	 */
-	@Nonnull
+	@NonNull
 	public Boolean isLiteral() {
 		for (Component component : components)
 			if (component.getType() != ComponentType.LITERAL)
@@ -296,8 +296,8 @@ public final class ResourcePathDeclaration {
 		return true;
 	}
 
-	@Nonnull
-	static String normalizePath(@Nonnull String path) {
+	@NonNull
+	static String normalizePath(@NonNull String path) {
 		requireNonNull(path);
 
 		path = trimAggressively(path);
@@ -328,8 +328,8 @@ public final class ResourcePathDeclaration {
 	 * @param path path from which components are extracted
 	 * @return logical components of the supplied {@code path}
 	 */
-	@Nonnull
-	protected List<Component> extractComponents(@Nonnull String path) {
+	@NonNull
+	protected List<Component> extractComponents(@NonNull String path) {
 		requireNonNull(path);
 
 		if ("/".equals(path))
@@ -433,9 +433,9 @@ public final class ResourcePathDeclaration {
 	 */
 	@Immutable
 	public static final class Component {
-		@Nonnull
+		@NonNull
 		private final String value;
-		@Nonnull
+		@NonNull
 		private final ComponentType type;
 
 		/**
@@ -445,17 +445,17 @@ public final class ResourcePathDeclaration {
 		 * @param type  the type of this component (literal or placeholder)
 		 * @return a {@link Component} instance
 		 */
-		@Nonnull
-		public static Component with(@Nonnull String value,
-																 @Nonnull ComponentType type) {
+		@NonNull
+		public static Component with(@NonNull String value,
+																 @NonNull ComponentType type) {
 			requireNonNull(value);
 			requireNonNull(type);
 
 			return new Component(value, type);
 		}
 
-		private Component(@Nonnull String value,
-											@Nonnull ComponentType type) {
+		private Component(@NonNull String value,
+											@NonNull ComponentType type) {
 			requireNonNull(value);
 			requireNonNull(type);
 
@@ -494,7 +494,7 @@ public final class ResourcePathDeclaration {
 		 *
 		 * @return the value of this component
 		 */
-		@Nonnull
+		@NonNull
 		public String getValue() {
 			return value;
 		}
@@ -504,7 +504,7 @@ public final class ResourcePathDeclaration {
 		 *
 		 * @return the type of component, e.g. {@link ComponentType#LITERAL} or {@link ComponentType#PLACEHOLDER}
 		 */
-		@Nonnull
+		@NonNull
 		public ComponentType getType() {
 			return type;
 		}

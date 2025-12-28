@@ -18,7 +18,7 @@ package com.soklet;
 
 import com.soklet.converter.ValueConverterRegistry;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.Optional;
@@ -42,13 +42,13 @@ import static java.util.Objects.requireNonNull;
  *   // This example uses Google's GSON
  *   static final Gson GSON = new Gson();
  *
- *   @Nonnull
+ *   @NonNull
  *   @Override
  *   public Optional<Object> marshalRequestBody(
- *     @Nonnull Request request,
- *     @Nonnull ResourceMethod resourceMethod,
- *     @Nonnull Parameter parameter,
- *     @Nonnull Type requestBodyType
+ *     @NonNull Request request,
+ *     @NonNull ResourceMethod resourceMethod,
+ *     @NonNull Parameter parameter,
+ *     @NonNull Type requestBodyType
  *   ) {
  *     // Let GSON turn the request body into an instance
  *     // of the specified type.
@@ -83,11 +83,11 @@ public interface RequestBodyMarshaler {
 	 * @param requestBodyType the type of the <em>Resource Method</em> parameter (provided for convenience)
 	 * @return the Java instance that corresponds to the request body bytes suitable for assignment to the <em>Resource Method</em> parameter, or {@link Optional#empty()} if no instance should be marshaled
 	 */
-	@Nonnull
-	Optional<Object> marshalRequestBody(@Nonnull Request request,
-																			@Nonnull ResourceMethod resourceMethod,
-																			@Nonnull Parameter parameter,
-																			@Nonnull Type requestBodyType);
+	@NonNull
+	Optional<Object> marshalRequestBody(@NonNull Request request,
+																			@NonNull ResourceMethod resourceMethod,
+																			@NonNull Parameter parameter,
+																			@NonNull Type requestBodyType);
 
 	/**
 	 * Acquires a threadsafe {@link RequestBodyMarshaler} implementation which converts request body data using the provided {@link ValueConverterRegistry}.
@@ -99,8 +99,8 @@ public interface RequestBodyMarshaler {
 	 * @param valueConverterRegistry a registry of converters that can transform {@link String} types to arbitrary Java types
 	 * @return a default {@code RequestBodyMarshaler} backed by the given {@link ValueConverterRegistry}
 	 */
-	@Nonnull
-	static RequestBodyMarshaler withValueConverterRegistry(@Nonnull ValueConverterRegistry valueConverterRegistry) {
+	@NonNull
+	static RequestBodyMarshaler withValueConverterRegistry(@NonNull ValueConverterRegistry valueConverterRegistry) {
 		requireNonNull(valueConverterRegistry);
 		return new DefaultRequestBodyMarshaler(valueConverterRegistry);
 	}

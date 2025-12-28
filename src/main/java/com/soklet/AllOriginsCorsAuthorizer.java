@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import javax.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.Map;
@@ -35,9 +35,9 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
-	@Nonnull
+	@NonNull
 	private static final Duration DEFAULT_ACCESS_CONTROL_MAX_AGE;
-	@Nonnull
+	@NonNull
 	private static final AllOriginsCorsAuthorizer DEFAULT_INSTANCE;
 
 	static {
@@ -50,7 +50,7 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 	 *
 	 * @return an instance of {@link AllOriginsCorsAuthorizer}
 	 */
-	@Nonnull
+	@NonNull
 	public static AllOriginsCorsAuthorizer defaultInstance() {
 		return DEFAULT_INSTANCE;
 	}
@@ -59,10 +59,10 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 		// Nothing to do
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public Optional<CorsResponse> authorize(@Nonnull Request request,
-																					@Nonnull Cors cors) {
+	public Optional<CorsResponse> authorize(@NonNull Request request,
+																					@NonNull Cors cors) {
 		requireNonNull(request);
 		requireNonNull(cors);
 
@@ -71,11 +71,11 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 				.build());
 	}
 
-	@Nonnull
+	@NonNull
 	@Override
-	public Optional<CorsPreflightResponse> authorizePreflight(@Nonnull Request request,
-																														@Nonnull CorsPreflight corsPreflight,
-																														@Nonnull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
+	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																														@NonNull CorsPreflight corsPreflight,
+																														@NonNull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);
 		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);
