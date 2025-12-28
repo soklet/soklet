@@ -18,10 +18,10 @@ package com.soklet;
 
 import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;

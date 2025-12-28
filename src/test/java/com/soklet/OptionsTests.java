@@ -17,10 +17,10 @@
 package com.soklet;
 
 import com.soklet.annotation.GET;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Map;
 import java.util.Set;

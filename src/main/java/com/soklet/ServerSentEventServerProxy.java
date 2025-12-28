@@ -17,9 +17,9 @@
 package com.soklet;
 
 import com.soklet.Soklet.MockServerSentEventServer;
-
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;

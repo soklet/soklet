@@ -20,9 +20,9 @@ import com.soklet.ServerSentEventRequestResult.HandshakeAccepted;
 import com.soklet.ServerSentEventRequestResult.HandshakeRejected;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
-
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedReader;
 import java.io.IOException;

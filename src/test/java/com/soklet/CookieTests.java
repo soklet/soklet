@@ -16,9 +16,7 @@
 
 package com.soklet;
 
-import com.soklet.ResponseCookie;
 import com.soklet.ResponseCookie.SameSite;
-import com.soklet.Utilities;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

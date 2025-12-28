@@ -32,9 +32,9 @@ import com.soklet.annotation.PUT;
 import com.soklet.annotation.PUTs;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.annotation.ServerSentEventSources;
-
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

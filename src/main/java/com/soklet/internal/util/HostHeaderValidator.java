@@ -17,6 +17,7 @@
 package com.soklet.internal.util;
 
 import org.jspecify.annotations.Nullable;
+
 import javax.annotation.concurrent.ThreadSafe;
 
 /**

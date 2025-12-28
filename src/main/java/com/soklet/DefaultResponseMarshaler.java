@@ -31,9 +31,9 @@ import com.soklet.ResponseMarshaler.Builder.ServiceUnavailableHandler;
 import com.soklet.ResponseMarshaler.Builder.ThrowableHandler;
 import com.soklet.exception.BadRequestException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
-
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;

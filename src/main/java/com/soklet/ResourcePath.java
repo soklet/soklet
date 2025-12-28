@@ -18,9 +18,9 @@ package com.soklet;
 
 import com.soklet.ResourcePathDeclaration.Component;
 import com.soklet.ResourcePathDeclaration.ComponentType;
-
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Arrays;
 import java.util.Collections;

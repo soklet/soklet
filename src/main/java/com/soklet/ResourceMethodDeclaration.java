@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+
 import javax.annotation.concurrent.ThreadSafe;
 
 import static java.util.Objects.requireNonNull;
