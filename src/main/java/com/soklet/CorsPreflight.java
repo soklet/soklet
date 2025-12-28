@@ -108,7 +108,7 @@ public final class CorsPreflight {
 	 * @return the CORS preflight data for this request, or {@link Optional#empty()} if insufficient data is present
 	 */
 	@NonNull
-	public static Optional<@NonNull CorsPreflight> fromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	public static Optional<CorsPreflight> fromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		// Build a lowercase-key view of headers for case-insensitive lookups

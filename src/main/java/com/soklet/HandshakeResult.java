@@ -280,7 +280,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		 * @return the client context, or {@link Optional#empty()} if none was specified
 		 */
 		@NonNull
-		public Optional<@NonNull Object> getClientContext() {
+		public Optional<Object> getClientContext() {
 			return Optional.ofNullable(this.clientContext);
 		}
 
@@ -290,7 +290,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		 * @return the client initialization function, or {@link Optional#empty()} if none was specified
 		 */
 		@NonNull
-		public Optional<@NonNull Consumer<ServerSentEventUnicaster>> getClientInitializer() {
+		public Optional<Consumer<ServerSentEventUnicaster>> getClientInitializer() {
 			return Optional.ofNullable(this.clientInitializer);
 		}
 

@@ -310,7 +310,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	@NonNull
 	@Override
-	public Optional<@NonNull ResourceMethod> resourceMethodForRequest(@NonNull Request request,
+	public Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
 																																	 @NonNull ServerType serverType) {
 		requireNonNull(request);
 		requireNonNull(serverType);

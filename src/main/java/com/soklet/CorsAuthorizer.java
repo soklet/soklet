@@ -50,7 +50,7 @@ public interface CorsAuthorizer {
 	 * @return a {@link CorsResponse} if authorized, or {@link Optional#empty()} if not authorized
 	 */
 	@NonNull
-	Optional<@NonNull CorsResponse> authorize(@NonNull Request request,
+	Optional<CorsResponse> authorize(@NonNull Request request,
 																						@NonNull Cors cors);
 
 	/**
@@ -62,7 +62,7 @@ public interface CorsAuthorizer {
 	 * @return a {@link CorsPreflightResponse} if authorized, or {@link Optional#empty()} if not authorized
 	 */
 	@NonNull
-	Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+	Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
 																															@NonNull CorsPreflight corsPreflight,
 																															@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod);
 

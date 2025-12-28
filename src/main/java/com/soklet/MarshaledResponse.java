@@ -166,7 +166,7 @@ public final class MarshaledResponse {
 	 * @return the response body to write, or {@link Optional#empty()}) if no body should be written
 	 */
 	@NonNull
-	public Optional<@NonNull byte[]> getBody() {
+	public Optional<byte[]> getBody() {
 		return Optional.ofNullable(this.body);
 	}
 

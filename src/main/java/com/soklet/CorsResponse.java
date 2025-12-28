@@ -121,7 +121,7 @@ public final class CorsResponse {
 	 * @return the header value
 	 */
 	@NonNull
-	public Optional<@NonNull Boolean> getAccessControlAllowCredentials() {
+	public Optional<Boolean> getAccessControlAllowCredentials() {
 		return Optional.ofNullable(this.accessControlAllowCredentials);
 	}
 

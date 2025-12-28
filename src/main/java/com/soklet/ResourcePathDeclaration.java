@@ -150,7 +150,7 @@ public final class ResourcePathDeclaration {
 	 * @return the {@link ComponentType#VARARGS} component in this declaration, or {@link Optional#empty()} if none exists.
 	 */
 	@NonNull
-	public Optional<@NonNull Component> getVarargsComponent() {
+	public Optional<Component> getVarargsComponent() {
 		if (getComponents().size() == 0)
 			return Optional.empty();
 

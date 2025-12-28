@@ -132,7 +132,7 @@ public final class CorsPreflightResponse {
 	 * @return the header value, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<@NonNull Boolean> getAccessControlAllowCredentials() {
+	public Optional<Boolean> getAccessControlAllowCredentials() {
 		return Optional.ofNullable(this.accessControlAllowCredentials);
 	}
 
@@ -142,7 +142,7 @@ public final class CorsPreflightResponse {
 	 * @return the header value, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<@NonNull Duration> getAccessControlMaxAge() {
+	public Optional<Duration> getAccessControlMaxAge() {
 		return Optional.ofNullable(this.accessControlMaxAge);
 	}
 

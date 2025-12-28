@@ -53,7 +53,7 @@ public interface ResourceMethodResolver {
 	 * @return the matching <em>Resource Method</em>, or {@link Optional#empty()} if no match was found
 	 */
 	@NonNull
-	Optional<@NonNull ResourceMethod> resourceMethodForRequest(@NonNull Request request,
+	Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
 																															@NonNull ServerType serverType);
 
 	/**

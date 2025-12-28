@@ -75,7 +75,7 @@ public final class Cors {
 	 * @return the CORS non-preflight data for this request, or {@link Optional#empty()} if insufficent data is present
 	 */
 	@NonNull
-	public static Optional<@NonNull Cors> fromHeaders(@NonNull HttpMethod httpMethod,
+	public static Optional<Cors> fromHeaders(@NonNull HttpMethod httpMethod,
 																									 @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(httpMethod);
 		requireNonNull(headers);

@@ -62,7 +62,7 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@NonNull
 	@Override
-	public Optional<@NonNull CorsResponse> authorize(@NonNull Request request,
+	public Optional<CorsResponse> authorize(@NonNull Request request,
 																								@NonNull Cors cors) {
 		requireNonNull(request);
 		requireNonNull(cors);
@@ -74,7 +74,7 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@NonNull
 	@Override
-	public Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
 																																		@NonNull CorsPreflight corsPreflight,
 																																		@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);

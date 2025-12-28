@@ -704,7 +704,7 @@ public final class Utilities {
 	 * @return the raw query component, or {@link Optional#empty()} if none
 	 */
 	@NonNull
-	public static Optional<@NonNull String> extractRawQueryFromUrl(@NonNull String url) {
+	public static Optional<String> extractRawQueryFromUrl(@NonNull String url) {
 		requireNonNull(url);
 
 		url = trimAggressivelyToEmpty(url);
@@ -861,7 +861,7 @@ public final class Utilities {
 	 * @return the URL prefix, or {@link Optional#empty()} if it could not be determined
 	 */
 	@NonNull
-	public static Optional<@NonNull String> extractClientUrlPrefixFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	public static Optional<String> extractClientUrlPrefixFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		// Host                   developer.mozilla.org OR developer.mozilla.org:443 OR [2001:db8::1]:8443
@@ -1093,7 +1093,7 @@ public final class Utilities {
 	 * @see #extractContentTypeFromHeaderValue(String)
 	 */
 	@NonNull
-	public static Optional<@NonNull String> extractContentTypeFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	public static Optional<String> extractContentTypeFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		Set<String> contentTypeHeaderValues = headers.get("Content-Type");
@@ -1113,7 +1113,7 @@ public final class Utilities {
 	 * @return the media type if present; otherwise {@link Optional#empty()}
 	 */
 	@NonNull
-	public static Optional<@NonNull String> extractContentTypeFromHeaderValue(@Nullable String contentTypeHeaderValue) {
+	public static Optional<String> extractContentTypeFromHeaderValue(@Nullable String contentTypeHeaderValue) {
 		contentTypeHeaderValue = trimAggressivelyToNull(contentTypeHeaderValue);
 
 		if (contentTypeHeaderValue == null)
@@ -1143,7 +1143,7 @@ public final class Utilities {
 	 * @see #extractCharsetFromHeaderValue(String)
 	 */
 	@NonNull
-	public static Optional<@NonNull Charset> extractCharsetFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+	public static Optional<Charset> extractCharsetFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(headers);
 
 		Set<String> contentTypeHeaderValues = headers.get("Content-Type");
@@ -1164,7 +1164,7 @@ public final class Utilities {
 	 * @return the resolved charset if present and valid; otherwise {@link Optional#empty()}
 	 */
 	@NonNull
-	public static Optional<@NonNull Charset> extractCharsetFromHeaderValue(@Nullable String contentTypeHeaderValue) {
+	public static Optional<Charset> extractCharsetFromHeaderValue(@Nullable String contentTypeHeaderValue) {
 		contentTypeHeaderValue = trimAggressivelyToNull(contentTypeHeaderValue);
 
 		if (contentTypeHeaderValue == null)

@@ -294,12 +294,12 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 
 		@NonNull
-		private Optional<@NonNull Consumer<ServerSentEvent>> getEventConsumer() {
+		private Optional<Consumer<ServerSentEvent>> getEventConsumer() {
 			return Optional.ofNullable(this.eventConsumer);
 		}
 
 		@NonNull
-		private Optional<@NonNull Consumer<String>> getCommentConsumer() {
+		private Optional<Consumer<String>> getCommentConsumer() {
 			return Optional.ofNullable(this.commentConsumer);
 		}
 

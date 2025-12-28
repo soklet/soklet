@@ -516,7 +516,7 @@ public final class Request {
 	 * @return the raw query for this request, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	public Optional<@NonNull String> getRawQuery() {
+	public Optional<String> getRawQuery() {
 		return Optional.ofNullable(this.rawQuery);
 	}
 
@@ -544,7 +544,7 @@ public final class Request {
 	 * @return the remote address for this request, or {@link Optional#empty()} if unavailable
 	 */
 	@NonNull
-	public Optional<@NonNull InetSocketAddress> getRemoteAddress() {
+	public Optional<InetSocketAddress> getRemoteAddress() {
 		return Optional.ofNullable(this.remoteAddress);
 	}
 
@@ -571,7 +571,7 @@ public final class Request {
 	 * @return the request's {@code Content-Type} header value, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<@NonNull String> getContentType() {
+	public Optional<String> getContentType() {
 		return Optional.ofNullable(this.contentType);
 	}
 
@@ -581,7 +581,7 @@ public final class Request {
 	 * @return the request's character encoding, or {@link Optional#empty()} if not specified
 	 */
 	@NonNull
-	public Optional<@NonNull Charset> getCharset() {
+	public Optional<Charset> getCharset() {
 		return Optional.ofNullable(this.charset);
 	}
 
@@ -641,7 +641,7 @@ public final class Request {
 	 * @return the request body bytes, or {@link Optional#empty()} if none was supplied
 	 */
 	@NonNull
-	public Optional<@NonNull byte[]> getBody() {
+	public Optional<byte[]> getBody() {
 		return Optional.ofNullable(this.body);
 
 		// Note: it would be nice to defensively copy, but it's inefficient
@@ -676,7 +676,7 @@ public final class Request {
 	 * @return a {@link String} representation of this request's body, or {@link Optional#empty()} if no request body was specified by the client
 	 */
 	@NonNull
-	public Optional<@NonNull String> getBodyAsString() {
+	public Optional<String> getBodyAsString() {
 		// Lazily instantiate a string instance using double-checked locking
 		String result = this.bodyAsString;
 
@@ -706,7 +706,7 @@ public final class Request {
 	 * @return non-preflight CORS request data, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	public Optional<@NonNull Cors> getCors() {
+	public Optional<Cors> getCors() {
 		return Optional.ofNullable(this.cors);
 	}
 
@@ -718,7 +718,7 @@ public final class Request {
 	 * @return preflight CORS request data, or {@link Optional#empty()} if none was specified
 	 */
 	@NonNull
-	public Optional<@NonNull CorsPreflight> getCorsPreflight() {
+	public Optional<CorsPreflight> getCorsPreflight() {
 		return Optional.ofNullable(this.corsPreflight);
 	}
 
@@ -837,7 +837,7 @@ public final class Request {
 	 * @throws IllegalQueryParameterException if the query parameter with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<@NonNull String> getQueryParameter(@NonNull String name) {
+	public Optional<String> getQueryParameter(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -863,7 +863,7 @@ public final class Request {
 	 * @throws IllegalFormParameterException if the form parameter with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<@NonNull String> getFormParameter(@NonNull String name) {
+	public Optional<String> getFormParameter(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -889,7 +889,7 @@ public final class Request {
 	 * @throws IllegalRequestHeaderException if the header with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<@NonNull String> getHeader(@NonNull String name) {
+	public Optional<String> getHeader(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -915,7 +915,7 @@ public final class Request {
 	 * @throws IllegalRequestCookieException if the cookie with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<@NonNull String> getCookie(@NonNull String name) {
+	public Optional<String> getCookie(@NonNull String name) {
 		requireNonNull(name);
 
 		try {
@@ -941,7 +941,7 @@ public final class Request {
 	 * @throws IllegalMultipartFieldException if the multipart field with the given {@code name} has multiple values
 	 */
 	@NonNull
-	public Optional<@NonNull MultipartField> getMultipartField(@NonNull String name) {
+	public Optional<MultipartField> getMultipartField(@NonNull String name) {
 		requireNonNull(name);
 
 		try {

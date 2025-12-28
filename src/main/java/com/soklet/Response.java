@@ -201,7 +201,7 @@ public final class Response {
 	 * @return the object representing the response body, or {@link Optional#empty()} if no response body should be written
 	 */
 	@NonNull
-	public Optional<@NonNull Object> getBody() {
+	public Optional<Object> getBody() {
 		return Optional.ofNullable(this.body);
 	}
 
