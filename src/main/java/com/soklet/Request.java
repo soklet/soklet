@@ -58,6 +58,8 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Any necessary decoding (path, URL parameter, {@code Content-Type: application/x-www-form-urlencoded}, etc.) will be automatically performed.  Unless otherwise indicated, all accessor methods will return decoded data.
  * <p>
+ * For performance, collection values (headers, query parameters, form parameters, cookies, multipart fields) are shallow-copied and not defensively deep-copied. Treat returned collections as immutable.
+ * <p>
  * Detailed documentation available at <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

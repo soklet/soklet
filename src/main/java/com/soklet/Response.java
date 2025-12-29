@@ -46,6 +46,8 @@ import static java.util.Objects.requireNonNull;
  *   <li>{@link #withRedirect(RedirectType, String)} (builder primed with redirect info)</li>
  * </ul>
  * <p>
+ * For performance, header collections are shallow-copied and not defensively deep-copied. Treat returned collections as immutable.
+ * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
