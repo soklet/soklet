@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.annotation.GET;
+import com.soklet.annotation.POST;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -52,8 +53,35 @@ public class OptionsTests {
 		});
 	}
 
+	@Test
+	public void options_excludes_head_when_no_get_or_head() {
+		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(PostOnlyResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
+				})
+				.build();
+
+		Soklet.runSimulator(cfg, simulator -> {
+			RequestResult result = simulator.performRequest(Request.withPath(HttpMethod.OPTIONS, "/submit").build());
+			Assertions.assertEquals(204, result.getMarshaledResponse().getStatusCode());
+			Map<String, Set<String>> headers = result.getMarshaledResponse().getHeaders();
+			Assertions.assertTrue(headers.containsKey("Allow"), "missing Allow header");
+			String allow = String.join(",", headers.get("Allow"));
+			Assertions.assertTrue(allow.contains("POST"));
+			Assertions.assertTrue(allow.contains("OPTIONS"));
+			Assertions.assertFalse(allow.contains("HEAD"));
+		});
+	}
+
 	public static class EchoResource {
 		@GET("/echo")
 		public String echo() {return "ok";}
+	}
+
+	public static class PostOnlyResource {
+		@POST("/submit")
+		public String submit() {return "ok";}
 	}
 }

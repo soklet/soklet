@@ -211,6 +211,11 @@ public final class SokletProcessor extends AbstractProcessor {
 				error(method, "Soklet: Resource Method must not be static");
 				// keep validating path so we can show all issues in one compile, but we won't collect if any error
 			}
+			// 2) must be public
+			boolean isPublic = method.getModifiers().contains(Modifier.PUBLIC);
+			if (!isPublic) {
+				error(method, "Soklet: Resource Method must be public");
+			}
 
 			// Repeatable-aware: iterate each occurrence on the same method
 			Annotation[] anns = method.getAnnotationsByType(cast(baseAnnotation));
@@ -249,7 +254,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				}
 
 				// Only collect if no errors were reported on this method occurrence
-				if (!pb.hadError && vr.ok && !method.getModifiers().contains(Modifier.STATIC)) {
+				if (!pb.hadError && vr.ok && isPublic && !method.getModifiers().contains(Modifier.STATIC)) {
 					String className = elements.getBinaryName(owner).toString();
 					String methodName = method.getSimpleName().toString();
 					String[] paramTypes = method.getParameters().stream()

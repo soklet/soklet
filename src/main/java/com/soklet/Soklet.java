@@ -918,27 +918,21 @@ public final class Soklet implements AutoCloseable {
 					return RequestResult.withMarshaledResponse(responseMarshaler.forCorsPreflightRejected(request, corsPreflight))
 							.resourceMethod(resourceMethod)
 							.build();
-				} else {
-					// Just a normal OPTIONS response (non-CORS-preflight).
-					// If there's a matching OPTIONS resource method for this OPTIONS request, then invoke it.
-					ResourceMethod optionsResourceMethod = matchingResourceMethodsByHttpMethod.get(HttpMethod.OPTIONS);
-
-					if (optionsResourceMethod != null) {
-						resourceMethod = optionsResourceMethod;
 					} else {
-						// Ensure OPTIONS is always present in the map, even if there is no explicit matching resource method for it
-						if (!matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.OPTIONS))
-							matchingResourceMethodsByHttpMethod.put(HttpMethod.OPTIONS, null);
+						// Just a normal OPTIONS response (non-CORS-preflight).
+						// If there's a matching OPTIONS resource method for this OPTIONS request, then invoke it.
+						ResourceMethod optionsResourceMethod = matchingResourceMethodsByHttpMethod.get(HttpMethod.OPTIONS);
 
-						// Ensure HEAD is always present in the map, even if there is no explicit matching resource method for it
-						if (!matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.HEAD))
-							matchingResourceMethodsByHttpMethod.put(HttpMethod.HEAD, null);
+						if (optionsResourceMethod != null) {
+							resourceMethod = optionsResourceMethod;
+						} else {
+							Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(matchingResourceMethodsByHttpMethod, true);
 
-						return RequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, matchingResourceMethodsByHttpMethod.keySet()))
-								.resourceMethod(resourceMethod)
-								.build();
+							return RequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, allowedHttpMethods))
+									.resourceMethod(resourceMethod)
+									.build();
+						}
 					}
-				}
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
 				// If there's a matching GET resource method for this HEAD request, then invoke it
 				Request headGetRequest = request.copy().httpMethod(HttpMethod.GET).finish();
@@ -954,24 +948,17 @@ public final class Soklet implements AutoCloseable {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
 				Map<HttpMethod, ResourceMethod> otherMatchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver, serverType);
 
-				Set<HttpMethod> matchingNonOptionsHttpMethods = otherMatchingResourceMethodsByHttpMethod.keySet().stream()
-						.filter(httpMethod -> httpMethod != HttpMethod.OPTIONS)
-						.collect(Collectors.toSet());
+					Set<HttpMethod> matchingNonOptionsHttpMethods = otherMatchingResourceMethodsByHttpMethod.keySet().stream()
+							.filter(httpMethod -> httpMethod != HttpMethod.OPTIONS)
+							.collect(Collectors.toSet());
 
-				// Ensure OPTIONS is always present in the map, even if there is no explicit matching resource method for it
-				if (!otherMatchingResourceMethodsByHttpMethod.containsKey(HttpMethod.OPTIONS))
-					otherMatchingResourceMethodsByHttpMethod.put(HttpMethod.OPTIONS, null);
-
-				// Ensure HEAD is always present in the map, even if there is no explicit matching resource method for it
-				if (!otherMatchingResourceMethodsByHttpMethod.containsKey(HttpMethod.HEAD))
-					otherMatchingResourceMethodsByHttpMethod.put(HttpMethod.HEAD, null);
-
-				if (matchingNonOptionsHttpMethods.size() > 0) {
-					// ...if some do, it's a 405
-					return RequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, otherMatchingResourceMethodsByHttpMethod.keySet()))
-							.resourceMethod(resourceMethod)
-							.build();
-				} else {
+					if (matchingNonOptionsHttpMethods.size() > 0) {
+						// ...if some do, it's a 405
+						Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(otherMatchingResourceMethodsByHttpMethod, true);
+						return RequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, allowedHttpMethods))
+								.resourceMethod(resourceMethod)
+								.build();
+					} else {
 					// no matching resource method found, it's a 404
 					return RequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
 							.resourceMethod(resourceMethod)
@@ -1204,6 +1191,24 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		return matchingResourceMethodsByHttpMethod;
+	}
+
+	@NonNull
+	private static Set<@NonNull HttpMethod> allowedHttpMethodsForResponse(@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> matchingResourceMethodsByHttpMethod,
+																																			 @NonNull Boolean includeOptions) {
+		requireNonNull(matchingResourceMethodsByHttpMethod);
+		requireNonNull(includeOptions);
+
+		Set<HttpMethod> allowedHttpMethods = EnumSet.noneOf(HttpMethod.class);
+		allowedHttpMethods.addAll(matchingResourceMethodsByHttpMethod.keySet());
+
+		if (includeOptions)
+			allowedHttpMethods.add(HttpMethod.OPTIONS);
+
+		if (matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.GET) || matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.HEAD))
+			allowedHttpMethods.add(HttpMethod.HEAD);
+
+		return allowedHttpMethods;
 	}
 
 	@NonNull

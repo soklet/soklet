@@ -114,6 +114,13 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void acceptLanguagesRejectZeroWeight() {
+		List<Locale> locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("en;q=0, fr");
+
+		assertEquals(List.of(Locale.forLanguageTag("fr")), locales, "Locales don't match");
+	}
+
+	@Test
 	public void acceptLanguagesRejectInvalidQualityValues() {
 		List<Locale> locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("en;q=bogus");
 

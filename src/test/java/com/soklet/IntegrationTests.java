@@ -712,6 +712,22 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void methodNotAllowed_405_excludesHeadWithoutGet() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+			URL u = new URL("http://127.0.0.1:" + port + "/len");
+			HttpURLConnection c = open("GET", u, Map.of("Accept", "text/plain"));
+			int code = c.getResponseCode();
+			Assertions.assertEquals(405, code);
+			List<String> allow = c.getHeaderFields().get("Allow");
+			Assertions.assertNotNull(allow);
+			Assertions.assertTrue(allow.contains("POST"));
+			Assertions.assertTrue(allow.contains("OPTIONS"));
+			Assertions.assertFalse(allow.contains("HEAD"));
+		}
+	}
+
+	@Test
 	public void cookies_quotedValueAndMultipleHeaders() throws Exception {
 		int port = findFreePort();
 		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {

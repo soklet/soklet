@@ -811,6 +811,9 @@ public final class Utilities {
 			List<Locale> locales = new ArrayList<>(languageRanges.size());
 
 			for (LanguageRange languageRange : languageRanges) {
+				if (!(languageRange.getWeight() > 0.0))
+					continue;
+
 				String range = languageRange.getRange();
 				String languageTag = range;
 

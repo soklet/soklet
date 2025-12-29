@@ -56,6 +56,28 @@ public class SokletProcessorTests {
 	}
 
 	@Test
+	void rejectsNonPublicResourceMethod() {
+		JavaFileObject src = JavaFileObjects.forSourceString("example.NonPublic",
+				"""
+						import com.soklet.annotation.GET;
+						
+						public class NonPublic {
+							@GET("/hidden")
+							private String hidden() { return "x"; }
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(src);
+
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining("Resource Method must be public")
+				.inFile(src)
+				.onLine(5);
+	}
+
+	@Test
 	void rejectsWrongReturnType() {
 		JavaFileObject src = JavaFileObjects.forSourceString("example.BadReturn",
 				"""
