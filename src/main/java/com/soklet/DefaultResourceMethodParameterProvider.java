@@ -949,8 +949,10 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			Type listElementType = null;
 			boolean wrappedInOptional = false;
 
-			if (parameter.getType().isAssignableFrom(Optional.class)) {
-				normalizedType = ((ParameterizedType) parameter.getParameterizedType()).getActualTypeArguments()[0];
+			if (Optional.class.equals(parameter.getType())) {
+				Type parameterizedType = parameter.getParameterizedType();
+				if (parameterizedType instanceof ParameterizedType parameterizedOptionalType)
+					normalizedType = parameterizedOptionalType.getActualTypeArguments()[0];
 				wrappedInOptional = true;
 			}
 
