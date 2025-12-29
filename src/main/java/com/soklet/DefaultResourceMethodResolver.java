@@ -471,23 +471,13 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		SortedMap<Long, Set<ResourceMethod>> resourceMethodsByPlaceholderCount = new TreeMap<>();
 
 		for (ResourceMethod resourceMethod : resourceMethods) {
-			Set<HttpMethodResourcePathDeclaration> declarations = getHttpMethodResourcePathDeclarationsByMethod().get(resourceMethod.getMethod());
+			long placeholderCount = resourceMethod.getResourcePathDeclaration().getComponents().stream()
+					.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.PLACEHOLDER)
+					.count();
 
-			if (declarations == null || declarations.isEmpty())
-				continue;
-
-			for (HttpMethodResourcePathDeclaration declaration : declarations) {
-				if (declaration.getHttpMethod() != request.getHttpMethod())
-					continue;
-
-				long placeholderCount = declaration.getResourcePathDeclaration().getComponents().stream()
-						.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.PLACEHOLDER)
-						.count();
-
-				resourceMethodsByPlaceholderCount
-						.computeIfAbsent(placeholderCount, k -> new HashSet<>())
-						.add(resourceMethod);
-			}
+			resourceMethodsByPlaceholderCount
+					.computeIfAbsent(placeholderCount, k -> new HashSet<>())
+					.add(resourceMethod);
 		}
 
 		return resourceMethodsByPlaceholderCount.isEmpty()
