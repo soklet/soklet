@@ -39,7 +39,7 @@ public interface MultipartParser {
 	 * @return a mapping of form field names to corresponding sets of form field values
 	 */
 	@NonNull
-	Map<String, Set<MultipartField>> extractMultipartFields(@NonNull Request request);
+	Map<@NonNull String, @NonNull Set<@NonNull MultipartField>> extractMultipartFields(@NonNull Request request);
 
 	/**
 	 * Acquires a threadsafe {@link MultipartParser}.

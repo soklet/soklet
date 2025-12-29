@@ -565,7 +565,7 @@ final class DefaultServer implements Server {
 	}
 
 	@NonNull
-	protected Map<String, Set<String>> headersFromMicrohttpRequest(@NonNull MicrohttpRequest microhttpRequest) {
+	protected Map<@NonNull String, @NonNull Set<@NonNull String>> headersFromMicrohttpRequest(@NonNull MicrohttpRequest microhttpRequest) {
 		requireNonNull(microhttpRequest);
 
 		// Turn Microhttp headers back into "name: value" lines for consumption by the Soklet parser/normalizer

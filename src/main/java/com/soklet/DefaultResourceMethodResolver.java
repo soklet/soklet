@@ -69,7 +69,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	@NonNull
-	private static final Map<String, Class<?>> PRIMITIVE_TYPES_BY_NAME;
+	private static final Map<@NonNull String, @NonNull Class<?>> PRIMITIVE_TYPES_BY_NAME;
 	@NonNull
 	private static final DefaultResourceMethodResolver DEFAULT_INSTANCE;
 
@@ -106,13 +106,13 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	private final Set<Method> methods;
+	private final Set<@NonNull Method> methods;
 	@NonNull
-	private final Map<HttpMethod, Set<Method>> methodsByHttpMethod;
+	private final Map<@NonNull HttpMethod, @NonNull Set<@NonNull Method>> methodsByHttpMethod;
 	@NonNull
-	private final Map<Method, Set<HttpMethodResourcePathDeclaration>> httpMethodResourcePathDeclarationsByMethod;
+	private final Map<@NonNull Method, @NonNull Set<@NonNull HttpMethodResourcePathDeclaration>> httpMethodResourcePathDeclarationsByMethod;
 	@NonNull
-	private final Set<ResourceMethod> resourceMethods;
+	private final Set<@NonNull ResourceMethod> resourceMethods;
 
 	private DefaultResourceMethodResolver() {
 		// Read declarations from SokletProcessor's compile-time lookup table
@@ -376,7 +376,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	protected Map<Method, Set<HttpMethodResourcePathDeclaration>> createHttpMethodResourcePathDeclarationsByMethod(@NonNull Set<Method> methods) {
+	protected Map<@NonNull Method, @NonNull Set<@NonNull HttpMethodResourcePathDeclaration>> createHttpMethodResourcePathDeclarationsByMethod(@NonNull Set<@NonNull Method> methods) {
 		requireNonNull(methods);
 
 		Map<Method, Set<HttpMethodResourcePathDeclaration>> httpMethodResourcePathDeclarationsByMethod = new HashMap<>();
@@ -453,8 +453,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	protected Set<ResourceMethod> mostSpecificResourceMethods(@NonNull Request request,
-																														@NonNull Set<ResourceMethod> resourceMethods) {
+	protected Set<@NonNull ResourceMethod> mostSpecificResourceMethods(@NonNull Request request,
+																																	@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
 		requireNonNull(request);
 		requireNonNull(resourceMethods);
 
@@ -496,7 +496,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	protected Map<HttpMethod, Set<Method>> createMethodsByHttpMethod(@NonNull Set<Method> methods) {
+	protected Map<@NonNull HttpMethod, @NonNull Set<@NonNull Method>> createMethodsByHttpMethod(@NonNull Set<@NonNull Method> methods) {
 		requireNonNull(methods);
 
 		Map<HttpMethod, Set<Method>> methodsByMethod = new HashMap<>();
@@ -534,7 +534,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	protected Set<Method> extractMethods(@NonNull Set<Class<?>> resourceClasses) {
+	protected Set<@NonNull Method> extractMethods(@NonNull Set<@NonNull Class<?>> resourceClasses) {
 		requireNonNull(resourceClasses);
 
 		Set<Method> methods = new HashSet<>();
@@ -575,12 +575,12 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	public Map<Method, Set<HttpMethodResourcePathDeclaration>> getHttpMethodResourcePathDeclarationsByMethod() {
+	public Map<@NonNull Method, @NonNull Set<@NonNull HttpMethodResourcePathDeclaration>> getHttpMethodResourcePathDeclarationsByMethod() {
 		return this.httpMethodResourcePathDeclarationsByMethod;
 	}
 
 	@NonNull
-	protected Map<HttpMethod, Set<Method>> getMethodsByHttpMethod() {
+	protected Map<@NonNull HttpMethod, @NonNull Set<@NonNull Method>> getMethodsByHttpMethod() {
 		return this.methodsByHttpMethod;
 	}
 

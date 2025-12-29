@@ -69,7 +69,7 @@ public final class ParameterizedHeaderValue {
 	@NonNull
 	private final String name;
 	@NonNull
-	private final List<Parameter> parameters;
+	private final List<@NonNull Parameter> parameters;
 
 	@NonNull
 	public static Builder withName(@NonNull String value) {
@@ -110,7 +110,7 @@ public final class ParameterizedHeaderValue {
 	 * The returned list is immutable.
 	 */
 	@NonNull
-	public List<Parameter> getParameters() {
+	public List<@NonNull Parameter> getParameters() {
 		return this.parameters;
 	}
 
@@ -145,7 +145,7 @@ public final class ParameterizedHeaderValue {
 
 	@NonNull
 	private static String render(@NonNull String value,
-															 @NonNull List<Parameter> parameters) {
+															 @NonNull List<@NonNull Parameter> parameters) {
 		requireNonNull(value);
 		requireNonNull(parameters);
 
@@ -286,7 +286,7 @@ public final class ParameterizedHeaderValue {
 		@NonNull
 		private final String name;
 		@NonNull
-		private final List<Parameter> parameters;
+		private final List<@NonNull Parameter> parameters;
 
 		private Builder(@NonNull String name) {
 			requireNonNull(name);

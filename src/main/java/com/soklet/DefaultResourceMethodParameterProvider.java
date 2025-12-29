@@ -518,8 +518,8 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		String parameterDescription = "multipart field";
 		String parameterName = extractParameterName(resourceMethod, parameter, multipart, multipart == null ? null : multipart.name());
 
-		List<String> values = new ArrayList<>();
-		List<MultipartField> valuesMetadata = new ArrayList<>();
+		List<@Nullable String> values = new ArrayList<>();
+		List<@NonNull MultipartField> valuesMetadata = new ArrayList<>();
 
 		for (Map.Entry<String, Set<MultipartField>> entry : request.getMultipartFields().entrySet()) {
 			String multipartName = entry.getKey();
@@ -571,8 +571,8 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		String parameterName = requestValueExtractionConfig.getParameterName();
 		String parameterDescription = requestValueExtractionConfig.getParameterDescription();
 		boolean optional = requestValueExtractionConfig.getOptional();
-		List<String> values = requestValueExtractionConfig.getValues();
-		List<T> valuesMetadata = requestValueExtractionConfig.getValuesMetadata();
+		List<@Nullable String> values = requestValueExtractionConfig.getValues();
+		List<@NonNull T> valuesMetadata = requestValueExtractionConfig.getValuesMetadata();
 		ValueMetadatumConverter<T> valueMetadatumConverter = requestValueExtractionConfig.getValueMetadatumConverter().orElse(null);
 		MissingExceptionProvider missingExceptionProvider = requestValueExtractionConfig.getMissingExceptionProvider();
 		IllegalExceptionProvider illegalExceptionProvider = requestValueExtractionConfig.getIllegalExceptionProvider();
@@ -587,7 +587,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		// Special handling for Lists (support for multiple query parameters/headers/cookies with the same name)
 		if (parameterType.isList()) {
-			List<Object> results = new ArrayList<>(values.size());
+			List<@Nullable Object> results = new ArrayList<>(values.size());
 
 			if (returnMetadataInsteadOfValues) {
 				for (int i = 0; i < valuesMetadata.size(); ++i) {
@@ -757,9 +757,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		@NonNull
 		private final Boolean optional;
 		@NonNull
-		private final List<String> values;
+		private final List<@Nullable String> values;
 		@NonNull
-		private final List<T> valuesMetadata;
+		private final List<@NonNull T> valuesMetadata;
 		@Nullable
 		private ValueMetadatumConverter<T> valueMetadatumConverter;
 		@NonNull
@@ -799,9 +799,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			@Nullable
 			private Boolean optional;
 			@Nullable
-			private List<String> values;
+			private List<@Nullable String> values;
 			@Nullable
-			private List<T> valuesMetadata;
+			private List<@NonNull T> valuesMetadata;
 			@Nullable
 			private ValueMetadatumConverter<T> valueMetadatumConverter;
 			@Nullable
@@ -834,13 +834,13 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			}
 
 			@NonNull
-			public Builder values(@Nullable List<String> values) {
+			public Builder values(@Nullable List<@Nullable String> values) {
 				this.values = values;
 				return this;
 			}
 
 			@NonNull
-			public Builder valuesMetadata(@Nullable List<T> valuesMetadata) {
+			public Builder valuesMetadata(@Nullable List<@NonNull T> valuesMetadata) {
 				this.valuesMetadata = valuesMetadata;
 				return this;
 			}
@@ -900,12 +900,12 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		}
 
 		@NonNull
-		public List<String> getValues() {
+		public List<@Nullable String> getValues() {
 			return this.values;
 		}
 
 		@NonNull
-		public List<T> getValuesMetadata() {
+		public List<@NonNull T> getValuesMetadata() {
 			return this.valuesMetadata;
 		}
 

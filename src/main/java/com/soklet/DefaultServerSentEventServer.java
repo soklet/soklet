@@ -187,15 +187,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	private final Boolean verifyConnectionOnceEstablished;
 	@NonNull
-	private final ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
+	private final ConcurrentHashMap<@NonNull ResourcePath, @NonNull DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
 	@NonNull
-	private final ConcurrentLruMap<ResourcePath, ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
+	private final ConcurrentLruMap<@NonNull ResourcePath, @NonNull ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
 	@NonNull
-	private final ConcurrentHashMap<DefaultServerSentEventConnection, DefaultServerSentEventBroadcaster> globalConnections;
+	private final ConcurrentHashMap<@NonNull DefaultServerSentEventConnection, @NonNull DefaultServerSentEventBroadcaster> globalConnections;
 	@NonNull
 	private final AtomicInteger activeConnectionCount;
 	@NonNull
-	private final ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> idleBroadcastersByResourcePath;
+	private final ConcurrentLruMap<@NonNull ResourcePath, @NonNull DefaultServerSentEventBroadcaster> idleBroadcastersByResourcePath;
 	@NonNull
 	private final ReentrantLock lock;
 	@NonNull
@@ -224,7 +224,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private volatile ServerSocketChannel serverSocketChannel;
 	// Does not need to be concurrent because it's calculated just once at initialization time and is never modified after
 	@NonNull
-	private volatile Map<ResourcePathDeclaration, ResourceMethod> resourceMethodsByResourcePathDeclaration;
+	private volatile Map<@NonNull ResourcePathDeclaration, @NonNull ResourceMethod> resourceMethodsByResourcePathDeclaration;
 	@Nullable
 	private RequestHandler requestHandler;
 	@Nullable
@@ -248,7 +248,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final Consumer<LogEvent> logEventConsumer;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@NonNull
-		private final Set<DefaultServerSentEventConnection> serverSentEventConnections;
+		private final Set<@NonNull DefaultServerSentEventConnection> serverSentEventConnections;
 
 		public DefaultServerSentEventBroadcaster(@NonNull ResourceMethod resourceMethod,
 																						 @NonNull ResourcePath resourcePath,
@@ -412,7 +412,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@NonNull
-		private Set<DefaultServerSentEventConnection> getServerSentEventConnections() {
+		private Set<@NonNull DefaultServerSentEventConnection> getServerSentEventConnections() {
 			return this.serverSentEventConnections;
 		}
 
@@ -2986,18 +2986,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	public Map<ResourcePathDeclaration, ResourceMethod> getResourceMethodsByResourcePathDeclaration() {
+	public Map<@NonNull ResourcePathDeclaration, @NonNull ResourceMethod> getResourceMethodsByResourcePathDeclaration() {
 		return this.resourceMethodsByResourcePathDeclaration;
 	}
 
 	// Package-private for test hook
 	@NonNull
-	ConcurrentHashMap<ResourcePath, DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
+	ConcurrentHashMap<@NonNull ResourcePath, @NonNull DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
 		return this.broadcastersByResourcePath;
 	}
 
 	@NonNull
-	protected ConcurrentLruMap<ResourcePath, ResourcePathDeclaration> getResourcePathDeclarationsByResourcePathCache() {
+	protected ConcurrentLruMap<@NonNull ResourcePath, @NonNull ResourcePathDeclaration> getResourcePathDeclarationsByResourcePathCache() {
 		return this.resourcePathDeclarationsByResourcePathCache;
 	}
 
@@ -3047,7 +3047,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	protected ConcurrentHashMap<DefaultServerSentEventConnection, DefaultServerSentEventBroadcaster> getGlobalConnections() {
+	protected ConcurrentHashMap<@NonNull DefaultServerSentEventConnection, @NonNull DefaultServerSentEventBroadcaster> getGlobalConnections() {
 		return this.globalConnections;
 	}
 
@@ -3057,7 +3057,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	protected ConcurrentLruMap<ResourcePath, DefaultServerSentEventBroadcaster> getIdleBroadcastersByResourcePath() {
+	protected ConcurrentLruMap<@NonNull ResourcePath, @NonNull DefaultServerSentEventBroadcaster> getIdleBroadcastersByResourcePath() {
 		return this.idleBroadcastersByResourcePath;
 	}
 

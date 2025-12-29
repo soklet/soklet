@@ -133,7 +133,7 @@ final class DefaultMultipartParser implements MultipartParser {
 
 	@Override
 	@NonNull
-	public Map<String, Set<MultipartField>> extractMultipartFields(@NonNull Request request) {
+	public Map<@NonNull String, @NonNull Set<@NonNull MultipartField>> extractMultipartFields(@NonNull Request request) {
 		byte[] requestBody = request.getBody().orElse(null);
 
 		if (requestBody == null)

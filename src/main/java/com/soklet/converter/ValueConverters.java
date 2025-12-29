@@ -52,7 +52,7 @@ import static java.lang.String.format;
 @ThreadSafe
 public final class ValueConverters {
 	@NonNull
-	private static final Set<ValueConverter<?, ?>> DEFAULT_VALUE_CONVERTERS;
+	private static final Set<@NonNull ValueConverter<?, ?>> DEFAULT_VALUE_CONVERTERS;
 
 	static {
 		DEFAULT_VALUE_CONVERTERS = Collections.unmodifiableSet(createDefaultValueConverters());
@@ -70,13 +70,13 @@ public final class ValueConverters {
 	 * @return the default set of converters
 	 */
 	@NonNull
-	public static Set<ValueConverter<?, ?>> defaultValueConverters() {
+	public static Set<@NonNull ValueConverter<?, ?>> defaultValueConverters() {
 		return DEFAULT_VALUE_CONVERTERS;
 	}
 
 	@NonNull
-	private static Set<ValueConverter<?, ?>> createDefaultValueConverters() {
-		Set<ValueConverter<?, ?>> defaultValueConverters = new HashSet<>();
+	private static Set<@NonNull ValueConverter<?, ?>> createDefaultValueConverters() {
+		Set<@NonNull ValueConverter<?, ?>> defaultValueConverters = new HashSet<>();
 
 		// Primitives
 		defaultValueConverters.add(new StringToIntegerValueConverter());

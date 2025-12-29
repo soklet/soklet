@@ -127,7 +127,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class Soklet implements AutoCloseable {
 	@NonNull
-	private static final Map<String, Set<String>> DEFAULT_ACCEPTED_HANDSHAKE_HEADERS;
+	private static final Map<@NonNull String, @NonNull Set<@NonNull String>> DEFAULT_ACCEPTED_HANDSHAKE_HEADERS;
 
 	static {
 		// Generally speaking, we always want these headers for SSE streaming responses.
@@ -395,7 +395,7 @@ public final class Soklet implements AutoCloseable {
 	@ThreadSafe
 	private static final class KeypressManager {
 		@NonNull
-		private static final Set<Soklet> SOKLET_REGISTRY;
+		private static final Set<@NonNull Soklet> SOKLET_REGISTRY;
 		@NonNull
 		private static final AtomicBoolean LISTENER_STARTED;
 
@@ -1160,9 +1160,9 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected Map<HttpMethod, ResourceMethod> resolveMatchingResourceMethodsByHttpMethod(@NonNull Request request,
-																																											 @NonNull ResourceMethodResolver resourceMethodResolver,
-																																											 @NonNull ServerType serverType) {
+	protected Map<@NonNull HttpMethod, @NonNull ResourceMethod> resolveMatchingResourceMethodsByHttpMethod(@NonNull Request request,
+																																														 @NonNull ResourceMethodResolver resourceMethodResolver,
+																																														 @NonNull ServerType serverType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethodResolver);
 		requireNonNull(serverType);
@@ -1556,10 +1556,10 @@ public final class Soklet implements AutoCloseable {
 		private final ResourcePath resourcePath;
 		// Maps the Consumer (Listener) to its Context object (e.g. Locale)
 		@NonNull
-		private final Map<Consumer<ServerSentEvent>, Object> eventConsumers;
+		private final Map<@NonNull Consumer<ServerSentEvent>, @NonNull Object> eventConsumers;
 		// Same goes for comments
 		@NonNull
-		private final Map<Consumer<String>, Object> commentConsumers;
+		private final Map<@NonNull Consumer<String>, @NonNull Object> commentConsumers;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
 
@@ -1709,12 +1709,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		protected Map<Consumer<ServerSentEvent>, Object> getEventConsumers() {
+		protected Map<@NonNull Consumer<ServerSentEvent>, @NonNull Object> getEventConsumers() {
 			return this.eventConsumers;
 		}
 
 		@NonNull
-		protected Map<Consumer<String>, Object> getCommentConsumers() {
+		protected Map<@NonNull Consumer<String>, @NonNull Object> getCommentConsumers() {
 			return this.commentConsumers;
 		}
 
@@ -1746,7 +1746,7 @@ public final class Soklet implements AutoCloseable {
 		private SokletConfig sokletConfig;
 		private ServerSentEventServer.@Nullable RequestHandler requestHandler;
 		@NonNull
-		private final ConcurrentHashMap<ResourcePath, MockServerSentEventBroadcaster> broadcastersByResourcePath;
+		private final ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockServerSentEventBroadcaster> broadcastersByResourcePath;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
 		@NonNull
@@ -1877,7 +1877,7 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		protected ConcurrentHashMap<ResourcePath, MockServerSentEventBroadcaster> getBroadcastersByResourcePath() {
+		protected ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockServerSentEventBroadcaster> getBroadcastersByResourcePath() {
 			return this.broadcastersByResourcePath;
 		}
 

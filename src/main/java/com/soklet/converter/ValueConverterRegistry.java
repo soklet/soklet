@@ -51,7 +51,7 @@ public final class ValueConverterRegistry {
 	@NonNull
 	private static final ValueConverter<?, ?> REFLEXIVE_VALUE_CONVERTER;
 	@NonNull
-	private static final Map<Type, Type> PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS;
+	private static final Map<@NonNull Type, @NonNull Type> PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS;
 
 	static {
 		REFLEXIVE_VALUE_CONVERTER = new ReflexiveValueConverter<>();
@@ -76,7 +76,7 @@ public final class ValueConverterRegistry {
 	// From a user's perspective, it would be burdensome to register converters for these ahead of time -
 	// it's preferable to have enum conversion "just work" for string names, which is almost always what's desired.
 	@NonNull
-	private final ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey;
+	private final ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey;
 
 	/**
 	 * Acquires a registry with a sensible default set of converters as specified by {@link ValueConverters#defaultValueConverters()}.
@@ -99,12 +99,12 @@ public final class ValueConverterRegistry {
 	 * @return a registry instance with sensible defaults, supplemented with custom converters
 	 */
 	@NonNull
-	public static ValueConverterRegistry withDefaultsSupplementedBy(@NonNull Set<ValueConverter<?, ?>> customValueConverters) {
+	public static ValueConverterRegistry withDefaultsSupplementedBy(@NonNull Set<@NonNull ValueConverter<?, ?>> customValueConverters) {
 		requireNonNull(customValueConverters);
 
-		Set<ValueConverter<?, ?>> defaultValueConverters = ValueConverters.defaultValueConverters();
+		Set<@NonNull ValueConverter<?, ?>> defaultValueConverters = ValueConverters.defaultValueConverters();
 
-		ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey = new ConcurrentHashMap<>(
+		ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey = new ConcurrentHashMap<>(
 				defaultValueConverters.size()
 						+ customValueConverters.size()
 						+ 1 // reflexive converter
@@ -133,7 +133,7 @@ public final class ValueConverterRegistry {
 		return new CacheKey(valueConverter.getFromType(), valueConverter.getToType());
 	}
 
-	private ValueConverterRegistry(@NonNull ConcurrentHashMap<CacheKey, ValueConverter<?, ?>> valueConvertersByCacheKey) {
+	private ValueConverterRegistry(@NonNull ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey) {
 		requireNonNull(valueConvertersByCacheKey);
 		this.valueConvertersByCacheKey = valueConvertersByCacheKey;
 	}
@@ -246,7 +246,7 @@ public final class ValueConverterRegistry {
 	}
 
 	@NonNull
-	protected Map<CacheKey, ValueConverter<?, ?>> getValueConvertersByCacheKey() {
+	protected Map<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> getValueConvertersByCacheKey() {
 		return this.valueConvertersByCacheKey;
 	}
 
