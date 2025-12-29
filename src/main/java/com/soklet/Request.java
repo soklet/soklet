@@ -1374,6 +1374,16 @@ public final class Request {
 
 		@NonNull
 		public Request finish() {
+			if (this.queryParametersModified) {
+				Map<String, Set<String>> queryParameters = this.builder.queryParameters;
+
+				if (queryParameters == null || queryParameters.isEmpty()) {
+					this.builder.rawQuery(null);
+				} else {
+					this.builder.rawQuery(Utilities.encodeQueryParameters(queryParameters, QueryFormat.RFC_3986_STRICT));
+				}
+			}
+
 			return this.builder.build();
 		}
 	}

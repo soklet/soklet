@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.InetSocketAddress;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -57,5 +59,24 @@ public class RequestTests {
 
 		Assertions.assertEquals("/a/../b/", request.getRawPath());
 		Assertions.assertEquals("/b", request.getPath());
+	}
+
+	@Test
+	public void copyUpdatesRawQueryWhenQueryParametersChange() {
+		Request request = Request.withRawUrl(HttpMethod.GET, "/search?q=one%20two&lang=en").build();
+
+		Assertions.assertEquals("q=one%20two&lang=en", request.getRawQuery().orElse(null));
+
+		Request updated = request.copy()
+				.queryParameters(parameters -> {
+					parameters.clear();
+					parameters.put("q", new LinkedHashSet<>(List.of("new value")));
+					parameters.put("lang", new LinkedHashSet<>(List.of("en")));
+					parameters.put("page", new LinkedHashSet<>(List.of("2")));
+				})
+				.finish();
+
+		Assertions.assertEquals("q=new%20value&lang=en&page=2", updated.getRawQuery().orElse(null));
+		Assertions.assertEquals("/search?q=new%20value&lang=en&page=2", updated.getRawPathAndQuery());
 	}
 }
