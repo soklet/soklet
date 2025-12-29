@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.annotation.GET;
+import com.soklet.annotation.PathParameter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -29,7 +30,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -106,14 +106,28 @@ public class RequestHandlingRegressionTests {
 	}
 
 	@Test
-	public void multipleRouteDeclarationsDoNotAffectSpecificity() {
-		ResourceMethodResolver resolver = ResourceMethodResolver.withClasses(
-				Set.of(MultiGetResource.class, ItemsResource.class));
+	public void explicitRouteBeatsPlaceholder() {
+		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RouteSpecificityResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
+				})
+				.build();
 
-		Request request = Request.withPath(HttpMethod.GET, "/items/123").build();
+		Soklet.runSimulator(configuration, simulator -> {
+			RequestResult specialResult = simulator.performRequest(
+					Request.withPath(HttpMethod.GET, "/items/special").build());
 
-		assertThrows(RuntimeException.class,
-				() -> resolver.resourceMethodForRequest(request, ServerType.STANDARD_HTTP));
+			assertEquals(Integer.valueOf(200), specialResult.getMarshaledResponse().getStatusCode());
+			assertEquals("special", specialResult.getResponse().get().getBody().get());
+
+			RequestResult itemResult = simulator.performRequest(
+					Request.withPath(HttpMethod.GET, "/items/123").build());
+
+			assertEquals(Integer.valueOf(200), itemResult.getMarshaledResponse().getStatusCode());
+			assertEquals("item:123", itemResult.getResponse().get().getBody().get());
+		});
 	}
 
 	@ThreadSafe
@@ -136,19 +150,15 @@ public class RequestHandlingRegressionTests {
 	}
 
 	@ThreadSafe
-	public static class MultiGetResource {
+	public static class RouteSpecificityResource {
 		@GET("/items/{id}")
-		@GET("/items/special")
-		public String getItem() {
-			return "ok";
+		public String getItem(@PathParameter String id) {
+			return "item:" + id;
 		}
-	}
 
-	@ThreadSafe
-	public static class ItemsResource {
-		@GET("/items/{id}")
-		public String getItem() {
-			return "ok";
+		@GET("/items/special")
+		public String getSpecialItem() {
+			return "special";
 		}
 	}
 }

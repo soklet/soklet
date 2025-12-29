@@ -56,8 +56,6 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
@@ -85,6 +83,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				"double", double.class,
 				"void", void.class
 		);
+
 		DEFAULT_INSTANCE = new DefaultResourceMethodResolver();
 	}
 
@@ -190,8 +189,12 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 		// Line format written by SokletProcessor:
 		// METHOD|b64(path)|b64(class)|b64(method)|b64(param1;param2;...)|true|false
-		private static ResourceMethodDeclaration parseLine(String line) {
+		@NonNull
+		private static ResourceMethodDeclaration parseLine(@NonNull String line) {
+			requireNonNull(line);
+
 			String[] parts = line.split("\\|", -1);
+
 			if (parts.length != 6) return null;
 
 			HttpMethod http = HttpMethod.valueOf(parts[0]);
@@ -207,7 +210,10 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			return new ResourceMethodDeclaration(http, path, className, methodName, paramTypes, sse);
 		}
 
-		private static List<ResourceMethodDeclaration> dedupeAndOrder(List<ResourceMethodDeclaration> in) {
+		@NonNull
+		private static List<ResourceMethodDeclaration> dedupeAndOrder(@NonNull List<ResourceMethodDeclaration> in) {
+			requireNonNull(in);
+
 			Map<String, ResourceMethodDeclaration> byKey = new LinkedHashMap<>();
 
 			for (ResourceMethodDeclaration r : in) {
@@ -218,11 +224,13 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			}
 
 			List<ResourceMethodDeclaration> out = new ArrayList<>(byKey.values());
+
 			out.sort(Comparator
 					.comparing((ResourceMethodDeclaration r) -> r.httpMethod().name())
 					.thenComparing(ResourceMethodDeclaration::path)
 					.thenComparing(ResourceMethodDeclaration::className)
 					.thenComparing(ResourceMethodDeclaration::methodName));
+
 			return out;
 		}
 	}
@@ -311,7 +319,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	@NonNull
 	@Override
 	public Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
-																																	 @NonNull ServerType serverType) {
+																													 @NonNull ServerType serverType) {
 		requireNonNull(request);
 		requireNonNull(serverType);
 
@@ -344,14 +352,6 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 							httpMethodResourcePathDeclaration.isServerSentEventSource()));
 				}
 		}
-
-		// Varargs precedence: if any matching resource method is defined with a varargs placeholder, only consider those.
-		Set<ResourceMethod> varargsMatches = matchingResourceMethods.stream()
-				.filter(resourceMethod -> resourceMethod.getResourcePathDeclaration().getVarargsComponent().isPresent())
-				.collect(Collectors.toSet());
-
-		if (!varargsMatches.isEmpty())
-			matchingResourceMethods = varargsMatches;
 
 		// Simple case - if exactly one resource method remains, use it.
 		if (matchingResourceMethods.size() == 1)
@@ -454,35 +454,42 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	@NonNull
 	protected Set<@NonNull ResourceMethod> mostSpecificResourceMethods(@NonNull Request request,
-																																	@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
+																																		 @NonNull Set<@NonNull ResourceMethod> resourceMethods) {
 		requireNonNull(request);
 		requireNonNull(resourceMethods);
 
-		// If any of the matching resource methods use a varargs placeholder, restrict to just those.
-		Set<ResourceMethod> varargsResourceMethods = resourceMethods.stream()
-				.filter(resourceMethod -> resourceMethod.getResourcePathDeclaration().getVarargsComponent().isPresent())
+		// Choose the most specific routes: prefer non-varargs, then fewer placeholders, then more literals.
+		Comparator<ResourceMethod> specificityComparator = Comparator
+				.comparing((ResourceMethod resourceMethod) -> resourceMethod.getResourcePathDeclaration().getVarargsComponent().isPresent())
+				.thenComparingLong(DefaultResourceMethodResolver::placeholderCount)
+				.thenComparingLong(resourceMethod -> -literalCount(resourceMethod));
+
+		ResourceMethod mostSpecific = resourceMethods.stream()
+				.min(specificityComparator)
+				.orElse(null);
+
+		if (mostSpecific == null)
+			return Collections.emptySet();
+
+		return resourceMethods.stream()
+				.filter(resourceMethod -> specificityComparator.compare(resourceMethod, mostSpecific) == 0)
 				.collect(Collectors.toSet());
+	}
 
-		if (!varargsResourceMethods.isEmpty())
-			resourceMethods = varargsResourceMethods;
+	private static long placeholderCount(@NonNull ResourceMethod resourceMethod) {
+		requireNonNull(resourceMethod);
 
-		// Group by the count of placeholder components (non-literal) in the declaration.
-		// Fewer placeholders means the route is more specific.
-		SortedMap<Long, Set<ResourceMethod>> resourceMethodsByPlaceholderCount = new TreeMap<>();
+		return resourceMethod.getResourcePathDeclaration().getComponents().stream()
+				.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.PLACEHOLDER)
+				.count();
+	}
 
-		for (ResourceMethod resourceMethod : resourceMethods) {
-			long placeholderCount = resourceMethod.getResourcePathDeclaration().getComponents().stream()
-					.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.PLACEHOLDER)
-					.count();
+	private static long literalCount(@NonNull ResourceMethod resourceMethod) {
+		requireNonNull(resourceMethod);
 
-			resourceMethodsByPlaceholderCount
-					.computeIfAbsent(placeholderCount, k -> new HashSet<>())
-					.add(resourceMethod);
-		}
-
-		return resourceMethodsByPlaceholderCount.isEmpty()
-				? Collections.emptySet()
-				: resourceMethodsByPlaceholderCount.get(resourceMethodsByPlaceholderCount.firstKey());
+		return resourceMethod.getResourcePathDeclaration().getComponents().stream()
+				.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.LITERAL)
+				.count();
 	}
 
 	@NonNull
