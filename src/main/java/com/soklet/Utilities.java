@@ -71,7 +71,9 @@ public final class Utilities {
 	@NonNull
 	private static final byte[] EMPTY_BYTE_ARRAY;
 	@NonNull
-	private static final Map<@NonNull String, @NonNull Locale> LOCALES_BY_LANGUAGE_RANGE_RANGE;
+	private static final List<@NonNull Locale> AVAILABLE_LOCALES;
+	@NonNull
+	private static final Map<@NonNull String, @NonNull Locale> LOCALES_BY_LANGUAGE_TAG;
 	@NonNull
 	private static final Pattern HEAD_WHITESPACE_PATTERN;
 	@NonNull
@@ -83,14 +85,18 @@ public final class Utilities {
 		EMPTY_BYTE_ARRAY = new byte[0];
 
 		Locale[] locales = Locale.getAvailableLocales();
-		Map<String, Locale> localesByLanguageRangeRange = new LinkedHashMap<>(locales.length);
+		AVAILABLE_LOCALES = Collections.unmodifiableList(Arrays.asList(locales));
+		
+		Map<String, Locale> localesByLanguageTag = new LinkedHashMap<>(locales.length);
 
 		for (Locale locale : locales) {
-			LanguageRange languageRange = new LanguageRange(locale.toLanguageTag());
-			localesByLanguageRangeRange.put(languageRange.getRange(), locale);
+			String languageTag = locale.toLanguageTag();
+
+			if (languageTag != null && !languageTag.isBlank())
+				localesByLanguageTag.putIfAbsent(languageTag.toLowerCase(Locale.ROOT), locale);
 		}
 
-		LOCALES_BY_LANGUAGE_RANGE_RANGE = Collections.unmodifiableMap(localesByLanguageRangeRange);
+		LOCALES_BY_LANGUAGE_TAG = Collections.unmodifiableMap(localesByLanguageTag);
 
 		boolean virtualThreadsAvailable = false;
 
@@ -232,7 +238,7 @@ public final class Utilities {
 	 */
 	@NonNull
 	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromQuery(@NonNull String query,
-																																				 @NonNull QueryFormat queryFormat) {
+																																																		@NonNull QueryFormat queryFormat) {
 		requireNonNull(query);
 		requireNonNull(queryFormat);
 
@@ -256,8 +262,8 @@ public final class Utilities {
 	 */
 	@NonNull
 	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromQuery(@NonNull String query,
-																																				 @NonNull QueryFormat queryFormat,
-																																				 @NonNull Charset charset) {
+																																																		@NonNull QueryFormat queryFormat,
+																																																		@NonNull Charset charset) {
 		requireNonNull(query);
 		requireNonNull(queryFormat);
 		requireNonNull(charset);
@@ -283,7 +289,7 @@ public final class Utilities {
 	 */
 	@NonNull
 	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromUrl(@NonNull String url,
-																																			 @NonNull QueryFormat queryFormat) {
+																																																	@NonNull QueryFormat queryFormat) {
 		requireNonNull(url);
 		requireNonNull(queryFormat);
 
@@ -307,8 +313,8 @@ public final class Utilities {
 	 */
 	@NonNull
 	public static Map<@NonNull String, @NonNull Set<@NonNull String>> extractQueryParametersFromUrl(@NonNull String url,
-																																			 @NonNull QueryFormat queryFormat,
-																																			 @NonNull Charset charset) {
+																																																	@NonNull QueryFormat queryFormat,
+																																																	@NonNull Charset charset) {
 		requireNonNull(url);
 		requireNonNull(queryFormat);
 		requireNonNull(charset);
@@ -657,7 +663,10 @@ public final class Utilities {
 			if (rawPath == null || rawPath.isEmpty())
 				rawPath = "/";
 
-			String decodedPath = performDecoding ? percentDecode(rawPath, StandardCharsets.UTF_8) : rawPath;
+			if (!performDecoding)
+				return rawPath;
+
+			String decodedPath = percentDecode(rawPath, StandardCharsets.UTF_8);
 
 			// Sanitize path traversal (e.g. /a/../b -> /b)
 			decodedPath = removeDotSegments(decodedPath);
@@ -679,7 +688,13 @@ public final class Utilities {
 			if (q != -1)
 				path = path.substring(0, q);
 
-			String decodedPath = performDecoding ? percentDecode(path, StandardCharsets.UTF_8) : path;
+			if (path.isEmpty())
+				path = "/";
+
+			if (!performDecoding)
+				return path;
+
+			String decodedPath = percentDecode(path, StandardCharsets.UTF_8);
 
 			// Sanitize path traversal (e.g. /a/../b -> /b)
 			decodedPath = removeDotSegments(decodedPath);
@@ -809,11 +824,30 @@ public final class Utilities {
 
 		try {
 			List<LanguageRange> languageRanges = LanguageRange.parse(acceptLanguageHeaderValue);
+			List<Locale> locales = new ArrayList<>(languageRanges.size());
+			boolean sawWildcard = false;
 
-			return languageRanges.stream()
-					.map(languageRange -> LOCALES_BY_LANGUAGE_RANGE_RANGE.get(languageRange.getRange()))
-					.filter(locale -> locale != null)
-					.collect(Collectors.toList());
+			for (LanguageRange languageRange : languageRanges) {
+				String range = languageRange.getRange();
+
+				if ("*".equals(range)) {
+					sawWildcard = true;
+					continue;
+				}
+
+				Locale locale = LOCALES_BY_LANGUAGE_TAG.get(range.toLowerCase(Locale.ROOT));
+
+				if (locale == null)
+					locale = Locale.lookup(List.of(languageRange), AVAILABLE_LOCALES);
+
+				if (locale != null && !locales.contains(locale))
+					locales.add(locale);
+			}
+
+			if (locales.isEmpty() && sawWildcard)
+				locales.add(Locale.getDefault());
+
+			return Collections.unmodifiableList(locales);
 		} catch (Exception ignored) {
 			return List.of();
 		}

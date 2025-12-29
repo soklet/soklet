@@ -1020,7 +1020,10 @@ public final class Soklet implements AutoCloseable {
 		if (responseObject == null) {
 			response = Response.withStatusCode(204).build();
 		} else if (responseObject instanceof MarshaledResponse) {
-			return RequestResult.withMarshaledResponse((MarshaledResponse) responseObject)
+			MarshaledResponse marshaledResponse = (MarshaledResponse) responseObject;
+			enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent());
+
+			return RequestResult.withMarshaledResponse(marshaledResponse)
 					.resourceMethod(resourceMethod)
 					.build();
 		} else if (responseObject instanceof Response) {
@@ -1037,7 +1040,11 @@ public final class Soklet implements AutoCloseable {
 			response = Response.withStatusCode(200).body(responseObject).build();
 		}
 
+		enforceBodylessStatusCode(response.getStatusCode(), response.getBody().isPresent());
+
 		MarshaledResponse marshaledResponse = responseMarshaler.forResourceMethod(request, response, resourceMethod);
+
+		enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent());
 
 		return RequestResult.withMarshaledResponse(marshaledResponse)
 				.response(response)
@@ -1068,6 +1075,20 @@ public final class Soklet implements AutoCloseable {
 				.headers(finalHeaders)
 				.cookies(accepted.getCookies())
 				.build();
+	}
+
+	private static void enforceBodylessStatusCode(@NonNull Integer statusCode,
+																								@NonNull Boolean hasBody) {
+		requireNonNull(statusCode);
+		requireNonNull(hasBody);
+
+		if (hasBody && isBodylessStatusCode(statusCode))
+			throw new IllegalStateException(format("HTTP status code %d must not include a response body", statusCode));
+	}
+
+	private static boolean isBodylessStatusCode(@NonNull Integer statusCode) {
+		requireNonNull(statusCode);
+		return (statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 304;
 	}
 
 	@NonNull

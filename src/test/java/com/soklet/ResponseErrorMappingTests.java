@@ -62,6 +62,22 @@ public class ResponseErrorMappingTests {
 		});
 	}
 
+	@Test
+	public void bodyless_response_with_body_maps_to_500() {
+		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ExplodeResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
+				})
+				.build();
+
+		Soklet.runSimulator(cfg, simulator -> {
+			RequestResult result = simulator.performRequest(Request.withPath(HttpMethod.GET, "/bodyless").build());
+			Assertions.assertEquals(500, result.getMarshaledResponse().getStatusCode());
+		});
+	}
+
 	public static class ExplodeResource {
 		@GET("/explode")
 		public String explode() {
@@ -71,6 +87,13 @@ public class ResponseErrorMappingTests {
 		@GET("/bad-request")
 		public String badRequest() {
 			throw new IllegalRequestBodyException("nope");
+		}
+
+		@GET("/bodyless")
+		public Response bodyless() {
+			return Response.withStatusCode(204)
+					.body("nope")
+					.build();
 		}
 	}
 }

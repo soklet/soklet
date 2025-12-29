@@ -50,4 +50,12 @@ public class RequestTests {
 
 		Assertions.assertEquals(address, request.getRemoteAddress().orElse(null));
 	}
+
+	@Test
+	public void rawPathPreservesDotSegmentsAndTrailingSlash() {
+		Request request = Request.withRawUrl(HttpMethod.GET, "/a/../b/").build();
+
+		Assertions.assertEquals("/a/../b/", request.getRawPath());
+		Assertions.assertEquals("/b", request.getPath());
+	}
 }
