@@ -509,6 +509,7 @@ public final class Soklet implements AutoCloseable {
 		AtomicBoolean willStartResponseWritingCompleted = new AtomicBoolean(false);
 		AtomicBoolean didFinishResponseWritingCompleted = new AtomicBoolean(false);
 		AtomicBoolean didFinishRequestHandlingCompleted = new AtomicBoolean(false);
+		AtomicBoolean didInvokeWrapRequestConsumer = new AtomicBoolean(false);
 
 		List<Throwable> throwables = new ArrayList<>(10);
 
@@ -525,6 +526,7 @@ public final class Soklet implements AutoCloseable {
 
 		try {
 			requestInterceptor.wrapRequest(request, (wrappedRequest) -> {
+				didInvokeWrapRequestConsumer.set(true);
 				requestHolder.set(wrappedRequest);
 
 				try {
@@ -559,6 +561,8 @@ public final class Soklet implements AutoCloseable {
 				}
 
 				try {
+					AtomicBoolean didInvokeMarshaledResponseConsumer = new AtomicBoolean(false);
+
 					requestInterceptor.interceptRequest(requestHolder.get(), resourceMethodHolder.get(), (interceptorRequest) -> {
 						requestHolder.set(interceptorRequest);
 
@@ -628,8 +632,15 @@ public final class Soklet implements AutoCloseable {
 							}
 						}
 					}, (interceptorMarshaledResponse) -> {
+						requireNonNull(interceptorMarshaledResponse);
+						didInvokeMarshaledResponseConsumer.set(true);
 						marshaledResponseHolder.set(interceptorMarshaledResponse);
 					});
+
+					if (!didInvokeMarshaledResponseConsumer.get()) {
+						requestResultHolder.set(null);
+						throw new IllegalStateException(format("%s::interceptRequest must call marshaledResponseConsumer", RequestInterceptor.class.getSimpleName()));
+					}
 				} catch (Throwable t) {
 					throwables.add(t);
 
@@ -660,10 +671,10 @@ public final class Soklet implements AutoCloseable {
 				} finally {
 					try {
 						try {
-						lifecycleObserver.willWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
-					} finally {
-						willStartResponseWritingCompleted.set(true);
-					}
+							lifecycleObserver.willWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
+						} finally {
+							willStartResponseWritingCompleted.set(true);
+						}
 
 						Instant responseWriteStarted = Instant.now();
 
@@ -738,6 +749,9 @@ public final class Soklet implements AutoCloseable {
 					}
 				}
 			});
+
+			if (!didInvokeWrapRequestConsumer.get())
+				throw new IllegalStateException(format("%s::wrapRequest must call requestConsumer", RequestInterceptor.class.getSimpleName()));
 		} catch (Throwable t) {
 			// If an error occurred during request wrapping, it's possible a response was never written/communicated back to LifecycleObserver.
 			// Detect that here and inform LifecycleObserver accordingly.
@@ -920,21 +934,21 @@ public final class Soklet implements AutoCloseable {
 					return RequestResult.withMarshaledResponse(responseMarshaler.forCorsPreflightRejected(request, corsPreflight))
 							.resourceMethod(resourceMethod)
 							.build();
+				} else {
+					// Just a normal OPTIONS response (non-CORS-preflight).
+					// If there's a matching OPTIONS resource method for this OPTIONS request, then invoke it.
+					ResourceMethod optionsResourceMethod = matchingResourceMethodsByHttpMethod.get(HttpMethod.OPTIONS);
+
+					if (optionsResourceMethod != null) {
+						resourceMethod = optionsResourceMethod;
 					} else {
-						// Just a normal OPTIONS response (non-CORS-preflight).
-						// If there's a matching OPTIONS resource method for this OPTIONS request, then invoke it.
-						ResourceMethod optionsResourceMethod = matchingResourceMethodsByHttpMethod.get(HttpMethod.OPTIONS);
+						Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(matchingResourceMethodsByHttpMethod, true);
 
-						if (optionsResourceMethod != null) {
-							resourceMethod = optionsResourceMethod;
-						} else {
-							Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(matchingResourceMethodsByHttpMethod, true);
-
-							return RequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, allowedHttpMethods))
-									.resourceMethod(resourceMethod)
-									.build();
-						}
+						return RequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, allowedHttpMethods))
+								.resourceMethod(resourceMethod)
+								.build();
 					}
+				}
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
 				// If there's a matching GET resource method for this HEAD request, then invoke it
 				Request headGetRequest = request.copy().httpMethod(HttpMethod.GET).finish();
@@ -950,17 +964,17 @@ public final class Soklet implements AutoCloseable {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
 				Map<HttpMethod, ResourceMethod> otherMatchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver, serverType);
 
-					Set<HttpMethod> matchingNonOptionsHttpMethods = otherMatchingResourceMethodsByHttpMethod.keySet().stream()
-							.filter(httpMethod -> httpMethod != HttpMethod.OPTIONS)
-							.collect(Collectors.toSet());
+				Set<HttpMethod> matchingNonOptionsHttpMethods = otherMatchingResourceMethodsByHttpMethod.keySet().stream()
+						.filter(httpMethod -> httpMethod != HttpMethod.OPTIONS)
+						.collect(Collectors.toSet());
 
-					if (matchingNonOptionsHttpMethods.size() > 0) {
-						// ...if some do, it's a 405
-						Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(otherMatchingResourceMethodsByHttpMethod, true);
-						return RequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, allowedHttpMethods))
-								.resourceMethod(resourceMethod)
-								.build();
-					} else {
+				if (matchingNonOptionsHttpMethods.size() > 0) {
+					// ...if some do, it's a 405
+					Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(otherMatchingResourceMethodsByHttpMethod, true);
+					return RequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, allowedHttpMethods))
+							.resourceMethod(resourceMethod)
+							.build();
+				} else {
 					// no matching resource method found, it's a 404
 					return RequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
 							.resourceMethod(resourceMethod)
@@ -1171,8 +1185,8 @@ public final class Soklet implements AutoCloseable {
 
 	@NonNull
 	protected Map<@NonNull HttpMethod, @NonNull ResourceMethod> resolveMatchingResourceMethodsByHttpMethod(@NonNull Request request,
-																																														 @NonNull ResourceMethodResolver resourceMethodResolver,
-																																														 @NonNull ServerType serverType) {
+																																																				 @NonNull ResourceMethodResolver resourceMethodResolver,
+																																																				 @NonNull ServerType serverType) {
 		requireNonNull(request);
 		requireNonNull(resourceMethodResolver);
 		requireNonNull(serverType);
@@ -1197,7 +1211,7 @@ public final class Soklet implements AutoCloseable {
 
 	@NonNull
 	private static Set<@NonNull HttpMethod> allowedHttpMethodsForResponse(@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> matchingResourceMethodsByHttpMethod,
-																																			 @NonNull Boolean includeOptions) {
+																																				@NonNull Boolean includeOptions) {
 		requireNonNull(matchingResourceMethodsByHttpMethod);
 		requireNonNull(includeOptions);
 

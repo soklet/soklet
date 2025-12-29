@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -102,6 +104,72 @@ public class RequestHandlingRegressionTests {
 			assertEquals(Integer.valueOf(200), result.getMarshaledResponse().getStatusCode());
 			assertEquals(Set.of("application/custom"),
 					result.getMarshaledResponse().getHeaders().get("Content-Type"));
+		});
+	}
+
+	@Test
+	public void wrapRequestMustAdvanceRequestFlow() {
+		List<LogEvent> logEvents = new ArrayList<>();
+
+		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(WrappedRequestResource.class)))
+				.requestInterceptor(new RequestInterceptor() {
+					@Override
+					public void wrapRequest(@NonNull Request request,
+																	@NonNull Consumer<Request> requestConsumer) {
+						// Intentionally do not advance the request.
+					}
+				})
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						logEvents.add(logEvent);
+					}
+				})
+				.build();
+
+		Soklet.runSimulator(configuration, simulator -> {
+			RequestResult result = simulator.performRequest(
+					Request.withPath(HttpMethod.GET, "/greet").build());
+
+			assertEquals(Integer.valueOf(500), result.getMarshaledResponse().getStatusCode());
+			Assertions.assertTrue(logEvents.stream()
+							.anyMatch(event -> event.getLogEventType() == LogEventType.REQUEST_INTERCEPTOR_WRAP_REQUEST_FAILED),
+					"Expected wrapRequest failure log event");
+		});
+	}
+
+	@Test
+	public void interceptRequestMustWriteResponse() {
+		List<LogEvent> logEvents = new ArrayList<>();
+
+		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(WrappedRequestResource.class)))
+				.requestInterceptor(new RequestInterceptor() {
+					@Override
+					public void interceptRequest(@NonNull Request request,
+																			 @Nullable ResourceMethod resourceMethod,
+																			 @NonNull Function<Request, MarshaledResponse> requestHandler,
+																			 @NonNull Consumer<MarshaledResponse> marshaledResponseConsumer) {
+						requestHandler.apply(request);
+					}
+				})
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						logEvents.add(logEvent);
+					}
+				})
+				.build();
+
+		Soklet.runSimulator(configuration, simulator -> {
+			RequestResult result = simulator.performRequest(
+					Request.withPath(HttpMethod.GET, "/greet").build());
+
+			assertEquals(Integer.valueOf(500), result.getMarshaledResponse().getStatusCode());
+			Assertions.assertTrue(logEvents.stream()
+							.anyMatch(event -> event.getLogEventType() == LogEventType.REQUEST_INTERCEPTOR_INTERCEPT_REQUEST_FAILED),
+					"Expected interceptRequest failure log event");
 		});
 	}
 

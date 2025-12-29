@@ -36,6 +36,9 @@ public interface RequestInterceptor {
 	 * Routing happens after this callback, so changes to the HTTP method or path affect which
 	 * <em>Resource Method</em> is selected.
 	 * <p>
+	 * You must call {@code requestConsumer.accept(...)} exactly once before returning to advance processing.
+	 * If you do not, Soklet logs the error and returns a 500 response.
+	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method,
 	 * Soklet will catch it and surface separately via {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}
 	 * with type {@link LogEventType#REQUEST_INTERCEPTOR_WRAP_REQUEST_FAILED}.
@@ -54,6 +57,9 @@ public interface RequestInterceptor {
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method,
 	 * Soklet will catch it and surface separately via {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}
 	 * with type {@link LogEventType#REQUEST_INTERCEPTOR_INTERCEPT_REQUEST_FAILED}.
+	 * <p>
+	 * You must call {@code marshaledResponseConsumer.accept(...)} exactly once before returning to send a response.
+	 * If you do not, Soklet logs the error and returns a 500 response.
 	 *
 	 * @param request                 the request that was received
 	 * @param resourceMethod          the <em>Resource Method</em> that will handle the request

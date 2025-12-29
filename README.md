@@ -707,7 +707,7 @@ SokletConfig config = SokletConfig.withServer(
 
 Request Wrapping: wraps around the whole "outside" of an entire request-handling flow.
 
-Request wrapping runs before Soklet resolves which _Resource Method_ should handle the request. If you want to rewrite the HTTP method or path, return a modified request via the consumer and Soklet will route using the wrapped request.
+Request wrapping runs before Soklet resolves which _Resource Method_ should handle the request. If you want to rewrite the HTTP method or path, return a modified request via the consumer and Soklet will route using the wrapped request. You must call `requestProcessor.accept(...)` exactly once before returning; otherwise Soklet logs an error and returns a 500 response.
 
 ```java
 // Special scoped value so anyone can access the current Locale.
@@ -753,6 +753,8 @@ Request Intercepting: provides programmatic control over two processing steps.
 
 1. Invoking the appropriate Resource Method to acquire a response
 2. Sending the response over the wire to the client
+
+You must call `responseWriter.accept(...)` exactly once before returning; otherwise Soklet logs an error and returns a 500 response.
 
 ```java
 SokletConfig config = SokletConfig.withServer(
