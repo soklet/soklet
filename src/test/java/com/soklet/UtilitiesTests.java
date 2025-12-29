@@ -71,9 +71,53 @@ public class UtilitiesTests {
 
 		assertEquals(List.of(), locales, "Blank locale string mishandled");
 
-		locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("xxxx");
+		locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("en_US");
 
-		assertEquals(List.of(), locales, "Junk locale string mishandled");
+		assertEquals(List.of(), locales, "Invalid locale string mishandled");
+	}
+
+	@Test
+	public void acceptLanguagesRespectWeights() {
+		List<Locale> locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("fr;q=0.9, en;q=1.0");
+
+		assertEquals(List.of(
+				Locale.forLanguageTag("en"),
+				Locale.forLanguageTag("fr")
+		), locales, "Locales don't match");
+	}
+
+	@Test
+	public void acceptLanguagesDeduplicate() {
+		List<Locale> locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("en, en;q=0.8");
+
+		assertEquals(List.of(Locale.forLanguageTag("en")), locales, "Locales don't match");
+	}
+
+	@Test
+	public void acceptLanguagesNormalizeCaseAndWhitespace() {
+		List<Locale> locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue(" EN-us , fr ");
+
+		assertEquals(List.of(
+				Locale.forLanguageTag("en-US"),
+				Locale.forLanguageTag("fr")
+		), locales, "Locales don't match");
+	}
+
+	@Test
+	public void acceptLanguagesSupportLanguageWildcard() {
+		List<Locale> locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("en-*, fr;q=0.9");
+
+		assertEquals(List.of(
+				Locale.forLanguageTag("en"),
+				Locale.forLanguageTag("fr")
+		), locales, "Locales don't match");
+	}
+
+	@Test
+	public void acceptLanguagesRejectInvalidQualityValues() {
+		List<Locale> locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("en;q=bogus");
+
+		assertEquals(List.of(), locales, "Malformed locale string mishandled");
 	}
 
 	@Test

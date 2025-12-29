@@ -71,10 +71,6 @@ public final class Utilities {
 	@NonNull
 	private static final byte[] EMPTY_BYTE_ARRAY;
 	@NonNull
-	private static final List<@NonNull Locale> AVAILABLE_LOCALES;
-	@NonNull
-	private static final Map<@NonNull String, @NonNull Locale> LOCALES_BY_LANGUAGE_TAG;
-	@NonNull
 	private static final Pattern HEAD_WHITESPACE_PATTERN;
 	@NonNull
 	private static final Pattern TAIL_WHITESPACE_PATTERN;
@@ -83,20 +79,6 @@ public final class Utilities {
 
 	static {
 		EMPTY_BYTE_ARRAY = new byte[0];
-
-		Locale[] locales = Locale.getAvailableLocales();
-		AVAILABLE_LOCALES = Collections.unmodifiableList(Arrays.asList(locales));
-		
-		Map<String, Locale> localesByLanguageTag = new LinkedHashMap<>(locales.length);
-
-		for (Locale locale : locales) {
-			String languageTag = locale.toLanguageTag();
-
-			if (languageTag != null && !languageTag.isBlank())
-				localesByLanguageTag.putIfAbsent(languageTag.toLowerCase(Locale.ROOT), locale);
-		}
-
-		LOCALES_BY_LANGUAGE_TAG = Collections.unmodifiableMap(localesByLanguageTag);
 
 		boolean virtualThreadsAvailable = false;
 
@@ -812,8 +794,10 @@ public final class Utilities {
 	/**
 	 * Parses an {@code Accept-Language} header value into a best-effort ordered list of {@link Locale}s.
 	 * <p>
-	 * Quality weights are honored by {@link Locale.LanguageRange#parse(String)}; results are then mapped to available
-	 * JVM locales. Unknown or unavailable language ranges are skipped. On parse failure, an empty list is returned.
+	 * Quality weights are honored by {@link Locale.LanguageRange#parse(String)}; results are then converted to
+	 * {@link Locale} instances that represent the client-supplied language tags. Wildcard ranges are ignored unless
+	 * they include a language component (e.g. {@code en-*} becomes {@code en}). On parse failure, an empty list is
+	 * returned.
 	 *
 	 * @param acceptLanguageHeaderValue the raw header value (must be non-{@code null})
 	 * @return locales in descending preference order; empty if none could be resolved
@@ -825,27 +809,33 @@ public final class Utilities {
 		try {
 			List<LanguageRange> languageRanges = LanguageRange.parse(acceptLanguageHeaderValue);
 			List<Locale> locales = new ArrayList<>(languageRanges.size());
-			boolean sawWildcard = false;
 
 			for (LanguageRange languageRange : languageRanges) {
 				String range = languageRange.getRange();
+				String languageTag = range;
 
-				if ("*".equals(range)) {
-					sawWildcard = true;
-					continue;
+				if (range.indexOf('*') != -1) {
+					int wildcardIndex = range.indexOf('*');
+
+					if (wildcardIndex == 0)
+						continue;
+
+					int languageEndIndex = range.indexOf('-');
+
+					if (languageEndIndex == -1 || languageEndIndex > wildcardIndex)
+						languageEndIndex = wildcardIndex;
+
+					languageTag = range.substring(0, languageEndIndex);
 				}
 
-				Locale locale = LOCALES_BY_LANGUAGE_TAG.get(range.toLowerCase(Locale.ROOT));
+				if (languageTag.isBlank())
+					continue;
 
-				if (locale == null)
-					locale = Locale.lookup(List.of(languageRange), AVAILABLE_LOCALES);
+				Locale locale = Locale.forLanguageTag(languageTag);
 
-				if (locale != null && !locales.contains(locale))
+				if (!locale.getLanguage().isBlank() && !locales.contains(locale))
 					locales.add(locale);
 			}
-
-			if (locales.isEmpty() && sawWildcard)
-				locales.add(Locale.getDefault());
 
 			return Collections.unmodifiableList(locales);
 		} catch (Exception ignored) {

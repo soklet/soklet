@@ -472,12 +472,12 @@ public class SokletTests {
 	}
 
 	@Test
-	public void wildcardAcceptLanguageReturnsLocales() {
+	public void wildcardAcceptLanguageReturnsNoLocales() {
 		Map<String, Set<String>> headers = Map.of("Accept-Language", Set.of("*"));
 
 		Request req = Request.withPath(HttpMethod.GET, "/").headers(headers).build();
 
-		Assertions.assertFalse(req.getLocales().isEmpty(), "Wildcard Accept-Language should return available locales");
+		Assertions.assertTrue(req.getLocales().isEmpty(), "Wildcard Accept-Language should not map to a concrete locale");
 	}
 
 	@Test
