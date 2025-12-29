@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.annotation.GET;
+import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -46,7 +47,6 @@ public class RequestHandlingRegressionTests {
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
 					public void wrapRequest(@NonNull Request request,
-																	@Nullable ResourceMethod resourceMethod,
 																	@NonNull Consumer<Request> requestConsumer) {
 						Request wrappedRequest = request.copy()
 								.httpMethod(HttpMethod.HEAD)
@@ -106,6 +106,37 @@ public class RequestHandlingRegressionTests {
 	}
 
 	@Test
+	public void wrappedRequestRewritesPathAndMethod() {
+		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(WrappedRequestRewriteResource.class)))
+				.requestInterceptor(new RequestInterceptor() {
+					@Override
+					public void wrapRequest(@NonNull Request request,
+																	@NonNull Consumer<Request> requestConsumer) {
+						Request wrappedRequest = request.copy()
+								.httpMethod(HttpMethod.POST)
+								.path("/rewrite-target")
+								.finish();
+
+						requestConsumer.accept(wrappedRequest);
+					}
+				})
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
+				})
+				.build();
+
+		Soklet.runSimulator(configuration, simulator -> {
+			RequestResult result = simulator.performRequest(
+					Request.withPath(HttpMethod.GET, "/rewrite-source").build());
+
+			assertEquals(Integer.valueOf(200), result.getMarshaledResponse().getStatusCode());
+			assertEquals("rewritten", result.getResponse().get().getBody().get());
+		});
+	}
+
+	@Test
 	public void explicitRouteBeatsPlaceholder() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RouteSpecificityResource.class)))
@@ -146,6 +177,19 @@ public class RequestHandlingRegressionTests {
 					.headers(Map.of("content-type", Set.of("application/custom")))
 					.body("ok")
 					.build();
+		}
+	}
+
+	@ThreadSafe
+	public static class WrappedRequestRewriteResource {
+		@GET("/rewrite-source")
+		public String original() {
+			return "original";
+		}
+
+		@POST("/rewrite-target")
+		public String rewritten() {
+			return "rewritten";
 		}
 	}
 

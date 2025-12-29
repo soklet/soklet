@@ -33,16 +33,17 @@ public interface RequestInterceptor {
 	/**
 	 * Called before Soklet begins request processing, allowing the request to be wrapped or replaced.
 	 * <p>
+	 * Routing happens after this callback, so changes to the HTTP method or path affect which
+	 * <em>Resource Method</em> is selected.
+	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method,
 	 * Soklet will catch it and surface separately via {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}
 	 * with type {@link LogEventType#REQUEST_INTERCEPTOR_WRAP_REQUEST_FAILED}.
 	 *
-	 * @param request        the request that was received
-	 * @param resourceMethod the <em>Resource Method</em> that will handle the request
+	 * @param request         the request that was received
 	 * @param requestConsumer receives the request to use for subsequent processing
 	 */
 	default void wrapRequest(@NonNull Request request,
-													 @Nullable ResourceMethod resourceMethod,
 													 @NonNull Consumer<Request> requestConsumer) {
 		requestConsumer.accept(request);
 	}

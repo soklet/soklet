@@ -36,7 +36,7 @@ public enum LogEventType {
 	 */
 	REQUEST_PROCESSING_FAILED,
 	/**
-	 * Indicates {@link RequestInterceptor#wrapRequest(Request, ResourceMethod, Consumer)} threw an exception.
+	 * Indicates {@link RequestInterceptor#wrapRequest(Request, Consumer)} threw an exception.
 	 */
 	REQUEST_INTERCEPTOR_WRAP_REQUEST_FAILED,
 	/**

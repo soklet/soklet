@@ -524,23 +524,25 @@ public final class Soklet implements AutoCloseable {
 		requestHolder.set(request);
 
 		try {
-			// Do we have an exact match for this resource method?
-			resourceMethodHolder.set(resourceMethodResolver.resourceMethodForRequest(requestHolder.get(), serverType).orElse(null));
-		} catch (Throwable t) {
-			safelyLog.accept(LogEvent.with(LogEventType.RESOURCE_METHOD_RESOLUTION_FAILED, "Unable to resolve Resource Method")
-					.throwable(t)
-					.request(requestHolder.get())
-					.build());
-
-			// If an exception occurs here, keep track of it - we will surface them after letting LifecycleObserver
-			// see that a request has come in.
-			throwables.add(t);
-			resourceMethodResolutionExceptionHolder.set(t);
-		}
-
-		try {
-			requestInterceptor.wrapRequest(request, resourceMethodHolder.get(), (wrappedRequest) -> {
+			requestInterceptor.wrapRequest(request, (wrappedRequest) -> {
 				requestHolder.set(wrappedRequest);
+
+				try {
+					// Resolve after wrapping so path/method rewrites affect routing.
+					resourceMethodHolder.set(resourceMethodResolver.resourceMethodForRequest(requestHolder.get(), serverType).orElse(null));
+					resourceMethodResolutionExceptionHolder.set(null);
+				} catch (Throwable t) {
+					safelyLog.accept(LogEvent.with(LogEventType.RESOURCE_METHOD_RESOLUTION_FAILED, "Unable to resolve Resource Method")
+							.throwable(t)
+							.request(requestHolder.get())
+							.build());
+
+					// If an exception occurs here, keep track of it - we will surface them after letting LifecycleObserver
+					// see that a request has come in.
+					throwables.add(t);
+					resourceMethodResolutionExceptionHolder.set(t);
+					resourceMethodHolder.set(null);
+				}
 
 				try {
 					lifecycleObserver.didStartRequestHandling(requestHolder.get(), resourceMethodHolder.get());

@@ -707,6 +707,8 @@ SokletConfig config = SokletConfig.withServer(
 
 Request Wrapping: wraps around the whole "outside" of an entire request-handling flow.
 
+Request wrapping runs before Soklet resolves which _Resource Method_ should handle the request. If you want to rewrite the HTTP method or path, return a modified request via the consumer and Soklet will route using the wrapped request.
+
 ```java
 // Special scoped value so anyone can access the current Locale.
 // For Java < 21, use ThreadLocal instead
@@ -723,7 +725,6 @@ SokletConfig config = SokletConfig.withServer(
   @Override
   public void wrapRequest(
     @NonNull Request request,
-    @Nullable ResourceMethod resourceMethod,
     @NonNull Consumer<Request> requestProcessor
   ) {
     // Make the locale accessible by other code during this request...
