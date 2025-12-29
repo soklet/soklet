@@ -153,7 +153,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>(response.getHeaders());
 
 			// If no Content-Type specified, supply a default
-			if (!headers.keySet().contains("Content-Type"))
+			if (!headers.containsKey("Content-Type"))
 				headers.put("Content-Type", Set.of(binaryResponse ? "application/octet-stream" : format("text/plain; charset=%s", getCharset().name())));
 
 			marshaledResponse = MarshaledResponse.withStatusCode(response.getStatusCode())
