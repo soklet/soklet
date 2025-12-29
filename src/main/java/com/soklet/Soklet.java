@@ -557,7 +557,7 @@ public final class Soklet implements AutoCloseable {
 				}
 
 				try {
-					requestInterceptor.interceptRequest(request, resourceMethodHolder.get(), (interceptorRequest) -> {
+					requestInterceptor.interceptRequest(requestHolder.get(), resourceMethodHolder.get(), (interceptorRequest) -> {
 						requestHolder.set(interceptorRequest);
 
 						try {
@@ -574,14 +574,14 @@ public final class Soklet implements AutoCloseable {
 							// need to happen after marshaling the response...
 
 							// 1. Customize response for HEAD (e.g. remove body, set Content-Length header)
-							updatedMarshaledResponse = applyHeadResponseIfApplicable(request, updatedMarshaledResponse);
+							updatedMarshaledResponse = applyHeadResponseIfApplicable(requestHolder.get(), updatedMarshaledResponse);
 
 							// 2. Apply other standard response customizations (CORS, Content-Length)
 							// Note that we don't want to write Content-Length for SSE "accepted" handshakes
 							HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
 							boolean suppressContentLength = handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted;
 
-							updatedMarshaledResponse = applyCommonPropertiesToMarshaledResponse(request, updatedMarshaledResponse, suppressContentLength);
+							updatedMarshaledResponse = applyCommonPropertiesToMarshaledResponse(requestHolder.get(), updatedMarshaledResponse, suppressContentLength);
 
 							// Update our result holder with the modified response if necessary
 							if (originalMarshaledResponse != updatedMarshaledResponse) {
@@ -607,7 +607,7 @@ public final class Soklet implements AutoCloseable {
 							// Unhappy path.  Try to use configuration's exception response marshaler...
 							try {
 								MarshaledResponse marshaledResponse = responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
-								marshaledResponse = applyCommonPropertiesToMarshaledResponse(request, marshaledResponse);
+								marshaledResponse = applyCommonPropertiesToMarshaledResponse(requestHolder.get(), marshaledResponse);
 								marshaledResponseHolder.set(marshaledResponse);
 
 								return marshaledResponse;
@@ -641,7 +641,7 @@ public final class Soklet implements AutoCloseable {
 								.build());
 
 						MarshaledResponse marshaledResponse = responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
-						marshaledResponse = applyCommonPropertiesToMarshaledResponse(request, marshaledResponse);
+						marshaledResponse = applyCommonPropertiesToMarshaledResponse(requestHolder.get(), marshaledResponse);
 						marshaledResponseHolder.set(marshaledResponse);
 					} catch (Throwable t2) {
 						throwables.add(t2);
@@ -753,7 +753,7 @@ public final class Soklet implements AutoCloseable {
 			if (marshaledResponseHolder.get() == null) {
 				try {
 					MarshaledResponse marshaledResponse = responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
-					marshaledResponse = applyCommonPropertiesToMarshaledResponse(request, marshaledResponse);
+					marshaledResponse = applyCommonPropertiesToMarshaledResponse(requestHolder.get(), marshaledResponse);
 					marshaledResponseHolder.set(marshaledResponse);
 				} catch (Throwable t2) {
 					throwables.add(t2);
