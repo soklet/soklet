@@ -154,7 +154,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		HEARTBEAT_COMMENT_PAYLOAD = ":\n\n";
 		HEARTBEAT_COMMENT_PAYLOAD_BYTES = HEARTBEAT_COMMENT_PAYLOAD.getBytes(StandardCharsets.UTF_8);
-		HEARTBEAT_COMMENT = ServerSentEventComment.withHeartbeat().build();
+		HEARTBEAT_COMMENT = ServerSentEventComment.heartbeatInstance();
 		DEFAULT_SSE_BUILDER_CAPACITY = 256;
 	}
 

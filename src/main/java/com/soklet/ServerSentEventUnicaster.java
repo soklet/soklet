@@ -80,7 +80,7 @@ public interface ServerSentEventUnicaster {
 	/**
 	 * Unicasts a single Server-Sent Event comment to a specific client listening to this unicaster's {@link ResourcePath}.
 	 * <p>
-	 * Use {@link ServerSentEventComment#withHeartbeat()} to emit a heartbeat comment, or set the {@link ServerSentEventComment#getCommentType()} to {@link ServerSentEventComment.CommentType#HEARTBEAT}.
+	 * Use {@link ServerSentEventComment#heartbeatInstance()} to emit a heartbeat comment.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and unicast operation[s] will occur on separate threads of execution.
 	 * <p>

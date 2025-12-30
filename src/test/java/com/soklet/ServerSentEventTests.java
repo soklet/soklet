@@ -87,7 +87,7 @@ public class ServerSentEventTests {
 							ResponseCookie.with("cookie-test", exampleId).build()
 					))
 					.clientInitializer(unicaster -> {
-						unicaster.unicastComment(ServerSentEventComment.withComment("Unicast comment").build());
+						unicaster.unicastComment(ServerSentEventComment.withComment("Unicast comment"));
 						unicaster.unicastEvent(ServerSentEvent.withEvent("initial")
 								.data("unicast")
 								.build()
@@ -159,7 +159,7 @@ public class ServerSentEventTests {
 				broadcaster.broadcastEvent(serverSentEvent);
 
 				// Now try a comment
-				broadcaster.broadcastComment(ServerSentEventComment.withComment("just a test").build());
+				broadcaster.broadcastComment(ServerSentEventComment.withComment("just a test"));
 			} else if (requestResult instanceof HandshakeRejected handshakeRejected) {
 				Assertions.fail("SSE handshake rejected: " + handshakeRejected);
 			} else if (requestResult instanceof RequestFailed requestFailed) {

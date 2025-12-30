@@ -121,8 +121,8 @@ public class MetricsCollectorTests {
 		Request request = Request.withPath(HttpMethod.GET, "/events/42").build();
 		ServerSentEventConnection connection = new TestServerSentEventConnection(request, resourceMethod, Instant.now(), null);
 		ServerSentEvent event = ServerSentEvent.withData("payload").build();
-		ServerSentEventComment comment = ServerSentEventComment.withComment("ping").build();
-		ServerSentEventComment heartbeat = ServerSentEventComment.withHeartbeat().build();
+		ServerSentEventComment comment = ServerSentEventComment.withComment("ping");
+		ServerSentEventComment heartbeat = ServerSentEventComment.heartbeatInstance();
 
 		collector.didEstablishServerSentEventConnection(connection);
 		collector.willWriteServerSentEvent(connection, event);
@@ -298,7 +298,7 @@ public class MetricsCollectorTests {
 				ServerSentEventBroadcaster broadcaster = awaitBroadcasterWithClient(serverSentEventServer,
 						"/metrics/sse/abc", Duration.ofSeconds(2));
 				broadcaster.broadcastEvent(ServerSentEvent.withData("payload").build());
-				broadcaster.broadcastComment(ServerSentEventComment.withComment("note").build());
+				broadcaster.broadcastComment(ServerSentEventComment.withComment("note"));
 
 				boolean sawData = false;
 				boolean sawComment = false;

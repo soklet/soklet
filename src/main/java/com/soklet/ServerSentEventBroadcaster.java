@@ -105,7 +105,7 @@ public interface ServerSentEventBroadcaster {
 	/**
 	 * Broadcasts a single Server-Sent Event comment to all clients listening to this broadcaster's {@link ResourcePath}.
 	 * <p>
-	 * Use {@link ServerSentEventComment#withHeartbeat()} to emit a heartbeat comment, or set the {@link ServerSentEventComment#getCommentType()} to {@link ServerSentEventComment.CommentType#HEARTBEAT}.
+	 * Use {@link ServerSentEventComment#heartbeatInstance()} to emit a heartbeat comment.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
 	 * <p>

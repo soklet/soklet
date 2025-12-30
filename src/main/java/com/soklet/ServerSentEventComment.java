@@ -19,7 +19,6 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 
@@ -33,6 +32,13 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class ServerSentEventComment {
+	@NonNull
+	private static final ServerSentEventComment HEARTBEAT_INSTANCE;
+
+	static {
+		HEARTBEAT_INSTANCE = new ServerSentEventComment(null, CommentType.HEARTBEAT);
+	}
+
 	@Nullable
 	private final String comment;
 	@NonNull
@@ -55,49 +61,37 @@ public final class ServerSentEventComment {
 	}
 
 	/**
-	 * Acquires a builder for {@link ServerSentEventComment} instances, seeded with a {@code comment} value.
+	 * Acquires a {@link ServerSentEventComment} instance with a {@code comment} payload.
 	 *
 	 * @param comment the comment payload for the instance
-	 * @return the builder
+	 * @return the comment instance
 	 */
 	@NonNull
-	public static Builder withComment(@NonNull String comment) {
-		return new Builder().comment(comment);
+	public static ServerSentEventComment withComment(@NonNull String comment) {
+		return new ServerSentEventComment(requireNonNull(comment), CommentType.COMMENT);
 	}
 
 	/**
-	 * Acquires an "empty" builder for {@link ServerSentEventComment} instances.
-	 * <p>
-	 * Note that {@code comment} is required unless {@code commentType} is {@link CommentType#HEARTBEAT}.
-	 *
-	 * @return the builder
-	 */
-	@NonNull
-	public static Builder withDefaults() {
-		return new Builder();
-	}
-
-	/**
-	 * Acquires a builder for {@link ServerSentEventComment} instances, seeded with a heartbeat comment.
+	 * Acquires a shared heartbeat comment instance.
 	 * <p>
 	 * Heartbeat comments do not carry a payload; {@link #getComment()} will be empty.
 	 *
-	 * @return the builder
+	 * @return a shared heartbeat comment instance
 	 */
 	@NonNull
-	public static Builder withHeartbeat() {
-		return new Builder().commentType(CommentType.HEARTBEAT);
+	public static ServerSentEventComment heartbeatInstance() {
+		return HEARTBEAT_INSTANCE;
 	}
 
-	protected ServerSentEventComment(@NonNull Builder builder) {
-		requireNonNull(builder);
-
-		this.comment = builder.comment;
-		this.commentType = builder.commentType != null ? builder.commentType : CommentType.COMMENT;
+	private ServerSentEventComment(@Nullable String comment,
+																 @NonNull CommentType commentType) {
+		this.comment = comment;
+		this.commentType = requireNonNull(commentType);
 
 		if (this.commentType == CommentType.COMMENT && this.comment == null)
 			throw new IllegalArgumentException(format("%s 'comment' values must not be null for %s comments",
 					ServerSentEventComment.class.getSimpleName(), CommentType.COMMENT));
+
 		if (this.commentType == CommentType.HEARTBEAT && this.comment != null)
 			throw new IllegalArgumentException(format("%s 'comment' values must be null for %s comments",
 					ServerSentEventComment.class.getSimpleName(), CommentType.HEARTBEAT));
@@ -111,7 +105,7 @@ public final class ServerSentEventComment {
 	 * @return the comment payload
 	 */
 	@NonNull
-	public Optional<@NonNull String> getComment() {
+	public Optional<String> getComment() {
 		return Optional.ofNullable(this.comment);
 	}
 
@@ -125,45 +119,10 @@ public final class ServerSentEventComment {
 		return this.commentType;
 	}
 
-	/**
-	 * Builder used to construct instances of {@link ServerSentEventComment}.
-	 * <p>
-	 * This class is intended for use by a single thread.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
-	@NotThreadSafe
-	public static final class Builder {
-		@Nullable
-		private String comment;
-		@Nullable
-		private CommentType commentType;
-
-		protected Builder() {
-			// Nothing to do
-		}
-
-		@NonNull
-		public Builder comment(@NonNull String comment) {
-			this.comment = requireNonNull(comment);
-			return this;
-		}
-
-		@NonNull
-		public Builder commentType(@NonNull CommentType commentType) {
-			this.commentType = requireNonNull(commentType);
-			return this;
-		}
-
-		@NonNull
-		public ServerSentEventComment build() {
-			return new ServerSentEventComment(this);
-		}
-	}
-
 	@Override
 	@NonNull
 	public String toString() {
-		return format("%s{commentType=%s, comment=%s}", getClass().getSimpleName(), this.commentType, this.comment);
+		return format("%s{commentType=%s, comment=%s}", getClass().getSimpleName(),
+				getCommentType(), getComment().orElse(""));
 	}
 }
