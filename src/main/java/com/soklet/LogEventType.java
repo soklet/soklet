@@ -92,6 +92,10 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED,
 	/**
+	 * Indicates a {@link MetricsCollector} invocation threw an exception.
+	 */
+	METRICS_COLLECTOR_FAILED,
+	/**
 	 * Indicates {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)} threw an exception.
 	 */
 	RESPONSE_MARSHALER_FOR_THROWABLE_FAILED,

@@ -172,8 +172,25 @@ public interface MetricsCollector {
 	 * Called after an SSE comment is written.
 	 */
 	default void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																							@NonNull String comment,
-																							@NonNull Duration writeDuration) {
+																						@NonNull String comment,
+																						@NonNull Duration writeDuration) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an SSE event is written with additional delivery metrics.
+	 *
+	 * @param serverSentEventConnection the connection the event was written to
+	 * @param serverSentEvent           the event that was written
+	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code -1} if unknown
+	 * @param payloadBytes              size of the serialized payload in bytes, or {@code -1} if unknown
+	 * @param queueDepth                number of queued elements remaining at write time, or {@code -1} if unknown
+	 */
+	default void didWriteServerSentEventMetrics(@NonNull ServerSentEventConnection serverSentEventConnection,
+																							@NonNull ServerSentEvent serverSentEvent,
+																							long deliveryLagNanos,
+																							int payloadBytes,
+																							int queueDepth) {
 		// No-op by default
 	}
 

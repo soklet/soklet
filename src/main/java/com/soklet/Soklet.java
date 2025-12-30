@@ -52,6 +52,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -497,6 +498,7 @@ public final class Soklet implements AutoCloseable {
 		ResponseMarshaler responseMarshaler = sokletConfig.getResponseMarshaler();
 		LifecycleObserver lifecycleObserver = sokletConfig.getLifecycleObserver();
 		RequestInterceptor requestInterceptor = sokletConfig.getRequestInterceptor();
+		MetricsCollector metricsCollector = sokletConfig.getMetricsCollector();
 
 		// Holders to permit mutable effectively-final variables
 		AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
@@ -521,6 +523,22 @@ public final class Soklet implements AutoCloseable {
 				throwables.add(throwable);
 			}
 		});
+
+		BiConsumer<String, Consumer<MetricsCollector>> safelyCollectMetrics = (message, metricsInvocation) -> {
+			if (metricsCollector == null)
+				return;
+
+			try {
+				metricsInvocation.accept(metricsCollector);
+			} catch (Throwable throwable) {
+				safelyLog.accept(LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED, message)
+						.throwable(throwable)
+						.request(requestHolder.get())
+						.resourceMethod(resourceMethodHolder.get())
+						.marshaledResponse(marshaledResponseHolder.get())
+						.build());
+			}
+		};
 
 		requestHolder.set(request);
 
@@ -559,6 +577,10 @@ public final class Soklet implements AutoCloseable {
 
 					throwables.add(t);
 				}
+
+				safelyCollectMetrics.accept(
+						format("An exception occurred while invoking %s::didStartRequestHandling", MetricsCollector.class.getSimpleName()),
+						(metricsInvocation) -> metricsInvocation.didStartRequestHandling(requestHolder.get(), resourceMethodHolder.get()));
 
 				try {
 					AtomicBoolean didInvokeMarshaledResponseConsumer = new AtomicBoolean(false);
@@ -676,6 +698,10 @@ public final class Soklet implements AutoCloseable {
 							willStartResponseWritingCompleted.set(true);
 						}
 
+						safelyCollectMetrics.accept(
+								format("An exception occurred while invoking %s::willWriteResponse", MetricsCollector.class.getSimpleName()),
+								(metricsInvocation) -> metricsInvocation.willWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get()));
+
 						Instant responseWriteStarted = Instant.now();
 
 						try {
@@ -707,6 +733,10 @@ public final class Soklet implements AutoCloseable {
 							} finally {
 								didFinishResponseWritingCompleted.set(true);
 							}
+
+							safelyCollectMetrics.accept(
+									format("An exception occurred while invoking %s::didWriteResponse", MetricsCollector.class.getSimpleName()),
+									(metricsInvocation) -> metricsInvocation.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration));
 						} catch (Throwable t) {
 							throwables.add(t);
 
@@ -727,12 +757,19 @@ public final class Soklet implements AutoCloseable {
 										.marshaledResponse(marshaledResponseHolder.get())
 										.build());
 							}
+
+							safelyCollectMetrics.accept(
+									format("An exception occurred while invoking %s::didFailToWriteResponse", MetricsCollector.class.getSimpleName()),
+									(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t));
 						}
 					} finally {
-						try {
-							Instant processingFinished = Instant.now();
-							Duration processingDuration = Duration.between(processingStarted, processingFinished);
+						Duration processingDuration = Duration.between(processingStarted, Instant.now());
 
+						safelyCollectMetrics.accept(
+								format("An exception occurred while invoking %s::didFinishRequestHandling", MetricsCollector.class.getSimpleName()),
+								(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
+
+						try {
 							lifecycleObserver.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
 						} catch (Throwable t) {
 							safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,
@@ -800,6 +837,10 @@ public final class Soklet implements AutoCloseable {
 							.marshaledResponse(marshaledResponseHolder.get())
 							.build());
 				}
+
+				safelyCollectMetrics.accept(
+						format("An exception occurred while invoking %s::willWriteResponse", MetricsCollector.class.getSimpleName()),
+						(metricsInvocation) -> metricsInvocation.willWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get()));
 			}
 
 			try {
@@ -833,6 +874,10 @@ public final class Soklet implements AutoCloseable {
 									.marshaledResponse(marshaledResponseHolder.get())
 									.build());
 						}
+
+						safelyCollectMetrics.accept(
+								format("An exception occurred while invoking %s::didWriteResponse", MetricsCollector.class.getSimpleName()),
+								(metricsInvocation) -> metricsInvocation.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration));
 					} catch (Throwable t2) {
 						throwables.add(t2);
 
@@ -853,14 +898,21 @@ public final class Soklet implements AutoCloseable {
 									.marshaledResponse(marshaledResponseHolder.get())
 									.build());
 						}
+
+						safelyCollectMetrics.accept(
+								format("An exception occurred while invoking %s::didFailToWriteResponse", MetricsCollector.class.getSimpleName()),
+								(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t));
 					}
 				}
 			} finally {
 				if (!didFinishRequestHandlingCompleted.get()) {
-					try {
-						Instant processingFinished = Instant.now();
-						Duration processingDuration = Duration.between(processingStarted, processingFinished);
+					Duration processingDuration = Duration.between(processingStarted, Instant.now());
 
+					safelyCollectMetrics.accept(
+							format("An exception occurred while invoking %s::didFinishRequestHandling", MetricsCollector.class.getSimpleName()),
+							(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
+
+					try {
 						lifecycleObserver.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
 					} catch (Throwable t2) {
 						safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,

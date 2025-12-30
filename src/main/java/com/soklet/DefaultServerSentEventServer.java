@@ -230,6 +230,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@Nullable
 	private LifecycleObserver lifecycleObserver;
 	@Nullable
+	private MetricsCollector metricsCollector;
+	@Nullable
 	private ResponseMarshaler responseMarshaler;
 	@Nullable
 	private IdGenerator<?> idGenerator;
@@ -626,6 +628,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(requestHandler);
 
 		this.lifecycleObserver = sokletConfig.getLifecycleObserver();
+		this.metricsCollector = sokletConfig.getMetricsCollector();
 		this.responseMarshaler = sokletConfig.getResponseMarshaler();
 		this.requestHandler = requestHandler;
 
@@ -725,7 +728,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(handler);
 
 		BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
-		DefaultServerSentEventConnection.WriteQueueElement e = DefaultServerSentEventConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent);
+		DefaultServerSentEventConnection.WriteQueueElement e =
+				DefaultServerSentEventConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent, System.nanoTime());
 
 		if (writeQueue.offer(e))
 			return true;
@@ -763,7 +767,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(handler);
 
 		BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
-		DefaultServerSentEventConnection.WriteQueueElement writeQueueElement = DefaultServerSentEventConnection.WriteQueueElement.withComment(comment);
+		DefaultServerSentEventConnection.WriteQueueElement writeQueueElement =
+				DefaultServerSentEventConnection.WriteQueueElement.withComment(comment, System.nanoTime());
 
 		if (writeQueue.offer(writeQueueElement))
 			return true;
@@ -1107,6 +1112,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.build());
 				}
 
+				safelyCollectMetrics(
+						format("An exception occurred while invoking %s::willEstablishServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+						request,
+						resourceMethod,
+						(metricsCollector) -> metricsCollector.willEstablishServerSentEventConnection(request, resourceMethod));
+
 				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, handshakeAccepted)
 						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
 				connectionSlotReserved.set(false);
@@ -1121,6 +1132,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.throwable(t)
 							.build());
 				}
+
+				safelyCollectMetrics(
+						format("An exception occurred while invoking %s::didEstablishServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+						clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getRequest(),
+						clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getResourceMethod(),
+						(metricsCollector) -> metricsCollector.didEstablishServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot()));
 
 				BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue =
 						clientSocketChannelRegistration.serverSentEventConnection().getWriteQueue();
@@ -1139,7 +1156,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					// Idle heartbeat
 					if (writeQueueElement == null)
-						writeQueueElement = DefaultServerSentEventConnection.WriteQueueElement.withComment("");
+						writeQueueElement = DefaultServerSentEventConnection.WriteQueueElement.withComment("", System.nanoTime());
 
 					if (writeQueueElement.isPoisonPill()) {
 						// Encountered poison pill, exit...
@@ -1178,6 +1195,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 									.throwable(t)
 									.build());
 						}
+
+						safelyCollectMetrics(
+								format("An exception occurred while invoking %s::willWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
+								clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getRequest(),
+								clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getResourceMethod(),
+								(metricsCollector) -> metricsCollector.willWriteServerSentEventComment(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), comment));
 					}
 
 					if (serverSentEvent != null) {
@@ -1188,6 +1211,27 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 									.throwable(t)
 									.build());
 						}
+
+						safelyCollectMetrics(
+								format("An exception occurred while invoking %s::willWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
+								clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getRequest(),
+								clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getResourceMethod(),
+								(metricsCollector) -> metricsCollector.willWriteServerSentEvent(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), serverSentEvent));
+					}
+
+					long deliveryLagNanos = -1L;
+					int payloadByteCount = -1;
+					int queueDepth = -1;
+
+					if (preSerializedEvent != null) {
+						long enqueuedAtNanos = writeQueueElement.getEnqueuedAtNanos();
+						long nowNanos = System.nanoTime();
+
+						if (enqueuedAtNanos > 0L)
+							deliveryLagNanos = Math.max(0L, nowNanos - enqueuedAtNanos);
+
+						payloadByteCount = preSerializedEvent.getPayloadBytes().length;
+						queueDepth = writeQueue.size();
 					}
 
 					writeStarted = Instant.now();
@@ -1234,6 +1278,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 											.throwable(t)
 											.build());
 								}
+
+								safelyCollectMetrics(
+										format("An exception occurred while invoking %s::didFailToWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
+										clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getRequest(),
+										clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getResourceMethod(),
+										(metricsCollector) -> metricsCollector.didFailToWriteServerSentEvent(
+												clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(),
+												serverSentEvent,
+												writeDuration,
+												writeThrowable));
 							} else {
 								try {
 									getLifecycleObserver().get().didWriteServerSentEvent(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), serverSentEvent, writeDuration);
@@ -1242,6 +1296,26 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 											.throwable(t)
 											.build());
 								}
+
+								safelyCollectMetrics(
+										format("An exception occurred while invoking %s::didWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
+										clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getRequest(),
+										clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getResourceMethod(),
+										(metricsCollector) -> metricsCollector.didWriteServerSentEvent(
+												clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(),
+												serverSentEvent,
+												writeDuration));
+
+								safelyCollectMetrics(
+										format("An exception occurred while invoking %s::didWriteServerSentEventMetrics", MetricsCollector.class.getSimpleName()),
+										clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getRequest(),
+										clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getResourceMethod(),
+										(metricsCollector) -> metricsCollector.didWriteServerSentEventMetrics(
+												clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(),
+												serverSentEvent,
+												deliveryLagNanos,
+												payloadByteCount,
+												queueDepth));
 							}
 						} else if (comment != null) {
 							if (writeThrowable != null) {
@@ -1252,6 +1326,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 											.throwable(t)
 											.build());
 								}
+
+								safelyCollectMetrics(
+										format("An exception occurred while invoking %s::didFailToWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
+										clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getRequest(),
+										clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getResourceMethod(),
+										(metricsCollector) -> metricsCollector.didFailToWriteServerSentEventComment(
+												clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(),
+												comment,
+												writeDuration,
+												writeThrowable));
 							} else {
 								try {
 									getLifecycleObserver().get().didWriteServerSentEventComment(clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(), comment, writeDuration);
@@ -1260,6 +1344,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 											.throwable(t)
 											.build());
 								}
+
+								safelyCollectMetrics(
+										format("An exception occurred while invoking %s::didWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
+										clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getRequest(),
+										clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getResourceMethod(),
+										(metricsCollector) -> metricsCollector.didWriteServerSentEventComment(
+												clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(),
+												comment,
+												writeDuration));
 							}
 						}
 
@@ -1280,6 +1373,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.throwable(t1)
 							.build());
 				}
+
+				safelyCollectMetrics(
+						format("An exception occurred while invoking %s::didFailToEstablishServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+						request,
+						resourceMethod,
+						(metricsCollector) -> metricsCollector.didFailToEstablishServerSentEventConnection(request, resourceMethod, t));
 			}
 
 			if (t instanceof InterruptedException)
@@ -1331,6 +1430,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.build());
 				}
 
+				safelyCollectMetrics(
+						format("An exception occurred while invoking %s::willTerminateServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+						clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getRequest(),
+						clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getResourceMethod(),
+						(metricsCollector) -> metricsCollector.willTerminateServerSentEventConnection(
+								clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(),
+								terminationReason,
+								throwable));
+
 				try {
 					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(clientSocketChannelRegistration.serverSentEventConnection(), false);
 				} catch (Throwable t) {
@@ -1358,6 +1466,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.throwable(t)
 							.build());
 				}
+
+				safelyCollectMetrics(
+						format("An exception occurred while invoking %s::didTerminateServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+						clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getRequest(),
+						clientSocketChannelRegistration.serverSentEventConnection().getSnapshot().getResourceMethod(),
+						(metricsCollector) -> metricsCollector.didTerminateServerSentEventConnection(
+								clientSocketChannelRegistration.serverSentEventConnection().getSnapshot(),
+								connectionDuration,
+								terminationReason,
+								throwable));
 			}
 
 			releaseReservedSlot(connectionSlotReserved);
@@ -1770,19 +1888,22 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			@Nullable
 			private final String comment;
 			private final boolean poisonPill;
+			private final long enqueuedAtNanos;
 
-			private static final WriteQueueElement POISON_PILL = new WriteQueueElement(null, null, true);
+			private static final WriteQueueElement POISON_PILL = new WriteQueueElement(null, null, true, -1L);
 
 			@NonNull
-			public static WriteQueueElement withPreSerializedEvent(@NonNull PreSerializedEvent preSerializedEvent) {
+			public static WriteQueueElement withPreSerializedEvent(@NonNull PreSerializedEvent preSerializedEvent,
+																														 long enqueuedAtNanos) {
 				requireNonNull(preSerializedEvent);
-				return new WriteQueueElement(preSerializedEvent, null, false);
+				return new WriteQueueElement(preSerializedEvent, null, false, enqueuedAtNanos);
 			}
 
 			@NonNull
-			public static WriteQueueElement withComment(@NonNull String comment) {
+			public static WriteQueueElement withComment(@NonNull String comment,
+																										 long enqueuedAtNanos) {
 				requireNonNull(comment);
-				return new WriteQueueElement(null, comment, false);
+				return new WriteQueueElement(null, comment, false, enqueuedAtNanos);
 			}
 
 			@NonNull
@@ -1792,7 +1913,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			private WriteQueueElement(@Nullable PreSerializedEvent preSerializedEvent,
 																@Nullable String comment,
-																boolean poisonPill) {
+																boolean poisonPill,
+																long enqueuedAtNanos) {
 				if (poisonPill) {
 					if (preSerializedEvent != null || comment != null)
 						throw new IllegalStateException("Poison pill cannot include a payload");
@@ -1807,6 +1929,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				this.preSerializedEvent = preSerializedEvent;
 				this.comment = comment;
 				this.poisonPill = poisonPill;
+				this.enqueuedAtNanos = enqueuedAtNanos;
 			}
 
 			@NonNull
@@ -1817,6 +1940,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			@NonNull
 			public Optional<String> getComment() {
 				return Optional.ofNullable(this.comment);
+			}
+
+			public long getEnqueuedAtNanos() {
+				return this.enqueuedAtNanos;
 			}
 
 			public boolean isPoisonPill() {
@@ -1947,7 +2074,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection if configured to do so
 		if (getVerifyConnectionOnceEstablished())
-			serverSentEventConnection.getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withComment(""));
+			serverSentEventConnection.getWriteQueue()
+					.offer(DefaultServerSentEventConnection.WriteQueueElement.withComment("", System.nanoTime()));
 
 		DefaultServerSentEventBroadcaster broadcaster =
 				registerConnectionWithBroadcaster(resourcePath, resourceMethod, serverSentEventConnection);
@@ -1984,7 +2112,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent = preSerializeServerSentEvent(serverSentEvent);
 
-			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent)))
+			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent, System.nanoTime())))
 				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 
@@ -1992,7 +2120,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		public void unicastComment(@NonNull String comment) {
 			requireNonNull(comment);
 
-			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withComment(comment)))
+			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withComment(comment, System.nanoTime())))
 				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 
@@ -2940,6 +3068,29 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
+	protected void safelyCollectMetrics(@NonNull String message,
+																			@Nullable Request request,
+																			@Nullable ResourceMethod resourceMethod,
+																			@NonNull Consumer<MetricsCollector> metricsConsumer) {
+		requireNonNull(message);
+		requireNonNull(metricsConsumer);
+
+		MetricsCollector metricsCollector = this.metricsCollector;
+
+		if (metricsCollector == null)
+			return;
+
+		try {
+			metricsConsumer.accept(metricsCollector);
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED, message)
+					.throwable(throwable)
+					.request(request)
+					.resourceMethod(resourceMethod)
+					.build());
+		}
+	}
+
 	@NonNull
 	protected Integer getPort() {
 		return this.port;
@@ -3079,6 +3230,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	protected Optional<LifecycleObserver> getLifecycleObserver() {
 		return Optional.ofNullable(this.lifecycleObserver);
+	}
+
+	@NonNull
+	protected Optional<MetricsCollector> getMetricsCollector() {
+		return Optional.ofNullable(this.metricsCollector);
 	}
 
 	@NonNull

@@ -17,8 +17,17 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.LongAdder;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * A basic in-memory metrics collector.
@@ -27,10 +36,605 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 final class DefaultMetricsCollector implements MetricsCollector {
+	private static final String UNKNOWN_ROUTE = "[unmatched]";
+	private static final String UNKNOWN_STATUS_CLASS = "unknown";
+
+	private static final long[] HTTP_LATENCY_BUCKETS_NANOS = nanosFromMillis(
+			1, 2, 5, 10, 25, 50, 100, 200, 400, 800, 1500, 3000, 7000, 15000);
+
+	private static final long[] HTTP_BODY_BYTES_BUCKETS = new long[]{
+			0, 128, 256, 512, 1024, 2048, 4096, 8192,
+			16384, 32768, 65536, 131072, 262144, 524288,
+			1048576, 2097152, 4194304, 8388608
+	};
+
+	private static final long[] SSE_CONNECTION_DURATION_BUCKETS_NANOS = nanosFromSeconds(
+			1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 14400);
+
+	private static final long[] SSE_TIME_TO_FIRST_EVENT_BUCKETS_NANOS = nanosFromMillis(
+			1, 2, 5, 10, 25, 50, 100, 200, 500, 1000, 3000, 10000);
+
+	private static final long[] SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS = nanosFromMillis(
+			0, 1, 2, 5, 10, 25, 50, 100, 200, 400, 800, 1500, 3000, 7000, 15000, 30000);
+
+	private static final long[] SSE_QUEUE_DEPTH_BUCKETS = new long[]{
+			0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024
+	};
+
+	private final ConcurrentHashMap<IdentityKey<Request>, RequestState> requestsInFlightByIdentity;
+	private final ConcurrentHashMap<Object, RequestState> requestsInFlightById;
+	private final ConcurrentHashMap<HttpMethodRouteStatusKey, Histogram> httpRequestDurationByRouteStatus;
+	private final ConcurrentHashMap<HttpMethodRouteStatusKey, Histogram> httpHandlerDurationByRouteStatus;
+	private final ConcurrentHashMap<HttpMethodRouteStatusKey, Histogram> httpTimeToFirstByteByRouteStatus;
+	private final ConcurrentHashMap<HttpMethodRouteKey, Histogram> httpRequestBodyBytesByRoute;
+	private final ConcurrentHashMap<HttpMethodRouteStatusKey, Histogram> httpResponseBodyBytesByRouteStatus;
+	private final ConcurrentHashMap<IdentityKey<ServerSentEventConnection>, SseConnectionState> sseConnectionsByIdentity;
+	private final ConcurrentHashMap<SseRouteKey, Histogram> sseTimeToFirstEventByRoute;
+	private final ConcurrentHashMap<SseRouteKey, Histogram> sseEventWriteDurationByRoute;
+	private final ConcurrentHashMap<SseRouteKey, Histogram> sseEventDeliveryLagByRoute;
+	private final ConcurrentHashMap<SseRouteKey, Histogram> sseEventSizeByRoute;
+	private final ConcurrentHashMap<SseRouteKey, Histogram> sseQueueDepthByRoute;
+	private final ConcurrentHashMap<SseRouteTerminationKey, Histogram> sseConnectionDurationByRouteAndReason;
+	private final LongAdder activeRequests;
+	private final LongAdder activeSseConnections;
+
 	@NonNull
 	public static DefaultMetricsCollector withDefaults() {
 		return new DefaultMetricsCollector();
 	}
 
-	// TODO: implement
+	private DefaultMetricsCollector() {
+		this.requestsInFlightByIdentity = new ConcurrentHashMap<>();
+		this.requestsInFlightById = new ConcurrentHashMap<>();
+		this.httpRequestDurationByRouteStatus = new ConcurrentHashMap<>();
+		this.httpHandlerDurationByRouteStatus = new ConcurrentHashMap<>();
+		this.httpTimeToFirstByteByRouteStatus = new ConcurrentHashMap<>();
+		this.httpRequestBodyBytesByRoute = new ConcurrentHashMap<>();
+		this.httpResponseBodyBytesByRouteStatus = new ConcurrentHashMap<>();
+		this.sseConnectionsByIdentity = new ConcurrentHashMap<>();
+		this.sseTimeToFirstEventByRoute = new ConcurrentHashMap<>();
+		this.sseEventWriteDurationByRoute = new ConcurrentHashMap<>();
+		this.sseEventDeliveryLagByRoute = new ConcurrentHashMap<>();
+		this.sseEventSizeByRoute = new ConcurrentHashMap<>();
+		this.sseQueueDepthByRoute = new ConcurrentHashMap<>();
+		this.sseConnectionDurationByRouteAndReason = new ConcurrentHashMap<>();
+		this.activeRequests = new LongAdder();
+		this.activeSseConnections = new LongAdder();
+	}
+
+	@Override
+	public void didStartRequestHandling(@NonNull Request request,
+																			@Nullable ResourceMethod resourceMethod) {
+		requireNonNull(request);
+
+		String route = routeFor(resourceMethod);
+		HttpMethod method = request.getHttpMethod();
+
+		this.activeRequests.increment();
+		RequestState state = new RequestState(new IdentityKey<>(request), request.getId(), System.nanoTime(), method, route);
+		this.requestsInFlightByIdentity.put(state.getIdentityKey(), state);
+		this.requestsInFlightById.put(state.getRequestId(), state);
+
+		long requestBodyBytes = request.getBody()
+				.map(body -> (long) body.length)
+				.orElse(0L);
+
+		Histogram requestBodyHistogram = histogramFor(this.httpRequestBodyBytesByRoute,
+				new HttpMethodRouteKey(method, route),
+				HTTP_BODY_BYTES_BUCKETS);
+		requestBodyHistogram.record(requestBodyBytes);
+	}
+
+	@Override
+	public void willWriteResponse(@NonNull Request request,
+																@Nullable ResourceMethod resourceMethod,
+																@NonNull MarshaledResponse marshaledResponse) {
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+
+		RequestState state = requestStateFor(request);
+
+		if (state == null)
+			return;
+
+		if (!state.markHandlerDurationRecorded())
+			return;
+
+		long elapsedNanos = System.nanoTime() - state.getStartedAtNanos();
+		String statusClass = statusClassFor(marshaledResponse.getStatusCode());
+
+		HttpMethodRouteStatusKey key = new HttpMethodRouteStatusKey(state.getMethod(), state.getRoute(), statusClass);
+		histogramFor(this.httpHandlerDurationByRouteStatus, key, HTTP_LATENCY_BUCKETS_NANOS)
+				.record(elapsedNanos);
+
+		// TTFB is approximated as "time to start writing response"
+		histogramFor(this.httpTimeToFirstByteByRouteStatus, key, HTTP_LATENCY_BUCKETS_NANOS)
+				.record(elapsedNanos);
+	}
+
+	@Override
+	public void didFinishRequestHandling(@NonNull Request request,
+																			 @Nullable ResourceMethod resourceMethod,
+																			 @NonNull MarshaledResponse marshaledResponse,
+																			 @NonNull Duration duration,
+																			 @NonNull List<@NonNull Throwable> throwables) {
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+		requireNonNull(duration);
+		requireNonNull(throwables);
+
+		this.activeRequests.decrement();
+		removeRequestState(request);
+
+		String route = routeFor(resourceMethod);
+		HttpMethod method = request.getHttpMethod();
+		String statusClass = statusClassFor(marshaledResponse.getStatusCode());
+
+		HttpMethodRouteStatusKey key = new HttpMethodRouteStatusKey(method, route, statusClass);
+		histogramFor(this.httpRequestDurationByRouteStatus, key, HTTP_LATENCY_BUCKETS_NANOS)
+				.record(duration.toNanos());
+
+		long responseBodyBytes = marshaledResponse.getBody()
+				.map(body -> (long) body.length)
+				.orElse(0L);
+
+		histogramFor(this.httpResponseBodyBytesByRouteStatus, key, HTTP_BODY_BYTES_BUCKETS)
+				.record(responseBodyBytes);
+	}
+
+	@Override
+	public void didEstablishServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection) {
+		requireNonNull(serverSentEventConnection);
+
+		String route = serverSentEventConnection.getResourceMethod()
+				.getResourcePathDeclaration()
+				.getPath();
+
+		this.activeSseConnections.increment();
+		this.sseConnectionsByIdentity.put(new IdentityKey<>(serverSentEventConnection),
+				new SseConnectionState(route, System.nanoTime()));
+	}
+
+	@Override
+	public void willWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
+																			 @NonNull ServerSentEvent serverSentEvent) {
+		requireNonNull(serverSentEventConnection);
+		requireNonNull(serverSentEvent);
+
+		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
+
+		if (state == null)
+			return;
+
+		if (state.markFirstEventRecorded()) {
+			long elapsedNanos = System.nanoTime() - state.getEstablishedAtNanos();
+			histogramFor(this.sseTimeToFirstEventByRoute,
+					new SseRouteKey(state.getRoute()),
+					SSE_TIME_TO_FIRST_EVENT_BUCKETS_NANOS).record(elapsedNanos);
+		}
+	}
+
+	@Override
+	public void didWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
+																			@NonNull ServerSentEvent serverSentEvent,
+																			@NonNull Duration writeDuration) {
+		requireNonNull(serverSentEventConnection);
+		requireNonNull(serverSentEvent);
+		requireNonNull(writeDuration);
+
+		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
+
+		if (state == null)
+			return;
+
+		state.incrementEventsSent();
+
+		histogramFor(this.sseEventWriteDurationByRoute,
+				new SseRouteKey(state.getRoute()),
+				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
+	}
+
+	@Override
+	public void didWriteServerSentEventMetrics(@NonNull ServerSentEventConnection serverSentEventConnection,
+																						 @NonNull ServerSentEvent serverSentEvent,
+																						 long deliveryLagNanos,
+																						 int payloadBytes,
+																						 int queueDepth) {
+		requireNonNull(serverSentEventConnection);
+		requireNonNull(serverSentEvent);
+
+		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
+		String route = state == null ? routeFor(serverSentEventConnection) : state.getRoute();
+
+		if (deliveryLagNanos >= 0) {
+			histogramFor(this.sseEventDeliveryLagByRoute,
+					new SseRouteKey(route),
+					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
+		}
+
+		if (payloadBytes >= 0) {
+			histogramFor(this.sseEventSizeByRoute,
+					new SseRouteKey(route),
+					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
+		}
+
+		if (queueDepth >= 0) {
+			histogramFor(this.sseQueueDepthByRoute,
+					new SseRouteKey(route),
+					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
+		}
+	}
+
+	@Override
+	public void didFailToWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
+																						@NonNull ServerSentEvent serverSentEvent,
+																						@NonNull Duration writeDuration,
+																						@NonNull Throwable throwable) {
+		requireNonNull(serverSentEventConnection);
+		requireNonNull(serverSentEvent);
+		requireNonNull(writeDuration);
+		requireNonNull(throwable);
+
+		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
+
+		if (state == null)
+			return;
+
+		histogramFor(this.sseEventWriteDurationByRoute,
+				new SseRouteKey(state.getRoute()),
+				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
+	}
+
+	@Override
+	public void didTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
+																										@NonNull Duration connectionDuration,
+																										ServerSentEventConnection.@NonNull TerminationReason terminationReason,
+																										@Nullable Throwable throwable) {
+		requireNonNull(serverSentEventConnection);
+		requireNonNull(connectionDuration);
+		requireNonNull(terminationReason);
+
+		this.activeSseConnections.decrement();
+		this.sseConnectionsByIdentity.remove(new IdentityKey<>(serverSentEventConnection));
+
+		String route = serverSentEventConnection.getResourceMethod()
+				.getResourcePathDeclaration()
+				.getPath();
+
+		SseRouteTerminationKey key = new SseRouteTerminationKey(route, terminationReason);
+
+		histogramFor(this.sseConnectionDurationByRouteAndReason, key, SSE_CONNECTION_DURATION_BUCKETS_NANOS)
+				.record(connectionDuration.toNanos());
+	}
+
+	long getActiveRequests() {
+		return this.activeRequests.sum();
+	}
+
+	long getActiveSseConnections() {
+		return this.activeSseConnections.sum();
+	}
+
+	@NonNull
+	Map<HttpMethodRouteStatusKey, HistogramSnapshot> snapshotHttpRequestDurations() {
+		return snapshotMap(this.httpRequestDurationByRouteStatus);
+	}
+
+	@NonNull
+	Map<HttpMethodRouteStatusKey, HistogramSnapshot> snapshotHttpHandlerDurations() {
+		return snapshotMap(this.httpHandlerDurationByRouteStatus);
+	}
+
+	@NonNull
+	Map<HttpMethodRouteStatusKey, HistogramSnapshot> snapshotHttpTimeToFirstByte() {
+		return snapshotMap(this.httpTimeToFirstByteByRouteStatus);
+	}
+
+	@NonNull
+	Map<HttpMethodRouteKey, HistogramSnapshot> snapshotHttpRequestBodyBytes() {
+		return snapshotMap(this.httpRequestBodyBytesByRoute);
+	}
+
+	@NonNull
+	Map<HttpMethodRouteStatusKey, HistogramSnapshot> snapshotHttpResponseBodyBytes() {
+		return snapshotMap(this.httpResponseBodyBytesByRouteStatus);
+	}
+
+	@NonNull
+	Map<SseRouteKey, HistogramSnapshot> snapshotSseTimeToFirstEvent() {
+		return snapshotMap(this.sseTimeToFirstEventByRoute);
+	}
+
+	@NonNull
+	Map<SseRouteKey, HistogramSnapshot> snapshotSseEventWriteDurations() {
+		return snapshotMap(this.sseEventWriteDurationByRoute);
+	}
+
+	@NonNull
+	Map<SseRouteKey, HistogramSnapshot> snapshotSseEventDeliveryLag() {
+		return snapshotMap(this.sseEventDeliveryLagByRoute);
+	}
+
+	@NonNull
+	Map<SseRouteKey, HistogramSnapshot> snapshotSseEventSizes() {
+		return snapshotMap(this.sseEventSizeByRoute);
+	}
+
+	@NonNull
+	Map<SseRouteKey, HistogramSnapshot> snapshotSseQueueDepth() {
+		return snapshotMap(this.sseQueueDepthByRoute);
+	}
+
+	@NonNull
+	Map<SseRouteTerminationKey, HistogramSnapshot> snapshotSseConnectionDurations() {
+		return snapshotMap(this.sseConnectionDurationByRouteAndReason);
+	}
+
+	void reset() {
+		this.activeRequests.reset();
+		this.activeSseConnections.reset();
+		this.requestsInFlightByIdentity.clear();
+		this.requestsInFlightById.clear();
+		this.sseConnectionsByIdentity.clear();
+		resetMap(this.httpRequestDurationByRouteStatus);
+		resetMap(this.httpHandlerDurationByRouteStatus);
+		resetMap(this.httpTimeToFirstByteByRouteStatus);
+		resetMap(this.httpRequestBodyBytesByRoute);
+		resetMap(this.httpResponseBodyBytesByRouteStatus);
+		resetMap(this.sseTimeToFirstEventByRoute);
+		resetMap(this.sseEventWriteDurationByRoute);
+		resetMap(this.sseEventDeliveryLagByRoute);
+		resetMap(this.sseEventSizeByRoute);
+		resetMap(this.sseQueueDepthByRoute);
+		resetMap(this.sseConnectionDurationByRouteAndReason);
+	}
+
+	@NonNull
+	private static String routeFor(@Nullable ResourceMethod resourceMethod) {
+		if (resourceMethod == null)
+			return UNKNOWN_ROUTE;
+
+		return resourceMethod.getResourcePathDeclaration().getPath();
+	}
+
+	@NonNull
+	private static String routeFor(@NonNull ServerSentEventConnection serverSentEventConnection) {
+		requireNonNull(serverSentEventConnection);
+		return serverSentEventConnection.getResourceMethod().getResourcePathDeclaration().getPath();
+	}
+
+	@NonNull
+	private static String statusClassFor(int statusCode) {
+		if (statusCode >= 100 && statusCode < 200)
+			return "1xx";
+		if (statusCode >= 200 && statusCode < 300)
+			return "2xx";
+		if (statusCode >= 300 && statusCode < 400)
+			return "3xx";
+		if (statusCode >= 400 && statusCode < 500)
+			return "4xx";
+		if (statusCode >= 500 && statusCode < 600)
+			return "5xx";
+
+		return UNKNOWN_STATUS_CLASS;
+	}
+
+	@NonNull
+	private static long[] nanosFromMillis(int... millis) {
+		long[] nanos = new long[millis.length];
+		for (int i = 0; i < millis.length; i++)
+			nanos[i] = millis[i] * 1_000_000L;
+		return nanos;
+	}
+
+	@NonNull
+	private static long[] nanosFromSeconds(int... seconds) {
+		long[] nanos = new long[seconds.length];
+		for (int i = 0; i < seconds.length; i++)
+			nanos[i] = seconds[i] * 1_000_000_000L;
+		return nanos;
+	}
+
+	@NonNull
+	private static <K> Histogram histogramFor(@NonNull Map<K, Histogram> map,
+																						@NonNull K key,
+																						@NonNull long[] buckets) {
+		requireNonNull(map);
+		requireNonNull(key);
+		requireNonNull(buckets);
+
+		return map.computeIfAbsent(key, ignored -> new Histogram(buckets));
+	}
+
+	@NonNull
+	private static <K> Map<K, HistogramSnapshot> snapshotMap(@NonNull Map<K, Histogram> map) {
+		requireNonNull(map);
+
+		Map<K, HistogramSnapshot> snapshot = new ConcurrentHashMap<>(map.size());
+		for (Map.Entry<K, Histogram> entry : map.entrySet())
+			snapshot.put(entry.getKey(), entry.getValue().snapshot());
+		return snapshot;
+	}
+
+	private static <K> void resetMap(@NonNull Map<K, Histogram> map) {
+		requireNonNull(map);
+
+		for (Histogram histogram : map.values())
+			histogram.reset();
+	}
+
+	private static final class RequestState {
+		@NonNull
+		private final IdentityKey<Request> identityKey;
+		@NonNull
+		private final Object requestId;
+		private final long startedAtNanos;
+		@NonNull
+		private final HttpMethod method;
+		@NonNull
+		private final String route;
+		@NonNull
+		private final AtomicBoolean handlerDurationRecorded;
+
+		private RequestState(@NonNull IdentityKey<Request> identityKey,
+												 @NonNull Object requestId,
+												 long startedAtNanos,
+												 @NonNull HttpMethod method,
+												 @NonNull String route) {
+			this.identityKey = requireNonNull(identityKey);
+			this.requestId = requireNonNull(requestId);
+			this.startedAtNanos = startedAtNanos;
+			this.method = requireNonNull(method);
+			this.route = requireNonNull(route);
+			this.handlerDurationRecorded = new AtomicBoolean(false);
+		}
+
+		@NonNull
+		IdentityKey<Request> getIdentityKey() {
+			return this.identityKey;
+		}
+
+		@NonNull
+		Object getRequestId() {
+			return this.requestId;
+		}
+
+		long getStartedAtNanos() {
+			return this.startedAtNanos;
+		}
+
+		@NonNull
+		HttpMethod getMethod() {
+			return this.method;
+		}
+
+		@NonNull
+		String getRoute() {
+			return this.route;
+		}
+
+		boolean markHandlerDurationRecorded() {
+			return this.handlerDurationRecorded.compareAndSet(false, true);
+		}
+	}
+
+	private static final class SseConnectionState {
+		private final long establishedAtNanos;
+		@NonNull
+		private final String route;
+		@NonNull
+		private final AtomicBoolean firstEventRecorded;
+		@NonNull
+		private final LongAdder eventsSent;
+
+		private SseConnectionState(@NonNull String route,
+															 long establishedAtNanos) {
+			this.route = requireNonNull(route);
+			this.establishedAtNanos = establishedAtNanos;
+			this.firstEventRecorded = new AtomicBoolean(false);
+			this.eventsSent = new LongAdder();
+		}
+
+		long getEstablishedAtNanos() {
+			return this.establishedAtNanos;
+		}
+
+		@NonNull
+		String getRoute() {
+			return this.route;
+		}
+
+		boolean markFirstEventRecorded() {
+			return this.firstEventRecorded.compareAndSet(false, true);
+		}
+
+		void incrementEventsSent() {
+			this.eventsSent.increment();
+		}
+	}
+
+	private static final class IdentityKey<T> {
+		private final T value;
+		private final int hash;
+
+		private IdentityKey(@NonNull T value) {
+			this.value = requireNonNull(value);
+			this.hash = System.identityHashCode(value);
+		}
+
+		@Override
+		public boolean equals(@Nullable Object object) {
+			if (this == object)
+				return true;
+			if (!(object instanceof IdentityKey<?> identityKey))
+				return false;
+			return this.value == identityKey.value;
+		}
+
+		@Override
+		public int hashCode() {
+			return this.hash;
+		}
+	}
+
+	private RequestState requestStateFor(@NonNull Request request) {
+		requireNonNull(request);
+
+		IdentityKey<Request> identityKey = new IdentityKey<>(request);
+		RequestState state = this.requestsInFlightByIdentity.get(identityKey);
+
+		if (state != null)
+			return state;
+
+		state = this.requestsInFlightById.get(request.getId());
+
+		if (state != null)
+			this.requestsInFlightByIdentity.putIfAbsent(identityKey, state);
+
+		return state;
+	}
+
+	private void removeRequestState(@NonNull Request request) {
+		requireNonNull(request);
+
+		RequestState state = requestStateFor(request);
+
+		if (state == null)
+			return;
+
+		this.requestsInFlightByIdentity.remove(state.getIdentityKey(), state);
+		this.requestsInFlightById.remove(state.getRequestId(), state);
+	}
+
+	record HttpMethodRouteKey(@NonNull HttpMethod method,
+														@NonNull String route) {
+		HttpMethodRouteKey {
+			requireNonNull(method);
+			requireNonNull(route);
+		}
+	}
+
+	record HttpMethodRouteStatusKey(@NonNull HttpMethod method,
+																	@NonNull String route,
+																	@NonNull String statusClass) {
+		HttpMethodRouteStatusKey {
+			requireNonNull(method);
+			requireNonNull(route);
+			requireNonNull(statusClass);
+		}
+	}
+
+	record SseRouteKey(@NonNull String route) {
+		SseRouteKey {
+			requireNonNull(route);
+		}
+	}
+
+	record SseRouteTerminationKey(@NonNull String route,
+																ServerSentEventConnection.@NonNull TerminationReason terminationReason) {
+		SseRouteTerminationKey {
+			requireNonNull(route);
+			requireNonNull(terminationReason);
+		}
+	}
 }

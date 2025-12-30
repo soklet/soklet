@@ -52,6 +52,8 @@ public final class SokletConfig {
 	@NonNull
 	private final LifecycleObserver lifecycleObserver;
 	@NonNull
+	private final MetricsCollector metricsCollector;
+	@NonNull
 	private final CorsAuthorizer corsAuthorizer;
 	@NonNull
 	private final Server server;
@@ -94,6 +96,7 @@ public final class SokletConfig {
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : ResponseMarshaler.defaultInstance();
 		this.requestInterceptor = builder.requestInterceptor != null ? builder.requestInterceptor : RequestInterceptor.defaultInstance();
 		this.lifecycleObserver = builder.lifecycleObserver != null ? builder.lifecycleObserver : LifecycleObserver.defaultInstance();
+		this.metricsCollector = builder.metricsCollector != null ? builder.metricsCollector : MetricsCollector.withDefaults();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : CorsAuthorizer.withRejectAllPolicy();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(this);
 	}
@@ -189,6 +192,16 @@ public final class SokletConfig {
 	}
 
 	/**
+	 * How Soklet will collect operational metrics.
+	 *
+	 * @return the instance responsible for metrics collection
+	 */
+	@NonNull
+	public MetricsCollector getMetricsCollector() {
+		return this.metricsCollector;
+	}
+
+	/**
 	 * How Soklet handles <a href="https://www.soklet.com/docs/cors">Cross-Origin Resource Sharing (CORS)</a>.
 	 *
 	 * @return the instance responsible for CORS-related processing
@@ -250,10 +263,11 @@ public final class SokletConfig {
 		@Nullable
 		private LifecycleObserver lifecycleObserver;
 		@Nullable
+		private MetricsCollector metricsCollector;
+		@Nullable
 		private CorsAuthorizer corsAuthorizer;
 
-		@NonNull
-		Builder(@NonNull Server server) {
+		@NonNull Builder(@NonNull Server server) {
 			requireNonNull(server);
 			this.server = server;
 		}
@@ -316,6 +330,12 @@ public final class SokletConfig {
 		@NonNull
 		public Builder lifecycleObserver(@Nullable LifecycleObserver lifecycleObserver) {
 			this.lifecycleObserver = lifecycleObserver;
+			return this;
+		}
+
+		@NonNull
+		public Builder metricsCollector(@Nullable MetricsCollector metricsCollector) {
+			this.metricsCollector = metricsCollector;
 			return this;
 		}
 
@@ -390,6 +410,7 @@ public final class SokletConfig {
 					.responseMarshaler(sokletConfig.responseMarshaler)
 					.requestInterceptor(sokletConfig.requestInterceptor)
 					.lifecycleObserver(sokletConfig.lifecycleObserver)
+					.metricsCollector(sokletConfig.metricsCollector)
 					.corsAuthorizer(sokletConfig.corsAuthorizer);
 		}
 
@@ -451,6 +472,12 @@ public final class SokletConfig {
 		@NonNull
 		public Copier lifecycleObserver(@Nullable LifecycleObserver lifecycleObserver) {
 			this.builder.lifecycleObserver(lifecycleObserver);
+			return this;
+		}
+
+		@NonNull
+		public Copier metricsCollector(@Nullable MetricsCollector metricsCollector) {
+			this.builder.metricsCollector(metricsCollector);
 			return this;
 		}
 
