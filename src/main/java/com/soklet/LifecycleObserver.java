@@ -292,7 +292,7 @@ public interface LifecycleObserver {
 	 * Called before an SSE comment is written.
 	 */
 	default void willWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																						 @NonNull String comment) {
+																						 @NonNull ServerSentEventComment serverSentEventComment) {
 		// No-op by default
 	}
 
@@ -300,7 +300,7 @@ public interface LifecycleObserver {
 	 * Called after an SSE comment is written.
 	 */
 	default void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																							@NonNull String comment,
+																							@NonNull ServerSentEventComment serverSentEventComment,
 																							@NonNull Duration writeDuration) {
 		// No-op by default
 	}
@@ -309,7 +309,7 @@ public interface LifecycleObserver {
 	 * Called after an SSE comment fails to write.
 	 */
 	default void didFailToWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																										@NonNull String comment,
+																										@NonNull ServerSentEventComment serverSentEventComment,
 																										@NonNull Duration writeDuration,
 																										@NonNull Throwable throwable) {
 		// No-op by default

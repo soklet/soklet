@@ -87,7 +87,7 @@ public class ServerSentEventTests {
 							ResponseCookie.with("cookie-test", exampleId).build()
 					))
 					.clientInitializer(unicaster -> {
-						unicaster.unicastComment("Unicast comment");
+						unicaster.unicastComment(ServerSentEventComment.withComment("Unicast comment").build());
 						unicaster.unicastEvent(ServerSentEvent.withEvent("initial")
 								.data("unicast")
 								.build()
@@ -105,7 +105,7 @@ public class ServerSentEventTests {
 				.build();
 
 		List<ServerSentEvent> events = new ArrayList<>();
-		List<String> comments = new ArrayList<>();
+		List<ServerSentEventComment> comments = new ArrayList<>();
 
 		Soklet.runSimulator(configuration, (simulator -> {
 			// Perform initial handshake with /examples/abc and verify 200 response
@@ -159,7 +159,7 @@ public class ServerSentEventTests {
 				broadcaster.broadcastEvent(serverSentEvent);
 
 				// Now try a comment
-				broadcaster.broadcastComment("just a test");
+				broadcaster.broadcastComment(ServerSentEventComment.withComment("just a test").build());
 			} else if (requestResult instanceof HandshakeRejected handshakeRejected) {
 				Assertions.fail("SSE handshake rejected: " + handshakeRejected);
 			} else if (requestResult instanceof RequestFailed requestFailed) {
@@ -174,8 +174,8 @@ public class ServerSentEventTests {
 		Assertions.assertEquals(2, comments.size(), "Wrong number of comments");
 		Assertions.assertEquals("unicast", events.get(0).getData().get(), "Unexpected unicast event data");
 		Assertions.assertEquals("data", events.get(1).getData().get(), "Unexpected broadcast event data");
-		Assertions.assertEquals("Unicast comment", comments.get(0), "Unexpected unicast comment");
-		Assertions.assertEquals("just a test", comments.get(1), "Unexpected broadcast comment");
+		Assertions.assertEquals("Unicast comment", comments.get(0).getComment(), "Unexpected unicast comment");
+		Assertions.assertEquals("just a test", comments.get(1).getComment(), "Unexpected broadcast comment");
 	}
 
 	@Test

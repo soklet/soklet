@@ -105,15 +105,15 @@ public interface ServerSentEventBroadcaster {
 	/**
 	 * Broadcasts a single Server-Sent Event comment to all clients listening to this broadcaster's {@link ResourcePath}.
 	 * <p>
-	 * Specify a blank string to generate a bare {@code ":"} Server-Sent Event comment line.
+	 * Use {@link ServerSentEventComment#withHeartbeat()} to emit a heartbeat comment, or set the {@link ServerSentEventComment#getCommentType()} to {@link ServerSentEventComment.CommentType#HEARTBEAT}.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
 	 * <p>
 	 * However, mock implementations may wish to block until broadcasts have completed - for example, to simplify automated testing.
 	 *
-	 * @param comment the comment payload to broadcast
+	 * @param serverSentEventComment the comment payload to broadcast
 	 */
-	void broadcastComment(@NonNull String comment);
+	void broadcastComment(@NonNull ServerSentEventComment serverSentEventComment);
 
 	/**
 	 * Broadcasts a Server-Sent Event comment where the payload is dynamically generated and memoized based on a specific trait of the client (e.g. {@link java.util.Locale} or User Role).
@@ -128,8 +128,8 @@ public interface ServerSentEventBroadcaster {
 	 *
 	 * @param <T>             the type of the grouping key
 	 * @param keySelector     a function that derives a grouping key from the client's associated context object
-	 * @param commentProvider a function that provides the comment string for a given key
+	 * @param commentProvider a function that provides the comment payload for a given key
 	 */
 	<T> void broadcastComment(@NonNull Function<Object, T> keySelector,
-														@NonNull Function<T, String> commentProvider);
+														@NonNull Function<T, ServerSentEventComment> commentProvider);
 }

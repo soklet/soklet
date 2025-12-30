@@ -62,13 +62,13 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		@NonNull
 		private List<@NonNull ServerSentEvent> clientInitializerEvents;
 		@NonNull
-		private List<@NonNull String> clientInitializerComments;
+		private List<@NonNull ServerSentEventComment> clientInitializerComments;
 		@NonNull
 		private final ReentrantLock lock;
 		@Nullable
 		private Consumer<ServerSentEvent> eventConsumer;
 		@Nullable
-		private Consumer<String> commentConsumer;
+		private Consumer<ServerSentEventComment> commentConsumer;
 
 		HandshakeAccepted(HandshakeResult.@NonNull Accepted handshakeResult,
 											@NonNull ResourcePath resourcePath,
@@ -114,18 +114,18 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 								}
 							}
 						},
-						(comment) -> {
-							requireNonNull(comment);
+						(serverSentEventComment) -> {
+							requireNonNull(serverSentEventComment);
 
 							// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
 							// If we do have the event consumer registered, send immediately
-							Consumer<String> commentConsumer = getCommentConsumer().orElse(null);
+							Consumer<ServerSentEventComment> commentConsumer = getCommentConsumer().orElse(null);
 
 							if (commentConsumer == null)
-								clientInitializerComments.add(comment);
+								clientInitializerComments.add(serverSentEventComment);
 							else {
 								try {
-									commentConsumer.accept(comment);
+									commentConsumer.accept(serverSentEventComment);
 								} catch (Throwable throwable) {
 									handleUnicastError(throwable);
 								}
@@ -184,7 +184,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 * @param commentConsumer function to be invoked when a Server-Sent comment has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 comment consumer
 		 */
-		public void registerCommentConsumer(@NonNull Consumer<String> commentConsumer) {
+		public void registerCommentConsumer(@NonNull Consumer<ServerSentEventComment> commentConsumer) {
 			requireNonNull(commentConsumer);
 
 			getLock().lock();
@@ -196,7 +196,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 				this.commentConsumer = commentConsumer;
 
 				// Send client initializer unicast comments immediately, before any broadcasts can make it through
-				for (String comment : getClientInitializerComments()) {
+				for (ServerSentEventComment comment : getClientInitializerComments()) {
 					try {
 						commentConsumer.accept(comment);
 					} catch (Throwable throwable) {
@@ -289,7 +289,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 
 		@NonNull
-		private List<@NonNull String> getClientInitializerComments() {
+		private List<@NonNull ServerSentEventComment> getClientInitializerComments() {
 			return this.clientInitializerComments;
 		}
 
@@ -299,7 +299,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 
 		@NonNull
-		private Optional<Consumer<String>> getCommentConsumer() {
+		private Optional<Consumer<ServerSentEventComment>> getCommentConsumer() {
 			return Optional.ofNullable(this.commentConsumer);
 		}
 

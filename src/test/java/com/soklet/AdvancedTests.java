@@ -1515,7 +1515,7 @@ public class AdvancedTests {
 		public HandshakeResult stream() {
 			// Return an accepted handshake that sends an initial comment so the test knows we're live.
 			return HandshakeResult.acceptWithDefaults()
-					.clientInitializer(unicaster -> unicaster.unicastComment("connected"))
+					.clientInitializer(unicaster -> unicaster.unicastComment(ServerSentEventComment.withComment("connected").build()))
 					.build();
 		}
 	}

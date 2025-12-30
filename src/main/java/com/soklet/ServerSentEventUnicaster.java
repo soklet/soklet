@@ -80,15 +80,15 @@ public interface ServerSentEventUnicaster {
 	/**
 	 * Unicasts a single Server-Sent Event comment to a specific client listening to this unicaster's {@link ResourcePath}.
 	 * <p>
-	 * Specify a blank string to generate a bare {@code ":"} Server-Sent Event comment line.
+	 * Use {@link ServerSentEventComment#withHeartbeat()} to emit a heartbeat comment, or set the {@link ServerSentEventComment#getCommentType()} to {@link ServerSentEventComment.CommentType#HEARTBEAT}.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and unicast operation[s] will occur on separate threads of execution.
 	 * <p>
 	 * However, mock implementations may wish to block until the unicast has completed - for example, to simplify automated testing.
 	 *
-	 * @param comment the comment payload to unicast
+	 * @param serverSentEventComment the comment payload to unicast
 	 */
-	void unicastComment(@NonNull String comment);
+	void unicastComment(@NonNull ServerSentEventComment serverSentEventComment);
 
 	/**
 	 * The runtime Resource Path with which this unicaster is associated.

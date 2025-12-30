@@ -1562,14 +1562,14 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private final Consumer<ServerSentEvent> eventConsumer;
 		@NonNull
-		private final Consumer<String> commentConsumer;
+		private final Consumer<ServerSentEventComment> commentConsumer;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
 
 		public MockServerSentEventUnicaster(@NonNull ResourcePath resourcePath,
 																				@NonNull Consumer<ServerSentEvent> eventConsumer,
-																				@NonNull Consumer<String> commentConsumer,
-																				@NonNull AtomicReference<Consumer<Throwable>> unicastErrorHandler) {
+																	 @NonNull Consumer<ServerSentEventComment> commentConsumer,
+																	 @NonNull AtomicReference<Consumer<Throwable>> unicastErrorHandler) {
 			requireNonNull(resourcePath);
 			requireNonNull(eventConsumer);
 			requireNonNull(commentConsumer);
@@ -1592,10 +1592,10 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		public void unicastComment(@NonNull String comment) {
-			requireNonNull(comment);
+		public void unicastComment(@NonNull ServerSentEventComment serverSentEventComment) {
+			requireNonNull(serverSentEventComment);
 			try {
-				getCommentConsumer().accept(comment);
+				getCommentConsumer().accept(serverSentEventComment);
 			} catch (Throwable throwable) {
 				handleUnicastError(throwable);
 			}
@@ -1613,7 +1613,7 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		protected Consumer<String> getCommentConsumer() {
+		protected Consumer<ServerSentEventComment> getCommentConsumer() {
 			return this.commentConsumer;
 		}
 
@@ -1653,7 +1653,7 @@ public final class Soklet implements AutoCloseable {
 		private final Map<@NonNull Consumer<ServerSentEvent>, @NonNull Object> eventConsumers;
 		// Same goes for comments
 		@NonNull
-		private final Map<@NonNull Consumer<String>, @NonNull Object> commentConsumers;
+		private final Map<@NonNull Consumer<ServerSentEventComment>, @NonNull Object> commentConsumers;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
 
@@ -1694,12 +1694,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		public void broadcastComment(@NonNull String comment) {
-			requireNonNull(comment);
+		public void broadcastComment(@NonNull ServerSentEventComment serverSentEventComment) {
+			requireNonNull(serverSentEventComment);
 
-			for (Consumer<String> commentConsumer : getCommentConsumers().keySet()) {
+			for (Consumer<ServerSentEventComment> commentConsumer : getCommentConsumers().keySet()) {
 				try {
-					commentConsumer.accept(comment);
+					commentConsumer.accept(serverSentEventComment);
 				} catch (Throwable throwable) {
 					handleBroadcastError(throwable);
 				}
@@ -1737,13 +1737,13 @@ public final class Soklet implements AutoCloseable {
 		@Override
 		public <T> void broadcastComment(
 				@NonNull Function<Object, T> keySelector,
-				@NonNull Function<T, String> commentProvider
+				@NonNull Function<T, ServerSentEventComment> commentProvider
 		) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 
 			// 1. Create temporary cache
-			Map<T, String> commentCache = new HashMap<>();
+			Map<T, ServerSentEventComment> commentCache = new HashMap<>();
 
 			this.getCommentConsumers().forEach((consumer, context) -> {
 				try {
@@ -1751,7 +1751,7 @@ public final class Soklet implements AutoCloseable {
 					T key = keySelector.apply(context);
 
 					// 3. Memoize
-					String comment = commentCache.computeIfAbsent(key, commentProvider);
+					ServerSentEventComment comment = commentCache.computeIfAbsent(key, commentProvider);
 
 					// 4. Dispatch
 					consumer.accept(comment);
@@ -1783,7 +1783,7 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		public Boolean registerCommentConsumer(@NonNull Consumer<String> commentConsumer) {
+		public Boolean registerCommentConsumer(@NonNull Consumer<ServerSentEventComment> commentConsumer) {
 			return registerCommentConsumer(commentConsumer, null);
 		}
 
@@ -1791,13 +1791,13 @@ public final class Soklet implements AutoCloseable {
 		 * Registers a consumer with an associated context, simulating a client with specific traits.
 		 */
 		@NonNull
-		public Boolean registerCommentConsumer(@NonNull Consumer<String> commentConsumer, @Nullable Object context) {
+		public Boolean registerCommentConsumer(@NonNull Consumer<ServerSentEventComment> commentConsumer, @Nullable Object context) {
 			requireNonNull(commentConsumer);
 			return this.getCommentConsumers().put(commentConsumer, context == null ? NULL_CONTEXT_SENTINEL : context) == null;
 		}
 
 		@NonNull
-		public Boolean unregisterCommentConsumer(@NonNull Consumer<String> commentConsumer) {
+		public Boolean unregisterCommentConsumer(@NonNull Consumer<ServerSentEventComment> commentConsumer) {
 			requireNonNull(commentConsumer);
 			return this.getCommentConsumers().remove(commentConsumer) != null;
 		}
@@ -1808,7 +1808,7 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		protected Map<@NonNull Consumer<String>, @NonNull Object> getCommentConsumers() {
+		protected Map<@NonNull Consumer<ServerSentEventComment>, @NonNull Object> getCommentConsumers() {
 			return this.commentConsumers;
 		}
 
@@ -1912,12 +1912,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		public void registerCommentConsumer(@NonNull ResourcePath resourcePath,
-																				@NonNull Consumer<String> commentConsumer) {
+																				@NonNull Consumer<ServerSentEventComment> commentConsumer) {
 			registerCommentConsumer(resourcePath, commentConsumer, null);
 		}
 
 		public void registerCommentConsumer(@NonNull ResourcePath resourcePath,
-																				@NonNull Consumer<String> commentConsumer,
+																				@NonNull Consumer<ServerSentEventComment> commentConsumer,
 																				@Nullable Object context) {
 			requireNonNull(resourcePath);
 			requireNonNull(commentConsumer);
@@ -1930,7 +1930,7 @@ public final class Soklet implements AutoCloseable {
 
 		@NonNull
 		public Boolean unregisterCommentConsumer(@NonNull ResourcePath resourcePath,
-																						 @NonNull Consumer<String> commentConsumer) {
+																						 @NonNull Consumer<ServerSentEventComment> commentConsumer) {
 			requireNonNull(resourcePath);
 			requireNonNull(commentConsumer);
 

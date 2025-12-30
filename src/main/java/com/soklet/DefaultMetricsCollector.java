@@ -20,7 +20,6 @@ import com.soklet.MetricsCollector.Histogram;
 import com.soklet.MetricsCollector.ServerRouteKey;
 import com.soklet.MetricsCollector.ServerRouteStatusKey;
 import com.soklet.MetricsCollector.RouteKind;
-import com.soklet.MetricsCollector.ServerSentEventCommentKind;
 import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
@@ -273,21 +272,19 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																							@NonNull String comment,
-																							@NonNull ServerSentEventCommentKind commentKind,
+																							@NonNull ServerSentEventComment serverSentEventComment,
 																							@NonNull Duration writeDuration,
 																							@Nullable Duration deliveryLag,
 																							@Nullable Integer payloadBytes,
 																							@Nullable Integer queueDepth) {
 		requireNonNull(serverSentEventConnection);
-		requireNonNull(comment);
-		requireNonNull(commentKind);
+		requireNonNull(serverSentEventComment);
 		requireNonNull(writeDuration);
 
 		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
 		RouteContext routeContext = routeContextFor(state, serverSentEventConnection);
 		ServerSentEventCommentRouteKey key = new ServerSentEventCommentRouteKey(routeContext.getRouteKind(),
-				routeContext.getRoute(), commentKind);
+				routeContext.getRoute(), serverSentEventComment.getCommentType());
 
 		if (deliveryLag != null) {
 			long deliveryLagNanos = Math.max(0L, deliveryLag.toNanos());
@@ -351,23 +348,21 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didFailToWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																										@NonNull String comment,
-																										@NonNull ServerSentEventCommentKind commentKind,
+																										@NonNull ServerSentEventComment serverSentEventComment,
 																										@NonNull Duration writeDuration,
 																										@NonNull Throwable throwable,
 																										@Nullable Duration deliveryLag,
 																										@Nullable Integer payloadBytes,
 																										@Nullable Integer queueDepth) {
 		requireNonNull(serverSentEventConnection);
-		requireNonNull(comment);
-		requireNonNull(commentKind);
+		requireNonNull(serverSentEventComment);
 		requireNonNull(writeDuration);
 		requireNonNull(throwable);
 
 		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
 		RouteContext routeContext = routeContextFor(state, serverSentEventConnection);
 		ServerSentEventCommentRouteKey key = new ServerSentEventCommentRouteKey(routeContext.getRouteKind(),
-				routeContext.getRoute(), commentKind);
+				routeContext.getRoute(), serverSentEventComment.getCommentType());
 
 		if (deliveryLag != null) {
 			long deliveryLagNanos = Math.max(0L, deliveryLag.toNanos());

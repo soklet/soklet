@@ -16,7 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.MetricsCollector.ServerSentEventCommentKind;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.util.ConcurrentLruMap;
@@ -125,6 +124,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	private static final byte[] HEARTBEAT_COMMENT_PAYLOAD_BYTES;
 	@NonNull
+	private static final ServerSentEventComment HEARTBEAT_COMMENT;
+	@NonNull
 	private static final Integer DEFAULT_SSE_BUILDER_CAPACITY;
 
 	static {
@@ -153,6 +154,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		HEARTBEAT_COMMENT_PAYLOAD = ":\n\n";
 		HEARTBEAT_COMMENT_PAYLOAD_BYTES = HEARTBEAT_COMMENT_PAYLOAD.getBytes(StandardCharsets.UTF_8);
+		HEARTBEAT_COMMENT = ServerSentEventComment.withHeartbeat().build();
 		DEFAULT_SSE_BUILDER_CAPACITY = 256;
 	}
 
@@ -303,13 +305,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void broadcastComment(@NonNull String comment) {
-			requireNonNull(comment);
+		public void broadcastComment(@NonNull ServerSentEventComment serverSentEventComment) {
+			requireNonNull(serverSentEventComment);
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
-				enqueueComment(this, serverSentEventConnection, comment, getBackpressureHandler());
+				enqueueComment(this, serverSentEventConnection, serverSentEventComment, getBackpressureHandler());
 		}
 
 		@Override
@@ -343,11 +345,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		@Override
 		public <T> void broadcastComment(@NonNull Function<Object, T> keySelector,
-																		 @NonNull Function<T, String> commentProvider) {
+																		 @NonNull Function<T, ServerSentEventComment> commentProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 
-			Map<T, String> payloadCache = new HashMap<>();
+			Map<T, ServerSentEventComment> payloadCache = new HashMap<>();
 
 			for (DefaultServerSentEventConnection connection : getServerSentEventConnections()) {
 				Object clientContext = connection.getClientContext().orElse(null);
@@ -357,7 +359,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					T key = keySelector.apply(clientContext);
 
 					// Ask client code to generate payload (if not present in our local cache)
-					String comment = payloadCache.computeIfAbsent(key, commentProvider);
+					ServerSentEventComment comment = payloadCache.computeIfAbsent(key, commentProvider);
 
 					enqueueComment(this, connection, comment, getBackpressureHandler());
 				} catch (Throwable t) {
@@ -470,10 +472,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void broadcastComment(@NonNull String comment) {
-			requireNonNull(comment);
+		public void broadcastComment(@NonNull ServerSentEventComment serverSentEventComment) {
+			requireNonNull(serverSentEventComment);
 			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
-			if (b != null) b.broadcastComment(comment);
+			if (b != null) b.broadcastComment(serverSentEventComment);
 		}
 
 		@Override
@@ -487,7 +489,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		@Override
 		public <T> void broadcastComment(@NonNull Function<Object, T> keySelector,
-																		 @NonNull Function<T, String> commentProvider) {
+																		 @NonNull Function<T, ServerSentEventComment> commentProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
@@ -760,16 +762,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	private static Boolean enqueueComment(@NonNull DefaultServerSentEventBroadcaster owner,
 																				@NonNull DefaultServerSentEventConnection connection,
-																				@NonNull String comment,
+																				@NonNull ServerSentEventComment serverSentEventComment,
 																				@NonNull BackpressureHandler handler) {
 		requireNonNull(owner);
 		requireNonNull(connection);
-		requireNonNull(comment);
+		requireNonNull(serverSentEventComment);
 		requireNonNull(handler);
 
 		BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
 		DefaultServerSentEventConnection.WriteQueueElement writeQueueElement =
-				DefaultServerSentEventConnection.WriteQueueElement.withComment(comment, System.nanoTime());
+				DefaultServerSentEventConnection.WriteQueueElement.withComment(serverSentEventComment, System.nanoTime());
 
 		if (writeQueue.offer(writeQueueElement))
 			return true;
@@ -1165,7 +1167,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					// Idle heartbeat
 					if (writeQueueElement == null)
-						writeQueueElement = DefaultServerSentEventConnection.WriteQueueElement.withComment("", System.nanoTime());
+						writeQueueElement = DefaultServerSentEventConnection.WriteQueueElement.withComment(HEARTBEAT_COMMENT, System.nanoTime());
 
 					if (writeQueueElement.isPoisonPill()) {
 						// Encountered poison pill, exit...
@@ -1174,12 +1176,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent =
 							writeQueueElement.getPreSerializedEvent().orElse(null);
-					String comment = writeQueueElement.getComment().orElse(null);
-					ServerSentEventCommentKind commentKind = comment == null
-							? null
-							: comment.isEmpty()
-							? ServerSentEventCommentKind.HEARTBEAT
-							: ServerSentEventCommentKind.COMMENT;
+					ServerSentEventComment serverSentEventComment = writeQueueElement.getComment().orElse(null);
+					String comment = serverSentEventComment == null ? null : serverSentEventComment.getComment();
 					ServerSentEvent serverSentEvent = preSerializedEvent != null
 							? preSerializedEvent.getServerSentEvent()
 							: null;
@@ -1189,7 +1187,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					if (preSerializedEvent != null) {
 						// It's a normal server-sent event
 						payloadBytes = preSerializedEvent.getPayloadBytes();
-					} else if (comment != null) {
+					} else if (serverSentEventComment != null) {
 						// It's a comment (includes heartbeats)
 						String payload = formatCommentForResponse(comment);
 						payloadBytes = payload == HEARTBEAT_COMMENT_PAYLOAD
@@ -1201,37 +1199,37 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 					ByteBuffer byteBuffer = ByteBuffer.wrap(payloadBytes);
 
-					if (comment != null) {
+					if (serverSentEventComment != null) {
 						try {
-								getLifecycleObserver().get().willWriteServerSentEventComment(connectionSnapshot, comment);
-							} catch (Throwable t) {
-								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
-										.throwable(t)
+							getLifecycleObserver().get().willWriteServerSentEventComment(connectionSnapshot, serverSentEventComment);
+						} catch (Throwable t) {
+							safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
+									.throwable(t)
 									.build());
 						}
 
-							safelyCollectMetrics(
-									format("An exception occurred while invoking %s::willWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
-									connectionRequest,
-									connectionResourceMethod,
-									(metricsCollector) -> metricsCollector.willWriteServerSentEventComment(connectionSnapshot, comment, commentKind));
-						}
+						safelyCollectMetrics(
+								format("An exception occurred while invoking %s::willWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
+								connectionRequest,
+								connectionResourceMethod,
+								(metricsCollector) -> metricsCollector.willWriteServerSentEventComment(connectionSnapshot, serverSentEventComment));
+					}
 
-						if (serverSentEvent != null) {
-							try {
-								getLifecycleObserver().get().willWriteServerSentEvent(connectionSnapshot, serverSentEvent);
-							} catch (Throwable t) {
-								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
-										.throwable(t)
+					if (serverSentEvent != null) {
+						try {
+							getLifecycleObserver().get().willWriteServerSentEvent(connectionSnapshot, serverSentEvent);
+						} catch (Throwable t) {
+							safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
+									.throwable(t)
 									.build());
 						}
 
-							safelyCollectMetrics(
-									format("An exception occurred while invoking %s::willWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
-									connectionRequest,
-									connectionResourceMethod,
-									(metricsCollector) -> metricsCollector.willWriteServerSentEvent(connectionSnapshot, serverSentEvent));
-						}
+						safelyCollectMetrics(
+								format("An exception occurred while invoking %s::willWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
+								connectionRequest,
+								connectionResourceMethod,
+								(metricsCollector) -> metricsCollector.willWriteServerSentEvent(connectionSnapshot, serverSentEvent));
+					}
 
 					Duration deliveryLag = null;
 					Integer payloadByteCount = null;
@@ -1330,10 +1328,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 												payloadByteCountSnapshot,
 												queueDepthSnapshot));
 							}
-						} else if (comment != null) {
+						} else if (serverSentEventComment != null) {
 							if (writeThrowableSnapshot != null) {
 								try {
-									getLifecycleObserver().get().didFailToWriteServerSentEventComment(connectionSnapshot, comment, writeDuration, writeThrowableSnapshot);
+									getLifecycleObserver().get().didFailToWriteServerSentEventComment(connectionSnapshot, serverSentEventComment, writeDuration, writeThrowableSnapshot);
 								} catch (Throwable t) {
 									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
 											.throwable(t)
@@ -1346,8 +1344,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 										connectionResourceMethod,
 										(metricsCollector) -> metricsCollector.didFailToWriteServerSentEventComment(
 												connectionSnapshot,
-												comment,
-												commentKind,
+												serverSentEventComment,
 												writeDuration,
 												writeThrowableSnapshot,
 												deliveryLagSnapshot,
@@ -1355,7 +1352,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 												queueDepthSnapshot));
 							} else {
 								try {
-									getLifecycleObserver().get().didWriteServerSentEventComment(connectionSnapshot, comment, writeDuration);
+									getLifecycleObserver().get().didWriteServerSentEventComment(connectionSnapshot, serverSentEventComment, writeDuration);
 								} catch (Throwable t) {
 									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
 											.throwable(t)
@@ -1368,8 +1365,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 										connectionResourceMethod,
 										(metricsCollector) -> metricsCollector.didWriteServerSentEventComment(
 												connectionSnapshot,
-												comment,
-												commentKind,
+												serverSentEventComment,
 												writeDuration,
 												deliveryLagSnapshot,
 												payloadByteCountSnapshot,
@@ -1916,7 +1912,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			@Nullable
 			private final PreSerializedEvent preSerializedEvent;
 			@Nullable
-			private final String comment;
+			private final ServerSentEventComment comment;
 			private final boolean poisonPill;
 			private final long enqueuedAtNanos;
 
@@ -1930,10 +1926,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			@NonNull
-			public static WriteQueueElement withComment(@NonNull String comment,
+			public static WriteQueueElement withComment(@NonNull ServerSentEventComment serverSentEventComment,
 																										 long enqueuedAtNanos) {
-				requireNonNull(comment);
-				return new WriteQueueElement(null, comment, false, enqueuedAtNanos);
+				requireNonNull(serverSentEventComment);
+				return new WriteQueueElement(null, serverSentEventComment, false, enqueuedAtNanos);
 			}
 
 			@NonNull
@@ -1942,7 +1938,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			private WriteQueueElement(@Nullable PreSerializedEvent preSerializedEvent,
-																@Nullable String comment,
+																@Nullable ServerSentEventComment comment,
 																boolean poisonPill,
 																long enqueuedAtNanos) {
 				if (poisonPill) {
@@ -1968,7 +1964,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			@NonNull
-			public Optional<String> getComment() {
+			public Optional<ServerSentEventComment> getComment() {
 				return Optional.ofNullable(this.comment);
 			}
 
@@ -2105,7 +2101,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection if configured to do so
 		if (getVerifyConnectionOnceEstablished())
 			serverSentEventConnection.getWriteQueue()
-					.offer(DefaultServerSentEventConnection.WriteQueueElement.withComment("", System.nanoTime()));
+					.offer(DefaultServerSentEventConnection.WriteQueueElement.withComment(HEARTBEAT_COMMENT, System.nanoTime()));
 
 		DefaultServerSentEventBroadcaster broadcaster =
 				registerConnectionWithBroadcaster(resourcePath, resourceMethod, serverSentEventConnection);
@@ -2147,10 +2143,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void unicastComment(@NonNull String comment) {
-			requireNonNull(comment);
+		public void unicastComment(@NonNull ServerSentEventComment serverSentEventComment) {
+			requireNonNull(serverSentEventComment);
 
-			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withComment(comment, System.nanoTime())))
+			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withComment(serverSentEventComment, System.nanoTime())))
 				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 

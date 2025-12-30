@@ -84,11 +84,11 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#willWriteServerSentEventComment(ServerSentEventConnection, String)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willWriteServerSentEventComment(ServerSentEventConnection, ServerSentEventComment)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didWriteServerSentEventComment(ServerSentEventConnection, String, Duration)} or {@link LifecycleObserver#didFailToWriteServerSentEventComment(ServerSentEventConnection, String, Duration, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didWriteServerSentEventComment(ServerSentEventConnection, ServerSentEventComment, Duration)} or {@link LifecycleObserver#didFailToWriteServerSentEventComment(ServerSentEventConnection, ServerSentEventComment, Duration, Throwable)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED,
 	/**

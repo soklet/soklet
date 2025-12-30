@@ -22,7 +22,6 @@ import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.MetricsCollector.ServerRouteKey;
 import com.soklet.MetricsCollector.ServerRouteStatusKey;
 import com.soklet.MetricsCollector.RouteKind;
-import com.soklet.MetricsCollector.ServerSentEventCommentKind;
 import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
@@ -122,13 +121,15 @@ public class MetricsCollectorTests {
 		Request request = Request.withPath(HttpMethod.GET, "/events/42").build();
 		ServerSentEventConnection connection = new TestServerSentEventConnection(request, resourceMethod, Instant.now(), null);
 		ServerSentEvent event = ServerSentEvent.withData("payload").build();
+		ServerSentEventComment comment = ServerSentEventComment.withComment("ping").build();
+		ServerSentEventComment heartbeat = ServerSentEventComment.withHeartbeat().build();
 
 		collector.didEstablishServerSentEventConnection(connection);
 		collector.willWriteServerSentEvent(connection, event);
 		collector.didWriteServerSentEvent(connection, event, Duration.ofMillis(2), Duration.ofNanos(500), 12, 3);
-		collector.didWriteServerSentEventComment(connection, "ping", ServerSentEventCommentKind.COMMENT,
+		collector.didWriteServerSentEventComment(connection, comment,
 				Duration.ofMillis(1), Duration.ofNanos(250), 4, 1);
-		collector.didWriteServerSentEventComment(connection, "", ServerSentEventCommentKind.HEARTBEAT,
+		collector.didWriteServerSentEventComment(connection, heartbeat,
 				Duration.ofMillis(1), Duration.ofNanos(100), 3, 2);
 		collector.didTerminateServerSentEventConnection(connection, Duration.ofSeconds(1),
 				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE, null);
@@ -138,9 +139,9 @@ public class MetricsCollectorTests {
 		ResourcePathDeclaration eventsRoute = ResourcePathDeclaration.withPath("/events/{id}");
 		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteKind.MATCHED, eventsRoute);
 		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteKind.MATCHED, eventsRoute,
-				ServerSentEventCommentKind.COMMENT);
+				ServerSentEventComment.CommentType.COMMENT);
 		ServerSentEventCommentRouteKey heartbeatKey = new ServerSentEventCommentRouteKey(RouteKind.MATCHED, eventsRoute,
-				ServerSentEventCommentKind.HEARTBEAT);
+				ServerSentEventComment.CommentType.HEARTBEAT);
 		ServerSentEventRouteTerminationKey terminationKey = new ServerSentEventRouteTerminationKey(RouteKind.MATCHED, eventsRoute,
 				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE);
 
@@ -280,7 +281,7 @@ public class MetricsCollectorTests {
 		ResourcePathDeclaration sseMetricsRoute = ResourcePathDeclaration.withPath("/metrics/sse/{id}");
 		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteKind.MATCHED, sseMetricsRoute);
 		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteKind.MATCHED, sseMetricsRoute,
-				ServerSentEventCommentKind.COMMENT);
+				ServerSentEventComment.CommentType.COMMENT);
 
 		try (Soklet app = Soklet.withConfig(config)) {
 			app.start();
@@ -297,7 +298,7 @@ public class MetricsCollectorTests {
 				ServerSentEventBroadcaster broadcaster = awaitBroadcasterWithClient(serverSentEventServer,
 						"/metrics/sse/abc", Duration.ofSeconds(2));
 				broadcaster.broadcastEvent(ServerSentEvent.withData("payload").build());
-				broadcaster.broadcastComment("note");
+				broadcaster.broadcastComment(ServerSentEventComment.withComment("note").build());
 
 				boolean sawData = false;
 				boolean sawComment = false;
