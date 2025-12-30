@@ -32,5 +32,5 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return new DefaultMetricsCollector();
 	}
 
-	// TODO: implement MetricsCollector methods
+	// TODO: implement
 }
