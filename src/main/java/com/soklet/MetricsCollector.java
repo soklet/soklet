@@ -467,10 +467,10 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record HttpMethodRouteKey(@NonNull HttpMethod method,
+	record ServerRouteKey(@NonNull HttpMethod method,
 														@NonNull RouteKind routeKind,
 														@Nullable ResourcePathDeclaration route) {
-		public HttpMethodRouteKey {
+		public ServerRouteKey {
 			requireNonNull(method);
 			requireNonNull(routeKind);
 			if (routeKind == RouteKind.MATCHED && route == null)
@@ -485,11 +485,11 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record HttpMethodRouteStatusKey(@NonNull HttpMethod method,
+	record ServerRouteStatusKey(@NonNull HttpMethod method,
 																	@NonNull RouteKind routeKind,
 																	@Nullable ResourcePathDeclaration route,
 																	@NonNull String statusClass) {
-		public HttpMethodRouteStatusKey {
+		public ServerRouteStatusKey {
 			requireNonNull(method);
 			requireNonNull(routeKind);
 			if (routeKind == RouteKind.MATCHED && route == null)

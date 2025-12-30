@@ -16,8 +16,8 @@
 
 package com.soklet;
 
-import com.soklet.MetricsCollector.HttpMethodRouteKey;
-import com.soklet.MetricsCollector.HttpMethodRouteStatusKey;
+import com.soklet.MetricsCollector.ServerRouteKey;
+import com.soklet.MetricsCollector.ServerRouteStatusKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
 import com.soklet.MetricsCollector.Snapshot;
@@ -40,15 +40,15 @@ public final class MetricsSnapshot {
 	private final long activeRequests;
 	private final long activeSseConnections;
 	@NonNull
-	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpRequestDurations;
+	private final Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> httpRequestDurations;
 	@NonNull
-	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpHandlerDurations;
+	private final Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> httpHandlerDurations;
 	@NonNull
-	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpTimeToFirstByte;
+	private final Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> httpTimeToFirstByte;
 	@NonNull
-	private final Map<@NonNull HttpMethodRouteKey, @NonNull Snapshot> httpRequestBodyBytes;
+	private final Map<@NonNull ServerRouteKey, @NonNull Snapshot> httpRequestBodyBytes;
 	@NonNull
-	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpResponseBodyBytes;
+	private final Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> httpResponseBodyBytes;
 	@NonNull
 	private final Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseTimeToFirstEvent;
 	@NonNull
@@ -64,11 +64,11 @@ public final class MetricsSnapshot {
 
 	public MetricsSnapshot(long activeRequests,
 												 long activeSseConnections,
-												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpRequestDurations,
-												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpHandlerDurations,
-												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpTimeToFirstByte,
-												 @NonNull Map<@NonNull HttpMethodRouteKey, @NonNull Snapshot> httpRequestBodyBytes,
-												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpResponseBodyBytes,
+												 @NonNull Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> httpRequestDurations,
+												 @NonNull Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> httpHandlerDurations,
+												 @NonNull Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> httpTimeToFirstByte,
+												 @NonNull Map<@NonNull ServerRouteKey, @NonNull Snapshot> httpRequestBodyBytes,
+												 @NonNull Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> httpResponseBodyBytes,
 												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseTimeToFirstEvent,
 												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseEventWriteDurations,
 												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseEventDeliveryLag,
@@ -99,27 +99,27 @@ public final class MetricsSnapshot {
 	}
 
 	@NonNull
-	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> getHttpRequestDurations() {
+	public Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> getHttpRequestDurations() {
 		return this.httpRequestDurations;
 	}
 
 	@NonNull
-	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> getHttpHandlerDurations() {
+	public Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> getHttpHandlerDurations() {
 		return this.httpHandlerDurations;
 	}
 
 	@NonNull
-	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> getHttpTimeToFirstByte() {
+	public Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> getHttpTimeToFirstByte() {
 		return this.httpTimeToFirstByte;
 	}
 
 	@NonNull
-	public Map<@NonNull HttpMethodRouteKey, @NonNull Snapshot> getHttpRequestBodyBytes() {
+	public Map<@NonNull ServerRouteKey, @NonNull Snapshot> getHttpRequestBodyBytes() {
 		return this.httpRequestBodyBytes;
 	}
 
 	@NonNull
-	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> getHttpResponseBodyBytes() {
+	public Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> getHttpResponseBodyBytes() {
 		return this.httpResponseBodyBytes;
 	}
 

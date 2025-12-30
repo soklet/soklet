@@ -19,8 +19,8 @@ package com.soklet;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.ServerSentEventSource;
-import com.soklet.MetricsCollector.HttpMethodRouteKey;
-import com.soklet.MetricsCollector.HttpMethodRouteStatusKey;
+import com.soklet.MetricsCollector.ServerRouteKey;
+import com.soklet.MetricsCollector.ServerRouteStatusKey;
 import com.soklet.MetricsCollector.RouteKind;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
@@ -79,8 +79,8 @@ public class MetricsCollectorTests {
 		MetricsSnapshot snapshot = collector.snapshot().orElseThrow();
 
 		ResourcePathDeclaration widgetRoute = ResourcePathDeclaration.withPath("/widgets/{id}");
-		HttpMethodRouteStatusKey statusKey = new HttpMethodRouteStatusKey(HttpMethod.POST, RouteKind.MATCHED, widgetRoute, "2xx");
-		HttpMethodRouteKey routeKey = new HttpMethodRouteKey(HttpMethod.POST, RouteKind.MATCHED, widgetRoute);
+		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteKind.MATCHED, widgetRoute, "2xx");
+		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteKind.MATCHED, widgetRoute);
 
 		Snapshot requestDurations = snapshot.getHttpRequestDurations().get(statusKey);
 		assertNotNull(requestDurations);
@@ -177,8 +177,8 @@ public class MetricsCollectorTests {
 
 		byte[] requestBody = "hello".getBytes(StandardCharsets.UTF_8);
 		ResourcePathDeclaration httpMetricsRoute = ResourcePathDeclaration.withPath("/metrics/http/{id}");
-		HttpMethodRouteStatusKey statusKey = new HttpMethodRouteStatusKey(HttpMethod.POST, RouteKind.MATCHED, httpMetricsRoute, "2xx");
-		HttpMethodRouteKey routeKey = new HttpMethodRouteKey(HttpMethod.POST, RouteKind.MATCHED, httpMetricsRoute);
+		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteKind.MATCHED, httpMetricsRoute, "2xx");
+		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteKind.MATCHED, httpMetricsRoute);
 
 		try (Soklet app = Soklet.withConfig(config)) {
 			app.start();
