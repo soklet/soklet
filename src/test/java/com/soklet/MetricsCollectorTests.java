@@ -22,6 +22,8 @@ import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.MetricsCollector.ServerRouteKey;
 import com.soklet.MetricsCollector.ServerRouteStatusKey;
 import com.soklet.MetricsCollector.RouteKind;
+import com.soklet.MetricsCollector.ServerSentEventCommentKind;
+import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
 import com.soklet.MetricsCollector.Snapshot;
@@ -124,7 +126,10 @@ public class MetricsCollectorTests {
 		collector.didEstablishServerSentEventConnection(connection);
 		collector.willWriteServerSentEvent(connection, event);
 		collector.didWriteServerSentEvent(connection, event, Duration.ofMillis(2), Duration.ofNanos(500), 12, 3);
-		collector.didWriteServerSentEventComment(connection, "ping", Duration.ofMillis(1), Duration.ofNanos(250), 4, 1);
+		collector.didWriteServerSentEventComment(connection, "ping", ServerSentEventCommentKind.COMMENT,
+				Duration.ofMillis(1), Duration.ofNanos(250), 4, 1);
+		collector.didWriteServerSentEventComment(connection, "", ServerSentEventCommentKind.HEARTBEAT,
+				Duration.ofMillis(1), Duration.ofNanos(100), 3, 2);
 		collector.didTerminateServerSentEventConnection(connection, Duration.ofSeconds(1),
 				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE, null);
 
@@ -132,6 +137,10 @@ public class MetricsCollectorTests {
 
 		ResourcePathDeclaration eventsRoute = ResourcePathDeclaration.withPath("/events/{id}");
 		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteKind.MATCHED, eventsRoute);
+		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteKind.MATCHED, eventsRoute,
+				ServerSentEventCommentKind.COMMENT);
+		ServerSentEventCommentRouteKey heartbeatKey = new ServerSentEventCommentRouteKey(RouteKind.MATCHED, eventsRoute,
+				ServerSentEventCommentKind.HEARTBEAT);
 		ServerSentEventRouteTerminationKey terminationKey = new ServerSentEventRouteTerminationKey(RouteKind.MATCHED, eventsRoute,
 				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE);
 
@@ -145,18 +154,38 @@ public class MetricsCollectorTests {
 
 		Snapshot deliveryLag = snapshot.getSseEventDeliveryLag().get(routeKey);
 		assertNotNull(deliveryLag);
-		assertEquals(2L, deliveryLag.getCount());
-		assertEquals(750L, deliveryLag.getSum());
+		assertEquals(1L, deliveryLag.getCount());
+		assertEquals(500L, deliveryLag.getSum());
 
 		Snapshot eventSizes = snapshot.getSseEventSizes().get(routeKey);
 		assertNotNull(eventSizes);
-		assertEquals(2L, eventSizes.getCount());
-		assertEquals(16L, eventSizes.getSum());
+		assertEquals(1L, eventSizes.getCount());
+		assertEquals(12L, eventSizes.getSum());
 
 		Snapshot queueDepth = snapshot.getSseQueueDepth().get(routeKey);
 		assertNotNull(queueDepth);
-		assertEquals(2L, queueDepth.getCount());
-		assertEquals(4L, queueDepth.getSum());
+		assertEquals(1L, queueDepth.getCount());
+		assertEquals(3L, queueDepth.getSum());
+
+		Snapshot commentDeliveryLag = snapshot.getSseCommentDeliveryLag().get(commentKey);
+		assertNotNull(commentDeliveryLag);
+		assertEquals(1L, commentDeliveryLag.getCount());
+		assertEquals(250L, commentDeliveryLag.getSum());
+
+		Snapshot commentSizes = snapshot.getSseCommentSizes().get(commentKey);
+		assertNotNull(commentSizes);
+		assertEquals(1L, commentSizes.getCount());
+		assertEquals(4L, commentSizes.getSum());
+
+		Snapshot commentQueueDepth = snapshot.getSseCommentQueueDepth().get(commentKey);
+		assertNotNull(commentQueueDepth);
+		assertEquals(1L, commentQueueDepth.getCount());
+		assertEquals(1L, commentQueueDepth.getSum());
+
+		Snapshot heartbeatDeliveryLag = snapshot.getSseCommentDeliveryLag().get(heartbeatKey);
+		assertNotNull(heartbeatDeliveryLag);
+		assertEquals(1L, heartbeatDeliveryLag.getCount());
+		assertEquals(100L, heartbeatDeliveryLag.getSum());
 
 		Snapshot connectionDurations = snapshot.getSseConnectionDurations().get(terminationKey);
 		assertNotNull(connectionDurations);
@@ -250,6 +279,8 @@ public class MetricsCollectorTests {
 
 		ResourcePathDeclaration sseMetricsRoute = ResourcePathDeclaration.withPath("/metrics/sse/{id}");
 		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteKind.MATCHED, sseMetricsRoute);
+		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteKind.MATCHED, sseMetricsRoute,
+				ServerSentEventCommentKind.COMMENT);
 
 		try (Soklet app = Soklet.withConfig(config)) {
 			app.start();
@@ -285,7 +316,8 @@ public class MetricsCollectorTests {
 		}
 
 		MetricsSnapshot snapshot = awaitSnapshot(collector,
-				(metricsSnapshot) -> metricsSnapshot.getSseEventWriteDurations().get(routeKey) != null,
+				(metricsSnapshot) -> metricsSnapshot.getSseEventWriteDurations().get(routeKey) != null
+						&& metricsSnapshot.getSseCommentDeliveryLag().get(commentKey) != null,
 				Duration.ofSeconds(3));
 
 		Snapshot timeToFirstEvent = snapshot.getSseTimeToFirstEvent().get(routeKey);
@@ -298,15 +330,27 @@ public class MetricsCollectorTests {
 
 		Snapshot deliveryLag = snapshot.getSseEventDeliveryLag().get(routeKey);
 		assertNotNull(deliveryLag);
-		assertTrue(deliveryLag.getCount() >= 2L);
+		assertTrue(deliveryLag.getCount() >= 1L);
 
 		Snapshot eventSizes = snapshot.getSseEventSizes().get(routeKey);
 		assertNotNull(eventSizes);
-		assertTrue(eventSizes.getCount() >= 2L);
+		assertTrue(eventSizes.getCount() >= 1L);
 
 		Snapshot queueDepth = snapshot.getSseQueueDepth().get(routeKey);
 		assertNotNull(queueDepth);
-		assertTrue(queueDepth.getCount() >= 2L);
+		assertTrue(queueDepth.getCount() >= 1L);
+
+		Snapshot commentDeliveryLag = snapshot.getSseCommentDeliveryLag().get(commentKey);
+		assertNotNull(commentDeliveryLag);
+		assertTrue(commentDeliveryLag.getCount() >= 1L);
+
+		Snapshot commentSizes = snapshot.getSseCommentSizes().get(commentKey);
+		assertNotNull(commentSizes);
+		assertTrue(commentSizes.getCount() >= 1L);
+
+		Snapshot commentQueueDepth = snapshot.getSseCommentQueueDepth().get(commentKey);
+		assertNotNull(commentQueueDepth);
+		assertTrue(commentQueueDepth.getCount() >= 1L);
 	}
 
 	private static ResourceMethod resourceMethodFor(@NonNull String path,

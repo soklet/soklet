@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.MetricsCollector.ServerRouteKey;
 import com.soklet.MetricsCollector.ServerRouteStatusKey;
+import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
 import com.soklet.MetricsCollector.Snapshot;
@@ -60,6 +61,12 @@ public final class MetricsSnapshot {
 	@NonNull
 	private final Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseQueueDepth;
 	@NonNull
+	private final Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> sseCommentDeliveryLag;
+	@NonNull
+	private final Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> sseCommentSizes;
+	@NonNull
+	private final Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> sseCommentQueueDepth;
+	@NonNull
 	private final Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull Snapshot> sseConnectionDurations;
 
 	public MetricsSnapshot(long activeRequests,
@@ -74,6 +81,9 @@ public final class MetricsSnapshot {
 												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseEventDeliveryLag,
 												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseEventSizes,
 												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseQueueDepth,
+												 @NonNull Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> sseCommentDeliveryLag,
+												 @NonNull Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> sseCommentSizes,
+												 @NonNull Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> sseCommentQueueDepth,
 												 @NonNull Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull Snapshot> sseConnectionDurations) {
 		this.activeRequests = activeRequests;
 		this.activeSseConnections = activeSseConnections;
@@ -87,6 +97,9 @@ public final class MetricsSnapshot {
 		this.sseEventDeliveryLag = Map.copyOf(requireNonNull(sseEventDeliveryLag));
 		this.sseEventSizes = Map.copyOf(requireNonNull(sseEventSizes));
 		this.sseQueueDepth = Map.copyOf(requireNonNull(sseQueueDepth));
+		this.sseCommentDeliveryLag = Map.copyOf(requireNonNull(sseCommentDeliveryLag));
+		this.sseCommentSizes = Map.copyOf(requireNonNull(sseCommentSizes));
+		this.sseCommentQueueDepth = Map.copyOf(requireNonNull(sseCommentQueueDepth));
 		this.sseConnectionDurations = Map.copyOf(requireNonNull(sseConnectionDurations));
 	}
 
@@ -146,6 +159,21 @@ public final class MetricsSnapshot {
 	@NonNull
 	public Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> getSseQueueDepth() {
 		return this.sseQueueDepth;
+	}
+
+	@NonNull
+	public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> getSseCommentDeliveryLag() {
+		return this.sseCommentDeliveryLag;
+	}
+
+	@NonNull
+	public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> getSseCommentSizes() {
+		return this.sseCommentSizes;
+	}
+
+	@NonNull
+	public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> getSseCommentQueueDepth() {
+		return this.sseCommentQueueDepth;
 	}
 
 	@NonNull

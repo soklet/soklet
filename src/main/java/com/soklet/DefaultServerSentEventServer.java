@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.MetricsCollector.ServerSentEventCommentKind;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.util.ConcurrentLruMap;
@@ -1174,6 +1175,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent =
 							writeQueueElement.getPreSerializedEvent().orElse(null);
 					String comment = writeQueueElement.getComment().orElse(null);
+					ServerSentEventCommentKind commentKind = comment == null
+							? null
+							: comment.isEmpty()
+							? ServerSentEventCommentKind.HEARTBEAT
+							: ServerSentEventCommentKind.COMMENT;
 					ServerSentEvent serverSentEvent = preSerializedEvent != null
 							? preSerializedEvent.getServerSentEvent()
 							: null;
@@ -1208,7 +1214,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 									format("An exception occurred while invoking %s::willWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
 									connectionRequest,
 									connectionResourceMethod,
-									(metricsCollector) -> metricsCollector.willWriteServerSentEventComment(connectionSnapshot, comment));
+									(metricsCollector) -> metricsCollector.willWriteServerSentEventComment(connectionSnapshot, comment, commentKind));
 						}
 
 						if (serverSentEvent != null) {
@@ -1341,6 +1347,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 										(metricsCollector) -> metricsCollector.didFailToWriteServerSentEventComment(
 												connectionSnapshot,
 												comment,
+												commentKind,
 												writeDuration,
 												writeThrowableSnapshot,
 												deliveryLagSnapshot,
@@ -1362,6 +1369,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 										(metricsCollector) -> metricsCollector.didWriteServerSentEventComment(
 												connectionSnapshot,
 												comment,
+												commentKind,
 												writeDuration,
 												deliveryLagSnapshot,
 												payloadByteCountSnapshot,

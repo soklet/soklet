@@ -20,6 +20,8 @@ import com.soklet.MetricsCollector.Histogram;
 import com.soklet.MetricsCollector.ServerRouteKey;
 import com.soklet.MetricsCollector.ServerRouteStatusKey;
 import com.soklet.MetricsCollector.RouteKind;
+import com.soklet.MetricsCollector.ServerSentEventCommentKind;
+import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
 import com.soklet.MetricsCollector.Snapshot;
@@ -81,6 +83,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseEventDeliveryLagByRoute;
 	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseEventSizeByRoute;
 	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseQueueDepthByRoute;
+	private final ConcurrentHashMap<ServerSentEventCommentRouteKey, Histogram> sseCommentDeliveryLagByRoute;
+	private final ConcurrentHashMap<ServerSentEventCommentRouteKey, Histogram> sseCommentSizeByRoute;
+	private final ConcurrentHashMap<ServerSentEventCommentRouteKey, Histogram> sseCommentQueueDepthByRoute;
 	private final ConcurrentHashMap<ServerSentEventRouteTerminationKey, Histogram> sseConnectionDurationByRouteAndReason;
 	private final LongAdder activeRequests;
 	private final LongAdder activeSseConnections;
@@ -104,6 +109,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.sseEventDeliveryLagByRoute = new ConcurrentHashMap<>();
 		this.sseEventSizeByRoute = new ConcurrentHashMap<>();
 		this.sseQueueDepthByRoute = new ConcurrentHashMap<>();
+		this.sseCommentDeliveryLagByRoute = new ConcurrentHashMap<>();
+		this.sseCommentSizeByRoute = new ConcurrentHashMap<>();
+		this.sseCommentQueueDepthByRoute = new ConcurrentHashMap<>();
 		this.sseConnectionDurationByRouteAndReason = new ConcurrentHashMap<>();
 		this.activeRequests = new LongAdder();
 		this.activeSseConnections = new LongAdder();
@@ -266,33 +274,37 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	public void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
 																							@NonNull String comment,
+																							@NonNull ServerSentEventCommentKind commentKind,
 																							@NonNull Duration writeDuration,
 																							@Nullable Duration deliveryLag,
 																							@Nullable Integer payloadBytes,
 																							@Nullable Integer queueDepth) {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(comment);
+		requireNonNull(commentKind);
 		requireNonNull(writeDuration);
 
 		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
 		RouteContext routeContext = routeContextFor(state, serverSentEventConnection);
+		ServerSentEventCommentRouteKey key = new ServerSentEventCommentRouteKey(routeContext.getRouteKind(),
+				routeContext.getRoute(), commentKind);
 
 		if (deliveryLag != null) {
 			long deliveryLagNanos = Math.max(0L, deliveryLag.toNanos());
-			histogramFor(this.sseEventDeliveryLagByRoute,
-					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+			histogramFor(this.sseCommentDeliveryLagByRoute,
+					key,
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
 		}
 
 		if (payloadBytes != null) {
-			histogramFor(this.sseEventSizeByRoute,
-					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+			histogramFor(this.sseCommentSizeByRoute,
+					key,
 					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
 		}
 
 		if (queueDepth != null) {
-			histogramFor(this.sseQueueDepthByRoute,
-					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+			histogramFor(this.sseCommentQueueDepthByRoute,
+					key,
 					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
 		}
 	}
@@ -340,6 +352,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	public void didFailToWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
 																										@NonNull String comment,
+																										@NonNull ServerSentEventCommentKind commentKind,
 																										@NonNull Duration writeDuration,
 																										@NonNull Throwable throwable,
 																										@Nullable Duration deliveryLag,
@@ -347,28 +360,31 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																										@Nullable Integer queueDepth) {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(comment);
+		requireNonNull(commentKind);
 		requireNonNull(writeDuration);
 		requireNonNull(throwable);
 
 		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
 		RouteContext routeContext = routeContextFor(state, serverSentEventConnection);
+		ServerSentEventCommentRouteKey key = new ServerSentEventCommentRouteKey(routeContext.getRouteKind(),
+				routeContext.getRoute(), commentKind);
 
 		if (deliveryLag != null) {
 			long deliveryLagNanos = Math.max(0L, deliveryLag.toNanos());
-			histogramFor(this.sseEventDeliveryLagByRoute,
-					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+			histogramFor(this.sseCommentDeliveryLagByRoute,
+					key,
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
 		}
 
 		if (payloadBytes != null) {
-			histogramFor(this.sseEventSizeByRoute,
-					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+			histogramFor(this.sseCommentSizeByRoute,
+					key,
 					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
 		}
 
 		if (queueDepth != null) {
-			histogramFor(this.sseQueueDepthByRoute,
-					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+			histogramFor(this.sseCommentQueueDepthByRoute,
+					key,
 					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
 		}
 	}
@@ -410,6 +426,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshotSseEventDeliveryLag(),
 				snapshotSseEventSizes(),
 				snapshotSseQueueDepth(),
+				snapshotSseCommentDeliveryLag(),
+				snapshotSseCommentSizes(),
+				snapshotSseCommentQueueDepth(),
 				snapshotSseConnectionDurations()));
 	}
 
@@ -472,6 +491,21 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
+	Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> snapshotSseCommentDeliveryLag() {
+		return snapshotMap(this.sseCommentDeliveryLagByRoute);
+	}
+
+	@NonNull
+	Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> snapshotSseCommentSizes() {
+		return snapshotMap(this.sseCommentSizeByRoute);
+	}
+
+	@NonNull
+	Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> snapshotSseCommentQueueDepth() {
+		return snapshotMap(this.sseCommentQueueDepthByRoute);
+	}
+
+	@NonNull
 	Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull Snapshot> snapshotSseConnectionDurations() {
 		return snapshotMap(this.sseConnectionDurationByRouteAndReason);
 	}
@@ -493,6 +527,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		resetMap(this.sseEventDeliveryLagByRoute);
 		resetMap(this.sseEventSizeByRoute);
 		resetMap(this.sseQueueDepthByRoute);
+		resetMap(this.sseCommentDeliveryLagByRoute);
+		resetMap(this.sseCommentSizeByRoute);
+		resetMap(this.sseCommentQueueDepthByRoute);
 		resetMap(this.sseConnectionDurationByRouteAndReason);
 	}
 

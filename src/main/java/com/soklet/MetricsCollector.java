@@ -191,7 +191,8 @@ public interface MetricsCollector {
 	 * Called before an SSE comment is written.
 	 */
 	default void willWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																							 @NonNull String comment) {
+																							 @NonNull String comment,
+																							 @NonNull ServerSentEventCommentKind commentKind) {
 		// No-op by default
 	}
 
@@ -200,6 +201,7 @@ public interface MetricsCollector {
 	 *
 	 * @param serverSentEventConnection the connection the comment was written to
 	 * @param comment                   the comment that was written
+	 * @param commentKind               whether the comment is a heartbeat or application comment
 	 * @param writeDuration             how long it took to write the comment
 	 * @param deliveryLag               elapsed time between enqueue and write start, or {@code null} if unknown
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
@@ -207,6 +209,7 @@ public interface MetricsCollector {
 	 */
 	default void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
 																							@NonNull String comment,
+																							@NonNull ServerSentEventCommentKind commentKind,
 																							@NonNull Duration writeDuration,
 																							@Nullable Duration deliveryLag,
 																							@Nullable Integer payloadBytes,
@@ -219,6 +222,7 @@ public interface MetricsCollector {
 	 *
 	 * @param serverSentEventConnection the connection the comment was written to
 	 * @param comment                   the comment that was written
+	 * @param commentKind               whether the comment is a heartbeat or application comment
 	 * @param writeDuration             how long it took to attempt the write
 	 * @param throwable                 the failure cause
 	 * @param deliveryLag               elapsed time between enqueue and write start, or {@code null} if unknown
@@ -227,6 +231,7 @@ public interface MetricsCollector {
 	 */
 	default void didFailToWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
 																										@NonNull String comment,
+																										@NonNull ServerSentEventCommentKind commentKind,
 																										@NonNull Duration writeDuration,
 																										@NonNull Throwable throwable,
 																										@Nullable Duration deliveryLag,
@@ -497,6 +502,40 @@ public interface MetricsCollector {
 			if (routeKind == RouteKind.UNMATCHED && route != null)
 				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
 			requireNonNull(statusClass);
+		}
+	}
+
+	/**
+	 * Indicates whether a Server-Sent Event comment is a keep-alive heartbeat or an application comment.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	enum ServerSentEventCommentKind {
+		/**
+		 * Application-provided comment.
+		 */
+		COMMENT,
+		/**
+		 * Keep-alive/heartbeat comment.
+		 */
+		HEARTBEAT
+	}
+
+	/**
+	 * Key for metrics grouped by Server-Sent Event comment kind and route match information.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record ServerSentEventCommentRouteKey(@NonNull RouteKind routeKind,
+																				@Nullable ResourcePathDeclaration route,
+																				@NonNull ServerSentEventCommentKind commentKind) {
+		public ServerSentEventCommentRouteKey {
+			requireNonNull(routeKind);
+			requireNonNull(commentKind);
+			if (routeKind == RouteKind.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
+			if (routeKind == RouteKind.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
 		}
 	}
 
