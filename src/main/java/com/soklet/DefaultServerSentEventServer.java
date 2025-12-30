@@ -1227,9 +1227,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 									(metricsCollector) -> metricsCollector.willWriteServerSentEvent(connectionSnapshot, serverSentEvent));
 						}
 
-					long deliveryLagNanos = -1L;
-					int payloadByteCount = -1;
-					int queueDepth = -1;
+					Long deliveryLagNanos = null;
+					Integer payloadByteCount = null;
+					Integer queueDepth = null;
 
 					long enqueuedAtNanos = writeQueueElement.getEnqueuedAtNanos();
 					long nowNanos = System.nanoTime();
@@ -1277,9 +1277,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						Instant writeFinished = Instant.now();
 						Duration writeDuration = Duration.between(writeStarted, writeFinished);
 						Throwable writeThrowableSnapshot = writeThrowable;
-						long deliveryLagNanosSnapshot = deliveryLagNanos;
-						int payloadByteCountSnapshot = payloadByteCount;
-						int queueDepthSnapshot = queueDepth;
+						Long deliveryLagNanosSnapshot = deliveryLagNanos;
+						Integer payloadByteCountSnapshot = payloadByteCount;
+						Integer queueDepthSnapshot = queueDepth;
 
 						if (serverSentEvent != null) {
 							if (writeThrowableSnapshot != null) {
@@ -1299,7 +1299,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 												connectionSnapshot,
 												serverSentEvent,
 												writeDuration,
-												writeThrowableSnapshot));
+												writeThrowableSnapshot,
+												deliveryLagNanosSnapshot,
+												payloadByteCountSnapshot,
+												queueDepthSnapshot));
 							} else {
 								try {
 									getLifecycleObserver().get().didWriteServerSentEvent(connectionSnapshot, serverSentEvent, writeDuration);
@@ -1316,15 +1319,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 										(metricsCollector) -> metricsCollector.didWriteServerSentEvent(
 												connectionSnapshot,
 												serverSentEvent,
-												writeDuration));
-
-								safelyCollectMetrics(
-										format("An exception occurred while invoking %s::didWriteServerSentEventMetrics", MetricsCollector.class.getSimpleName()),
-										connectionRequest,
-										connectionResourceMethod,
-										(metricsCollector) -> metricsCollector.didWriteServerSentEventMetrics(
-												connectionSnapshot,
-												serverSentEvent,
+												writeDuration,
 												deliveryLagNanosSnapshot,
 												payloadByteCountSnapshot,
 												queueDepthSnapshot));
@@ -1347,7 +1342,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 												connectionSnapshot,
 												comment,
 												writeDuration,
-												writeThrowableSnapshot));
+												writeThrowableSnapshot,
+												deliveryLagNanosSnapshot,
+												payloadByteCountSnapshot,
+												queueDepthSnapshot));
 							} else {
 								try {
 									getLifecycleObserver().get().didWriteServerSentEventComment(connectionSnapshot, comment, writeDuration);
@@ -1364,15 +1362,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 										(metricsCollector) -> metricsCollector.didWriteServerSentEventComment(
 												connectionSnapshot,
 												comment,
-												writeDuration));
-
-								safelyCollectMetrics(
-										format("An exception occurred while invoking %s::didWriteServerSentEventCommentMetrics", MetricsCollector.class.getSimpleName()),
-										connectionRequest,
-										connectionResourceMethod,
-										(metricsCollector) -> metricsCollector.didWriteServerSentEventCommentMetrics(
-												connectionSnapshot,
-												comment,
+												writeDuration,
 												deliveryLagNanosSnapshot,
 												payloadByteCountSnapshot,
 												queueDepthSnapshot));

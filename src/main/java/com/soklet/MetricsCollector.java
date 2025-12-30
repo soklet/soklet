@@ -20,8 +20,8 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.Arrays;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -149,20 +149,41 @@ public interface MetricsCollector {
 
 	/**
 	 * Called after an SSE event is written.
+	 *
+	 * @param serverSentEventConnection the connection the event was written to
+	 * @param serverSentEvent           the event that was written
+	 * @param writeDuration             how long it took to write the event
+	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code null} if unknown
+	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
+	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
 	default void didWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
 																			 @NonNull ServerSentEvent serverSentEvent,
-																			 @NonNull Duration writeDuration) {
+																			 @NonNull Duration writeDuration,
+																			 @Nullable Long deliveryLagNanos,
+																			 @Nullable Integer payloadBytes,
+																			 @Nullable Integer queueDepth) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an SSE event fails to write.
+	 *
+	 * @param serverSentEventConnection the connection the event was written to
+	 * @param serverSentEvent           the event that was written
+	 * @param writeDuration             how long it took to attempt the write
+	 * @param throwable                 the failure cause
+	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code null} if unknown
+	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
+	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
 	default void didFailToWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
 																						 @NonNull ServerSentEvent serverSentEvent,
 																						 @NonNull Duration writeDuration,
-																						 @NonNull Throwable throwable) {
+																						 @NonNull Throwable throwable,
+																						 @Nullable Long deliveryLagNanos,
+																						 @Nullable Integer payloadBytes,
+																						 @Nullable Integer queueDepth) {
 		// No-op by default
 	}
 
@@ -176,54 +197,41 @@ public interface MetricsCollector {
 
 	/**
 	 * Called after an SSE comment is written.
-	 */
-	default void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																						@NonNull String comment,
-																						@NonNull Duration writeDuration) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after an SSE event is written with additional delivery metrics.
-	 *
-	 * @param serverSentEventConnection the connection the event was written to
-	 * @param serverSentEvent           the event that was written
-	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code -1} if unknown
-	 * @param payloadBytes              size of the serialized payload in bytes, or {@code -1} if unknown
-	 * @param queueDepth                number of queued elements remaining at write time, or {@code -1} if unknown
-	 */
-	default void didWriteServerSentEventMetrics(@NonNull ServerSentEventConnection serverSentEventConnection,
-																							@NonNull ServerSentEvent serverSentEvent,
-																							long deliveryLagNanos,
-																							int payloadBytes,
-																							int queueDepth) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after an SSE comment is written with additional delivery metrics.
 	 *
 	 * @param serverSentEventConnection the connection the comment was written to
 	 * @param comment                   the comment that was written
-	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code -1} if unknown
-	 * @param payloadBytes              size of the serialized payload in bytes, or {@code -1} if unknown
-	 * @param queueDepth                number of queued elements remaining at write time, or {@code -1} if unknown
+	 * @param writeDuration             how long it took to write the comment
+	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code null} if unknown
+	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
+	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
-	default void didWriteServerSentEventCommentMetrics(@NonNull ServerSentEventConnection serverSentEventConnection,
-																										 @NonNull String comment,
-																										 long deliveryLagNanos,
-																										 int payloadBytes,
-																										 int queueDepth) {
+	default void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
+																							@NonNull String comment,
+																							@NonNull Duration writeDuration,
+																							@Nullable Long deliveryLagNanos,
+																							@Nullable Integer payloadBytes,
+																							@Nullable Integer queueDepth) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an SSE comment fails to write.
+	 *
+	 * @param serverSentEventConnection the connection the comment was written to
+	 * @param comment                   the comment that was written
+	 * @param writeDuration             how long it took to attempt the write
+	 * @param throwable                 the failure cause
+	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code null} if unknown
+	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
+	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
 	default void didFailToWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
 																										@NonNull String comment,
 																										@NonNull Duration writeDuration,
-																										@NonNull Throwable throwable) {
+																										@NonNull Throwable throwable,
+																										@Nullable Long deliveryLagNanos,
+																										@Nullable Integer payloadBytes,
+																										@Nullable Integer queueDepth) {
 		// No-op by default
 	}
 

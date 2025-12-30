@@ -225,48 +225,37 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	public void didWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
 																			@NonNull ServerSentEvent serverSentEvent,
-																			@NonNull Duration writeDuration) {
+																			@NonNull Duration writeDuration,
+																			@Nullable Long deliveryLagNanos,
+																			@Nullable Integer payloadBytes,
+																			@Nullable Integer queueDepth) {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(serverSentEvent);
 		requireNonNull(writeDuration);
 
 		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
-
-		if (state == null)
-			return;
-
-		state.incrementEventsSent();
-
-		histogramFor(this.sseEventWriteDurationByRoute,
-				new ServerSentEventRouteKey(state.getRouteKind(), state.getRoute()),
-				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
-	}
-
-	@Override
-	public void didWriteServerSentEventMetrics(@NonNull ServerSentEventConnection serverSentEventConnection,
-																						 @NonNull ServerSentEvent serverSentEvent,
-																						 long deliveryLagNanos,
-																						 int payloadBytes,
-																						 int queueDepth) {
-		requireNonNull(serverSentEventConnection);
-		requireNonNull(serverSentEvent);
-
-		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
 		RouteContext routeContext = routeContextFor(state, serverSentEventConnection);
 
-		if (deliveryLagNanos >= 0) {
+		if (state != null)
+			state.incrementEventsSent();
+
+		histogramFor(this.sseEventWriteDurationByRoute,
+				new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
+
+		if (deliveryLagNanos != null) {
 			histogramFor(this.sseEventDeliveryLagByRoute,
 					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
 		}
 
-		if (payloadBytes >= 0) {
+		if (payloadBytes != null) {
 			histogramFor(this.sseEventSizeByRoute,
 					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
 		}
 
-		if (queueDepth >= 0) {
+		if (queueDepth != null) {
 			histogramFor(this.sseQueueDepthByRoute,
 					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
@@ -274,30 +263,32 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@Override
-	public void didWriteServerSentEventCommentMetrics(@NonNull ServerSentEventConnection serverSentEventConnection,
-																										@NonNull String comment,
-																										long deliveryLagNanos,
-																										int payloadBytes,
-																										int queueDepth) {
+	public void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
+																							@NonNull String comment,
+																							@NonNull Duration writeDuration,
+																							@Nullable Long deliveryLagNanos,
+																							@Nullable Integer payloadBytes,
+																							@Nullable Integer queueDepth) {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(comment);
+		requireNonNull(writeDuration);
 
 		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
 		RouteContext routeContext = routeContextFor(state, serverSentEventConnection);
 
-		if (deliveryLagNanos >= 0) {
+		if (deliveryLagNanos != null) {
 			histogramFor(this.sseEventDeliveryLagByRoute,
 					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
 		}
 
-		if (payloadBytes >= 0) {
+		if (payloadBytes != null) {
 			histogramFor(this.sseEventSizeByRoute,
 					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
 		}
 
-		if (queueDepth >= 0) {
+		if (queueDepth != null) {
 			histogramFor(this.sseQueueDepthByRoute,
 					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
@@ -308,20 +299,74 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	public void didFailToWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
 																						@NonNull ServerSentEvent serverSentEvent,
 																						@NonNull Duration writeDuration,
-																						@NonNull Throwable throwable) {
+																						@NonNull Throwable throwable,
+																						@Nullable Long deliveryLagNanos,
+																						@Nullable Integer payloadBytes,
+																						@Nullable Integer queueDepth) {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(serverSentEvent);
 		requireNonNull(writeDuration);
 		requireNonNull(throwable);
 
 		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
-
-		if (state == null)
-			return;
+		RouteContext routeContext = routeContextFor(state, serverSentEventConnection);
 
 		histogramFor(this.sseEventWriteDurationByRoute,
-				new ServerSentEventRouteKey(state.getRouteKind(), state.getRoute()),
+				new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
+
+		if (deliveryLagNanos != null) {
+			histogramFor(this.sseEventDeliveryLagByRoute,
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
+		}
+
+		if (payloadBytes != null) {
+			histogramFor(this.sseEventSizeByRoute,
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
+		}
+
+		if (queueDepth != null) {
+			histogramFor(this.sseQueueDepthByRoute,
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
+		}
+	}
+
+	@Override
+	public void didFailToWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
+																										@NonNull String comment,
+																										@NonNull Duration writeDuration,
+																										@NonNull Throwable throwable,
+																										@Nullable Long deliveryLagNanos,
+																										@Nullable Integer payloadBytes,
+																										@Nullable Integer queueDepth) {
+		requireNonNull(serverSentEventConnection);
+		requireNonNull(comment);
+		requireNonNull(writeDuration);
+		requireNonNull(throwable);
+
+		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
+		RouteContext routeContext = routeContextFor(state, serverSentEventConnection);
+
+		if (deliveryLagNanos != null) {
+			histogramFor(this.sseEventDeliveryLagByRoute,
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
+		}
+
+		if (payloadBytes != null) {
+			histogramFor(this.sseEventSizeByRoute,
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
+		}
+
+		if (queueDepth != null) {
+			histogramFor(this.sseQueueDepthByRoute,
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
+					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
+		}
 	}
 
 	@Override
