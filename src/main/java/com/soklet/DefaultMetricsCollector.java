@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
@@ -80,6 +81,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final ConcurrentHashMap<ServerSentEventRouteTerminationKey, Histogram> sseConnectionDurationByRouteAndReason;
 	private final LongAdder activeRequests;
 	private final LongAdder activeSseConnections;
+	private final AtomicBoolean includeSseMetrics;
 
 	@NonNull
 	public static DefaultMetricsCollector withDefaults() {
@@ -106,6 +108,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.sseConnectionDurationByRouteAndReason = new ConcurrentHashMap<>();
 		this.activeRequests = new LongAdder();
 		this.activeSseConnections = new LongAdder();
+		this.includeSseMetrics = new AtomicBoolean(false);
+	}
+
+	void initialize(@NonNull SokletConfig sokletConfig) {
+		requireNonNull(sokletConfig);
+		this.includeSseMetrics.set(sokletConfig.getServerSentEventServer().isPresent());
 	}
 
 	@Override
@@ -419,6 +427,59 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshotSseConnectionDurations()));
 	}
 
+	@Override
+	@NonNull
+	public Optional<String> snapshotAsText() {
+		MetricsSnapshot snapshot = snapshot().orElse(null);
+
+		if (snapshot == null)
+			return Optional.empty();
+
+		StringBuilder sb = new StringBuilder(8192);
+
+		appendGauge(sb, "soklet_http_requests_active", "Currently active HTTP requests",
+				snapshot.getActiveRequests());
+
+		appendHistogram(sb, "soklet_http_request_duration_nanos", "HTTP request duration in nanoseconds",
+				snapshot.getHttpRequestDurations(), DefaultMetricsCollector::labelsForHttpStatusKey);
+		appendHistogram(sb, "soklet_http_handler_duration_nanos", "HTTP handler duration in nanoseconds",
+				snapshot.getHttpHandlerDurations(), DefaultMetricsCollector::labelsForHttpStatusKey);
+		appendHistogram(sb, "soklet_http_ttfb_nanos", "HTTP time to first byte in nanoseconds",
+				snapshot.getHttpTimeToFirstByte(), DefaultMetricsCollector::labelsForHttpStatusKey);
+		appendHistogram(sb, "soklet_http_request_body_bytes", "HTTP request body size in bytes",
+				snapshot.getHttpRequestBodyBytes(), DefaultMetricsCollector::labelsForHttpRouteKey);
+		appendHistogram(sb, "soklet_http_response_body_bytes", "HTTP response body size in bytes",
+				snapshot.getHttpResponseBodyBytes(), DefaultMetricsCollector::labelsForHttpStatusKey);
+
+		if (this.includeSseMetrics.get()) {
+			appendGauge(sb, "soklet_sse_connections_active", "Currently active SSE connections",
+					snapshot.getActiveSseConnections());
+
+			appendHistogram(sb, "soklet_sse_time_to_first_event_nanos", "SSE time to first event in nanoseconds",
+					snapshot.getSseTimeToFirstEvent(), DefaultMetricsCollector::labelsForSseRouteKey);
+			appendHistogram(sb, "soklet_sse_event_write_duration_nanos", "SSE event write duration in nanoseconds",
+					snapshot.getSseEventWriteDurations(), DefaultMetricsCollector::labelsForSseRouteKey);
+			appendHistogram(sb, "soklet_sse_event_delivery_lag_nanos", "SSE event delivery lag in nanoseconds",
+					snapshot.getSseEventDeliveryLag(), DefaultMetricsCollector::labelsForSseRouteKey);
+			appendHistogram(sb, "soklet_sse_event_size_bytes", "SSE event size in bytes",
+					snapshot.getSseEventSizes(), DefaultMetricsCollector::labelsForSseRouteKey);
+			appendHistogram(sb, "soklet_sse_queue_depth", "SSE queue depth",
+					snapshot.getSseQueueDepth(), DefaultMetricsCollector::labelsForSseRouteKey);
+
+			appendHistogram(sb, "soklet_sse_comment_delivery_lag_nanos", "SSE comment delivery lag in nanoseconds",
+					snapshot.getSseCommentDeliveryLag(), DefaultMetricsCollector::labelsForSseCommentKey);
+			appendHistogram(sb, "soklet_sse_comment_size_bytes", "SSE comment size in bytes",
+					snapshot.getSseCommentSizes(), DefaultMetricsCollector::labelsForSseCommentKey);
+			appendHistogram(sb, "soklet_sse_comment_queue_depth", "SSE comment queue depth",
+					snapshot.getSseCommentQueueDepth(), DefaultMetricsCollector::labelsForSseCommentKey);
+
+			appendHistogram(sb, "soklet_sse_connection_duration_nanos", "SSE connection duration in nanoseconds",
+					snapshot.getSseConnectionDurations(), DefaultMetricsCollector::labelsForSseTerminationKey);
+		}
+
+		return Optional.of(sb.toString());
+	}
+
 	long getActiveRequests() {
 		return this.activeRequests.sum();
 	}
@@ -603,6 +664,147 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		for (Histogram histogram : map.values())
 			histogram.reset();
+	}
+
+	private static void appendGauge(@NonNull StringBuilder sb,
+																	@NonNull String name,
+																	@NonNull String help,
+																	long value) {
+		requireNonNull(sb);
+		requireNonNull(name);
+		requireNonNull(help);
+
+		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
+		sb.append("# TYPE ").append(name).append(" gauge\n");
+		sb.append(name).append(' ').append(value).append('\n');
+	}
+
+	private static <K> void appendHistogram(@NonNull StringBuilder sb,
+																					@NonNull String name,
+																					@NonNull String help,
+																					@NonNull Map<K, Snapshot> histograms,
+																					@NonNull Function<K, String> labelsProvider) {
+		requireNonNull(sb);
+		requireNonNull(name);
+		requireNonNull(help);
+		requireNonNull(histograms);
+		requireNonNull(labelsProvider);
+
+		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
+		sb.append("# TYPE ").append(name).append(" histogram\n");
+
+		histograms.forEach((key, histogram) -> {
+			String labels = labelsProvider.apply(key);
+			appendHistogramSamples(sb, name, labels, histogram);
+		});
+	}
+
+	private static void appendHistogramSamples(@NonNull StringBuilder sb,
+																						 @NonNull String name,
+																						 @NonNull String labels,
+																						 @NonNull Snapshot histogram) {
+		requireNonNull(sb);
+		requireNonNull(name);
+		requireNonNull(labels);
+		requireNonNull(histogram);
+
+		int bucketCount = histogram.getBucketCount();
+
+		for (int i = 0; i < bucketCount; i++) {
+			long boundary = histogram.getBucketBoundary(i);
+			String le = boundary == Long.MAX_VALUE ? "+Inf" : String.valueOf(boundary);
+
+			sb.append(name).append("_bucket{").append(labels).append(",le=\"").append(le).append("\"} ")
+					.append(histogram.getBucketCumulativeCount(i)).append('\n');
+		}
+
+		sb.append(name).append("_count{").append(labels).append("} ")
+				.append(histogram.getCount()).append('\n');
+		sb.append(name).append("_sum{").append(labels).append("} ")
+				.append(histogram.getSum()).append('\n');
+	}
+
+	@NonNull
+	private static String labelsForHttpStatusKey(@NonNull ServerRouteStatusKey key) {
+		requireNonNull(key);
+
+		return label("method", key.method().name())
+				+ ',' + label("route", routeLabel(key.routeKind(), key.route()))
+				+ ',' + label("status_class", key.statusClass());
+	}
+
+	@NonNull
+	private static String labelsForHttpRouteKey(@NonNull ServerRouteKey key) {
+		requireNonNull(key);
+
+		return label("method", key.method().name())
+				+ ',' + label("route", routeLabel(key.routeKind(), key.route()));
+	}
+
+	@NonNull
+	private static String labelsForSseRouteKey(@NonNull ServerSentEventRouteKey key) {
+		requireNonNull(key);
+
+		return label("route", routeLabel(key.routeKind(), key.route()));
+	}
+
+	@NonNull
+	private static String labelsForSseCommentKey(@NonNull ServerSentEventCommentRouteKey key) {
+		requireNonNull(key);
+
+		return label("route", routeLabel(key.routeKind(), key.route()))
+				+ ',' + label("comment_type", key.commentType().name());
+	}
+
+	@NonNull
+	private static String labelsForSseTerminationKey(@NonNull ServerSentEventRouteTerminationKey key) {
+		requireNonNull(key);
+
+		return label("route", routeLabel(key.routeKind(), key.route()))
+				+ ',' + label("termination_reason", key.terminationReason().name());
+	}
+
+	@NonNull
+	private static String routeLabel(@NonNull RouteKind routeKind,
+																	 @Nullable ResourcePathDeclaration route) {
+		requireNonNull(routeKind);
+
+		if (routeKind == RouteKind.UNMATCHED || route == null)
+			return "unmatched";
+
+		return route.getPath();
+	}
+
+	@NonNull
+	private static String label(@NonNull String name,
+															@NonNull String value) {
+		requireNonNull(name);
+		requireNonNull(value);
+
+		return name + "=\"" + escapeLabelValue(value) + "\"";
+	}
+
+	@NonNull
+	private static String escapeLabelValue(@NonNull String value) {
+		requireNonNull(value);
+
+		StringBuilder sb = new StringBuilder(value.length() + 8);
+
+		for (int i = 0; i < value.length(); i++) {
+			char c = value.charAt(i);
+			if (c == '\\')
+				sb.append("\\\\");
+			else if (c == '\n')
+				sb.append("\\n");
+			else if (c == '\r')
+				sb.append("\\r");
+			else if (c == '"')
+				sb.append("\\\"");
+			else
+				sb.append(c);
+		}
+
+		return sb.toString();
 	}
 
 	private static final class RouteContext {

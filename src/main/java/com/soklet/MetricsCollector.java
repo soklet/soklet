@@ -246,6 +246,18 @@ public interface MetricsCollector {
 	}
 
 	/**
+	 * Returns a text snapshot of metrics collected so far, if supported.
+	 * <p>
+	 * The default collector returns data in Prometheus-compatible text exposition format.
+	 *
+	 * @return a textual metrics snapshot, or {@link Optional#empty()} if unsupported
+	 */
+	@NonNull
+	default Optional<String> snapshotAsText() {
+		return Optional.empty();
+	}
+
+	/**
 	 * Resets any in-memory metrics state, if supported.
 	 */
 	default void reset() {

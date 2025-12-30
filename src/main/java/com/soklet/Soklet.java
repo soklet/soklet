@@ -186,6 +186,20 @@ public final class Soklet implements AutoCloseable {
 			throw new IllegalStateException(format("Resource Methods annotated with @%s were found, but no %s is configured. See https://www.soklet.com/docs/server-sent-events for details.",
 					ServerSentEventSource.class.getSimpleName(), ServerSentEventServer.class.getSimpleName()));
 
+		MetricsCollector metricsCollector = sokletConfig.getMetricsCollector();
+
+		if (metricsCollector instanceof DefaultMetricsCollector defaultMetricsCollector) {
+			try {
+				defaultMetricsCollector.initialize(sokletConfig);
+			} catch (Throwable t) {
+				sokletConfig.getLifecycleObserver().didReceiveLogEvent(
+						LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED,
+										format("An exception occurred while initializing %s", metricsCollector.getClass().getSimpleName()))
+								.throwable(t)
+								.build());
+			}
+		}
+
 		// Use a layer of indirection here so the Soklet type does not need to directly implement the `RequestHandler` interface.
 		// Reasoning: the `handleRequest` method for Soklet should not be public, which might lead to accidental invocation by users.
 		// That method should only be called by the managed `Server` instance.

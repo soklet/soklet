@@ -54,6 +54,7 @@ import static com.soklet.TestSupport.findFreePort;
 import static com.soklet.TestSupport.readAll;
 import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -112,6 +113,29 @@ public class MetricsCollectorTests {
 		Snapshot resetRequestDurations = resetSnapshot.getHttpRequestDurations().get(statusKey);
 		assertTrue(resetRequestDurations == null || resetRequestDurations.getCount() == 0L);
 		assertEquals(0L, resetSnapshot.getActiveRequests());
+	}
+
+	@Test
+	public void snapshotAsTextRespectsSseConfiguration() {
+		DefaultMetricsCollector collector = DefaultMetricsCollector.withDefaults();
+
+		SokletConfig noSseConfig = SokletConfig.withServer(Server.withPort(0).build())
+				.metricsCollector(collector)
+				.build();
+		collector.initialize(noSseConfig);
+
+		String noSseSnapshot = collector.snapshotAsText().orElseThrow();
+		assertTrue(noSseSnapshot.contains("soklet_http_requests_active"));
+		assertFalse(noSseSnapshot.contains("soklet_sse_connections_active"));
+
+		SokletConfig withSseConfig = SokletConfig.withServer(Server.withPort(0).build())
+				.serverSentEventServer(ServerSentEventServer.withPort(0).build())
+				.metricsCollector(collector)
+				.build();
+		collector.initialize(withSseConfig);
+
+		String withSseSnapshot = collector.snapshotAsText().orElseThrow();
+		assertTrue(withSseSnapshot.contains("soklet_sse_connections_active"));
 	}
 
 	@Test
