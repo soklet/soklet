@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Optional;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -32,7 +33,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class ServerSentEventComment {
-	@NonNull
+	@Nullable
 	private final String comment;
 	@NonNull
 	private final CommentType commentType;
@@ -66,6 +67,8 @@ public final class ServerSentEventComment {
 
 	/**
 	 * Acquires an "empty" builder for {@link ServerSentEventComment} instances.
+	 * <p>
+	 * Note that {@code comment} is required unless {@code commentType} is {@link CommentType#HEARTBEAT}.
 	 *
 	 * @return the builder
 	 */
@@ -76,33 +79,40 @@ public final class ServerSentEventComment {
 
 	/**
 	 * Acquires a builder for {@link ServerSentEventComment} instances, seeded with a heartbeat comment.
+	 * <p>
+	 * Heartbeat comments do not carry a payload; {@link #getComment()} will be empty.
 	 *
 	 * @return the builder
 	 */
 	@NonNull
 	public static Builder withHeartbeat() {
-		return new Builder().comment("").commentType(CommentType.HEARTBEAT);
+		return new Builder().commentType(CommentType.HEARTBEAT);
 	}
 
 	protected ServerSentEventComment(@NonNull Builder builder) {
 		requireNonNull(builder);
 
-		if (builder.comment == null)
-			throw new IllegalArgumentException(format("%s 'comment' values must not be null",
-					ServerSentEventComment.class.getSimpleName()));
-
 		this.comment = builder.comment;
 		this.commentType = builder.commentType != null ? builder.commentType : CommentType.COMMENT;
+
+		if (this.commentType == CommentType.COMMENT && this.comment == null)
+			throw new IllegalArgumentException(format("%s 'comment' values must not be null for %s comments",
+					ServerSentEventComment.class.getSimpleName(), CommentType.COMMENT));
+		if (this.commentType == CommentType.HEARTBEAT && this.comment != null)
+			throw new IllegalArgumentException(format("%s 'comment' values must be null for %s comments",
+					ServerSentEventComment.class.getSimpleName(), CommentType.HEARTBEAT));
 	}
 
 	/**
 	 * The comment payload.
+	 * <p>
+	 * Heartbeat comments return {@link Optional#empty()}.
 	 *
 	 * @return the comment payload
 	 */
 	@NonNull
-	public String getComment() {
-		return this.comment;
+	public Optional<@NonNull String> getComment() {
+		return Optional.ofNullable(this.comment);
 	}
 
 	/**

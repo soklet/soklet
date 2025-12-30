@@ -1177,7 +1177,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent =
 							writeQueueElement.getPreSerializedEvent().orElse(null);
 					ServerSentEventComment serverSentEventComment = writeQueueElement.getComment().orElse(null);
-					String comment = serverSentEventComment == null ? null : serverSentEventComment.getComment();
+					Optional<String> comment = serverSentEventComment == null
+							? Optional.empty()
+							: serverSentEventComment.getComment();
 					ServerSentEvent serverSentEvent = preSerializedEvent != null
 							? preSerializedEvent.getServerSentEvent()
 							: null;
@@ -1189,7 +1191,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						payloadBytes = preSerializedEvent.getPayloadBytes();
 					} else if (serverSentEventComment != null) {
 						// It's a comment (includes heartbeats)
-						String payload = formatCommentForResponse(comment);
+						String payload;
+						if (serverSentEventComment.getCommentType() == ServerSentEventComment.CommentType.HEARTBEAT) {
+							payload = HEARTBEAT_COMMENT_PAYLOAD;
+						} else {
+							String commentValue = comment.orElseThrow(() ->
+									new IllegalStateException("Server-Sent Event comment payload missing"));
+							payload = formatCommentForResponse(commentValue);
+						}
 						payloadBytes = payload == HEARTBEAT_COMMENT_PAYLOAD
 								? HEARTBEAT_COMMENT_PAYLOAD_BYTES
 								: payload.getBytes(StandardCharsets.UTF_8);

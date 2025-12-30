@@ -174,8 +174,8 @@ public class ServerSentEventTests {
 		Assertions.assertEquals(2, comments.size(), "Wrong number of comments");
 		Assertions.assertEquals("unicast", events.get(0).getData().get(), "Unexpected unicast event data");
 		Assertions.assertEquals("data", events.get(1).getData().get(), "Unexpected broadcast event data");
-		Assertions.assertEquals("Unicast comment", comments.get(0).getComment(), "Unexpected unicast comment");
-		Assertions.assertEquals("just a test", comments.get(1).getComment(), "Unexpected broadcast comment");
+		Assertions.assertEquals("Unicast comment", comments.get(0).getComment().orElseThrow(), "Unexpected unicast comment");
+		Assertions.assertEquals("just a test", comments.get(1).getComment().orElseThrow(), "Unexpected broadcast comment");
 	}
 
 	@Test
