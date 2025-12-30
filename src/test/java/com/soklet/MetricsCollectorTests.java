@@ -21,6 +21,7 @@ import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.MetricsCollector.HttpMethodRouteKey;
 import com.soklet.MetricsCollector.HttpMethodRouteStatusKey;
+import com.soklet.MetricsCollector.RouteKind;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
 import com.soklet.MetricsCollector.Snapshot;
@@ -77,8 +78,9 @@ public class MetricsCollectorTests {
 
 		MetricsSnapshot snapshot = collector.snapshot().orElseThrow();
 
-		HttpMethodRouteStatusKey statusKey = new HttpMethodRouteStatusKey(HttpMethod.POST, "/widgets/{id}", "2xx");
-		HttpMethodRouteKey routeKey = new HttpMethodRouteKey(HttpMethod.POST, "/widgets/{id}");
+		ResourcePathDeclaration widgetRoute = ResourcePathDeclaration.withPath("/widgets/{id}");
+		HttpMethodRouteStatusKey statusKey = new HttpMethodRouteStatusKey(HttpMethod.POST, RouteKind.MATCHED, widgetRoute, "2xx");
+		HttpMethodRouteKey routeKey = new HttpMethodRouteKey(HttpMethod.POST, RouteKind.MATCHED, widgetRoute);
 
 		Snapshot requestDurations = snapshot.getHttpRequestDurations().get(statusKey);
 		assertNotNull(requestDurations);
@@ -129,8 +131,9 @@ public class MetricsCollectorTests {
 
 		MetricsSnapshot snapshot = collector.snapshot().orElseThrow();
 
-		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey("/events/{id}");
-		ServerSentEventRouteTerminationKey terminationKey = new ServerSentEventRouteTerminationKey("/events/{id}",
+		ResourcePathDeclaration eventsRoute = ResourcePathDeclaration.withPath("/events/{id}");
+		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteKind.MATCHED, eventsRoute);
+		ServerSentEventRouteTerminationKey terminationKey = new ServerSentEventRouteTerminationKey(RouteKind.MATCHED, eventsRoute,
 				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE);
 
 		Snapshot timeToFirstEvent = snapshot.getSseTimeToFirstEvent().get(routeKey);
@@ -174,8 +177,9 @@ public class MetricsCollectorTests {
 				.build();
 
 		byte[] requestBody = "hello".getBytes(StandardCharsets.UTF_8);
-		HttpMethodRouteStatusKey statusKey = new HttpMethodRouteStatusKey(HttpMethod.POST, "/metrics/http/{id}", "2xx");
-		HttpMethodRouteKey routeKey = new HttpMethodRouteKey(HttpMethod.POST, "/metrics/http/{id}");
+		ResourcePathDeclaration httpMetricsRoute = ResourcePathDeclaration.withPath("/metrics/http/{id}");
+		HttpMethodRouteStatusKey statusKey = new HttpMethodRouteStatusKey(HttpMethod.POST, RouteKind.MATCHED, httpMetricsRoute, "2xx");
+		HttpMethodRouteKey routeKey = new HttpMethodRouteKey(HttpMethod.POST, RouteKind.MATCHED, httpMetricsRoute);
 
 		try (Soklet app = Soklet.withConfig(config)) {
 			app.start();
@@ -245,7 +249,8 @@ public class MetricsCollectorTests {
 				.metricsCollector(collector)
 				.build();
 
-		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey("/metrics/sse/{id}");
+		ResourcePathDeclaration sseMetricsRoute = ResourcePathDeclaration.withPath("/metrics/sse/{id}");
+		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteKind.MATCHED, sseMetricsRoute);
 
 		try (Soklet app = Soklet.withConfig(config)) {
 			app.start();

@@ -19,6 +19,7 @@ package com.soklet;
 import com.soklet.MetricsCollector.Histogram;
 import com.soklet.MetricsCollector.HttpMethodRouteKey;
 import com.soklet.MetricsCollector.HttpMethodRouteStatusKey;
+import com.soklet.MetricsCollector.RouteKind;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
 import com.soklet.MetricsCollector.Snapshot;
@@ -43,7 +44,6 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultMetricsCollector implements MetricsCollector {
-	private static final String UNKNOWN_ROUTE = "[unmatched]";
 	private static final String UNKNOWN_STATUS_CLASS = "unknown";
 
 	private static final long[] HTTP_LATENCY_BUCKETS_NANOS = nanosFromMillis(
@@ -114,11 +114,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																			@Nullable ResourceMethod resourceMethod) {
 		requireNonNull(request);
 
-		String route = routeFor(resourceMethod);
+		RouteContext routeContext = routeFor(resourceMethod);
 		HttpMethod method = request.getHttpMethod();
 
 		this.activeRequests.increment();
-		RequestState state = new RequestState(new IdentityKey<>(request), request.getId(), System.nanoTime(), method, route);
+		RequestState state = new RequestState(new IdentityKey<>(request), request.getId(), System.nanoTime(), method,
+				routeContext.getRouteKind(), routeContext.getRoute());
 		this.requestsInFlightByIdentity.put(state.getIdentityKey(), state);
 		this.requestsInFlightById.put(state.getRequestId(), state);
 
@@ -127,7 +128,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.orElse(0L);
 
 		Histogram requestBodyHistogram = histogramFor(this.httpRequestBodyBytesByRoute,
-				new HttpMethodRouteKey(method, route),
+				new HttpMethodRouteKey(method, routeContext.getRouteKind(), routeContext.getRoute()),
 				HTTP_BODY_BYTES_BUCKETS);
 		requestBodyHistogram.record(requestBodyBytes);
 	}
@@ -150,7 +151,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		long elapsedNanos = System.nanoTime() - state.getStartedAtNanos();
 		String statusClass = statusClassFor(marshaledResponse.getStatusCode());
 
-		HttpMethodRouteStatusKey key = new HttpMethodRouteStatusKey(state.getMethod(), state.getRoute(), statusClass);
+		HttpMethodRouteStatusKey key = new HttpMethodRouteStatusKey(state.getMethod(), state.getRouteKind(),
+				state.getRoute(), statusClass);
 		histogramFor(this.httpHandlerDurationByRouteStatus, key, HTTP_LATENCY_BUCKETS_NANOS)
 				.record(elapsedNanos);
 
@@ -173,11 +175,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.activeRequests.decrement();
 		removeRequestState(request);
 
-		String route = routeFor(resourceMethod);
+		RouteContext routeContext = routeFor(resourceMethod);
 		HttpMethod method = request.getHttpMethod();
 		String statusClass = statusClassFor(marshaledResponse.getStatusCode());
 
-		HttpMethodRouteStatusKey key = new HttpMethodRouteStatusKey(method, route, statusClass);
+		HttpMethodRouteStatusKey key = new HttpMethodRouteStatusKey(method, routeContext.getRouteKind(),
+				routeContext.getRoute(), statusClass);
 		histogramFor(this.httpRequestDurationByRouteStatus, key, HTTP_LATENCY_BUCKETS_NANOS)
 				.record(duration.toNanos());
 
@@ -193,13 +196,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	public void didEstablishServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection) {
 		requireNonNull(serverSentEventConnection);
 
-		String route = serverSentEventConnection.getResourceMethod()
-				.getResourcePathDeclaration()
-				.getPath();
+		RouteContext routeContext = routeFor(serverSentEventConnection);
 
 		this.activeSseConnections.increment();
 		this.sseConnectionsByIdentity.put(new IdentityKey<>(serverSentEventConnection),
-				new SseConnectionState(route, System.nanoTime()));
+				new SseConnectionState(routeContext.getRouteKind(), routeContext.getRoute(), System.nanoTime()));
 	}
 
 	@Override
@@ -216,7 +217,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		if (state.markFirstEventRecorded()) {
 			long elapsedNanos = System.nanoTime() - state.getEstablishedAtNanos();
 			histogramFor(this.sseTimeToFirstEventByRoute,
-					new ServerSentEventRouteKey(state.getRoute()),
+					new ServerSentEventRouteKey(state.getRouteKind(), state.getRoute()),
 					SSE_TIME_TO_FIRST_EVENT_BUCKETS_NANOS).record(elapsedNanos);
 		}
 	}
@@ -237,7 +238,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		state.incrementEventsSent();
 
 		histogramFor(this.sseEventWriteDurationByRoute,
-				new ServerSentEventRouteKey(state.getRoute()),
+				new ServerSentEventRouteKey(state.getRouteKind(), state.getRoute()),
 				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
 	}
 
@@ -251,23 +252,23 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(serverSentEvent);
 
 		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
-		String route = state == null ? routeFor(serverSentEventConnection) : state.getRoute();
+		RouteContext routeContext = routeContextFor(state, serverSentEventConnection);
 
 		if (deliveryLagNanos >= 0) {
 			histogramFor(this.sseEventDeliveryLagByRoute,
-					new ServerSentEventRouteKey(route),
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
 		}
 
 		if (payloadBytes >= 0) {
 			histogramFor(this.sseEventSizeByRoute,
-					new ServerSentEventRouteKey(route),
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
 		}
 
 		if (queueDepth >= 0) {
 			histogramFor(this.sseQueueDepthByRoute,
-					new ServerSentEventRouteKey(route),
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
 		}
 	}
@@ -282,23 +283,23 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(comment);
 
 		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
-		String route = state == null ? routeFor(serverSentEventConnection) : state.getRoute();
+		RouteContext routeContext = routeContextFor(state, serverSentEventConnection);
 
 		if (deliveryLagNanos >= 0) {
 			histogramFor(this.sseEventDeliveryLagByRoute,
-					new ServerSentEventRouteKey(route),
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
 		}
 
 		if (payloadBytes >= 0) {
 			histogramFor(this.sseEventSizeByRoute,
-					new ServerSentEventRouteKey(route),
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
 		}
 
 		if (queueDepth >= 0) {
 			histogramFor(this.sseQueueDepthByRoute,
-					new ServerSentEventRouteKey(route),
+					new ServerSentEventRouteKey(routeContext.getRouteKind(), routeContext.getRoute()),
 					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
 		}
 	}
@@ -319,7 +320,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			return;
 
 		histogramFor(this.sseEventWriteDurationByRoute,
-				new ServerSentEventRouteKey(state.getRoute()),
+				new ServerSentEventRouteKey(state.getRouteKind(), state.getRoute()),
 				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
 	}
 
@@ -335,11 +336,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.activeSseConnections.decrement();
 		this.sseConnectionsByIdentity.remove(new IdentityKey<>(serverSentEventConnection));
 
-		String route = serverSentEventConnection.getResourceMethod()
-				.getResourcePathDeclaration()
-				.getPath();
+		RouteContext routeContext = routeFor(serverSentEventConnection);
 
-		ServerSentEventRouteTerminationKey key = new ServerSentEventRouteTerminationKey(route, terminationReason);
+		ServerSentEventRouteTerminationKey key = new ServerSentEventRouteTerminationKey(routeContext.getRouteKind(),
+				routeContext.getRoute(), terminationReason);
 
 		histogramFor(this.sseConnectionDurationByRouteAndReason, key, SSE_CONNECTION_DURATION_BUCKETS_NANOS)
 				.record(connectionDuration.toNanos());
@@ -448,17 +448,28 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static String routeFor(@Nullable ResourceMethod resourceMethod) {
+	private static RouteContext routeFor(@Nullable ResourceMethod resourceMethod) {
 		if (resourceMethod == null)
-			return UNKNOWN_ROUTE;
+			return new RouteContext(RouteKind.UNMATCHED, null);
 
-		return resourceMethod.getResourcePathDeclaration().getPath();
+		return new RouteContext(RouteKind.MATCHED, resourceMethod.getResourcePathDeclaration());
 	}
 
 	@NonNull
-	private static String routeFor(@NonNull ServerSentEventConnection serverSentEventConnection) {
+	private static RouteContext routeFor(@NonNull ServerSentEventConnection serverSentEventConnection) {
 		requireNonNull(serverSentEventConnection);
-		return serverSentEventConnection.getResourceMethod().getResourcePathDeclaration().getPath();
+		return new RouteContext(RouteKind.MATCHED, serverSentEventConnection.getResourceMethod().getResourcePathDeclaration());
+	}
+
+	@NonNull
+	private static RouteContext routeContextFor(@Nullable SseConnectionState state,
+																							@NonNull ServerSentEventConnection serverSentEventConnection) {
+		requireNonNull(serverSentEventConnection);
+
+		if (state != null)
+			return new RouteContext(state.getRouteKind(), state.getRoute());
+
+		return routeFor(serverSentEventConnection);
 	}
 
 	@NonNull
@@ -521,6 +532,33 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			histogram.reset();
 	}
 
+	private static final class RouteContext {
+		@NonNull
+		private final RouteKind routeKind;
+		@Nullable
+		private final ResourcePathDeclaration route;
+
+		private RouteContext(@NonNull RouteKind routeKind,
+												 @Nullable ResourcePathDeclaration route) {
+			this.routeKind = requireNonNull(routeKind);
+			if (routeKind == RouteKind.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
+			if (routeKind == RouteKind.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
+			this.route = route;
+		}
+
+		@NonNull
+		RouteKind getRouteKind() {
+			return this.routeKind;
+		}
+
+		@Nullable
+		ResourcePathDeclaration getRoute() {
+			return this.route;
+		}
+	}
+
 	private static final class RequestState {
 		@NonNull
 		private final IdentityKey<Request> identityKey;
@@ -530,7 +568,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		@NonNull
 		private final HttpMethod method;
 		@NonNull
-		private final String route;
+		private final RouteKind routeKind;
+		@Nullable
+		private final ResourcePathDeclaration route;
 		@NonNull
 		private final AtomicBoolean handlerDurationRecorded;
 
@@ -538,12 +578,18 @@ final class DefaultMetricsCollector implements MetricsCollector {
 												 @NonNull Object requestId,
 												 long startedAtNanos,
 												 @NonNull HttpMethod method,
-												 @NonNull String route) {
+												 @NonNull RouteKind routeKind,
+												 @Nullable ResourcePathDeclaration route) {
 			this.identityKey = requireNonNull(identityKey);
 			this.requestId = requireNonNull(requestId);
 			this.startedAtNanos = startedAtNanos;
 			this.method = requireNonNull(method);
-			this.route = requireNonNull(route);
+			this.routeKind = requireNonNull(routeKind);
+			if (routeKind == RouteKind.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
+			if (routeKind == RouteKind.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
+			this.route = route;
 			this.handlerDurationRecorded = new AtomicBoolean(false);
 		}
 
@@ -567,7 +613,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		}
 
 		@NonNull
-		String getRoute() {
+		RouteKind getRouteKind() {
+			return this.routeKind;
+		}
+
+		@Nullable
+		ResourcePathDeclaration getRoute() {
 			return this.route;
 		}
 
@@ -579,15 +630,23 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private static final class SseConnectionState {
 		private final long establishedAtNanos;
 		@NonNull
-		private final String route;
+		private final RouteKind routeKind;
+		@Nullable
+		private final ResourcePathDeclaration route;
 		@NonNull
 		private final AtomicBoolean firstEventRecorded;
 		@NonNull
 		private final LongAdder eventsSent;
 
-		private SseConnectionState(@NonNull String route,
-															 long establishedAtNanos) {
-			this.route = requireNonNull(route);
+		private SseConnectionState(@NonNull RouteKind routeKind,
+															 @Nullable ResourcePathDeclaration route,
+														 long establishedAtNanos) {
+			this.routeKind = requireNonNull(routeKind);
+			if (routeKind == RouteKind.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
+			if (routeKind == RouteKind.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
+			this.route = route;
 			this.establishedAtNanos = establishedAtNanos;
 			this.firstEventRecorded = new AtomicBoolean(false);
 			this.eventsSent = new LongAdder();
@@ -598,7 +657,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		}
 
 		@NonNull
-		String getRoute() {
+		RouteKind getRouteKind() {
+			return this.routeKind;
+		}
+
+		@Nullable
+		ResourcePathDeclaration getRoute() {
 			return this.route;
 		}
 

@@ -439,53 +439,89 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Key for metrics grouped by HTTP method and route template.
+	 * Indicates whether a request was matched to a {@link ResourcePathDeclaration}.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	enum RouteKind {
+		/**
+		 * The request matched a {@link ResourcePathDeclaration}.
+		 */
+		MATCHED,
+		/**
+		 * The request did not match any {@link ResourcePathDeclaration}.
+		 */
+		UNMATCHED
+	}
+
+	/**
+	 * Key for metrics grouped by HTTP method and route match information.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record HttpMethodRouteKey(@NonNull HttpMethod method,
-														@NonNull String route) {
+														@NonNull RouteKind routeKind,
+														@Nullable ResourcePathDeclaration route) {
 		public HttpMethodRouteKey {
 			requireNonNull(method);
-			requireNonNull(route);
+			requireNonNull(routeKind);
+			if (routeKind == RouteKind.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
+			if (routeKind == RouteKind.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
 		}
 	}
 
 	/**
-	 * Key for metrics grouped by HTTP method, route template, and status class (e.g. 2xx).
+	 * Key for metrics grouped by HTTP method, route match information, and status class (e.g. 2xx).
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record HttpMethodRouteStatusKey(@NonNull HttpMethod method,
-																	@NonNull String route,
+																	@NonNull RouteKind routeKind,
+																	@Nullable ResourcePathDeclaration route,
 																	@NonNull String statusClass) {
 		public HttpMethodRouteStatusKey {
 			requireNonNull(method);
-			requireNonNull(route);
+			requireNonNull(routeKind);
+			if (routeKind == RouteKind.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
+			if (routeKind == RouteKind.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
 			requireNonNull(statusClass);
 		}
 	}
 
 	/**
-	 * Key for metrics grouped by Server-Sent Event route template.
+	 * Key for metrics grouped by Server-Sent Event route match information.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventRouteKey(@NonNull String route) {
+	record ServerSentEventRouteKey(@NonNull RouteKind routeKind,
+																 @Nullable ResourcePathDeclaration route) {
 		public ServerSentEventRouteKey {
-			requireNonNull(route);
+			requireNonNull(routeKind);
+			if (routeKind == RouteKind.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
+			if (routeKind == RouteKind.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
 		}
 	}
 
 	/**
-	 * Key for metrics grouped by Server-Sent Event route template and termination reason.
+	 * Key for metrics grouped by Server-Sent Event route match information and termination reason.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventRouteTerminationKey(@NonNull String route,
+	record ServerSentEventRouteTerminationKey(@NonNull RouteKind routeKind,
+																						@Nullable ResourcePathDeclaration route,
 																						ServerSentEventConnection.@NonNull TerminationReason terminationReason) {
 		public ServerSentEventRouteTerminationKey {
-			requireNonNull(route);
+			requireNonNull(routeKind);
+			if (routeKind == RouteKind.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
+			if (routeKind == RouteKind.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
 			requireNonNull(terminationReason);
 		}
 	}
