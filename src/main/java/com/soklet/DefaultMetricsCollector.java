@@ -267,6 +267,37 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@Override
+	public void didWriteServerSentEventCommentMetrics(@NonNull ServerSentEventConnection serverSentEventConnection,
+																										@NonNull String comment,
+																										long deliveryLagNanos,
+																										int payloadBytes,
+																										int queueDepth) {
+		requireNonNull(serverSentEventConnection);
+		requireNonNull(comment);
+
+		SseConnectionState state = this.sseConnectionsByIdentity.get(new IdentityKey<>(serverSentEventConnection));
+		String route = state == null ? routeFor(serverSentEventConnection) : state.getRoute();
+
+		if (deliveryLagNanos >= 0) {
+			histogramFor(this.sseEventDeliveryLagByRoute,
+					new SseRouteKey(route),
+					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
+		}
+
+		if (payloadBytes >= 0) {
+			histogramFor(this.sseEventSizeByRoute,
+					new SseRouteKey(route),
+					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
+		}
+
+		if (queueDepth >= 0) {
+			histogramFor(this.sseQueueDepthByRoute,
+					new SseRouteKey(route),
+					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
+		}
+	}
+
+	@Override
 	public void didFailToWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
 																						@NonNull ServerSentEvent serverSentEvent,
 																						@NonNull Duration writeDuration,

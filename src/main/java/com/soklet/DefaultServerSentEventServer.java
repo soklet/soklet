@@ -1231,16 +1231,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					int payloadByteCount = -1;
 					int queueDepth = -1;
 
-					if (preSerializedEvent != null) {
-						long enqueuedAtNanos = writeQueueElement.getEnqueuedAtNanos();
-						long nowNanos = System.nanoTime();
+					long enqueuedAtNanos = writeQueueElement.getEnqueuedAtNanos();
+					long nowNanos = System.nanoTime();
 
-						if (enqueuedAtNanos > 0L)
-							deliveryLagNanos = Math.max(0L, nowNanos - enqueuedAtNanos);
+					if (enqueuedAtNanos > 0L)
+						deliveryLagNanos = Math.max(0L, nowNanos - enqueuedAtNanos);
 
-						payloadByteCount = preSerializedEvent.getPayloadBytes().length;
-						queueDepth = writeQueue.size();
-					}
+					if (payloadBytes != null)
+						payloadByteCount = payloadBytes.length;
+
+					queueDepth = writeQueue.size();
 
 					writeStarted = Instant.now();
 					Throwable writeThrowable = null;
@@ -1365,6 +1365,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 												connectionSnapshot,
 												comment,
 												writeDuration));
+
+								safelyCollectMetrics(
+										format("An exception occurred while invoking %s::didWriteServerSentEventCommentMetrics", MetricsCollector.class.getSimpleName()),
+										connectionRequest,
+										connectionResourceMethod,
+										(metricsCollector) -> metricsCollector.didWriteServerSentEventCommentMetrics(
+												connectionSnapshot,
+												comment,
+												deliveryLagNanosSnapshot,
+												payloadByteCountSnapshot,
+												queueDepthSnapshot));
 							}
 						}
 
