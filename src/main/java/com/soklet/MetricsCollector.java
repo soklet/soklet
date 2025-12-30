@@ -22,6 +22,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Contract for collecting operational metrics from Soklet.
@@ -201,6 +202,23 @@ public interface MetricsCollector {
 																										@NonNull String comment,
 																										@NonNull Duration writeDuration,
 																										@NonNull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Returns a snapshot of metrics collected so far, if supported.
+	 *
+	 * @return an optional metrics snapshot
+	 */
+	@NonNull
+	default Optional<MetricsSnapshot> snapshot() {
+		return Optional.empty();
+	}
+
+	/**
+	 * Resets any in-memory metrics state, if supported.
+	 */
+	default void reset() {
 		// No-op by default
 	}
 

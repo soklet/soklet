@@ -23,6 +23,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.LongAdder;
@@ -287,9 +288,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
-																										@NonNull Duration connectionDuration,
-																										ServerSentEventConnection.@NonNull TerminationReason terminationReason,
-																										@Nullable Throwable throwable) {
+																									 @NonNull Duration connectionDuration,
+																									 ServerSentEventConnection.@NonNull TerminationReason terminationReason,
+																									 @Nullable Throwable throwable) {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(connectionDuration);
 		requireNonNull(terminationReason);
@@ -307,6 +308,25 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.record(connectionDuration.toNanos());
 	}
 
+	@Override
+	@NonNull
+	public Optional<MetricsSnapshot> snapshot() {
+		return Optional.of(new MetricsSnapshot(
+				getActiveRequests(),
+				getActiveSseConnections(),
+				snapshotHttpRequestDurations(),
+				snapshotHttpHandlerDurations(),
+				snapshotHttpTimeToFirstByte(),
+				snapshotHttpRequestBodyBytes(),
+				snapshotHttpResponseBodyBytes(),
+				snapshotSseTimeToFirstEvent(),
+				snapshotSseEventWriteDurations(),
+				snapshotSseEventDeliveryLag(),
+				snapshotSseEventSizes(),
+				snapshotSseQueueDepth(),
+				snapshotSseConnectionDurations()));
+	}
+
 	long getActiveRequests() {
 		return this.activeRequests.sum();
 	}
@@ -316,61 +336,62 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	Map<HttpMethodRouteStatusKey, HistogramSnapshot> snapshotHttpRequestDurations() {
+	Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpRequestDurations() {
 		return snapshotMap(this.httpRequestDurationByRouteStatus);
 	}
 
 	@NonNull
-	Map<HttpMethodRouteStatusKey, HistogramSnapshot> snapshotHttpHandlerDurations() {
+	Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpHandlerDurations() {
 		return snapshotMap(this.httpHandlerDurationByRouteStatus);
 	}
 
 	@NonNull
-	Map<HttpMethodRouteStatusKey, HistogramSnapshot> snapshotHttpTimeToFirstByte() {
+	Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpTimeToFirstByte() {
 		return snapshotMap(this.httpTimeToFirstByteByRouteStatus);
 	}
 
 	@NonNull
-	Map<HttpMethodRouteKey, HistogramSnapshot> snapshotHttpRequestBodyBytes() {
+	Map<@NonNull HttpMethodRouteKey, @NonNull HistogramSnapshot> snapshotHttpRequestBodyBytes() {
 		return snapshotMap(this.httpRequestBodyBytesByRoute);
 	}
 
 	@NonNull
-	Map<HttpMethodRouteStatusKey, HistogramSnapshot> snapshotHttpResponseBodyBytes() {
+	Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpResponseBodyBytes() {
 		return snapshotMap(this.httpResponseBodyBytesByRouteStatus);
 	}
 
 	@NonNull
-	Map<SseRouteKey, HistogramSnapshot> snapshotSseTimeToFirstEvent() {
+	Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> snapshotSseTimeToFirstEvent() {
 		return snapshotMap(this.sseTimeToFirstEventByRoute);
 	}
 
 	@NonNull
-	Map<SseRouteKey, HistogramSnapshot> snapshotSseEventWriteDurations() {
+	Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> snapshotSseEventWriteDurations() {
 		return snapshotMap(this.sseEventWriteDurationByRoute);
 	}
 
 	@NonNull
-	Map<SseRouteKey, HistogramSnapshot> snapshotSseEventDeliveryLag() {
+	Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> snapshotSseEventDeliveryLag() {
 		return snapshotMap(this.sseEventDeliveryLagByRoute);
 	}
 
 	@NonNull
-	Map<SseRouteKey, HistogramSnapshot> snapshotSseEventSizes() {
+	Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> snapshotSseEventSizes() {
 		return snapshotMap(this.sseEventSizeByRoute);
 	}
 
 	@NonNull
-	Map<SseRouteKey, HistogramSnapshot> snapshotSseQueueDepth() {
+	Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> snapshotSseQueueDepth() {
 		return snapshotMap(this.sseQueueDepthByRoute);
 	}
 
 	@NonNull
-	Map<SseRouteTerminationKey, HistogramSnapshot> snapshotSseConnectionDurations() {
+	Map<@NonNull SseRouteTerminationKey, @NonNull HistogramSnapshot> snapshotSseConnectionDurations() {
 		return snapshotMap(this.sseConnectionDurationByRouteAndReason);
 	}
 
-	void reset() {
+	@Override
+	public void reset() {
 		this.activeRequests.reset();
 		this.activeSseConnections.reset();
 		this.requestsInFlightByIdentity.clear();
@@ -447,7 +468,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static <K> Map<K, HistogramSnapshot> snapshotMap(@NonNull Map<K, Histogram> map) {
+	private static <K> Map<@NonNull K, @NonNull HistogramSnapshot> snapshotMap(@NonNull Map<K, Histogram> map) {
 		requireNonNull(map);
 
 		Map<K, HistogramSnapshot> snapshot = new ConcurrentHashMap<>(map.size());
@@ -606,35 +627,4 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.requestsInFlightById.remove(state.getRequestId(), state);
 	}
 
-	record HttpMethodRouteKey(@NonNull HttpMethod method,
-														@NonNull String route) {
-		HttpMethodRouteKey {
-			requireNonNull(method);
-			requireNonNull(route);
-		}
-	}
-
-	record HttpMethodRouteStatusKey(@NonNull HttpMethod method,
-																	@NonNull String route,
-																	@NonNull String statusClass) {
-		HttpMethodRouteStatusKey {
-			requireNonNull(method);
-			requireNonNull(route);
-			requireNonNull(statusClass);
-		}
-	}
-
-	record SseRouteKey(@NonNull String route) {
-		SseRouteKey {
-			requireNonNull(route);
-		}
-	}
-
-	record SseRouteTerminationKey(@NonNull String route,
-																ServerSentEventConnection.@NonNull TerminationReason terminationReason) {
-		SseRouteTerminationKey {
-			requireNonNull(route);
-			requireNonNull(terminationReason);
-		}
-	}
 }

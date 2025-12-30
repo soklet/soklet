@@ -29,7 +29,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class HistogramSnapshot {
+public final class HistogramSnapshot {
 	@NonNull
 	private final long[] bucketBoundaries;
 	@NonNull
@@ -39,12 +39,12 @@ final class HistogramSnapshot {
 	private final long min;
 	private final long max;
 
-	HistogramSnapshot(@NonNull long[] bucketBoundaries,
-										@NonNull long[] bucketCumulativeCounts,
-										long count,
-										long sum,
-										long min,
-										long max) {
+	public HistogramSnapshot(@NonNull long[] bucketBoundaries,
+													 @NonNull long[] bucketCumulativeCounts,
+													 long count,
+													 long sum,
+													 long min,
+													 long max) {
 		requireNonNull(bucketBoundaries);
 		requireNonNull(bucketCumulativeCounts);
 
