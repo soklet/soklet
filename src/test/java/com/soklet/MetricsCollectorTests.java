@@ -123,8 +123,8 @@ public class MetricsCollectorTests {
 
 		collector.didEstablishServerSentEventConnection(connection);
 		collector.willWriteServerSentEvent(connection, event);
-		collector.didWriteServerSentEvent(connection, event, Duration.ofMillis(2), 500L, 12, 3);
-		collector.didWriteServerSentEventComment(connection, "ping", Duration.ofMillis(1), 250L, 4, 1);
+		collector.didWriteServerSentEvent(connection, event, Duration.ofMillis(2), Duration.ofNanos(500), 12, 3);
+		collector.didWriteServerSentEventComment(connection, "ping", Duration.ofMillis(1), Duration.ofNanos(250), 4, 1);
 		collector.didTerminateServerSentEventConnection(connection, Duration.ofSeconds(1),
 				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE, null);
 

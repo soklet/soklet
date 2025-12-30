@@ -153,14 +153,14 @@ public interface MetricsCollector {
 	 * @param serverSentEventConnection the connection the event was written to
 	 * @param serverSentEvent           the event that was written
 	 * @param writeDuration             how long it took to write the event
-	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code null} if unknown
+	 * @param deliveryLag               elapsed time between enqueue and write start, or {@code null} if unknown
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
 	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
 	default void didWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
 																			 @NonNull ServerSentEvent serverSentEvent,
 																			 @NonNull Duration writeDuration,
-																			 @Nullable Long deliveryLagNanos,
+																			 @Nullable Duration deliveryLag,
 																			 @Nullable Integer payloadBytes,
 																			 @Nullable Integer queueDepth) {
 		// No-op by default
@@ -173,7 +173,7 @@ public interface MetricsCollector {
 	 * @param serverSentEvent           the event that was written
 	 * @param writeDuration             how long it took to attempt the write
 	 * @param throwable                 the failure cause
-	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code null} if unknown
+	 * @param deliveryLag               elapsed time between enqueue and write start, or {@code null} if unknown
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
 	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
@@ -181,7 +181,7 @@ public interface MetricsCollector {
 																						 @NonNull ServerSentEvent serverSentEvent,
 																						 @NonNull Duration writeDuration,
 																						 @NonNull Throwable throwable,
-																						 @Nullable Long deliveryLagNanos,
+																						 @Nullable Duration deliveryLag,
 																						 @Nullable Integer payloadBytes,
 																						 @Nullable Integer queueDepth) {
 		// No-op by default
@@ -201,14 +201,14 @@ public interface MetricsCollector {
 	 * @param serverSentEventConnection the connection the comment was written to
 	 * @param comment                   the comment that was written
 	 * @param writeDuration             how long it took to write the comment
-	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code null} if unknown
+	 * @param deliveryLag               elapsed time between enqueue and write start, or {@code null} if unknown
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
 	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
 	default void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
 																							@NonNull String comment,
 																							@NonNull Duration writeDuration,
-																							@Nullable Long deliveryLagNanos,
+																							@Nullable Duration deliveryLag,
 																							@Nullable Integer payloadBytes,
 																							@Nullable Integer queueDepth) {
 		// No-op by default
@@ -221,7 +221,7 @@ public interface MetricsCollector {
 	 * @param comment                   the comment that was written
 	 * @param writeDuration             how long it took to attempt the write
 	 * @param throwable                 the failure cause
-	 * @param deliveryLagNanos          elapsed time between enqueue and write start, or {@code null} if unknown
+	 * @param deliveryLag               elapsed time between enqueue and write start, or {@code null} if unknown
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
 	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
@@ -229,7 +229,7 @@ public interface MetricsCollector {
 																										@NonNull String comment,
 																										@NonNull Duration writeDuration,
 																										@NonNull Throwable throwable,
-																										@Nullable Long deliveryLagNanos,
+																										@Nullable Duration deliveryLag,
 																										@Nullable Integer payloadBytes,
 																										@Nullable Integer queueDepth) {
 		// No-op by default

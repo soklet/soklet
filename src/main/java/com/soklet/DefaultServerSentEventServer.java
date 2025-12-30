@@ -1227,7 +1227,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 									(metricsCollector) -> metricsCollector.willWriteServerSentEvent(connectionSnapshot, serverSentEvent));
 						}
 
-					Long deliveryLagNanos = null;
+					Duration deliveryLag = null;
 					Integer payloadByteCount = null;
 					Integer queueDepth = null;
 
@@ -1235,7 +1235,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					long nowNanos = System.nanoTime();
 
 					if (enqueuedAtNanos > 0L)
-						deliveryLagNanos = Math.max(0L, nowNanos - enqueuedAtNanos);
+						deliveryLag = Duration.ofNanos(Math.max(0L, nowNanos - enqueuedAtNanos));
 
 					if (payloadBytes != null)
 						payloadByteCount = payloadBytes.length;
@@ -1277,7 +1277,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						Instant writeFinished = Instant.now();
 						Duration writeDuration = Duration.between(writeStarted, writeFinished);
 						Throwable writeThrowableSnapshot = writeThrowable;
-						Long deliveryLagNanosSnapshot = deliveryLagNanos;
+						Duration deliveryLagSnapshot = deliveryLag;
 						Integer payloadByteCountSnapshot = payloadByteCount;
 						Integer queueDepthSnapshot = queueDepth;
 
@@ -1300,7 +1300,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 												serverSentEvent,
 												writeDuration,
 												writeThrowableSnapshot,
-												deliveryLagNanosSnapshot,
+												deliveryLagSnapshot,
 												payloadByteCountSnapshot,
 												queueDepthSnapshot));
 							} else {
@@ -1320,7 +1320,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 												connectionSnapshot,
 												serverSentEvent,
 												writeDuration,
-												deliveryLagNanosSnapshot,
+												deliveryLagSnapshot,
 												payloadByteCountSnapshot,
 												queueDepthSnapshot));
 							}
@@ -1343,7 +1343,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 												comment,
 												writeDuration,
 												writeThrowableSnapshot,
-												deliveryLagNanosSnapshot,
+												deliveryLagSnapshot,
 												payloadByteCountSnapshot,
 												queueDepthSnapshot));
 							} else {
@@ -1363,7 +1363,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 												connectionSnapshot,
 												comment,
 												writeDuration,
-												deliveryLagNanosSnapshot,
+												deliveryLagSnapshot,
 												payloadByteCountSnapshot,
 												queueDepthSnapshot));
 							}
