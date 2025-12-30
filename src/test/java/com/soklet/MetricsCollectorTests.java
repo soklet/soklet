@@ -21,7 +21,7 @@ import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.MetricsCollector.ServerRouteKey;
 import com.soklet.MetricsCollector.ServerRouteStatusKey;
-import com.soklet.MetricsCollector.RouteKind;
+import com.soklet.MetricsCollector.RouteType;
 import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
@@ -81,8 +81,8 @@ public class MetricsCollectorTests {
 		MetricsSnapshot snapshot = collector.snapshot().orElseThrow();
 
 		ResourcePathDeclaration widgetRoute = ResourcePathDeclaration.withPath("/widgets/{id}");
-		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteKind.MATCHED, widgetRoute, "2xx");
-		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteKind.MATCHED, widgetRoute);
+		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute, "2xx");
+		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute);
 
 		Snapshot requestDurations = snapshot.getHttpRequestDurations().get(statusKey);
 		assertNotNull(requestDurations);
@@ -161,12 +161,12 @@ public class MetricsCollectorTests {
 		MetricsSnapshot snapshot = collector.snapshot().orElseThrow();
 
 		ResourcePathDeclaration eventsRoute = ResourcePathDeclaration.withPath("/events/{id}");
-		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteKind.MATCHED, eventsRoute);
-		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteKind.MATCHED, eventsRoute,
+		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteType.MATCHED, eventsRoute);
+		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteType.MATCHED, eventsRoute,
 				ServerSentEventComment.CommentType.COMMENT);
-		ServerSentEventCommentRouteKey heartbeatKey = new ServerSentEventCommentRouteKey(RouteKind.MATCHED, eventsRoute,
+		ServerSentEventCommentRouteKey heartbeatKey = new ServerSentEventCommentRouteKey(RouteType.MATCHED, eventsRoute,
 				ServerSentEventComment.CommentType.HEARTBEAT);
-		ServerSentEventRouteTerminationKey terminationKey = new ServerSentEventRouteTerminationKey(RouteKind.MATCHED, eventsRoute,
+		ServerSentEventRouteTerminationKey terminationKey = new ServerSentEventRouteTerminationKey(RouteType.MATCHED, eventsRoute,
 				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE);
 
 		Snapshot timeToFirstEvent = snapshot.getSseTimeToFirstEvent().get(routeKey);
@@ -231,8 +231,8 @@ public class MetricsCollectorTests {
 
 		byte[] requestBody = "hello".getBytes(StandardCharsets.UTF_8);
 		ResourcePathDeclaration httpMetricsRoute = ResourcePathDeclaration.withPath("/metrics/http/{id}");
-		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteKind.MATCHED, httpMetricsRoute, "2xx");
-		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteKind.MATCHED, httpMetricsRoute);
+		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute, "2xx");
+		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute);
 
 		try (Soklet app = Soklet.withConfig(config)) {
 			app.start();
@@ -303,8 +303,8 @@ public class MetricsCollectorTests {
 				.build();
 
 		ResourcePathDeclaration sseMetricsRoute = ResourcePathDeclaration.withPath("/metrics/sse/{id}");
-		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteKind.MATCHED, sseMetricsRoute);
-		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteKind.MATCHED, sseMetricsRoute,
+		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteType.MATCHED, sseMetricsRoute);
+		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteType.MATCHED, sseMetricsRoute,
 				ServerSentEventComment.CommentType.COMMENT);
 
 		try (Soklet app = Soklet.withConfig(config)) {

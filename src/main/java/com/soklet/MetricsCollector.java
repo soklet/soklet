@@ -463,7 +463,7 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	enum RouteKind {
+	enum RouteType {
 		/**
 		 * The request matched a {@link ResourcePathDeclaration}.
 		 */
@@ -480,15 +480,15 @@ public interface MetricsCollector {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record ServerRouteKey(@NonNull HttpMethod method,
-												@NonNull RouteKind routeKind,
+												@NonNull RouteType routeType,
 												@Nullable ResourcePathDeclaration route) {
 		public ServerRouteKey {
 			requireNonNull(method);
-			requireNonNull(routeKind);
-			if (routeKind == RouteKind.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
-			if (routeKind == RouteKind.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
+			requireNonNull(routeType);
+			if (routeType == RouteType.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
+			if (routeType == RouteType.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
 		}
 	}
 
@@ -498,16 +498,16 @@ public interface MetricsCollector {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record ServerRouteStatusKey(@NonNull HttpMethod method,
-															@NonNull RouteKind routeKind,
+															@NonNull RouteType routeType,
 															@Nullable ResourcePathDeclaration route,
 															@NonNull String statusClass) {
 		public ServerRouteStatusKey {
 			requireNonNull(method);
-			requireNonNull(routeKind);
-			if (routeKind == RouteKind.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
-			if (routeKind == RouteKind.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
+			requireNonNull(routeType);
+			if (routeType == RouteType.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
+			if (routeType == RouteType.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
 			requireNonNull(statusClass);
 		}
 	}
@@ -517,16 +517,16 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventCommentRouteKey(@NonNull RouteKind routeKind,
+	record ServerSentEventCommentRouteKey(@NonNull RouteType routeType,
 																				@Nullable ResourcePathDeclaration route,
 																				ServerSentEventComment.@NonNull CommentType commentType) {
 		public ServerSentEventCommentRouteKey {
-			requireNonNull(routeKind);
+			requireNonNull(routeType);
 			requireNonNull(commentType);
-			if (routeKind == RouteKind.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
-			if (routeKind == RouteKind.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
+			if (routeType == RouteType.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
+			if (routeType == RouteType.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
 		}
 	}
 
@@ -535,14 +535,14 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventRouteKey(@NonNull RouteKind routeKind,
+	record ServerSentEventRouteKey(@NonNull RouteType routeType,
 																 @Nullable ResourcePathDeclaration route) {
 		public ServerSentEventRouteKey {
-			requireNonNull(routeKind);
-			if (routeKind == RouteKind.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
-			if (routeKind == RouteKind.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
+			requireNonNull(routeType);
+			if (routeType == RouteType.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
+			if (routeType == RouteType.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
 		}
 	}
 
@@ -551,15 +551,15 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventRouteTerminationKey(@NonNull RouteKind routeKind,
+	record ServerSentEventRouteTerminationKey(@NonNull RouteType routeType,
 																						@Nullable ResourcePathDeclaration route,
 																						ServerSentEventConnection.@NonNull TerminationReason terminationReason) {
 		public ServerSentEventRouteTerminationKey {
-			requireNonNull(routeKind);
-			if (routeKind == RouteKind.MATCHED && route == null)
-				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");
-			if (routeKind == RouteKind.UNMATCHED && route != null)
-				throw new IllegalArgumentException("Route must be null when RouteKind is UNMATCHED");
+			requireNonNull(routeType);
+			if (routeType == RouteType.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
+			if (routeType == RouteType.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
 			requireNonNull(terminationReason);
 		}
 	}

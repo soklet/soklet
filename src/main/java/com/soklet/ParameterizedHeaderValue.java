@@ -105,7 +105,7 @@ public final class ParameterizedHeaderValue {
 	}
 
 	/**
-	 * Returns the parameters (including their kinds and unencoded values) that make up this header value.
+	 * Returns the parameters (including their types and unencoded values) that make up this header value.
 	 * <p>
 	 * The returned list is immutable.
 	 */
@@ -162,30 +162,30 @@ public final class ParameterizedHeaderValue {
 	}
 
 	/**
+	 * What type of header-value parameter this is: {@link #TOKEN}, {@link #QUOTED}, or {@link #RFC_8187}.
+	 */
+	public enum ParameterType {
+		/**
+		 * {@code name=value} where value is an HTTP token (RFC 9110).
+		 */
+		TOKEN,
+		/**
+		 * {@code name="value"} where value is an HTTP quoted-string (RFC 9110).
+		 */
+		QUOTED,
+		/**
+		 * {@code name*=UTF-8''...} where value is an RFC 8187 ext-value.
+		 */
+		RFC_8187
+	}
+
+	/**
 	 * A single header-value parameter: given a header value like {@code attachment; filename="resume.pdf"; filename*=UTF-8''r%C3%A9sum%C3%A9.pdf}, there are two {@code filename} parameter name-value pairs.
 	 */
 	@ThreadSafe
 	public static final class Parameter {
-		/**
-		 * What kind of header-value parameter this is: {@link #TOKEN}, {@link #QUOTED}, or {@link #RFC_8187}.
-		 */
-		public enum Kind {
-			/**
-			 * {@code name=value} where value is an HTTP token (RFC 9110).
-			 */
-			TOKEN,
-			/**
-			 * {@code name="value"} where value is an HTTP quoted-string (RFC 9110).
-			 */
-			QUOTED,
-			/**
-			 * {@code name*=UTF-8''...} where value is an RFC 8187 ext-value.
-			 */
-			RFC_8187
-		}
-
 		@NonNull
-		private final Kind kind;
+		private final ParameterType parameterType;
 		@NonNull
 		private final String name;
 		@NonNull
@@ -193,24 +193,24 @@ public final class ParameterizedHeaderValue {
 		@NonNull
 		private final String encodedFragment; // already encoded "name=value" or "name*=ext-value"
 
-		private Parameter(@NonNull Kind kind,
+		private Parameter(@NonNull ParameterType parameterType,
 											@NonNull String name,
 											@NonNull String value,
 											@NonNull String encodedFragment) {
-			this.kind = requireNonNull(kind);
+			this.parameterType = requireNonNull(parameterType);
 			this.name = requireNonNull(name);
 			this.value = requireNonNull(value);
 			this.encodedFragment = requireNonNull(encodedFragment);
 		}
 
 		/**
-		 * Gets the kind of this parameter.
+		 * Gets the type of this parameter.
 		 *
-		 * @return the parameter kind
+		 * @return the parameter type
 		 */
 		@NonNull
-		public Kind getKind() {
-			return kind;
+		public ParameterType getParameterType() {
+			return parameterType;
 		}
 
 		/**
@@ -247,7 +247,7 @@ public final class ParameterizedHeaderValue {
 		@NonNull
 		public String toString() {
 			return "Parameter{"
-					+ "kind=" + kind
+					+ "parameterType=" + parameterType
 					+ ", name=" + name
 					+ ", value=" + value
 					+ ", encodedFragment=" + encodedFragment
@@ -262,7 +262,7 @@ public final class ParameterizedHeaderValue {
 				return false;
 
 			Parameter that = (Parameter) other;
-			return this.kind == that.kind
+			return this.parameterType == that.parameterType
 					&& this.name.equals(that.name)
 					&& this.value.equals(that.value)
 					&& this.encodedFragment.equals(that.encodedFragment);
@@ -270,7 +270,7 @@ public final class ParameterizedHeaderValue {
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(kind, name, value, encodedFragment);
+			return Objects.hash(parameterType, name, value, encodedFragment);
 		}
 	}
 
@@ -315,7 +315,7 @@ public final class ParameterizedHeaderValue {
 			String v = sanitizeTokenValue(value);
 
 			String encoded = n + "=" + v;
-			this.parameters.add(new Parameter(Parameter.Kind.TOKEN, n, v, encoded));
+			this.parameters.add(new Parameter(ParameterType.TOKEN, n, v, encoded));
 			return this;
 		}
 
@@ -344,7 +344,7 @@ public final class ParameterizedHeaderValue {
 			String encodedValue = encodeQuotedString(v);
 			String encoded = n + "=" + encodedValue;
 
-			this.parameters.add(new Parameter(Parameter.Kind.QUOTED, n, v, encoded));
+			this.parameters.add(new Parameter(ParameterType.QUOTED, n, v, encoded));
 			return this;
 		}
 
@@ -377,7 +377,7 @@ public final class ParameterizedHeaderValue {
 			String extValue = encodeRfc8187ExtValue(v);
 			String encoded = n + "*=" + extValue;
 
-			this.parameters.add(new Parameter(Parameter.Kind.RFC_8187, n, v, encoded));
+			this.parameters.add(new Parameter(ParameterType.RFC_8187, n, v, encoded));
 			return this;
 		}
 
