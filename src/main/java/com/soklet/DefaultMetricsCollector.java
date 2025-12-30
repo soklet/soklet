@@ -16,6 +16,12 @@
 
 package com.soklet;
 
+import com.soklet.MetricsCollector.Histogram;
+import com.soklet.MetricsCollector.HttpMethodRouteKey;
+import com.soklet.MetricsCollector.HttpMethodRouteStatusKey;
+import com.soklet.MetricsCollector.ServerSentEventRouteKey;
+import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
+import com.soklet.MetricsCollector.Snapshot;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -70,12 +76,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final ConcurrentHashMap<HttpMethodRouteKey, Histogram> httpRequestBodyBytesByRoute;
 	private final ConcurrentHashMap<HttpMethodRouteStatusKey, Histogram> httpResponseBodyBytesByRouteStatus;
 	private final ConcurrentHashMap<IdentityKey<ServerSentEventConnection>, SseConnectionState> sseConnectionsByIdentity;
-	private final ConcurrentHashMap<SseRouteKey, Histogram> sseTimeToFirstEventByRoute;
-	private final ConcurrentHashMap<SseRouteKey, Histogram> sseEventWriteDurationByRoute;
-	private final ConcurrentHashMap<SseRouteKey, Histogram> sseEventDeliveryLagByRoute;
-	private final ConcurrentHashMap<SseRouteKey, Histogram> sseEventSizeByRoute;
-	private final ConcurrentHashMap<SseRouteKey, Histogram> sseQueueDepthByRoute;
-	private final ConcurrentHashMap<SseRouteTerminationKey, Histogram> sseConnectionDurationByRouteAndReason;
+	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseTimeToFirstEventByRoute;
+	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseEventWriteDurationByRoute;
+	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseEventDeliveryLagByRoute;
+	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseEventSizeByRoute;
+	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseQueueDepthByRoute;
+	private final ConcurrentHashMap<ServerSentEventRouteTerminationKey, Histogram> sseConnectionDurationByRouteAndReason;
 	private final LongAdder activeRequests;
 	private final LongAdder activeSseConnections;
 
@@ -210,7 +216,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		if (state.markFirstEventRecorded()) {
 			long elapsedNanos = System.nanoTime() - state.getEstablishedAtNanos();
 			histogramFor(this.sseTimeToFirstEventByRoute,
-					new SseRouteKey(state.getRoute()),
+					new ServerSentEventRouteKey(state.getRoute()),
 					SSE_TIME_TO_FIRST_EVENT_BUCKETS_NANOS).record(elapsedNanos);
 		}
 	}
@@ -231,7 +237,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		state.incrementEventsSent();
 
 		histogramFor(this.sseEventWriteDurationByRoute,
-				new SseRouteKey(state.getRoute()),
+				new ServerSentEventRouteKey(state.getRoute()),
 				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
 	}
 
@@ -249,19 +255,19 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		if (deliveryLagNanos >= 0) {
 			histogramFor(this.sseEventDeliveryLagByRoute,
-					new SseRouteKey(route),
+					new ServerSentEventRouteKey(route),
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
 		}
 
 		if (payloadBytes >= 0) {
 			histogramFor(this.sseEventSizeByRoute,
-					new SseRouteKey(route),
+					new ServerSentEventRouteKey(route),
 					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
 		}
 
 		if (queueDepth >= 0) {
 			histogramFor(this.sseQueueDepthByRoute,
-					new SseRouteKey(route),
+					new ServerSentEventRouteKey(route),
 					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
 		}
 	}
@@ -280,19 +286,19 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		if (deliveryLagNanos >= 0) {
 			histogramFor(this.sseEventDeliveryLagByRoute,
-					new SseRouteKey(route),
+					new ServerSentEventRouteKey(route),
 					SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(deliveryLagNanos);
 		}
 
 		if (payloadBytes >= 0) {
 			histogramFor(this.sseEventSizeByRoute,
-					new SseRouteKey(route),
+					new ServerSentEventRouteKey(route),
 					HTTP_BODY_BYTES_BUCKETS).record(payloadBytes);
 		}
 
 		if (queueDepth >= 0) {
 			histogramFor(this.sseQueueDepthByRoute,
-					new SseRouteKey(route),
+					new ServerSentEventRouteKey(route),
 					SSE_QUEUE_DEPTH_BUCKETS).record(queueDepth);
 		}
 	}
@@ -313,7 +319,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			return;
 
 		histogramFor(this.sseEventWriteDurationByRoute,
-				new SseRouteKey(state.getRoute()),
+				new ServerSentEventRouteKey(state.getRoute()),
 				SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS).record(writeDuration.toNanos());
 	}
 
@@ -333,7 +339,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.getResourcePathDeclaration()
 				.getPath();
 
-		SseRouteTerminationKey key = new SseRouteTerminationKey(route, terminationReason);
+		ServerSentEventRouteTerminationKey key = new ServerSentEventRouteTerminationKey(route, terminationReason);
 
 		histogramFor(this.sseConnectionDurationByRouteAndReason, key, SSE_CONNECTION_DURATION_BUCKETS_NANOS)
 				.record(connectionDuration.toNanos());
@@ -367,57 +373,57 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpRequestDurations() {
+	Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> snapshotHttpRequestDurations() {
 		return snapshotMap(this.httpRequestDurationByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpHandlerDurations() {
+	Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> snapshotHttpHandlerDurations() {
 		return snapshotMap(this.httpHandlerDurationByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpTimeToFirstByte() {
+	Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> snapshotHttpTimeToFirstByte() {
 		return snapshotMap(this.httpTimeToFirstByteByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull HttpMethodRouteKey, @NonNull HistogramSnapshot> snapshotHttpRequestBodyBytes() {
+	Map<@NonNull HttpMethodRouteKey, @NonNull Snapshot> snapshotHttpRequestBodyBytes() {
 		return snapshotMap(this.httpRequestBodyBytesByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpResponseBodyBytes() {
+	Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> snapshotHttpResponseBodyBytes() {
 		return snapshotMap(this.httpResponseBodyBytesByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> snapshotSseTimeToFirstEvent() {
+	Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> snapshotSseTimeToFirstEvent() {
 		return snapshotMap(this.sseTimeToFirstEventByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> snapshotSseEventWriteDurations() {
+	Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> snapshotSseEventWriteDurations() {
 		return snapshotMap(this.sseEventWriteDurationByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> snapshotSseEventDeliveryLag() {
+	Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> snapshotSseEventDeliveryLag() {
 		return snapshotMap(this.sseEventDeliveryLagByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> snapshotSseEventSizes() {
+	Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> snapshotSseEventSizes() {
 		return snapshotMap(this.sseEventSizeByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> snapshotSseQueueDepth() {
+	Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> snapshotSseQueueDepth() {
 		return snapshotMap(this.sseQueueDepthByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull SseRouteTerminationKey, @NonNull HistogramSnapshot> snapshotSseConnectionDurations() {
+	Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull Snapshot> snapshotSseConnectionDurations() {
 		return snapshotMap(this.sseConnectionDurationByRouteAndReason);
 	}
 
@@ -499,10 +505,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static <K> Map<@NonNull K, @NonNull HistogramSnapshot> snapshotMap(@NonNull Map<K, Histogram> map) {
+	private static <K> Map<@NonNull K, @NonNull Snapshot> snapshotMap(@NonNull Map<K, Histogram> map) {
 		requireNonNull(map);
 
-		Map<K, HistogramSnapshot> snapshot = new ConcurrentHashMap<>(map.size());
+		Map<K, Snapshot> snapshot = new ConcurrentHashMap<>(map.size());
 		for (Map.Entry<K, Histogram> entry : map.entrySet())
 			snapshot.put(entry.getKey(), entry.getValue().snapshot());
 		return snapshot;

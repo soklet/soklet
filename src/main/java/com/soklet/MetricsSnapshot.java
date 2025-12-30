@@ -16,6 +16,11 @@
 
 package com.soklet;
 
+import com.soklet.MetricsCollector.HttpMethodRouteKey;
+import com.soklet.MetricsCollector.HttpMethodRouteStatusKey;
+import com.soklet.MetricsCollector.ServerSentEventRouteKey;
+import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
+import com.soklet.MetricsCollector.Snapshot;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -35,41 +40,41 @@ public final class MetricsSnapshot {
 	private final long activeRequests;
 	private final long activeSseConnections;
 	@NonNull
-	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
+	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpRequestDurations;
 	@NonNull
-	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations;
+	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpHandlerDurations;
 	@NonNull
-	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte;
+	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpTimeToFirstByte;
 	@NonNull
-	private final Map<@NonNull HttpMethodRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes;
+	private final Map<@NonNull HttpMethodRouteKey, @NonNull Snapshot> httpRequestBodyBytes;
 	@NonNull
-	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
+	private final Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpResponseBodyBytes;
 	@NonNull
-	private final Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
+	private final Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseTimeToFirstEvent;
 	@NonNull
-	private final Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations;
+	private final Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseEventWriteDurations;
 	@NonNull
-	private final Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag;
+	private final Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseEventDeliveryLag;
 	@NonNull
-	private final Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> sseEventSizes;
+	private final Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseEventSizes;
 	@NonNull
-	private final Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> sseQueueDepth;
+	private final Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseQueueDepth;
 	@NonNull
-	private final Map<@NonNull SseRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations;
+	private final Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull Snapshot> sseConnectionDurations;
 
 	public MetricsSnapshot(long activeRequests,
 												 long activeSseConnections,
-												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations,
-												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations,
-												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte,
-												 @NonNull Map<@NonNull HttpMethodRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes,
-												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes,
-												 @NonNull Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent,
-												 @NonNull Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations,
-												 @NonNull Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag,
-												 @NonNull Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> sseEventSizes,
-												 @NonNull Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> sseQueueDepth,
-												 @NonNull Map<@NonNull SseRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations) {
+												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpRequestDurations,
+												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpHandlerDurations,
+												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpTimeToFirstByte,
+												 @NonNull Map<@NonNull HttpMethodRouteKey, @NonNull Snapshot> httpRequestBodyBytes,
+												 @NonNull Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> httpResponseBodyBytes,
+												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseTimeToFirstEvent,
+												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseEventWriteDurations,
+												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseEventDeliveryLag,
+												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseEventSizes,
+												 @NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> sseQueueDepth,
+												 @NonNull Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull Snapshot> sseConnectionDurations) {
 		this.activeRequests = activeRequests;
 		this.activeSseConnections = activeSseConnections;
 		this.httpRequestDurations = Map.copyOf(requireNonNull(httpRequestDurations));
@@ -94,57 +99,57 @@ public final class MetricsSnapshot {
 	}
 
 	@NonNull
-	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> getHttpRequestDurations() {
+	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> getHttpRequestDurations() {
 		return this.httpRequestDurations;
 	}
 
 	@NonNull
-	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> getHttpHandlerDurations() {
+	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> getHttpHandlerDurations() {
 		return this.httpHandlerDurations;
 	}
 
 	@NonNull
-	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> getHttpTimeToFirstByte() {
+	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> getHttpTimeToFirstByte() {
 		return this.httpTimeToFirstByte;
 	}
 
 	@NonNull
-	public Map<@NonNull HttpMethodRouteKey, @NonNull HistogramSnapshot> getHttpRequestBodyBytes() {
+	public Map<@NonNull HttpMethodRouteKey, @NonNull Snapshot> getHttpRequestBodyBytes() {
 		return this.httpRequestBodyBytes;
 	}
 
 	@NonNull
-	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull HistogramSnapshot> getHttpResponseBodyBytes() {
+	public Map<@NonNull HttpMethodRouteStatusKey, @NonNull Snapshot> getHttpResponseBodyBytes() {
 		return this.httpResponseBodyBytes;
 	}
 
 	@NonNull
-	public Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> getSseTimeToFirstEvent() {
+	public Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> getSseTimeToFirstEvent() {
 		return this.sseTimeToFirstEvent;
 	}
 
 	@NonNull
-	public Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> getSseEventWriteDurations() {
+	public Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> getSseEventWriteDurations() {
 		return this.sseEventWriteDurations;
 	}
 
 	@NonNull
-	public Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> getSseEventDeliveryLag() {
+	public Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> getSseEventDeliveryLag() {
 		return this.sseEventDeliveryLag;
 	}
 
 	@NonNull
-	public Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> getSseEventSizes() {
+	public Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> getSseEventSizes() {
 		return this.sseEventSizes;
 	}
 
 	@NonNull
-	public Map<@NonNull SseRouteKey, @NonNull HistogramSnapshot> getSseQueueDepth() {
+	public Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> getSseQueueDepth() {
 		return this.sseQueueDepth;
 	}
 
 	@NonNull
-	public Map<@NonNull SseRouteTerminationKey, @NonNull HistogramSnapshot> getSseConnectionDurations() {
+	public Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull Snapshot> getSseConnectionDurations() {
 		return this.sseConnectionDurations;
 	}
 }

@@ -20,9 +20,14 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Arrays;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Contract for collecting operational metrics from Soklet.
@@ -237,6 +242,252 @@ public interface MetricsCollector {
 	 */
 	default void reset() {
 		// No-op by default
+	}
+
+	/**
+	 * A thread-safe histogram with fixed bucket boundaries.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	final class Histogram {
+		@NonNull
+		private final long[] bucketBoundaries;
+		@NonNull
+		private final LongAdder[] bucketCounts;
+		@NonNull
+		private final LongAdder count;
+		@NonNull
+		private final LongAdder sum;
+		@NonNull
+		private final AtomicLong min;
+		@NonNull
+		private final AtomicLong max;
+
+		public Histogram(@NonNull long[] bucketBoundaries) {
+			requireNonNull(bucketBoundaries);
+
+			this.bucketBoundaries = bucketBoundaries.clone();
+			Arrays.sort(this.bucketBoundaries);
+			this.bucketCounts = new LongAdder[this.bucketBoundaries.length + 1];
+			for (int i = 0; i < this.bucketCounts.length; i++)
+				this.bucketCounts[i] = new LongAdder();
+			this.count = new LongAdder();
+			this.sum = new LongAdder();
+			this.min = new AtomicLong(Long.MAX_VALUE);
+			this.max = new AtomicLong(Long.MIN_VALUE);
+		}
+
+		public void record(long value) {
+			if (value < 0)
+				return;
+
+			this.count.increment();
+			this.sum.add(value);
+			updateMin(value);
+			updateMax(value);
+
+			int bucketIndex = bucketIndex(value);
+			this.bucketCounts[bucketIndex].increment();
+		}
+
+		@NonNull
+		public Snapshot snapshot() {
+			long[] boundariesWithOverflow = Arrays.copyOf(this.bucketBoundaries, this.bucketBoundaries.length + 1);
+			boundariesWithOverflow[boundariesWithOverflow.length - 1] = Long.MAX_VALUE;
+
+			long[] cumulativeCounts = new long[this.bucketCounts.length];
+			long cumulative = 0;
+			for (int i = 0; i < this.bucketCounts.length; i++) {
+				cumulative += this.bucketCounts[i].sum();
+				cumulativeCounts[i] = cumulative;
+			}
+
+			long countSnapshot = this.count.sum();
+			long sumSnapshot = this.sum.sum();
+			long minSnapshot = this.min.get();
+			long maxSnapshot = this.max.get();
+
+			if (minSnapshot == Long.MAX_VALUE)
+				minSnapshot = 0;
+			if (maxSnapshot == Long.MIN_VALUE)
+				maxSnapshot = 0;
+
+			return new Snapshot(boundariesWithOverflow, cumulativeCounts, countSnapshot, sumSnapshot, minSnapshot, maxSnapshot);
+		}
+
+		public void reset() {
+			this.count.reset();
+			this.sum.reset();
+			this.min.set(Long.MAX_VALUE);
+			this.max.set(Long.MIN_VALUE);
+			for (LongAdder bucket : this.bucketCounts)
+				bucket.reset();
+		}
+
+		private int bucketIndex(long value) {
+			for (int i = 0; i < this.bucketBoundaries.length; i++)
+				if (value <= this.bucketBoundaries[i])
+					return i;
+
+			return this.bucketBoundaries.length;
+		}
+
+		private void updateMin(long value) {
+			long current;
+			while (value < (current = this.min.get())) {
+				if (this.min.compareAndSet(current, value))
+					break;
+			}
+		}
+
+		private void updateMax(long value) {
+			long current;
+			while (value > (current = this.max.get())) {
+				if (this.max.compareAndSet(current, value))
+					break;
+			}
+		}
+	}
+
+	/**
+	 * Immutable snapshot of a {@link Histogram}.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	final class Snapshot {
+		@NonNull
+		private final long[] bucketBoundaries;
+		@NonNull
+		private final long[] bucketCumulativeCounts;
+		private final long count;
+		private final long sum;
+		private final long min;
+		private final long max;
+
+		public Snapshot(@NonNull long[] bucketBoundaries,
+										@NonNull long[] bucketCumulativeCounts,
+										long count,
+										long sum,
+										long min,
+										long max) {
+			requireNonNull(bucketBoundaries);
+			requireNonNull(bucketCumulativeCounts);
+
+			if (bucketBoundaries.length != bucketCumulativeCounts.length)
+				throw new IllegalArgumentException("Bucket boundaries and cumulative counts must be the same length");
+
+			this.bucketBoundaries = bucketBoundaries.clone();
+			this.bucketCumulativeCounts = bucketCumulativeCounts.clone();
+			this.count = count;
+			this.sum = sum;
+			this.min = min;
+			this.max = max;
+		}
+
+		public int getBucketCount() {
+			return this.bucketBoundaries.length;
+		}
+
+		public long getBucketBoundary(int index) {
+			return this.bucketBoundaries[index];
+		}
+
+		public long getBucketCumulativeCount(int index) {
+			return this.bucketCumulativeCounts[index];
+		}
+
+		public long getCount() {
+			return this.count;
+		}
+
+		public long getSum() {
+			return this.sum;
+		}
+
+		public long getMin() {
+			return this.min;
+		}
+
+		public long getMax() {
+			return this.max;
+		}
+
+		public long getPercentile(double percentile) {
+			if (percentile <= 0.0)
+				return this.min;
+			if (percentile >= 100.0)
+				return this.max;
+			if (this.count == 0)
+				return 0;
+
+			long threshold = (long) Math.ceil((percentile / 100.0) * this.count);
+
+			for (int i = 0; i < this.bucketCumulativeCounts.length; i++)
+				if (this.bucketCumulativeCounts[i] >= threshold)
+					return this.bucketBoundaries[i];
+
+			return this.bucketBoundaries[this.bucketBoundaries.length - 1];
+		}
+
+		@Override
+		public String toString() {
+			return String.format("%s{count=%d, min=%d, max=%d, sum=%d, bucketBoundaries=%s}",
+					getClass().getSimpleName(), this.count, this.min, this.max, this.sum, Arrays.toString(this.bucketBoundaries));
+		}
+	}
+
+	/**
+	 * Key for metrics grouped by HTTP method and route template.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record HttpMethodRouteKey(@NonNull HttpMethod method,
+														@NonNull String route) {
+		public HttpMethodRouteKey {
+			requireNonNull(method);
+			requireNonNull(route);
+		}
+	}
+
+	/**
+	 * Key for metrics grouped by HTTP method, route template, and status class (e.g. 2xx).
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record HttpMethodRouteStatusKey(@NonNull HttpMethod method,
+																	@NonNull String route,
+																	@NonNull String statusClass) {
+		public HttpMethodRouteStatusKey {
+			requireNonNull(method);
+			requireNonNull(route);
+			requireNonNull(statusClass);
+		}
+	}
+
+	/**
+	 * Key for metrics grouped by Server-Sent Event route template.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record ServerSentEventRouteKey(@NonNull String route) {
+		public ServerSentEventRouteKey {
+			requireNonNull(route);
+		}
+	}
+
+	/**
+	 * Key for metrics grouped by Server-Sent Event route template and termination reason.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record ServerSentEventRouteTerminationKey(@NonNull String route,
+																						ServerSentEventConnection.@NonNull TerminationReason terminationReason) {
+		public ServerSentEventRouteTerminationKey {
+			requireNonNull(route);
+			requireNonNull(terminationReason);
+		}
 	}
 
 	/**
