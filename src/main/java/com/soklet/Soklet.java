@@ -1568,8 +1568,8 @@ public final class Soklet implements AutoCloseable {
 
 		public MockServerSentEventUnicaster(@NonNull ResourcePath resourcePath,
 																				@NonNull Consumer<ServerSentEvent> eventConsumer,
-																	 @NonNull Consumer<ServerSentEventComment> commentConsumer,
-																	 @NonNull AtomicReference<Consumer<Throwable>> unicastErrorHandler) {
+																				@NonNull Consumer<ServerSentEventComment> commentConsumer,
+																				@NonNull AtomicReference<Consumer<Throwable>> unicastErrorHandler) {
 			requireNonNull(resourcePath);
 			requireNonNull(eventConsumer);
 			requireNonNull(commentConsumer);

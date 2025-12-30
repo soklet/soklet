@@ -148,8 +148,8 @@ public interface LifecycleObserver {
 	 * Called before response data is written.
 	 */
 	default void willWriteResponse(@NonNull Request request,
-															 @Nullable ResourceMethod resourceMethod,
-															 @NonNull MarshaledResponse marshaledResponse) {
+																 @Nullable ResourceMethod resourceMethod,
+																 @NonNull MarshaledResponse marshaledResponse) {
 		// No-op by default
 	}
 
@@ -157,9 +157,9 @@ public interface LifecycleObserver {
 	 * Called after response data is written.
 	 */
 	default void didWriteResponse(@NonNull Request request,
-															@Nullable ResourceMethod resourceMethod,
-															@NonNull MarshaledResponse marshaledResponse,
-															@NonNull Duration responseWriteDuration) {
+																@Nullable ResourceMethod resourceMethod,
+																@NonNull MarshaledResponse marshaledResponse,
+																@NonNull Duration responseWriteDuration) {
 		// No-op by default
 	}
 
@@ -237,8 +237,8 @@ public interface LifecycleObserver {
 	 * Called if an SSE connection fails to establish.
 	 */
 	default void didFailToEstablishServerSentEventConnection(@NonNull Request request,
-																												 @Nullable ResourceMethod resourceMethod,
-																												 @NonNull Throwable throwable) {
+																													 @Nullable ResourceMethod resourceMethod,
+																													 @NonNull Throwable throwable) {
 		// No-op by default
 	}
 
@@ -265,7 +265,7 @@ public interface LifecycleObserver {
 	 * Called before an SSE event is written.
 	 */
 	default void willWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
-																			 @NonNull ServerSentEvent serverSentEvent) {
+																				@NonNull ServerSentEvent serverSentEvent) {
 		// No-op by default
 	}
 
@@ -273,8 +273,8 @@ public interface LifecycleObserver {
 	 * Called after an SSE event is written.
 	 */
 	default void didWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
-																		 @NonNull ServerSentEvent serverSentEvent,
-																		 @NonNull Duration writeDuration) {
+																			 @NonNull ServerSentEvent serverSentEvent,
+																			 @NonNull Duration writeDuration) {
 		// No-op by default
 	}
 
@@ -292,7 +292,7 @@ public interface LifecycleObserver {
 	 * Called before an SSE comment is written.
 	 */
 	default void willWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																						 @NonNull ServerSentEventComment serverSentEventComment) {
+																							 @NonNull ServerSentEventComment serverSentEventComment) {
 		// No-op by default
 	}
 

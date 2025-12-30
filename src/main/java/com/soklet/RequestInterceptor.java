@@ -61,9 +61,9 @@ public interface RequestInterceptor {
 	 * You must call {@code marshaledResponseConsumer.accept(...)} exactly once before returning to send a response.
 	 * If you do not, Soklet logs the error and returns a 500 response.
 	 *
-	 * @param request                 the request that was received
-	 * @param resourceMethod          the <em>Resource Method</em> that will handle the request
-	 * @param requestHandler          function that performs standard request handling and returns a response
+	 * @param request                   the request that was received
+	 * @param resourceMethod            the <em>Resource Method</em> that will handle the request
+	 * @param requestHandler            function that performs standard request handling and returns a response
 	 * @param marshaledResponseConsumer receives the response to send to the client
 	 */
 	default void interceptRequest(@NonNull Request request,

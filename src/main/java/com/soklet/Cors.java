@@ -76,7 +76,7 @@ public final class Cors {
 	 */
 	@NonNull
 	public static Optional<Cors> fromHeaders(@NonNull HttpMethod httpMethod,
-																									 @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+																					 @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(httpMethod);
 		requireNonNull(headers);
 

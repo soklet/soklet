@@ -16,14 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.MetricsCollector.Histogram;
-import com.soklet.MetricsCollector.ServerRouteKey;
-import com.soklet.MetricsCollector.ServerRouteStatusKey;
-import com.soklet.MetricsCollector.RouteKind;
-import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
-import com.soklet.MetricsCollector.ServerSentEventRouteKey;
-import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
-import com.soklet.MetricsCollector.Snapshot;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -272,11 +264,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																							@NonNull ServerSentEventComment serverSentEventComment,
-																							@NonNull Duration writeDuration,
-																							@Nullable Duration deliveryLag,
-																							@Nullable Integer payloadBytes,
-																							@Nullable Integer queueDepth) {
+																						 @NonNull ServerSentEventComment serverSentEventComment,
+																						 @NonNull Duration writeDuration,
+																						 @Nullable Duration deliveryLag,
+																						 @Nullable Integer payloadBytes,
+																						 @Nullable Integer queueDepth) {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(serverSentEventComment);
 		requireNonNull(writeDuration);
@@ -348,12 +340,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didFailToWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																										@NonNull ServerSentEventComment serverSentEventComment,
-																										@NonNull Duration writeDuration,
-																										@NonNull Throwable throwable,
-																										@Nullable Duration deliveryLag,
-																										@Nullable Integer payloadBytes,
-																										@Nullable Integer queueDepth) {
+																									 @NonNull ServerSentEventComment serverSentEventComment,
+																									 @NonNull Duration writeDuration,
+																									 @NonNull Throwable throwable,
+																									 @Nullable Duration deliveryLag,
+																									 @Nullable Integer payloadBytes,
+																									 @Nullable Integer queueDepth) {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(serverSentEventComment);
 		requireNonNull(writeDuration);
@@ -386,9 +378,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
-																									 @NonNull Duration connectionDuration,
-																									 ServerSentEventConnection.@NonNull TerminationReason terminationReason,
-																									 @Nullable Throwable throwable) {
+																										@NonNull Duration connectionDuration,
+																										ServerSentEventConnection.@NonNull TerminationReason terminationReason,
+																										@Nullable Throwable throwable) {
 		requireNonNull(serverSentEventConnection);
 		requireNonNull(connectionDuration);
 		requireNonNull(terminationReason);
@@ -721,7 +713,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		private SseConnectionState(@NonNull RouteKind routeKind,
 															 @Nullable ResourcePathDeclaration route,
-														 long establishedAtNanos) {
+															 long establishedAtNanos) {
 			this.routeKind = requireNonNull(routeKind);
 			if (routeKind == RouteKind.MATCHED && route == null)
 				throw new IllegalArgumentException("Route must be provided when RouteKind is MATCHED");

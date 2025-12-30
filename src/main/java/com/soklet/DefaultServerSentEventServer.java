@@ -1936,7 +1936,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			@NonNull
 			public static WriteQueueElement withComment(@NonNull ServerSentEventComment serverSentEventComment,
-																										 long enqueuedAtNanos) {
+																									long enqueuedAtNanos) {
 				requireNonNull(serverSentEventComment);
 				return new WriteQueueElement(null, serverSentEventComment, false, enqueuedAtNanos);
 			}
@@ -2071,8 +2071,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@NonNull
 	private Optional<ClientSocketChannelRegistration> registerClientSocketChannel(@NonNull SocketChannel clientSocketChannel,
-																																									@NonNull Request request,
-																																									HandshakeResult.@NonNull Accepted handshakeAccepted) {
+																																								@NonNull Request request,
+																																								HandshakeResult.@NonNull Accepted handshakeAccepted) {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
 		requireNonNull(handshakeAccepted);

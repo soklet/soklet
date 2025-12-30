@@ -54,7 +54,7 @@ public interface ResourceMethodResolver {
 	 */
 	@NonNull
 	Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
-																															@NonNull ServerType serverType);
+																										@NonNull ServerType serverType);
 
 	/**
 	 * Vends the set of all <em>Resource Methods</em> registered in the system.

@@ -468,8 +468,8 @@ public interface MetricsCollector {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record ServerRouteKey(@NonNull HttpMethod method,
-														@NonNull RouteKind routeKind,
-														@Nullable ResourcePathDeclaration route) {
+												@NonNull RouteKind routeKind,
+												@Nullable ResourcePathDeclaration route) {
 		public ServerRouteKey {
 			requireNonNull(method);
 			requireNonNull(routeKind);
@@ -486,9 +486,9 @@ public interface MetricsCollector {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record ServerRouteStatusKey(@NonNull HttpMethod method,
-																	@NonNull RouteKind routeKind,
-																	@Nullable ResourcePathDeclaration route,
-																	@NonNull String statusClass) {
+															@NonNull RouteKind routeKind,
+															@Nullable ResourcePathDeclaration route,
+															@NonNull String statusClass) {
 		public ServerRouteStatusKey {
 			requireNonNull(method);
 			requireNonNull(routeKind);

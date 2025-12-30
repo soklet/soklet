@@ -44,5 +44,5 @@ public interface ResourceMethodParameterProvider {
 	 */
 	@NonNull
 	List<@Nullable Object> parameterValuesForResourceMethod(@NonNull Request request,
-																														@NonNull ResourceMethod resourceMethod);
+																													@NonNull ResourceMethod resourceMethod);
 }

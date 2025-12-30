@@ -51,7 +51,7 @@ public interface CorsAuthorizer {
 	 */
 	@NonNull
 	Optional<CorsResponse> authorize(@NonNull Request request,
-																						@NonNull Cors cors);
+																	 @NonNull Cors cors);
 
 	/**
 	 * Authorizes a <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">CORS preflight</a> request.
@@ -63,8 +63,8 @@ public interface CorsAuthorizer {
 	 */
 	@NonNull
 	Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
-																															@NonNull CorsPreflight corsPreflight,
-																															@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod);
+																										 @NonNull CorsPreflight corsPreflight,
+																										 @NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod);
 
 	/**
 	 * Acquires a threadsafe {@link CorsAuthorizer} configured to permit all cross-domain requests <strong>regardless of {@code Origin}</strong>.
