@@ -748,9 +748,14 @@ public final class Soklet implements AutoCloseable {
 								didFinishResponseWritingCompleted.set(true);
 							}
 
+							Integer payloadBytes = marshaledResponseHolder.get().getBody()
+									.map(body -> body.length)
+									.orElse(0);
+
 							safelyCollectMetrics.accept(
 									format("An exception occurred while invoking %s::didWriteResponse", MetricsCollector.class.getSimpleName()),
-									(metricsInvocation) -> metricsInvocation.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration));
+									(metricsInvocation) -> metricsInvocation.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(),
+											marshaledResponseHolder.get(), responseWriteDuration, payloadBytes));
 						} catch (Throwable t) {
 							throwables.add(t);
 
@@ -772,9 +777,14 @@ public final class Soklet implements AutoCloseable {
 										.build());
 							}
 
+							Integer payloadBytes = marshaledResponseHolder.get().getBody()
+									.map(body -> body.length)
+									.orElse(0);
+
 							safelyCollectMetrics.accept(
 									format("An exception occurred while invoking %s::didFailToWriteResponse", MetricsCollector.class.getSimpleName()),
-									(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t));
+									(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(),
+											marshaledResponseHolder.get(), responseWriteDuration, t, payloadBytes));
 						}
 					} finally {
 						Duration processingDuration = Duration.between(processingStarted, Instant.now());
@@ -889,9 +899,14 @@ public final class Soklet implements AutoCloseable {
 									.build());
 						}
 
+						Integer payloadBytes = marshaledResponseHolder.get().getBody()
+								.map(body -> body.length)
+								.orElse(0);
+
 						safelyCollectMetrics.accept(
 								format("An exception occurred while invoking %s::didWriteResponse", MetricsCollector.class.getSimpleName()),
-								(metricsInvocation) -> metricsInvocation.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration));
+								(metricsInvocation) -> metricsInvocation.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(),
+										marshaledResponseHolder.get(), responseWriteDuration, payloadBytes));
 					} catch (Throwable t2) {
 						throwables.add(t2);
 
@@ -913,9 +928,14 @@ public final class Soklet implements AutoCloseable {
 									.build());
 						}
 
+						Integer payloadBytes = marshaledResponseHolder.get().getBody()
+								.map(body -> body.length)
+								.orElse(0);
+
 						safelyCollectMetrics.accept(
 								format("An exception occurred while invoking %s::didFailToWriteResponse", MetricsCollector.class.getSimpleName()),
-								(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t));
+								(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(),
+										marshaledResponseHolder.get(), responseWriteDuration, t, payloadBytes));
 					}
 				}
 			} finally {

@@ -77,22 +77,28 @@ public interface MetricsCollector {
 
 	/**
 	 * Called after response data is written.
+	 *
+	 * @param payloadBytes number of bytes written for the response body (excludes headers and transport overhead)
 	 */
 	default void didWriteResponse(@NonNull Request request,
 																@Nullable ResourceMethod resourceMethod,
 																@NonNull MarshaledResponse marshaledResponse,
-																@NonNull Duration responseWriteDuration) {
+																@NonNull Duration responseWriteDuration,
+																@NonNull Integer payloadBytes) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after response data fails to write.
+	 *
+	 * @param payloadBytes number of bytes intended for the response body (excludes headers and transport overhead)
 	 */
 	default void didFailToWriteResponse(@NonNull Request request,
 																			@Nullable ResourceMethod resourceMethod,
 																			@NonNull MarshaledResponse marshaledResponse,
 																			@NonNull Duration responseWriteDuration,
-																			@NonNull Throwable throwable) {
+																			@NonNull Throwable throwable,
+																			@NonNull Integer payloadBytes) {
 		// No-op by default
 	}
 

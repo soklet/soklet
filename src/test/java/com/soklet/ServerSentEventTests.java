@@ -1110,7 +1110,8 @@ public class ServerSentEventTests {
 				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
 				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
-				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 200"), "Expected 200 for obs-text in header value");
+				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 200"),
+						"Expected 200 for obs-text in header value, got: " + rawHeaders);
 			}
 		}
 	}
