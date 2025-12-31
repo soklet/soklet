@@ -38,6 +38,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Soklet's standard implementation, available via {@link #withDefaults()}, supports detailed histogram collection with
  * immutable snapshots (via {@link #snapshot()}) and provides Prometheus/OpenMetrics export helpers for convenience.
+ * To disable metrics collection without a custom implementation, use {@link #disabled()}.
  * <p>
  * If you prefer OpenTelemetry, Micrometer, or another metrics system for monitoring, you might choose to create your own
  * implementation of this interface.
@@ -678,12 +679,12 @@ public interface MetricsCollector {
 		/**
 		 * Creates an immutable histogram snapshot.
 		 *
-		 * @param bucketBoundaries inclusive upper bounds for buckets, including overflow
+		 * @param bucketBoundaries       inclusive upper bounds for buckets, including overflow
 		 * @param bucketCumulativeCounts cumulative counts for each bucket
-		 * @param count total number of samples recorded
-		 * @param sum sum of all recorded values
-		 * @param min smallest recorded value (or 0 if none)
-		 * @param max largest recorded value (or 0 if none)
+		 * @param count                  total number of samples recorded
+		 * @param sum                    sum of all recorded values
+		 * @param min                    smallest recorded value (or 0 if none)
+		 * @param max                    largest recorded value (or 0 if none)
 		 */
 		public Snapshot(@NonNull long[] bucketBoundaries,
 										@NonNull long[] bucketCumulativeCounts,
@@ -916,5 +917,17 @@ public interface MetricsCollector {
 	@NonNull
 	static MetricsCollector withDefaults() {
 		return DefaultMetricsCollector.withDefaults();
+	}
+
+	/**
+	 * Acquires a threadsafe {@link MetricsCollector} instance that performs no work.
+	 * <p>
+	 * This method is useful when you want to explicitly disable metrics collection without writing your own implementation.
+	 *
+	 * @return a no-op {@code MetricsCollector}
+	 */
+	@NonNull
+	static MetricsCollector disabled() {
+		return DisabledMetricsCollector.defaultInstance();
 	}
 }
