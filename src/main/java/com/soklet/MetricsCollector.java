@@ -36,7 +36,11 @@ import static java.util.Objects.requireNonNull;
 /**
  * Contract for collecting operational metrics from Soklet.
  * <p>
- * Implementations might bridge to external systems (OpenTelemetry, Micrometer, Prometheus, etc.)
+ * Soklet's standard implementation, available via {@link #withDefaults()}, supports detailed histogram collection with
+ * immutable snapshots (via {@link #snapshot()}) and provides Prometheus/OpenMetrics export helpers for convenience.
+ * <p>
+ * If you prefer OpenTelemetry, Micrometer, or another metrics system for monitoring, you might choose to create your own
+ * implementation of this interface.
  * <p>
  * <p>All methods must be:
  * <ul>
@@ -44,6 +48,26 @@ import static java.util.Objects.requireNonNull;
  *   <li><strong>Non-blocking</strong> — should not perform I/O or acquire locks that might contend</li>
  *   <li><strong>Failure-tolerant</strong> — exceptions are caught and logged, never break request handling</li>
  * </ul>
+ * <p>
+ * Example usage:
+ * <pre><code>
+ * {@literal @}GET("/metrics")
+ * public MarshaledResponse getMetrics(@NonNull MetricsCollector metricsCollector) {
+ *   SnapshotTextOptions options = SnapshotTextOptions
+ *     .withMetricsFormat(MetricsFormat.PROMETHEUS)
+ *     .build();
+ *
+ *   String body = metricsCollector.snapshotText(options).orElse(null);
+ *
+ *   if (body == null)
+ *     return MarshaledResponse.withStatusCode(204).build();
+ *
+ *   return MarshaledResponse.withStatusCode(200)
+ *     .headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+ *     .body(body.getBytes(StandardCharsets.UTF_8))
+ *     .build();
+ * }
+ * </code></pre>
  * <p>
  * See <a href="https://www.soklet.com/docs/metrics-collection">https://www.soklet.com/docs/metrics-collection</a> for detailed documentation.
  *
@@ -272,14 +296,31 @@ public interface MetricsCollector {
 
 	/**
 	 * Text format to use for {@link #snapshotText(SnapshotTextOptions)}.
+	 * <p>
+	 * This controls serialization only; the underlying metrics data is unchanged.
 	 */
 	enum MetricsFormat {
+		/**
+		 * Prometheus text exposition format.
+		 */
 		PROMETHEUS,
+		/**
+		 * OpenMetrics text exposition format, including the {@code # EOF} trailer.
+		 */
 		OPEN_METRICS
 	}
 
 	/**
 	 * Options for rendering a textual metrics snapshot.
+	 * <p>
+	 * Use {@link #withMetricsFormat(MetricsFormat)} to obtain a builder and customize output.
+	 * <p>
+	 * Key options:
+	 * <ul>
+	 *   <li>{@code metricFilter} allows per-sample filtering by name and labels</li>
+	 *   <li>{@code histogramFormat} controls bucket vs count/sum output</li>
+	 *   <li>{@code includeZeroBuckets} drops empty bucket samples when false</li>
+	 * </ul>
 	 */
 	@ThreadSafe
 	final class SnapshotTextOptions {
@@ -303,27 +344,50 @@ public interface MetricsCollector {
 
 		/**
 		 * Begins building options with the specified format.
+		 *
+		 * @param metricsFormat the text exposition format
+		 * @return a builder seeded with the format
 		 */
 		@NonNull
 		public static Builder withMetricsFormat(@NonNull MetricsFormat metricsFormat) {
 			return new Builder(metricsFormat);
 		}
 
+		/**
+		 * The text exposition format to emit.
+		 *
+		 * @return the metrics format
+		 */
 		@NonNull
 		public MetricsFormat getMetricsFormat() {
 			return this.metricsFormat;
 		}
 
+		/**
+		 * Optional filter for rendered samples.
+		 *
+		 * @return the filter, if present
+		 */
 		@NonNull
 		public Optional<Predicate<MetricSample>> getMetricFilter() {
 			return Optional.ofNullable(this.metricFilter);
 		}
 
+		/**
+		 * The histogram rendering strategy.
+		 *
+		 * @return the histogram format
+		 */
 		@NonNull
 		public HistogramFormat getHistogramFormat() {
 			return this.histogramFormat;
 		}
 
+		/**
+		 * Whether zero-count buckets should be emitted.
+		 *
+		 * @return {@code true} if zero-count buckets are included
+		 */
 		@NonNull
 		public Boolean getIncludeZeroBuckets() {
 			return this.includeZeroBuckets;
@@ -333,13 +397,26 @@ public interface MetricsCollector {
 		 * Supported histogram rendering strategies.
 		 */
 		public enum HistogramFormat {
+			/**
+			 * Emit full histogram series (buckets, count, and sum).
+			 */
 			FULL_BUCKETS,
+			/**
+			 * Emit only {@code _count} and {@code _sum} samples (omit buckets).
+			 */
 			COUNT_SUM_ONLY,
+			/**
+			 * Suppress histogram output entirely.
+			 */
 			NONE
 		}
 
 		/**
 		 * A single text-format sample with its label set.
+		 * <p>
+		 * Filters receive these instances for each rendered sample. For histogram buckets,
+		 * the sample name includes {@code _bucket} and the labels include {@code le}.
+		 * Label maps are immutable and preserve insertion order.
 		 */
 		public static final class MetricSample {
 			@NonNull
@@ -347,17 +424,33 @@ public interface MetricsCollector {
 			@NonNull
 			private final Map<@NonNull String, @NonNull String> labels;
 
+			/**
+			 * Creates a metrics sample definition.
+			 *
+			 * @param name   the sample name (e.g. {@code soklet_http_request_duration_nanos_bucket})
+			 * @param labels the sample labels
+			 */
 			public MetricSample(@NonNull String name,
 													@NonNull Map<@NonNull String, @NonNull String> labels) {
 				this.name = requireNonNull(name);
 				this.labels = Collections.unmodifiableMap(new LinkedHashMap<>(requireNonNull(labels)));
 			}
 
+			/**
+			 * The name for this sample.
+			 *
+			 * @return the sample name
+			 */
 			@NonNull
 			public String getName() {
 				return this.name;
 			}
 
+			/**
+			 * The label set for this sample.
+			 *
+			 * @return immutable labels
+			 */
 			@NonNull
 			public Map<@NonNull String, @NonNull String> getLabels() {
 				return this.labels;
@@ -366,6 +459,8 @@ public interface MetricsCollector {
 
 		/**
 		 * Builder for {@link SnapshotTextOptions}.
+		 * <p>
+		 * Defaults are {@link HistogramFormat#FULL_BUCKETS} and {@code includeZeroBuckets=true}.
 		 */
 		@ThreadSafe
 		public static final class Builder {
@@ -384,24 +479,47 @@ public interface MetricsCollector {
 				this.includeZeroBuckets = true;
 			}
 
+			/**
+			 * Sets an optional per-sample filter.
+			 *
+			 * @param metricFilter the filter to apply, or {@code null} to disable filtering
+			 * @return this builder
+			 */
 			@NonNull
 			public Builder metricFilter(@Nullable Predicate<MetricSample> metricFilter) {
 				this.metricFilter = metricFilter;
 				return this;
 			}
 
+			/**
+			 * Sets how histograms are rendered in the text snapshot.
+			 *
+			 * @param histogramFormat the histogram format
+			 * @return this builder
+			 */
 			@NonNull
 			public Builder histogramFormat(@NonNull HistogramFormat histogramFormat) {
 				this.histogramFormat = requireNonNull(histogramFormat);
 				return this;
 			}
 
+			/**
+			 * Controls whether zero-count buckets are emitted.
+			 *
+			 * @param includeZeroBuckets {@code true} to include zero-count buckets, {@code false} to omit them
+			 * @return this builder
+			 */
 			@NonNull
 			public Builder includeZeroBuckets(@Nullable Boolean includeZeroBuckets) {
 				this.includeZeroBuckets = includeZeroBuckets;
 				return this;
 			}
 
+			/**
+			 * Builds a {@link SnapshotTextOptions} instance.
+			 *
+			 * @return the built options
+			 */
 			@NonNull
 			public SnapshotTextOptions build() {
 				return new SnapshotTextOptions(this);
@@ -411,6 +529,10 @@ public interface MetricsCollector {
 
 	/**
 	 * A thread-safe histogram with fixed bucket boundaries.
+	 * <p>
+	 * Negative values are ignored. Buckets use inclusive upper bounds, and snapshots include
+	 * an overflow bucket represented by a {@link Snapshot#getBucketBoundary(int)} of
+	 * {@link Long#MAX_VALUE}.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -429,6 +551,11 @@ public interface MetricsCollector {
 		@NonNull
 		private final AtomicLong max;
 
+		/**
+		 * Creates a histogram with the provided bucket boundaries.
+		 *
+		 * @param bucketBoundaries inclusive upper bounds for buckets
+		 */
 		public Histogram(@NonNull long[] bucketBoundaries) {
 			requireNonNull(bucketBoundaries);
 
@@ -443,6 +570,11 @@ public interface MetricsCollector {
 			this.max = new AtomicLong(Long.MIN_VALUE);
 		}
 
+		/**
+		 * Records a value into the histogram.
+		 *
+		 * @param value the value to record
+		 */
 		public void record(long value) {
 			if (value < 0)
 				return;
@@ -456,6 +588,11 @@ public interface MetricsCollector {
 			this.bucketCounts[bucketIndex].increment();
 		}
 
+		/**
+		 * Captures an immutable snapshot of the histogram.
+		 *
+		 * @return the histogram snapshot
+		 */
 		@NonNull
 		public Snapshot snapshot() {
 			long[] boundariesWithOverflow = Arrays.copyOf(this.bucketBoundaries, this.bucketBoundaries.length + 1);
@@ -481,6 +618,9 @@ public interface MetricsCollector {
 			return new Snapshot(boundariesWithOverflow, cumulativeCounts, countSnapshot, sumSnapshot, minSnapshot, maxSnapshot);
 		}
 
+		/**
+		 * Resets all counts and min/max values.
+		 */
 		public void reset() {
 			this.count.reset();
 			this.sum.reset();
@@ -517,6 +657,10 @@ public interface MetricsCollector {
 
 	/**
 	 * Immutable snapshot of a {@link Histogram}.
+	 * <p>
+	 * Bucket counts are cumulative. Boundaries are inclusive upper bounds, and the final
+	 * boundary is {@link Long#MAX_VALUE} to represent the overflow bucket. Units are the same
+	 * as values passed to {@link Histogram#record(long)}.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -531,6 +675,16 @@ public interface MetricsCollector {
 		private final long min;
 		private final long max;
 
+		/**
+		 * Creates an immutable histogram snapshot.
+		 *
+		 * @param bucketBoundaries inclusive upper bounds for buckets, including overflow
+		 * @param bucketCumulativeCounts cumulative counts for each bucket
+		 * @param count total number of samples recorded
+		 * @param sum sum of all recorded values
+		 * @param min smallest recorded value (or 0 if none)
+		 * @param max largest recorded value (or 0 if none)
+		 */
 		public Snapshot(@NonNull long[] bucketBoundaries,
 										@NonNull long[] bucketCumulativeCounts,
 										long count,
@@ -551,34 +705,77 @@ public interface MetricsCollector {
 			this.max = max;
 		}
 
+		/**
+		 * Number of histogram buckets, including the overflow bucket.
+		 *
+		 * @return the bucket count
+		 */
 		public int getBucketCount() {
 			return this.bucketBoundaries.length;
 		}
 
+		/**
+		 * The inclusive upper bound for the bucket at the given index.
+		 *
+		 * @param index the bucket index
+		 * @return the bucket boundary
+		 */
 		public long getBucketBoundary(int index) {
 			return this.bucketBoundaries[index];
 		}
 
+		/**
+		 * The cumulative count for the bucket at the given index.
+		 *
+		 * @param index the bucket index
+		 * @return the cumulative count
+		 */
 		public long getBucketCumulativeCount(int index) {
 			return this.bucketCumulativeCounts[index];
 		}
 
+		/**
+		 * Total number of recorded values.
+		 *
+		 * @return the count
+		 */
 		public long getCount() {
 			return this.count;
 		}
 
+		/**
+		 * Sum of all recorded values.
+		 *
+		 * @return the sum
+		 */
 		public long getSum() {
 			return this.sum;
 		}
 
+		/**
+		 * Smallest recorded value, or 0 if no values were recorded.
+		 *
+		 * @return the minimum value
+		 */
 		public long getMin() {
 			return this.min;
 		}
 
+		/**
+		 * Largest recorded value, or 0 if no values were recorded.
+		 *
+		 * @return the maximum value
+		 */
 		public long getMax() {
 			return this.max;
 		}
 
+		/**
+		 * Returns an approximate percentile based on bucket boundaries.
+		 *
+		 * @param percentile percentile between 0 and 100
+		 * @return the approximated percentile value
+		 */
 		public long getPercentile(double percentile) {
 			if (percentile <= 0.0)
 				return this.min;
