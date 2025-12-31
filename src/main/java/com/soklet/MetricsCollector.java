@@ -22,10 +22,14 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.function.Predicate;
 
 import static java.util.Objects.requireNonNull;
 
@@ -248,12 +252,14 @@ public interface MetricsCollector {
 	/**
 	 * Returns a text snapshot of metrics collected so far, if supported.
 	 * <p>
-	 * The default collector returns data in Prometheus-compatible text exposition format.
+	 * The default collector supports Prometheus and OpenMetrics text exposition formats.
 	 *
+	 * @param options the snapshot rendering options
 	 * @return a textual metrics snapshot, or {@link Optional#empty()} if unsupported
 	 */
 	@NonNull
-	default Optional<String> snapshotAsText() {
+	default Optional<String> snapshotText(@NonNull SnapshotTextOptions options) {
+		requireNonNull(options);
 		return Optional.empty();
 	}
 
@@ -262,6 +268,145 @@ public interface MetricsCollector {
 	 */
 	default void reset() {
 		// No-op by default
+	}
+
+	/**
+	 * Text format to use for {@link #snapshotText(SnapshotTextOptions)}.
+	 */
+	enum MetricsFormat {
+		PROMETHEUS,
+		OPEN_METRICS
+	}
+
+	/**
+	 * Options for rendering a textual metrics snapshot.
+	 */
+	@ThreadSafe
+	final class SnapshotTextOptions {
+		@NonNull
+		private final MetricsFormat metricsFormat;
+		@Nullable
+		private final Predicate<MetricSample> metricFilter;
+		@NonNull
+		private final HistogramFormat histogramFormat;
+		@NonNull
+		private final Boolean includeZeroBuckets;
+
+		private SnapshotTextOptions(@NonNull Builder builder) {
+			requireNonNull(builder);
+
+			this.metricsFormat = requireNonNull(builder.metricsFormat);
+			this.metricFilter = builder.metricFilter;
+			this.histogramFormat = requireNonNull(builder.histogramFormat);
+			this.includeZeroBuckets = builder.includeZeroBuckets == null ? true : builder.includeZeroBuckets;
+		}
+
+		/**
+		 * Begins building options with the specified format.
+		 */
+		@NonNull
+		public static Builder withMetricsFormat(@NonNull MetricsFormat metricsFormat) {
+			return new Builder(metricsFormat);
+		}
+
+		@NonNull
+		public MetricsFormat getMetricsFormat() {
+			return this.metricsFormat;
+		}
+
+		@NonNull
+		public Optional<Predicate<MetricSample>> getMetricFilter() {
+			return Optional.ofNullable(this.metricFilter);
+		}
+
+		@NonNull
+		public HistogramFormat getHistogramFormat() {
+			return this.histogramFormat;
+		}
+
+		@NonNull
+		public Boolean getIncludeZeroBuckets() {
+			return this.includeZeroBuckets;
+		}
+
+		/**
+		 * Supported histogram rendering strategies.
+		 */
+		public enum HistogramFormat {
+			FULL_BUCKETS,
+			COUNT_SUM_ONLY,
+			NONE
+		}
+
+		/**
+		 * A single text-format sample with its label set.
+		 */
+		public static final class MetricSample {
+			@NonNull
+			private final String name;
+			@NonNull
+			private final Map<@NonNull String, @NonNull String> labels;
+
+			public MetricSample(@NonNull String name,
+													@NonNull Map<@NonNull String, @NonNull String> labels) {
+				this.name = requireNonNull(name);
+				this.labels = Collections.unmodifiableMap(new LinkedHashMap<>(requireNonNull(labels)));
+			}
+
+			@NonNull
+			public String getName() {
+				return this.name;
+			}
+
+			@NonNull
+			public Map<@NonNull String, @NonNull String> getLabels() {
+				return this.labels;
+			}
+		}
+
+		/**
+		 * Builder for {@link SnapshotTextOptions}.
+		 */
+		@ThreadSafe
+		public static final class Builder {
+			@NonNull
+			private final MetricsFormat metricsFormat;
+			@Nullable
+			private Predicate<MetricSample> metricFilter;
+			@NonNull
+			private HistogramFormat histogramFormat;
+			@Nullable
+			private Boolean includeZeroBuckets;
+
+			private Builder(@NonNull MetricsFormat metricsFormat) {
+				this.metricsFormat = requireNonNull(metricsFormat);
+				this.histogramFormat = HistogramFormat.FULL_BUCKETS;
+				this.includeZeroBuckets = true;
+			}
+
+			@NonNull
+			public Builder metricFilter(@Nullable Predicate<MetricSample> metricFilter) {
+				this.metricFilter = metricFilter;
+				return this;
+			}
+
+			@NonNull
+			public Builder histogramFormat(@NonNull HistogramFormat histogramFormat) {
+				this.histogramFormat = requireNonNull(histogramFormat);
+				return this;
+			}
+
+			@NonNull
+			public Builder includeZeroBuckets(@Nullable Boolean includeZeroBuckets) {
+				this.includeZeroBuckets = includeZeroBuckets;
+				return this;
+			}
+
+			@NonNull
+			public SnapshotTextOptions build() {
+				return new SnapshotTextOptions(this);
+			}
+		}
 	}
 
 	/**

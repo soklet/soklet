@@ -116,15 +116,18 @@ public class MetricsCollectorTests {
 	}
 
 	@Test
-	public void snapshotAsTextRespectsSseConfiguration() {
+	public void snapshotTextRespectsSseConfiguration() {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.withDefaults();
+		MetricsCollector.SnapshotTextOptions prometheusOptions = MetricsCollector.SnapshotTextOptions
+				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)
+				.build();
 
 		SokletConfig noSseConfig = SokletConfig.withServer(Server.withPort(0).build())
 				.metricsCollector(collector)
 				.build();
 		collector.initialize(noSseConfig);
 
-		String noSseSnapshot = collector.snapshotAsText().orElseThrow();
+		String noSseSnapshot = collector.snapshotText(prometheusOptions).orElseThrow();
 		assertTrue(noSseSnapshot.contains("soklet_http_requests_active"));
 		assertFalse(noSseSnapshot.contains("soklet_sse_connections_active"));
 
@@ -134,8 +137,68 @@ public class MetricsCollectorTests {
 				.build();
 		collector.initialize(withSseConfig);
 
-		String withSseSnapshot = collector.snapshotAsText().orElseThrow();
+		String withSseSnapshot = collector.snapshotText(prometheusOptions).orElseThrow();
 		assertTrue(withSseSnapshot.contains("soklet_sse_connections_active"));
+
+		ResourceMethod resourceMethod = resourceMethodFor("/widgets/{id}", HttpMethod.GET, "createWidget", false);
+		Request request = Request.withPath(HttpMethod.GET, "/widgets/123").build();
+		MarshaledResponse response = MarshaledResponse.withStatusCode(200).build();
+
+		collector.didStartRequestHandling(request, resourceMethod);
+		collector.willWriteResponse(request, resourceMethod, response);
+		collector.didFinishRequestHandling(request, resourceMethod, response, Duration.ofSeconds(2), List.of());
+
+		MetricsCollector.SnapshotTextOptions includeZeroBuckets = MetricsCollector.SnapshotTextOptions
+				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)
+				.includeZeroBuckets(true)
+				.build();
+		String withZeroBucketsSnapshot = collector.snapshotText(includeZeroBuckets).orElseThrow();
+		assertTrue(withZeroBucketsSnapshot.contains(
+				"soklet_http_request_duration_nanos_bucket{method=\"GET\",route=\"/widgets/{id}\",status_class=\"2xx\",le=\"1000000\"}"));
+
+		MetricsCollector.SnapshotTextOptions excludeZeroBuckets = MetricsCollector.SnapshotTextOptions
+				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)
+				.includeZeroBuckets(false)
+				.build();
+		String withoutZeroBucketsSnapshot = collector.snapshotText(excludeZeroBuckets).orElseThrow();
+		assertFalse(withoutZeroBucketsSnapshot.contains(
+				"soklet_http_request_duration_nanos_bucket{method=\"GET\",route=\"/widgets/{id}\",status_class=\"2xx\",le=\"1000000\"}"));
+		assertTrue(withoutZeroBucketsSnapshot.contains(
+				"soklet_http_request_duration_nanos_bucket{method=\"GET\",route=\"/widgets/{id}\",status_class=\"2xx\",le=\"3000000000\"}"));
+
+		MetricsCollector.SnapshotTextOptions countSumOnly = MetricsCollector.SnapshotTextOptions
+				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)
+				.histogramFormat(MetricsCollector.SnapshotTextOptions.HistogramFormat.COUNT_SUM_ONLY)
+				.build();
+		String countSumSnapshot = collector.snapshotText(countSumOnly).orElseThrow();
+		assertFalse(countSumSnapshot.contains("soklet_http_request_duration_nanos_bucket{"));
+		assertTrue(countSumSnapshot.contains("soklet_http_request_duration_nanos_count{"));
+		assertTrue(countSumSnapshot.contains("soklet_http_request_duration_nanos_sum{"));
+
+		MetricsCollector.SnapshotTextOptions noHistograms = MetricsCollector.SnapshotTextOptions
+				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)
+				.histogramFormat(MetricsCollector.SnapshotTextOptions.HistogramFormat.NONE)
+				.build();
+		String noHistogramSnapshot = collector.snapshotText(noHistograms).orElseThrow();
+		assertFalse(noHistogramSnapshot.contains("soklet_http_request_duration_nanos"));
+
+		Predicate<MetricsCollector.SnapshotTextOptions.MetricSample> httpOnlyFilter =
+				sample -> sample.getName().equals("soklet_http_requests_active");
+		MetricsCollector.SnapshotTextOptions filtered = MetricsCollector.SnapshotTextOptions
+				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)
+				.metricFilter(httpOnlyFilter)
+				.build();
+		String filteredSnapshot = collector.snapshotText(filtered).orElseThrow();
+		assertTrue(filteredSnapshot.contains("soklet_http_requests_active"));
+		assertFalse(filteredSnapshot.contains("soklet_sse_connections_active"));
+		assertFalse(filteredSnapshot.contains("soklet_http_request_duration_nanos"));
+
+		MetricsCollector.SnapshotTextOptions openMetricsOptions = MetricsCollector.SnapshotTextOptions
+				.withMetricsFormat(MetricsCollector.MetricsFormat.OPEN_METRICS)
+				.build();
+		String openMetricsSnapshot = collector.snapshotText(openMetricsOptions).orElseThrow();
+		assertTrue(openMetricsSnapshot.contains("# EOF"));
+		assertFalse(withZeroBucketsSnapshot.contains("# EOF"));
 	}
 
 	@Test

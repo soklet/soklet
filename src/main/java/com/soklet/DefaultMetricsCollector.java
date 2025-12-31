@@ -21,6 +21,8 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static java.util.Objects.requireNonNull;
 
@@ -429,7 +432,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	@NonNull
-	public Optional<String> snapshotAsText() {
+	public Optional<String> snapshotText(@NonNull SnapshotTextOptions options) {
+		requireNonNull(options);
+
 		MetricsSnapshot snapshot = snapshot().orElse(null);
 
 		if (snapshot == null)
@@ -438,44 +443,47 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		StringBuilder sb = new StringBuilder(8192);
 
 		appendGauge(sb, "soklet_http_requests_active", "Currently active HTTP requests",
-				snapshot.getActiveRequests());
+				snapshot.getActiveRequests(), options);
 
 		appendHistogram(sb, "soklet_http_request_duration_nanos", "HTTP request duration in nanoseconds",
-				snapshot.getHttpRequestDurations(), DefaultMetricsCollector::labelsForHttpStatusKey);
+				snapshot.getHttpRequestDurations(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
 		appendHistogram(sb, "soklet_http_handler_duration_nanos", "HTTP handler duration in nanoseconds",
-				snapshot.getHttpHandlerDurations(), DefaultMetricsCollector::labelsForHttpStatusKey);
+				snapshot.getHttpHandlerDurations(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
 		appendHistogram(sb, "soklet_http_ttfb_nanos", "HTTP time to first byte in nanoseconds",
-				snapshot.getHttpTimeToFirstByte(), DefaultMetricsCollector::labelsForHttpStatusKey);
+				snapshot.getHttpTimeToFirstByte(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
 		appendHistogram(sb, "soklet_http_request_body_bytes", "HTTP request body size in bytes",
-				snapshot.getHttpRequestBodyBytes(), DefaultMetricsCollector::labelsForHttpRouteKey);
+				snapshot.getHttpRequestBodyBytes(), DefaultMetricsCollector::labelsForHttpRouteKey, options);
 		appendHistogram(sb, "soklet_http_response_body_bytes", "HTTP response body size in bytes",
-				snapshot.getHttpResponseBodyBytes(), DefaultMetricsCollector::labelsForHttpStatusKey);
+				snapshot.getHttpResponseBodyBytes(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
 
 		if (this.includeSseMetrics.get()) {
 			appendGauge(sb, "soklet_sse_connections_active", "Currently active SSE connections",
-					snapshot.getActiveSseConnections());
+					snapshot.getActiveSseConnections(), options);
 
 			appendHistogram(sb, "soklet_sse_time_to_first_event_nanos", "SSE time to first event in nanoseconds",
-					snapshot.getSseTimeToFirstEvent(), DefaultMetricsCollector::labelsForSseRouteKey);
+					snapshot.getSseTimeToFirstEvent(), DefaultMetricsCollector::labelsForSseRouteKey, options);
 			appendHistogram(sb, "soklet_sse_event_write_duration_nanos", "SSE event write duration in nanoseconds",
-					snapshot.getSseEventWriteDurations(), DefaultMetricsCollector::labelsForSseRouteKey);
+					snapshot.getSseEventWriteDurations(), DefaultMetricsCollector::labelsForSseRouteKey, options);
 			appendHistogram(sb, "soklet_sse_event_delivery_lag_nanos", "SSE event delivery lag in nanoseconds",
-					snapshot.getSseEventDeliveryLag(), DefaultMetricsCollector::labelsForSseRouteKey);
+					snapshot.getSseEventDeliveryLag(), DefaultMetricsCollector::labelsForSseRouteKey, options);
 			appendHistogram(sb, "soklet_sse_event_size_bytes", "SSE event size in bytes",
-					snapshot.getSseEventSizes(), DefaultMetricsCollector::labelsForSseRouteKey);
+					snapshot.getSseEventSizes(), DefaultMetricsCollector::labelsForSseRouteKey, options);
 			appendHistogram(sb, "soklet_sse_queue_depth", "SSE queue depth",
-					snapshot.getSseQueueDepth(), DefaultMetricsCollector::labelsForSseRouteKey);
+					snapshot.getSseQueueDepth(), DefaultMetricsCollector::labelsForSseRouteKey, options);
 
 			appendHistogram(sb, "soklet_sse_comment_delivery_lag_nanos", "SSE comment delivery lag in nanoseconds",
-					snapshot.getSseCommentDeliveryLag(), DefaultMetricsCollector::labelsForSseCommentKey);
+					snapshot.getSseCommentDeliveryLag(), DefaultMetricsCollector::labelsForSseCommentKey, options);
 			appendHistogram(sb, "soklet_sse_comment_size_bytes", "SSE comment size in bytes",
-					snapshot.getSseCommentSizes(), DefaultMetricsCollector::labelsForSseCommentKey);
+					snapshot.getSseCommentSizes(), DefaultMetricsCollector::labelsForSseCommentKey, options);
 			appendHistogram(sb, "soklet_sse_comment_queue_depth", "SSE comment queue depth",
-					snapshot.getSseCommentQueueDepth(), DefaultMetricsCollector::labelsForSseCommentKey);
+					snapshot.getSseCommentQueueDepth(), DefaultMetricsCollector::labelsForSseCommentKey, options);
 
 			appendHistogram(sb, "soklet_sse_connection_duration_nanos", "SSE connection duration in nanoseconds",
-					snapshot.getSseConnectionDurations(), DefaultMetricsCollector::labelsForSseTerminationKey);
+					snapshot.getSseConnectionDurations(), DefaultMetricsCollector::labelsForSseTerminationKey, options);
 		}
+
+		if (options.getMetricsFormat() == MetricsFormat.OPEN_METRICS)
+			sb.append("# EOF\n");
 
 		return Optional.of(sb.toString());
 	}
@@ -669,99 +677,206 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private static void appendGauge(@NonNull StringBuilder sb,
 																	@NonNull String name,
 																	@NonNull String help,
-																	long value) {
+																	long value,
+																	@NonNull SnapshotTextOptions options) {
 		requireNonNull(sb);
 		requireNonNull(name);
 		requireNonNull(help);
+		requireNonNull(options);
+
+		if (!shouldEmitSample(options, name, Map.of()))
+			return;
 
 		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
 		sb.append("# TYPE ").append(name).append(" gauge\n");
-		sb.append(name).append(' ').append(value).append('\n');
+		appendSample(sb, name, "", value);
 	}
 
 	private static <K> void appendHistogram(@NonNull StringBuilder sb,
 																					@NonNull String name,
 																					@NonNull String help,
 																					@NonNull Map<K, Snapshot> histograms,
-																					@NonNull Function<K, String> labelsProvider) {
+																					@NonNull Function<K, LabelSet> labelsProvider,
+																					@NonNull SnapshotTextOptions options) {
 		requireNonNull(sb);
 		requireNonNull(name);
 		requireNonNull(help);
 		requireNonNull(histograms);
 		requireNonNull(labelsProvider);
+		requireNonNull(options);
+
+		if (options.getHistogramFormat() == SnapshotTextOptions.HistogramFormat.NONE)
+			return;
+
+		StringBuilder metricBody = new StringBuilder();
+
+		histograms.forEach((key, histogram) -> {
+			LabelSet labels = labelsProvider.apply(key);
+			appendHistogramSamples(metricBody, name, labels, histogram, options);
+		});
+
+		if (metricBody.length() == 0)
+			return;
 
 		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
 		sb.append("# TYPE ").append(name).append(" histogram\n");
-
-		histograms.forEach((key, histogram) -> {
-			String labels = labelsProvider.apply(key);
-			appendHistogramSamples(sb, name, labels, histogram);
-		});
+		sb.append(metricBody);
 	}
 
 	private static void appendHistogramSamples(@NonNull StringBuilder sb,
 																						 @NonNull String name,
-																						 @NonNull String labels,
-																						 @NonNull Snapshot histogram) {
+																						 @NonNull LabelSet labels,
+																						 @NonNull Snapshot histogram,
+																						 @NonNull SnapshotTextOptions options) {
 		requireNonNull(sb);
 		requireNonNull(name);
 		requireNonNull(labels);
 		requireNonNull(histogram);
+		requireNonNull(options);
 
-		int bucketCount = histogram.getBucketCount();
+		SnapshotTextOptions.HistogramFormat histogramFormat = options.getHistogramFormat();
+		boolean includeZeroBuckets = options.getIncludeZeroBuckets();
 
-		for (int i = 0; i < bucketCount; i++) {
-			long boundary = histogram.getBucketBoundary(i);
-			String le = boundary == Long.MAX_VALUE ? "+Inf" : String.valueOf(boundary);
+		if (histogramFormat == SnapshotTextOptions.HistogramFormat.FULL_BUCKETS) {
+			int bucketCount = histogram.getBucketCount();
 
-			sb.append(name).append("_bucket{").append(labels).append(",le=\"").append(le).append("\"} ")
-					.append(histogram.getBucketCumulativeCount(i)).append('\n');
+			for (int i = 0; i < bucketCount; i++) {
+				long cumulativeCount = histogram.getBucketCumulativeCount(i);
+				if (!includeZeroBuckets && cumulativeCount == 0L)
+					continue;
+
+				long boundary = histogram.getBucketBoundary(i);
+				String le = boundary == Long.MAX_VALUE ? "+Inf" : String.valueOf(boundary);
+				String labelsWithLe = labelsWithLe(labels.getEncoded(), le);
+				String sampleName = name + "_bucket";
+
+				if (!shouldEmitSample(options, sampleName, labels, le))
+					continue;
+
+				appendSample(sb, sampleName, labelsWithLe, cumulativeCount);
+			}
 		}
 
-		sb.append(name).append("_count{").append(labels).append("} ")
-				.append(histogram.getCount()).append('\n');
-		sb.append(name).append("_sum{").append(labels).append("} ")
-				.append(histogram.getSum()).append('\n');
+		if (histogramFormat != SnapshotTextOptions.HistogramFormat.NONE) {
+			String countName = name + "_count";
+			if (shouldEmitSample(options, countName, labels.getLabels())) {
+				appendSample(sb, countName, labels.getEncoded(), histogram.getCount());
+			}
+
+			String sumName = name + "_sum";
+			if (shouldEmitSample(options, sumName, labels.getLabels())) {
+				appendSample(sb, sumName, labels.getEncoded(), histogram.getSum());
+			}
+		}
+	}
+
+	private static void appendSample(@NonNull StringBuilder sb,
+																	 @NonNull String name,
+																	 @NonNull String labels,
+																	 long value) {
+		requireNonNull(sb);
+		requireNonNull(name);
+		requireNonNull(labels);
+
+		sb.append(name);
+		if (!labels.isEmpty())
+			sb.append('{').append(labels).append('}');
+		sb.append(' ').append(value).append('\n');
+	}
+
+	private static boolean shouldEmitSample(@NonNull SnapshotTextOptions options,
+																					@NonNull String name,
+																					@NonNull Map<@NonNull String, @NonNull String> labels) {
+		requireNonNull(options);
+		requireNonNull(name);
+		requireNonNull(labels);
+
+		Predicate<SnapshotTextOptions.MetricSample> filter = options.getMetricFilter().orElse(null);
+		if (filter == null)
+			return true;
+
+		return filter.test(new SnapshotTextOptions.MetricSample(name, labels));
+	}
+
+	private static boolean shouldEmitSample(@NonNull SnapshotTextOptions options,
+																					@NonNull String name,
+																					@NonNull LabelSet labels,
+																					@Nullable String le) {
+		requireNonNull(options);
+		requireNonNull(name);
+		requireNonNull(labels);
+
+		Predicate<SnapshotTextOptions.MetricSample> filter = options.getMetricFilter().orElse(null);
+		if (filter == null)
+			return true;
+
+		Map<String, String> labelMap = new LinkedHashMap<>(labels.getLabels());
+		if (le != null)
+			labelMap.put("le", le);
+
+		return filter.test(new SnapshotTextOptions.MetricSample(name, labelMap));
 	}
 
 	@NonNull
-	private static String labelsForHttpStatusKey(@NonNull ServerRouteStatusKey key) {
-		requireNonNull(key);
+	private static String labelsWithLe(@NonNull String labels,
+																		 @NonNull String le) {
+		requireNonNull(labels);
+		requireNonNull(le);
 
-		return label("method", key.method().name())
-				+ ',' + label("route", routeLabel(key.routeType(), key.route()))
-				+ ',' + label("status_class", key.statusClass());
+		if (labels.isEmpty())
+			return "le=\"" + le + "\"";
+
+		return labels + ",le=\"" + le + "\"";
 	}
 
 	@NonNull
-	private static String labelsForHttpRouteKey(@NonNull ServerRouteKey key) {
+	private static LabelSet labelsForHttpStatusKey(@NonNull ServerRouteStatusKey key) {
 		requireNonNull(key);
 
-		return label("method", key.method().name())
-				+ ',' + label("route", routeLabel(key.routeType(), key.route()));
+		Map<String, String> labels = new LinkedHashMap<>(3);
+		labels.put("method", key.method().name());
+		labels.put("route", routeLabel(key.routeType(), key.route()));
+		labels.put("status_class", key.statusClass());
+		return new LabelSet(labels);
 	}
 
 	@NonNull
-	private static String labelsForSseRouteKey(@NonNull ServerSentEventRouteKey key) {
+	private static LabelSet labelsForHttpRouteKey(@NonNull ServerRouteKey key) {
 		requireNonNull(key);
 
-		return label("route", routeLabel(key.routeType(), key.route()));
+		Map<String, String> labels = new LinkedHashMap<>(2);
+		labels.put("method", key.method().name());
+		labels.put("route", routeLabel(key.routeType(), key.route()));
+		return new LabelSet(labels);
 	}
 
 	@NonNull
-	private static String labelsForSseCommentKey(@NonNull ServerSentEventCommentRouteKey key) {
+	private static LabelSet labelsForSseRouteKey(@NonNull ServerSentEventRouteKey key) {
 		requireNonNull(key);
 
-		return label("route", routeLabel(key.routeType(), key.route()))
-				+ ',' + label("comment_type", key.commentType().name());
+		Map<String, String> labels = new LinkedHashMap<>(1);
+		labels.put("route", routeLabel(key.routeType(), key.route()));
+		return new LabelSet(labels);
 	}
 
 	@NonNull
-	private static String labelsForSseTerminationKey(@NonNull ServerSentEventRouteTerminationKey key) {
+	private static LabelSet labelsForSseCommentKey(@NonNull ServerSentEventCommentRouteKey key) {
 		requireNonNull(key);
 
-		return label("route", routeLabel(key.routeType(), key.route()))
-				+ ',' + label("termination_reason", key.terminationReason().name());
+		Map<String, String> labels = new LinkedHashMap<>(2);
+		labels.put("route", routeLabel(key.routeType(), key.route()));
+		labels.put("comment_type", key.commentType().name());
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForSseTerminationKey(@NonNull ServerSentEventRouteTerminationKey key) {
+		requireNonNull(key);
+
+		Map<String, String> labels = new LinkedHashMap<>(2);
+		labels.put("route", routeLabel(key.routeType(), key.route()));
+		labels.put("termination_reason", key.terminationReason().name());
+		return new LabelSet(labels);
 	}
 
 	@NonNull
@@ -775,13 +890,50 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return route.getPath();
 	}
 
-	@NonNull
-	private static String label(@NonNull String name,
-															@NonNull String value) {
-		requireNonNull(name);
-		requireNonNull(value);
+	private static final class LabelSet {
+		@NonNull
+		private final Map<@NonNull String, @NonNull String> labels;
+		@NonNull
+		private final String encoded;
 
-		return name + "=\"" + escapeLabelValue(value) + "\"";
+		private LabelSet(@NonNull Map<@NonNull String, @NonNull String> labels) {
+			this.labels = Collections.unmodifiableMap(new LinkedHashMap<>(requireNonNull(labels)));
+			this.encoded = encodeLabels(this.labels);
+		}
+
+		@NonNull
+		Map<@NonNull String, @NonNull String> getLabels() {
+			return this.labels;
+		}
+
+		@NonNull
+		String getEncoded() {
+			return this.encoded;
+		}
+	}
+
+	@NonNull
+	private static String encodeLabels(@NonNull Map<@NonNull String, @NonNull String> labels) {
+		requireNonNull(labels);
+
+		if (labels.isEmpty())
+			return "";
+
+		StringBuilder sb = new StringBuilder(labels.size() * 16);
+		boolean first = true;
+
+		for (Map.Entry<String, String> entry : labels.entrySet()) {
+			if (!first)
+				sb.append(',');
+			first = false;
+
+			sb.append(entry.getKey())
+					.append("=\"")
+					.append(escapeLabelValue(entry.getValue()))
+					.append('"');
+		}
+
+		return sb.toString();
 	}
 
 	@NonNull
