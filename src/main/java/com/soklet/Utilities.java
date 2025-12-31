@@ -883,6 +883,8 @@ public final class Utilities {
 	 *   <li>{@code https://www.soklet.com/test} (trailing slash, path)</li>
 	 *   <li>{@code https://www.soklet.com/test?abc=1234} (trailing slash, path, query)</li>
 	 * </ul>
+	 * <p>
+	 * {@code Origin} is treated as a fallback signal only and will not override a conflicting {@code Host} value.
 	 *
 	 * @param headers HTTP request headers
 	 * @return the URL prefix, or {@link Optional#empty()} if it could not be determined
@@ -972,6 +974,7 @@ public final class Utilities {
 		}
 
 		// Origin: null OR <scheme>://<hostname> OR <scheme>://<hostname>:<port> (IPv6 supported)
+		// Use Origin only when host is missing or when it matches the Host-derived value.
 		if (protocol == null || host == null || portAsString == null) {
 			Set<String> originHeaders = headers.get("Origin");
 
@@ -979,22 +982,34 @@ public final class Utilities {
 				String originHeader = trimAggressivelyToNull(originHeaders.iterator().next());
 				try {
 					URI o = new URI(originHeader);
-					String sch = trimAggressivelyToNull(o.getScheme());
-					String h = o.getHost(); // may be bracketed already on some JDKs
-					int p = o.getPort(); // -1 if absent
+					String originProtocol = trimAggressivelyToNull(o.getScheme());
+					String originHost = o.getHost(); // may be bracketed already on some JDKs
+					int originPort = o.getPort(); // -1 if absent
 
-					if (sch != null)
-						protocol = sch;
-
-					if (h != null) {
-						boolean alreadyBracketed = h.startsWith("[") && h.endsWith("]");
-						boolean isIpv6Like = h.indexOf(':') >= 0; // contains colon(s)
-						host = (isIpv6Like && !alreadyBracketed) ? "[" + h + "]" : h;
+					if (originHost != null) {
+						boolean alreadyBracketed = originHost.startsWith("[") && originHost.endsWith("]");
+						boolean isIpv6Like = originHost.indexOf(':') >= 0; // contains colon(s)
+						originHost = (isIpv6Like && !alreadyBracketed) ? "[" + originHost + "]" : originHost;
 					}
 
-					if (p >= 0) {
-						portAsString = String.valueOf(p);
-						portExplicit = true;
+					boolean hostMatchesOrigin = host != null && originHost != null && host.equalsIgnoreCase(originHost);
+
+					if (host == null) {
+						if (originHost != null)
+							host = originHost;
+						if (originProtocol != null)
+							protocol = originProtocol;
+						if (originPort >= 0) {
+							portAsString = String.valueOf(originPort);
+							portExplicit = true;
+						}
+					} else if (hostMatchesOrigin) {
+						if (protocol == null && originProtocol != null)
+							protocol = originProtocol;
+						if (portAsString == null && originPort >= 0) {
+							portAsString = String.valueOf(originPort);
+							portExplicit = true;
+						}
 					}
 				} catch (URISyntaxException ignored) {
 					// no-op

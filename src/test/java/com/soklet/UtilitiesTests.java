@@ -439,6 +439,29 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void origin_doesNotOverrideHostWhenMismatch() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Host", Set.of("api.example.com"));
+		headers.put("X-Forwarded-Proto", Set.of("https"));
+		headers.put("Origin", Set.of("https://evil.example.net"));
+
+		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
+		Assertions.assertEquals("https://api.example.com", url.get());
+	}
+
+	@Test
+	public void origin_fillsSchemeAndPortWhenHostMatches() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Host", Set.of("api.example.com"));
+		headers.put("Origin", Set.of("https://api.example.com:8443"));
+
+		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
+		Assertions.assertEquals("https://api.example.com:8443", url.get());
+	}
+
+	@Test
 	public void forwardedQuotedValues_areHandled() {
 		Map<String, Set<String>> headers = Map.of(
 				"Forwarded", Set.of("for=203.0.113.60; proto=\"https\"; host=\"example.com:443\"")
