@@ -118,6 +118,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE;
 	@NonNull
+	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE;
+	@NonNull
 	private static final ResourcePathDeclaration NO_MATCH_SENTINEL;
 	@NonNull
 	private static final String HEARTBEAT_COMMENT_PAYLOAD;
@@ -145,6 +147,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// Cache off a special failsafe response
 		FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_400);
+		FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_408);
 		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_500);
 		FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503);
 
@@ -902,8 +905,24 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				return;
 			} catch (SocketTimeoutException e) {
-				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "request timed out"
-				throw e;
+				// Request read timed out before we could parse a handshake, return 408 and close.
+				try {
+					synchronized (channelLock) {
+						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE);
+					}
+				} catch (Throwable t) {
+					// best effort
+				} finally {
+					try {
+						synchronized (channelLock) {
+							clientSocketChannel.close();
+						}
+					} catch (IOException ignored) {
+						// Nothing to do
+					}
+				}
+
+				return;
 			} catch (Exception e) {
 				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
 						.throwable(e)
@@ -2440,8 +2459,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(clientSocketChannel);
 
 		// Because reads from the socket channel are blocking, there is no way to specify a timeout for it.
-		// We work around this by performing the read in a virtual thread, and use the timeout functionality
-		// built in to Futures to interrupt the thread if it doesn't finish in time.
+		// We work around this by performing the read in another thread and using Future timeouts to detect
+		// when the read exceeds the limit; the caller closes the channel to terminate the read.
 		Future<String> readFuture = null;
 
 		// How long to wait for the request to be read (minimum of 1 millisecond)
@@ -2539,9 +2558,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Wait up to the specified timeout for reading to complete
 			return readFuture.get(timeoutMillis, TimeUnit.MILLISECONDS);
 		} catch (TimeoutException e) {
-			// Time's up; cancel the task so the blocking read is interrupted
+			// Time's up; cancel without interrupt so we can still write a 408 response before closing
 			if (readFuture != null)
-				readFuture.cancel(true);
+				readFuture.cancel(false);
 
 			throw new SocketTimeoutException(format("Reading request took longer than %d ms", timeoutMillis));
 		} catch (InterruptedException e) {
