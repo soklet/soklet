@@ -270,7 +270,7 @@ public interface MetricsCollector {
 	 * @return an optional metrics snapshot
 	 */
 	@NonNull
-	default Optional<MetricsSnapshot> snapshot() {
+	default Optional<Snapshot> snapshot() {
 		return Optional.empty();
 	}
 
@@ -529,10 +529,164 @@ public interface MetricsCollector {
 	}
 
 	/**
+	 * Immutable snapshot of collected metrics.
+	 * <p>
+	 * Durations are in nanoseconds, sizes are in bytes, and queue depths are raw counts.
+	 * Histogram values are captured as {@link HistogramSnapshot} instances.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	final class Snapshot {
+		private final long activeRequests;
+		private final long activeSseConnections;
+		@NonNull
+		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
+		@NonNull
+		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations;
+		@NonNull
+		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte;
+		@NonNull
+		private final Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes;
+		@NonNull
+		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
+		@NonNull
+		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
+		@NonNull
+		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations;
+		@NonNull
+		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag;
+		@NonNull
+		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes;
+		@NonNull
+		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth;
+		@NonNull
+		private final Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag;
+		@NonNull
+		private final Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes;
+		@NonNull
+		private final Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth;
+		@NonNull
+		private final Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations;
+
+		public Snapshot(long activeRequests,
+										long activeSseConnections,
+										@NonNull Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations,
+										@NonNull Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations,
+										@NonNull Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte,
+										@NonNull Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes,
+										@NonNull Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes,
+										@NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent,
+										@NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations,
+										@NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag,
+										@NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes,
+										@NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth,
+										@NonNull Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag,
+										@NonNull Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes,
+										@NonNull Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth,
+										@NonNull Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations) {
+			this.activeRequests = activeRequests;
+			this.activeSseConnections = activeSseConnections;
+			this.httpRequestDurations = Map.copyOf(requireNonNull(httpRequestDurations));
+			this.httpHandlerDurations = Map.copyOf(requireNonNull(httpHandlerDurations));
+			this.httpTimeToFirstByte = Map.copyOf(requireNonNull(httpTimeToFirstByte));
+			this.httpRequestBodyBytes = Map.copyOf(requireNonNull(httpRequestBodyBytes));
+			this.httpResponseBodyBytes = Map.copyOf(requireNonNull(httpResponseBodyBytes));
+			this.sseTimeToFirstEvent = Map.copyOf(requireNonNull(sseTimeToFirstEvent));
+			this.sseEventWriteDurations = Map.copyOf(requireNonNull(sseEventWriteDurations));
+			this.sseEventDeliveryLag = Map.copyOf(requireNonNull(sseEventDeliveryLag));
+			this.sseEventSizes = Map.copyOf(requireNonNull(sseEventSizes));
+			this.sseQueueDepth = Map.copyOf(requireNonNull(sseQueueDepth));
+			this.sseCommentDeliveryLag = Map.copyOf(requireNonNull(sseCommentDeliveryLag));
+			this.sseCommentSizes = Map.copyOf(requireNonNull(sseCommentSizes));
+			this.sseCommentQueueDepth = Map.copyOf(requireNonNull(sseCommentQueueDepth));
+			this.sseConnectionDurations = Map.copyOf(requireNonNull(sseConnectionDurations));
+		}
+
+		public long getActiveRequests() {
+			return this.activeRequests;
+		}
+
+		public long getActiveSseConnections() {
+			return this.activeSseConnections;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpRequestDurations() {
+			return this.httpRequestDurations;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpHandlerDurations() {
+			return this.httpHandlerDurations;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpTimeToFirstByte() {
+			return this.httpTimeToFirstByte;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> getHttpRequestBodyBytes() {
+			return this.httpRequestBodyBytes;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpResponseBodyBytes() {
+			return this.httpResponseBodyBytes;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseTimeToFirstEvent() {
+			return this.sseTimeToFirstEvent;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseEventWriteDurations() {
+			return this.sseEventWriteDurations;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseEventDeliveryLag() {
+			return this.sseEventDeliveryLag;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseEventSizes() {
+			return this.sseEventSizes;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseQueueDepth() {
+			return this.sseQueueDepth;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentDeliveryLag() {
+			return this.sseCommentDeliveryLag;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentSizes() {
+			return this.sseCommentSizes;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentQueueDepth() {
+			return this.sseCommentQueueDepth;
+		}
+
+		@NonNull
+		public Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> getSseConnectionDurations() {
+			return this.sseConnectionDurations;
+		}
+	}
+
+	/**
 	 * A thread-safe histogram with fixed bucket boundaries.
 	 * <p>
 	 * Negative values are ignored. Buckets use inclusive upper bounds, and snapshots include
-	 * an overflow bucket represented by a {@link Snapshot#getBucketBoundary(int)} of
+	 * an overflow bucket represented by a {@link HistogramSnapshot#getBucketBoundary(int)} of
 	 * {@link Long#MAX_VALUE}.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -595,7 +749,7 @@ public interface MetricsCollector {
 		 * @return the histogram snapshot
 		 */
 		@NonNull
-		public Snapshot snapshot() {
+		public HistogramSnapshot snapshot() {
 			long[] boundariesWithOverflow = Arrays.copyOf(this.bucketBoundaries, this.bucketBoundaries.length + 1);
 			boundariesWithOverflow[boundariesWithOverflow.length - 1] = Long.MAX_VALUE;
 
@@ -616,7 +770,7 @@ public interface MetricsCollector {
 			if (maxSnapshot == Long.MIN_VALUE)
 				maxSnapshot = 0;
 
-			return new Snapshot(boundariesWithOverflow, cumulativeCounts, countSnapshot, sumSnapshot, minSnapshot, maxSnapshot);
+			return new HistogramSnapshot(boundariesWithOverflow, cumulativeCounts, countSnapshot, sumSnapshot, minSnapshot, maxSnapshot);
 		}
 
 		/**
@@ -666,7 +820,7 @@ public interface MetricsCollector {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	final class Snapshot {
+	final class HistogramSnapshot {
 		@NonNull
 		private final long[] bucketBoundaries;
 		@NonNull
@@ -686,12 +840,12 @@ public interface MetricsCollector {
 		 * @param min                    smallest recorded value (or 0 if none)
 		 * @param max                    largest recorded value (or 0 if none)
 		 */
-		public Snapshot(@NonNull long[] bucketBoundaries,
-										@NonNull long[] bucketCumulativeCounts,
-										long count,
-										long sum,
-										long min,
-										long max) {
+		public HistogramSnapshot(@NonNull long[] bucketBoundaries,
+														 @NonNull long[] bucketCumulativeCounts,
+														 long count,
+														 long sum,
+														 long min,
+														 long max) {
 			requireNonNull(bucketBoundaries);
 			requireNonNull(bucketCumulativeCounts);
 

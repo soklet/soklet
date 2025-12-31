@@ -16,6 +16,8 @@
 
 package com.soklet;
 
+import com.soklet.MetricsCollector.HistogramSnapshot;
+import com.soklet.MetricsCollector.Snapshot;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -410,8 +412,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	@NonNull
-	public Optional<MetricsSnapshot> snapshot() {
-		return Optional.of(new MetricsSnapshot(
+	public Optional<Snapshot> snapshot() {
+		return Optional.of(new Snapshot(
 				getActiveRequests(),
 				getActiveSseConnections(),
 				snapshotHttpRequestDurations(),
@@ -435,7 +437,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	public Optional<String> snapshotText(@NonNull SnapshotTextOptions options) {
 		requireNonNull(options);
 
-		MetricsSnapshot snapshot = snapshot().orElse(null);
+		Snapshot snapshot = snapshot().orElse(null);
 
 		if (snapshot == null)
 			return Optional.empty();
@@ -497,72 +499,72 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> snapshotHttpRequestDurations() {
+	Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpRequestDurations() {
 		return snapshotMap(this.httpRequestDurationByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> snapshotHttpHandlerDurations() {
+	Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpHandlerDurations() {
 		return snapshotMap(this.httpHandlerDurationByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> snapshotHttpTimeToFirstByte() {
+	Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpTimeToFirstByte() {
 		return snapshotMap(this.httpTimeToFirstByteByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull ServerRouteKey, @NonNull Snapshot> snapshotHttpRequestBodyBytes() {
+	Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> snapshotHttpRequestBodyBytes() {
 		return snapshotMap(this.httpRequestBodyBytesByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerRouteStatusKey, @NonNull Snapshot> snapshotHttpResponseBodyBytes() {
+	Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpResponseBodyBytes() {
 		return snapshotMap(this.httpResponseBodyBytesByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> snapshotSseTimeToFirstEvent() {
+	Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> snapshotSseTimeToFirstEvent() {
 		return snapshotMap(this.sseTimeToFirstEventByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> snapshotSseEventWriteDurations() {
+	Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> snapshotSseEventWriteDurations() {
 		return snapshotMap(this.sseEventWriteDurationByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> snapshotSseEventDeliveryLag() {
+	Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> snapshotSseEventDeliveryLag() {
 		return snapshotMap(this.sseEventDeliveryLagByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> snapshotSseEventSizes() {
+	Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> snapshotSseEventSizes() {
 		return snapshotMap(this.sseEventSizeByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventRouteKey, @NonNull Snapshot> snapshotSseQueueDepth() {
+	Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> snapshotSseQueueDepth() {
 		return snapshotMap(this.sseQueueDepthByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> snapshotSseCommentDeliveryLag() {
+	Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> snapshotSseCommentDeliveryLag() {
 		return snapshotMap(this.sseCommentDeliveryLagByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> snapshotSseCommentSizes() {
+	Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> snapshotSseCommentSizes() {
 		return snapshotMap(this.sseCommentSizeByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventCommentRouteKey, @NonNull Snapshot> snapshotSseCommentQueueDepth() {
+	Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> snapshotSseCommentQueueDepth() {
 		return snapshotMap(this.sseCommentQueueDepthByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull Snapshot> snapshotSseConnectionDurations() {
+	Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> snapshotSseConnectionDurations() {
 		return snapshotMap(this.sseConnectionDurationByRouteAndReason);
 	}
 
@@ -658,10 +660,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static <K> Map<@NonNull K, @NonNull Snapshot> snapshotMap(@NonNull Map<K, Histogram> map) {
+	private static <K> Map<@NonNull K, @NonNull HistogramSnapshot> snapshotMap(@NonNull Map<K, Histogram> map) {
 		requireNonNull(map);
 
-		Map<K, Snapshot> snapshot = new ConcurrentHashMap<>(map.size());
+		Map<K, HistogramSnapshot> snapshot = new ConcurrentHashMap<>(map.size());
 		for (Map.Entry<K, Histogram> entry : map.entrySet())
 			snapshot.put(entry.getKey(), entry.getValue().snapshot());
 		return snapshot;
@@ -695,7 +697,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private static <K> void appendHistogram(@NonNull StringBuilder sb,
 																					@NonNull String name,
 																					@NonNull String help,
-																					@NonNull Map<K, Snapshot> histograms,
+																					@NonNull Map<K, HistogramSnapshot> histograms,
 																					@NonNull Function<K, LabelSet> labelsProvider,
 																					@NonNull SnapshotTextOptions options) {
 		requireNonNull(sb);
@@ -726,7 +728,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private static void appendHistogramSamples(@NonNull StringBuilder sb,
 																						 @NonNull String name,
 																						 @NonNull LabelSet labels,
-																						 @NonNull Snapshot histogram,
+																						 @NonNull HistogramSnapshot histogram,
 																						 @NonNull SnapshotTextOptions options) {
 		requireNonNull(sb);
 		requireNonNull(name);

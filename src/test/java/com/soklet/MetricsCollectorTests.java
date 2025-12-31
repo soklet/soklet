@@ -25,7 +25,7 @@ import com.soklet.MetricsCollector.RouteType;
 import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
-import com.soklet.MetricsCollector.Snapshot;
+import com.soklet.MetricsCollector.HistogramSnapshot;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -78,30 +78,30 @@ public class MetricsCollectorTests {
 		collector.willWriteResponse(request, resourceMethod, response);
 		collector.didFinishRequestHandling(request, resourceMethod, response, Duration.ofMillis(5), List.of());
 
-		MetricsSnapshot snapshot = collector.snapshot().orElseThrow();
+		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 
 		ResourcePathDeclaration widgetRoute = ResourcePathDeclaration.withPath("/widgets/{id}");
 		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute, "2xx");
 		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute);
 
-		Snapshot requestDurations = snapshot.getHttpRequestDurations().get(statusKey);
+		HistogramSnapshot requestDurations = snapshot.getHttpRequestDurations().get(statusKey);
 		assertNotNull(requestDurations);
 		assertEquals(1L, requestDurations.getCount());
 
-		Snapshot handlerDurations = snapshot.getHttpHandlerDurations().get(statusKey);
+		HistogramSnapshot handlerDurations = snapshot.getHttpHandlerDurations().get(statusKey);
 		assertNotNull(handlerDurations);
 		assertEquals(1L, handlerDurations.getCount());
 
-		Snapshot timeToFirstByte = snapshot.getHttpTimeToFirstByte().get(statusKey);
+		HistogramSnapshot timeToFirstByte = snapshot.getHttpTimeToFirstByte().get(statusKey);
 		assertNotNull(timeToFirstByte);
 		assertEquals(1L, timeToFirstByte.getCount());
 
-		Snapshot requestBodyBytes = snapshot.getHttpRequestBodyBytes().get(routeKey);
+		HistogramSnapshot requestBodyBytes = snapshot.getHttpRequestBodyBytes().get(routeKey);
 		assertNotNull(requestBodyBytes);
 		assertEquals(1L, requestBodyBytes.getCount());
 		assertEquals(3L, requestBodyBytes.getSum());
 
-		Snapshot responseBodyBytes = snapshot.getHttpResponseBodyBytes().get(statusKey);
+		HistogramSnapshot responseBodyBytes = snapshot.getHttpResponseBodyBytes().get(statusKey);
 		assertNotNull(responseBodyBytes);
 		assertEquals(1L, responseBodyBytes.getCount());
 		assertEquals(2L, responseBodyBytes.getSum());
@@ -109,8 +109,8 @@ public class MetricsCollectorTests {
 		assertEquals(0L, snapshot.getActiveRequests());
 
 		collector.reset();
-		MetricsSnapshot resetSnapshot = collector.snapshot().orElseThrow();
-		Snapshot resetRequestDurations = resetSnapshot.getHttpRequestDurations().get(statusKey);
+		MetricsCollector.Snapshot resetSnapshot = collector.snapshot().orElseThrow();
+		HistogramSnapshot resetRequestDurations = resetSnapshot.getHttpRequestDurations().get(statusKey);
 		assertTrue(resetRequestDurations == null || resetRequestDurations.getCount() == 0L);
 		assertEquals(0L, resetSnapshot.getActiveRequests());
 	}
@@ -221,7 +221,7 @@ public class MetricsCollectorTests {
 		collector.didTerminateServerSentEventConnection(connection, Duration.ofSeconds(1),
 				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE, null);
 
-		MetricsSnapshot snapshot = collector.snapshot().orElseThrow();
+		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 
 		ResourcePathDeclaration eventsRoute = ResourcePathDeclaration.withPath("/events/{id}");
 		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteType.MATCHED, eventsRoute);
@@ -232,50 +232,50 @@ public class MetricsCollectorTests {
 		ServerSentEventRouteTerminationKey terminationKey = new ServerSentEventRouteTerminationKey(RouteType.MATCHED, eventsRoute,
 				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE);
 
-		Snapshot timeToFirstEvent = snapshot.getSseTimeToFirstEvent().get(routeKey);
+		HistogramSnapshot timeToFirstEvent = snapshot.getSseTimeToFirstEvent().get(routeKey);
 		assertNotNull(timeToFirstEvent);
 		assertEquals(1L, timeToFirstEvent.getCount());
 
-		Snapshot eventWriteDurations = snapshot.getSseEventWriteDurations().get(routeKey);
+		HistogramSnapshot eventWriteDurations = snapshot.getSseEventWriteDurations().get(routeKey);
 		assertNotNull(eventWriteDurations);
 		assertEquals(1L, eventWriteDurations.getCount());
 
-		Snapshot deliveryLag = snapshot.getSseEventDeliveryLag().get(routeKey);
+		HistogramSnapshot deliveryLag = snapshot.getSseEventDeliveryLag().get(routeKey);
 		assertNotNull(deliveryLag);
 		assertEquals(1L, deliveryLag.getCount());
 		assertEquals(500L, deliveryLag.getSum());
 
-		Snapshot eventSizes = snapshot.getSseEventSizes().get(routeKey);
+		HistogramSnapshot eventSizes = snapshot.getSseEventSizes().get(routeKey);
 		assertNotNull(eventSizes);
 		assertEquals(1L, eventSizes.getCount());
 		assertEquals(12L, eventSizes.getSum());
 
-		Snapshot queueDepth = snapshot.getSseQueueDepth().get(routeKey);
+		HistogramSnapshot queueDepth = snapshot.getSseQueueDepth().get(routeKey);
 		assertNotNull(queueDepth);
 		assertEquals(1L, queueDepth.getCount());
 		assertEquals(3L, queueDepth.getSum());
 
-		Snapshot commentDeliveryLag = snapshot.getSseCommentDeliveryLag().get(commentKey);
+		HistogramSnapshot commentDeliveryLag = snapshot.getSseCommentDeliveryLag().get(commentKey);
 		assertNotNull(commentDeliveryLag);
 		assertEquals(1L, commentDeliveryLag.getCount());
 		assertEquals(250L, commentDeliveryLag.getSum());
 
-		Snapshot commentSizes = snapshot.getSseCommentSizes().get(commentKey);
+		HistogramSnapshot commentSizes = snapshot.getSseCommentSizes().get(commentKey);
 		assertNotNull(commentSizes);
 		assertEquals(1L, commentSizes.getCount());
 		assertEquals(4L, commentSizes.getSum());
 
-		Snapshot commentQueueDepth = snapshot.getSseCommentQueueDepth().get(commentKey);
+		HistogramSnapshot commentQueueDepth = snapshot.getSseCommentQueueDepth().get(commentKey);
 		assertNotNull(commentQueueDepth);
 		assertEquals(1L, commentQueueDepth.getCount());
 		assertEquals(1L, commentQueueDepth.getSum());
 
-		Snapshot heartbeatDeliveryLag = snapshot.getSseCommentDeliveryLag().get(heartbeatKey);
+		HistogramSnapshot heartbeatDeliveryLag = snapshot.getSseCommentDeliveryLag().get(heartbeatKey);
 		assertNotNull(heartbeatDeliveryLag);
 		assertEquals(1L, heartbeatDeliveryLag.getCount());
 		assertEquals(100L, heartbeatDeliveryLag.getSum());
 
-		Snapshot connectionDurations = snapshot.getSseConnectionDurations().get(terminationKey);
+		HistogramSnapshot connectionDurations = snapshot.getSseConnectionDurations().get(terminationKey);
 		assertNotNull(connectionDurations);
 		assertEquals(1L, connectionDurations.getCount());
 
@@ -318,28 +318,28 @@ public class MetricsCollectorTests {
 			connection.disconnect();
 		}
 
-		MetricsSnapshot snapshot = awaitSnapshot(collector,
+		MetricsCollector.Snapshot snapshot = awaitSnapshot(collector,
 				(metricsSnapshot) -> metricsSnapshot.getHttpRequestDurations().get(statusKey) != null,
 				Duration.ofSeconds(2));
 
-		Snapshot requestDurations = snapshot.getHttpRequestDurations().get(statusKey);
+		HistogramSnapshot requestDurations = snapshot.getHttpRequestDurations().get(statusKey);
 		assertNotNull(requestDurations);
 		assertEquals(1L, requestDurations.getCount());
 
-		Snapshot handlerDurations = snapshot.getHttpHandlerDurations().get(statusKey);
+		HistogramSnapshot handlerDurations = snapshot.getHttpHandlerDurations().get(statusKey);
 		assertNotNull(handlerDurations);
 		assertEquals(1L, handlerDurations.getCount());
 
-		Snapshot timeToFirstByte = snapshot.getHttpTimeToFirstByte().get(statusKey);
+		HistogramSnapshot timeToFirstByte = snapshot.getHttpTimeToFirstByte().get(statusKey);
 		assertNotNull(timeToFirstByte);
 		assertEquals(1L, timeToFirstByte.getCount());
 
-		Snapshot requestBodyBytes = snapshot.getHttpRequestBodyBytes().get(routeKey);
+		HistogramSnapshot requestBodyBytes = snapshot.getHttpRequestBodyBytes().get(routeKey);
 		assertNotNull(requestBodyBytes);
 		assertEquals(1L, requestBodyBytes.getCount());
 		assertEquals(requestBody.length, requestBodyBytes.getSum());
 
-		Snapshot responseBodyBytes = snapshot.getHttpResponseBodyBytes().get(statusKey);
+		HistogramSnapshot responseBodyBytes = snapshot.getHttpResponseBodyBytes().get(statusKey);
 		assertNotNull(responseBodyBytes);
 		assertEquals(1L, responseBodyBytes.getCount());
 		assertEquals(HttpMetricsResource.RESPONSE_BODY.length, responseBodyBytes.getSum());
@@ -403,40 +403,40 @@ public class MetricsCollectorTests {
 			}
 		}
 
-		MetricsSnapshot snapshot = awaitSnapshot(collector,
+		MetricsCollector.Snapshot snapshot = awaitSnapshot(collector,
 				(metricsSnapshot) -> metricsSnapshot.getSseEventWriteDurations().get(routeKey) != null
 						&& metricsSnapshot.getSseCommentDeliveryLag().get(commentKey) != null,
 				Duration.ofSeconds(3));
 
-		Snapshot timeToFirstEvent = snapshot.getSseTimeToFirstEvent().get(routeKey);
+		HistogramSnapshot timeToFirstEvent = snapshot.getSseTimeToFirstEvent().get(routeKey);
 		assertNotNull(timeToFirstEvent);
 		assertEquals(1L, timeToFirstEvent.getCount());
 
-		Snapshot eventWriteDurations = snapshot.getSseEventWriteDurations().get(routeKey);
+		HistogramSnapshot eventWriteDurations = snapshot.getSseEventWriteDurations().get(routeKey);
 		assertNotNull(eventWriteDurations);
 		assertTrue(eventWriteDurations.getCount() >= 1L);
 
-		Snapshot deliveryLag = snapshot.getSseEventDeliveryLag().get(routeKey);
+		HistogramSnapshot deliveryLag = snapshot.getSseEventDeliveryLag().get(routeKey);
 		assertNotNull(deliveryLag);
 		assertTrue(deliveryLag.getCount() >= 1L);
 
-		Snapshot eventSizes = snapshot.getSseEventSizes().get(routeKey);
+		HistogramSnapshot eventSizes = snapshot.getSseEventSizes().get(routeKey);
 		assertNotNull(eventSizes);
 		assertTrue(eventSizes.getCount() >= 1L);
 
-		Snapshot queueDepth = snapshot.getSseQueueDepth().get(routeKey);
+		HistogramSnapshot queueDepth = snapshot.getSseQueueDepth().get(routeKey);
 		assertNotNull(queueDepth);
 		assertTrue(queueDepth.getCount() >= 1L);
 
-		Snapshot commentDeliveryLag = snapshot.getSseCommentDeliveryLag().get(commentKey);
+		HistogramSnapshot commentDeliveryLag = snapshot.getSseCommentDeliveryLag().get(commentKey);
 		assertNotNull(commentDeliveryLag);
 		assertTrue(commentDeliveryLag.getCount() >= 1L);
 
-		Snapshot commentSizes = snapshot.getSseCommentSizes().get(commentKey);
+		HistogramSnapshot commentSizes = snapshot.getSseCommentSizes().get(commentKey);
 		assertNotNull(commentSizes);
 		assertTrue(commentSizes.getCount() >= 1L);
 
-		Snapshot commentQueueDepth = snapshot.getSseCommentQueueDepth().get(commentKey);
+		HistogramSnapshot commentQueueDepth = snapshot.getSseCommentQueueDepth().get(commentKey);
 		assertNotNull(commentQueueDepth);
 		assertTrue(commentQueueDepth.getCount() >= 1L);
 	}
@@ -596,15 +596,15 @@ public class MetricsCollectorTests {
 		}
 	}
 
-	private static MetricsSnapshot awaitSnapshot(@NonNull DefaultMetricsCollector collector,
-																							 @NonNull Predicate<MetricsSnapshot> predicate,
+	private static MetricsCollector.Snapshot awaitSnapshot(@NonNull DefaultMetricsCollector collector,
+																							 @NonNull Predicate<MetricsCollector.Snapshot> predicate,
 																							 @NonNull Duration timeout) throws InterruptedException {
 		requireNonNull(collector);
 		requireNonNull(predicate);
 		requireNonNull(timeout);
 
 		long deadline = System.nanoTime() + timeout.toNanos();
-		MetricsSnapshot snapshot = collector.snapshot().orElseThrow();
+		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 
 		while (System.nanoTime() < deadline) {
 			if (predicate.test(snapshot))
