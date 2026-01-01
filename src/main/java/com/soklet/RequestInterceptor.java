@@ -75,6 +75,8 @@ public interface RequestInterceptor {
 
 	/**
 	 * Acquires a threadsafe {@link RequestInterceptor} instance with sensible defaults.
+	 * <p>
+	 * The returned instance is guaranteed to be a JVM-wide singleton.
 	 *
 	 * @return a {@code RequestInterceptor} with default settings
 	 */

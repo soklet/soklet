@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.Arrays;
@@ -42,6 +43,22 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * If you prefer OpenTelemetry, Micrometer, or another metrics system for monitoring, you might choose to create your own
  * implementation of this interface.
+ * <p>
+ * Example configuration:
+ * <pre><code>
+ * SokletConfig config = SokletConfig.withServer(Server.withPort(8080).build())
+ *   // This is already the default; specifying it here is optional
+ *   .metricsCollector(MetricsCollector.withDefaults())
+ *   .build();
+ * </code></pre>
+ * <p>
+ * To disable metrics collection entirely, specify Soklet's no-op implementation:
+ * <pre><code>
+ * SokletConfig config = SokletConfig.withServer(Server.withPort(8080).build())
+ *   // Use this instead of null to disable metrics collection
+ *   .metricsCollector(MetricsCollector.disabled())
+ *   .build();
+ * </code></pre>
  * <p>
  * <p>All methods must be:
  * <ul>
@@ -533,13 +550,17 @@ public interface MetricsCollector {
 	 * <p>
 	 * Durations are in nanoseconds, sizes are in bytes, and queue depths are raw counts.
 	 * Histogram values are captured as {@link HistogramSnapshot} instances.
+	 * Instances are typically produced by {@link MetricsCollector#snapshot()} but can also be built
+	 * manually via {@link #withDefaults()}.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
 	final class Snapshot {
-		private final long activeRequests;
-		private final long activeSseConnections;
+		@NonNull
+		private final Long activeRequests;
+		@NonNull
+		private final Long activeSseConnections;
 		@NonNull
 		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
 		@NonNull
@@ -569,116 +590,464 @@ public interface MetricsCollector {
 		@NonNull
 		private final Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations;
 
-		public Snapshot(long activeRequests,
-										long activeSseConnections,
-										@NonNull Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations,
-										@NonNull Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations,
-										@NonNull Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte,
-										@NonNull Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes,
-										@NonNull Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes,
-										@NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent,
-										@NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations,
-										@NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag,
-										@NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes,
-										@NonNull Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth,
-										@NonNull Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag,
-										@NonNull Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes,
-										@NonNull Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth,
-										@NonNull Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations) {
-			this.activeRequests = activeRequests;
-			this.activeSseConnections = activeSseConnections;
-			this.httpRequestDurations = Map.copyOf(requireNonNull(httpRequestDurations));
-			this.httpHandlerDurations = Map.copyOf(requireNonNull(httpHandlerDurations));
-			this.httpTimeToFirstByte = Map.copyOf(requireNonNull(httpTimeToFirstByte));
-			this.httpRequestBodyBytes = Map.copyOf(requireNonNull(httpRequestBodyBytes));
-			this.httpResponseBodyBytes = Map.copyOf(requireNonNull(httpResponseBodyBytes));
-			this.sseTimeToFirstEvent = Map.copyOf(requireNonNull(sseTimeToFirstEvent));
-			this.sseEventWriteDurations = Map.copyOf(requireNonNull(sseEventWriteDurations));
-			this.sseEventDeliveryLag = Map.copyOf(requireNonNull(sseEventDeliveryLag));
-			this.sseEventSizes = Map.copyOf(requireNonNull(sseEventSizes));
-			this.sseQueueDepth = Map.copyOf(requireNonNull(sseQueueDepth));
-			this.sseCommentDeliveryLag = Map.copyOf(requireNonNull(sseCommentDeliveryLag));
-			this.sseCommentSizes = Map.copyOf(requireNonNull(sseCommentSizes));
-			this.sseCommentQueueDepth = Map.copyOf(requireNonNull(sseCommentQueueDepth));
-			this.sseConnectionDurations = Map.copyOf(requireNonNull(sseConnectionDurations));
+		/**
+		 * Acquires an "empty" builder for {@link Snapshot} instances.
+		 *
+		 * @return the builder
+		 */
+		@NonNull
+		public static Builder withDefaults() {
+			return new Builder();
 		}
 
-		public long getActiveRequests() {
+		private Snapshot(@NonNull Builder builder) {
+			requireNonNull(builder);
+
+			this.activeRequests = requireNonNull(builder.activeRequests);
+			this.activeSseConnections = requireNonNull(builder.activeSseConnections);
+			this.httpRequestDurations = copyOrEmpty(builder.httpRequestDurations);
+			this.httpHandlerDurations = copyOrEmpty(builder.httpHandlerDurations);
+			this.httpTimeToFirstByte = copyOrEmpty(builder.httpTimeToFirstByte);
+			this.httpRequestBodyBytes = copyOrEmpty(builder.httpRequestBodyBytes);
+			this.httpResponseBodyBytes = copyOrEmpty(builder.httpResponseBodyBytes);
+			this.sseTimeToFirstEvent = copyOrEmpty(builder.sseTimeToFirstEvent);
+			this.sseEventWriteDurations = copyOrEmpty(builder.sseEventWriteDurations);
+			this.sseEventDeliveryLag = copyOrEmpty(builder.sseEventDeliveryLag);
+			this.sseEventSizes = copyOrEmpty(builder.sseEventSizes);
+			this.sseQueueDepth = copyOrEmpty(builder.sseQueueDepth);
+			this.sseCommentDeliveryLag = copyOrEmpty(builder.sseCommentDeliveryLag);
+			this.sseCommentSizes = copyOrEmpty(builder.sseCommentSizes);
+			this.sseCommentQueueDepth = copyOrEmpty(builder.sseCommentQueueDepth);
+			this.sseConnectionDurations = copyOrEmpty(builder.sseConnectionDurations);
+		}
+
+		/**
+		 * Returns the number of active HTTP requests.
+		 *
+		 * @return the active HTTP request count
+		 */
+		@NonNull
+		public Long getActiveRequests() {
 			return this.activeRequests;
 		}
 
-		public long getActiveSseConnections() {
+		/**
+		 * Returns the number of active server-sent event connections.
+		 *
+		 * @return the active SSE connection count
+		 */
+		@NonNull
+		public Long getActiveSseConnections() {
 			return this.activeSseConnections;
 		}
 
+		/**
+		 * Returns HTTP request duration histograms keyed by server route and status class.
+		 *
+		 * @return HTTP request duration histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpRequestDurations() {
 			return this.httpRequestDurations;
 		}
 
+		/**
+		 * Returns HTTP handler duration histograms keyed by server route and status class.
+		 *
+		 * @return HTTP handler duration histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpHandlerDurations() {
 			return this.httpHandlerDurations;
 		}
 
+		/**
+		 * Returns HTTP time-to-first-byte histograms keyed by server route and status class.
+		 *
+		 * @return HTTP time-to-first-byte histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpTimeToFirstByte() {
 			return this.httpTimeToFirstByte;
 		}
 
+		/**
+		 * Returns HTTP request body size histograms keyed by server route.
+		 *
+		 * @return HTTP request body size histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> getHttpRequestBodyBytes() {
 			return this.httpRequestBodyBytes;
 		}
 
+		/**
+		 * Returns HTTP response body size histograms keyed by server route and status class.
+		 *
+		 * @return HTTP response body size histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpResponseBodyBytes() {
 			return this.httpResponseBodyBytes;
 		}
 
+		/**
+		 * Returns SSE time-to-first-event histograms keyed by route.
+		 *
+		 * @return SSE time-to-first-event histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseTimeToFirstEvent() {
 			return this.sseTimeToFirstEvent;
 		}
 
+		/**
+		 * Returns SSE event write duration histograms keyed by route.
+		 *
+		 * @return SSE event write duration histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseEventWriteDurations() {
 			return this.sseEventWriteDurations;
 		}
 
+		/**
+		 * Returns SSE event delivery lag histograms keyed by route.
+		 *
+		 * @return SSE event delivery lag histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseEventDeliveryLag() {
 			return this.sseEventDeliveryLag;
 		}
 
+		/**
+		 * Returns SSE event size histograms keyed by route.
+		 *
+		 * @return SSE event size histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseEventSizes() {
 			return this.sseEventSizes;
 		}
 
+		/**
+		 * Returns SSE queue depth histograms keyed by route.
+		 *
+		 * @return SSE queue depth histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseQueueDepth() {
 			return this.sseQueueDepth;
 		}
 
+		/**
+		 * Returns SSE comment delivery lag histograms keyed by route and comment type.
+		 *
+		 * @return SSE comment delivery lag histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentDeliveryLag() {
 			return this.sseCommentDeliveryLag;
 		}
 
+		/**
+		 * Returns SSE comment size histograms keyed by route and comment type.
+		 *
+		 * @return SSE comment size histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentSizes() {
 			return this.sseCommentSizes;
 		}
 
+		/**
+		 * Returns SSE comment queue depth histograms keyed by route and comment type.
+		 *
+		 * @return SSE comment queue depth histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentQueueDepth() {
 			return this.sseCommentQueueDepth;
 		}
 
+		/**
+		 * Returns SSE connection duration histograms keyed by route and termination reason.
+		 *
+		 * @return SSE connection duration histograms
+		 */
 		@NonNull
 		public Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> getSseConnectionDurations() {
 			return this.sseConnectionDurations;
+		}
+
+		@NonNull
+		private static <K, V> Map<K, V> copyOrEmpty(@Nullable Map<K, V> map) {
+			return map == null ? Map.of() : Map.copyOf(map);
+		}
+
+		/**
+		 * Builder used to construct instances of {@link Snapshot}.
+		 * <p>
+		 * This class is intended for use by a single thread.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		@NotThreadSafe
+		public static final class Builder {
+			@NonNull
+			private Long activeRequests;
+			@NonNull
+			private Long activeSseConnections;
+			@Nullable
+			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
+			@Nullable
+			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations;
+			@Nullable
+			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte;
+			@Nullable
+			private Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes;
+			@Nullable
+			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
+			@Nullable
+			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
+			@Nullable
+			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations;
+			@Nullable
+			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag;
+			@Nullable
+			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes;
+			@Nullable
+			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth;
+			@Nullable
+			private Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag;
+			@Nullable
+			private Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes;
+			@Nullable
+			private Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth;
+			@Nullable
+			private Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations;
+
+			private Builder() {
+				this.activeRequests = 0L;
+				this.activeSseConnections = 0L;
+			}
+
+			/**
+			 * Sets the active HTTP request count.
+			 *
+			 * @param activeRequests the active HTTP request count
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder activeRequests(@NonNull Long activeRequests) {
+				this.activeRequests = requireNonNull(activeRequests);
+				return this;
+			}
+
+			/**
+			 * Sets the active server-sent event connection count.
+			 *
+			 * @param activeSseConnections the active SSE connection count
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder activeSseConnections(@NonNull Long activeSseConnections) {
+				this.activeSseConnections = requireNonNull(activeSseConnections);
+				return this;
+			}
+
+			/**
+			 * Sets HTTP request duration histograms keyed by server route and status class.
+			 *
+			 * @param httpRequestDurations the HTTP request duration histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder httpRequestDurations(
+					@Nullable Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations) {
+				this.httpRequestDurations = httpRequestDurations;
+				return this;
+			}
+
+			/**
+			 * Sets HTTP handler duration histograms keyed by server route and status class.
+			 *
+			 * @param httpHandlerDurations the HTTP handler duration histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder httpHandlerDurations(
+					@Nullable Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations) {
+				this.httpHandlerDurations = httpHandlerDurations;
+				return this;
+			}
+
+			/**
+			 * Sets HTTP time-to-first-byte histograms keyed by server route and status class.
+			 *
+			 * @param httpTimeToFirstByte the HTTP time-to-first-byte histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder httpTimeToFirstByte(
+					@Nullable Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte) {
+				this.httpTimeToFirstByte = httpTimeToFirstByte;
+				return this;
+			}
+
+			/**
+			 * Sets HTTP request body size histograms keyed by server route.
+			 *
+			 * @param httpRequestBodyBytes the HTTP request body size histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder httpRequestBodyBytes(
+					@Nullable Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes) {
+				this.httpRequestBodyBytes = httpRequestBodyBytes;
+				return this;
+			}
+
+			/**
+			 * Sets HTTP response body size histograms keyed by server route and status class.
+			 *
+			 * @param httpResponseBodyBytes the HTTP response body size histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder httpResponseBodyBytes(
+					@Nullable Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes) {
+				this.httpResponseBodyBytes = httpResponseBodyBytes;
+				return this;
+			}
+
+			/**
+			 * Sets SSE time-to-first-event histograms keyed by route.
+			 *
+			 * @param sseTimeToFirstEvent the SSE time-to-first-event histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseTimeToFirstEvent(
+					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent) {
+				this.sseTimeToFirstEvent = sseTimeToFirstEvent;
+				return this;
+			}
+
+			/**
+			 * Sets SSE event write duration histograms keyed by route.
+			 *
+			 * @param sseEventWriteDurations the SSE event write duration histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseEventWriteDurations(
+					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations) {
+				this.sseEventWriteDurations = sseEventWriteDurations;
+				return this;
+			}
+
+			/**
+			 * Sets SSE event delivery lag histograms keyed by route.
+			 *
+			 * @param sseEventDeliveryLag the SSE event delivery lag histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseEventDeliveryLag(
+					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag) {
+				this.sseEventDeliveryLag = sseEventDeliveryLag;
+				return this;
+			}
+
+			/**
+			 * Sets SSE event size histograms keyed by route.
+			 *
+			 * @param sseEventSizes the SSE event size histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseEventSizes(
+					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes) {
+				this.sseEventSizes = sseEventSizes;
+				return this;
+			}
+
+			/**
+			 * Sets SSE queue depth histograms keyed by route.
+			 *
+			 * @param sseQueueDepth the SSE queue depth histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseQueueDepth(
+					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth) {
+				this.sseQueueDepth = sseQueueDepth;
+				return this;
+			}
+
+			/**
+			 * Sets SSE comment delivery lag histograms keyed by route and comment type.
+			 *
+			 * @param sseCommentDeliveryLag the SSE comment delivery lag histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseCommentDeliveryLag(
+					@Nullable Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag) {
+				this.sseCommentDeliveryLag = sseCommentDeliveryLag;
+				return this;
+			}
+
+			/**
+			 * Sets SSE comment size histograms keyed by route and comment type.
+			 *
+			 * @param sseCommentSizes the SSE comment size histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseCommentSizes(
+					@Nullable Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes) {
+				this.sseCommentSizes = sseCommentSizes;
+				return this;
+			}
+
+			/**
+			 * Sets SSE comment queue depth histograms keyed by route and comment type.
+			 *
+			 * @param sseCommentQueueDepth the SSE comment queue depth histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseCommentQueueDepth(
+					@Nullable Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth) {
+				this.sseCommentQueueDepth = sseCommentQueueDepth;
+				return this;
+			}
+
+			/**
+			 * Sets SSE connection duration histograms keyed by route and termination reason.
+			 *
+			 * @param sseConnectionDurations the SSE connection duration histograms
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseConnectionDurations(
+					@Nullable Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations) {
+				this.sseConnectionDurations = sseConnectionDurations;
+				return this;
+			}
+
+			/**
+			 * Builds a {@link Snapshot} instance.
+			 *
+			 * @return the built snapshot
+			 */
+			@NonNull
+			public Snapshot build() {
+				return new Snapshot(this);
+			}
 		}
 	}
 

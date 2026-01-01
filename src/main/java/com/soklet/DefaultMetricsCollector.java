@@ -413,23 +413,24 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	@NonNull
 	public Optional<Snapshot> snapshot() {
-		return Optional.of(new Snapshot(
-				getActiveRequests(),
-				getActiveSseConnections(),
-				snapshotHttpRequestDurations(),
-				snapshotHttpHandlerDurations(),
-				snapshotHttpTimeToFirstByte(),
-				snapshotHttpRequestBodyBytes(),
-				snapshotHttpResponseBodyBytes(),
-				snapshotSseTimeToFirstEvent(),
-				snapshotSseEventWriteDurations(),
-				snapshotSseEventDeliveryLag(),
-				snapshotSseEventSizes(),
-				snapshotSseQueueDepth(),
-				snapshotSseCommentDeliveryLag(),
-				snapshotSseCommentSizes(),
-				snapshotSseCommentQueueDepth(),
-				snapshotSseConnectionDurations()));
+		return Optional.of(Snapshot.withDefaults()
+				.activeRequests(getActiveRequests())
+				.activeSseConnections(getActiveSseConnections())
+				.httpRequestDurations(snapshotHttpRequestDurations())
+				.httpHandlerDurations(snapshotHttpHandlerDurations())
+				.httpTimeToFirstByte(snapshotHttpTimeToFirstByte())
+				.httpRequestBodyBytes(snapshotHttpRequestBodyBytes())
+				.httpResponseBodyBytes(snapshotHttpResponseBodyBytes())
+				.sseTimeToFirstEvent(snapshotSseTimeToFirstEvent())
+				.sseEventWriteDurations(snapshotSseEventWriteDurations())
+				.sseEventDeliveryLag(snapshotSseEventDeliveryLag())
+				.sseEventSizes(snapshotSseEventSizes())
+				.sseQueueDepth(snapshotSseQueueDepth())
+				.sseCommentDeliveryLag(snapshotSseCommentDeliveryLag())
+				.sseCommentSizes(snapshotSseCommentSizes())
+				.sseCommentQueueDepth(snapshotSseCommentQueueDepth())
+				.sseConnectionDurations(snapshotSseConnectionDurations())
+				.build());
 	}
 
 	@Override
