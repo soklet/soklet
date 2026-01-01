@@ -840,10 +840,30 @@ public final class Utilities {
 					locales.add(locale);
 			}
 
-			return Collections.unmodifiableList(locales);
-		} catch (Exception ignored) {
-			return List.of();
+		return Collections.unmodifiableList(locales);
+	} catch (Exception ignored) {
+		return List.of();
+	}
+}
+
+	@Nullable
+	private static String firstHeaderValue(@Nullable Set<String> headerValues) {
+		if (headerValues == null || headerValues.isEmpty())
+			return null;
+
+		for (String value : headerValues) {
+			String trimmed = trimAggressivelyToNull(value);
+			if (trimmed == null)
+				continue;
+
+			for (String part : splitCommaAware(trimmed)) {
+				String candidate = trimAggressivelyToNull(part);
+				if (candidate != null)
+					return candidate;
+			}
 		}
+
+		return null;
 	}
 
 	/**
@@ -884,7 +904,7 @@ public final class Utilities {
 	 *   <li>{@code https://www.soklet.com/test?abc=1234} (trailing slash, path, query)</li>
 	 * </ul>
 	 * <p>
-	 * {@code Origin} is treated as a fallback signal only and will not override a conflicting {@code Host} value.
+	 * {@code Origin} is treated as a fallback signal only and will not override a conflicting {@code Host} or forwarded host value.
 	 *
 	 * @param headers HTTP request headers
 	 * @return the URL prefix, or {@link Optional#empty()} if it could not be determined
@@ -909,65 +929,120 @@ public final class Utilities {
 		String portAsString = null;
 		Boolean portExplicit = false;
 
-		// Host: developer.mozilla.org OR developer.mozilla.org:443 OR [2001:db8::1]:8443
-		Set<String> hostHeaders = headers.get("Host");
+		// Forwarded: by=<identifier>;for=<identifier>;host=<host>;proto=<http|https>
+		String forwardedHeader = firstHeaderValue(headers.get("Forwarded"));
+		if (forwardedHeader != null) {
+			// Each field component might look like "by=<identifier>"
+			String[] forwardedHeaderFieldComponents = forwardedHeader.split(";");
+			for (String forwardedHeaderFieldComponent : forwardedHeaderFieldComponents) {
+				forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
+				if (forwardedHeaderFieldComponent == null)
+					continue;
 
-		if (hostHeaders != null && !hostHeaders.isEmpty()) {
-			HostPort hostPort = parseHostPort(hostHeaders.iterator().next()).orElse(null);
+				// Break "by=<identifier>" into "by" and "<identifier>" pieces
+				String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("=" /* escape special Regex char */));
+				if (forwardedHeaderFieldNameAndValue.length != 2)
+					continue;
 
-			if (hostPort != null) {
-				host = hostPort.getHost();
+				String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
+				String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
+				if (name == null || value == null)
+					continue;
 
-				if (hostPort.getPort().isPresent()) {
-					portAsString = String.valueOf(hostPort.getPort().get());
-					portExplicit = true;
+				if ("host".equalsIgnoreCase(name)) {
+					if (host == null) {
+						HostPort hostPort = parseHostPort(value).orElse(null);
+
+						if (hostPort != null) {
+							host = hostPort.getHost();
+
+							if (hostPort.getPort().isPresent()) {
+								portAsString = String.valueOf(hostPort.getPort().get());
+								portExplicit = true;
+							}
+						}
+					}
+				} else if ("proto".equalsIgnoreCase(name)) {
+					if (protocol == null)
+						protocol = stripOptionalQuotes(value);
 				}
 			}
 		}
 
-		// Forwarded: by=<identifier>;for=<identifier>;host=<host>;proto=<http|https>
-		Set<String> forwardedHeaders = headers.get("Forwarded");
-		if (forwardedHeaders != null && forwardedHeaders.size() > 0) {
-			String forwardedHeader = trimAggressivelyToNull(forwardedHeaders.stream().findFirst().get());
+		// X-Forwarded-Proto: https
+		if (protocol == null) {
+			String xForwardedProtoHeader = firstHeaderValue(headers.get("X-Forwarded-Proto"));
+			if (xForwardedProtoHeader != null)
+				protocol = stripOptionalQuotes(xForwardedProtoHeader);
+		}
 
-			// If there are multiple comma-separated components, pick the first one
-			String[] forwardedHeaderComponents = forwardedHeader != null ? forwardedHeader.split(",") : new String[0];
-			forwardedHeader = forwardedHeaderComponents.length > 0 ? trimAggressivelyToNull(forwardedHeaderComponents[0]) : null;
+		// X-Forwarded-Protocol: https (Microsoft's alternate name)
+		if (protocol == null) {
+			String xForwardedProtocolHeader = firstHeaderValue(headers.get("X-Forwarded-Protocol"));
+			if (xForwardedProtocolHeader != null)
+				protocol = stripOptionalQuotes(xForwardedProtocolHeader);
+		}
 
-			if (forwardedHeader != null) {
-				// Each field component might look like "by=<identifier>"
-				String[] forwardedHeaderFieldComponents = forwardedHeader.split(";");
-				for (String forwardedHeaderFieldComponent : forwardedHeaderFieldComponents) {
-					forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
-					if (forwardedHeaderFieldComponent == null)
-						continue;
+		// X-Url-Scheme: https (Microsoft's alternate name)
+		if (protocol == null) {
+			String xUrlSchemeHeader = firstHeaderValue(headers.get("X-Url-Scheme"));
+			if (xUrlSchemeHeader != null)
+				protocol = stripOptionalQuotes(xUrlSchemeHeader);
+		}
 
-					// Break "by=<identifier>" into "by" and "<identifier>" pieces
-					String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("=" /* escape special Regex char */));
-					if (forwardedHeaderFieldNameAndValue.length != 2)
-						continue;
+		// Front-End-Https: on (Microsoft's alternate name)
+		if (protocol == null) {
+			String frontEndHttpsHeader = firstHeaderValue(headers.get("Front-End-Https"));
+			if (frontEndHttpsHeader != null)
+				protocol = "on".equalsIgnoreCase(frontEndHttpsHeader) ? "https" : "http";
+		}
 
-					String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
-					String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
-					if (name == null || value == null)
-						continue;
+		// X-Forwarded-Ssl: on (Microsoft's alternate name)
+		if (protocol == null) {
+			String xForwardedSslHeader = firstHeaderValue(headers.get("X-Forwarded-Ssl"));
+			if (xForwardedSslHeader != null)
+				protocol = "on".equalsIgnoreCase(xForwardedSslHeader) ? "https" : "http";
+		}
 
-					if ("host".equalsIgnoreCase(name)) {
-						if (host == null) {
-							HostPort hostPort = parseHostPort(value).orElse(null);
+		// X-Forwarded-Host: id42.example-cdn.com (or with port / IPv6)
+		if (host == null) {
+			String xForwardedHostHeader = firstHeaderValue(headers.get("X-Forwarded-Host"));
+			if (xForwardedHostHeader != null) {
+				HostPort hostPort = parseHostPort(xForwardedHostHeader).orElse(null);
 
-							if (hostPort != null) {
-								host = hostPort.getHost();
+				if (hostPort != null) {
+					host = hostPort.getHost();
 
-								if (hostPort.getPort().isPresent()) {
-									portAsString = String.valueOf(hostPort.getPort().get());
-									portExplicit = true;
-								}
-							}
-						}
-					} else if ("proto".equalsIgnoreCase(name)) {
-						if (protocol == null)
-							protocol = stripOptionalQuotes(value);
+					if (hostPort.getPort().isPresent() && portAsString == null) {
+						portAsString = String.valueOf(hostPort.getPort().get());
+						portExplicit = true;
+					}
+				}
+			}
+		}
+
+		// X-Forwarded-Port: 443
+		if (portAsString == null) {
+			String xForwardedPortHeader = firstHeaderValue(headers.get("X-Forwarded-Port"));
+			if (xForwardedPortHeader != null) {
+				portAsString = stripOptionalQuotes(xForwardedPortHeader);
+				portExplicit = true;
+			}
+		}
+
+		// Host: developer.mozilla.org OR developer.mozilla.org:443 OR [2001:db8::1]:8443
+		if (host == null) {
+			String hostHeader = firstHeaderValue(headers.get("Host"));
+
+			if (hostHeader != null) {
+				HostPort hostPort = parseHostPort(hostHeader).orElse(null);
+
+				if (hostPort != null) {
+					host = hostPort.getHost();
+
+					if (hostPort.getPort().isPresent() && portAsString == null) {
+						portAsString = String.valueOf(hostPort.getPort().get());
+						portExplicit = true;
 					}
 				}
 			}
@@ -976,10 +1051,9 @@ public final class Utilities {
 		// Origin: null OR <scheme>://<hostname> OR <scheme>://<hostname>:<port> (IPv6 supported)
 		// Use Origin only when host is missing or when it matches the Host-derived value.
 		if (protocol == null || host == null || portAsString == null) {
-			Set<String> originHeaders = headers.get("Origin");
+			String originHeader = firstHeaderValue(headers.get("Origin"));
 
-			if (originHeaders != null && !originHeaders.isEmpty()) {
-				String originHeader = trimAggressivelyToNull(originHeaders.iterator().next());
+			if (originHeader != null) {
 				try {
 					URI o = new URI(originHeader);
 					String originProtocol = trimAggressivelyToNull(o.getScheme());
@@ -1014,84 +1088,6 @@ public final class Utilities {
 				} catch (URISyntaxException ignored) {
 					// no-op
 				}
-			}
-		}
-
-		// X-Forwarded-Proto: https
-		if (protocol == null) {
-			Set<String> xForwardedProtoHeaders = headers.get("X-Forwarded-Proto");
-			if (xForwardedProtoHeaders != null && xForwardedProtoHeaders.size() > 0) {
-				String xForwardedProtoHeader = trimAggressivelyToNull(xForwardedProtoHeaders.stream().findFirst().get());
-				protocol = xForwardedProtoHeader;
-			}
-		}
-
-		// X-Forwarded-Protocol: https (Microsoft's alternate name)
-		if (protocol == null) {
-			Set<String> xForwardedProtocolHeaders = headers.get("X-Forwarded-Protocol");
-			if (xForwardedProtocolHeaders != null && xForwardedProtocolHeaders.size() > 0) {
-				String xForwardedProtocolHeader = trimAggressivelyToNull(xForwardedProtocolHeaders.stream().findFirst().get());
-				protocol = xForwardedProtocolHeader;
-			}
-		}
-
-		// X-Url-Scheme: https (Microsoft's alternate name)
-		if (protocol == null) {
-			Set<String> xUrlSchemeHeaders = headers.get("X-Url-Scheme");
-			if (xUrlSchemeHeaders != null && xUrlSchemeHeaders.size() > 0) {
-				String xUrlSchemeHeader = trimAggressivelyToNull(xUrlSchemeHeaders.stream().findFirst().get());
-				protocol = xUrlSchemeHeader;
-			}
-		}
-
-		// Front-End-Https: on (Microsoft's alternate name)
-		if (protocol == null) {
-			Set<String> frontEndHttpsHeaders = headers.get("Front-End-Https");
-			if (frontEndHttpsHeaders != null && frontEndHttpsHeaders.size() > 0) {
-				String frontEndHttpsHeader = trimAggressivelyToNull(frontEndHttpsHeaders.stream().findFirst().get());
-
-				if (frontEndHttpsHeader != null)
-					protocol = "on".equalsIgnoreCase(frontEndHttpsHeader) ? "https" : "http";
-			}
-		}
-
-		// X-Forwarded-Ssl: on (Microsoft's alternate name)
-		if (protocol == null) {
-			Set<String> xForwardedSslHeaders = headers.get("X-Forwarded-Ssl");
-			if (xForwardedSslHeaders != null && xForwardedSslHeaders.size() > 0) {
-				String xForwardedSslHeader = trimAggressivelyToNull(xForwardedSslHeaders.stream().findFirst().get());
-
-				if (xForwardedSslHeader != null)
-					protocol = "on".equalsIgnoreCase(xForwardedSslHeader) ? "https" : "http";
-			}
-		}
-
-		// X-Forwarded-Host: id42.example-cdn.com (or with port / IPv6)
-		if (host == null) {
-			Set<String> xForwardedHostHeaders = headers.get("X-Forwarded-Host");
-			if (xForwardedHostHeaders != null && xForwardedHostHeaders.size() > 0) {
-				HostPort hostPort = parseHostPort(xForwardedHostHeaders.iterator().next()).orElse(null);
-
-				if (hostPort != null) {
-					host = hostPort.getHost();
-
-					if (hostPort.getPort().isPresent() && portAsString == null) {
-						portAsString = String.valueOf(hostPort.getPort().get());
-						portExplicit = true;
-					}
-				}
-			}
-		}
-
-		// X-Forwarded-Port: 443
-		if (portAsString == null) {
-			Set<String> xForwardedPortHeaders = headers.get("X-Forwarded-Port");
-			if (xForwardedPortHeaders != null && xForwardedPortHeaders.size() > 0) {
-				String xForwardedPortHeader = trimAggressivelyToNull(xForwardedPortHeaders.stream().findFirst().get());
-				portAsString = xForwardedPortHeader;
-
-				if (xForwardedPortHeader != null)
-					portExplicit = true;
 			}
 		}
 

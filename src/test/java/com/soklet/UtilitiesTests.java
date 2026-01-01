@@ -180,6 +180,13 @@ public class UtilitiesTests {
 				"X-Forwarded-Protocol", Set.of("https")
 		)).orElse(null);
 		assertEquals("https://www.soklet.com", clientUrlPrefix, "Client URL prefix was not correctly detected");
+
+		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+				"Host", Set.of("internal.soklet.local"),
+				"X-Forwarded-Host", Set.of("www.soklet.com"),
+				"X-Forwarded-Proto", Set.of("https")
+		)).orElse(null);
+		assertEquals("https://www.soklet.com", clientUrlPrefix, "Forwarded host should override Host header");
 	}
 
 	@Test
@@ -470,6 +477,19 @@ public class UtilitiesTests {
 		Optional<String> prefix = Utilities.extractClientUrlPrefixFromHeaders(headers);
 		Assertions.assertTrue(prefix.isPresent());
 		Assertions.assertEquals("https://example.com:443", prefix.get());
+	}
+
+	@Test
+	public void forwardedHeaderLists_useFirstEntry() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Host", Set.of("internal.soklet.local"));
+		headers.put("X-Forwarded-Host", Set.of("public.soklet.com, internal.soklet.local"));
+		headers.put("X-Forwarded-Proto", Set.of("https, http"));
+		headers.put("X-Forwarded-Port", Set.of("8443, 8080"));
+
+		Optional<String> prefix = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		Assertions.assertTrue(prefix.isPresent());
+		Assertions.assertEquals("https://public.soklet.com:8443", prefix.get());
 	}
 
 	@Test
