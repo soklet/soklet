@@ -1446,6 +1446,8 @@ public interface MetricsCollector {
 	 * Acquires a threadsafe {@link MetricsCollector} instance that performs no work.
 	 * <p>
 	 * This method is useful when you want to explicitly disable metrics collection without writing your own implementation.
+	 * <p>
+	 * The returned instance is guaranteed to be a JVM-wide singleton.
 	 *
 	 * @return a no-op {@code MetricsCollector}
 	 */
