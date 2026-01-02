@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -144,49 +146,98 @@ public class UtilitiesTests {
 	}
 
 	@Test
-	public void clientUrlPrefixFromHeaders() {
-		String clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of()).orElse(null);
-		assertEquals(null, clientUrlPrefix, "Client URL prefix erroneously detected from incomplete header data");
+	public void effectiveOriginFromHeaders() {
+		String effectiveOrigin = extractEffectiveOrigin(Map.of()).orElse(null);
+		assertEquals(null, effectiveOrigin, "Client URL prefix erroneously detected from incomplete header data");
 
-		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+		effectiveOrigin = extractEffectiveOrigin(Map.of(
 				"Host", Set.of("www.soklet.com")
 		)).orElse(null);
-		assertEquals(null, clientUrlPrefix, "Client URL prefix erroneously detected from incomplete header data");
+		assertEquals(null, effectiveOrigin, "Client URL prefix erroneously detected from incomplete header data");
 
-		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+		effectiveOrigin = extractEffectiveOrigin(Map.of(
 				"Host", Set.of("www.soklet.com:443")
 		)).orElse(null);
-		assertEquals(null, clientUrlPrefix, "Client URL prefix erroneously detected from incomplete header data");
+		assertEquals(null, effectiveOrigin, "Client URL prefix erroneously detected from incomplete header data");
 
-		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+		effectiveOrigin = extractEffectiveOrigin(Map.of(
 				"Forwarded", Set.of("for=12.34.56.78;host=example.com;proto=https, for=23.45.67.89")
 		)).orElse(null);
-		assertEquals("https://example.com", clientUrlPrefix, "Client URL prefix was not correctly detected");
+		assertEquals("https://example.com", effectiveOrigin, "Client URL prefix was not correctly detected");
 
-		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+		effectiveOrigin = extractEffectiveOrigin(Map.of(
 				"Host", Set.of("www.soklet.com"),
 				"X-Forwarded-Proto", Set.of("https")
 		)).orElse(null);
-		assertEquals("https://www.soklet.com", clientUrlPrefix, "Client URL prefix was not correctly detected");
+		assertEquals("https://www.soklet.com", effectiveOrigin, "Client URL prefix was not correctly detected");
 
-		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+		effectiveOrigin = extractEffectiveOrigin(Map.of(
 				"Host", Set.of("www.soklet.com"),
 				"X-Forwarded-Proto", Set.of("https")
 		)).orElse(null);
-		assertEquals("https://www.soklet.com", clientUrlPrefix, "Client URL prefix was not correctly detected");
+		assertEquals("https://www.soklet.com", effectiveOrigin, "Client URL prefix was not correctly detected");
 
-		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+		effectiveOrigin = extractEffectiveOrigin(Map.of(
 				"X-Forwarded-Host", Set.of("www.soklet.com"),
 				"X-Forwarded-Protocol", Set.of("https")
 		)).orElse(null);
-		assertEquals("https://www.soklet.com", clientUrlPrefix, "Client URL prefix was not correctly detected");
+		assertEquals("https://www.soklet.com", effectiveOrigin, "Client URL prefix was not correctly detected");
 
-		clientUrlPrefix = Utilities.extractClientUrlPrefixFromHeaders(Map.of(
+		effectiveOrigin = extractEffectiveOrigin(Map.of(
 				"Host", Set.of("internal.soklet.local"),
 				"X-Forwarded-Host", Set.of("www.soklet.com"),
 				"X-Forwarded-Proto", Set.of("https")
 		)).orElse(null);
-		assertEquals("https://www.soklet.com", clientUrlPrefix, "Forwarded host should override Host header");
+		assertEquals("https://www.soklet.com", effectiveOrigin, "Forwarded host should override Host header");
+	}
+
+	@Test
+	public void effectiveOriginFromHeaders_respectsTrustPolicy() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"Host", Set.of("internal.soklet.local"),
+				"X-Forwarded-Host", Set.of("public.soklet.com"),
+				"X-Forwarded-Proto", Set.of("https")
+		);
+
+		InetSocketAddress remoteAddress = new InetSocketAddress(InetAddress.getByName("203.0.113.10"), 1234);
+
+		assertEquals(Optional.empty(),
+				Utilities.extractEffectiveOrigin(
+						Utilities.EffectiveOriginResolver.withHeaders(headers, Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
+								.remoteAddress(remoteAddress)
+				));
+
+		assertEquals(Optional.empty(),
+				Utilities.extractEffectiveOrigin(
+						Utilities.EffectiveOriginResolver.withHeaders(headers, Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST)
+								.remoteAddress(remoteAddress)
+								.trustedProxyAddresses(Set.of(InetAddress.getByName("203.0.113.11")))
+				));
+
+		assertEquals(Optional.of("https://public.soklet.com"),
+				Utilities.extractEffectiveOrigin(
+						Utilities.EffectiveOriginResolver.withHeaders(headers, Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST)
+								.remoteAddress(remoteAddress)
+								.trustedProxyAddresses(Set.of(InetAddress.getByName("203.0.113.10")))
+				));
+	}
+
+	@Test
+	public void effectiveOriginFromHeaders_originFallbackHonorsSettings() {
+		Map<String, Set<String>> headers = Map.of(
+				"Origin", Set.of("https://api.example.com:8443")
+		);
+
+		assertEquals(Optional.empty(),
+				Utilities.extractEffectiveOrigin(
+						Utilities.EffectiveOriginResolver.withHeaders(headers, Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
+				));
+
+		assertEquals(Optional.of("https://api.example.com:8443"),
+				Utilities.extractEffectiveOrigin(
+						Utilities.EffectiveOriginResolver.withHeaders(headers, Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
+								.allowOriginFallback(true)
+				));
 	}
 
 	@Test
@@ -420,7 +471,7 @@ public class UtilitiesTests {
 		headers.put("Host", Set.of("[2001:db8::1]:8080"));
 		headers.put("X-Forwarded-Proto", Set.of("https"));
 
-		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
 		Assertions.assertEquals("https://[2001:db8::1]:8080", url.get());
 	}
@@ -430,7 +481,7 @@ public class UtilitiesTests {
 		Map<String, Set<String>> headers = new HashMap<>();
 		headers.put("Forwarded", Set.of("for=\"[2001:db8::1]\"; host=\"[2001:db8::1]:8443\"; proto=https"));
 
-		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
 		Assertions.assertEquals("https://[2001:db8::1]:8443", url.get());
 	}
@@ -440,7 +491,7 @@ public class UtilitiesTests {
 		Map<String, Set<String>> headers = new HashMap<>();
 		headers.put("Origin", Set.of("http://[2001:db8::1]:12345"));
 
-		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
 		Assertions.assertEquals("http://[2001:db8::1]:12345", url.get());
 	}
@@ -452,7 +503,7 @@ public class UtilitiesTests {
 		headers.put("X-Forwarded-Proto", Set.of("https"));
 		headers.put("Origin", Set.of("https://evil.example.net"));
 
-		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
 		Assertions.assertEquals("https://api.example.com", url.get());
 	}
@@ -463,7 +514,7 @@ public class UtilitiesTests {
 		headers.put("Host", Set.of("api.example.com"));
 		headers.put("Origin", Set.of("https://api.example.com:8443"));
 
-		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
 		Assertions.assertEquals("https://api.example.com:8443", url.get());
 	}
@@ -474,7 +525,7 @@ public class UtilitiesTests {
 				"Forwarded", Set.of("for=203.0.113.60; proto=\"https\"; host=\"example.com:443\"")
 		);
 
-		Optional<String> prefix = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isPresent());
 		Assertions.assertEquals("https://example.com:443", prefix.get());
 	}
@@ -487,7 +538,7 @@ public class UtilitiesTests {
 		headers.put("X-Forwarded-Proto", Set.of("https, http"));
 		headers.put("X-Forwarded-Port", Set.of("8443, 8080"));
 
-		Optional<String> prefix = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		Optional<String> prefix = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(prefix.isPresent());
 		Assertions.assertEquals("https://public.soklet.com:8443", prefix.get());
 	}
@@ -525,7 +576,7 @@ public class UtilitiesTests {
 		Map<String, Set<String>> headers = new HashMap<>();
 		headers.put("Forwarded", Set.of("for=\"[2001:db8::1]\"; host=\"example.com:8443\"; proto=\"https\""));
 
-		var url = Utilities.extractClientUrlPrefixFromHeaders(headers);
+		var url = extractEffectiveOrigin(headers);
 		Assertions.assertTrue(url.isPresent(), "URL prefix should be detected");
 		Assertions.assertEquals("https://example.com:8443", url.get());
 	}
@@ -669,7 +720,16 @@ public class UtilitiesTests {
 
 		assertEquals(
 				Optional.of("https://www.example.com"),
-				Utilities.extractClientUrlPrefixFromHeaders(headers)
+				extractEffectiveOrigin(headers)
+		);
+	}
+
+	private static Optional<String> extractEffectiveOrigin(Map<String, Set<String>> headers) {
+		return Utilities.extractEffectiveOrigin(
+				Utilities.EffectiveOriginResolver.withHeaders(
+						headers,
+						Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_ALL
+				)
 		);
 	}
 

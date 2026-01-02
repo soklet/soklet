@@ -21,6 +21,7 @@ import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.lang.Thread.UncaughtExceptionHandler;
@@ -28,6 +29,8 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
@@ -52,6 +55,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -840,11 +844,11 @@ public final class Utilities {
 					locales.add(locale);
 			}
 
-		return Collections.unmodifiableList(locales);
-	} catch (Exception ignored) {
-		return List.of();
+			return Collections.unmodifiableList(locales);
+		} catch (Exception ignored) {
+			return List.of();
+		}
 	}
-}
 
 	@Nullable
 	private static String firstHeaderValue(@Nullable Set<String> headerValues) {
@@ -867,11 +871,11 @@ public final class Utilities {
 	}
 
 	/**
-	 * Best-effort attempt to determine a client's URL prefix by examining request headers.
+	 * Best-effort attempt to determine a client's effective origin by examining request headers.
 	 * <p>
-	 * A URL prefix in this context is defined as {@code <scheme>://host<:optional port>}, but no path or query components.
+	 * An effective origin in this context is defined as {@code <scheme>://host<:optional port>}, but no path or query components.
 	 * <p>
-	 * Soklet is generally the "last hop" behind a load balancer/reverse proxy and does get accessed directly by clients.
+	 * Soklet is generally the "last hop" behind a load balancer/reverse proxy but may also be accessed directly by clients.
 	 * <p>
 	 * Normally a load balancer/reverse proxy/other upstream proxies will provide information about the true source of the
 	 * request through headers like the following:
@@ -888,15 +892,15 @@ public final class Utilities {
 	 *   <li>{@code X-Forwarded-Port}</li>
 	 * </ul>
 	 * <p>
-	 * This method may take these and other headers into account when determining URL prefix.
+	 * This method may take these and other headers into account when determining an effective origin.
 	 * <p>
-	 * For example, the following would be legal URL prefixes returned from this method:
+	 * For example, the following would be legal effective origins returned from this method:
 	 * <ul>
 	 *   <li>{@code https://www.soklet.com}</li>
 	 *   <li>{@code http://www.fake.com:1234}</li>
 	 * </ul>
 	 * <p>
-	 * The following would NOT be legal URL prefixes:
+	 * The following would NOT be legal effective origins:
 	 * <ul>
 	 *   <li>{@code www.soklet.com} (missing protocol) </li>
 	 *   <li>{@code https://www.soklet.com/} (trailing slash)</li>
@@ -905,13 +909,35 @@ public final class Utilities {
 	 * </ul>
 	 * <p>
 	 * {@code Origin} is treated as a fallback signal only and will not override a conflicting {@code Host} or forwarded host value.
+	 * <p>
+	 * Forwarded headers are only used when permitted by {@link EffectiveOriginResolver.TrustPolicy}. When using
+	 * {@link EffectiveOriginResolver.TrustPolicy#TRUST_PROXY_ALLOWLIST}, you must provide a trusted proxy predicate or allowlist.
+	 * If the remote address is missing or not trusted, forwarded headers are ignored.
+	 * <p>
+	 * Extraction order is: trusted forwarded headers → {@code Host} → (optional) {@code Origin} fallback.
+	 * If {@link EffectiveOriginResolver#allowOriginFallback(Boolean)} is unset, {@code Origin} fallback is enabled only for
+	 * {@link EffectiveOriginResolver.TrustPolicy#TRUST_ALL}.
 	 *
-	 * @param headers HTTP request headers
-	 * @return the URL prefix, or {@link Optional#empty()} if it could not be determined
+	 * @param effectiveOriginResolver request headers and trust settings
+	 * @return the effective origin, or {@link Optional#empty()} if it could not be determined
 	 */
 	@NonNull
-	public static Optional<String> extractClientUrlPrefixFromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
-		requireNonNull(headers);
+	public static Optional<String> extractEffectiveOrigin(@NonNull EffectiveOriginResolver effectiveOriginResolver) {
+		requireNonNull(effectiveOriginResolver);
+		requireNonNull(effectiveOriginResolver.headers);
+		requireNonNull(effectiveOriginResolver.trustPolicy);
+
+		if (effectiveOriginResolver.trustPolicy == EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST
+				&& effectiveOriginResolver.trustedProxyPredicate == null) {
+			throw new IllegalStateException(format("%s policy requires a trusted proxy predicate or allowlist.",
+					EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST));
+		}
+
+		Map<String, Set<String>> headers = effectiveOriginResolver.headers;
+		boolean trustForwardedHeaders = shouldTrustForwardedHeaders(effectiveOriginResolver);
+		boolean allowOriginFallback = effectiveOriginResolver.allowOriginFallback != null
+				? effectiveOriginResolver.allowOriginFallback
+				: effectiveOriginResolver.trustPolicy == EffectiveOriginResolver.TrustPolicy.TRUST_ALL;
 
 		// Host                   developer.mozilla.org OR developer.mozilla.org:443 OR [2001:db8::1]:8443
 		// Forwarded              by=<identifier>;for=<identifier>;host=<host>;proto=<http|https> (can be repeated if comma-separated, e.g. for=12.34.56.78;host=example.com;proto=https, for=23.45.67.89)
@@ -930,82 +956,84 @@ public final class Utilities {
 		Boolean portExplicit = false;
 
 		// Forwarded: by=<identifier>;for=<identifier>;host=<host>;proto=<http|https>
-		String forwardedHeader = firstHeaderValue(headers.get("Forwarded"));
-		if (forwardedHeader != null) {
-			// Each field component might look like "by=<identifier>"
-			String[] forwardedHeaderFieldComponents = forwardedHeader.split(";");
-			for (String forwardedHeaderFieldComponent : forwardedHeaderFieldComponents) {
-				forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
-				if (forwardedHeaderFieldComponent == null)
-					continue;
+		if (trustForwardedHeaders) {
+			String forwardedHeader = firstHeaderValue(headers.get("Forwarded"));
+			if (forwardedHeader != null) {
+				// Each field component might look like "by=<identifier>"
+				String[] forwardedHeaderFieldComponents = forwardedHeader.split(";");
+				for (String forwardedHeaderFieldComponent : forwardedHeaderFieldComponents) {
+					forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
+					if (forwardedHeaderFieldComponent == null)
+						continue;
 
-				// Break "by=<identifier>" into "by" and "<identifier>" pieces
-				String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("=" /* escape special Regex char */));
-				if (forwardedHeaderFieldNameAndValue.length != 2)
-					continue;
+					// Break "by=<identifier>" into "by" and "<identifier>" pieces
+					String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("=" /* escape special Regex char */));
+					if (forwardedHeaderFieldNameAndValue.length != 2)
+						continue;
 
-				String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
-				String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
-				if (name == null || value == null)
-					continue;
+					String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
+					String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
+					if (name == null || value == null)
+						continue;
 
-				if ("host".equalsIgnoreCase(name)) {
-					if (host == null) {
-						HostPort hostPort = parseHostPort(value).orElse(null);
+					if ("host".equalsIgnoreCase(name)) {
+						if (host == null) {
+							HostPort hostPort = parseHostPort(value).orElse(null);
 
-						if (hostPort != null) {
-							host = hostPort.getHost();
+							if (hostPort != null) {
+								host = hostPort.getHost();
 
-							if (hostPort.getPort().isPresent()) {
-								portAsString = String.valueOf(hostPort.getPort().get());
-								portExplicit = true;
+								if (hostPort.getPort().isPresent()) {
+									portAsString = String.valueOf(hostPort.getPort().get());
+									portExplicit = true;
+								}
 							}
 						}
+					} else if ("proto".equalsIgnoreCase(name)) {
+						if (protocol == null)
+							protocol = stripOptionalQuotes(value);
 					}
-				} else if ("proto".equalsIgnoreCase(name)) {
-					if (protocol == null)
-						protocol = stripOptionalQuotes(value);
 				}
 			}
 		}
 
 		// X-Forwarded-Proto: https
-		if (protocol == null) {
+		if (trustForwardedHeaders && protocol == null) {
 			String xForwardedProtoHeader = firstHeaderValue(headers.get("X-Forwarded-Proto"));
 			if (xForwardedProtoHeader != null)
 				protocol = stripOptionalQuotes(xForwardedProtoHeader);
 		}
 
 		// X-Forwarded-Protocol: https (Microsoft's alternate name)
-		if (protocol == null) {
+		if (trustForwardedHeaders && protocol == null) {
 			String xForwardedProtocolHeader = firstHeaderValue(headers.get("X-Forwarded-Protocol"));
 			if (xForwardedProtocolHeader != null)
 				protocol = stripOptionalQuotes(xForwardedProtocolHeader);
 		}
 
 		// X-Url-Scheme: https (Microsoft's alternate name)
-		if (protocol == null) {
+		if (trustForwardedHeaders && protocol == null) {
 			String xUrlSchemeHeader = firstHeaderValue(headers.get("X-Url-Scheme"));
 			if (xUrlSchemeHeader != null)
 				protocol = stripOptionalQuotes(xUrlSchemeHeader);
 		}
 
 		// Front-End-Https: on (Microsoft's alternate name)
-		if (protocol == null) {
+		if (trustForwardedHeaders && protocol == null) {
 			String frontEndHttpsHeader = firstHeaderValue(headers.get("Front-End-Https"));
 			if (frontEndHttpsHeader != null)
 				protocol = "on".equalsIgnoreCase(frontEndHttpsHeader) ? "https" : "http";
 		}
 
 		// X-Forwarded-Ssl: on (Microsoft's alternate name)
-		if (protocol == null) {
+		if (trustForwardedHeaders && protocol == null) {
 			String xForwardedSslHeader = firstHeaderValue(headers.get("X-Forwarded-Ssl"));
 			if (xForwardedSslHeader != null)
 				protocol = "on".equalsIgnoreCase(xForwardedSslHeader) ? "https" : "http";
 		}
 
 		// X-Forwarded-Host: id42.example-cdn.com (or with port / IPv6)
-		if (host == null) {
+		if (trustForwardedHeaders && host == null) {
 			String xForwardedHostHeader = firstHeaderValue(headers.get("X-Forwarded-Host"));
 			if (xForwardedHostHeader != null) {
 				HostPort hostPort = parseHostPort(xForwardedHostHeader).orElse(null);
@@ -1022,7 +1050,7 @@ public final class Utilities {
 		}
 
 		// X-Forwarded-Port: 443
-		if (portAsString == null) {
+		if (trustForwardedHeaders && portAsString == null) {
 			String xForwardedPortHeader = firstHeaderValue(headers.get("X-Forwarded-Port"));
 			if (xForwardedPortHeader != null) {
 				portAsString = stripOptionalQuotes(xForwardedPortHeader);
@@ -1050,7 +1078,7 @@ public final class Utilities {
 
 		// Origin: null OR <scheme>://<hostname> OR <scheme>://<hostname>:<port> (IPv6 supported)
 		// Use Origin only when host is missing or when it matches the Host-derived value.
-		if (protocol == null || host == null || portAsString == null) {
+		if (allowOriginFallback && (protocol == null || host == null || portAsString == null)) {
 			String originHeader = firstHeaderValue(headers.get("Origin"));
 
 			if (originHeader != null) {
@@ -1111,14 +1139,170 @@ public final class Utilities {
 							("https".equalsIgnoreCase(protocol) && port.equals(443));
 
 			// Keep default ports if the client/proxy explicitly sent them
-			String clientUrlPrefix = (usingDefaultPort && !portExplicit)
+			String effectiveOrigin = (usingDefaultPort && !portExplicit)
 					? format("%s://%s", protocol, host)
 					: format("%s://%s:%s", protocol, host, port);
 
-			return Optional.of(clientUrlPrefix);
+			return Optional.of(effectiveOrigin);
 		}
 
 		return Optional.empty();
+	}
+
+	private static boolean shouldTrustForwardedHeaders(@NonNull EffectiveOriginResolver effectiveOriginResolver) {
+		if (effectiveOriginResolver.trustPolicy == EffectiveOriginResolver.TrustPolicy.TRUST_ALL)
+			return true;
+
+		if (effectiveOriginResolver.trustPolicy == EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
+			return false;
+
+		if (effectiveOriginResolver.remoteAddress == null || effectiveOriginResolver.trustedProxyPredicate == null)
+			return false;
+
+		return effectiveOriginResolver.trustedProxyPredicate.test(effectiveOriginResolver.remoteAddress);
+	}
+
+	/**
+	 * Builder for {@link #extractEffectiveOrigin(EffectiveOriginResolver)}.
+	 * <p>
+	 * Packages the inputs needed to reconstruct a client origin (scheme + host + optional port) from request headers.
+	 * The resulting value never includes a path or query component.
+	 * <p>
+	 * Forwarded headers can be spoofed if Soklet is reachable directly. Choose a {@link TrustPolicy} that matches your
+	 * deployment and, for {@link TrustPolicy#TRUST_PROXY_ALLOWLIST}, provide a trusted proxy predicate or allowlist.
+	 * If the remote address is missing or not trusted, forwarded headers are ignored.
+	 * <p>
+	 * Extraction order is: trusted forwarded headers → {@code Host} → (optional) {@code Origin} fallback. {@code Origin}
+	 * never overrides a conflicting host value; it only fills missing scheme/port or supplies host when absent.
+	 * <p>
+	 * Defaults: if {@link #allowOriginFallback(Boolean)} is left unset, {@code Origin} fallback is enabled only for
+	 * {@link TrustPolicy#TRUST_ALL}; otherwise it is disabled.
+	 */
+	@NotThreadSafe
+	public static final class EffectiveOriginResolver {
+		@NonNull
+		private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+		@NonNull
+		private final TrustPolicy trustPolicy;
+		@Nullable
+		private InetSocketAddress remoteAddress;
+		@Nullable
+		private Predicate<InetSocketAddress> trustedProxyPredicate;
+		@Nullable
+		private Boolean allowOriginFallback;
+
+		/**
+		 * Acquires a builder seeded with raw request headers and a trust policy.
+		 *
+		 * @param headers     HTTP request headers
+		 * @param trustPolicy how forwarded headers should be trusted
+		 * @return the builder
+		 */
+		@NonNull
+		public static EffectiveOriginResolver withHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+																											@NonNull TrustPolicy trustPolicy) {
+			requireNonNull(headers);
+			requireNonNull(trustPolicy);
+			return new EffectiveOriginResolver(headers, trustPolicy);
+		}
+
+		/**
+		 * Acquires a builder seeded with a {@link Request} and a trust policy.
+		 *
+		 * @param request     the current request
+		 * @param trustPolicy how forwarded headers should be trusted
+		 * @return the builder
+		 */
+		@NonNull
+		public static EffectiveOriginResolver withRequest(@NonNull Request request,
+																										@NonNull TrustPolicy trustPolicy) {
+			requireNonNull(request);
+			EffectiveOriginResolver resolver = withHeaders(request.getHeaders(), trustPolicy);
+			resolver.remoteAddress = request.getRemoteAddress().orElse(null);
+			return resolver;
+		}
+
+		private EffectiveOriginResolver(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+																		@NonNull TrustPolicy trustPolicy) {
+			this.headers = headers;
+			this.trustPolicy = trustPolicy;
+		}
+
+		/**
+		 * The remote address of the client connection.
+		 *
+		 * @param remoteAddress the remote address, or {@code null} if unavailable
+		 * @return this builder
+		 */
+		@NonNull
+		public EffectiveOriginResolver remoteAddress(@Nullable InetSocketAddress remoteAddress) {
+			this.remoteAddress = remoteAddress;
+			return this;
+		}
+
+		/**
+		 * Predicate used when {@link TrustPolicy#TRUST_PROXY_ALLOWLIST} is in effect.
+		 *
+		 * @param trustedProxyPredicate predicate that returns {@code true} for trusted proxies
+		 * @return this builder
+		 */
+		@NonNull
+		public EffectiveOriginResolver trustedProxyPredicate(@Nullable Predicate<InetSocketAddress> trustedProxyPredicate) {
+			this.trustedProxyPredicate = trustedProxyPredicate;
+			return this;
+		}
+
+		/**
+		 * Allows specifying an IP allowlist for trusted proxies.
+		 *
+		 * @param trustedProxyAddresses IP addresses of trusted proxies
+		 * @return this builder
+		 */
+		@NonNull
+		public EffectiveOriginResolver trustedProxyAddresses(@NonNull Set<@NonNull InetAddress> trustedProxyAddresses) {
+			requireNonNull(trustedProxyAddresses);
+			Set<InetAddress> normalizedAddresses = Set.copyOf(trustedProxyAddresses);
+			this.trustedProxyPredicate = remoteAddress -> {
+				if (remoteAddress == null)
+					return false;
+
+				InetAddress address = remoteAddress.getAddress();
+				return address != null && normalizedAddresses.contains(address);
+			};
+			return this;
+		}
+
+		/**
+		 * Controls whether {@code Origin} is used as a fallback signal when determining the client URL prefix.
+		 *
+		 * @param allowOriginFallback {@code true} to allow {@code Origin} fallback, {@code false} to disable it
+		 * @return this builder
+		 */
+		@NonNull
+		public EffectiveOriginResolver allowOriginFallback(@Nullable Boolean allowOriginFallback) {
+			this.allowOriginFallback = allowOriginFallback;
+			return this;
+		}
+
+		/**
+		 * Forwarded header trust policy.
+		 */
+		public enum TrustPolicy {
+			/**
+			 * Trust forwarded headers from any source.
+			 */
+			TRUST_ALL,
+
+			/**
+			 * Trust forwarded headers only from proxies in a configured allowlist.
+			 */
+			TRUST_PROXY_ALLOWLIST,
+
+			/**
+			 * Ignore forwarded headers entirely.
+			 */
+			TRUST_NONE
+		}
 	}
 
 	/**
