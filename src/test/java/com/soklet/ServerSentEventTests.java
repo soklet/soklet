@@ -215,6 +215,25 @@ public class ServerSentEventTests {
 		Assertions.assertEquals(2, errorCount.get(), "Unexpected number of unicast errors");
 	}
 
+	@Test
+	public void parseTooLargeRequestPreservesHeaders() {
+		ServerSentEventServer serverSentEventServer = ServerSentEventServer.withPort(0).build();
+		DefaultServerSentEventServer defaultServerSentEventServer = (DefaultServerSentEventServer) serverSentEventServer;
+
+		String rawRequest = "GET /events HTTP/1.1\r\n" +
+				"Host: example.com\r\n" +
+				"X-Trace-Id: abc123\r\n" +
+				"\r\n";
+
+		Optional<Request> request = defaultServerSentEventServer.parseTooLargeRequestForRawRequest(rawRequest);
+		Assertions.assertTrue(request.isPresent(), "Expected request to parse from truncated data");
+
+		Request parsedRequest = request.get();
+		Assertions.assertTrue(parsedRequest.isContentTooLarge(), "Expected request to be flagged as too large");
+		Assertions.assertEquals(Optional.of("example.com"), parsedRequest.getHeader("Host"));
+		Assertions.assertEquals(Optional.of("abc123"), parsedRequest.getHeader("X-Trace-Id"));
+	}
+
 	@ThreadSafe
 	protected static class ServerSentEventResource {
 		@NonNull

@@ -2634,8 +2634,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		String firstLine = null;
 
 		int crLfIndex = rawRequest.indexOf("\r\n");
-		if (crLfIndex == -1)
+		int firstLineSeparatorLength = 2;
+		if (crLfIndex == -1) {
 			crLfIndex = rawRequest.indexOf('\n');
+			firstLineSeparatorLength = 1;
+		}
 
 		if (crLfIndex != -1)
 			firstLine = rawRequest.substring(0, crLfIndex).trim();
@@ -2683,9 +2686,40 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			rawUri = rawQuery == null ? rawPath : rawPath + "?" + rawQuery;
 		}
 
-		// TODO: eventually would be nice to parse headers as best we can.  For now, we just parse the first request line
+		List<String> rawHeaderLines = new ArrayList<>();
+		int headerStartIndex = crLfIndex + firstLineSeparatorLength;
+		int cursor = headerStartIndex;
+
+		while (cursor < rawRequest.length()) {
+			int nextCrLfIndex = rawRequest.indexOf("\r\n", cursor);
+			int nextLfIndex = rawRequest.indexOf('\n', cursor);
+			int lineEndIndex;
+			int lineSeparatorLength;
+
+			if (nextCrLfIndex == -1 && nextLfIndex == -1) {
+				lineEndIndex = rawRequest.length();
+				lineSeparatorLength = 0;
+			} else if (nextCrLfIndex != -1 && (nextLfIndex == -1 || nextCrLfIndex < nextLfIndex)) {
+				lineEndIndex = nextCrLfIndex;
+				lineSeparatorLength = 2;
+			} else {
+				lineEndIndex = nextLfIndex;
+				lineSeparatorLength = 1;
+			}
+
+			String headerLine = rawRequest.substring(cursor, lineEndIndex);
+			if (headerLine.length() == 0)
+				break;
+
+			rawHeaderLines.add(headerLine);
+			cursor = lineEndIndex + lineSeparatorLength;
+		}
+
+		Map<String, Set<String>> headers = Utilities.extractHeadersFromRawHeaderLines(rawHeaderLines);
+
 		return Optional.of(Request.withRawUrl(httpMethod, rawUri)
 				.idGenerator(getIdGenerator())
+				.headers(headers)
 				.contentTooLarge(true)
 				.build());
 	}

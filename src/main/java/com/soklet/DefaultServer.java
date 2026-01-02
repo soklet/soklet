@@ -48,12 +48,14 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -95,6 +97,8 @@ final class DefaultServer implements Server {
 	private static final Integer DEFAULT_MAXIMUM_CONNECTIONS;
 	@NonNull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
+	@NonNull
+	private static final Integer DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -107,6 +111,7 @@ final class DefaultServer implements Server {
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
 		DEFAULT_MAXIMUM_CONNECTIONS = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
+		DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER = 64;
 	}
 
 	@NonNull
@@ -180,7 +185,16 @@ final class DefaultServer implements Server {
 							.build());
 				});
 
-			return Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(), new NonvirtualThreadFactory(threadNamePrefix));
+			int threadPoolSize = Runtime.getRuntime().availableProcessors();
+			int queueCapacity = Math.max(1, threadPoolSize * DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER);
+
+			return new ThreadPoolExecutor(
+					threadPoolSize,
+					threadPoolSize,
+					0L,
+					TimeUnit.MILLISECONDS,
+					new ArrayBlockingQueue<>(queueCapacity),
+					new NonvirtualThreadFactory(threadNamePrefix));
 		};
 
 		if (this.requestHandlerTimeout.isNegative() || this.requestHandlerTimeout.isZero())
