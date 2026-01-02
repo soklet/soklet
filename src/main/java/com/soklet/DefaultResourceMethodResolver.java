@@ -142,6 +142,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		this.methodsByHttpMethod = Collections.unmodifiableMap(byHttp);
 		this.httpMethodResourcePathDeclarationsByMethod = Collections.unmodifiableMap(byMethod);
 		this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
+		validateNoAmbiguousResourceMethods(this.resourceMethods);
 	}
 
 	@ThreadSafe
@@ -314,6 +315,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 
 		this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
+		validateNoAmbiguousResourceMethods(this.resourceMethods);
 	}
 
 	@NonNull
@@ -490,6 +492,148 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		return resourceMethod.getResourcePathDeclaration().getComponents().stream()
 				.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.LITERAL)
 				.count();
+	}
+
+	private static void validateNoAmbiguousResourceMethods(@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
+		requireNonNull(resourceMethods);
+
+		if (resourceMethods.size() < 2)
+			return;
+
+		Map<SpecificityKey, List<ResourceMethod>> groups = new HashMap<>();
+
+		for (ResourceMethod resourceMethod : resourceMethods) {
+			ResourcePathDeclaration declaration = resourceMethod.getResourcePathDeclaration();
+			boolean hasVarargs = declaration.getVarargsComponent().isPresent();
+
+			SpecificityKey key = new SpecificityKey(
+					resourceMethod.getHttpMethod(),
+					resourceMethod.isServerSentEventSource(),
+					hasVarargs,
+					placeholderCount(resourceMethod),
+					literalCount(resourceMethod));
+
+			groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(resourceMethod);
+		}
+
+		List<String> ambiguousPairs = new ArrayList<>();
+
+		for (List<ResourceMethod> group : groups.values()) {
+			if (group.size() < 2)
+				continue;
+
+			for (int i = 0; i < group.size(); i++) {
+				ResourceMethod first = group.get(i);
+				for (int j = i + 1; j < group.size(); j++) {
+					ResourceMethod second = group.get(j);
+					if (resourcePathDeclarationsOverlap(first.getResourcePathDeclaration(),
+							second.getResourcePathDeclaration())) {
+						ambiguousPairs.add(format("%s vs %s",
+								describeResourceMethod(first),
+								describeResourceMethod(second)));
+					}
+				}
+			}
+		}
+
+		if (!ambiguousPairs.isEmpty()) {
+			throw new IllegalStateException(format(
+					"Ambiguous resource method declarations detected. These routes are equally specific and overlap:\n%s",
+					String.join("\n", ambiguousPairs)));
+		}
+	}
+
+	private static String describeResourceMethod(@NonNull ResourceMethod resourceMethod) {
+		requireNonNull(resourceMethod);
+
+		String serverType = resourceMethod.isServerSentEventSource() ? "SSE" : "HTTP";
+		return format("%s %s %s -> %s",
+				serverType,
+				resourceMethod.getHttpMethod().name(),
+				resourceMethod.getResourcePathDeclaration().getPath(),
+				resourceMethod.getMethod().toString());
+	}
+
+	private static boolean resourcePathDeclarationsOverlap(@NonNull ResourcePathDeclaration first,
+																												 @NonNull ResourcePathDeclaration second) {
+		requireNonNull(first);
+		requireNonNull(second);
+
+		List<ResourcePathDeclaration.Component> firstComponents = first.getComponents();
+		List<ResourcePathDeclaration.Component> secondComponents = second.getComponents();
+
+		boolean firstHasVarargs = first.getVarargsComponent().isPresent();
+		boolean secondHasVarargs = second.getVarargsComponent().isPresent();
+
+		int firstPrefixLength = firstComponents.size() - (firstHasVarargs ? 1 : 0);
+		int secondPrefixLength = secondComponents.size() - (secondHasVarargs ? 1 : 0);
+
+		if (!firstHasVarargs && !secondHasVarargs) {
+			if (firstComponents.size() != secondComponents.size())
+				return false;
+
+			for (int i = 0; i < firstComponents.size(); i++)
+				if (!componentsCompatible(firstComponents.get(i), secondComponents.get(i)))
+					return false;
+
+			return true;
+		}
+
+		if (firstHasVarargs && !secondHasVarargs) {
+			if (secondComponents.size() < firstPrefixLength)
+				return false;
+
+			for (int i = 0; i < firstPrefixLength; i++)
+				if (!componentsCompatible(firstComponents.get(i), secondComponents.get(i)))
+					return false;
+
+			return true;
+		}
+
+		if (!firstHasVarargs) {
+			if (firstComponents.size() < secondPrefixLength)
+				return false;
+
+			for (int i = 0; i < secondPrefixLength; i++)
+				if (!componentsCompatible(firstComponents.get(i), secondComponents.get(i)))
+					return false;
+
+			return true;
+		}
+
+		int minPrefixLength = Math.min(firstPrefixLength, secondPrefixLength);
+
+		for (int i = 0; i < minPrefixLength; i++)
+			if (!componentsCompatible(firstComponents.get(i), secondComponents.get(i)))
+				return false;
+
+		return true;
+	}
+
+	private static boolean componentsCompatible(ResourcePathDeclaration.@NonNull Component first,
+																							ResourcePathDeclaration.@NonNull Component second) {
+		requireNonNull(first);
+		requireNonNull(second);
+
+		if (first.getType() == ResourcePathDeclaration.ComponentType.LITERAL
+				&& second.getType() == ResourcePathDeclaration.ComponentType.LITERAL)
+			return first.getValue().equals(second.getValue());
+
+		return true;
+	}
+
+	private record SpecificityKey(@NonNull HttpMethod httpMethod,
+															 @NonNull Boolean serverSentEventSource,
+															 @NonNull Boolean hasVarargs,
+															 @NonNull Long placeholderCount,
+															 @NonNull Long literalCount) {
+		private SpecificityKey {
+			requireNonNull(httpMethod);
+			requireNonNull(serverSentEventSource);
+			requireNonNull(hasVarargs);
+			requireNonNull(placeholderCount);
+			requireNonNull(literalCount);
+		}
 	}
 
 	@NonNull
