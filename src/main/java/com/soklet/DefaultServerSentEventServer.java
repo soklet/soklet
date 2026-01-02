@@ -862,6 +862,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		AtomicReference<HandshakeResult.Accepted> handshakeAcceptedReference = new AtomicReference<>();
 		AtomicBoolean connectionSlotReserved = new AtomicBoolean(false);
 		AtomicBoolean handshakeResponseWritten = new AtomicBoolean(false);
+		AtomicBoolean acceptanceFinalized = new AtomicBoolean(false);
 		AtomicReference<ScheduledFuture<?>> handshakeTimeoutFutureRef = new AtomicReference<>();
 		InetSocketAddress remoteAddress = null;
 
@@ -874,7 +875,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				} catch (IOException ignored) {
 					// Best effort
 				}
-				// TODO: in a future version, we might introduce lifecycle interceptor option here and for Server for "will/didInitiateConnection"
+				notifyWillAcceptConnection(remoteAddress);
 				String rawRequest = readRequest(clientSocketChannel);
 				request = parseRequest(rawRequest, remoteAddress);
 			} catch (RequestTooLargeIOException e) {
@@ -883,6 +884,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (remoteAddress != null)
 					request = request.copy().remoteAddress(remoteAddress).finish();
 			} catch (IllegalRequestException e) {
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.UNPARSEABLE_REQUEST, e);
+
 				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
 						.throwable(e)
 						.build());
@@ -905,6 +909,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				return;
 			} catch (SocketTimeoutException e) {
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.REQUEST_READ_TIMEOUT, e);
+
 				// Request read timed out before we could parse a handshake, return 408 and close.
 				try {
 					synchronized (channelLock) {
@@ -924,6 +931,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				return;
 			} catch (Exception e) {
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
+
 				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
 						.throwable(e)
 						.build());
@@ -934,6 +944,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (request.getHttpMethod() == HttpMethod.GET)
 					validateNoRequestBodyHeaders(request);
 			} catch (IllegalRequestException e) {
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.HANDSHAKE_REJECTED, e);
+
 				try {
 					MarshaledResponse response = getResponseMarshaler().get().forThrowable(request, e, null);
 					synchronized (channelLock) {
@@ -962,6 +975,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// Fast-path check for overload (authoritative limit enforcement occurs after handshake acceptance)
 			if (resourcePathDeclaration != null && getActiveConnectionCount() >= getConcurrentConnectionLimit()) {
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.MAX_CONNECTIONS, null);
+
 				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
 						format("Rejecting request to %s: Concurrent connection limit (%d) reached", request.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
 
@@ -996,11 +1012,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
 			Thread handlerThread = Thread.currentThread();
+			InetSocketAddress remoteAddressSnapshot = remoteAddress;
 
 			if (requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
 				handshakeTimeoutFutureRef.set(requestHandlerTimeoutExecutorService.schedule(() -> {
 					if (!handshakeResponseWritten.compareAndSet(false, true))
 						return;
+
+					if (acceptanceFinalized.compareAndSet(false, true))
+						notifyDidFailToAcceptConnection(remoteAddressSnapshot, ConnectionRejectionReason.HANDSHAKE_TIMEOUT,
+								new TimeoutException("SSE handshake timed out"));
 
 					byte[] responseBytes = FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE;
 
@@ -1039,6 +1060,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			try {
+				InetSocketAddress remoteAddressSnapshotForHandler = remoteAddress;
 				getRequestHandler().get().handleRequest(requestForHandler, (@NonNull RequestResult requestResult) -> {
 					if (!handshakeResponseWritten.compareAndSet(false, true))
 						return;
@@ -1056,6 +1078,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							connectionSlotReserved.set(true);
 							handshakeAcceptedReference.set(accepted);
 						} else {
+							if (acceptanceFinalized.compareAndSet(false, true))
+								notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.MAX_CONNECTIONS, null);
+
 							safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
 									format("Rejecting request to %s: Concurrent connection limit (%d) reached", requestForHandler.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
 
@@ -1081,6 +1106,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						// Clear the accepted handshake reference in case it was set
 						handshakeAcceptedReference.set(null);
 						releaseReservedSlot(connectionSlotReserved);
+						if (acceptanceFinalized.compareAndSet(false, true))
+							notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.INTERNAL_ERROR, t);
 						handshakeHttpResponse = FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE;
 					}
 
@@ -1101,6 +1128,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						// Clear the accepted handshake reference in case it was set
 						handshakeAcceptedReference.set(null);
 						releaseReservedSlot(connectionSlotReserved);
+						if (acceptanceFinalized.compareAndSet(false, true))
+							notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.INTERNAL_ERROR, t);
 					}
 				});
 			} catch (Throwable t) {
@@ -1114,6 +1143,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						// best effort
 					}
 				}
+
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, t);
 
 				throw t;
 			}
@@ -1146,6 +1178,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, handshakeAccepted)
 						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
 				connectionSlotReserved.set(false);
+
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidAcceptConnection(remoteAddress);
 
 				DefaultServerSentEventConnection serverSentEventConnection = clientSocketChannelRegistration.serverSentEventConnection();
 				ServerSentEventConnection connectionSnapshot = serverSentEventConnection.getSnapshot();
@@ -1405,9 +1440,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							throw writeThrowableSnapshot;
 					}
 				}
+			} else {
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.HANDSHAKE_REJECTED, null);
 			}
 		} catch (Throwable t) {
 			throwable = t;
+
+			if (acceptanceFinalized.compareAndSet(false, true))
+				notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, t);
 
 			// If we attempted to establish (willEstablish fired), but registration is null, it means we failed before didEstablish could fire.
 			if (handshakeAcceptedReference.get() != null && clientSocketChannelRegistration == null) {
@@ -3120,6 +3161,74 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Not much else we can do here but dump to stderr
 			throwable.printStackTrace(System.err);
 		}
+	}
+
+	private void notifyWillAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.willAcceptConnection(ServerType.SERVER_SENT_EVENT, remoteAddress));
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::willAcceptConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(throwable)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willAcceptConnection", MetricsCollector.class.getSimpleName()),
+				null,
+				null,
+				(metricsCollector) -> metricsCollector.willAcceptConnection(ServerType.SERVER_SENT_EVENT, remoteAddressSnapshot));
+	}
+
+	private void notifyDidAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didAcceptConnection(ServerType.SERVER_SENT_EVENT, remoteAddress));
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::didAcceptConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(throwable)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didAcceptConnection", MetricsCollector.class.getSimpleName()),
+				null,
+				null,
+				(metricsCollector) -> metricsCollector.didAcceptConnection(ServerType.SERVER_SENT_EVENT, remoteAddressSnapshot));
+	}
+
+	private void notifyDidFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress,
+																							 @NonNull ConnectionRejectionReason reason,
+																							 @Nullable Throwable throwable) {
+		requireNonNull(reason);
+
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didFailToAcceptConnection(ServerType.SERVER_SENT_EVENT, remoteAddress, reason, throwable));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::didFailToAcceptConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		ConnectionRejectionReason reasonSnapshot = reason;
+		Throwable throwableSnapshot = throwable;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToAcceptConnection", MetricsCollector.class.getSimpleName()),
+				null,
+				null,
+				(metricsCollector) -> metricsCollector.didFailToAcceptConnection(ServerType.SERVER_SENT_EVENT,
+						remoteAddressSnapshot,
+						reasonSnapshot,
+						throwableSnapshot));
 	}
 
 	protected void safelyCollectMetrics(@NonNull String message,

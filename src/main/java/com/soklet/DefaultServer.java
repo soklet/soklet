@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.exception.IllegalRequestException;
+import com.soklet.internal.microhttp.ConnectionListener;
 import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.Handler;
 import com.soklet.internal.microhttp.Header;
@@ -33,6 +34,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.BindException;
+import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -58,6 +60,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -145,6 +148,8 @@ final class DefaultServer implements Server {
 	@Nullable
 	private volatile LifecycleObserver lifecycleObserver;
 	@Nullable
+	private volatile MetricsCollector metricsCollector;
+	@Nullable
 	private volatile EventLoop eventLoop;
 
 	protected DefaultServer(@NonNull Builder builder) {
@@ -226,6 +231,23 @@ final class DefaultServer implements Server {
 				public void log(@Nullable Exception e,
 												@Nullable LogEntry... logEntries) {
 					// No-op
+				}
+			};
+
+			ConnectionListener connectionListener = new ConnectionListener() {
+				@Override
+				public void willAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+					notifyWillAcceptConnection(remoteAddress);
+				}
+
+				@Override
+				public void didAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+					notifyDidAcceptConnection(remoteAddress);
+				}
+
+				@Override
+				public void didFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.MAX_CONNECTIONS, null);
 				}
 			};
 
@@ -391,7 +413,7 @@ final class DefaultServer implements Server {
 			EventLoop eventLoop = null;
 
 			try {
-				eventLoop = new EventLoop(options, logger, handler);
+				eventLoop = new EventLoop(options, logger, handler, connectionListener);
 				eventLoop.start();
 				this.eventLoop = eventLoop;
 			} catch (BindException e) {
@@ -562,6 +584,7 @@ final class DefaultServer implements Server {
 
 		this.requestHandler = requestHandler;
 		this.lifecycleObserver = sokletConfig.getLifecycleObserver();
+		this.metricsCollector = sokletConfig.getMetricsCollector();
 	}
 
 	@NonNull
@@ -639,6 +662,88 @@ final class DefaultServer implements Server {
 			// Not much else we can do here but dump to stderr
 			throwable.printStackTrace(System.err);
 		}
+	}
+
+	protected void safelyCollectMetrics(@NonNull String message,
+																			@NonNull Consumer<MetricsCollector> metricsConsumer) {
+		requireNonNull(message);
+		requireNonNull(metricsConsumer);
+
+		MetricsCollector metricsCollector = this.metricsCollector;
+
+		if (metricsCollector == null)
+			return;
+
+		try {
+			metricsConsumer.accept(metricsCollector);
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED, message)
+					.throwable(throwable)
+					.build());
+		}
+	}
+
+	private void notifyWillAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.willAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress));
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::willAcceptConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(throwable)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willAcceptConnection", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.willAcceptConnection(ServerType.STANDARD_HTTP, remoteAddressSnapshot));
+	}
+
+	private void notifyDidAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress));
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::didAcceptConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(throwable)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didAcceptConnection", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didAcceptConnection(ServerType.STANDARD_HTTP, remoteAddressSnapshot));
+	}
+
+	private void notifyDidFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress,
+																							 @NonNull ConnectionRejectionReason reason,
+																							 @Nullable Throwable throwable) {
+		requireNonNull(reason);
+
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didFailToAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress, reason, throwable));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::didFailToAcceptConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		ConnectionRejectionReason reasonSnapshot = reason;
+		Throwable throwableSnapshot = throwable;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToAcceptConnection", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didFailToAcceptConnection(ServerType.STANDARD_HTTP,
+						remoteAddressSnapshot,
+						reasonSnapshot,
+						throwableSnapshot));
 	}
 
 	@NonNull

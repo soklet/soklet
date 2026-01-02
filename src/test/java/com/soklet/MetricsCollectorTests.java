@@ -73,7 +73,9 @@ public class MetricsCollectorTests {
 		MarshaledResponse response = MarshaledResponse.withStatusCode(201)
 				.body(new byte[]{9, 8})
 				.build();
-
+		collector.willAcceptConnection(ServerType.STANDARD_HTTP, null);
+		collector.didAcceptConnection(ServerType.STANDARD_HTTP, null);
+		collector.didFailToAcceptConnection(ServerType.STANDARD_HTTP, null, ConnectionRejectionReason.MAX_CONNECTIONS, null);
 		collector.didStartRequestHandling(request, resourceMethod);
 		collector.willWriteResponse(request, resourceMethod, response);
 		collector.didFinishRequestHandling(request, resourceMethod, response, Duration.ofMillis(5), List.of());
@@ -106,12 +108,16 @@ public class MetricsCollectorTests {
 		assertEquals(1L, responseBodyBytes.getCount());
 		assertEquals(2L, responseBodyBytes.getSum());
 
+		assertEquals(1L, snapshot.getHttpConnectionsAccepted());
+		assertEquals(1L, snapshot.getHttpConnectionsRejected());
 		assertEquals(0L, snapshot.getActiveRequests());
 
 		collector.reset();
 		MetricsCollector.Snapshot resetSnapshot = collector.snapshot().orElseThrow();
 		HistogramSnapshot resetRequestDurations = resetSnapshot.getHttpRequestDurations().get(statusKey);
 		assertTrue(resetRequestDurations == null || resetRequestDurations.getCount() == 0L);
+		assertEquals(0L, resetSnapshot.getHttpConnectionsAccepted());
+		assertEquals(0L, resetSnapshot.getHttpConnectionsRejected());
 		assertEquals(0L, resetSnapshot.getActiveRequests());
 	}
 
@@ -129,7 +135,9 @@ public class MetricsCollectorTests {
 
 		String noSseSnapshot = collector.snapshotText(prometheusOptions).orElseThrow();
 		assertTrue(noSseSnapshot.contains("soklet_http_requests_active"));
+		assertTrue(noSseSnapshot.contains("soklet_http_connections_accepted_total"));
 		assertFalse(noSseSnapshot.contains("soklet_sse_connections_active"));
+		assertFalse(noSseSnapshot.contains("soklet_sse_connections_accepted_total"));
 
 		SokletConfig withSseConfig = SokletConfig.withServer(Server.withPort(0).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(0).build())
@@ -139,6 +147,8 @@ public class MetricsCollectorTests {
 
 		String withSseSnapshot = collector.snapshotText(prometheusOptions).orElseThrow();
 		assertTrue(withSseSnapshot.contains("soklet_sse_connections_active"));
+		assertTrue(withSseSnapshot.contains("soklet_sse_connections_accepted_total"));
+		assertTrue(withSseSnapshot.contains("soklet_sse_connections_rejected_total"));
 
 		ResourceMethod resourceMethod = resourceMethodFor("/widgets/{id}", HttpMethod.GET, "createWidget", false);
 		Request request = Request.withPath(HttpMethod.GET, "/widgets/123").build();

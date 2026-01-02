@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.List;
 
@@ -122,6 +123,43 @@ public interface LifecycleObserver {
 	 */
 	default void didFailToStopServer(@NonNull Server server,
 																	 @NonNull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when a server is about to accept a new TCP connection.
+	 *
+	 * @param serverType    the server type that is accepting the connection
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 */
+	default void willAcceptConnection(@NonNull ServerType serverType,
+																		@Nullable InetSocketAddress remoteAddress) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a server accepts a new TCP connection.
+	 *
+	 * @param serverType    the server type that accepted the connection
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 */
+	default void didAcceptConnection(@NonNull ServerType serverType,
+																	 @Nullable InetSocketAddress remoteAddress) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a server fails to accept a new TCP connection.
+	 *
+	 * @param serverType    the server type that failed to accept the connection
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param reason        the failure reason
+	 * @param throwable     an optional underlying cause, or {@code null} if not applicable
+	 */
+	default void didFailToAcceptConnection(@NonNull ServerType serverType,
+																				 @Nullable InetSocketAddress remoteAddress,
+																				 @NonNull ConnectionRejectionReason reason,
+																				 @Nullable Throwable throwable) {
 		// No-op by default
 	}
 

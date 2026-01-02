@@ -44,6 +44,18 @@ public enum LogEventType {
 	 */
 	REQUEST_INTERCEPTOR_INTERCEPT_REQUEST_FAILED,
 	/**
+	 * Indicates {@link LifecycleObserver#willAcceptConnection(ServerType, java.net.InetSocketAddress)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_WILL_ACCEPT_CONNECTION_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didAcceptConnection(ServerType, java.net.InetSocketAddress)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_ACCEPT_CONNECTION_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didFailToAcceptConnection(ServerType, java.net.InetSocketAddress, ConnectionRejectionReason, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
+	/**
 	 * Indicates {@link LifecycleObserver#didStartRequestHandling(Request, ResourceMethod)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,

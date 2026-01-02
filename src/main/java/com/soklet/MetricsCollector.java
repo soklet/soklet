@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
@@ -37,8 +38,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * Contract for collecting operational metrics from Soklet.
  * <p>
- * Soklet's standard implementation, available via {@link #withDefaults()}, supports detailed histogram collection with
- * immutable snapshots (via {@link #snapshot()}) and provides Prometheus/OpenMetrics export helpers for convenience.
+ * Soklet's standard implementation, available via {@link #withDefaults()}, supports detailed histogram collection,
+ * connection accept/reject counters, immutable snapshots (via {@link #snapshot()}), and provides Prometheus/OpenMetrics
+ * export helpers for convenience.
  * To disable metrics collection without a custom implementation, use {@link #disabled()}.
  * <p>
  * If you prefer OpenTelemetry, Micrometer, or another metrics system for monitoring, you might choose to create your own
@@ -93,6 +95,43 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public interface MetricsCollector {
+	/**
+	 * Called when a server is about to accept a new TCP connection.
+	 *
+	 * @param serverType    the server type that is accepting the connection
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 */
+	default void willAcceptConnection(@NonNull ServerType serverType,
+																		@Nullable InetSocketAddress remoteAddress) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a server accepts a new TCP connection.
+	 *
+	 * @param serverType    the server type that accepted the connection
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 */
+	default void didAcceptConnection(@NonNull ServerType serverType,
+																	 @Nullable InetSocketAddress remoteAddress) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a server fails to accept a new TCP connection.
+	 *
+	 * @param serverType    the server type that failed to accept the connection
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param reason        the failure reason
+	 * @param throwable     an optional underlying cause, or {@code null} if not applicable
+	 */
+	default void didFailToAcceptConnection(@NonNull ServerType serverType,
+																				 @Nullable InetSocketAddress remoteAddress,
+																				 @NonNull ConnectionRejectionReason reason,
+																				 @Nullable Throwable throwable) {
+		// No-op by default
+	}
+
 	/**
 	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
 	 */
@@ -550,6 +589,7 @@ public interface MetricsCollector {
 	 * <p>
 	 * Durations are in nanoseconds, sizes are in bytes, and queue depths are raw counts.
 	 * Histogram values are captured as {@link HistogramSnapshot} instances.
+	 * Connection counts report total accepted/rejected connections for the HTTP and SSE servers.
 	 * Instances are typically produced by {@link MetricsCollector#snapshot()} but can also be built
 	 * manually via {@link #withDefaults()}.
 	 *
@@ -561,6 +601,14 @@ public interface MetricsCollector {
 		private final Long activeRequests;
 		@NonNull
 		private final Long activeSseConnections;
+		@NonNull
+		private final Long httpConnectionsAccepted;
+		@NonNull
+		private final Long httpConnectionsRejected;
+		@NonNull
+		private final Long sseConnectionsAccepted;
+		@NonNull
+		private final Long sseConnectionsRejected;
 		@NonNull
 		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
 		@NonNull
@@ -605,6 +653,10 @@ public interface MetricsCollector {
 
 			this.activeRequests = requireNonNull(builder.activeRequests);
 			this.activeSseConnections = requireNonNull(builder.activeSseConnections);
+			this.httpConnectionsAccepted = requireNonNull(builder.httpConnectionsAccepted);
+			this.httpConnectionsRejected = requireNonNull(builder.httpConnectionsRejected);
+			this.sseConnectionsAccepted = requireNonNull(builder.sseConnectionsAccepted);
+			this.sseConnectionsRejected = requireNonNull(builder.sseConnectionsRejected);
 			this.httpRequestDurations = copyOrEmpty(builder.httpRequestDurations);
 			this.httpHandlerDurations = copyOrEmpty(builder.httpHandlerDurations);
 			this.httpTimeToFirstByte = copyOrEmpty(builder.httpTimeToFirstByte);
@@ -639,6 +691,46 @@ public interface MetricsCollector {
 		@NonNull
 		public Long getActiveSseConnections() {
 			return this.activeSseConnections;
+		}
+
+		/**
+		 * Returns the total number of accepted HTTP connections.
+		 *
+		 * @return total accepted HTTP connections
+		 */
+		@NonNull
+		public Long getHttpConnectionsAccepted() {
+			return this.httpConnectionsAccepted;
+		}
+
+		/**
+		 * Returns the total number of rejected HTTP connections.
+		 *
+		 * @return total rejected HTTP connections
+		 */
+		@NonNull
+		public Long getHttpConnectionsRejected() {
+			return this.httpConnectionsRejected;
+		}
+
+		/**
+		 * Returns the total number of accepted SSE connections.
+		 *
+		 * @return total accepted SSE connections
+		 */
+		@NonNull
+		public Long getSseConnectionsAccepted() {
+			return this.sseConnectionsAccepted;
+		}
+
+		/**
+		 * Returns the total number of rejected SSE connections.
+		 *
+		 * @return total rejected SSE connections
+		 */
+		@NonNull
+		public Long getSseConnectionsRejected() {
+			return this.sseConnectionsRejected;
 		}
 
 		/**
@@ -799,6 +891,14 @@ public interface MetricsCollector {
 			private Long activeRequests;
 			@NonNull
 			private Long activeSseConnections;
+			@NonNull
+			private Long httpConnectionsAccepted;
+			@NonNull
+			private Long httpConnectionsRejected;
+			@NonNull
+			private Long sseConnectionsAccepted;
+			@NonNull
+			private Long sseConnectionsRejected;
 			@Nullable
 			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
 			@Nullable
@@ -831,6 +931,10 @@ public interface MetricsCollector {
 			private Builder() {
 				this.activeRequests = 0L;
 				this.activeSseConnections = 0L;
+				this.httpConnectionsAccepted = 0L;
+				this.httpConnectionsRejected = 0L;
+				this.sseConnectionsAccepted = 0L;
+				this.sseConnectionsRejected = 0L;
 			}
 
 			/**
@@ -854,6 +958,54 @@ public interface MetricsCollector {
 			@NonNull
 			public Builder activeSseConnections(@NonNull Long activeSseConnections) {
 				this.activeSseConnections = requireNonNull(activeSseConnections);
+				return this;
+			}
+
+			/**
+			 * Sets the total number of accepted HTTP connections.
+			 *
+			 * @param httpConnectionsAccepted total accepted HTTP connections
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder httpConnectionsAccepted(@NonNull Long httpConnectionsAccepted) {
+				this.httpConnectionsAccepted = requireNonNull(httpConnectionsAccepted);
+				return this;
+			}
+
+			/**
+			 * Sets the total number of rejected HTTP connections.
+			 *
+			 * @param httpConnectionsRejected total rejected HTTP connections
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder httpConnectionsRejected(@NonNull Long httpConnectionsRejected) {
+				this.httpConnectionsRejected = requireNonNull(httpConnectionsRejected);
+				return this;
+			}
+
+			/**
+			 * Sets the total number of accepted SSE connections.
+			 *
+			 * @param sseConnectionsAccepted total accepted SSE connections
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseConnectionsAccepted(@NonNull Long sseConnectionsAccepted) {
+				this.sseConnectionsAccepted = requireNonNull(sseConnectionsAccepted);
+				return this;
+			}
+
+			/**
+			 * Sets the total number of rejected SSE connections.
+			 *
+			 * @param sseConnectionsRejected total rejected SSE connections
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseConnectionsRejected(@NonNull Long sseConnectionsRejected) {
+				this.sseConnectionsRejected = requireNonNull(sseConnectionsRejected);
 				return this;
 			}
 

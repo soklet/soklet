@@ -22,6 +22,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -86,6 +87,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final ConcurrentHashMap<ServerSentEventRouteTerminationKey, Histogram> sseConnectionDurationByRouteAndReason;
 	private final LongAdder activeRequests;
 	private final LongAdder activeSseConnections;
+	private final LongAdder httpConnectionsAccepted;
+	private final LongAdder httpConnectionsRejected;
+	private final LongAdder sseConnectionsAccepted;
+	private final LongAdder sseConnectionsRejected;
 	private final AtomicBoolean includeSseMetrics;
 
 	@NonNull
@@ -113,12 +118,47 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.sseConnectionDurationByRouteAndReason = new ConcurrentHashMap<>();
 		this.activeRequests = new LongAdder();
 		this.activeSseConnections = new LongAdder();
+		this.httpConnectionsAccepted = new LongAdder();
+		this.httpConnectionsRejected = new LongAdder();
+		this.sseConnectionsAccepted = new LongAdder();
+		this.sseConnectionsRejected = new LongAdder();
 		this.includeSseMetrics = new AtomicBoolean(false);
 	}
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
 		this.includeSseMetrics.set(sokletConfig.getServerSentEventServer().isPresent());
+	}
+
+	@Override
+	public void willAcceptConnection(@NonNull ServerType serverType,
+																	 @Nullable InetSocketAddress remoteAddress) {
+		requireNonNull(serverType);
+	}
+
+	@Override
+	public void didAcceptConnection(@NonNull ServerType serverType,
+																	@Nullable InetSocketAddress remoteAddress) {
+		requireNonNull(serverType);
+
+		if (serverType == ServerType.STANDARD_HTTP)
+			this.httpConnectionsAccepted.increment();
+		else if (serverType == ServerType.SERVER_SENT_EVENT)
+			this.sseConnectionsAccepted.increment();
+	}
+
+	@Override
+	public void didFailToAcceptConnection(@NonNull ServerType serverType,
+																				@Nullable InetSocketAddress remoteAddress,
+																				@NonNull ConnectionRejectionReason reason,
+																				@Nullable Throwable throwable) {
+		requireNonNull(serverType);
+		requireNonNull(reason);
+
+		if (serverType == ServerType.STANDARD_HTTP)
+			this.httpConnectionsRejected.increment();
+		else if (serverType == ServerType.SERVER_SENT_EVENT)
+			this.sseConnectionsRejected.increment();
 	}
 
 	@Override
@@ -416,6 +456,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return Optional.of(Snapshot.withDefaults()
 				.activeRequests(getActiveRequests())
 				.activeSseConnections(getActiveSseConnections())
+				.httpConnectionsAccepted(getHttpConnectionsAccepted())
+				.httpConnectionsRejected(getHttpConnectionsRejected())
+				.sseConnectionsAccepted(getSseConnectionsAccepted())
+				.sseConnectionsRejected(getSseConnectionsRejected())
 				.httpRequestDurations(snapshotHttpRequestDurations())
 				.httpHandlerDurations(snapshotHttpHandlerDurations())
 				.httpTimeToFirstByte(snapshotHttpTimeToFirstByte())
@@ -447,6 +491,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		appendGauge(sb, "soklet_http_requests_active", "Currently active HTTP requests",
 				snapshot.getActiveRequests(), options);
+		appendCounter(sb, "soklet_http_connections_accepted_total", "Total accepted HTTP connections",
+				snapshot.getHttpConnectionsAccepted(), options);
+		appendCounter(sb, "soklet_http_connections_rejected_total", "Total rejected HTTP connections",
+				snapshot.getHttpConnectionsRejected(), options);
 
 		appendHistogram(sb, "soklet_http_request_duration_nanos", "HTTP request duration in nanoseconds",
 				snapshot.getHttpRequestDurations(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
@@ -460,6 +508,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshot.getHttpResponseBodyBytes(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
 
 		if (this.includeSseMetrics.get()) {
+			appendCounter(sb, "soklet_sse_connections_accepted_total", "Total accepted SSE connections",
+					snapshot.getSseConnectionsAccepted(), options);
+			appendCounter(sb, "soklet_sse_connections_rejected_total", "Total rejected SSE connections",
+					snapshot.getSseConnectionsRejected(), options);
 			appendGauge(sb, "soklet_sse_connections_active", "Currently active SSE connections",
 					snapshot.getActiveSseConnections(), options);
 
@@ -497,6 +549,22 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	long getActiveSseConnections() {
 		return this.activeSseConnections.sum();
+	}
+
+	long getHttpConnectionsAccepted() {
+		return this.httpConnectionsAccepted.sum();
+	}
+
+	long getHttpConnectionsRejected() {
+		return this.httpConnectionsRejected.sum();
+	}
+
+	long getSseConnectionsAccepted() {
+		return this.sseConnectionsAccepted.sum();
+	}
+
+	long getSseConnectionsRejected() {
+		return this.sseConnectionsRejected.sum();
 	}
 
 	@NonNull
@@ -573,6 +641,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	public void reset() {
 		this.activeRequests.reset();
 		this.activeSseConnections.reset();
+		this.httpConnectionsAccepted.reset();
+		this.httpConnectionsRejected.reset();
+		this.sseConnectionsAccepted.reset();
+		this.sseConnectionsRejected.reset();
 		this.requestsInFlightByIdentity.clear();
 		this.requestsInFlightById.clear();
 		this.sseConnectionsByIdentity.clear();
@@ -692,6 +764,24 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
 		sb.append("# TYPE ").append(name).append(" gauge\n");
+		appendSample(sb, name, "", value);
+	}
+
+	private static void appendCounter(@NonNull StringBuilder sb,
+																		@NonNull String name,
+																		@NonNull String help,
+																		long value,
+																		@NonNull SnapshotTextOptions options) {
+		requireNonNull(sb);
+		requireNonNull(name);
+		requireNonNull(help);
+		requireNonNull(options);
+
+		if (!shouldEmitSample(options, name, Map.of()))
+			return;
+
+		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
+		sb.append("# TYPE ").append(name).append(" counter\n");
 		appendSample(sb, name, "", value);
 	}
 

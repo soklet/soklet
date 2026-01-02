@@ -2,6 +2,7 @@ package com.soklet.internal.microhttp;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.StandardSocketOptions;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -23,6 +24,7 @@ public class EventLoop {
 
     private final Options options;
     private final Logger logger;
+    private final ConnectionListener connectionListener;
 
     private final Selector selector;
     private final AtomicBoolean stop;
@@ -31,16 +33,21 @@ public class EventLoop {
     private final Thread thread;
 
     public EventLoop(Handler handler) throws IOException {
-        this(Options.builder().build(), handler);
+        this(Options.builder().build(), NoopLogger.instance(), handler, NoopConnectionListener.instance());
     }
 
     public EventLoop(Options options, Handler handler) throws IOException {
-        this(options, NoopLogger.instance(), handler);
+        this(options, NoopLogger.instance(), handler, NoopConnectionListener.instance());
     }
 
     public EventLoop(Options options, Logger logger, Handler handler) throws IOException {
+        this(options, logger, handler, NoopConnectionListener.instance());
+    }
+
+    public EventLoop(Options options, Logger logger, Handler handler, ConnectionListener connectionListener) throws IOException {
         this.options = options;
         this.logger = logger;
+        this.connectionListener = connectionListener == null ? NoopConnectionListener.instance() : connectionListener;
 
         selector = Selector.open();
         stop = new AtomicBoolean();
@@ -105,16 +112,28 @@ public class EventLoop {
                         it.remove();
                         continue;
                     }
+                    InetSocketAddress remoteAddress = null;
+                    try {
+                        SocketAddress socketAddress = socketChannel.getRemoteAddress();
+                        if (socketAddress instanceof InetSocketAddress) {
+                            remoteAddress = (InetSocketAddress) socketAddress;
+                        }
+                    } catch (IOException ignored) {
+                        // Best effort
+                    }
+                    connectionListener.willAcceptConnection(remoteAddress);
                     if (options.maxConnections() > 0 && totalConnections() >= options.maxConnections()) {
                         if (logger.enabled()) {
                             logger.log(
                                     new LogEntry("event", "accept_reject_max_connections"),
                                     new LogEntry("max_connections", Integer.toString(options.maxConnections())));
                         }
+                        connectionListener.didFailToAcceptConnection(remoteAddress);
                         CloseUtils.closeQuietly(socketChannel);
                         it.remove();
                         continue;
                     }
+                    connectionListener.didAcceptConnection(remoteAddress);
                     ConnectionEventLoop connectionEventLoop = leastConnections();
                     connectionEventLoop.register(socketChannel);
                 }
