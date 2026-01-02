@@ -134,8 +134,11 @@ public interface MetricsCollector {
 
 	/**
 	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
+	 *
+	 * @param serverType the server type that received the request
 	 */
-	default void didStartRequestHandling(@NonNull Request request,
+	default void didStartRequestHandling(@NonNull ServerType serverType,
+																			 @NonNull Request request,
 																			 @Nullable ResourceMethod resourceMethod) {
 		// No-op by default
 	}
@@ -143,7 +146,8 @@ public interface MetricsCollector {
 	/**
 	 * Called after a request finishes processing.
 	 */
-	default void didFinishRequestHandling(@NonNull Request request,
+	default void didFinishRequestHandling(@NonNull ServerType serverType,
+																				@NonNull Request request,
 																				@Nullable ResourceMethod resourceMethod,
 																				@NonNull MarshaledResponse marshaledResponse,
 																				@NonNull Duration duration,
@@ -154,7 +158,8 @@ public interface MetricsCollector {
 	/**
 	 * Called before response data is written.
 	 */
-	default void willWriteResponse(@NonNull Request request,
+	default void willWriteResponse(@NonNull ServerType serverType,
+																 @NonNull Request request,
 																 @Nullable ResourceMethod resourceMethod,
 																 @NonNull MarshaledResponse marshaledResponse) {
 		// No-op by default
@@ -163,7 +168,8 @@ public interface MetricsCollector {
 	/**
 	 * Called after response data is written.
 	 */
-	default void didWriteResponse(@NonNull Request request,
+	default void didWriteResponse(@NonNull ServerType serverType,
+																@NonNull Request request,
 																@Nullable ResourceMethod resourceMethod,
 																@NonNull MarshaledResponse marshaledResponse,
 																@NonNull Duration responseWriteDuration) {
@@ -173,7 +179,8 @@ public interface MetricsCollector {
 	/**
 	 * Called after response data fails to write.
 	 */
-	default void didFailToWriteResponse(@NonNull Request request,
+	default void didFailToWriteResponse(@NonNull ServerType serverType,
+																			@NonNull Request request,
 																			@Nullable ResourceMethod resourceMethod,
 																			@NonNull MarshaledResponse marshaledResponse,
 																			@NonNull Duration responseWriteDuration,

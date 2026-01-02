@@ -162,8 +162,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@Override
-	public void didStartRequestHandling(@NonNull Request request,
+	public void didStartRequestHandling(@NonNull ServerType serverType,
+																			@NonNull Request request,
 																			@Nullable ResourceMethod resourceMethod) {
+		requireNonNull(serverType);
 		requireNonNull(request);
 
 		RouteContext routeContext = routeFor(resourceMethod);
@@ -186,9 +188,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@Override
-	public void willWriteResponse(@NonNull Request request,
+	public void willWriteResponse(@NonNull ServerType serverType,
+																@NonNull Request request,
 																@Nullable ResourceMethod resourceMethod,
 																@NonNull MarshaledResponse marshaledResponse) {
+		requireNonNull(serverType);
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
 
@@ -214,11 +218,13 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@Override
-	public void didFinishRequestHandling(@NonNull Request request,
+	public void didFinishRequestHandling(@NonNull ServerType serverType,
+																			 @NonNull Request request,
 																			 @Nullable ResourceMethod resourceMethod,
 																			 @NonNull MarshaledResponse marshaledResponse,
 																			 @NonNull Duration duration,
 																			 @NonNull List<@NonNull Throwable> throwables) {
+		requireNonNull(serverType);
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
 		requireNonNull(duration);

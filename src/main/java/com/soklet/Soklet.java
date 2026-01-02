@@ -579,7 +579,7 @@ public final class Soklet implements AutoCloseable {
 				}
 
 				try {
-					lifecycleObserver.didStartRequestHandling(requestHolder.get(), resourceMethodHolder.get());
+					lifecycleObserver.didStartRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get());
 				} catch (Throwable t) {
 					safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,
 									format("An exception occurred while invoking %s::didStartRequestHandling",
@@ -594,7 +594,7 @@ public final class Soklet implements AutoCloseable {
 
 				safelyCollectMetrics.accept(
 						format("An exception occurred while invoking %s::didStartRequestHandling", MetricsCollector.class.getSimpleName()),
-						(metricsInvocation) -> metricsInvocation.didStartRequestHandling(requestHolder.get(), resourceMethodHolder.get()));
+						(metricsInvocation) -> metricsInvocation.didStartRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get()));
 
 				try {
 					AtomicBoolean didInvokeMarshaledResponseConsumer = new AtomicBoolean(false);
@@ -707,14 +707,14 @@ public final class Soklet implements AutoCloseable {
 				} finally {
 					try {
 						try {
-							lifecycleObserver.willWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
+							lifecycleObserver.willWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
 						} finally {
 							willStartResponseWritingCompleted.set(true);
 						}
 
 						safelyCollectMetrics.accept(
 								format("An exception occurred while invoking %s::willWriteResponse", MetricsCollector.class.getSimpleName()),
-								(metricsInvocation) -> metricsInvocation.willWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get()));
+								(metricsInvocation) -> metricsInvocation.willWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get()));
 
 						Instant responseWriteStarted = Instant.now();
 
@@ -732,7 +732,7 @@ public final class Soklet implements AutoCloseable {
 							Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
 
 							try {
-								lifecycleObserver.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration);
+								lifecycleObserver.didWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration);
 							} catch (Throwable t) {
 								throwables.add(t);
 
@@ -750,7 +750,7 @@ public final class Soklet implements AutoCloseable {
 
 							safelyCollectMetrics.accept(
 									format("An exception occurred while invoking %s::didWriteResponse", MetricsCollector.class.getSimpleName()),
-									(metricsInvocation) -> metricsInvocation.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(),
+									(metricsInvocation) -> metricsInvocation.didWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(),
 											marshaledResponseHolder.get(), responseWriteDuration));
 						} catch (Throwable t) {
 							throwables.add(t);
@@ -759,7 +759,7 @@ public final class Soklet implements AutoCloseable {
 							Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
 
 							try {
-								lifecycleObserver.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
+								lifecycleObserver.didFailToWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
 							} catch (Throwable t2) {
 								throwables.add(t2);
 
@@ -775,7 +775,7 @@ public final class Soklet implements AutoCloseable {
 
 							safelyCollectMetrics.accept(
 									format("An exception occurred while invoking %s::didFailToWriteResponse", MetricsCollector.class.getSimpleName()),
-									(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(),
+									(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(),
 											marshaledResponseHolder.get(), responseWriteDuration, t));
 						}
 					} finally {
@@ -783,10 +783,10 @@ public final class Soklet implements AutoCloseable {
 
 						safelyCollectMetrics.accept(
 								format("An exception occurred while invoking %s::didFinishRequestHandling", MetricsCollector.class.getSimpleName()),
-								(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
+								(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
 
 						try {
-							lifecycleObserver.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
+							lifecycleObserver.didFinishRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
 						} catch (Throwable t) {
 							safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,
 											format("An exception occurred while invoking %s::didFinishRequestHandling",
@@ -842,7 +842,7 @@ public final class Soklet implements AutoCloseable {
 
 			if (!willStartResponseWritingCompleted.get()) {
 				try {
-					lifecycleObserver.willWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
+					lifecycleObserver.willWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get());
 				} catch (Throwable t2) {
 					safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_RESPONSE_FAILED,
 									format("An exception occurred while invoking %s::willWriteResponse",
@@ -856,7 +856,7 @@ public final class Soklet implements AutoCloseable {
 
 				safelyCollectMetrics.accept(
 						format("An exception occurred while invoking %s::willWriteResponse", MetricsCollector.class.getSimpleName()),
-						(metricsInvocation) -> metricsInvocation.willWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get()));
+						(metricsInvocation) -> metricsInvocation.willWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get()));
 			}
 
 			try {
@@ -877,7 +877,7 @@ public final class Soklet implements AutoCloseable {
 						Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
 
 						try {
-							lifecycleObserver.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration);
+							lifecycleObserver.didWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration);
 						} catch (Throwable t2) {
 							throwables.add(t2);
 
@@ -893,7 +893,7 @@ public final class Soklet implements AutoCloseable {
 
 						safelyCollectMetrics.accept(
 								format("An exception occurred while invoking %s::didWriteResponse", MetricsCollector.class.getSimpleName()),
-								(metricsInvocation) -> metricsInvocation.didWriteResponse(requestHolder.get(), resourceMethodHolder.get(),
+								(metricsInvocation) -> metricsInvocation.didWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(),
 										marshaledResponseHolder.get(), responseWriteDuration));
 					} catch (Throwable t2) {
 						throwables.add(t2);
@@ -902,7 +902,7 @@ public final class Soklet implements AutoCloseable {
 						Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
 
 						try {
-							lifecycleObserver.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
+							lifecycleObserver.didFailToWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
 						} catch (Throwable t3) {
 							throwables.add(t3);
 
@@ -918,7 +918,7 @@ public final class Soklet implements AutoCloseable {
 
 						safelyCollectMetrics.accept(
 								format("An exception occurred while invoking %s::didFailToWriteResponse", MetricsCollector.class.getSimpleName()),
-								(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(requestHolder.get(), resourceMethodHolder.get(),
+								(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(),
 										marshaledResponseHolder.get(), responseWriteDuration, t));
 					}
 				}
@@ -928,10 +928,10 @@ public final class Soklet implements AutoCloseable {
 
 					safelyCollectMetrics.accept(
 							format("An exception occurred while invoking %s::didFinishRequestHandling", MetricsCollector.class.getSimpleName()),
-							(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
+							(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
 
 					try {
-						lifecycleObserver.didFinishRequestHandling(requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
+						lifecycleObserver.didFinishRequestHandling(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
 					} catch (Throwable t2) {
 						safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,
 										format("An exception occurred while invoking %s::didFinishRequestHandling",

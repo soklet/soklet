@@ -76,9 +76,9 @@ public class MetricsCollectorTests {
 		collector.willAcceptConnection(ServerType.STANDARD_HTTP, null);
 		collector.didAcceptConnection(ServerType.STANDARD_HTTP, null);
 		collector.didFailToAcceptConnection(ServerType.STANDARD_HTTP, null, ConnectionRejectionReason.MAX_CONNECTIONS, null);
-		collector.didStartRequestHandling(request, resourceMethod);
-		collector.willWriteResponse(request, resourceMethod, response);
-		collector.didFinishRequestHandling(request, resourceMethod, response, Duration.ofMillis(5), List.of());
+		collector.didStartRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod);
+		collector.willWriteResponse(ServerType.STANDARD_HTTP, request, resourceMethod, response);
+		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod, response, Duration.ofMillis(5), List.of());
 
 		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 
@@ -154,9 +154,9 @@ public class MetricsCollectorTests {
 		Request request = Request.withPath(HttpMethod.GET, "/widgets/123").build();
 		MarshaledResponse response = MarshaledResponse.withStatusCode(200).build();
 
-		collector.didStartRequestHandling(request, resourceMethod);
-		collector.willWriteResponse(request, resourceMethod, response);
-		collector.didFinishRequestHandling(request, resourceMethod, response, Duration.ofSeconds(2), List.of());
+		collector.didStartRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod);
+		collector.willWriteResponse(ServerType.STANDARD_HTTP, request, resourceMethod, response);
+		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod, response, Duration.ofSeconds(2), List.of());
 
 		MetricsCollector.SnapshotTextOptions includeZeroBuckets = MetricsCollector.SnapshotTextOptions
 				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)

@@ -56,19 +56,19 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didStartRequestHandling(Request, ResourceMethod)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didStartRequestHandling(ServerType, Request, ResourceMethod)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didFinishRequestHandling(Request, ResourceMethod, MarshaledResponse, Duration, List)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didFinishRequestHandling(ServerType, Request, ResourceMethod, MarshaledResponse, Duration, List)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#willWriteResponse(Request, ResourceMethod, MarshaledResponse)}  threw an exception.
+	 * Indicates {@link LifecycleObserver#willWriteResponse(ServerType, Request, ResourceMethod, MarshaledResponse)}  threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_WILL_WRITE_RESPONSE_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didWriteResponse(Request, ResourceMethod, MarshaledResponse, Duration)}  or {@link LifecycleObserver#didFailToWriteResponse(Request, ResourceMethod, MarshaledResponse, Duration, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didWriteResponse(ServerType, Request, ResourceMethod, MarshaledResponse, Duration)}  or {@link LifecycleObserver#didFailToWriteResponse(ServerType, Request, ResourceMethod, MarshaledResponse, Duration, Throwable)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_WRITE_RESPONSE_FAILED,
 	/**
