@@ -66,6 +66,24 @@ public interface ServerSentEventConnection {
 	Optional<Object> getClientContext();
 
 	/**
+	 * Categorizes why a Server-Sent Event handshake failed.
+	 */
+	enum HandshakeFailureReason {
+		/**
+		 * The SSE handshake did not complete in time.
+		 */
+		HANDSHAKE_TIMEOUT,
+		/**
+		 * The SSE handshake completed with a non-accepted result.
+		 */
+		HANDSHAKE_REJECTED,
+		/**
+		 * An unexpected internal error occurred while establishing the SSE connection.
+		 */
+		INTERNAL_ERROR
+	}
+
+	/**
 	 * Categorizes why a Server-Sent Event connection terminated.
 	 */
 	enum TerminationReason {

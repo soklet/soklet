@@ -76,7 +76,7 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_WILL_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didEstablishServerSentEventConnection(ServerSentEventConnection)} or {@link LifecycleObserver#didFailToEstablishServerSentEventConnection(Request, ResourceMethod, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didEstablishServerSentEventConnection(ServerSentEventConnection)} or {@link LifecycleObserver#didFailToEstablishServerSentEventConnection(Request, ResourceMethod, ServerSentEventConnection.HandshakeFailureReason, Throwable)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
 	/**

@@ -35,14 +35,6 @@ public enum ConnectionRejectionReason {
 	 */
 	UNPARSEABLE_REQUEST,
 	/**
-	 * The SSE handshake did not complete in time.
-	 */
-	HANDSHAKE_TIMEOUT,
-	/**
-	 * The SSE handshake completed with a non-accepted result.
-	 */
-	HANDSHAKE_REJECTED,
-	/**
 	 * An unexpected internal error occurred while handling the connection.
 	 */
 	INTERNAL_ERROR

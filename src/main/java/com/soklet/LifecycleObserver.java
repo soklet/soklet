@@ -273,10 +273,14 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called if an SSE connection fails to establish.
+	 *
+	 * @param reason    the handshake failure reason
+	 * @param throwable an optional underlying cause, or {@code null} if not applicable
 	 */
 	default void didFailToEstablishServerSentEventConnection(@NonNull Request request,
 																													 @Nullable ResourceMethod resourceMethod,
-																													 @NonNull Throwable throwable) {
+																													 ServerSentEventConnection.@NonNull HandshakeFailureReason reason,
+																													 @Nullable Throwable throwable) {
 		// No-op by default
 	}
 

@@ -863,6 +863,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		AtomicBoolean connectionSlotReserved = new AtomicBoolean(false);
 		AtomicBoolean handshakeResponseWritten = new AtomicBoolean(false);
 		AtomicBoolean acceptanceFinalized = new AtomicBoolean(false);
+		AtomicBoolean establishmentFailureNotified = new AtomicBoolean(false);
 		AtomicReference<ScheduledFuture<?>> handshakeTimeoutFutureRef = new AtomicReference<>();
 		InetSocketAddress remoteAddress = null;
 
@@ -944,8 +945,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (request.getHttpMethod() == HttpMethod.GET)
 					validateNoRequestBodyHeaders(request);
 			} catch (IllegalRequestException e) {
-				if (acceptanceFinalized.compareAndSet(false, true))
-					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.HANDSHAKE_REJECTED, e);
+				acceptanceFinalized.compareAndSet(false, true);
+				if (establishmentFailureNotified.compareAndSet(false, true))
+					notifyDidFailToEstablishServerSentEventConnection(request, resourceMethod,
+							ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, e);
 
 				try {
 					MarshaledResponse response = getResponseMarshaler().get().forThrowable(request, e, null);
@@ -1019,9 +1022,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					if (!handshakeResponseWritten.compareAndSet(false, true))
 						return;
 
-					if (acceptanceFinalized.compareAndSet(false, true))
-						notifyDidFailToAcceptConnection(remoteAddressSnapshot, ConnectionRejectionReason.HANDSHAKE_TIMEOUT,
-								new TimeoutException("SSE handshake timed out"));
+					acceptanceFinalized.compareAndSet(false, true);
+					if (establishmentFailureNotified.compareAndSet(false, true)) {
+						TimeoutException timeoutException = new TimeoutException("SSE handshake timed out");
+						notifyDidFailToEstablishServerSentEventConnection(requestForHandler, resourceMethodForHandler,
+								ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT, timeoutException);
+					}
 
 					byte[] responseBytes = FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE;
 
@@ -1441,8 +1447,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					}
 				}
 			} else {
-				if (acceptanceFinalized.compareAndSet(false, true))
-					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.HANDSHAKE_REJECTED, null);
+				acceptanceFinalized.compareAndSet(false, true);
+				if (establishmentFailureNotified.compareAndSet(false, true))
+					notifyDidFailToEstablishServerSentEventConnection(request, resourceMethod,
+							ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, null);
 			}
 		} catch (Throwable t) {
 			throwable = t;
@@ -1452,22 +1460,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// If we attempted to establish (willEstablish fired), but registration is null, it means we failed before didEstablish could fire.
 			if (handshakeAcceptedReference.get() != null && clientSocketChannelRegistration == null) {
-				try {
-					getLifecycleObserver().get().didFailToEstablishServerSentEventConnection(request, resourceMethod, t);
-				} catch (Throwable t1) {
-					safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::didFailToEstablishServerSentEventConnection", LifecycleObserver.class.getSimpleName()))
-							.throwable(t1)
-							.build());
-				}
-
-				Request failedRequest = request;
-				ResourceMethod failedResourceMethod = resourceMethod;
-
-				safelyCollectMetrics(
-						format("An exception occurred while invoking %s::didFailToEstablishServerSentEventConnection", MetricsCollector.class.getSimpleName()),
-						failedRequest,
-						failedResourceMethod,
-						(metricsCollector) -> metricsCollector.didFailToEstablishServerSentEventConnection(failedRequest, failedResourceMethod, t));
+				if (establishmentFailureNotified.compareAndSet(false, true))
+					notifyDidFailToEstablishServerSentEventConnection(request, resourceMethod,
+							ServerSentEventConnection.HandshakeFailureReason.INTERNAL_ERROR, t);
 			}
 
 			if (t instanceof InterruptedException)
@@ -3227,6 +3222,39 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				null,
 				(metricsCollector) -> metricsCollector.didFailToAcceptConnection(ServerType.SERVER_SENT_EVENT,
 						remoteAddressSnapshot,
+						reasonSnapshot,
+						throwableSnapshot));
+	}
+
+	private void notifyDidFailToEstablishServerSentEventConnection(@NonNull Request request,
+																																 @Nullable ResourceMethod resourceMethod,
+																																 ServerSentEventConnection.@NonNull HandshakeFailureReason reason,
+																																 @Nullable Throwable throwable) {
+		requireNonNull(request);
+		requireNonNull(reason);
+
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didFailToEstablishServerSentEventConnection(request, resourceMethod, reason, throwable));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::didFailToEstablishServerSentEventConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		Request failedRequest = request;
+		ResourceMethod failedResourceMethod = resourceMethod;
+		ServerSentEventConnection.HandshakeFailureReason reasonSnapshot = reason;
+		Throwable throwableSnapshot = throwable;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToEstablishServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+				failedRequest,
+				failedResourceMethod,
+				(metricsCollector) -> metricsCollector.didFailToEstablishServerSentEventConnection(
+						failedRequest,
+						failedResourceMethod,
 						reasonSnapshot,
 						throwableSnapshot));
 	}
