@@ -48,7 +48,8 @@ public class RequestHandlingRegressionTests {
 				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
-					public void wrapRequest(@NonNull Request request,
+					public void wrapRequest(@NonNull ServerType serverType,
+																	@NonNull Request request,
 																	@NonNull Consumer<Request> requestConsumer) {
 						Request wrappedRequest = request.copy()
 								.httpMethod(HttpMethod.HEAD)
@@ -62,7 +63,8 @@ public class RequestHandlingRegressionTests {
 					}
 
 					@Override
-					public void interceptRequest(@NonNull Request request,
+					public void interceptRequest(@NonNull ServerType serverType,
+																			 @NonNull Request request,
 																			 @Nullable ResourceMethod resourceMethod,
 																			 @NonNull Function<Request, MarshaledResponse> requestHandler,
 																			 @NonNull Consumer<MarshaledResponse> marshaledResponseConsumer) {
@@ -115,7 +117,8 @@ public class RequestHandlingRegressionTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(WrappedRequestResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
-					public void wrapRequest(@NonNull Request request,
+					public void wrapRequest(@NonNull ServerType serverType,
+																	@NonNull Request request,
 																	@NonNull Consumer<Request> requestConsumer) {
 						// Intentionally do not advance the request.
 					}
@@ -147,7 +150,8 @@ public class RequestHandlingRegressionTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(WrappedRequestResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
-					public void interceptRequest(@NonNull Request request,
+					public void interceptRequest(@NonNull ServerType serverType,
+																			 @NonNull Request request,
 																			 @Nullable ResourceMethod resourceMethod,
 																			 @NonNull Function<Request, MarshaledResponse> requestHandler,
 																			 @NonNull Consumer<MarshaledResponse> marshaledResponseConsumer) {
@@ -179,7 +183,8 @@ public class RequestHandlingRegressionTests {
 				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(WrappedRequestRewriteResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
-					public void wrapRequest(@NonNull Request request,
+					public void wrapRequest(@NonNull ServerType serverType,
+																	@NonNull Request request,
 																	@NonNull Consumer<Request> requestConsumer) {
 						Request wrappedRequest = request.copy()
 								.httpMethod(HttpMethod.POST)

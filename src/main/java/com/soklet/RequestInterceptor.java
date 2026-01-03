@@ -22,6 +22,8 @@ import org.jspecify.annotations.Nullable;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Hook methods that can adjust Soklet's request processing flow.
  * <p>
@@ -43,11 +45,16 @@ public interface RequestInterceptor {
 	 * Soklet will catch it and surface separately via {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}
 	 * with type {@link LogEventType#REQUEST_INTERCEPTOR_WRAP_REQUEST_FAILED}.
 	 *
+	 * @param serverType      the server type that received the request
 	 * @param request         the request that was received
 	 * @param requestConsumer receives the request to use for subsequent processing
 	 */
-	default void wrapRequest(@NonNull Request request,
+	default void wrapRequest(@NonNull ServerType serverType,
+													 @NonNull Request request,
 													 @NonNull Consumer<Request> requestConsumer) {
+		requireNonNull(serverType);
+		requireNonNull(request);
+		requireNonNull(requestConsumer);
 		requestConsumer.accept(request);
 	}
 
@@ -61,15 +68,21 @@ public interface RequestInterceptor {
 	 * You must call {@code marshaledResponseConsumer.accept(...)} exactly once before returning to send a response.
 	 * If you do not, Soklet logs the error and returns a 500 response.
 	 *
+	 * @param serverType                the server type that received the request
 	 * @param request                   the request that was received
 	 * @param resourceMethod            the <em>Resource Method</em> that will handle the request
 	 * @param requestHandler            function that performs standard request handling and returns a response
 	 * @param marshaledResponseConsumer receives the response to send to the client
 	 */
-	default void interceptRequest(@NonNull Request request,
-																@Nullable ResourceMethod resourceMethod,
-																@NonNull Function<Request, MarshaledResponse> requestHandler,
-																@NonNull Consumer<MarshaledResponse> marshaledResponseConsumer) {
+	default void interceptRequest(@NonNull ServerType serverType,
+																	@NonNull Request request,
+																	@Nullable ResourceMethod resourceMethod,
+																	@NonNull Function<Request, MarshaledResponse> requestHandler,
+																	@NonNull Consumer<MarshaledResponse> marshaledResponseConsumer) {
+		requireNonNull(serverType);
+		requireNonNull(request);
+		requireNonNull(requestHandler);
+		requireNonNull(marshaledResponseConsumer);
 		marshaledResponseConsumer.accept(requestHandler.apply(request));
 	}
 

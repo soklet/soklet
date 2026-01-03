@@ -723,9 +723,10 @@ static {
 
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
-).lifecycleObserver(new LifecycleObserver() {
+).requestInterceptor(new RequestInterceptor() {
   @Override
   public void wrapRequest(
+    @NonNull ServerType serverType,
     @NonNull Request request,
     @NonNull Consumer<Request> requestProcessor
   ) {
@@ -761,9 +762,10 @@ You must call `responseWriter.accept(...)` exactly once before returning; otherw
 ```java
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
-).lifecycleObserver(new LifecycleObserver() {
+).requestInterceptor(new RequestInterceptor() {
   @Override
   public void interceptRequest(
+    @NonNull ServerType serverType,
     @NonNull Request request,
     @Nullable ResourceMethod resourceMethod,
     @NonNull Function<Request, MarshaledResponse> responseProducer,

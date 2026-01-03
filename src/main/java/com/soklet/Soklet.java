@@ -557,7 +557,7 @@ public final class Soklet implements AutoCloseable {
 		requestHolder.set(request);
 
 		try {
-			requestInterceptor.wrapRequest(request, (wrappedRequest) -> {
+			requestInterceptor.wrapRequest(serverType, request, (wrappedRequest) -> {
 				didInvokeWrapRequestConsumer.set(true);
 				requestHolder.set(wrappedRequest);
 
@@ -599,7 +599,7 @@ public final class Soklet implements AutoCloseable {
 				try {
 					AtomicBoolean didInvokeMarshaledResponseConsumer = new AtomicBoolean(false);
 
-					requestInterceptor.interceptRequest(requestHolder.get(), resourceMethodHolder.get(), (interceptorRequest) -> {
+					requestInterceptor.interceptRequest(serverType, requestHolder.get(), resourceMethodHolder.get(), (interceptorRequest) -> {
 						requestHolder.set(interceptorRequest);
 
 						try {
