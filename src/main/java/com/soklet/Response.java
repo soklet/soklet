@@ -183,8 +183,9 @@ public final class Response {
 	/**
 	 * The headers to be written to the client for this response.
 	 * <p>
-	 * The keys are the header names and the values are header values
-	 * (it is possible to send the client multiple headers with the same name).
+	 * The keys are the header names and the values are header values. Soklet writes one header line per value.
+	 * If order matters, provide either a {@link java.util.SortedSet} or {@link java.util.LinkedHashSet} to preserve
+	 * the desired ordering; otherwise values are naturally sorted for consistency.
 	 * <p>
 	 * <em>Note that response headers have case-insensitive names per the HTTP spec.</em>
 	 *

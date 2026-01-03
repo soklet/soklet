@@ -142,6 +142,9 @@ public final class MarshaledResponse {
 
 	/**
 	 * The HTTP headers to write for this response.
+	 * <p>
+	 * Soklet writes one header line per value. If order matters, provide either a {@link java.util.SortedSet} or
+	 * {@link java.util.LinkedHashSet} to preserve the desired ordering; otherwise values are naturally sorted for consistency.
 	 *
 	 * @return the headers to write
 	 */

@@ -48,12 +48,15 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -1590,23 +1593,28 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				// HTTP status line
 				printWriter.print("HTTP/1.1 200 OK\r\n");
 
-				// Write headers, ignoring illegal ones
-				for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
-					String headerName = entry.getKey();
+					// Write headers, ignoring illegal ones
+					for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
+						String headerName = entry.getKey();
 
-					if (headerName == null)
-						continue;
+						if (headerName == null)
+							continue;
 
 					if (ILLEGAL_LOWERCASE_HEADER_NAMES.contains(headerName.toLowerCase(Locale.ENGLISH)))
 						throw new IllegalArgumentException(format("You may not specify the '%s' header for %s.%s responses",
 								headerName, HandshakeResult.class.getSimpleName(), HandshakeResult.Accepted.class.getSimpleName()));
 
-					Set<String> values = entry.getValue();
+						Set<String> values = entry.getValue();
+						if (values == null || values.isEmpty())
+							continue;
 
-					if (values != null)
-						for (String value : values)
+						List<String> normalizedValues = normalizeHeaderValues(values);
+						if (normalizedValues.isEmpty())
+							continue;
+
+						for (String value : normalizedValues)
 							printWriter.printf("%s: %s\r\n", headerName, value);
-				}
+					}
 
 				// Emit cookies (one header per cookie)
 				for (ResponseCookie cookie : marshaledResponse.getCookies())
@@ -1632,11 +1640,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				boolean hasContentLength = false;
 				boolean hasTransferEncoding = false;
 
-				for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
-					String headerName = entry.getKey();
+					for (Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
+						String headerName = entry.getKey();
 
-					if (headerName == null)
-						continue;
+						if (headerName == null)
+							continue;
 
 					String lowercaseHeaderName = headerName.toLowerCase(Locale.ENGLISH);
 
@@ -1646,12 +1654,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					if (lowercaseHeaderName.equals("transfer-encoding"))
 						hasTransferEncoding = true;
 
-					Set<String> headerValues = entry.getValue();
+						Set<String> headerValues = entry.getValue();
+						if (headerValues == null || headerValues.isEmpty())
+							continue;
 
-					if (headerValues != null)
-						for (String headerValue : headerValues)
+						List<String> normalizedValues = normalizeHeaderValues(headerValues);
+						if (normalizedValues.isEmpty())
+							continue;
+
+						for (String headerValue : normalizedValues)
 							printWriter.printf("%s: %s\r\n", headerName, headerValue);
-				}
+					}
 
 				// Emit cookies (one header per cookie)
 				for (ResponseCookie cookie : marshaledResponse.getCookies())
@@ -1680,6 +1693,29 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				throw new IllegalStateException(format("Unsupported %s: %s", HandshakeResult.class.getSimpleName(), handshakeResult));
 			}
 		}
+	}
+
+	@NonNull
+	private static List<String> normalizeHeaderValues(@NonNull Set<String> values) {
+		requireNonNull(values);
+
+		if (values.isEmpty())
+			return List.of();
+
+		List<String> normalizedValues;
+
+		if (values instanceof SortedSet || values instanceof LinkedHashSet) {
+			normalizedValues = new ArrayList<>(values.size());
+			for (String value : values)
+				normalizedValues.add(value == null ? "" : value);
+		} else {
+			SortedSet<String> sortedValues = new TreeSet<>();
+			for (String value : values)
+				sortedValues.add(value == null ? "" : value);
+			normalizedValues = new ArrayList<>(sortedValues);
+		}
+
+		return normalizedValues;
 	}
 
 	@NonNull

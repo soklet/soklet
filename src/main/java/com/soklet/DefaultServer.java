@@ -619,17 +619,20 @@ final class DefaultServer implements Server {
 
 		List<Header> headers = new ArrayList<>();
 
-		// Non-cookies headers get their values comma-separated
+		// Emit one header line per value (order preserved for SortedSet/LinkedHashSet)
 		for (Map.Entry<String, Set<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 			String name = entry.getKey();
 			Set<String> values = entry.getValue();
 
-			// Force natural ordering for consistent output if the set is not already sorted.
-			if (!isAlreadySorted(values))
-				values = new TreeSet<>(entry.getValue());
+			if (name == null || values == null || values.isEmpty())
+				continue;
 
-			for (String value : values)
-				headers.add(new Header(name, value == null ? "" : value));
+			List<String> normalizedValues = normalizeHeaderValues(values);
+			if (normalizedValues.isEmpty())
+				continue;
+
+			for (String value : normalizedValues)
+				headers.add(new Header(name, value));
 		}
 
 		// ResponseCookie headers are split into multiple instances of Set-Cookie.
@@ -665,6 +668,30 @@ final class DefaultServer implements Server {
 		requireNonNull(set);
 		return set instanceof SortedSet || set instanceof LinkedHashSet;
 	}
+
+	@NonNull
+	private static List<String> normalizeHeaderValues(@NonNull Set<String> values) {
+		requireNonNull(values);
+
+		if (values.isEmpty())
+			return List.of();
+
+		List<String> normalizedValues;
+
+		if (values instanceof SortedSet || values instanceof LinkedHashSet) {
+			normalizedValues = new ArrayList<>(values.size());
+			for (String value : values)
+				normalizedValues.add(value == null ? "" : value);
+		} else {
+			SortedSet<String> sortedValues = new TreeSet<>();
+			for (String value : values)
+				sortedValues.add(value == null ? "" : value);
+			normalizedValues = new ArrayList<>(sortedValues);
+		}
+
+		return normalizedValues;
+	}
+
 
 	protected void safelyLog(@NonNull LogEvent logEvent) {
 		requireNonNull(logEvent);
