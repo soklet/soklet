@@ -77,6 +77,8 @@ public final class ValueConverterRegistry {
 	// it's preferable to have enum conversion "just work" for string names, which is almost always what's desired.
 	@NonNull
 	private final ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey;
+	private final boolean enableReflexiveConversion;
+	private final boolean enableEnumAutoConversion;
 
 	/**
 	 * Acquires a registry with a sensible default set of converters as specified by {@link ValueConverters#defaultValueConverters()}.
@@ -103,6 +105,8 @@ public final class ValueConverterRegistry {
 		requireNonNull(customValueConverters);
 
 		Set<@NonNull ValueConverter<?, ?>> defaultValueConverters = ValueConverters.defaultValueConverters();
+		boolean enableReflexiveConversion = true;
+		boolean enableEnumAutoConversion = true;
 
 		ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey = new ConcurrentHashMap<>(
 				defaultValueConverters.size()
@@ -116,16 +120,49 @@ public final class ValueConverterRegistry {
 			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(defaultValueConverter), defaultValueConverter);
 
 		// We also include a "reflexive" converter which knows how to convert a type to itself
-		valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(REFLEXIVE_VALUE_CONVERTER), REFLEXIVE_VALUE_CONVERTER);
+		if (enableReflexiveConversion)
+			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(REFLEXIVE_VALUE_CONVERTER), REFLEXIVE_VALUE_CONVERTER);
 
 		// Finally, register any additional converters that were provided
 		for (ValueConverter<?, ?> customValueConverter : customValueConverters)
 			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(customValueConverter), customValueConverter);
 
-		return new ValueConverterRegistry(valueConvertersByCacheKey);
+		return new ValueConverterRegistry(valueConvertersByCacheKey, enableReflexiveConversion, enableEnumAutoConversion);
 	}
 
-	// TODO: we might add a factory method in the future that creates a totally-blank-slate registry that doesn't use defaults at all, doesn't create new ones for enums automatically, etc.
+	/**
+	 * Acquires a registry without any default converters or automatic enum/reflexive conversions.
+	 * <p>
+	 * This method is guaranteed to return a new instance.
+	 *
+	 * @return a registry instance without defaults or automatic conversions
+	 */
+	@NonNull
+	public static ValueConverterRegistry withBlankSlate() {
+		return withBlankSlateSupplementedBy(Set.of());
+	}
+
+	/**
+	 * Acquires a registry without any default converters or automatic enum/reflexive conversions, supplemented with custom converters.
+	 * <p>
+	 * This method is guaranteed to return a new instance.
+	 *
+	 * @param customValueConverters the custom value converters to include in the registry
+	 * @return a registry instance without defaults or automatic conversions, supplemented with custom converters
+	 */
+	@NonNull
+	public static ValueConverterRegistry withBlankSlateSupplementedBy(@NonNull Set<@NonNull ValueConverter<?, ?>> customValueConverters) {
+		requireNonNull(customValueConverters);
+
+		ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey = new ConcurrentHashMap<>(
+				customValueConverters.size() + 1
+		);
+
+		for (ValueConverter<?, ?> customValueConverter : customValueConverters)
+			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(customValueConverter), customValueConverter);
+
+		return new ValueConverterRegistry(valueConvertersByCacheKey, false, false);
+	}
 
 	@NonNull
 	private static CacheKey extractCacheKeyFromValueConverter(@NonNull ValueConverter<?, ?> valueConverter) {
@@ -133,9 +170,13 @@ public final class ValueConverterRegistry {
 		return new CacheKey(valueConverter.getFromType(), valueConverter.getToType());
 	}
 
-	private ValueConverterRegistry(@NonNull ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey) {
+	private ValueConverterRegistry(@NonNull ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey,
+																 boolean enableReflexiveConversion,
+																 boolean enableEnumAutoConversion) {
 		requireNonNull(valueConvertersByCacheKey);
 		this.valueConvertersByCacheKey = valueConvertersByCacheKey;
+		this.enableReflexiveConversion = enableReflexiveConversion;
+		this.enableEnumAutoConversion = enableEnumAutoConversion;
 	}
 
 	/**
@@ -186,7 +227,7 @@ public final class ValueConverterRegistry {
 		Type normalizedToType = normalizePrimitiveTypeIfNecessary(toType);
 
 		// Reflexive case: from == to
-		if (normalizedFromType.equals(normalizedToType))
+		if (this.enableReflexiveConversion && normalizedFromType.equals(normalizedToType))
 			return Optional.of((ValueConverter<F, T>) REFLEXIVE_VALUE_CONVERTER);
 
 		CacheKey cacheKey = new CacheKey(normalizedFromType, normalizedToType);
@@ -194,7 +235,7 @@ public final class ValueConverterRegistry {
 
 		// Special case for enums.
 		// If no converter was registered for converting a String to an Enum<?>, create a simple converter and cache it off
-		if (valueConverter == null && String.class.equals(normalizedFromType) && toType instanceof @SuppressWarnings("rawtypes")Class toClass) {
+		if (this.enableEnumAutoConversion && valueConverter == null && String.class.equals(normalizedFromType) && toType instanceof @SuppressWarnings("rawtypes")Class toClass) {
 			if (toClass.isEnum()) {
 				valueConverter = new ValueConverter<>() {
 					@Override

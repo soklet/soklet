@@ -23,10 +23,12 @@ import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.RequestBody;
 import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.converter.ValueConversionException;
+import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
 import com.soklet.exception.IllegalRequestBodyException;
 import com.soklet.exception.IllegalRequestException;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -1024,6 +1026,46 @@ public class AdvancedTests {
 		testConversion(registry, "2024-13-45", LocalDate.class, false); // Invalid date
 	}
 
+	@Test
+	public void testBlankSlateValueConverterRegistry() {
+		ValueConverterRegistry registry = ValueConverterRegistry.withBlankSlate();
+
+		Assertions.assertTrue(registry.get(String.class, Integer.class).isEmpty(),
+				"Blank-slate registry should not include default converters");
+		Assertions.assertTrue(registry.get(String.class, String.class).isEmpty(),
+				"Blank-slate registry should not include reflexive conversion");
+		Assertions.assertTrue(registry.get(String.class, ValueConverterTestEnum.class).isEmpty(),
+				"Blank-slate registry should not auto-generate enum converters");
+
+		ValueConverter<String, Integer> customConverter = new ValueConverter<>() {
+			@NonNull
+			@Override
+			public Optional<Integer> convert(@Nullable String from) throws ValueConversionException {
+				return from == null ? Optional.empty() : Optional.of(Integer.valueOf(from));
+			}
+
+			@NonNull
+			@Override
+			public java.lang.reflect.Type getFromType() {
+				return String.class;
+			}
+
+			@NonNull
+			@Override
+			public java.lang.reflect.Type getToType() {
+				return Integer.class;
+			}
+		};
+
+		ValueConverterRegistry supplemented = ValueConverterRegistry.withBlankSlateSupplementedBy(Set.of(customConverter));
+		Assertions.assertTrue(supplemented.get(String.class, Integer.class).isPresent(),
+				"Custom converters should be available in blank-slate registries");
+		Assertions.assertTrue(supplemented.get(String.class, String.class).isEmpty(),
+				"Blank-slate registries should still avoid reflexive conversion");
+		Assertions.assertTrue(supplemented.get(String.class, ValueConverterTestEnum.class).isEmpty(),
+				"Blank-slate registries should still avoid enum auto-conversion");
+	}
+
 	private void testConversion(ValueConverterRegistry registry, String input,
 															Class<?> targetType, boolean shouldSucceed) {
 		try {
@@ -1038,6 +1080,10 @@ public class AdvancedTests {
 				Assertions.fail("Unexpected conversion exception for: " + input);
 			}
 		}
+	}
+
+	private enum ValueConverterTestEnum {
+		ONE
 	}
 
 	// ==================== Resource Path Matching Edge Cases ====================
