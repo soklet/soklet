@@ -37,6 +37,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Type;
 import java.lang.ref.WeakReference;
 import java.net.Socket;
 import java.net.URI;
@@ -1046,13 +1047,13 @@ public class AdvancedTests {
 
 			@NonNull
 			@Override
-			public java.lang.reflect.Type getFromType() {
+			public Type getFromType() {
 				return String.class;
 			}
 
 			@NonNull
 			@Override
-			public java.lang.reflect.Type getToType() {
+			public Type getToType() {
 				return Integer.class;
 			}
 		};
