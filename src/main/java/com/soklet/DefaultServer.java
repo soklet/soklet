@@ -99,6 +99,8 @@ final class DefaultServer implements Server {
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 	@NonNull
 	private static final Integer DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER;
+	@NonNull
+	private static final Integer DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -112,6 +114,7 @@ final class DefaultServer implements Server {
 		DEFAULT_MAXIMUM_CONNECTIONS = 0;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 		DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER = 64;
+		DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER = 16;
 	}
 
 	@NonNull
@@ -124,6 +127,10 @@ final class DefaultServer implements Server {
 	private final Duration requestTimeout;
 	@NonNull
 	private final Duration requestHandlerTimeout;
+	@NonNull
+	private final Integer requestHandlerConcurrency;
+	@NonNull
+	private final Integer requestHandlerQueueCapacity;
 	@NonNull
 	private final Duration socketSelectTimeout;
 	@NonNull
@@ -175,18 +182,45 @@ final class DefaultServer implements Server {
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.defaultInstance();
 		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.withDefaults();
+
+		int defaultRequestHandlerConcurrency = Utilities.virtualThreadsAvailable()
+				? Math.max(1, this.concurrency * DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER)
+				: Math.max(1, this.concurrency);
+
+		this.requestHandlerConcurrency = builder.requestHandlerConcurrency != null
+				? builder.requestHandlerConcurrency
+				: defaultRequestHandlerConcurrency;
+
+		if (this.requestHandlerConcurrency < 1)
+			throw new IllegalArgumentException("Request handler concurrency must be > 0");
+
+		this.requestHandlerQueueCapacity = builder.requestHandlerQueueCapacity != null
+				? builder.requestHandlerQueueCapacity
+				: Math.max(1, this.requestHandlerConcurrency * DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER);
+
+		if (this.requestHandlerQueueCapacity < 1)
+			throw new IllegalArgumentException("Request handler queue capacity must be > 0");
+
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "request-handler-";
+			int threadPoolSize = getRequestHandlerConcurrency();
+			int queueCapacity = getRequestHandlerQueueCapacity();
 
-			if (Utilities.virtualThreadsAvailable())
-				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
+			if (Utilities.virtualThreadsAvailable()) {
+				ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
 							.throwable(throwable)
 							.build());
 				});
 
-			int threadPoolSize = Runtime.getRuntime().availableProcessors();
-			int queueCapacity = Math.max(1, threadPoolSize * DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER);
+				return new ThreadPoolExecutor(
+						threadPoolSize,
+						threadPoolSize,
+						0L,
+						TimeUnit.MILLISECONDS,
+						new ArrayBlockingQueue<>(queueCapacity),
+						threadFactory);
+			}
 
 			return new ThreadPoolExecutor(
 					threadPoolSize,
@@ -810,6 +844,16 @@ final class DefaultServer implements Server {
 	@NonNull
 	protected Duration getRequestHandlerTimeout() {
 		return this.requestHandlerTimeout;
+	}
+
+	@NonNull
+	protected Integer getRequestHandlerConcurrency() {
+		return this.requestHandlerConcurrency;
+	}
+
+	@NonNull
+	protected Integer getRequestHandlerQueueCapacity() {
+		return this.requestHandlerQueueCapacity;
 	}
 
 	@NonNull

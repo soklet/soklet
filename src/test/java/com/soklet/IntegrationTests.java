@@ -43,6 +43,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 import static com.soklet.TestSupport.connectWithRetry;
@@ -578,6 +583,41 @@ public class IntegrationTests {
 	}
 
 	@ThreadSafe
+	public static class QueueBlockingResource {
+		private static final AtomicInteger startedCount = new AtomicInteger(0);
+		private static volatile CountDownLatch firstStartedLatch = new CountDownLatch(1);
+		private static volatile CountDownLatch releaseFirstLatch = new CountDownLatch(1);
+
+		static void reset() {
+			startedCount.set(0);
+			firstStartedLatch = new CountDownLatch(1);
+			releaseFirstLatch = new CountDownLatch(1);
+		}
+
+		static boolean awaitFirstStarted(long timeout, @NonNull TimeUnit unit) throws InterruptedException {
+			return firstStartedLatch.await(timeout, unit);
+		}
+
+		static void releaseFirst() {
+			releaseFirstLatch.countDown();
+		}
+
+		@GET("/queue-block")
+		public String block() {
+			if (startedCount.incrementAndGet() == 1) {
+				firstStartedLatch.countDown();
+				try {
+					releaseFirstLatch.await(5, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}
+
+			return "ok";
+		}
+	}
+
+	@ThreadSafe
 	public static class UsersResource {
 		@GET("/users/me")
 		public String me() {return "literal";}
@@ -693,6 +733,88 @@ public class IntegrationTests {
 					Assertions.fail("Connection did not close after timeout response");
 				}
 			}
+		}
+	}
+
+	@Test
+	public void requestHandlerQueueCapacity_rejectsWhenFull() throws Exception {
+		int port = findFreePort();
+		QueueBlockingResource.reset();
+
+		Server server = Server.withPort(port)
+						.concurrency(1)
+						.requestHandlerConcurrency(1)
+						.requestHandlerQueueCapacity(1)
+						.requestHandlerTimeout(Duration.ofSeconds(5))
+						.build();
+
+		SokletConfig cfg = SokletConfig.withServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(QueueBlockingResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			ExecutorService requestExecutor = ((DefaultServer) server).getRequestHandlerExecutorService().orElse(null);
+			if (requestExecutor instanceof ThreadPoolExecutor threadPoolExecutor) {
+				threadPoolExecutor.prestartAllCoreThreads();
+			}
+
+			Socket socket1 = connectWithRetry("127.0.0.1", port, 2000);
+			socket1.setSoTimeout(4000);
+			OutputStream out1 = socket1.getOutputStream();
+			out1.write((
+					"GET /queue-block HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out1.flush();
+
+			Assertions.assertTrue(QueueBlockingResource.awaitFirstStarted(5, TimeUnit.SECONDS),
+					"Expected first request to enter handler");
+
+			Socket socket2 = connectWithRetry("127.0.0.1", port, 2000);
+			socket2.setSoTimeout(4000);
+			OutputStream out2 = socket2.getOutputStream();
+			out2.write((
+					"GET /queue-block HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out2.flush();
+
+			Thread.sleep(200);
+
+			try (Socket socket3 = connectWithRetry("127.0.0.1", port, 2000);
+					 InputStream in3 = socket3.getInputStream();
+					 OutputStream out3 = socket3.getOutputStream()) {
+				socket3.setSoTimeout(4000);
+				out3.write((
+						"GET /queue-block HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out3.flush();
+
+				RawResponse response3 = readResponse(in3);
+				Assertions.assertTrue(response3.statusLine().startsWith("HTTP/1.1 503"),
+						"Expected 503 for full request handler queue");
+			} finally {
+				QueueBlockingResource.releaseFirst();
+			}
+
+			RawResponse response1 = readResponse(socket1.getInputStream());
+			Assertions.assertTrue(response1.statusLine().startsWith("HTTP/1.1 200"));
+
+			RawResponse response2 = readResponse(socket2.getInputStream());
+			Assertions.assertTrue(response2.statusLine().startsWith("HTTP/1.1 200"));
+
+			socket1.close();
+			socket2.close();
 		}
 	}
 

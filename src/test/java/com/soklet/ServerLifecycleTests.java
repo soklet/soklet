@@ -164,6 +164,50 @@ public class ServerLifecycleTests {
 		}
 	}
 
+	@Test
+	public void requestHandlerDefaults_useExpectedConcurrencyAndQueueCapacity() {
+		int concurrency = 3;
+		Server server = Server.withPort(0)
+				.concurrency(concurrency)
+				.build();
+
+		DefaultServer internal = (DefaultServer) server;
+
+		boolean virtualThreadsAvailable = Boolean.TRUE.equals(Utilities.virtualThreadsAvailable());
+		int expectedConcurrency = virtualThreadsAvailable ? concurrency * 16 : concurrency;
+		int expectedQueueCapacity = expectedConcurrency * 64;
+
+		Assertions.assertEquals(Integer.valueOf(expectedConcurrency), internal.getRequestHandlerConcurrency());
+		Assertions.assertEquals(Integer.valueOf(expectedQueueCapacity), internal.getRequestHandlerQueueCapacity());
+	}
+
+	@Test
+	public void requestHandlerQueueCapacity_defaultsFromExplicitConcurrency() {
+		Server server = Server.withPort(0)
+				.requestHandlerConcurrency(4)
+				.build();
+
+		DefaultServer internal = (DefaultServer) server;
+		Assertions.assertEquals(Integer.valueOf(4), internal.getRequestHandlerConcurrency());
+		Assertions.assertEquals(Integer.valueOf(4 * 64), internal.getRequestHandlerQueueCapacity());
+	}
+
+	@Test
+	public void requestHandlerConcurrency_requiresPositiveValue() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				Server.withPort(0)
+						.requestHandlerConcurrency(0)
+						.build());
+	}
+
+	@Test
+	public void requestHandlerQueueCapacity_requiresPositiveValue() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				Server.withPort(0)
+						.requestHandlerQueueCapacity(0)
+						.build());
+	}
+
 	public static class HealthResource {
 		@GET("/health")
 		public String health() {return "ok";}
