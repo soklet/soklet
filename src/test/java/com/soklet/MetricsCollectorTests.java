@@ -204,7 +204,7 @@ public class MetricsCollectorTests {
 		assertFalse(filteredSnapshot.contains("soklet_http_request_duration_nanos"));
 
 		MetricsCollector.SnapshotTextOptions openMetricsOptions = MetricsCollector.SnapshotTextOptions
-				.withMetricsFormat(MetricsCollector.MetricsFormat.OPEN_METRICS)
+				.withMetricsFormat(MetricsCollector.MetricsFormat.OPEN_METRICS_1_0)
 				.build();
 		String openMetricsSnapshot = collector.snapshotText(openMetricsOptions).orElseThrow();
 		assertTrue(openMetricsSnapshot.contains("# EOF"));

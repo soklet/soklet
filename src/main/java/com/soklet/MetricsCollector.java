@@ -39,8 +39,8 @@ import static java.util.Objects.requireNonNull;
  * Contract for collecting operational metrics from Soklet.
  * <p>
  * Soklet's standard implementation, available via {@link #withDefaults()}, supports detailed histogram collection,
- * connection accept/reject counters, immutable snapshots (via {@link #snapshot()}), and provides Prometheus/OpenMetrics
- * export helpers for convenience.
+ * connection accept/reject counters, immutable snapshots (via {@link #snapshot()}), and provides Prometheus
+ * (text format v0.0.4) / OpenMetrics (1.0) export helpers for convenience.
  * To disable metrics collection without a custom implementation, use {@link #disabled()}.
  * <p>
  * If you prefer OpenTelemetry, Micrometer, or another metrics system for monitoring, you might choose to create your own
@@ -344,7 +344,7 @@ public interface MetricsCollector {
 	/**
 	 * Returns a text snapshot of metrics collected so far, if supported.
 	 * <p>
-	 * The default collector supports Prometheus and OpenMetrics text exposition formats.
+	 * The default collector supports Prometheus (text format v0.0.4) and OpenMetrics (1.0) text exposition formats.
 	 *
 	 * @param options the snapshot rendering options
 	 * @return a textual metrics snapshot, or {@link Optional#empty()} if unsupported
@@ -369,13 +369,13 @@ public interface MetricsCollector {
 	 */
 	enum MetricsFormat {
 		/**
-		 * Prometheus text exposition format.
+		 * Prometheus text exposition format (v0.0.4).
 		 */
 		PROMETHEUS,
 		/**
-		 * OpenMetrics text exposition format, including the {@code # EOF} trailer.
+		 * OpenMetrics text exposition format (1.0), including the {@code # EOF} trailer.
 		 */
-		OPEN_METRICS
+		OPEN_METRICS_1_0
 	}
 
 	/**

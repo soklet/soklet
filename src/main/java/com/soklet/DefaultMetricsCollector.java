@@ -543,7 +543,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 					snapshot.getSseConnectionDurations(), DefaultMetricsCollector::labelsForSseTerminationKey, options);
 		}
 
-		if (options.getMetricsFormat() == MetricsFormat.OPEN_METRICS)
+		if (options.getMetricsFormat() == MetricsFormat.OPEN_METRICS_1_0)
 			sb.append("# EOF\n");
 
 		return Optional.of(sb.toString());
