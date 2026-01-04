@@ -117,6 +117,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	private static final Integer DEFAULT_BROADCASTER_CACHE_CAPACITY;
 	@NonNull
+	private static final Integer DEFAULT_BROADCASTER_CONNECTION_SET_CAPACITY;
+	@NonNull
 	private static final Integer DEFAULT_RESOURCE_PATH_CACHE_CAPACITY;
 	@NonNull
 	private static final Boolean DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
@@ -153,6 +155,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_CONNECTION_QUEUE_CAPACITY = 128;
 		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
 		DEFAULT_BROADCASTER_CACHE_CAPACITY = 1_024;
+		DEFAULT_BROADCASTER_CONNECTION_SET_CAPACITY = 1_024;
 		DEFAULT_RESOURCE_PATH_CACHE_CAPACITY = 8_192;
 		DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED = true;
 
@@ -181,6 +184,40 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		void onBackpressure(@NonNull DefaultServerSentEventBroadcaster owner,
 												@NonNull DefaultServerSentEventConnection connection,
 												@NonNull String cause);
+	}
+
+	@ThreadSafe
+	private static final class HandshakeContext {
+		@NonNull
+		private final Object channelLock;
+		@NonNull
+		private final AtomicBoolean handshakeResponseWritten;
+		@NonNull
+		private final AtomicBoolean acceptanceFinalized;
+		@NonNull
+		private final AtomicBoolean establishmentFailureNotified;
+		@NonNull
+		private final AtomicReference<ScheduledFuture<?>> handshakeTimeoutFutureRef;
+		@NonNull
+		private final AtomicReference<Thread> handlerThreadRef;
+		@NonNull
+		private final AtomicReference<Request> requestRef;
+		@NonNull
+		private final AtomicReference<ResourceMethod> resourceMethodRef;
+		@NonNull
+		private final AtomicReference<InetSocketAddress> remoteAddressRef;
+
+		private HandshakeContext(@Nullable InetSocketAddress remoteAddress) {
+			this.channelLock = new Object();
+			this.handshakeResponseWritten = new AtomicBoolean(false);
+			this.acceptanceFinalized = new AtomicBoolean(false);
+			this.establishmentFailureNotified = new AtomicBoolean(false);
+			this.handshakeTimeoutFutureRef = new AtomicReference<>();
+			this.handlerThreadRef = new AtomicReference<>();
+			this.requestRef = new AtomicReference<>();
+			this.resourceMethodRef = new AtomicReference<>();
+			this.remoteAddressRef = new AtomicReference<>(remoteAddress);
+		}
 	}
 
 	@NonNull
@@ -224,6 +261,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	private final Supplier<ExecutorService> requestReaderExecutorServiceSupplier;
 	@NonNull
+	private final Supplier<ExecutorService> connectionExecutorServiceSupplier;
+	@NonNull
 	private final Integer concurrentConnectionLimit;
 	@NonNull
 	private final Integer connectionQueueCapacity;
@@ -235,6 +274,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private volatile ScheduledExecutorService requestHandlerTimeoutExecutorService;
 	@Nullable
 	private volatile ExecutorService requestReaderExecutorService;
+	@Nullable
+	private volatile ExecutorService connectionExecutorService;
 	@NonNull
 	private volatile Boolean started;
 	@NonNull
@@ -277,7 +318,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 																						 @NonNull ResourcePath resourcePath,
 																						 @NonNull BackpressureHandler backpressureHandler,
 																						 @NonNull Consumer<DefaultServerSentEventConnection> connectionUnregisteredListener,
-																						 @NonNull Consumer<LogEvent> logEventConsumer) {
+																						 @NonNull Consumer<LogEvent> logEventConsumer,
+																						 int connectionSetInitialCapacity) {
 			requireNonNull(resourceMethod);
 			requireNonNull(resourcePath);
 			requireNonNull(backpressureHandler);
@@ -289,8 +331,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.backpressureHandler = backpressureHandler;
 			this.connectionUnregisteredListener = connectionUnregisteredListener;
 			this.logEventConsumer = logEventConsumer;
-			// TODO: let clients specify capacity
-			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(256);
+			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(Math.max(1, connectionSetInitialCapacity));
 		}
 
 		@NonNull
@@ -657,6 +698,19 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					threadFactory);
 		};
 
+		this.connectionExecutorServiceSupplier = () ->
+				Utilities.createVirtualThreadsNewThreadPerTaskExecutor("sse-connection-", (Thread thread, Throwable throwable) -> {
+					try {
+						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+										"Unexpected exception occurred during Server-Sent Event connection processing")
+								.throwable(throwable)
+								.build());
+					} catch (Throwable loggingThrowable) {
+						throwable.printStackTrace(System.err);
+						loggingThrowable.printStackTrace(System.err);
+					}
+				});
+
 		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : DEFAULT_CONCURRENT_CONNECTION_LIMIT;
 
 		if (this.concurrentConnectionLimit < 1)
@@ -718,6 +772,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
 			this.requestHandlerTimeoutExecutorService = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "sse-request-handler-timeout"));
 			this.requestReaderExecutorService = getRequestReaderExecutorServiceSupplier().get();
+			this.connectionExecutorService = getConnectionExecutorServiceSupplier().get();
 			this.stopping = false;
 			this.started = true; // set before thread starts to avoid early exit races
 			this.eventLoopThread = new Thread(this::startInternal, "sse-event-loop");
@@ -856,19 +911,32 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				socket.setKeepAlive(true);
 				socket.setTcpNoDelay(true);
 
+				InetSocketAddress remoteAddress = null;
 				try {
-					executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
-				} catch (RejectedExecutionException e) {
-					InetSocketAddress remoteAddress = null;
-					try {
-						SocketAddress socketAddress = clientSocketChannel.getRemoteAddress();
-						if (socketAddress instanceof InetSocketAddress)
-							remoteAddress = (InetSocketAddress) socketAddress;
-					} catch (IOException ignored) {
-						// Best effort
-					}
+					SocketAddress socketAddress = clientSocketChannel.getRemoteAddress();
+					if (socketAddress instanceof InetSocketAddress)
+						remoteAddress = (InetSocketAddress) socketAddress;
+				} catch (IOException ignored) {
+					// Best effort
+				}
 
-					notifyWillAcceptConnection(remoteAddress);
+				HandshakeContext handshakeContext = new HandshakeContext(remoteAddress);
+				notifyWillAcceptConnection(remoteAddress);
+
+				ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
+				if (requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
+					handshakeContext.handshakeTimeoutFutureRef.set(requestHandlerTimeoutExecutorService.schedule(() ->
+									handleHandshakeTimeout(clientSocketChannel, handshakeContext),
+							Math.max(1L, getRequestHandlerTimeout().toMillis()),
+							TimeUnit.MILLISECONDS));
+				}
+
+				try {
+					executorService.submit(() -> handleClientSocketChannel(clientSocketChannel, handshakeContext));
+				} catch (RejectedExecutionException e) {
+					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
+					handshakeContext.handshakeResponseWritten.compareAndSet(false, true);
+					handshakeContext.acceptanceFinalized.compareAndSet(false, true);
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
 
 					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
@@ -914,36 +982,109 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	protected void handleClientSocketChannel(@NonNull SocketChannel clientSocketChannel) {
+	private void handleHandshakeTimeout(@NonNull SocketChannel clientSocketChannel,
+																			@NonNull HandshakeContext handshakeContext) {
 		requireNonNull(clientSocketChannel);
+		requireNonNull(handshakeContext);
+
+		if (!handshakeContext.handshakeResponseWritten.compareAndSet(false, true))
+			return;
+
+		handshakeContext.acceptanceFinalized.compareAndSet(false, true);
+
+		Request request = handshakeContext.requestRef.get();
+		ResourceMethod resourceMethod = handshakeContext.resourceMethodRef.get();
+		InetSocketAddress remoteAddress = handshakeContext.remoteAddressRef.get();
+
+		if (request == null) {
+			notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR,
+					new TimeoutException("SSE handshake timed out"));
+		} else if (handshakeContext.establishmentFailureNotified.compareAndSet(false, true)) {
+			TimeoutException timeoutException = new TimeoutException("SSE handshake timed out");
+			notifyDidFailToEstablishServerSentEventConnection(request,
+					resourceMethod,
+					ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT,
+					timeoutException);
+		}
+
+		byte[] responseBytes = FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE;
+
+		try {
+			ResponseMarshaler responseMarshaler = getResponseMarshaler().orElse(null);
+			if (request != null && responseMarshaler != null) {
+				MarshaledResponse response = responseMarshaler.forServiceUnavailable(request, resourceMethod);
+				responseBytes = createHandshakeHttpResponse(RequestResult.withMarshaledResponse(response).build());
+			}
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to prepare SSE handshake timeout response")
+					.throwable(t)
+					.build());
+		}
+
+		try {
+			synchronized (handshakeContext.channelLock) {
+				writeFully(clientSocketChannel, responseBytes);
+			}
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to write SSE handshake timeout response")
+					.throwable(t)
+					.build());
+		} finally {
+			try {
+				synchronized (handshakeContext.channelLock) {
+					clientSocketChannel.close();
+				}
+			} catch (IOException ignored) {
+				// Nothing to do
+			}
+		}
+
+		Thread handlerThread = handshakeContext.handlerThreadRef.get();
+		if (handlerThread != null)
+			handlerThread.interrupt();
+	}
+
+	protected void handleClientSocketChannel(@NonNull SocketChannel clientSocketChannel,
+																					@NonNull HandshakeContext handshakeContext) {
+		requireNonNull(clientSocketChannel);
+		requireNonNull(handshakeContext);
 
 		ClientSocketChannelRegistration clientSocketChannelRegistration = null;
 		Request request = null;
 		ResourceMethod resourceMethod = null;
-		Instant writeStarted;
-		Throwable throwable = null;
-		Object channelLock = new Object();
 
-		// Keep track of whether we should go through the "handshake accepted" flow.
-		// Might change from "accepted" to "rejected" if an error occurs
 		AtomicReference<HandshakeResult.Accepted> handshakeAcceptedReference = new AtomicReference<>();
 		AtomicBoolean connectionSlotReserved = new AtomicBoolean(false);
-		AtomicBoolean handshakeResponseWritten = new AtomicBoolean(false);
-		AtomicBoolean acceptanceFinalized = new AtomicBoolean(false);
-		AtomicBoolean establishmentFailureNotified = new AtomicBoolean(false);
-		AtomicReference<ScheduledFuture<?>> handshakeTimeoutFutureRef = new AtomicReference<>();
-		InetSocketAddress remoteAddress = null;
+		boolean connectionProcessingStarted = false;
 
-		try (clientSocketChannel) {
-			try {
+		handshakeContext.handlerThreadRef.set(Thread.currentThread());
+
+		Object channelLock = handshakeContext.channelLock;
+		AtomicBoolean handshakeResponseWritten = handshakeContext.handshakeResponseWritten;
+		AtomicBoolean acceptanceFinalized = handshakeContext.acceptanceFinalized;
+		AtomicBoolean establishmentFailureNotified = handshakeContext.establishmentFailureNotified;
+
+		InetSocketAddress remoteAddress = handshakeContext.remoteAddressRef.get();
+
+		if (handshakeResponseWritten.get()) {
+			closeSocketChannel(clientSocketChannel, channelLock);
+			return;
+		}
+
+		try {
+			if (remoteAddress == null) {
 				try {
 					SocketAddress socketAddress = clientSocketChannel.getRemoteAddress();
-					if (socketAddress instanceof InetSocketAddress)
+					if (socketAddress instanceof InetSocketAddress) {
 						remoteAddress = (InetSocketAddress) socketAddress;
+						handshakeContext.remoteAddressRef.set(remoteAddress);
+					}
 				} catch (IOException ignored) {
 					// Best effort
 				}
-				notifyWillAcceptConnection(remoteAddress);
+			}
+
+			try {
 				String rawRequest = readRequest(clientSocketChannel);
 				request = parseRequest(rawRequest, remoteAddress);
 			} catch (RequestTooLargeIOException e) {
@@ -960,22 +1101,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						.throwable(e)
 						.build());
 
-				try {
-					synchronized (channelLock) {
-						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
-					}
-				} catch (Throwable t) {
-					// best effort
-				} finally {
+				if (handshakeResponseWritten.compareAndSet(false, true)) {
+					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 					try {
 						synchronized (channelLock) {
-							clientSocketChannel.close();
+							writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
 						}
-					} catch (IOException ignored) {
-						// Nothing to do
+					} catch (Throwable t) {
+						// best effort
 					}
 				}
 
+				closeSocketChannel(clientSocketChannel, channelLock);
 				return;
 			} catch (IllegalRequestException e) {
 				if (acceptanceFinalized.compareAndSet(false, true))
@@ -985,44 +1122,36 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						.throwable(e)
 						.build());
 
-				try {
-					synchronized (channelLock) {
-						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE);
-					}
-				} catch (Throwable t) {
-					// best effort
-				} finally {
+				if (handshakeResponseWritten.compareAndSet(false, true)) {
+					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 					try {
 						synchronized (channelLock) {
-							clientSocketChannel.close();
+							writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE);
 						}
-					} catch (IOException ignored) {
-						// Nothing to do
+					} catch (Throwable t) {
+						// best effort
 					}
 				}
 
+				closeSocketChannel(clientSocketChannel, channelLock);
 				return;
 			} catch (SocketTimeoutException e) {
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.REQUEST_READ_TIMEOUT, e);
 
 				// Request read timed out before we could parse a handshake, return 408 and close.
-				try {
-					synchronized (channelLock) {
-						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE);
-					}
-				} catch (Throwable t) {
-					// best effort
-				} finally {
+				if (handshakeResponseWritten.compareAndSet(false, true)) {
+					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 					try {
 						synchronized (channelLock) {
-							clientSocketChannel.close();
+							writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE);
 						}
-					} catch (IOException ignored) {
-						// Nothing to do
+					} catch (Throwable t) {
+						// best effort
 					}
 				}
 
+				closeSocketChannel(clientSocketChannel, channelLock);
 				return;
 			} catch (Exception e) {
 				if (acceptanceFinalized.compareAndSet(false, true))
@@ -1034,6 +1163,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				throw e;
 			}
 
+			handshakeContext.requestRef.set(request);
+
+			if (handshakeResponseWritten.get()) {
+				closeSocketChannel(clientSocketChannel, channelLock);
+				return;
+			}
+
 			try {
 				if (request.getHttpMethod() == HttpMethod.GET)
 					validateNoRequestBodyHeaders(request);
@@ -1043,23 +1179,19 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					notifyDidFailToEstablishServerSentEventConnection(request, resourceMethod,
 							ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, e);
 
-				try {
-					MarshaledResponse response = getResponseMarshaler().get().forThrowable(request, e, null);
-					synchronized (channelLock) {
-						writeHandshakeResponseToChannel(clientSocketChannel, response);
-					}
-				} catch (Throwable t) {
-					// best effort
-				} finally {
+				if (handshakeResponseWritten.compareAndSet(false, true)) {
+					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 					try {
+						MarshaledResponse response = getResponseMarshaler().get().forThrowable(request, e, null);
 						synchronized (channelLock) {
-							clientSocketChannel.close();
+							writeHandshakeResponseToChannel(clientSocketChannel, response);
 						}
-					} catch (IOException ignored) {
-						// Nothing to do
+					} catch (Throwable t) {
+						// best effort
 					}
 				}
 
+				closeSocketChannel(clientSocketChannel, channelLock);
 				return;
 			}
 
@@ -1069,6 +1201,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (resourcePathDeclaration != null)
 				resourceMethod = getResourceMethodsByResourcePathDeclaration().get(resourcePathDeclaration);
 
+			handshakeContext.resourceMethodRef.set(resourceMethod);
+
 			// Fast-path check for overload (authoritative limit enforcement occurs after handshake acceptance)
 			if (resourcePathDeclaration != null && getActiveConnectionCount() >= getConcurrentConnectionLimit()) {
 				if (acceptanceFinalized.compareAndSet(false, true))
@@ -1077,25 +1211,20 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
 						format("Rejecting request to %s: Concurrent connection limit (%d) reached", request.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
 
-				MarshaledResponse response = getResponseMarshaler().get().forServiceUnavailable(request, resourceMethod);
+				if (handshakeResponseWritten.compareAndSet(false, true)) {
+					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
+					MarshaledResponse response = getResponseMarshaler().get().forServiceUnavailable(request, resourceMethod);
 
-				try {
-					synchronized (channelLock) {
-						writeMarshaledResponseToChannel(clientSocketChannel, response);
-					}
-				} catch (Throwable t) {
-					// best effort
-				} finally {
 					try {
 						synchronized (channelLock) {
-							clientSocketChannel.close();
+							writeMarshaledResponseToChannel(clientSocketChannel, response);
 						}
-					} catch (IOException ignored) {
-						// Nothing to do
+					} catch (Throwable t) {
+						// best effort
 					}
 				}
 
-				// Bail early
+				closeSocketChannel(clientSocketChannel, channelLock);
 				return;
 			}
 
@@ -1104,59 +1233,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
 			// Subsequent writes to the open socket (those following successful transmission of the "accepted" handshake response) are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
 			final Request requestForHandler = request;
-			final ResourceMethod resourceMethodForHandler = resourceMethod;
-
-			ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
-			Thread handlerThread = Thread.currentThread();
-			InetSocketAddress remoteAddressSnapshot = remoteAddress;
-
-			if (requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
-				handshakeTimeoutFutureRef.set(requestHandlerTimeoutExecutorService.schedule(() -> {
-					if (!handshakeResponseWritten.compareAndSet(false, true))
-						return;
-
-					acceptanceFinalized.compareAndSet(false, true);
-					if (establishmentFailureNotified.compareAndSet(false, true)) {
-						TimeoutException timeoutException = new TimeoutException("SSE handshake timed out");
-						notifyDidFailToEstablishServerSentEventConnection(requestForHandler, resourceMethodForHandler,
-								ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT, timeoutException);
-					}
-
-					byte[] responseBytes = FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE;
-
-					try {
-						ResponseMarshaler responseMarshaler = getResponseMarshaler().orElse(null);
-						if (responseMarshaler != null) {
-							MarshaledResponse response = responseMarshaler.forServiceUnavailable(requestForHandler, resourceMethodForHandler);
-							responseBytes = createHandshakeHttpResponse(RequestResult.withMarshaledResponse(response).build());
-						}
-					} catch (Throwable t) {
-						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to prepare SSE handshake timeout response")
-								.throwable(t)
-								.build());
-					}
-
-					try {
-						synchronized (channelLock) {
-							writeFully(clientSocketChannel, responseBytes);
-						}
-					} catch (Throwable t) {
-						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to write SSE handshake timeout response")
-								.throwable(t)
-								.build());
-					} finally {
-						try {
-							synchronized (channelLock) {
-								clientSocketChannel.close();
-							}
-						} catch (IOException ignored) {
-							// Nothing to do
-						}
-					}
-
-					handlerThread.interrupt();
-				}, Math.max(1L, getRequestHandlerTimeout().toMillis()), TimeUnit.MILLISECONDS));
-			}
 
 			try {
 				InetSocketAddress remoteAddressSnapshotForHandler = remoteAddress;
@@ -1164,7 +1240,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					if (!handshakeResponseWritten.compareAndSet(false, true))
 						return;
 
-					cancelTimeout(handshakeTimeoutFutureRef.getAndSet(null));
+					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 
 					// Set to the value Soklet processing gives us. Will be the empty Optional if no resource method was matched
 					HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
@@ -1233,7 +1309,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				});
 			} catch (Throwable t) {
 				if (handshakeResponseWritten.compareAndSet(false, true)) {
-					cancelTimeout(handshakeTimeoutFutureRef.getAndSet(null));
+					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 					try {
 						synchronized (channelLock) {
 							writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE);
@@ -1281,264 +1357,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidAcceptConnection(remoteAddress);
 
-				DefaultServerSentEventConnection serverSentEventConnection = clientSocketChannelRegistration.serverSentEventConnection();
-				ServerSentEventConnection connectionSnapshot = serverSentEventConnection.getSnapshot();
-				Request connectionRequest = connectionSnapshot.getRequest();
-				ResourceMethod connectionResourceMethod = connectionSnapshot.getResourceMethod();
-
-				try {
-					getLifecycleObserver().get().didEstablishServerSentEventConnection(connectionSnapshot);
-				} catch (Throwable t) {
-					safelyLog(LogEvent.with(
-									LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
-									format("An exception occurred while invoking %s::didEstablishServerSentEventConnection",
-											LifecycleObserver.class.getSimpleName()))
-							.throwable(t)
-							.build());
+				if (startConnectionProcessing(clientSocketChannelRegistration, channelLock)) {
+					connectionProcessingStarted = true;
+					return;
 				}
 
-				safelyCollectMetrics(
-						format("An exception occurred while invoking %s::didEstablishServerSentEventConnection", MetricsCollector.class.getSimpleName()),
-						connectionRequest,
-						connectionResourceMethod,
-						(metricsCollector) -> metricsCollector.didEstablishServerSentEventConnection(connectionSnapshot));
-
-				BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue =
-						serverSentEventConnection.getWriteQueue();
-
-				while (true) {
-					DefaultServerSentEventConnection.WriteQueueElement writeQueueElement;
-
-					try {
-						// Wait for an event/comment; if idle for heartbeatInterval, emit a heartbeat comment.
-						writeQueueElement = writeQueue.poll(getHeartbeatInterval().toMillis(), TimeUnit.MILLISECONDS);
-					} catch (InterruptedException e) {
-						// Interrupted during shutdown - exit cleanly
-						Thread.currentThread().interrupt();
-						break;
-					}
-
-					// Idle heartbeat
-					if (writeQueueElement == null)
-						writeQueueElement = DefaultServerSentEventConnection.WriteQueueElement.withComment(HEARTBEAT_COMMENT, System.nanoTime());
-
-					if (writeQueueElement.isPoisonPill()) {
-						// Encountered poison pill, exit...
-						break;
-					}
-
-					DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent =
-							writeQueueElement.getPreSerializedEvent().orElse(null);
-					ServerSentEventComment serverSentEventComment = writeQueueElement.getComment().orElse(null);
-					Optional<String> comment = serverSentEventComment == null
-							? Optional.empty()
-							: serverSentEventComment.getComment();
-					ServerSentEvent serverSentEvent = preSerializedEvent != null
-							? preSerializedEvent.getServerSentEvent()
-							: null;
-
-					byte[] payloadBytes;
-
-					if (preSerializedEvent != null) {
-						// It's a normal server-sent event
-						payloadBytes = preSerializedEvent.getPayloadBytes();
-					} else if (serverSentEventComment != null) {
-						// It's a comment (includes heartbeats)
-						String payload;
-						if (serverSentEventComment.getCommentType() == ServerSentEventComment.CommentType.HEARTBEAT) {
-							payload = HEARTBEAT_COMMENT_PAYLOAD;
-						} else {
-							String commentValue = comment.orElseThrow(() ->
-									new IllegalStateException("Server-Sent Event comment payload missing"));
-							payload = formatCommentForResponse(commentValue);
-						}
-						payloadBytes = payload == HEARTBEAT_COMMENT_PAYLOAD
-								? HEARTBEAT_COMMENT_PAYLOAD_BYTES
-								: payload.getBytes(StandardCharsets.UTF_8);
-					} else {
-						throw new IllegalStateException("Not sure what to do; no Server-Sent Event or comment available");
-					}
-
-					ByteBuffer byteBuffer = ByteBuffer.wrap(payloadBytes);
-
-					if (serverSentEventComment != null) {
-						try {
-							getLifecycleObserver().get().willWriteServerSentEventComment(connectionSnapshot, serverSentEventComment);
-						} catch (Throwable t) {
-							safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
-									.throwable(t)
-									.build());
-						}
-
-						safelyCollectMetrics(
-								format("An exception occurred while invoking %s::willWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
-								connectionRequest,
-								connectionResourceMethod,
-								(metricsCollector) -> metricsCollector.willWriteServerSentEventComment(connectionSnapshot, serverSentEventComment));
-					}
-
-					if (serverSentEvent != null) {
-						try {
-							getLifecycleObserver().get().willWriteServerSentEvent(connectionSnapshot, serverSentEvent);
-						} catch (Throwable t) {
-							safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
-									.throwable(t)
-									.build());
-						}
-
-						safelyCollectMetrics(
-								format("An exception occurred while invoking %s::willWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
-								connectionRequest,
-								connectionResourceMethod,
-								(metricsCollector) -> metricsCollector.willWriteServerSentEvent(connectionSnapshot, serverSentEvent));
-					}
-
-					Duration deliveryLag = null;
-					Integer payloadByteCount = null;
-					Integer queueDepth = null;
-
-					long enqueuedAtNanos = writeQueueElement.getEnqueuedAtNanos();
-					long nowNanos = System.nanoTime();
-
-					if (enqueuedAtNanos > 0L)
-						deliveryLag = Duration.ofNanos(Math.max(0L, nowNanos - enqueuedAtNanos));
-
-					if (payloadBytes != null)
-						payloadByteCount = payloadBytes.length;
-
-					queueDepth = writeQueue.size();
-
-					writeStarted = Instant.now();
-					Throwable writeThrowable = null;
-					AtomicBoolean writeTimedOut = null;
-					ScheduledFuture<?> writeTimeoutFuture = null;
-					long writeTimeoutMillis = getWriteTimeout().toMillis();
-
-					if (writeTimeoutMillis > 0 && requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
-						AtomicBoolean timedOut = new AtomicBoolean(false);
-						writeTimedOut = timedOut;
-						writeTimeoutFuture = requestHandlerTimeoutExecutorService.schedule(() -> {
-							timedOut.set(true);
-							try {
-								clientSocketChannel.close();
-							} catch (IOException ignored) {
-								// Nothing to do
-							}
-						}, Math.max(1L, writeTimeoutMillis), TimeUnit.MILLISECONDS);
-					}
-
-					try {
-						while (byteBuffer.hasRemaining()) {
-							clientSocketChannel.write(byteBuffer);
-						}
-					} catch (Throwable t) {
-						writeThrowable = t;
-					} finally {
-						cancelTimeout(writeTimeoutFuture);
-						if (writeTimedOut != null && writeTimedOut.get()
-								&& (writeThrowable == null || writeThrowable instanceof ClosedChannelException)) {
-							writeThrowable = new SocketTimeoutException("SSE write timed out");
-						}
-
-						Instant writeFinished = Instant.now();
-						Duration writeDuration = Duration.between(writeStarted, writeFinished);
-						Throwable writeThrowableSnapshot = writeThrowable;
-						Duration deliveryLagSnapshot = deliveryLag;
-						Integer payloadByteCountSnapshot = payloadByteCount;
-						Integer queueDepthSnapshot = queueDepth;
-
-						if (serverSentEvent != null) {
-							if (writeThrowableSnapshot != null) {
-								try {
-									getLifecycleObserver().get().didFailToWriteServerSentEvent(connectionSnapshot, serverSentEvent, writeDuration, writeThrowableSnapshot);
-								} catch (Throwable t) {
-									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
-											.throwable(t)
-											.build());
-								}
-
-								safelyCollectMetrics(
-										format("An exception occurred while invoking %s::didFailToWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
-										connectionRequest,
-										connectionResourceMethod,
-										(metricsCollector) -> metricsCollector.didFailToWriteServerSentEvent(
-												connectionSnapshot,
-												serverSentEvent,
-												writeDuration,
-												writeThrowableSnapshot,
-												deliveryLagSnapshot,
-												payloadByteCountSnapshot,
-												queueDepthSnapshot));
-							} else {
-								try {
-									getLifecycleObserver().get().didWriteServerSentEvent(connectionSnapshot, serverSentEvent, writeDuration);
-								} catch (Throwable t) {
-									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
-											.throwable(t)
-											.build());
-								}
-
-								safelyCollectMetrics(
-										format("An exception occurred while invoking %s::didWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
-										connectionRequest,
-										connectionResourceMethod,
-										(metricsCollector) -> metricsCollector.didWriteServerSentEvent(
-												connectionSnapshot,
-												serverSentEvent,
-												writeDuration,
-												deliveryLagSnapshot,
-												payloadByteCountSnapshot,
-												queueDepthSnapshot));
-							}
-						} else if (serverSentEventComment != null) {
-							if (writeThrowableSnapshot != null) {
-								try {
-									getLifecycleObserver().get().didFailToWriteServerSentEventComment(connectionSnapshot, serverSentEventComment, writeDuration, writeThrowableSnapshot);
-								} catch (Throwable t) {
-									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
-											.throwable(t)
-											.build());
-								}
-
-								safelyCollectMetrics(
-										format("An exception occurred while invoking %s::didFailToWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
-										connectionRequest,
-										connectionResourceMethod,
-										(metricsCollector) -> metricsCollector.didFailToWriteServerSentEventComment(
-												connectionSnapshot,
-												serverSentEventComment,
-												writeDuration,
-												writeThrowableSnapshot,
-												deliveryLagSnapshot,
-												payloadByteCountSnapshot,
-												queueDepthSnapshot));
-							} else {
-								try {
-									getLifecycleObserver().get().didWriteServerSentEventComment(connectionSnapshot, serverSentEventComment, writeDuration);
-								} catch (Throwable t) {
-									safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
-											.throwable(t)
-											.build());
-								}
-
-								safelyCollectMetrics(
-										format("An exception occurred while invoking %s::didWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
-										connectionRequest,
-										connectionResourceMethod,
-										(metricsCollector) -> metricsCollector.didWriteServerSentEventComment(
-												connectionSnapshot,
-												serverSentEventComment,
-												writeDuration,
-												deliveryLagSnapshot,
-												payloadByteCountSnapshot,
-												queueDepthSnapshot));
-							}
-						}
-
-						if (writeThrowableSnapshot != null)
-							throw writeThrowableSnapshot;
-					}
-				}
+				if (establishmentFailureNotified.compareAndSet(false, true))
+					notifyDidFailToEstablishServerSentEventConnection(request, resourceMethod,
+							ServerSentEventConnection.HandshakeFailureReason.INTERNAL_ERROR, null);
 			} else {
 				acceptanceFinalized.compareAndSet(false, true);
 				if (establishmentFailureNotified.compareAndSet(false, true))
@@ -1546,8 +1372,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, null);
 			}
 		} catch (Throwable t) {
-			throwable = t;
-
 			if (acceptanceFinalized.compareAndSet(false, true))
 				notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, t);
 
@@ -1561,107 +1385,440 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (t instanceof InterruptedException)
 				Thread.currentThread().interrupt();
 		} finally {
-			cancelTimeout(handshakeTimeoutFutureRef.getAndSet(null));
+			cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 
-			// First, close the channel itself...
-			if (clientSocketChannel != null) {
-				try {
-					synchronized (channelLock) {
-						clientSocketChannel.close();
+			if (!connectionProcessingStarted) {
+				// If a connection was registered but not handed off, unregister and release it.
+				if (clientSocketChannelRegistration != null) {
+					try {
+						clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(
+								clientSocketChannelRegistration.serverSentEventConnection(),
+								false);
+					} catch (Throwable t) {
+						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
+								.throwable(t)
+								.build());
 					}
-				} catch (Exception exception) {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event connection socket channel")
-							.throwable(exception)
-							.build());
+
+					// Cleanup empty broadcaster
+					maybeCleanupBroadcaster(clientSocketChannelRegistration.broadcaster());
+				}
+
+				closeSocketChannel(clientSocketChannel, channelLock);
+				releaseReservedSlot(connectionSlotReserved);
+			}
+		}
+	}
+
+	private boolean startConnectionProcessing(@NonNull ClientSocketChannelRegistration registration,
+																						@NonNull Object channelLock) {
+		requireNonNull(registration);
+		requireNonNull(channelLock);
+
+		ExecutorService connectionExecutorService = getConnectionExecutorService().orElse(null);
+
+		if (connectionExecutorService == null || connectionExecutorService.isShutdown())
+			return false;
+
+		try {
+			connectionExecutorService.submit(() -> processEstablishedConnection(registration, channelLock));
+			return true;
+		} catch (RejectedExecutionException e) {
+			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Connection executor rejected task")
+					.throwable(e)
+					.build());
+			return false;
+		}
+	}
+
+	private void processEstablishedConnection(@NonNull ClientSocketChannelRegistration registration,
+																						@NonNull Object channelLock) {
+		requireNonNull(registration);
+		requireNonNull(channelLock);
+
+		DefaultServerSentEventConnection serverSentEventConnection = registration.serverSentEventConnection();
+		SocketChannel clientSocketChannel = serverSentEventConnection.getSocketChannel();
+		ServerSentEventConnection connectionSnapshot = serverSentEventConnection.getSnapshot();
+		Request connectionRequest = connectionSnapshot.getRequest();
+		ResourceMethod connectionResourceMethod = connectionSnapshot.getResourceMethod();
+		ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
+
+		try {
+			getLifecycleObserver().get().didEstablishServerSentEventConnection(connectionSnapshot);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(
+							LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::didEstablishServerSentEventConnection",
+									LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didEstablishServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+				connectionRequest,
+				connectionResourceMethod,
+				(metricsCollector) -> metricsCollector.didEstablishServerSentEventConnection(connectionSnapshot));
+
+		Throwable throwable = null;
+
+		try {
+			BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue =
+					serverSentEventConnection.getWriteQueue();
+
+			while (true) {
+				DefaultServerSentEventConnection.WriteQueueElement writeQueueElement;
+
+				try {
+					// Wait for an event/comment; if idle for heartbeatInterval, emit a heartbeat comment.
+					writeQueueElement = writeQueue.poll(getHeartbeatInterval().toMillis(), TimeUnit.MILLISECONDS);
+				} catch (InterruptedException e) {
+					// Interrupted during shutdown - exit cleanly
+					Thread.currentThread().interrupt();
+					break;
+				}
+
+				// Idle heartbeat
+				if (writeQueueElement == null)
+					writeQueueElement = DefaultServerSentEventConnection.WriteQueueElement.withComment(HEARTBEAT_COMMENT, System.nanoTime());
+
+				if (writeQueueElement.isPoisonPill()) {
+					// Encountered poison pill, exit...
+					break;
+				}
+
+				DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent =
+						writeQueueElement.getPreSerializedEvent().orElse(null);
+				ServerSentEventComment serverSentEventComment = writeQueueElement.getComment().orElse(null);
+				Optional<String> comment = serverSentEventComment == null
+						? Optional.empty()
+						: serverSentEventComment.getComment();
+				ServerSentEvent serverSentEvent = preSerializedEvent != null
+						? preSerializedEvent.getServerSentEvent()
+						: null;
+
+				byte[] payloadBytes;
+
+				if (preSerializedEvent != null) {
+					// It's a normal server-sent event
+					payloadBytes = preSerializedEvent.getPayloadBytes();
+				} else if (serverSentEventComment != null) {
+					// It's a comment (includes heartbeats)
+					String payload;
+					if (serverSentEventComment.getCommentType() == ServerSentEventComment.CommentType.HEARTBEAT) {
+						payload = HEARTBEAT_COMMENT_PAYLOAD;
+					} else {
+						String commentValue = comment.orElseThrow(() ->
+								new IllegalStateException("Server-Sent Event comment payload missing"));
+						payload = formatCommentForResponse(commentValue);
+					}
+					payloadBytes = payload == HEARTBEAT_COMMENT_PAYLOAD
+							? HEARTBEAT_COMMENT_PAYLOAD_BYTES
+							: payload.getBytes(StandardCharsets.UTF_8);
+				} else {
+					throw new IllegalStateException("Not sure what to do; no Server-Sent Event or comment available");
+				}
+
+				ByteBuffer byteBuffer = ByteBuffer.wrap(payloadBytes);
+
+				if (serverSentEventComment != null) {
+					try {
+						getLifecycleObserver().get().willWriteServerSentEventComment(connectionSnapshot, serverSentEventComment);
+					} catch (Throwable t) {
+						safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
+								.throwable(t)
+								.build());
+					}
+
+					safelyCollectMetrics(
+							format("An exception occurred while invoking %s::willWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
+							connectionRequest,
+							connectionResourceMethod,
+							(metricsCollector) -> metricsCollector.willWriteServerSentEventComment(connectionSnapshot, serverSentEventComment));
+				}
+
+				if (serverSentEvent != null) {
+					try {
+						getLifecycleObserver().get().willWriteServerSentEvent(connectionSnapshot, serverSentEvent);
+					} catch (Throwable t) {
+						safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
+								.throwable(t)
+								.build());
+					}
+
+					safelyCollectMetrics(
+							format("An exception occurred while invoking %s::willWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
+							connectionRequest,
+							connectionResourceMethod,
+							(metricsCollector) -> metricsCollector.willWriteServerSentEvent(connectionSnapshot, serverSentEvent));
+				}
+
+				Duration deliveryLag = null;
+				Integer payloadByteCount = null;
+				Integer queueDepth = null;
+
+				long enqueuedAtNanos = writeQueueElement.getEnqueuedAtNanos();
+				long nowNanos = System.nanoTime();
+
+				if (enqueuedAtNanos > 0L)
+					deliveryLag = Duration.ofNanos(Math.max(0L, nowNanos - enqueuedAtNanos));
+
+				if (payloadBytes != null)
+					payloadByteCount = payloadBytes.length;
+
+				queueDepth = writeQueue.size();
+
+				Instant writeStarted = Instant.now();
+				Throwable writeThrowable = null;
+				AtomicBoolean writeTimedOut = null;
+				ScheduledFuture<?> writeTimeoutFuture = null;
+				long writeTimeoutMillis = getWriteTimeout().toMillis();
+
+				if (writeTimeoutMillis > 0 && requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
+					AtomicBoolean timedOut = new AtomicBoolean(false);
+					writeTimedOut = timedOut;
+					writeTimeoutFuture = requestHandlerTimeoutExecutorService.schedule(() -> {
+						timedOut.set(true);
+						try {
+							clientSocketChannel.close();
+						} catch (IOException ignored) {
+							// Nothing to do
+						}
+					}, Math.max(1L, writeTimeoutMillis), TimeUnit.MILLISECONDS);
+				}
+
+				try {
+					while (byteBuffer.hasRemaining()) {
+						clientSocketChannel.write(byteBuffer);
+					}
+				} catch (Throwable t) {
+					writeThrowable = t;
+				} finally {
+					cancelTimeout(writeTimeoutFuture);
+					if (writeTimedOut != null && writeTimedOut.get()
+							&& (writeThrowable == null || writeThrowable instanceof ClosedChannelException)) {
+						writeThrowable = new SocketTimeoutException("SSE write timed out");
+					}
+
+					Instant writeFinished = Instant.now();
+					Duration writeDuration = Duration.between(writeStarted, writeFinished);
+					Throwable writeThrowableSnapshot = writeThrowable;
+					Duration deliveryLagSnapshot = deliveryLag;
+					Integer payloadByteCountSnapshot = payloadByteCount;
+					Integer queueDepthSnapshot = queueDepth;
+
+					if (serverSentEvent != null) {
+						if (writeThrowableSnapshot != null) {
+							try {
+								getLifecycleObserver().get().didFailToWriteServerSentEvent(connectionSnapshot, serverSentEvent, writeDuration, writeThrowableSnapshot);
+							} catch (Throwable t) {
+								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
+										.throwable(t)
+										.build());
+							}
+
+							safelyCollectMetrics(
+									format("An exception occurred while invoking %s::didFailToWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
+									connectionRequest,
+									connectionResourceMethod,
+									(metricsCollector) -> metricsCollector.didFailToWriteServerSentEvent(
+											connectionSnapshot,
+											serverSentEvent,
+											writeDuration,
+											writeThrowableSnapshot,
+											deliveryLagSnapshot,
+											payloadByteCountSnapshot,
+											queueDepthSnapshot));
+						} else {
+							try {
+								getLifecycleObserver().get().didWriteServerSentEvent(connectionSnapshot, serverSentEvent, writeDuration);
+							} catch (Throwable t) {
+								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
+										.throwable(t)
+										.build());
+							}
+
+							safelyCollectMetrics(
+									format("An exception occurred while invoking %s::didWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
+									connectionRequest,
+									connectionResourceMethod,
+									(metricsCollector) -> metricsCollector.didWriteServerSentEvent(
+											connectionSnapshot,
+											serverSentEvent,
+											writeDuration,
+											deliveryLagSnapshot,
+											payloadByteCountSnapshot,
+											queueDepthSnapshot));
+						}
+					} else if (serverSentEventComment != null) {
+						if (writeThrowableSnapshot != null) {
+							try {
+								getLifecycleObserver().get().didFailToWriteServerSentEventComment(connectionSnapshot, serverSentEventComment, writeDuration, writeThrowableSnapshot);
+							} catch (Throwable t) {
+								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
+										.throwable(t)
+										.build());
+							}
+
+							safelyCollectMetrics(
+									format("An exception occurred while invoking %s::didFailToWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
+									connectionRequest,
+									connectionResourceMethod,
+									(metricsCollector) -> metricsCollector.didFailToWriteServerSentEventComment(
+											connectionSnapshot,
+											serverSentEventComment,
+											writeDuration,
+											writeThrowableSnapshot,
+											deliveryLagSnapshot,
+											payloadByteCountSnapshot,
+											queueDepthSnapshot));
+						} else {
+							try {
+								getLifecycleObserver().get().didWriteServerSentEventComment(connectionSnapshot, serverSentEventComment, writeDuration);
+							} catch (Throwable t) {
+								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
+										.throwable(t)
+										.build());
+							}
+
+							safelyCollectMetrics(
+									format("An exception occurred while invoking %s::didWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
+									connectionRequest,
+									connectionResourceMethod,
+									(metricsCollector) -> metricsCollector.didWriteServerSentEventComment(
+											connectionSnapshot,
+											serverSentEventComment,
+											writeDuration,
+											deliveryLagSnapshot,
+											payloadByteCountSnapshot,
+											queueDepthSnapshot));
+						}
+					}
+
+					if (writeThrowableSnapshot != null)
+						throw writeThrowableSnapshot;
 				}
 			}
+		} catch (Throwable t) {
+			throwable = t;
+			if (t instanceof InterruptedException)
+				Thread.currentThread().interrupt();
+		} finally {
+			terminateConnection(registration, channelLock, throwable);
+		}
+	}
 
-			// ...then unregister from broadcaster (prevents race with broadcasts)
-			if (clientSocketChannelRegistration != null) {
-				DefaultServerSentEventConnection serverSentEventConnection = clientSocketChannelRegistration.serverSentEventConnection();
-				ServerSentEventConnection connectionSnapshot = serverSentEventConnection.getSnapshot();
-				Request connectionRequest = connectionSnapshot.getRequest();
-				ResourceMethod connectionResourceMethod = connectionSnapshot.getResourceMethod();
+	private void terminateConnection(@NonNull ClientSocketChannelRegistration registration,
+																	 @NonNull Object channelLock,
+																	 @Nullable Throwable throwable) {
+		requireNonNull(registration);
+		requireNonNull(channelLock);
 
-				ServerSentEventConnection.TerminationReason terminationReason =
-						serverSentEventConnection.getTerminationReason().orElse(null);
+		DefaultServerSentEventConnection serverSentEventConnection = registration.serverSentEventConnection();
+		ServerSentEventConnection connectionSnapshot = serverSentEventConnection.getSnapshot();
+		Request connectionRequest = connectionSnapshot.getRequest();
+		ResourceMethod connectionResourceMethod = connectionSnapshot.getResourceMethod();
+		SocketChannel clientSocketChannel = serverSentEventConnection.getSocketChannel();
 
-				if (terminationReason == null) {
-					if (isStopping())
-						terminationReason = ServerSentEventConnection.TerminationReason.SERVER_STOP;
-					else if (isRemoteClose(throwable))
-						terminationReason = ServerSentEventConnection.TerminationReason.REMOTE_CLOSE;
-					else if (throwable != null)
-						terminationReason = ServerSentEventConnection.TerminationReason.ERROR;
-					else
-						terminationReason = ServerSentEventConnection.TerminationReason.UNKNOWN;
-
-					serverSentEventConnection.setTerminationReason(terminationReason);
-				}
-
-				ServerSentEventConnection.TerminationReason effectiveTerminationReason = terminationReason;
-				Throwable terminationThrowable = throwable;
-
-				try {
-					getLifecycleObserver().get().willTerminateServerSentEventConnection(
-							connectionSnapshot,
-							effectiveTerminationReason,
-							terminationThrowable);
-				} catch (Throwable t) {
-					safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::willTerminateServerSentEventConnection", LifecycleObserver.class.getSimpleName()))
-							.throwable(t)
-							.build());
-				}
-
-				safelyCollectMetrics(
-						format("An exception occurred while invoking %s::willTerminateServerSentEventConnection", MetricsCollector.class.getSimpleName()),
-						connectionRequest,
-						connectionResourceMethod,
-						(metricsCollector) -> metricsCollector.willTerminateServerSentEventConnection(
-								connectionSnapshot,
-								effectiveTerminationReason,
-								terminationThrowable));
-
-				try {
-					clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(serverSentEventConnection, false);
-				} catch (Throwable t) {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
-							.throwable(t)
-							.build());
-				}
-
-				// Cleanup empty broadcaster
-				maybeCleanupBroadcaster(clientSocketChannelRegistration.broadcaster());
-
-				Instant connectionFinished = Instant.now();
-				Duration connectionDuration = Duration.between(
-						serverSentEventConnection.getEstablishedAt(),
-						connectionFinished);
-
-				try {
-					getLifecycleObserver().get().didTerminateServerSentEventConnection(
-							connectionSnapshot,
-							connectionDuration,
-							effectiveTerminationReason,
-							terminationThrowable);
-				} catch (Throwable t) {
-					safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::didTerminateServerSentEventConnection", LifecycleObserver.class.getSimpleName()))
-							.throwable(t)
-							.build());
-				}
-
-				safelyCollectMetrics(
-						format("An exception occurred while invoking %s::didTerminateServerSentEventConnection", MetricsCollector.class.getSimpleName()),
-						connectionRequest,
-						connectionResourceMethod,
-						(metricsCollector) -> metricsCollector.didTerminateServerSentEventConnection(
-								connectionSnapshot,
-								connectionDuration,
-								effectiveTerminationReason,
-								terminationThrowable));
+		try {
+			synchronized (channelLock) {
+				clientSocketChannel.close();
 			}
+		} catch (Exception exception) {
+			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event connection socket channel")
+					.throwable(exception)
+					.build());
+		}
 
-			releaseReservedSlot(connectionSlotReserved);
+		ServerSentEventConnection.TerminationReason terminationReason =
+				serverSentEventConnection.getTerminationReason().orElse(null);
+
+		if (terminationReason == null) {
+			if (isStopping())
+				terminationReason = ServerSentEventConnection.TerminationReason.SERVER_STOP;
+			else if (isRemoteClose(throwable))
+				terminationReason = ServerSentEventConnection.TerminationReason.REMOTE_CLOSE;
+			else if (throwable != null)
+				terminationReason = ServerSentEventConnection.TerminationReason.ERROR;
+			else
+				terminationReason = ServerSentEventConnection.TerminationReason.UNKNOWN;
+
+			serverSentEventConnection.setTerminationReason(terminationReason);
+		}
+
+		ServerSentEventConnection.TerminationReason effectiveTerminationReason = terminationReason;
+		Throwable terminationThrowable = throwable;
+
+		try {
+			getLifecycleObserver().get().willTerminateServerSentEventConnection(
+					connectionSnapshot,
+					effectiveTerminationReason,
+					terminationThrowable);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::willTerminateServerSentEventConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willTerminateServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+				connectionRequest,
+				connectionResourceMethod,
+				(metricsCollector) -> metricsCollector.willTerminateServerSentEventConnection(
+						connectionSnapshot,
+						effectiveTerminationReason,
+						terminationThrowable));
+
+		try {
+			registration.broadcaster().unregisterServerSentEventConnection(serverSentEventConnection, false);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
+					.throwable(t)
+					.build());
+		}
+
+		// Cleanup empty broadcaster
+		maybeCleanupBroadcaster(registration.broadcaster());
+
+		Instant connectionFinished = Instant.now();
+		Duration connectionDuration = Duration.between(
+				serverSentEventConnection.getEstablishedAt(),
+				connectionFinished);
+
+		try {
+			getLifecycleObserver().get().didTerminateServerSentEventConnection(
+					connectionSnapshot,
+					connectionDuration,
+					effectiveTerminationReason,
+					terminationThrowable);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::didTerminateServerSentEventConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didTerminateServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+				connectionRequest,
+				connectionResourceMethod,
+				(metricsCollector) -> metricsCollector.didTerminateServerSentEventConnection(
+						connectionSnapshot,
+						connectionDuration,
+						effectiveTerminationReason,
+						terminationThrowable));
+	}
+
+	private void closeSocketChannel(@NonNull SocketChannel clientSocketChannel,
+																	@NonNull Object channelLock) {
+		requireNonNull(clientSocketChannel);
+		requireNonNull(channelLock);
+
+		try {
+			synchronized (channelLock) {
+				clientSocketChannel.close();
+			}
+		} catch (IOException ignored) {
+			// Nothing to do
 		}
 	}
 
@@ -2885,6 +3042,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		ExecutorService requestHandlerExecutorServiceSnapshot;
 		ScheduledExecutorService requestHandlerTimeoutExecutorServiceSnapshot;
 		ExecutorService requestReaderExecutorServiceSnapshot;
+		ExecutorService connectionExecutorServiceSnapshot;
 		ServerSocketChannel serverSocketChannelSnapshot;
 		boolean interrupted = false;
 
@@ -2900,6 +3058,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
 			requestHandlerTimeoutExecutorServiceSnapshot = this.requestHandlerTimeoutExecutorService;
 			requestReaderExecutorServiceSnapshot = this.requestReaderExecutorService;
+			connectionExecutorServiceSnapshot = this.connectionExecutorService;
 			serverSocketChannelSnapshot = this.serverSocketChannel;
 		} finally {
 			getLock().unlock();
@@ -2958,6 +3117,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (requestReaderExecutorServiceSnapshot != null)
 			requestReaderExecutorServiceSnapshot.shutdownNow();
 
+		if (connectionExecutorServiceSnapshot != null)
+			connectionExecutorServiceSnapshot.shutdownNow();
+
 		// Shared wall-clock deadline
 		final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
 
@@ -2975,6 +3137,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		if (requestReaderExecutorServiceSnapshot != null)
 			waits.add(awaitTerminationAsync(requestReaderExecutorServiceSnapshot, grace));
+
+		if (connectionExecutorServiceSnapshot != null)
+			waits.add(awaitTerminationAsync(connectionExecutorServiceSnapshot, grace));
 
 		// Wait for all, but no longer than the single budget
 		try {
@@ -3001,6 +3166,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (requestReaderExecutorServiceSnapshot != null)
 			awaitPoolTermination(requestReaderExecutorServiceSnapshot, remainingMillis(deadlineNanos));
 
+		if (connectionExecutorServiceSnapshot != null)
+			awaitPoolTermination(connectionExecutorServiceSnapshot, remainingMillis(deadlineNanos));
+
 		getLock().lock();
 		try {
 			this.started = false;
@@ -3010,6 +3178,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.requestHandlerExecutorService = null;
 			this.requestHandlerTimeoutExecutorService = null;
 			this.requestReaderExecutorService = null;
+			this.connectionExecutorService = null;
 			this.getBroadcastersByResourcePath().clear();
 			this.getIdleBroadcastersByResourcePath().clear();
 			this.getResourcePathDeclarationsByResourcePathCache().clear();
@@ -3169,6 +3338,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		BackpressureHandler handler = (owner, connection, cause) ->
 				closeConnectionDueToBackpressure(owner, connection, cause);
 
+		// Scale initial capacity with connection limit, but cap to avoid large per-route allocations.
+		int connectionSetInitialCapacity = Math.max(1,
+				Math.min(getConcurrentConnectionLimit(), DEFAULT_BROADCASTER_CONNECTION_SET_CAPACITY));
+
 		return new DefaultServerSentEventBroadcaster(
 				resourceMethod,
 				resourcePath,
@@ -3179,7 +3352,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					if (removed != null)
 						releaseConnectionSlot();
 				},
-				this::safelyLog
+				this::safelyLog,
+				connectionSetInitialCapacity
 		);
 	}
 
@@ -3553,6 +3727,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	protected Supplier<ExecutorService> getRequestReaderExecutorServiceSupplier() {
 		return this.requestReaderExecutorServiceSupplier;
+	}
+
+	@NonNull
+	protected Supplier<ExecutorService> getConnectionExecutorServiceSupplier() {
+		return this.connectionExecutorServiceSupplier;
+	}
+
+	@NonNull
+	protected Optional<ExecutorService> getConnectionExecutorService() {
+		return Optional.ofNullable(this.connectionExecutorService);
 	}
 
 	@NonNull
