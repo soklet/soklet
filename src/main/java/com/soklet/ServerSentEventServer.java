@@ -180,6 +180,10 @@ public interface ServerSentEventServer extends AutoCloseable {
 		@Nullable
 		Duration requestHandlerTimeout;
 		@Nullable
+		Integer requestHandlerConcurrency;
+		@Nullable
+		Integer requestHandlerQueueCapacity;
+		@Nullable
 		Duration writeTimeout;
 		@Nullable
 		Duration shutdownTimeout;
@@ -232,6 +236,18 @@ public interface ServerSentEventServer extends AutoCloseable {
 		@NonNull
 		public Builder requestHandlerTimeout(@Nullable Duration requestHandlerTimeout) {
 			this.requestHandlerTimeout = requestHandlerTimeout;
+			return this;
+		}
+
+		@NonNull
+		public Builder requestHandlerConcurrency(@Nullable Integer requestHandlerConcurrency) {
+			this.requestHandlerConcurrency = requestHandlerConcurrency;
+			return this;
+		}
+
+		@NonNull
+		public Builder requestHandlerQueueCapacity(@Nullable Integer requestHandlerQueueCapacity) {
+			this.requestHandlerQueueCapacity = requestHandlerQueueCapacity;
 			return this;
 		}
 

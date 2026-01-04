@@ -57,10 +57,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import java.util.stream.Collectors;
 
 import static com.soklet.TestSupport.connectWithRetry;
@@ -798,6 +800,112 @@ public class ServerSentEventTests {
 
 	@Test
 	@Timeout(value = 10, unit = SECONDS)
+	public void sse_requestHandlerQueueCapacity_rejectsWhenFull() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		BlockingRejectHandshakeResource.prepare(1);
+
+		ServerSentEventServer sse = ServerSentEventServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestTimeout(Duration.ofSeconds(5))
+				.requestHandlerTimeout(Duration.ofSeconds(5))
+				.requestHandlerConcurrency(1)
+				.requestHandlerQueueCapacity(1)
+				.concurrentConnectionLimit(10)
+				.verifyConnectionOnceEstablished(false)
+				.build();
+
+		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+				.serverSentEventServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingRejectHandshakeResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.withConfig(cfg)) {
+			app.start();
+
+			ExecutorService requestExecutor = ((DefaultServerSentEventServer) sse).getRequestHandlerExecutorService().orElse(null);
+			ThreadPoolExecutor requestPool = requestExecutor instanceof ThreadPoolExecutor
+					? (ThreadPoolExecutor) requestExecutor
+					: null;
+			Assertions.assertNotNull(requestPool, "Expected bounded request handler executor");
+
+			Socket socket1 = null;
+			Socket socket2 = null;
+			Socket socket3 = null;
+
+			try {
+				socket1 = connectWithRetry("127.0.0.1", ssePort, 2000);
+				socket1.setSoTimeout(8000);
+				writeHttpGet(socket1, "/sse/queue-limit", ssePort);
+				BlockingRejectHandshakeResource.awaitReady(5, SECONDS);
+
+				socket2 = connectWithRetry("127.0.0.1", ssePort, 2000);
+				socket2.setSoTimeout(8000);
+				writeHttpGet(socket2, "/sse/queue-limit", ssePort);
+
+				long deadline = System.nanoTime() + SECONDS.toNanos(2);
+				boolean queued = false;
+				while (System.nanoTime() < deadline) {
+					if (requestPool.getQueue().size() >= 1) {
+						queued = true;
+						break;
+					}
+					Thread.sleep(10);
+				}
+
+				Assertions.assertTrue(queued, "Expected second connection to be queued");
+
+				socket3 = connectWithRetry("127.0.0.1", ssePort, 2000);
+				socket3.setSoTimeout(8000);
+				writeHttpGet(socket3, "/sse/queue-limit", ssePort);
+
+				BlockingRejectHandshakeResource.release();
+
+				ExecutorService readerPool = Executors.newFixedThreadPool(3);
+				try {
+					final Socket socket1Final = socket1;
+					final Socket socket2Final = socket2;
+					final Socket socket3Final = socket3;
+					Future<String> f1 = readerPool.submit(() -> readHandshake(socket1Final));
+					Future<String> f2 = readerPool.submit(() -> readHandshake(socket2Final));
+					Future<String> f3 = readerPool.submit(() -> readHandshake(socket3Final));
+
+					String h1 = f1.get(8, SECONDS);
+					String h2 = f2.get(8, SECONDS);
+					String h3 = f3.get(8, SECONDS);
+
+					Assertions.assertNotNull(h1, "No handshake response on socket1");
+					Assertions.assertNotNull(h2, "No handshake response on socket2");
+					Assertions.assertNotNull(h3, "No handshake response on socket3");
+
+					long rejectedCount = Stream.of(h1, h2, h3).filter(header -> header.startsWith("HTTP/1.1 403")).count();
+					long busyCount = Stream.of(h1, h2, h3).filter(header -> header.startsWith("HTTP/1.1 503")).count();
+					Assertions.assertEquals(2, rejectedCount, "Expected two rejected handshakes");
+					Assertions.assertEquals(1, busyCount, "Expected one rejected handshake due to queue capacity");
+				} finally {
+					readerPool.shutdownNow();
+				}
+			} finally {
+				if (socket1 != null) socket1.close();
+				if (socket2 != null) socket2.close();
+				if (socket3 != null) socket3.close();
+			}
+		}
+	}
+
+	private static String readHandshake(@NonNull Socket socket) throws IOException {
+		requireNonNull(socket);
+
+		String headers = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+		if (headers == null)
+			headers = readUntil(socket.getInputStream(), "\n\n", 4096);
+		return headers;
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
 	public void handshake_rejected_writes_status_body_and_cookies() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1467,6 +1575,37 @@ public class ServerSentEventTests {
 				Thread.currentThread().interrupt();
 			}
 			return HandshakeResult.accept();
+		}
+	}
+
+	@ThreadSafe
+	public static class BlockingRejectHandshakeResource {
+		private static volatile CountDownLatch ready;
+		private static volatile CountDownLatch release;
+
+		static void prepare(int connections) {
+			ready = new CountDownLatch(connections);
+			release = new CountDownLatch(1);
+		}
+
+		static void awaitReady(long timeout, TimeUnit unit) throws InterruptedException {
+			if (!ready.await(timeout, unit))
+				throw new IllegalStateException("Timed out waiting for concurrent handshakes");
+		}
+
+		static void release() {
+			release.countDown();
+		}
+
+		@ServerSentEventSource("/sse/queue-limit")
+		public HandshakeResult sseQueueLimit(@NonNull Request request) {
+			ready.countDown();
+			try {
+				release.await(5, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			return HandshakeResult.rejectWithResponse(Response.withStatusCode(403).build());
 		}
 	}
 

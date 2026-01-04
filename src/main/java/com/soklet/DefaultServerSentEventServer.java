@@ -68,6 +68,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -94,6 +96,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private static final Duration DEFAULT_REQUEST_TIMEOUT;
 	@NonNull
 	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
+	@NonNull
+	private static final Integer DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER;
+	@NonNull
+	private static final Integer DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER;
 	@NonNull
 	private static final Duration DEFAULT_WRITE_TIMEOUT;
 	@NonNull
@@ -137,6 +143,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
+		DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER = 64;
+		DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER = 16;
 		DEFAULT_WRITE_TIMEOUT = Duration.ZERO;
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 64 * 1_024;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
@@ -183,6 +191,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private final Duration requestTimeout;
 	@NonNull
 	private final Duration requestHandlerTimeout;
+	@NonNull
+	private final Integer requestHandlerConcurrency;
+	@NonNull
+	private final Integer requestHandlerQueueCapacity;
 	@NonNull
 	private final Duration writeTimeout;
 	@NonNull
@@ -518,6 +530,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.withDefaults();
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
+		int defaultRequestHandlerConcurrency = Math.max(1, Runtime.getRuntime().availableProcessors() * DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER);
+		this.requestHandlerConcurrency = builder.requestHandlerConcurrency != null ? builder.requestHandlerConcurrency : defaultRequestHandlerConcurrency;
+		this.requestHandlerQueueCapacity = builder.requestHandlerQueueCapacity != null
+				? builder.requestHandlerQueueCapacity
+				: Math.max(1, this.requestHandlerConcurrency * DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER);
 		this.writeTimeout = builder.writeTimeout != null ? builder.writeTimeout : DEFAULT_WRITE_TIMEOUT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.heartbeatInterval = builder.heartbeatInterval != null ? builder.heartbeatInterval : DEFAULT_HEARTBEAT_INTERVAL;
@@ -534,6 +551,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		if (this.requestHandlerTimeout.isNegative() || this.requestHandlerTimeout.isZero())
 			throw new IllegalArgumentException("Request handler timeout must be > 0");
+
+		if (this.requestHandlerConcurrency < 1)
+			throw new IllegalArgumentException("Request handler concurrency must be > 0");
+
+		if (this.requestHandlerQueueCapacity < 1)
+			throw new IllegalArgumentException("Request handler queue capacity must be > 0");
 
 		if (this.writeTimeout.isNegative())
 			throw new IllegalArgumentException("Write timeout must be >= 0");
@@ -582,8 +605,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "sse-request-handler-";
+			int threadPoolSize = getRequestHandlerConcurrency();
+			int queueCapacity = getRequestHandlerQueueCapacity();
 
-			return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
+			ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 				try {
 					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event processing")
 							.throwable(throwable)
@@ -595,12 +620,22 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					loggingThrowable.printStackTrace(System.err);
 				}
 			});
+
+			return new ThreadPoolExecutor(
+					threadPoolSize,
+					threadPoolSize,
+					0L,
+					TimeUnit.MILLISECONDS,
+					new ArrayBlockingQueue<>(queueCapacity),
+					threadFactory);
 		};
 
 		this.requestReaderExecutorServiceSupplier = () -> {
 			String threadNamePrefix = "sse-request-reader-";
+			int threadPoolSize = getRequestHandlerConcurrency();
+			int queueCapacity = getRequestHandlerQueueCapacity();
 
-			return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
+			ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 				try {
 					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event request reading")
 							.throwable(throwable)
@@ -612,6 +647,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					loggingThrowable.printStackTrace(System.err);
 				}
 			});
+
+			return new ThreadPoolExecutor(
+					threadPoolSize,
+					threadPoolSize,
+					0L,
+					TimeUnit.MILLISECONDS,
+					new ArrayBlockingQueue<>(queueCapacity),
+					threadFactory);
 		};
 
 		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : DEFAULT_CONCURRENT_CONNECTION_LIMIT;
@@ -816,14 +859,35 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				try {
 					executorService.submit(() -> handleClientSocketChannel(clientSocketChannel));
 				} catch (RejectedExecutionException e) {
-					// Pool is shutting down; close channel and exit the loop
+					InetSocketAddress remoteAddress = null;
 					try {
-						clientSocketChannel.close();
+						SocketAddress socketAddress = clientSocketChannel.getRemoteAddress();
+						if (socketAddress instanceof InetSocketAddress)
+							remoteAddress = (InetSocketAddress) socketAddress;
 					} catch (IOException ignored) {
-						// Nothing to do
+						// Best effort
 					}
 
-					break;
+					notifyWillAcceptConnection(remoteAddress);
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
+
+					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
+							.throwable(e)
+							.build());
+
+					try {
+						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
+					} catch (Throwable t) {
+						// best effort
+					} finally {
+						try {
+							clientSocketChannel.close();
+						} catch (IOException ignored) {
+							// Nothing to do
+						}
+					}
+
+					continue;
 				}
 			}
 		} catch (ClosedChannelException ignored) {
@@ -887,6 +951,32 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				request = e.getTooLargeRequest();
 				if (remoteAddress != null)
 					request = request.copy().remoteAddress(remoteAddress).finish();
+			} catch (RequestReadRejectedException e) {
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
+
+				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+								"Request reader executor rejected task")
+						.throwable(e)
+						.build());
+
+				try {
+					synchronized (channelLock) {
+						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
+					}
+				} catch (Throwable t) {
+					// best effort
+				} finally {
+					try {
+						synchronized (channelLock) {
+							clientSocketChannel.close();
+						}
+					} catch (IOException ignored) {
+						// Nothing to do
+					}
+				}
+
+				return;
 			} catch (IllegalRequestException e) {
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.UNPARSEABLE_REQUEST, e);
@@ -2544,11 +2634,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (requestReaderExecutorService == null || requestReaderExecutorService.isShutdown())
 				throw new IOException("Server is shutting down");
 
-			readFuture = requestReaderExecutorService.submit(() -> {
-				ByteBuffer buffer = ByteBuffer.allocate(getRequestReadBufferSizeInBytes());
+			try {
+				readFuture = requestReaderExecutorService.submit(() -> {
+					ByteBuffer buffer = ByteBuffer.allocate(getRequestReadBufferSizeInBytes());
 
-				// Use ISO-8859-1 so HTTP header bytes map 1:1 while remaining deterministic across hosts.
-				CharsetDecoder decoder = StandardCharsets.ISO_8859_1.newDecoder()
+					// Use ISO-8859-1 so HTTP header bytes map 1:1 while remaining deterministic across hosts.
+					CharsetDecoder decoder = StandardCharsets.ISO_8859_1.newDecoder()
 						.onMalformedInput(CodingErrorAction.REPLACE)
 						.onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPLACE);
 
@@ -2624,8 +2715,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					}
 				}
 
-				return requestBuilder.toString();
-			});
+					return requestBuilder.toString();
+				});
+			} catch (RejectedExecutionException e) {
+				throw new RequestReadRejectedException("Request reader executor rejected task", e);
+			}
 
 			// Wait up to the specified timeout for reading to complete
 			return readFuture.get(timeoutMillis, TimeUnit.MILLISECONDS);
@@ -2758,6 +2852,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				.headers(headers)
 				.contentTooLarge(true)
 				.build());
+	}
+
+	@NotThreadSafe
+	protected static class RequestReadRejectedException extends IOException {
+		public RequestReadRejectedException(@Nullable String message,
+																				@Nullable Throwable cause) {
+			super(message, cause);
+		}
 	}
 
 	@NotThreadSafe
@@ -3370,6 +3472,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	protected Duration getRequestHandlerTimeout() {
 		return this.requestHandlerTimeout;
+	}
+
+	@NonNull
+	protected Integer getRequestHandlerConcurrency() {
+		return this.requestHandlerConcurrency;
+	}
+
+	@NonNull
+	protected Integer getRequestHandlerQueueCapacity() {
+		return this.requestHandlerQueueCapacity;
 	}
 
 	@NonNull

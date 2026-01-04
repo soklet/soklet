@@ -316,36 +316,43 @@ final class DefaultServer implements Server {
 					return;
 				}
 
+				AtomicBoolean responseWritten = new AtomicBoolean(false);
+				AtomicReference<ScheduledFuture<?>> timeoutFutureRef = new AtomicReference<>();
+				AtomicReference<Thread> handlerThreadRef = new AtomicReference<>();
+
+				if (requestHandlerTimeoutExecutorServiceReference != null && !requestHandlerTimeoutExecutorServiceReference.isShutdown()) {
+					timeoutFutureRef.set(requestHandlerTimeoutExecutorServiceReference.schedule(() -> {
+						if (!responseWritten.compareAndSet(false, true))
+							return;
+
+						Thread handlerThread = handlerThreadRef.get();
+						if (handlerThread != null)
+							handlerThread.interrupt();
+
+						try {
+							MicrohttpResponse timeoutResponse = withConnectionClose(
+									provideMicrohttpFailsafeResponse(503, microhttpRequest,
+											new TimeoutException("Request handling timed out")));
+							microHttpCallback.accept(timeoutResponse);
+						} catch (Throwable t2) {
+							safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a timeout response")
+									.throwable(t2)
+									.build());
+						}
+					}, Math.max(1L, getRequestHandlerTimeout().toMillis()), TimeUnit.MILLISECONDS));
+				}
+
 				try {
 					requestHandlerExecutorServiceReference.submit(() -> {
+						if (responseWritten.get())
+							return;
+
+						handlerThreadRef.set(Thread.currentThread());
+
 						RequestHandler requestHandler = getRequestHandler().orElse(null);
 
 						if (requestHandler == null)
 							return;
-
-						AtomicBoolean responseWritten = new AtomicBoolean(false);
-						Thread handlerThread = Thread.currentThread();
-						AtomicReference<ScheduledFuture<?>> timeoutFutureRef = new AtomicReference<>();
-
-						if (requestHandlerTimeoutExecutorServiceReference != null && !requestHandlerTimeoutExecutorServiceReference.isShutdown()) {
-							timeoutFutureRef.set(requestHandlerTimeoutExecutorServiceReference.schedule(() -> {
-								if (!responseWritten.compareAndSet(false, true))
-									return;
-
-								handlerThread.interrupt();
-
-								try {
-									MicrohttpResponse timeoutResponse = withConnectionClose(
-											provideMicrohttpFailsafeResponse(503, microhttpRequest,
-													new TimeoutException("Request handling timed out")));
-									microHttpCallback.accept(timeoutResponse);
-								} catch (Throwable t2) {
-									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a timeout response")
-											.throwable(t2)
-											.build());
-								}
-							}, Math.max(1L, getRequestHandlerTimeout().toMillis()), TimeUnit.MILLISECONDS));
-						}
 
 						try {
 							// Normalize body
@@ -446,12 +453,15 @@ final class DefaultServer implements Server {
 							.throwable(e)
 							.build());
 
-					try {
-						microHttpCallback.accept(provideMicrohttpFailsafeResponse(503, microhttpRequest, e));
-					} catch (Throwable t2) {
-						safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
-								.throwable(t2)
-								.build());
+					if (responseWritten.compareAndSet(false, true)) {
+						cancelTimeout(timeoutFutureRef.getAndSet(null));
+						try {
+							microHttpCallback.accept(withConnectionClose(provideMicrohttpFailsafeResponse(503, microhttpRequest, e)));
+						} catch (Throwable t2) {
+							safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+									.throwable(t2)
+									.build());
+						}
 					}
 				}
 			});
