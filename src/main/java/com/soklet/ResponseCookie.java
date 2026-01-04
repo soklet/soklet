@@ -119,7 +119,12 @@ public final class ResponseCookie {
 		if (setCookieHeaderRepresentation == null || setCookieHeaderRepresentation.length() == 0)
 			return Optional.empty();
 
-		List<HttpCookie> cookies = HttpCookie.parse(setCookieHeaderRepresentation);
+		String normalizedSetCookieHeaderRepresentation = stripSetCookiePrefix(setCookieHeaderRepresentation);
+
+		if (normalizedSetCookieHeaderRepresentation == null || normalizedSetCookieHeaderRepresentation.length() == 0)
+			return Optional.empty();
+
+		List<HttpCookie> cookies = HttpCookie.parse(normalizedSetCookieHeaderRepresentation);
 
 		if (cookies.size() == 0)
 			return Optional.empty();
@@ -132,13 +137,126 @@ public final class ResponseCookie {
 		long maxAge = httpCookie.getMaxAge();
 		Duration maxAgeDuration = (maxAge >= 0) ? Duration.ofSeconds(maxAge) : null;
 
+		Optional<SameSite> sameSite = extractSameSiteAttribute(normalizedSetCookieHeaderRepresentation);
+
 		return Optional.of(ResponseCookie.with(httpCookie.getName(), httpCookie.getValue())
 				.maxAge(maxAgeDuration)
 				.domain(httpCookie.getDomain())
 				.httpOnly(httpCookie.isHttpOnly())
 				.secure(httpCookie.getSecure())
 				.path(httpCookie.getPath())
+				.sameSite(sameSite.orElse(null))
 				.build());
+	}
+
+	@Nullable
+	private static String stripSetCookiePrefix(@NonNull String setCookieHeaderRepresentation) {
+		requireNonNull(setCookieHeaderRepresentation);
+
+		String trimmed = trimAggressivelyToNull(setCookieHeaderRepresentation);
+
+		if (trimmed == null)
+			return null;
+
+		String prefix = "set-cookie:";
+
+		if (trimmed.length() >= prefix.length()
+				&& trimmed.regionMatches(true, 0, prefix, 0, prefix.length()))
+			return trimAggressivelyToNull(trimmed.substring(prefix.length()));
+
+		return trimmed;
+	}
+
+	@NonNull
+	private static Optional<SameSite> extractSameSiteAttribute(@NonNull String setCookieHeaderRepresentation) {
+		requireNonNull(setCookieHeaderRepresentation);
+
+		List<String> components = splitSetCookieHeaderRespectingQuotes(setCookieHeaderRepresentation);
+
+		if (components.size() <= 1)
+			return Optional.empty();
+
+		for (int i = 1; i < components.size(); i++) {
+			String component = trimAggressivelyToNull(components.get(i));
+			if (component == null)
+				continue;
+
+			int equalsIndex = component.indexOf('=');
+			String attributeName = trimAggressivelyToNull(equalsIndex == -1 ? component : component.substring(0, equalsIndex));
+
+			if (attributeName == null)
+				continue;
+
+			if (!"samesite".equalsIgnoreCase(attributeName))
+				continue;
+
+			if (equalsIndex == -1)
+				return Optional.empty();
+
+			String attributeValue = trimAggressivelyToNull(component.substring(equalsIndex + 1));
+			if (attributeValue == null)
+				return Optional.empty();
+
+			attributeValue = stripOptionalQuotes(attributeValue);
+			return SameSite.fromHeaderRepresentation(attributeValue);
+		}
+
+		return Optional.empty();
+	}
+
+	@NonNull
+	private static List<@NonNull String> splitSetCookieHeaderRespectingQuotes(@NonNull String headerValue) {
+		requireNonNull(headerValue);
+
+		List<String> parts = new ArrayList<>();
+		StringBuilder current = new StringBuilder(headerValue.length());
+		boolean inQuotes = false;
+		boolean escaped = false;
+
+		for (int i = 0; i < headerValue.length(); i++) {
+			char c = headerValue.charAt(i);
+
+			if (escaped) {
+				current.append(c);
+				escaped = false;
+				continue;
+			}
+
+			if (c == '\\') {
+				escaped = true;
+				current.append(c);
+				continue;
+			}
+
+			if (c == '"') {
+				inQuotes = !inQuotes;
+				current.append(c);
+				continue;
+			}
+
+			if (c == ';' && !inQuotes) {
+				parts.add(current.toString());
+				current.setLength(0);
+				continue;
+			}
+
+			current.append(c);
+		}
+
+		if (current.length() > 0)
+			parts.add(current.toString());
+
+		return parts;
+	}
+
+	@NonNull
+	private static String stripOptionalQuotes(@NonNull String value) {
+		requireNonNull(value);
+
+		if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\""))
+			return value.substring(1, value.length() - 1);
+
+		return value;
 	}
 
 	private ResponseCookie(@NonNull Builder builder) {

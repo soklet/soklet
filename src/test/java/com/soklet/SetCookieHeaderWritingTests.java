@@ -300,6 +300,18 @@ public class SetCookieHeaderWritingTests {
 	}
 
 	@Test
+	public void setCookieHeaderParsingPreservesSameSite() {
+		String setCookieHeader = "sessionid=abc123; Path=/; Secure; SameSite=None";
+
+		Optional<ResponseCookie> parsed = ResponseCookie.fromSetCookieHeaderRepresentation(setCookieHeader);
+		assertTrue(parsed.isPresent(), "Should parse session cookie with SameSite");
+
+		ResponseCookie cookie = parsed.get();
+		assertEquals(ResponseCookie.SameSite.NONE, cookie.getSameSite().orElse(null),
+				"SameSite should be preserved when parsing Set-Cookie");
+	}
+
+	@Test
 	public void testNegativeMaxAgeCreatesInvalidDuration() {
 		// HttpCookie allows -1 maxAge, but Duration.ofSeconds(-1) is problematic
 		HttpCookie httpCookie = new HttpCookie("test", "value");

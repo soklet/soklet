@@ -1159,7 +1159,9 @@ public final class Utilities {
 
 		if (portAsString != null) {
 			try {
-				port = Integer.parseInt(portAsString, 10);
+				int parsedPort = Integer.parseInt(portAsString, 10);
+				if (parsedPort >= 1 && parsedPort <= 65535)
+					port = parsedPort;
 			} catch (Exception ignored) {
 				// Not an integer; ignore it
 			}
