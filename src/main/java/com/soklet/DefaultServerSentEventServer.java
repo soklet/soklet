@@ -922,6 +922,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				HandshakeContext handshakeContext = new HandshakeContext(remoteAddress);
 				notifyWillAcceptConnection(remoteAddress);
+				notifyDidAcceptConnection(remoteAddress);
 
 				ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
 				if (requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
@@ -1088,11 +1089,21 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				String rawRequest = readRequest(clientSocketChannel);
 				request = parseRequest(rawRequest, remoteAddress);
 			} catch (RequestTooLargeIOException e) {
+				if (handshakeResponseWritten.get()) {
+					closeSocketChannel(clientSocketChannel, channelLock);
+					return;
+				}
+
 				// Exception provides a "too large"-flagged request with whatever data we could pull out of it
 				request = e.getTooLargeRequest();
 				if (remoteAddress != null)
 					request = request.copy().remoteAddress(remoteAddress).finish();
 			} catch (RequestReadRejectedException e) {
+				if (handshakeResponseWritten.get()) {
+					closeSocketChannel(clientSocketChannel, channelLock);
+					return;
+				}
+
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
 
@@ -1115,6 +1126,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				closeSocketChannel(clientSocketChannel, channelLock);
 				return;
 			} catch (IllegalRequestException e) {
+				if (handshakeResponseWritten.get()) {
+					closeSocketChannel(clientSocketChannel, channelLock);
+					return;
+				}
+
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.UNPARSEABLE_REQUEST, e);
 
@@ -1136,6 +1152,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				closeSocketChannel(clientSocketChannel, channelLock);
 				return;
 			} catch (SocketTimeoutException e) {
+				if (handshakeResponseWritten.get()) {
+					closeSocketChannel(clientSocketChannel, channelLock);
+					return;
+				}
+
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.REQUEST_READ_TIMEOUT, e);
 
@@ -1154,6 +1175,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				closeSocketChannel(clientSocketChannel, channelLock);
 				return;
 			} catch (Exception e) {
+				if (handshakeResponseWritten.get()) {
+					closeSocketChannel(clientSocketChannel, channelLock);
+					return;
+				}
+
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
 
@@ -1353,9 +1379,6 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, handshakeAccepted)
 						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
 				connectionSlotReserved.set(false);
-
-				if (acceptanceFinalized.compareAndSet(false, true))
-					notifyDidAcceptConnection(remoteAddress);
 
 				if (startConnectionProcessing(clientSocketChannelRegistration, channelLock)) {
 					connectionProcessingStarted = true;
