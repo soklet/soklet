@@ -28,6 +28,12 @@ import java.util.Optional;
  * For example, you might have a {@code ValueConverter<String, List<Integer>>} which converts
  * text like {@code "1,2,3"} to a list of numbers.
  * <p>
+ * Generic type inference only supports direct {@link AbstractValueConverter} / {@link FromStringValueConverter}
+ * subclasses or direct {@link ValueConverter} implementations. If you introduce intermediate generic base classes
+ * or type variables (for example, {@code abstract class BadConverter<T> extends AbstractValueConverter<String, T>} then
+ * {@code class JwtConverter extends BadConverter<Jwt>}), Soklet may be unable to resolve {@code F}/{@code T} and will
+ * throw an {@link IllegalStateException}. This limitation may be addressed in a future release.
+ * <p>
  * Value conversion is documented in detail at <a href="https://www.soklet.com/docs/value-conversions">https://www.soklet.com/docs/value-conversions</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
