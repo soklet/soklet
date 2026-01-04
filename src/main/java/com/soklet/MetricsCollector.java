@@ -631,6 +631,10 @@ public interface MetricsCollector {
 		@NonNull
 		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
 		@NonNull
+		private final Map<@NonNull ServerSentEventRouteKey, @NonNull Long> sseHandshakesAccepted;
+		@NonNull
+		private final Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
+		@NonNull
 		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
 		@NonNull
 		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations;
@@ -673,6 +677,8 @@ public interface MetricsCollector {
 			this.httpTimeToFirstByte = copyOrEmpty(builder.httpTimeToFirstByte);
 			this.httpRequestBodyBytes = copyOrEmpty(builder.httpRequestBodyBytes);
 			this.httpResponseBodyBytes = copyOrEmpty(builder.httpResponseBodyBytes);
+			this.sseHandshakesAccepted = copyOrEmpty(builder.sseHandshakesAccepted);
+			this.sseHandshakesRejected = copyOrEmpty(builder.sseHandshakesRejected);
 			this.sseTimeToFirstEvent = copyOrEmpty(builder.sseTimeToFirstEvent);
 			this.sseEventWriteDurations = copyOrEmpty(builder.sseEventWriteDurations);
 			this.sseEventDeliveryLag = copyOrEmpty(builder.sseEventDeliveryLag);
@@ -792,6 +798,26 @@ public interface MetricsCollector {
 		@NonNull
 		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpResponseBodyBytes() {
 			return this.httpResponseBodyBytes;
+		}
+
+		/**
+		 * Returns SSE handshake acceptance counters keyed by route.
+		 *
+		 * @return SSE handshake acceptance counters
+		 */
+		@NonNull
+		public Map<@NonNull ServerSentEventRouteKey, @NonNull Long> getSseHandshakesAccepted() {
+			return this.sseHandshakesAccepted;
+		}
+
+		/**
+		 * Returns SSE handshake rejection counters keyed by route and failure reason.
+		 *
+		 * @return SSE handshake rejection counters
+		 */
+		@NonNull
+		public Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> getSseHandshakesRejected() {
+			return this.sseHandshakesRejected;
 		}
 
 		/**
@@ -920,6 +946,10 @@ public interface MetricsCollector {
 			private Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes;
 			@Nullable
 			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
+			@Nullable
+			private Map<@NonNull ServerSentEventRouteKey, @NonNull Long> sseHandshakesAccepted;
+			@Nullable
+			private Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
 			@Nullable
 			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
 			@Nullable
@@ -1082,6 +1112,32 @@ public interface MetricsCollector {
 			public Builder httpResponseBodyBytes(
 					@Nullable Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes) {
 				this.httpResponseBodyBytes = httpResponseBodyBytes;
+				return this;
+			}
+
+			/**
+			 * Sets SSE handshake acceptance counters keyed by route.
+			 *
+			 * @param sseHandshakesAccepted SSE handshake acceptance counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseHandshakesAccepted(
+					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull Long> sseHandshakesAccepted) {
+				this.sseHandshakesAccepted = sseHandshakesAccepted;
+				return this;
+			}
+
+			/**
+			 * Sets SSE handshake rejection counters keyed by route and failure reason.
+			 *
+			 * @param sseHandshakesRejected SSE handshake rejection counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseHandshakesRejected(
+					@Nullable Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected) {
+				this.sseHandshakesRejected = sseHandshakesRejected;
 				return this;
 			}
 
@@ -1572,6 +1628,24 @@ public interface MetricsCollector {
 				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
 			if (routeType == RouteType.UNMATCHED && route != null)
 				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
+		}
+	}
+
+	/**
+	 * Key for metrics grouped by Server-Sent Event route match information and handshake failure reason.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record ServerSentEventRouteHandshakeFailureKey(@NonNull RouteType routeType,
+																								 @Nullable ResourcePathDeclaration route,
+																								 ServerSentEventConnection.@NonNull HandshakeFailureReason handshakeFailureReason) {
+		public ServerSentEventRouteHandshakeFailureKey {
+			requireNonNull(routeType);
+			if (routeType == RouteType.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
+			if (routeType == RouteType.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
+			requireNonNull(handshakeFailureReason);
 		}
 	}
 

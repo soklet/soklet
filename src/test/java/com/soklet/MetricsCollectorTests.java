@@ -23,6 +23,7 @@ import com.soklet.MetricsCollector.ServerRouteKey;
 import com.soklet.MetricsCollector.ServerRouteStatusKey;
 import com.soklet.MetricsCollector.RouteType;
 import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
+import com.soklet.MetricsCollector.ServerSentEventRouteHandshakeFailureKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
 import com.soklet.MetricsCollector.HistogramSnapshot;
@@ -221,6 +222,8 @@ public class MetricsCollectorTests {
 		ServerSentEventComment comment = ServerSentEventComment.withComment("ping");
 		ServerSentEventComment heartbeat = ServerSentEventComment.heartbeatInstance();
 
+		collector.didFailToEstablishServerSentEventConnection(request, resourceMethod,
+				ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, null);
 		collector.didEstablishServerSentEventConnection(connection);
 		collector.willWriteServerSentEvent(connection, event);
 		collector.didWriteServerSentEvent(connection, event, Duration.ofMillis(2), Duration.ofNanos(500), 12, 3);
@@ -239,6 +242,8 @@ public class MetricsCollectorTests {
 				ServerSentEventComment.CommentType.COMMENT);
 		ServerSentEventCommentRouteKey heartbeatKey = new ServerSentEventCommentRouteKey(RouteType.MATCHED, eventsRoute,
 				ServerSentEventComment.CommentType.HEARTBEAT);
+		ServerSentEventRouteHandshakeFailureKey handshakeFailureKey = new ServerSentEventRouteHandshakeFailureKey(
+				RouteType.MATCHED, eventsRoute, ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_REJECTED);
 		ServerSentEventRouteTerminationKey terminationKey = new ServerSentEventRouteTerminationKey(RouteType.MATCHED, eventsRoute,
 				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE);
 
@@ -289,6 +294,8 @@ public class MetricsCollectorTests {
 		assertNotNull(connectionDurations);
 		assertEquals(1L, connectionDurations.getCount());
 
+		assertEquals(1L, snapshot.getSseHandshakesAccepted().get(routeKey));
+		assertEquals(1L, snapshot.getSseHandshakesRejected().get(handshakeFailureKey));
 		assertEquals(0L, snapshot.getActiveSseConnections());
 	}
 

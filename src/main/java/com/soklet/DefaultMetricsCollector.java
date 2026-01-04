@@ -76,6 +76,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final ConcurrentHashMap<ServerRouteKey, Histogram> httpRequestBodyBytesByRoute;
 	private final ConcurrentHashMap<ServerRouteStatusKey, Histogram> httpResponseBodyBytesByRouteStatus;
 	private final ConcurrentHashMap<IdentityKey<ServerSentEventConnection>, SseConnectionState> sseConnectionsByIdentity;
+	private final ConcurrentHashMap<ServerSentEventRouteKey, LongAdder> sseHandshakesAcceptedByRoute;
+	private final ConcurrentHashMap<ServerSentEventRouteHandshakeFailureKey, LongAdder> sseHandshakesRejectedByRouteAndReason;
 	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseTimeToFirstEventByRoute;
 	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseEventWriteDurationByRoute;
 	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseEventDeliveryLagByRoute;
@@ -107,6 +109,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.httpRequestBodyBytesByRoute = new ConcurrentHashMap<>();
 		this.httpResponseBodyBytesByRouteStatus = new ConcurrentHashMap<>();
 		this.sseConnectionsByIdentity = new ConcurrentHashMap<>();
+		this.sseHandshakesAcceptedByRoute = new ConcurrentHashMap<>();
+		this.sseHandshakesRejectedByRouteAndReason = new ConcurrentHashMap<>();
 		this.sseTimeToFirstEventByRoute = new ConcurrentHashMap<>();
 		this.sseEventWriteDurationByRoute = new ConcurrentHashMap<>();
 		this.sseEventDeliveryLagByRoute = new ConcurrentHashMap<>();
@@ -256,9 +260,26 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		RouteContext routeContext = routeFor(serverSentEventConnection);
 
+		counterFor(this.sseHandshakesAcceptedByRoute,
+				new ServerSentEventRouteKey(routeContext.getRouteType(), routeContext.getRoute())).increment();
 		this.activeSseConnections.increment();
 		this.sseConnectionsByIdentity.put(new IdentityKey<>(serverSentEventConnection),
 				new SseConnectionState(routeContext.getRouteType(), routeContext.getRoute(), System.nanoTime()));
+	}
+
+	@Override
+	public void didFailToEstablishServerSentEventConnection(@NonNull Request request,
+																													 @Nullable ResourceMethod resourceMethod,
+																													 ServerSentEventConnection.@NonNull HandshakeFailureReason reason,
+																													 @Nullable Throwable throwable) {
+		requireNonNull(request);
+		requireNonNull(reason);
+
+		RouteContext routeContext = routeFor(resourceMethod);
+
+		counterFor(this.sseHandshakesRejectedByRouteAndReason,
+				new ServerSentEventRouteHandshakeFailureKey(routeContext.getRouteType(), routeContext.getRoute(), reason))
+				.increment();
 	}
 
 	@Override
@@ -466,6 +487,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.httpConnectionsRejected(getHttpConnectionsRejected())
 				.sseConnectionsAccepted(getSseConnectionsAccepted())
 				.sseConnectionsRejected(getSseConnectionsRejected())
+				.sseHandshakesAccepted(snapshotSseHandshakesAccepted())
+				.sseHandshakesRejected(snapshotSseHandshakesRejected())
 				.httpRequestDurations(snapshotHttpRequestDurations())
 				.httpHandlerDurations(snapshotHttpHandlerDurations())
 				.httpTimeToFirstByte(snapshotHttpTimeToFirstByte())
@@ -520,6 +543,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 					snapshot.getSseConnectionsRejected(), options);
 			appendGauge(sb, "soklet_sse_connections_active", "Currently active SSE connections",
 					snapshot.getActiveSseConnections(), options);
+			appendCounter(sb, "soklet_sse_handshakes_accepted_total", "Total accepted SSE handshakes",
+					snapshot.getSseHandshakesAccepted(), DefaultMetricsCollector::labelsForSseRouteKey, options);
+			appendCounter(sb, "soklet_sse_handshakes_rejected_total", "Total rejected SSE handshakes",
+					snapshot.getSseHandshakesRejected(), DefaultMetricsCollector::labelsForSseHandshakeFailureKey, options);
 
 			appendHistogram(sb, "soklet_sse_time_to_first_event_nanos", "SSE time to first event in nanoseconds",
 					snapshot.getSseTimeToFirstEvent(), DefaultMetricsCollector::labelsForSseRouteKey, options);
@@ -639,6 +666,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
+	Map<@NonNull ServerSentEventRouteKey, @NonNull Long> snapshotSseHandshakesAccepted() {
+		return snapshotCounterMap(this.sseHandshakesAcceptedByRoute);
+	}
+
+	@NonNull
+	Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> snapshotSseHandshakesRejected() {
+		return snapshotCounterMap(this.sseHandshakesRejectedByRouteAndReason);
+	}
+
+	@NonNull
 	Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> snapshotSseConnectionDurations() {
 		return snapshotMap(this.sseConnectionDurationByRouteAndReason);
 	}
@@ -654,6 +691,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.requestsInFlightByIdentity.clear();
 		this.requestsInFlightById.clear();
 		this.sseConnectionsByIdentity.clear();
+		resetCounterMap(this.sseHandshakesAcceptedByRoute);
+		resetCounterMap(this.sseHandshakesRejectedByRouteAndReason);
 		resetMap(this.httpRequestDurationByRouteStatus);
 		resetMap(this.httpHandlerDurationByRouteStatus);
 		resetMap(this.httpTimeToFirstByteByRouteStatus);
@@ -739,6 +778,15 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
+	private static <K> LongAdder counterFor(@NonNull Map<K, LongAdder> map,
+																					@NonNull K key) {
+		requireNonNull(map);
+		requireNonNull(key);
+
+		return map.computeIfAbsent(key, ignored -> new LongAdder());
+	}
+
+	@NonNull
 	private static <K> Map<@NonNull K, @NonNull HistogramSnapshot> snapshotMap(@NonNull Map<K, Histogram> map) {
 		requireNonNull(map);
 
@@ -748,11 +796,28 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return snapshot;
 	}
 
+	@NonNull
+	private static <K> Map<@NonNull K, @NonNull Long> snapshotCounterMap(@NonNull Map<K, LongAdder> map) {
+		requireNonNull(map);
+
+		Map<K, Long> snapshot = new ConcurrentHashMap<>(map.size());
+		for (Map.Entry<K, LongAdder> entry : map.entrySet())
+			snapshot.put(entry.getKey(), entry.getValue().sum());
+		return snapshot;
+	}
+
 	private static <K> void resetMap(@NonNull Map<K, Histogram> map) {
 		requireNonNull(map);
 
 		for (Histogram histogram : map.values())
 			histogram.reset();
+	}
+
+	private static <K> void resetCounterMap(@NonNull Map<K, LongAdder> map) {
+		requireNonNull(map);
+
+		for (LongAdder counter : map.values())
+			counter.reset();
 	}
 
 	private static void appendGauge(@NonNull StringBuilder sb,
@@ -789,6 +854,40 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
 		sb.append("# TYPE ").append(name).append(" counter\n");
 		appendSample(sb, name, "", value);
+	}
+
+	private static <K> void appendCounter(@NonNull StringBuilder sb,
+																				@NonNull String name,
+																				@NonNull String help,
+																				@NonNull Map<K, Long> counters,
+																				@NonNull Function<K, LabelSet> labelsProvider,
+																				@NonNull SnapshotTextOptions options) {
+		requireNonNull(sb);
+		requireNonNull(name);
+		requireNonNull(help);
+		requireNonNull(counters);
+		requireNonNull(labelsProvider);
+		requireNonNull(options);
+
+		if (counters.isEmpty())
+			return;
+
+		StringBuilder metricBody = new StringBuilder();
+
+		counters.forEach((key, value) -> {
+			LabelSet labels = labelsProvider.apply(key);
+			if (!shouldEmitSample(options, name, labels.getLabels()))
+				return;
+
+			appendSample(metricBody, name, labels.getEncoded(), value);
+		});
+
+		if (metricBody.length() == 0)
+			return;
+
+		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
+		sb.append("# TYPE ").append(name).append(" counter\n");
+		sb.append(metricBody);
 	}
 
 	private static <K> void appendHistogram(@NonNull StringBuilder sb,
@@ -955,6 +1054,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		Map<String, String> labels = new LinkedHashMap<>(1);
 		labels.put("route", routeLabel(key.routeType(), key.route()));
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForSseHandshakeFailureKey(@NonNull ServerSentEventRouteHandshakeFailureKey key) {
+		requireNonNull(key);
+
+		Map<String, String> labels = new LinkedHashMap<>(2);
+		labels.put("route", routeLabel(key.routeType(), key.route()));
+		labels.put("handshake_failure_reason", key.handshakeFailureReason().name());
 		return new LabelSet(labels);
 	}
 
