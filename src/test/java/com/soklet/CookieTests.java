@@ -100,4 +100,51 @@ public class CookieTests {
 					.build();
 		}, "SameSite=None must also set Secure");
 	}
+
+	@Test
+	public void partitionedRequiresSecure() {
+		Assertions.assertThrows(IllegalArgumentException.class, () -> {
+			ResponseCookie.with("sid", "v")
+					.path("/")
+					.sameSite(SameSite.NONE)
+					.partitioned(true)
+					.build();
+		});
+	}
+
+	@Test
+	public void partitionedRequiresPathSlash() {
+		Assertions.assertThrows(IllegalArgumentException.class, () -> {
+			ResponseCookie.with("sid", "v")
+					.path("/api")
+					.sameSite(SameSite.NONE)
+					.secure(true)
+					.partitioned(true)
+					.build();
+		});
+	}
+
+	@Test
+	public void partitionedRequiresSameSiteNone() {
+		Assertions.assertThrows(IllegalArgumentException.class, () -> {
+			ResponseCookie.with("sid", "v")
+					.path("/")
+					.sameSite(SameSite.LAX)
+					.secure(true)
+					.partitioned(true)
+					.build();
+		});
+	}
+
+	@Test
+	public void partitionedCookieSerializes() {
+		ResponseCookie cookie = ResponseCookie.with("sid", "v")
+				.path("/")
+				.sameSite(SameSite.NONE)
+				.secure(true)
+				.partitioned(true)
+				.build();
+
+		Assertions.assertTrue(cookie.toSetCookieHeaderRepresentation().contains("Partitioned"));
+	}
 }

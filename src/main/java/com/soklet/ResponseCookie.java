@@ -23,8 +23,16 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.HttpCookie;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.SignStyle;
+import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -53,6 +61,8 @@ public final class ResponseCookie {
 	@Nullable
 	private final Duration maxAge;
 	@Nullable
+	private final Instant expires;
+	@Nullable
 	private final String domain;
 	@Nullable
 	private final String path;
@@ -62,6 +72,37 @@ public final class ResponseCookie {
 	private final Boolean httpOnly;
 	@Nullable
 	private final SameSite sameSite;
+	@Nullable
+	private final Priority priority;
+	@NonNull
+	private final Boolean partitioned;
+
+	@NonNull
+	private static final DateTimeFormatter RFC_1123_FORMATTER;
+	@NonNull
+	private static final DateTimeFormatter RFC_1036_PARSER;
+	@NonNull
+	private static final DateTimeFormatter ASCTIME_PARSER;
+
+	static {
+		RFC_1123_FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME.withZone(ZoneId.of("GMT"));
+		RFC_1036_PARSER = new DateTimeFormatterBuilder()
+				.parseCaseInsensitive()
+				.appendPattern("EEE, dd MMM ")
+				.appendValueReduced(ChronoField.YEAR, 2, 2, 1900)
+				.appendPattern(" HH:mm:ss zzz")
+				.toFormatter(Locale.US)
+				.withZone(ZoneOffset.UTC);
+		ASCTIME_PARSER = new DateTimeFormatterBuilder()
+				.parseCaseInsensitive()
+				.appendPattern("EEE MMM")
+				.appendLiteral(' ')
+				.optionalStart().appendLiteral(' ').optionalEnd()
+				.appendValue(ChronoField.DAY_OF_MONTH, 1, 2, SignStyle.NOT_NEGATIVE)
+				.appendPattern(" HH:mm:ss yyyy")
+				.toFormatter(Locale.US)
+				.withZone(ZoneOffset.UTC);
+	}
 
 	/**
 	 * Acquires a builder for {@link ResponseCookie} instances.
@@ -137,15 +178,18 @@ public final class ResponseCookie {
 		long maxAge = httpCookie.getMaxAge();
 		Duration maxAgeDuration = (maxAge >= 0) ? Duration.ofSeconds(maxAge) : null;
 
-		Optional<SameSite> sameSite = extractSameSiteAttribute(normalizedSetCookieHeaderRepresentation);
+		ParsedSetCookieAttributes attributes = parseSetCookieAttributes(normalizedSetCookieHeaderRepresentation);
 
 		return Optional.of(ResponseCookie.with(httpCookie.getName(), httpCookie.getValue())
 				.maxAge(maxAgeDuration)
+				.expires(attributes.getExpires().orElse(null))
 				.domain(httpCookie.getDomain())
 				.httpOnly(httpCookie.isHttpOnly())
 				.secure(httpCookie.getSecure())
 				.path(httpCookie.getPath())
-				.sameSite(sameSite.orElse(null))
+				.sameSite(attributes.getSameSite().orElse(null))
+				.priority(attributes.getPriority().orElse(null))
+				.partitioned(attributes.getPartitioned())
 				.build());
 	}
 
@@ -168,13 +212,14 @@ public final class ResponseCookie {
 	}
 
 	@NonNull
-	private static Optional<SameSite> extractSameSiteAttribute(@NonNull String setCookieHeaderRepresentation) {
+	private static ParsedSetCookieAttributes parseSetCookieAttributes(@NonNull String setCookieHeaderRepresentation) {
 		requireNonNull(setCookieHeaderRepresentation);
 
+		ParsedSetCookieAttributes attributes = new ParsedSetCookieAttributes();
 		List<String> components = splitSetCookieHeaderRespectingQuotes(setCookieHeaderRepresentation);
 
 		if (components.size() <= 1)
-			return Optional.empty();
+			return attributes;
 
 		for (int i = 1; i < components.size(); i++) {
 			String component = trimAggressivelyToNull(components.get(i));
@@ -187,21 +232,61 @@ public final class ResponseCookie {
 			if (attributeName == null)
 				continue;
 
-			if (!"samesite".equalsIgnoreCase(attributeName))
+			String attributeValue = equalsIndex == -1 ? null : trimAggressivelyToNull(component.substring(equalsIndex + 1));
+
+			if ("samesite".equalsIgnoreCase(attributeName)) {
+				if (attributes.sameSite == null && attributeValue != null) {
+					attributeValue = stripOptionalQuotes(attributeValue);
+					attributes.sameSite = SameSite.fromHeaderRepresentation(attributeValue).orElse(null);
+				}
 				continue;
+			}
 
-			if (equalsIndex == -1)
-				return Optional.empty();
+			if ("expires".equalsIgnoreCase(attributeName)) {
+				if (attributes.expires == null && attributeValue != null) {
+					try {
+						attributeValue = stripOptionalQuotes(attributeValue);
+						attributes.expires = parseHttpDate(attributeValue);
+					} catch (IllegalArgumentException ignored) {
+						// Ignore malformed Expires attribute
+					}
+				}
+				continue;
+			}
 
-			String attributeValue = trimAggressivelyToNull(component.substring(equalsIndex + 1));
-			if (attributeValue == null)
-				return Optional.empty();
+			if ("priority".equalsIgnoreCase(attributeName)) {
+				if (attributes.priority == null && attributeValue != null) {
+					attributeValue = stripOptionalQuotes(attributeValue);
+					attributes.priority = Priority.fromHeaderRepresentation(attributeValue).orElse(null);
+				}
+				continue;
+			}
 
-			attributeValue = stripOptionalQuotes(attributeValue);
-			return SameSite.fromHeaderRepresentation(attributeValue);
+			if ("partitioned".equalsIgnoreCase(attributeName))
+				attributes.partitioned = true;
 		}
 
-		return Optional.empty();
+		return attributes;
+	}
+
+	@NonNull
+	private static Instant parseHttpDate(@NonNull String value) {
+		requireNonNull(value);
+
+		String trimmed = trimAggressivelyToNull(value);
+
+		if (trimmed == null)
+			throw new IllegalArgumentException("Date value cannot be blank");
+
+		for (DateTimeFormatter formatter : List.of(RFC_1123_FORMATTER, RFC_1036_PARSER, ASCTIME_PARSER)) {
+			try {
+				return Instant.from(formatter.parse(trimmed));
+			} catch (Exception ignored) {
+				// try next formatter
+			}
+		}
+
+		throw new IllegalArgumentException(format("Unable to parse HTTP-date value '%s'", trimmed));
 	}
 
 	@NonNull
@@ -265,11 +350,14 @@ public final class ResponseCookie {
 		this.name = builder.name;
 		this.value = builder.value;
 		this.maxAge = builder.maxAge;
+		this.expires = builder.expires;
 		this.domain = builder.domain;
 		this.path = trimAggressivelyToNull(builder.path); // Can't specify blank paths. Must be null (omitted) or start with "/"
 		this.secure = builder.secure == null ? false : builder.secure;
 		this.httpOnly = builder.httpOnly == null ? false : builder.httpOnly;
 		this.sameSite = builder.sameSite;
+		this.priority = builder.priority;
+		this.partitioned = builder.partitioned == null ? false : builder.partitioned;
 
 		// Extra validation to ensure we are not creating cookies that are illegal according to the spec
 
@@ -278,9 +366,24 @@ public final class ResponseCookie {
 		Rfc6265Utils.validateDomain(getDomain().orElse(null));
 		Rfc6265Utils.validatePath(getPath().orElse(null));
 
+		if (this.maxAge != null && this.maxAge.isNegative())
+			throw new IllegalArgumentException("Max-Age must be >= 0");
+
 		if (this.sameSite == SameSite.NONE && (this.secure == null || !this.secure))
 			throw new IllegalArgumentException(format("Specifying %s value %s.%s requires that you also set secure=true, otherwise browsers will likely discard the cookie",
 					ResponseCookie.class.getSimpleName(), SameSite.class.getSimpleName(), SameSite.NONE.name()));
+
+		if (this.partitioned) {
+			if (this.secure == null || !this.secure)
+				throw new IllegalArgumentException("Partitioned cookies require secure=true");
+
+			String cookiePath = getPath().orElse(null);
+			if (cookiePath == null || !cookiePath.equals("/"))
+				throw new IllegalArgumentException("Partitioned cookies require path=\"/\"");
+
+			if (this.sameSite != SameSite.NONE)
+				throw new IllegalArgumentException("Partitioned cookies require SameSite=None");
+		}
 	}
 
 	/**
@@ -307,6 +410,9 @@ public final class ResponseCookie {
 		if (maxAge >= 0)
 			components.add(format("Max-Age=%d", maxAge));
 
+		if (getExpires().isPresent())
+			components.add(format("Expires=%s", RFC_1123_FORMATTER.format(getExpires().get())));
+
 		if (getSecure())
 			components.add("Secure");
 
@@ -315,6 +421,12 @@ public final class ResponseCookie {
 
 		if (getSameSite().isPresent())
 			components.add(format("SameSite=%s", getSameSite().get().getHeaderRepresentation()));
+
+		if (getPriority().isPresent())
+			components.add(format("Priority=%s", getPriority().get().getHeaderRepresentation()));
+
+		if (getPartitioned())
+			components.add("Partitioned");
 
 		return components.stream().collect(Collectors.joining("; "));
 	}
@@ -325,11 +437,14 @@ public final class ResponseCookie {
 				getName(),
 				getValue(),
 				getMaxAge(),
+				getExpires(),
 				getDomain(),
 				getPath(),
 				getSecure(),
 				getHttpOnly(),
-				getSameSite()
+				getSameSite(),
+				getPriority(),
+				getPartitioned()
 		);
 	}
 
@@ -344,11 +459,14 @@ public final class ResponseCookie {
 		return Objects.equals(getName(), responseCookie.getName())
 				&& Objects.equals(getValue(), responseCookie.getValue())
 				&& Objects.equals(getMaxAge(), responseCookie.getMaxAge())
+				&& Objects.equals(getExpires(), responseCookie.getExpires())
 				&& Objects.equals(getDomain(), responseCookie.getDomain())
 				&& Objects.equals(getPath(), responseCookie.getPath())
 				&& Objects.equals(getSecure(), responseCookie.getSecure())
 				&& Objects.equals(getHttpOnly(), responseCookie.getHttpOnly())
-				&& Objects.equals(getSameSite(), responseCookie.getSameSite());
+				&& Objects.equals(getSameSite(), responseCookie.getSameSite())
+				&& Objects.equals(getPriority(), responseCookie.getPriority())
+				&& Objects.equals(getPartitioned(), responseCookie.getPartitioned());
 	}
 
 	@Override
@@ -385,6 +503,16 @@ public final class ResponseCookie {
 	@NonNull
 	public Optional<Duration> getMaxAge() {
 		return Optional.ofNullable(this.maxAge);
+	}
+
+	/**
+	 * Gets the cookie's {@code Expires} value, if present.
+	 *
+	 * @return the {@code Expires} value of the cookie, or {@link Optional#empty()} if there is none
+	 */
+	@NonNull
+	public Optional<Instant> getExpires() {
+		return Optional.ofNullable(this.expires);
 	}
 
 	/**
@@ -435,6 +563,26 @@ public final class ResponseCookie {
 	@NonNull
 	public Optional<SameSite> getSameSite() {
 		return Optional.ofNullable(this.sameSite);
+	}
+
+	/**
+	 * Gets the cookie's {@code Priority} value, if present.
+	 *
+	 * @return the {@code Priority} value of the cookie, or {@link Optional#empty()} if there is none
+	 */
+	@NonNull
+	public Optional<Priority> getPriority() {
+		return Optional.ofNullable(this.priority);
+	}
+
+	/**
+	 * Gets the cookie's {@code Partitioned} flag.
+	 *
+	 * @return {@code true} if the {@code Partitioned} flag is present, {@code false} otherwise
+	 */
+	@NonNull
+	public Boolean getPartitioned() {
+		return this.partitioned;
 	}
 
 	/**
@@ -500,6 +648,41 @@ public final class ResponseCookie {
 	}
 
 	/**
+	 * Represents the {@code Priority} response cookie attribute.
+	 */
+	public enum Priority {
+		LOW("Low"),
+		MEDIUM("Medium"),
+		HIGH("High");
+
+		@NonNull
+		private final String headerRepresentation;
+
+		Priority(@NonNull String headerRepresentation) {
+			requireNonNull(headerRepresentation);
+			this.headerRepresentation = headerRepresentation;
+		}
+
+		@NonNull
+		public String getHeaderRepresentation() {
+			return this.headerRepresentation;
+		}
+
+		@NonNull
+		public static Optional<Priority> fromHeaderRepresentation(@NonNull String headerRepresentation) {
+			requireNonNull(headerRepresentation);
+
+			String normalized = headerRepresentation.trim();
+
+			for (Priority priority : values())
+				if (normalized.equalsIgnoreCase(priority.getHeaderRepresentation()))
+					return Optional.of(priority);
+
+			return Optional.empty();
+		}
+	}
+
+	/**
 	 * Builder used to construct instances of {@link ResponseCookie} via {@link ResponseCookie#withName(String)}
 	 * or {@link ResponseCookie#with(String, String)}.
 	 * <p>
@@ -516,6 +699,8 @@ public final class ResponseCookie {
 		@Nullable
 		private Duration maxAge;
 		@Nullable
+		private Instant expires;
+		@Nullable
 		private String domain;
 		@Nullable
 		private String path;
@@ -525,6 +710,10 @@ public final class ResponseCookie {
 		private Boolean httpOnly;
 		@Nullable
 		private SameSite sameSite;
+		@Nullable
+		private Priority priority;
+		@Nullable
+		private Boolean partitioned;
 
 		protected Builder(@NonNull String name) {
 			requireNonNull(name);
@@ -554,6 +743,12 @@ public final class ResponseCookie {
 		@NonNull
 		public Builder maxAge(@Nullable Duration maxAge) {
 			this.maxAge = maxAge;
+			return this;
+		}
+
+		@NonNull
+		public Builder expires(@Nullable Instant expires) {
+			this.expires = expires;
 			return this;
 		}
 
@@ -588,6 +783,18 @@ public final class ResponseCookie {
 		}
 
 		@NonNull
+		public Builder priority(@Nullable Priority priority) {
+			this.priority = priority;
+			return this;
+		}
+
+		@NonNull
+		public Builder partitioned(@Nullable Boolean partitioned) {
+			this.partitioned = partitioned;
+			return this;
+		}
+
+		@NonNull
 		public ResponseCookie build() {
 			return new ResponseCookie(this);
 		}
@@ -611,11 +818,14 @@ public final class ResponseCookie {
 			this.builder = new Builder(responseCookie.getName())
 					.value(responseCookie.getValue().orElse(null))
 					.maxAge(responseCookie.getMaxAge().orElse(null))
+					.expires(responseCookie.getExpires().orElse(null))
 					.domain(responseCookie.getDomain().orElse(null))
 					.path(responseCookie.getPath().orElse(null))
 					.secure(responseCookie.getSecure())
 					.httpOnly(responseCookie.getHttpOnly())
-					.sameSite(responseCookie.getSameSite().orElse(null));
+					.sameSite(responseCookie.getSameSite().orElse(null))
+					.priority(responseCookie.getPriority().orElse(null))
+					.partitioned(responseCookie.getPartitioned());
 		}
 
 		@NonNull
@@ -634,6 +844,12 @@ public final class ResponseCookie {
 		@NonNull
 		public Copier maxAge(@Nullable Duration maxAge) {
 			this.builder.maxAge(maxAge);
+			return this;
+		}
+
+		@NonNull
+		public Copier expires(@Nullable Instant expires) {
+			this.builder.expires(expires);
 			return this;
 		}
 
@@ -668,8 +884,52 @@ public final class ResponseCookie {
 		}
 
 		@NonNull
+		public Copier priority(@Nullable Priority priority) {
+			this.builder.priority(priority);
+			return this;
+		}
+
+		@NonNull
+		public Copier partitioned(@Nullable Boolean partitioned) {
+			this.builder.partitioned(partitioned);
+			return this;
+		}
+
+		@NonNull
 		public ResponseCookie finish() {
 			return this.builder.build();
+		}
+	}
+
+	@ThreadSafe
+	private static final class ParsedSetCookieAttributes {
+		@Nullable
+		private Instant expires;
+		@Nullable
+		private SameSite sameSite;
+		@Nullable
+		private Priority priority;
+		@NonNull
+		private Boolean partitioned = false;
+
+		@NonNull
+		private Optional<Instant> getExpires() {
+			return Optional.ofNullable(this.expires);
+		}
+
+		@NonNull
+		private Optional<SameSite> getSameSite() {
+			return Optional.ofNullable(this.sameSite);
+		}
+
+		@NonNull
+		private Optional<Priority> getPriority() {
+			return Optional.ofNullable(this.priority);
+		}
+
+		@NonNull
+		private Boolean getPartitioned() {
+			return this.partitioned;
 		}
 	}
 

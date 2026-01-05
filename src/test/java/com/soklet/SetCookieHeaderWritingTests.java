@@ -24,6 +24,7 @@ import java.net.HttpCookie;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -309,6 +310,37 @@ public class SetCookieHeaderWritingTests {
 		ResponseCookie cookie = parsed.get();
 		assertEquals(ResponseCookie.SameSite.NONE, cookie.getSameSite().orElse(null),
 				"SameSite should be preserved when parsing Set-Cookie");
+	}
+
+	@Test
+	public void setCookieHeaderParsingPreservesExpiresPriorityAndPartitioned() {
+		String setCookieHeader = "sessionid=abc123; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Max-Age=3600; Path=/; Secure; SameSite=None; Priority=High; Partitioned";
+
+		Optional<ResponseCookie> parsed = ResponseCookie.fromSetCookieHeaderRepresentation(setCookieHeader);
+		assertTrue(parsed.isPresent(), "Should parse Set-Cookie with Expires/Priority/Partitioned");
+
+		ResponseCookie cookie = parsed.get();
+		assertEquals(Instant.parse("2015-10-21T07:28:00Z"), cookie.getExpires().orElse(null));
+		assertEquals(ResponseCookie.Priority.HIGH, cookie.getPriority().orElse(null));
+		assertTrue(cookie.getPartitioned());
+	}
+
+	@Test
+	public void setCookieHeaderRepresentationIncludesExpiresPriorityAndPartitioned() {
+		Instant expires = Instant.parse("2015-10-21T07:28:00Z");
+		ResponseCookie cookie = ResponseCookie.with("sessionid", "abc123")
+				.expires(expires)
+				.priority(ResponseCookie.Priority.HIGH)
+				.partitioned(true)
+				.path("/")
+				.secure(true)
+				.sameSite(ResponseCookie.SameSite.NONE)
+				.build();
+
+		String setCookieHeader = cookie.toSetCookieHeaderRepresentation();
+		assertTrue(setCookieHeader.contains("Expires=Wed, 21 Oct 2015 07:28:00 GMT"));
+		assertTrue(setCookieHeader.contains("Priority=High"));
+		assertTrue(setCookieHeader.contains("Partitioned"));
 	}
 
 	@Test
