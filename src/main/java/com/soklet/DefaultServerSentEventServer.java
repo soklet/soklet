@@ -63,11 +63,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -770,7 +770,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				throw new IllegalStateException(format("No %s was registered for %s", LifecycleObserver.class, getClass()));
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
-			this.requestHandlerTimeoutExecutorService = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "sse-request-handler-timeout"));
+			ScheduledThreadPoolExecutor timeoutExecutor = new ScheduledThreadPoolExecutor(
+					1,
+					runnable -> new Thread(runnable, "sse-request-handler-timeout"));
+			timeoutExecutor.setRemoveOnCancelPolicy(true);
+			this.requestHandlerTimeoutExecutorService = timeoutExecutor;
 			this.requestReaderExecutorService = getRequestReaderExecutorServiceSupplier().get();
 			this.connectionExecutorService = getConnectionExecutorServiceSupplier().get();
 			this.stopping = false;

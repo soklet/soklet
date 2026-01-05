@@ -50,10 +50,10 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -467,7 +467,11 @@ final class DefaultServer implements Server {
 			});
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
-			this.requestHandlerTimeoutExecutorService = Executors.newSingleThreadScheduledExecutor(new NonvirtualThreadFactory("request-handler-timeout"));
+			ScheduledThreadPoolExecutor timeoutExecutor = new ScheduledThreadPoolExecutor(
+					1,
+					new NonvirtualThreadFactory("request-handler-timeout"));
+			timeoutExecutor.setRemoveOnCancelPolicy(true);
+			this.requestHandlerTimeoutExecutorService = timeoutExecutor;
 			EventLoop eventLoop = null;
 
 			try {
