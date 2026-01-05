@@ -576,7 +576,7 @@ final class DefaultServer implements Server {
 				.map(StatusCode::getReasonPhrase)
 				.orElse("Unknown");
 		List<Header> headers = List.of(new Header("Content-Type", format("text/plain; charset=%s", charset.name())));
-		byte[] body = format("HTTP %d: %s", statusCode, StatusCode.fromStatusCode(statusCode).get().getReasonPhrase()).getBytes(charset);
+		byte[] body = format("HTTP %d: %s", statusCode, reasonPhrase).getBytes(charset);
 
 		return new MicrohttpResponse(statusCode, reasonPhrase, headers, body);
 	}

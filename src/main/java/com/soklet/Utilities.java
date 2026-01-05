@@ -993,41 +993,57 @@ public final class Utilities {
 
 		// Forwarded: by=<identifier>;for=<identifier>;host=<host>;proto=<http|https>
 		if (trustForwardedHeaders) {
-			String forwardedHeader = firstHeaderValue(headers.get("Forwarded"));
-			if (forwardedHeader != null) {
-				// Each field component might look like "by=<identifier>"
-				String[] forwardedHeaderFieldComponents = forwardedHeader.split(";");
-				for (String forwardedHeaderFieldComponent : forwardedHeaderFieldComponents) {
-					forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
-					if (forwardedHeaderFieldComponent == null)
+			Set<String> forwardedHeaders = headers.get("Forwarded");
+			if (forwardedHeaders != null) {
+				forwardedHeaderLoop:
+				for (String forwardedHeader : forwardedHeaders) {
+					String trimmed = trimAggressivelyToNull(forwardedHeader);
+					if (trimmed == null)
 						continue;
 
-					// Break "by=<identifier>" into "by" and "<identifier>" pieces
-					String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("=" /* escape special Regex char */));
-					if (forwardedHeaderFieldNameAndValue.length != 2)
-						continue;
+					for (String forwardedEntry : splitCommaAware(trimmed)) {
+						String entry = trimAggressivelyToNull(forwardedEntry);
+						if (entry == null)
+							continue;
 
-					String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
-					String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
-					if (name == null || value == null)
-						continue;
+						// Each field component might look like "by=<identifier>"
+						String[] forwardedHeaderFieldComponents = entry.split(";");
+						for (String forwardedHeaderFieldComponent : forwardedHeaderFieldComponents) {
+							forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
+							if (forwardedHeaderFieldComponent == null)
+								continue;
 
-					if ("host".equalsIgnoreCase(name)) {
-						if (host == null) {
-							HostPort hostPort = parseHostPort(value).orElse(null);
+							// Break "by=<identifier>" into "by" and "<identifier>" pieces
+							String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("=" /* escape special Regex char */), 2);
+							if (forwardedHeaderFieldNameAndValue.length != 2)
+								continue;
 
-							if (hostPort != null) {
-								host = hostPort.getHost();
+							String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
+							String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
+							if (name == null || value == null)
+								continue;
 
-								if (hostPort.getPort().isPresent()) {
-									portAsString = String.valueOf(hostPort.getPort().get());
-									portExplicit = true;
+							if ("host".equalsIgnoreCase(name)) {
+								if (host == null) {
+									HostPort hostPort = parseHostPort(value).orElse(null);
+
+									if (hostPort != null) {
+										host = hostPort.getHost();
+
+										if (hostPort.getPort().isPresent()) {
+											portAsString = String.valueOf(hostPort.getPort().get());
+											portExplicit = true;
+										}
+									}
 								}
+							} else if ("proto".equalsIgnoreCase(name)) {
+								if (protocol == null)
+									protocol = stripOptionalQuotes(value);
 							}
 						}
-					} else if ("proto".equalsIgnoreCase(name)) {
-						if (protocol == null)
-							protocol = stripOptionalQuotes(value);
+
+						if (host != null && protocol != null)
+							break forwardedHeaderLoop;
 					}
 				}
 			}

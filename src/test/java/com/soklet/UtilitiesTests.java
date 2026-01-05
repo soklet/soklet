@@ -557,6 +557,29 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void forwardedHeaderLists_skipIncompleteEntries() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Forwarded", Set.of("for=203.0.113.60, for=203.0.113.61; proto=https; host=example.com:8443"));
+
+		Optional<String> prefix = extractEffectiveOrigin(headers);
+		Assertions.assertTrue(prefix.isPresent());
+		Assertions.assertEquals("https://example.com:8443", prefix.get());
+	}
+
+	@Test
+	public void forwardedHeaderLists_supportMultipleHeaderValues() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		Set<String> forwardedValues = new LinkedHashSet<>();
+		forwardedValues.add("for=203.0.113.60");
+		forwardedValues.add("for=203.0.113.61; proto=https; host=example.com");
+		headers.put("Forwarded", forwardedValues);
+
+		Optional<String> prefix = extractEffectiveOrigin(headers);
+		Assertions.assertTrue(prefix.isPresent());
+		Assertions.assertEquals("https://example.com", prefix.get());
+	}
+
+	@Test
 	public void commaJoinableHeaders_splitOutsideQuotes() {
 		List<String> lines = List.of(
 				"Cache-Control: no-cache, no-store",
