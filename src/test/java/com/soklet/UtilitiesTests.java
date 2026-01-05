@@ -191,6 +191,12 @@ public class UtilitiesTests {
 		assertEquals("https://www.soklet.com", effectiveOrigin, "Forwarded host should override Host header");
 
 		effectiveOrigin = extractEffectiveOrigin(Map.of(
+				"host", Set.of("www.soklet.com"),
+				"x-forwarded-proto", Set.of("https")
+		)).orElse(null);
+		assertEquals("https://www.soklet.com", effectiveOrigin, "Header names should be treated as case-insensitive");
+
+		effectiveOrigin = extractEffectiveOrigin(Map.of(
 				"Host", Set.of("www.soklet.com"),
 				"X-Forwarded-Proto", Set.of("https"),
 				"X-Forwarded-Port", Set.of("-1")

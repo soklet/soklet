@@ -1262,7 +1262,7 @@ public final class Utilities {
 
 		private EffectiveOriginResolver(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
 																		@NonNull TrustPolicy trustPolicy) {
-			this.headers = headers;
+			this.headers = new LinkedCaseInsensitiveMap<>(headers);
 			this.trustPolicy = trustPolicy;
 		}
 
