@@ -98,44 +98,41 @@ Soklet systems can be structurally as simple as a "hello world" app.
 While a real production system will have more moving parts, this demonstrates that you _can_ build server software without ceremony or dependencies.
 
 ```java
-// Visit https://www.soklet.com to learn how to build a real app
 package com.soklet.example;
 
 public class App {
-  // Handles HTTP requests
-  public static class ExampleResource {
-    // Canonical example
-    @GET("/")
-    public String index() {
-      return "Hello, world!";
-    }
-    
-    // Echoes back the path parameter, which must be a LocalDate
-    @GET("/echo/{date}")
-    public LocalDate echo(@PathParameter LocalDate date) {
-      return date;
-    }
+  // Canonical example
+  @GET("/")
+  public String index() {
+    return "Hello, world!";
+  }
+  
+  // Echoes back the path parameter, which must be a LocalDate
+  @GET("/echo/{date}")
+  public LocalDate echo(@PathParameter LocalDate date) {
+    return date;
+  }
 
-    // Formats request body locale for display and customizes the response.
-    // Example: fr-CA ⇒ francês (Canadá)
-    @POST("/language")
-    public Response languageFor(@RequestBody Locale locale) {
-      Locale systemLocale = Locale.forLanguageTag("pt-BR");
-      String contentLanguage = systemLocale.toLanguageTag();
+  // Formats request body locale for display and customizes the response.
+  // Example: fr-CA ⇒ francês (Canadá)
+  @POST("/language")
+  public Response languageFor(@RequestBody Locale locale) {
+    Locale systemLocale = Locale.forLanguageTag("pt-BR");
+    String contentLanguage = systemLocale.toLanguageTag();
 
-      return Response.withStatusCode(200)
-        .body(locale.getDisplayName(systemLocale))
-        .headers(Map.of("Content-Language", Set.of(contentLanguage)))
-        .cookies(Set.of(
-          ResponseCookie.with("lastRequest", Instant.now().toString())
-            .httpOnly(true)
-            .secure(true)
-            .maxAge(Duration.ofMinutes(5))
-            .sameSite(SameSite.LAX)
-            .build()
-        ))        
-        .build();
-    }
+    return Response.withStatusCode(200)
+      .body(locale.getDisplayName(systemLocale))
+      .headers(Map.of("Content-Language", Set.of(contentLanguage)))
+      .cookies(Set.of(
+        ResponseCookie.withName("lastRequest")
+          .value(Instant.now().toString())
+          .httpOnly(true)
+          .secure(true)
+          .maxAge(Duration.ofMinutes(5))
+          .sameSite(SameSite.LAX)
+          .build()
+      ))        
+      .build();
   }
 
   // Start the server and listen on :8080
@@ -178,6 +175,7 @@ java -cp soklet-2.0.0-SNAPSHOT.jar:build com/soklet/example/App
 HTTP/1.1 200 OK
 Content-Length: 13
 Content-Type: text/plain; charset=UTF-8
+Date: Sun, 21 Mar 2024 16:19:01 GMT
 
 Hello, world!
 ```
@@ -188,6 +186,7 @@ Hello, world!
 HTTP/1.1 200 OK
 Content-Length: 10
 Content-Type: text/plain; charset=UTF-8
+Date: Sun, 21 Mar 2024 16:19:01 GMT
 
 2024-12-31
 ```
@@ -198,6 +197,7 @@ Content-Type: text/plain; charset=UTF-8
 HTTP/1.1 400 Bad Request
 Content-Length: 21
 Content-Type: text/plain; charset=UTF-8
+Date: Sun, 21 Mar 2024 16:19:01 GMT
 
 HTTP 400: Bad Request
 ```
@@ -209,7 +209,8 @@ HTTP/1.1 200 OK
 Content-Language: pt-BR
 Content-Length: 18
 Content-Type: text/plain; charset=UTF-8
-Set-Cookie: lastRequest=2024-04-20T16:19:02.115336Z; Max-Age=300; Secure; HttpOnly; SameSite=Lax
+Date: Sun, 21 Mar 2024 16:19:01 GMT
+Set-Cookie: lastRequest=2024-04-21T16:19:01.115336Z; Max-Age=300; Secure; HttpOnly; SameSite=Lax
 
 francês (Canadá)
 ```
@@ -646,6 +647,7 @@ Test:
 HTTP/1.1 200 OK
 Content-Length: 37
 Content-Type: text/plain; charset=UTF-8
+Date: Sun, 21 Mar 2024 16:19:01 GMT
 
 123
 456
