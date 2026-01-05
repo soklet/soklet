@@ -395,7 +395,7 @@ public final class ResponseCookie {
 	 */
 	@NonNull
 	public String toSetCookieHeaderRepresentation() {
-		List<String> components = new ArrayList<>(8);
+		List<String> components = new ArrayList<>(10);
 
 		components.add(format("%s=%s", getName(), getValue().orElse("")));
 
