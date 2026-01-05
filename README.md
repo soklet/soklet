@@ -339,7 +339,9 @@ public void createEmployee(@RequestBody Employee employee) {
 
 #### Response Writing
 
-To control how response data is surfaced to clients (e.g. JSON), provide handler functions to Soklet as shown below.
+To control how response data is surfaced to clients (e.g. JSON), provide handler functions
+([`ResourceMethodHandler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.ResourceMethodHandler.html) and
+[`ThrowableHandler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.ThrowableHandler.html)) to Soklet as shown below.
 
 Alternatively, you can provide your own implementation of [`ResponseMarshaler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.html) for full control.
 
@@ -512,7 +514,8 @@ SokletConfig config = SokletConfig.withServer(
 ).build();
 ```
 
-SSE test via the simulator (see [`ServerSentEventRequestResult`](https://javadoc.soklet.com/com/soklet/ServerSentEventRequestResult.html)):
+SSE test via the [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html)
+(see [`ServerSentEventRequestResult`](https://javadoc.soklet.com/com/soklet/ServerSentEventRequestResult.html)):
 
 ```java
 import org.junit.Assert;
@@ -770,7 +773,7 @@ public class WidgetResource {
 Implement [`LifecycleObserver`](https://javadoc.soklet.com/com/soklet/LifecycleObserver.html) and
 [`RequestInterceptor`](https://javadoc.soklet.com/com/soklet/RequestInterceptor.html) to hook into server and request lifecycles.
 
-Server Start/Stop: execute code immediately before and after server startup and shutdown.
+Server Start/Stop: execute code immediately before and after [`Server`](https://javadoc.soklet.com/com/soklet/Server.html) startup and shutdown.
 
 ```java
 SokletConfig config = SokletConfig.withServer(
@@ -802,7 +805,7 @@ SokletConfig config = SokletConfig.withServer(
 }).build();
 ```
 
-Request Handling: these methods are fired at the very start of request processing and the very end, respectively.
+Request Handling: these methods are fired at the very start of [`Request`](https://javadoc.soklet.com/com/soklet/Request.html) processing and the very end, respectively.
 
 ```java
 SokletConfig config = SokletConfig.withServer(
@@ -845,9 +848,9 @@ SokletConfig config = SokletConfig.withServer(
 }).build();                  
 ```
 
-Request Wrapping: wraps around the whole "outside" of an entire request-handling flow.
+Request Wrapping: wraps around the whole "outside" of an entire [`Request`](https://javadoc.soklet.com/com/soklet/Request.html) handling flow.
 
-Request wrapping runs before Soklet resolves which [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html) should handle the request. If you want to rewrite the HTTP method or path, return a modified request via the consumer and Soklet will route using the wrapped request. You must call `requestProcessor.accept(...)` exactly once before returning; otherwise Soklet logs an error and returns a 500 response.
+Request wrapping runs before Soklet resolves which [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html) should handle the request. If you want to rewrite the HTTP method or path, return a modified [`Request`](https://javadoc.soklet.com/com/soklet/Request.html) via the consumer and Soklet will route using the wrapped request. You must call `requestProcessor.accept(...)` exactly once before returning; otherwise Soklet logs an error and returns a 500 response.
 
 ```java
 // Special scoped value so anyone can access the current Locale.
@@ -892,8 +895,8 @@ class ExampleService {
 
 Request Intercepting (via [`RequestInterceptor`](https://javadoc.soklet.com/com/soklet/RequestInterceptor.html)): provides programmatic control over two processing steps.
 
-1. Invoking the appropriate Resource Method to acquire a response
-2. Sending the response over the wire to the client
+1. Invoking the appropriate [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html) to acquire a [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html)
+2. Sending the [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) over the wire to the client
 
 You must call `responseWriter.accept(...)` exactly once before returning; otherwise Soklet logs an error and returns a 500 response.
 
@@ -931,7 +934,7 @@ SokletConfig config = SokletConfig.withServer(
 }).build();
 ```
 
-Response Writing: monitor the response writing process - sending bytes over the wire - which may terminate exceptionally (e.g. unexpected client disconnect).
+Response Writing: monitor the response writing process for each [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) - sending bytes over the wire - which may terminate exceptionally (e.g. unexpected client disconnect).
 
 ```java
 SokletConfig config = SokletConfig.withServer(
