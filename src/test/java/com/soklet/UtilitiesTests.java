@@ -580,6 +580,25 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void forwardedHeaderLists_doNotMixEntries() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Forwarded", Set.of("host=example.com, proto=https"));
+
+		Optional<String> prefix = extractEffectiveOrigin(headers);
+		Assertions.assertTrue(prefix.isEmpty(), "Forwarded entries should not be mixed");
+	}
+
+	@Test
+	public void forwardedHeaderQuotedSemicolons_areHandled() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Forwarded", Set.of("for=\"abc;def\"; host=example.com; proto=https"));
+
+		Optional<String> prefix = extractEffectiveOrigin(headers);
+		Assertions.assertTrue(prefix.isPresent());
+		Assertions.assertEquals("https://example.com", prefix.get());
+	}
+
+	@Test
 	public void commaJoinableHeaders_splitOutsideQuotes() {
 		List<String> lines = List.of(
 				"Cache-Control: no-cache, no-store",

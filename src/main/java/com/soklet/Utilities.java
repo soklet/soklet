@@ -1006,8 +1006,13 @@ public final class Utilities {
 						if (entry == null)
 							continue;
 
+						String entryHost = null;
+						String entryProtocol = null;
+						String entryPortAsString = null;
+						Boolean entryPortExplicit = false;
+
 						// Each field component might look like "by=<identifier>"
-						String[] forwardedHeaderFieldComponents = entry.split(";");
+						List<String> forwardedHeaderFieldComponents = splitSemicolonAware(entry);
 						for (String forwardedHeaderFieldComponent : forwardedHeaderFieldComponents) {
 							forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
 							if (forwardedHeaderFieldComponent == null)
@@ -1024,26 +1029,33 @@ public final class Utilities {
 								continue;
 
 							if ("host".equalsIgnoreCase(name)) {
-								if (host == null) {
+								if (entryHost == null) {
 									HostPort hostPort = parseHostPort(value).orElse(null);
 
 									if (hostPort != null) {
-										host = hostPort.getHost();
+										entryHost = hostPort.getHost();
 
 										if (hostPort.getPort().isPresent()) {
-											portAsString = String.valueOf(hostPort.getPort().get());
-											portExplicit = true;
+											entryPortAsString = String.valueOf(hostPort.getPort().get());
+											entryPortExplicit = true;
 										}
 									}
 								}
 							} else if ("proto".equalsIgnoreCase(name)) {
-								if (protocol == null)
-									protocol = stripOptionalQuotes(value);
+								if (entryProtocol == null)
+									entryProtocol = stripOptionalQuotes(value);
 							}
 						}
 
-						if (host != null && protocol != null)
+						if (entryHost != null || entryProtocol != null) {
+							host = entryHost;
+							protocol = entryProtocol;
+							if (entryPortAsString != null) {
+								portAsString = entryPortAsString;
+								portExplicit = entryPortExplicit;
+							}
 							break forwardedHeaderLoop;
+						}
 					}
 				}
 			}
@@ -1815,6 +1827,46 @@ public final class Utilities {
 				cur.append(c);
 			}
 		}
+		out.add(cur.toString());
+		return out;
+	}
+
+	/**
+	 * Header parsing helper: split on semicolons that are not inside a quoted-string; supports \" escapes inside quotes.
+	 */
+	@NonNull
+	private static List<String> splitSemicolonAware(@NonNull String string) {
+		requireNonNull(string);
+
+		List<String> out = new ArrayList<>(4);
+		StringBuilder cur = new StringBuilder();
+		boolean inQuotes = false;
+		boolean escaped = false;
+
+		for (int i = 0; i < string.length(); i++) {
+			char c = string.charAt(i);
+
+			if (escaped) {
+				cur.append(c);
+				escaped = false;
+			} else if (c == '\\') {
+				if (inQuotes) {
+					cur.append('\\');
+					escaped = true;
+				} else {
+					cur.append('\\');
+				}
+			} else if (c == '"') {
+				inQuotes = !inQuotes;
+				cur.append('"');
+			} else if (c == ';' && !inQuotes) {
+				out.add(cur.toString());
+				cur.setLength(0);
+			} else {
+				cur.append(c);
+			}
+		}
+
 		out.add(cur.toString());
 		return out;
 	}
