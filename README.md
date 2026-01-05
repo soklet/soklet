@@ -230,6 +230,7 @@ Feature highlights include:
 * Internationalization via the JDK and [Lokalized](https://www.lokalized.com)
 * JSON requests/responses via [Gson](https://github.com/google/gson)
 * Logging via [SLF4J](https://slf4j.org/) / [Logback](https://logback.qos.ch/)
+* Metrics collection via [`MetricsCollector`](https://www.soklet.com/docs/metrics-collection)
 * Automated unit and integration tests via [JUnit](https://junit.org)
 * Ability to run in [Docker](https://www.docker.com/)
 
@@ -458,6 +459,125 @@ public Response exampleRedirect() {
   return Response.withRedirect(
     RedirectType.HTTP_307_TEMPORARY_REDIRECT, "/other-url"
   ).build();
+}
+```
+
+#### Server-Sent Events (SSE)
+
+SSE endpoints are declared with `@ServerSentEventSource` and served from a dedicated SSE server
+port (typically separate from your standard HTTP server port).
+
+```java
+public record ChatMessage(String message) {}
+
+public class ChatResource {
+  @ServerSentEventSource("/chat")
+  public HandshakeResult chat() {
+    return HandshakeResult.acceptWithDefaults()
+      .clientInitializer(unicaster -> {
+        unicaster.unicastEvent(ServerSentEvent.withEvent("hello")
+          .data("welcome")
+          .build());
+      })
+      .build();
+  }
+
+  @POST("/chat")
+  public void postMessage(@RequestBody ChatMessage message,
+                          @NonNull ServerSentEventServer sseServer) {
+    ServerSentEventBroadcaster broadcaster = sseServer
+      .acquireBroadcaster(ResourcePath.withPath("/chat"))
+      .get();
+
+    broadcaster.broadcastEvent(ServerSentEvent.withEvent("message")
+      .data(message.message())
+      .build());
+  }
+}
+```
+
+Wire up both servers:
+
+```java
+SokletConfig config = SokletConfig.withServer(
+  Server.withPort(8080).build()
+).serverSentEventServer(
+  ServerSentEventServer.withPort(8081).build()
+).resourceMethodResolver(
+  ResourceMethodResolver.withClasses(Set.of(ChatResource.class))
+).build();
+```
+
+SSE test via the simulator:
+
+```java
+import org.junit.Assert;
+import org.junit.Test;
+
+@Test
+public void sseTest() {
+  SokletConfig config = SokletConfig.forSimulatorTesting()
+    .serverSentEventServer(ServerSentEventServer.withPort(0).build())
+    .resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ChatResource.class)))
+    .build();
+
+  List<ServerSentEvent> events = new ArrayList<>();
+
+  Soklet.runSimulator(config, simulator -> {
+    Request request = Request.withPath(HttpMethod.GET, "/chat").build();
+    ServerSentEventRequestResult result = simulator.performServerSentEventRequest(request);
+
+    if (result instanceof ServerSentEventRequestResult.HandshakeAccepted accepted) {
+      accepted.registerEventConsumer(events::add);
+
+      ServerSentEventBroadcaster broadcaster = config.getServerSentEventServer().get()
+        .acquireBroadcaster(ResourcePath.withPath("/chat")).get();
+      broadcaster.broadcastEvent(ServerSentEvent.withEvent("message")
+        .data("hello")
+        .build());
+    } else {
+      throw new IllegalStateException("SSE handshake failed: " + result);
+    }
+  });
+
+  Assert.assertEquals("hello", events.get(0).getData().orElse(null));
+}
+```
+
+#### Metrics Collection
+
+Soklet includes a `MetricsCollector` hook for collecting HTTP and SSE telemetry. The default in-memory
+collector is enabled automatically, but you can replace or disable it:
+
+```java
+SokletConfig config = SokletConfig.withServer(
+  Server.withPort(8080).build()
+).metricsCollector(
+  MetricsCollector.withDefaults()
+  // or MetricsCollector.disabled()
+).build();
+```
+
+You can expose a `/metrics` endpoint by injecting `MetricsCollector` into a resource method:
+
+```java
+@GET("/metrics")
+public MarshaledResponse getMetrics(@NonNull MetricsCollector metricsCollector) {
+  SnapshotTextOptions options = SnapshotTextOptions
+    .withMetricsFormat(MetricsFormat.PROMETHEUS)
+    .histogramFormat(SnapshotTextOptions.HistogramFormat.FULL_BUCKETS)
+    .includeZeroBuckets(false)
+    .build();
+
+  String body = metricsCollector.snapshotText(options).orElse(null);
+
+  if (body == null)
+    return MarshaledResponse.withStatusCode(204).build();
+
+  return MarshaledResponse.withStatusCode(200)
+    .headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+    .body(body.getBytes(StandardCharsets.UTF_8))
+    .build();
 }
 ```
 
