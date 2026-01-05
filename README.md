@@ -236,9 +236,26 @@ Feature highlights include:
 
 ### What Else Does It Do?
 
+#### Request Handling
+
+Soklet maps HTTP requests to plain Java methods known as Resource Methods
+([`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html)).
+Annotate them with [`@GET`](https://javadoc.soklet.com/com/soklet/annotation/GET.html),
+[`@POST`](https://javadoc.soklet.com/com/soklet/annotation/POST.html),
+[`@PUT`](https://javadoc.soklet.com/com/soklet/annotation/PUT.html),
+[`@PATCH`](https://javadoc.soklet.com/com/soklet/annotation/PATCH.html),
+[`@DELETE`](https://javadoc.soklet.com/com/soklet/annotation/DELETE.html),
+[`@HEAD`](https://javadoc.soklet.com/com/soklet/annotation/HEAD.html),
+[`@OPTIONS`](https://javadoc.soklet.com/com/soklet/annotation/OPTIONS.html), or
+[`@ServerSentEventSource`](https://javadoc.soklet.com/com/soklet/annotation/ServerSentEventSource.html) for SSE.
+Soklet discovers them at compile time via the
+[`SokletProcessor`](https://javadoc.soklet.com/com/soklet/SokletProcessor.html) annotation processor, avoiding
+classpath scans at startup. See the [Request Handling](https://www.soklet.com/docs/request-handling) docs for details.
+
 #### Access To Request Data
 
-Resource methods can accept a [`Request`](https://javadoc.soklet.com/com/soklet/Request.html) parameter and inspect
+Resource Methods ([`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html)) can accept a
+[`Request`](https://javadoc.soklet.com/com/soklet/Request.html) parameter and inspect
 [`HttpMethod`](https://javadoc.soklet.com/com/soklet/HttpMethod.html) values.
 
 ```java
@@ -248,8 +265,8 @@ public void example(Request request /* param name is arbitrary */) {
   HttpMethod httpMethod = request.getHttpMethod();
   // Just the path, e.g. "/example"
   String path = request.getPath(); 
-  // The path and query parameters, e.g. "/example?test=123"
-  String uri = request.getUri();
+  // The raw path and query, e.g. "/example?test=123"
+  String rawPathAndQuery = request.getRawPathAndQuery();
   // Request body as bytes, if available
   Optional<byte[]> body = request.getBody();
   // Request body marshaled to a string, if available.
@@ -288,6 +305,22 @@ public void example(Request request /* param name is arbitrary */) {
   Optional<String> contentType = request.getContentType();
 }
 ```
+
+#### Value Conversions
+
+Soklet converts textual request inputs to Java types using a
+[`ValueConverterRegistry`](https://javadoc.soklet.com/com/soklet/converter/ValueConverterRegistry.html) populated with
+[`ValueConverter<F,T>`](https://javadoc.soklet.com/com/soklet/converter/ValueConverter.html).
+Conversions are applied to parameters annotated with
+[`@QueryParameter`](https://javadoc.soklet.com/com/soklet/annotation/QueryParameter.html),
+[`@PathParameter`](https://javadoc.soklet.com/com/soklet/annotation/PathParameter.html),
+[`@RequestHeader`](https://javadoc.soklet.com/com/soklet/annotation/RequestHeader.html),
+[`@RequestCookie`](https://javadoc.soklet.com/com/soklet/annotation/RequestCookie.html),
+[`@FormParameter`](https://javadoc.soklet.com/com/soklet/annotation/FormParameter.html), and
+[`@Multipart`](https://javadoc.soklet.com/com/soklet/annotation/Multipart.html).
+Supply your own registry (or additional converters) via
+[`SokletConfig`](https://javadoc.soklet.com/com/soklet/SokletConfig.html) to support custom types.
+
 #### Request Body Parsing
 
 Configure a [`RequestBodyMarshaler`](https://javadoc.soklet.com/com/soklet/RequestBodyMarshaler.html) however you like - here we accept JSON:
@@ -453,7 +486,7 @@ public MarshaledResponse exampleImage() throws IOException {
 }
 ```
 
-Redirects:
+Redirects (via [`Response`](https://javadoc.soklet.com/com/soklet/Response.html)):
 
 ```java
 @GET("/example-redirect")
@@ -466,6 +499,16 @@ public Response exampleRedirect() {
   ).build();
 }
 ```
+
+#### Server Configuration
+
+Soklet ships with an embedded HTTP/1.1 [`Server`](https://javadoc.soklet.com/com/soklet/Server.html) and (for SSE) a
+dedicated [`ServerSentEventServer`](https://javadoc.soklet.com/com/soklet/ServerSentEventServer.html).
+Both builders let you configure host, timeouts, handler concurrency/queueing, request size limits, and connection caps; you
+can also plug in custom [`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html) and
+[`MultipartParser`](https://javadoc.soklet.com/com/soklet/MultipartParser.html) instances.
+Provide the configured servers via [`SokletConfig`](https://javadoc.soklet.com/com/soklet/SokletConfig.html) and see the
+[Server Configuration](https://www.soklet.com/docs/server-configuration) docs for the full option matrix.
 
 #### Server-Sent Events (SSE)
 
@@ -568,7 +611,8 @@ SokletConfig config = SokletConfig.withServer(
 Use [`MetricsCollector.SnapshotTextOptions`](https://javadoc.soklet.com/com/soklet/MetricsCollector.SnapshotTextOptions.html) and
 [`MetricsCollector.MetricsFormat`](https://javadoc.soklet.com/com/soklet/MetricsCollector.MetricsFormat.html) to control text output.
 
-You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html) into a resource method:
+You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
+into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):
 
 ```java
 @GET("/metrics")
@@ -690,7 +734,7 @@ Backend parameters can use [`@Multipart`](https://javadoc.soklet.com/com/soklet/
 ```java
 @POST("/multipart")
 public Response multipart(
-  @QueryParam Long id,
+  @QueryParameter Long id,
   // Multipart fields work like other Soklet params
   // with support for Optional<T>, List<T>, custom names, ...
   @Multipart(optional=true) String freeform,
@@ -842,7 +886,7 @@ SokletConfig config = SokletConfig.withServer(
     //    including sending the response to the client
     // * throwables is the ordered list of exceptions
     //    thrown during execution (if any)
-    long millis = processingDuration.toNanos() / 1_000_000.0;
+    long millis = processingDuration.toMillis();
     System.out.printf("Entire request took %dms\n", millis);
   }
 }).build();                  
@@ -961,7 +1005,7 @@ SokletConfig config = SokletConfig.withServer(
     @NonNull Duration responseWriteDuration,
     @Nullable Throwable throwable
   ) {
-    long millis = processingDuration.toNanos() / 1_000_000.0;
+    long millis = responseWriteDuration.toMillis();
     System.out.printf("Took %dms to write response\n", millis);
 
     // You have access to the throwable that might have occurred
@@ -1192,7 +1236,7 @@ public void basicIntegrationTest() {
     
     // Verify status code
     Integer expectedCode = 200;
-    Integer actualCode = response.getStatusCode();
+    Integer actualCode = marshaledResponse.getStatusCode();
     Assert.assertEquals("Bad status code", expectedCode, actualCode);
 
     // Verify response body
