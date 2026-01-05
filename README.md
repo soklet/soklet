@@ -20,7 +20,7 @@ Soklet codes like a library, not a framework.
 
 The Java web ecosystem is missing a server solution that is dependency-free but offers support for virtual threads, hooks for dependency injection, and annotation-based request handling. Soklet aims to fill this void.
 
-Soklet provides the basic plumbing to build "transactional" REST APIs that exchange small amounts of data with clients.
+Soklet provides the plumbing to build "transactional" REST APIs that exchange small amounts of data with clients.
 It does not make technology choices on your behalf (but [an example of how to build a full-featured API is available](https://www.soklet.com/docs/toy-store-app)). It does not natively support [Reactive Programming](https://en.wikipedia.org/wiki/Reactive_programming) or similar methodologies.  It _does_ give you the foundation to build your system, your way.
 
 Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/docs/licensing), proudly powering production systems since 2015.
@@ -35,7 +35,7 @@ Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/do
 * Support for automated unit and integration testing
 * Emphasis on configurability
 * Thorough, high-quality documentation
-* Support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
+* Best-in-class support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
 * [Servlet Integration](https://www.soklet.com/docs/servlet-integration) for legacy code
 
 ### Design Non-Goals
