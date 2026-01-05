@@ -514,7 +514,7 @@ Provide the configured servers via [`SokletConfig`](https://javadoc.soklet.com/c
 
 SSE endpoints are declared with [`@ServerSentEventSource`](https://javadoc.soklet.com/com/soklet/annotation/ServerSentEventSource.html) and return a
 [`HandshakeResult`](https://javadoc.soklet.com/com/soklet/HandshakeResult.html), served from a dedicated
-[`ServerSentEventServer`](https://javadoc.soklet.com/com/soklet/ServerSentEventServer.html) port (typically separate from your standard HTTP server port).
+[`ServerSentEventServer`](https://javadoc.soklet.com/com/soklet/ServerSentEventServer.html) port (separate from your standard HTTP server port).
 
 ```java
 public record ChatMessage(String message) {}
@@ -591,47 +591,6 @@ public void sseTest() {
   });
 
   Assert.assertEquals("hello", events.get(0).getData().orElse(null));
-}
-```
-
-#### Metrics Collection
-
-Soklet includes a [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html) hook for collecting HTTP and SSE telemetry. The default in-memory
-collector is enabled automatically, but you can replace or disable it:
-
-```java
-SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
-).metricsCollector(
-  MetricsCollector.withDefaults()
-  // or MetricsCollector.disabled()
-).build();
-```
-
-Use [`MetricsCollector.SnapshotTextOptions`](https://javadoc.soklet.com/com/soklet/MetricsCollector.SnapshotTextOptions.html) and
-[`MetricsCollector.MetricsFormat`](https://javadoc.soklet.com/com/soklet/MetricsCollector.MetricsFormat.html) to control text output.
-
-You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
-into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):
-
-```java
-@GET("/metrics")
-public MarshaledResponse getMetrics(@NonNull MetricsCollector metricsCollector) {
-  SnapshotTextOptions options = SnapshotTextOptions
-    .withMetricsFormat(MetricsFormat.PROMETHEUS)
-    .histogramFormat(SnapshotTextOptions.HistogramFormat.FULL_BUCKETS)
-    .includeZeroBuckets(false)
-    .build();
-
-  String body = metricsCollector.snapshotText(options).orElse(null);
-
-  if (body == null)
-    return MarshaledResponse.withStatusCode(204).build();
-
-  return MarshaledResponse.withStatusCode(200)
-    .headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-    .body(body.getBytes(StandardCharsets.UTF_8))
-    .build();
 }
 ```
 
@@ -1248,6 +1207,47 @@ public void basicIntegrationTest() {
       Assert.fail("No response body");
     });
   }));
+}
+```
+
+#### Metrics Collection
+
+Soklet includes a [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html) hook for collecting HTTP and SSE telemetry. The default in-memory
+collector is enabled automatically, but you can replace or disable it:
+
+```java
+SokletConfig config = SokletConfig.withServer(
+  Server.withPort(8080).build()
+).metricsCollector(
+  MetricsCollector.withDefaults()
+  // or MetricsCollector.disabled()
+).build();
+```
+
+Use [`MetricsCollector.SnapshotTextOptions`](https://javadoc.soklet.com/com/soklet/MetricsCollector.SnapshotTextOptions.html) and
+[`MetricsCollector.MetricsFormat`](https://javadoc.soklet.com/com/soklet/MetricsCollector.MetricsFormat.html) to control text output.
+
+You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
+into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):
+
+```java
+@GET("/metrics")
+public MarshaledResponse getMetrics(@NonNull MetricsCollector metricsCollector) {
+  SnapshotTextOptions options = SnapshotTextOptions
+    .withMetricsFormat(MetricsFormat.PROMETHEUS)
+    .histogramFormat(HistogramFormat.FULL_BUCKETS)
+    .includeZeroBuckets(false)
+    .build();
+
+  String body = metricsCollector.snapshotText(options).orElse(null);
+
+  if (body == null)
+    return MarshaledResponse.withStatusCode(204).build();
+
+  return MarshaledResponse.withStatusCode(200)
+    .headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+    .body(body.getBytes(StandardCharsets.UTF_8))
+    .build();
 }
 ```
 
