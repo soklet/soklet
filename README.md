@@ -230,13 +230,16 @@ Feature highlights include:
 * Internationalization via the JDK and [Lokalized](https://www.lokalized.com)
 * JSON requests/responses via [Gson](https://github.com/google/gson)
 * Logging via [SLF4J](https://slf4j.org/) / [Logback](https://logback.qos.ch/)
-* Metrics collection via [`MetricsCollector`](https://www.soklet.com/docs/metrics-collection)
+* Metrics collection via [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 * Automated unit and integration tests via [JUnit](https://junit.org)
 * Ability to run in [Docker](https://www.docker.com/)
 
 ### What Else Does It Do?
 
 #### Access To Request Data
+
+Resource methods can accept a [`Request`](https://javadoc.soklet.com/com/soklet/Request.html) parameter and inspect
+[`HttpMethod`](https://javadoc.soklet.com/com/soklet/HttpMethod.html) values.
 
 ```java
 @GET("/example")
@@ -287,7 +290,7 @@ public void example(Request request /* param name is arbitrary */) {
 ```
 #### Request Body Parsing
 
-Configure however you like - here we accept JSON:
+Configure a [`RequestBodyMarshaler`](https://javadoc.soklet.com/com/soklet/RequestBodyMarshaler.html) however you like - here we accept JSON:
 
 ```java
 SokletConfig config = SokletConfig.withServer(
@@ -464,8 +467,9 @@ public Response exampleRedirect() {
 
 #### Server-Sent Events (SSE)
 
-SSE endpoints are declared with `@ServerSentEventSource` and served from a dedicated SSE server
-port (typically separate from your standard HTTP server port).
+SSE endpoints are declared with [`@ServerSentEventSource`](https://javadoc.soklet.com/com/soklet/annotation/ServerSentEventSource.html) and return a
+[`HandshakeResult`](https://javadoc.soklet.com/com/soklet/HandshakeResult.html), served from a dedicated
+[`ServerSentEventServer`](https://javadoc.soklet.com/com/soklet/ServerSentEventServer.html) port (typically separate from your standard HTTP server port).
 
 ```java
 public record ChatMessage(String message) {}
@@ -508,7 +512,7 @@ SokletConfig config = SokletConfig.withServer(
 ).build();
 ```
 
-SSE test via the simulator:
+SSE test via the simulator (see [`ServerSentEventRequestResult`](https://javadoc.soklet.com/com/soklet/ServerSentEventRequestResult.html)):
 
 ```java
 import org.junit.Assert;
@@ -546,7 +550,7 @@ public void sseTest() {
 
 #### Metrics Collection
 
-Soklet includes a `MetricsCollector` hook for collecting HTTP and SSE telemetry. The default in-memory
+Soklet includes a [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html) hook for collecting HTTP and SSE telemetry. The default in-memory
 collector is enabled automatically, but you can replace or disable it:
 
 ```java
@@ -558,7 +562,10 @@ SokletConfig config = SokletConfig.withServer(
 ).build();
 ```
 
-You can expose a `/metrics` endpoint by injecting `MetricsCollector` into a resource method:
+Use [`MetricsCollector.SnapshotTextOptions`](https://javadoc.soklet.com/com/soklet/MetricsCollector.SnapshotTextOptions.html) and
+[`MetricsCollector.MetricsFormat`](https://javadoc.soklet.com/com/soklet/MetricsCollector.MetricsFormat.html) to control text output.
+
+You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html) into a resource method:
 
 ```java
 @GET("/metrics")
@@ -604,6 +611,9 @@ Frontend:
 ```
 
 Backend:
+
+Backend parameters can use [`@QueryParameter`](https://javadoc.soklet.com/com/soklet/annotation/QueryParameter.html) and
+[`@FormParameter`](https://javadoc.soklet.com/com/soklet/annotation/FormParameter.html).
 
 ```java
 @POST("/form")
@@ -671,6 +681,9 @@ Frontend:
 
 Backend:
 
+Backend parameters can use [`@Multipart`](https://javadoc.soklet.com/com/soklet/annotation/Multipart.html) and
+[`MultipartField`](https://javadoc.soklet.com/com/soklet/MultipartField.html).
+
 ```java
 @POST("/multipart")
 public Response multipart(
@@ -714,6 +727,8 @@ public Response multipart(
 
 In practice, you will likely want to tie in to whatever Dependency Injection library your application uses and have the DI infrastructure vend your instances.
 
+Soklet integrates via an [`InstanceProvider`](https://javadoc.soklet.com/com/soklet/InstanceProvider.html).
+
 Here's how it might look if you use [Google Guice](https://github.com/google/guice):
 
 ```java
@@ -751,6 +766,9 @@ public class WidgetResource {
 ```
 
 #### Lifecycle Handling and Interception
+
+Implement [`LifecycleObserver`](https://javadoc.soklet.com/com/soklet/LifecycleObserver.html) and
+[`RequestInterceptor`](https://javadoc.soklet.com/com/soklet/RequestInterceptor.html) to hook into server and request lifecycles.
 
 Server Start/Stop: execute code immediately before and after server startup and shutdown.
 
@@ -829,7 +847,7 @@ SokletConfig config = SokletConfig.withServer(
 
 Request Wrapping: wraps around the whole "outside" of an entire request-handling flow.
 
-Request wrapping runs before Soklet resolves which _Resource Method_ should handle the request. If you want to rewrite the HTTP method or path, return a modified request via the consumer and Soklet will route using the wrapped request. You must call `requestProcessor.accept(...)` exactly once before returning; otherwise Soklet logs an error and returns a 500 response.
+Request wrapping runs before Soklet resolves which [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html) should handle the request. If you want to rewrite the HTTP method or path, return a modified request via the consumer and Soklet will route using the wrapped request. You must call `requestProcessor.accept(...)` exactly once before returning; otherwise Soklet logs an error and returns a 500 response.
 
 ```java
 // Special scoped value so anyone can access the current Locale.
@@ -872,7 +890,7 @@ class ExampleService {
 }
 ```
 
-Request Intercepting: provides programmatic control over two processing steps.
+Request Intercepting (via [`RequestInterceptor`](https://javadoc.soklet.com/com/soklet/RequestInterceptor.html)): provides programmatic control over two processing steps.
 
 1. Invoking the appropriate Resource Method to acquire a response
 2. Sending the response over the wire to the client
@@ -955,6 +973,11 @@ SokletConfig config = SokletConfig.withServer(
 ```
 
 #### CORS Support
+
+CORS is handled by [`CorsAuthorizer`](https://javadoc.soklet.com/com/soklet/CorsAuthorizer.html) using
+[`Cors`](https://javadoc.soklet.com/com/soklet/Cors.html) metadata and returns
+[`CorsPreflightResponse`](https://javadoc.soklet.com/com/soklet/CorsPreflightResponse.html) /
+[`CorsResponse`](https://javadoc.soklet.com/com/soklet/CorsResponse.html) as needed.
 
 Authorize All Origins:
 
@@ -1143,6 +1166,8 @@ public class HelloResource {
 ```
 
 Perform tests:
+
+Soklet's [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html) is available via [`Soklet`](https://javadoc.soklet.com/com/soklet/Soklet.html) to exercise full request/response flows without binding a port.
 
 ```java
 @Test
