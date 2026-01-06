@@ -38,7 +38,7 @@ public interface RequestInterceptor {
 	 * Routing happens after this callback, so changes to the HTTP method or path affect which
 	 * <em>Resource Method</em> is selected.
 	 * <p>
-	 * You must call {@code requestConsumer.accept(...)} exactly once before returning to advance processing.
+	 * You must call {@code requestProcessor.accept(...)} exactly once before returning to advance processing.
 	 * If you do not, Soklet logs the error and returns a 500 response.
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method,
@@ -47,15 +47,15 @@ public interface RequestInterceptor {
 	 *
 	 * @param serverType      the server type that received the request
 	 * @param request         the request that was received
-	 * @param requestConsumer receives the request to use for subsequent processing
+	 * @param requestProcessor receives the request to use for subsequent processing
 	 */
 	default void wrapRequest(@NonNull ServerType serverType,
 													 @NonNull Request request,
-													 @NonNull Consumer<Request> requestConsumer) {
+													 @NonNull Consumer<Request> requestProcessor) {
 		requireNonNull(serverType);
 		requireNonNull(request);
-		requireNonNull(requestConsumer);
-		requestConsumer.accept(request);
+		requireNonNull(requestProcessor);
+		requestProcessor.accept(request);
 	}
 
 	/**
@@ -65,25 +65,25 @@ public interface RequestInterceptor {
 	 * Soklet will catch it and surface separately via {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}
 	 * with type {@link LogEventType#REQUEST_INTERCEPTOR_INTERCEPT_REQUEST_FAILED}.
 	 * <p>
-	 * You must call {@code marshaledResponseConsumer.accept(...)} exactly once before returning to send a response.
+	 * You must call {@code responseWriter.accept(...)} exactly once before returning to send a response.
 	 * If you do not, Soklet logs the error and returns a 500 response.
 	 *
 	 * @param serverType                the server type that received the request
 	 * @param request                   the request that was received
 	 * @param resourceMethod            the <em>Resource Method</em> that will handle the request
-	 * @param requestHandler            function that performs standard request handling and returns a response
-	 * @param marshaledResponseConsumer receives the response to send to the client
+	 * @param responseGenerator         function that performs standard request handling and returns a response
+	 * @param responseWriter            receives the response to send to the client
 	 */
 	default void interceptRequest(@NonNull ServerType serverType,
 																	@NonNull Request request,
 																	@Nullable ResourceMethod resourceMethod,
-																	@NonNull Function<Request, MarshaledResponse> requestHandler,
-																	@NonNull Consumer<MarshaledResponse> marshaledResponseConsumer) {
+																	@NonNull Function<Request, MarshaledResponse> responseGenerator,
+																	@NonNull Consumer<MarshaledResponse> responseWriter) {
 		requireNonNull(serverType);
 		requireNonNull(request);
-		requireNonNull(requestHandler);
-		requireNonNull(marshaledResponseConsumer);
-		marshaledResponseConsumer.accept(requestHandler.apply(request));
+		requireNonNull(responseGenerator);
+		requireNonNull(responseWriter);
+		responseWriter.accept(responseGenerator.apply(request));
 	}
 
 	/**

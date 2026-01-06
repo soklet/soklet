@@ -914,7 +914,7 @@ SokletConfig config = SokletConfig.withServer(
     @NonNull ServerType serverType,
     @NonNull Request request,
     @Nullable ResourceMethod resourceMethod,
-    @NonNull Function<Request, MarshaledResponse> responseProducer,
+    @NonNull Function<Request, MarshaledResponse> responseGenerator,
     @NonNull Consumer<MarshaledResponse> responseWriter
   ) {
     // Here's where you might start a DB transaction.
@@ -922,7 +922,7 @@ SokletConfig config = SokletConfig.withServer(
     MyDatabase.INSTANCE.beginTransaction();
 
     // Step 1: Invoke the Resource Method and acquire its response
-    MarshaledResponse response = responseProducer.apply(request);
+    MarshaledResponse response = responseGenerator.apply(request);
 
     // Commit the DB transaction before sending the response
     // to reduce contention by keeping "open" time short

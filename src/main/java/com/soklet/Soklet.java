@@ -675,7 +675,7 @@ public final class Soklet implements AutoCloseable {
 
 					if (!didInvokeMarshaledResponseConsumer.get()) {
 						requestResultHolder.set(null);
-						throw new IllegalStateException(format("%s::interceptRequest must call marshaledResponseConsumer", RequestInterceptor.class.getSimpleName()));
+						throw new IllegalStateException(format("%s::interceptRequest must call responseWriter", RequestInterceptor.class.getSimpleName()));
 					}
 				} catch (Throwable t) {
 					throwables.add(t);
@@ -804,7 +804,7 @@ public final class Soklet implements AutoCloseable {
 			});
 
 			if (!didInvokeWrapRequestConsumer.get())
-				throw new IllegalStateException(format("%s::wrapRequest must call requestConsumer", RequestInterceptor.class.getSimpleName()));
+				throw new IllegalStateException(format("%s::wrapRequest must call requestProcessor", RequestInterceptor.class.getSimpleName()));
 		} catch (Throwable t) {
 			// If an error occurred during request wrapping, it's possible a response was never written/communicated back to LifecycleObserver.
 			// Detect that here and inform LifecycleObserver accordingly.

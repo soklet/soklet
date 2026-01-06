@@ -50,7 +50,7 @@ public class RequestHandlingRegressionTests {
 					@Override
 					public void wrapRequest(@NonNull ServerType serverType,
 																	@NonNull Request request,
-																	@NonNull Consumer<Request> requestConsumer) {
+																	@NonNull Consumer<Request> requestProcessor) {
 						Request wrappedRequest = request.copy()
 								.httpMethod(HttpMethod.HEAD)
 								.headers(headers -> {
@@ -59,16 +59,16 @@ public class RequestHandlingRegressionTests {
 								})
 								.finish();
 
-						requestConsumer.accept(wrappedRequest);
+						requestProcessor.accept(wrappedRequest);
 					}
 
 					@Override
 					public void interceptRequest(@NonNull ServerType serverType,
 																			 @NonNull Request request,
 																			 @Nullable ResourceMethod resourceMethod,
-																			 @NonNull Function<Request, MarshaledResponse> requestHandler,
-																			 @NonNull Consumer<MarshaledResponse> marshaledResponseConsumer) {
-						marshaledResponseConsumer.accept(requestHandler.apply(request));
+																			 @NonNull Function<Request, MarshaledResponse> responseGenerator,
+																			 @NonNull Consumer<MarshaledResponse> responseWriter) {
+						responseWriter.accept(responseGenerator.apply(request));
 					}
 				})
 				.lifecycleObserver(new LifecycleObserver() {
@@ -119,7 +119,7 @@ public class RequestHandlingRegressionTests {
 					@Override
 					public void wrapRequest(@NonNull ServerType serverType,
 																	@NonNull Request request,
-																	@NonNull Consumer<Request> requestConsumer) {
+																	@NonNull Consumer<Request> requestProcessor) {
 						// Intentionally do not advance the request.
 					}
 				})
@@ -153,9 +153,9 @@ public class RequestHandlingRegressionTests {
 					public void interceptRequest(@NonNull ServerType serverType,
 																			 @NonNull Request request,
 																			 @Nullable ResourceMethod resourceMethod,
-																			 @NonNull Function<Request, MarshaledResponse> requestHandler,
-																			 @NonNull Consumer<MarshaledResponse> marshaledResponseConsumer) {
-						requestHandler.apply(request);
+																			 @NonNull Function<Request, MarshaledResponse> responseGenerator,
+																			 @NonNull Consumer<MarshaledResponse> responseWriter) {
+						responseGenerator.apply(request);
 					}
 				})
 				.lifecycleObserver(new LifecycleObserver() {
@@ -185,13 +185,13 @@ public class RequestHandlingRegressionTests {
 					@Override
 					public void wrapRequest(@NonNull ServerType serverType,
 																	@NonNull Request request,
-																	@NonNull Consumer<Request> requestConsumer) {
+																	@NonNull Consumer<Request> requestProcessor) {
 						Request wrappedRequest = request.copy()
 								.httpMethod(HttpMethod.POST)
 								.path("/rewrite-target")
 								.finish();
 
-						requestConsumer.accept(wrappedRequest);
+						requestProcessor.accept(wrappedRequest);
 					}
 				})
 				.lifecycleObserver(new LifecycleObserver() {
