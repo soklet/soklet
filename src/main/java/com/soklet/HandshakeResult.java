@@ -78,7 +78,7 @@ import static java.util.Objects.requireNonNull;
  * Finally, broadcast to all clients who had their handshakes accepted:
  * <pre>{@code // Sometime later, acquire a broadcaster...
  * ResourcePath resourcePath = ResourcePath.withPath("/chats/123/event-source");
- * ServerSentEventBroadcaster broadcaster = sseServer.acquireBroadcaster(resourcePath).get();
+ * ServerSentEventBroadcaster broadcaster = sseServer.acquireBroadcaster(resourcePath).orElseThrow();
  *
  * // ...construct the payload...
  * ServerSentEvent event = ServerSentEvent.withEvent("chat-message")

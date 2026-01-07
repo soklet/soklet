@@ -26,7 +26,7 @@ import java.util.function.Function;
  * For example:
  * <pre>{@code // Acquire our SSE broadcaster (sends to anyone listening to "/examples/123")
  * ServerSentEventServer server = ...;
- * ServerSentEventBroadcaster broadcaster = server.acquireBroadcaster(ResourcePath.withPath("/examples/123")).get();
+ * ServerSentEventBroadcaster broadcaster = server.acquireBroadcaster(ResourcePath.withPath("/examples/123")).orElseThrow();
  *
  * // Create our SSE payload
  * ServerSentEvent event = ServerSentEvent.withEvent("test")

@@ -349,7 +349,7 @@ SokletConfig config = SokletConfig.withServer(
     // examine annotations on the method/parameter which might
     // inform custom marshaling strategies.
     return Optional.of(GSON.fromJson(
-      request.getBodyAsString().get(), 
+      request.getBodyAsString().orElseThrow(),
       requestBodyType
     ));
   }
@@ -537,7 +537,7 @@ public class ChatResource {
                           @NonNull ServerSentEventServer sseServer) {
     ServerSentEventBroadcaster broadcaster = sseServer
       .acquireBroadcaster(ResourcePath.withPath("/chat"))
-      .get();
+      .orElseThrow();
 
     broadcaster.broadcastEvent(ServerSentEvent.withEvent("message")
       .data(message.message())
@@ -581,8 +581,8 @@ public void sseTest() {
     if (result instanceof ServerSentEventRequestResult.HandshakeAccepted accepted) {
       accepted.registerEventConsumer(events::add);
 
-      ServerSentEventBroadcaster broadcaster = config.getServerSentEventServer().get()
-        .acquireBroadcaster(ResourcePath.withPath("/chat")).get();
+      ServerSentEventBroadcaster broadcaster = config.getServerSentEventServer().orElseThrow()
+        .acquireBroadcaster(ResourcePath.withPath("/chat")).orElseThrow();
       broadcaster.broadcastEvent(ServerSentEvent.withEvent("message")
         .data("hello")
         .build());
@@ -1033,7 +1033,7 @@ SokletConfig config = SokletConfig.withServer(server)
       @NonNull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod
     ) {
       // Requests here are guaranteed to have the Cors value set
-      Cors cors = request.getCors().get();
+      Cors cors = request.getCors().orElseThrow();
 
       // Only greenlight our soklet.com subdomains
       if (originMatchesValidSubdomain(cors))
@@ -1053,7 +1053,7 @@ SokletConfig config = SokletConfig.withServer(server)
     @Override
     public Optional<CorsResponse> authorize(@NonNull Request request) {
       // Requests here are guaranteed to have the Cors value set
-      Cors cors = request.getCors().get();
+      Cors cors = request.getCors().orElseThrow();
 
       // Only greenlight our soklet.com subdomains
       if (originMatchesValidSubdomain(cors))
@@ -1131,18 +1131,18 @@ public void reverseAgainUnitTest() {
 
   // Extract actuals
   Integer actualCode = response.getStatusCode();
-  List<Integer> actualBody = (List<Integer>) response.getBody().get();
+  List<Integer> actualBody = (List<Integer>) response.getBody().orElseThrow();
 
   Integer actualLargest = response.getHeaders().get("X-Largest").stream()
     .findAny()
     .map(value -> Integer.valueOf(value))
-    .get();
+    .orElseThrow();
 
   Instant actualLastRequest = response.getCookies().stream()
     .filter(responseCookie -> responseCookie.getName().equals("lastRequest"))
     .findAny()
-    .map(responseCookie -> Instant.parse(responseCookie.getValue().get()))
-    .get();
+    .map(responseCookie -> Instant.parse(responseCookie.getValue().orElseThrow()))
+    .orElseThrow();
 
   // Verify expectations vs. actuals
   Assert.assertEquals("Bad status code", expectedCode, actualCode);

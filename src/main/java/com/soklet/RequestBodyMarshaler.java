@@ -58,7 +58,7 @@ import static java.util.Objects.requireNonNull;
  *     // examine annotations on the method/parameter which might
  *     // inform custom marshaling strategies.
  *     return Optional.of(GSON.fromJson(
- *       request.getBodyAsString().get(),
+ *       request.getBodyAsString().orElseThrow(),
  *       requestBodyType
  *     ));
  *   }
