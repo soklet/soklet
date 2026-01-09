@@ -20,6 +20,7 @@ import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.util.ConcurrentLruMap;
 import com.soklet.internal.util.HostHeaderValidator;
+import com.soklet.MetricsCollector.ServerSentEventDropReason;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -47,6 +48,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -304,6 +306,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		private final ResourceMethod resourceMethod;
 		@NonNull
 		private final ResourcePath resourcePath;
+		@Nullable
+		private final MetricsCollector metricsCollector;
 		@NonNull
 		private final BackpressureHandler backpressureHandler;
 		@NonNull
@@ -316,6 +320,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		public DefaultServerSentEventBroadcaster(@NonNull ResourceMethod resourceMethod,
 																						 @NonNull ResourcePath resourcePath,
+																						 @Nullable MetricsCollector metricsCollector,
 																						 @NonNull BackpressureHandler backpressureHandler,
 																						 @NonNull Consumer<DefaultServerSentEventConnection> connectionUnregisteredListener,
 																						 @NonNull Consumer<LogEvent> logEventConsumer,
@@ -328,6 +333,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			this.resourceMethod = resourceMethod;
 			this.resourcePath = resourcePath;
+			this.metricsCollector = metricsCollector;
 			this.backpressureHandler = backpressureHandler;
 			this.connectionUnregisteredListener = connectionUnregisteredListener;
 			this.logEventConsumer = logEventConsumer;
@@ -351,6 +357,26 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			return (long) getServerSentEventConnections().size();
 		}
 
+		private void safelyCollectMetrics(@NonNull String message,
+																			@NonNull Consumer<MetricsCollector> metricsConsumer) {
+			requireNonNull(message);
+			requireNonNull(metricsConsumer);
+
+			MetricsCollector collector = this.metricsCollector;
+
+			if (collector == null)
+				return;
+
+			try {
+				metricsConsumer.accept(collector);
+			} catch (Throwable throwable) {
+				this.logEventConsumer.accept(LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED, message)
+						.throwable(throwable)
+						.resourceMethod(getResourceMethod())
+						.build());
+			}
+		}
+
 		@Override
 		public void broadcastEvent(@NonNull ServerSentEvent serverSentEvent) {
 			requireNonNull(serverSentEvent);
@@ -359,8 +385,19 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
-			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
-				enqueuePreSerializedEvent(this, serverSentEventConnection, preSerializedEvent, getBackpressureHandler());
+			int attempted = 0;
+			int delivered = 0;
+			int dropped = 0;
+
+			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections()) {
+				attempted++;
+				if (enqueuePreSerializedEvent(this, serverSentEventConnection, preSerializedEvent, getBackpressureHandler()))
+					delivered++;
+				else
+					dropped++;
+			}
+
+			recordBroadcastOutcome(attempted, delivered, dropped, null);
 		}
 
 		@Override
@@ -369,8 +406,19 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
-			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections())
-				enqueueComment(this, serverSentEventConnection, serverSentEventComment, getBackpressureHandler());
+			int attempted = 0;
+			int delivered = 0;
+			int dropped = 0;
+
+			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections()) {
+				attempted++;
+				if (enqueueComment(this, serverSentEventConnection, serverSentEventComment, getBackpressureHandler()))
+					delivered++;
+				else
+					dropped++;
+			}
+
+			recordBroadcastOutcome(attempted, delivered, dropped, serverSentEventComment.getCommentType());
 		}
 
 		@Override
@@ -380,6 +428,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			requireNonNull(eventProvider);
 
 			Map<T, DefaultServerSentEventConnection.PreSerializedEvent> payloadCache = new HashMap<>();
+			int attempted = 0;
+			int delivered = 0;
+			int dropped = 0;
 
 			for (DefaultServerSentEventConnection connection : getServerSentEventConnections()) {
 				Object clientContext = connection.getClientContext().orElse(null);
@@ -391,7 +442,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					// Ask client code to generate payload (if not present in our local cache)
 					DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent =
 							payloadCache.computeIfAbsent(key, (cacheKey) -> preSerializeServerSentEvent(eventProvider.apply(cacheKey)));
-					enqueuePreSerializedEvent(this, connection, preSerializedEvent, getBackpressureHandler());
+					attempted++;
+					if (enqueuePreSerializedEvent(this, connection, preSerializedEvent, getBackpressureHandler()))
+						delivered++;
+					else
+						dropped++;
 				} catch (Throwable t) {
 					this.getLogEventConsumer().accept(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
 									format("Failed to generate Server-Sent-Event for connection on %s with client context %s",
@@ -400,6 +455,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.build());
 				}
 			}
+
+			recordBroadcastOutcome(attempted, delivered, dropped, null);
 		}
 
 		@Override
@@ -409,6 +466,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			requireNonNull(commentProvider);
 
 			Map<T, ServerSentEventComment> payloadCache = new HashMap<>();
+			EnumMap<ServerSentEventComment.CommentType, int[]> countsByType =
+					new EnumMap<>(ServerSentEventComment.CommentType.class);
 
 			for (DefaultServerSentEventConnection connection : getServerSentEventConnections()) {
 				Object clientContext = connection.getClientContext().orElse(null);
@@ -420,7 +479,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					// Ask client code to generate payload (if not present in our local cache)
 					ServerSentEventComment comment = payloadCache.computeIfAbsent(key, commentProvider);
 
-					enqueueComment(this, connection, comment, getBackpressureHandler());
+					ServerSentEventComment.CommentType commentType = comment.getCommentType();
+					int[] counts = countsByType.computeIfAbsent(commentType, ignored -> new int[3]);
+					counts[0]++;
+					if (enqueueComment(this, connection, comment, getBackpressureHandler()))
+						counts[1]++;
+					else
+						counts[2]++;
 				} catch (Throwable t) {
 					this.getLogEventConsumer().accept(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
 									format("Failed to generate Server-Sent Event comment for connection on %s with client context %s",
@@ -429,6 +494,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							.build());
 				}
 			}
+
+			countsByType.forEach((commentType, counts) ->
+					recordBroadcastOutcome(counts[0], counts[1], counts[2], commentType));
 		}
 
 		@NonNull
@@ -468,6 +536,80 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// Snapshot list for consistency during unregister process
 			for (DefaultServerSentEventConnection serverSentEventConnection : new ArrayList<>(getServerSentEventConnections()))
 				unregisterServerSentEventConnection(serverSentEventConnection, sendPoisonPill);
+		}
+
+		private void recordBroadcastOutcome(int attempted,
+																			 int delivered,
+																			 int dropped,
+																			 ServerSentEventComment.@Nullable CommentType commentType) {
+			if (attempted == 0 && delivered == 0 && dropped == 0)
+				return;
+
+			ResourcePathDeclaration route = getResourceMethod().getResourcePathDeclaration();
+			ServerSentEventComment.CommentType commentTypeSnapshot = commentType;
+
+			if (commentTypeSnapshot == null) {
+				safelyCollectMetrics(
+						format("An exception occurred while invoking %s::didBroadcastServerSentEvent", MetricsCollector.class.getSimpleName()),
+						(metricsCollector) -> metricsCollector.didBroadcastServerSentEvent(route, attempted, delivered, dropped));
+			} else {
+				safelyCollectMetrics(
+						format("An exception occurred while invoking %s::didBroadcastServerSentEventComment", MetricsCollector.class.getSimpleName()),
+						(metricsCollector) -> metricsCollector.didBroadcastServerSentEventComment(route, commentTypeSnapshot, attempted, delivered, dropped));
+			}
+		}
+
+		private void recordDroppedEvent(@NonNull DefaultServerSentEventConnection connection,
+																		DefaultServerSentEventConnection.@NonNull PreSerializedEvent preSerializedEvent,
+																		@Nullable Integer queueDepth) {
+			requireNonNull(connection);
+			requireNonNull(preSerializedEvent);
+
+			ServerSentEventConnection connectionSnapshot = connection.getSnapshot();
+			Integer payloadBytes = preSerializedEvent.getPayloadBytes().length;
+			Integer queueDepthSnapshot = queueDepth;
+
+			safelyCollectMetrics(
+					format("An exception occurred while invoking %s::didDropServerSentEvent", MetricsCollector.class.getSimpleName()),
+					(metricsCollector) -> metricsCollector.didDropServerSentEvent(
+							connectionSnapshot,
+							preSerializedEvent.getServerSentEvent(),
+							ServerSentEventDropReason.QUEUE_FULL,
+							payloadBytes,
+							queueDepthSnapshot));
+		}
+
+		private void recordDroppedComment(@NonNull DefaultServerSentEventConnection connection,
+																			@NonNull ServerSentEventComment serverSentEventComment,
+																			@Nullable Integer queueDepth) {
+			requireNonNull(connection);
+			requireNonNull(serverSentEventComment);
+
+			ServerSentEventConnection connectionSnapshot = connection.getSnapshot();
+			Integer payloadBytes = payloadBytesForComment(serverSentEventComment);
+			Integer queueDepthSnapshot = queueDepth;
+
+			safelyCollectMetrics(
+					format("An exception occurred while invoking %s::didDropServerSentEventComment", MetricsCollector.class.getSimpleName()),
+					(metricsCollector) -> metricsCollector.didDropServerSentEventComment(
+							connectionSnapshot,
+							serverSentEventComment,
+							ServerSentEventDropReason.QUEUE_FULL,
+							payloadBytes,
+							queueDepthSnapshot));
+		}
+
+		@NonNull
+		private Integer payloadBytesForComment(@NonNull ServerSentEventComment serverSentEventComment) {
+			requireNonNull(serverSentEventComment);
+
+			if (serverSentEventComment.getCommentType() == ServerSentEventComment.CommentType.HEARTBEAT)
+				return HEARTBEAT_COMMENT_PAYLOAD_BYTES.length;
+
+			String commentValue = serverSentEventComment.getComment()
+					.orElseThrow(() -> new IllegalStateException("Server-Sent Event comment payload missing"));
+			String payload = formatCommentForResponse(commentValue);
+			return payload.getBytes(StandardCharsets.UTF_8).length;
 		}
 
 		@NonNull
@@ -845,6 +987,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (writeQueue.offer(e))
 			return true;
 
+		Integer queueDepth = writeQueue.size();
+		owner.recordDroppedEvent(connection, preSerializedEvent, queueDepth);
+
 		// Queue full — delegate to handler: log + close + unregister.
 		handler.onBackpressure(owner, connection, "event");
 		return false;
@@ -883,6 +1028,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		if (writeQueue.offer(writeQueueElement))
 			return true;
+
+		Integer queueDepth = writeQueue.size();
+		owner.recordDroppedComment(connection, serverSentEventComment, queueDepth);
 
 		handler.onBackpressure(owner, connection, "comment");
 		return false;
@@ -927,6 +1075,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				HandshakeContext handshakeContext = new HandshakeContext(remoteAddress);
 				notifyWillAcceptConnection(remoteAddress);
 				notifyDidAcceptConnection(remoteAddress);
+				notifyWillAcceptRequest(remoteAddress, null);
 
 				ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
 				if (requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
@@ -938,7 +1087,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				try {
 					executorService.submit(() -> handleClientSocketChannel(clientSocketChannel, handshakeContext));
+					notifyDidAcceptRequest(remoteAddress, null);
 				} catch (RejectedExecutionException e) {
+					RequestRejectionReason rejectionReason = rejectionReasonFor(executorService);
+					notifyDidFailToAcceptRequest(remoteAddress, null, rejectionReason, e);
+
 					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 					handshakeContext.handshakeResponseWritten.compareAndSet(false, true);
 					handshakeContext.acceptanceFinalized.compareAndSet(false, true);
@@ -1090,6 +1243,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			try {
+				notifyWillReadRequest(remoteAddress, null);
+
 				String rawRequest = readRequest(clientSocketChannel);
 				request = parseRequest(rawRequest, remoteAddress);
 			} catch (RequestTooLargeIOException e) {
@@ -1107,6 +1262,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					closeSocketChannel(clientSocketChannel, channelLock);
 					return;
 				}
+
+				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_REJECTED, e);
 
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
@@ -1135,6 +1292,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					return;
 				}
 
+				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.UNPARSEABLE_REQUEST, e);
+
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.UNPARSEABLE_REQUEST, e);
 
@@ -1161,6 +1320,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					return;
 				}
 
+				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_TIMEOUT, e);
+
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.REQUEST_READ_TIMEOUT, e);
 
@@ -1184,6 +1345,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					return;
 				}
 
+				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.INTERNAL_ERROR, e);
+
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
 
@@ -1194,6 +1357,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			handshakeContext.requestRef.set(request);
+			notifyDidReadRequest(remoteAddress, request.getRawPathAndQuery());
 
 			if (handshakeResponseWritten.get()) {
 				closeSocketChannel(clientSocketChannel, channelLock);
@@ -2077,7 +2241,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	protected String formatCommentForResponse(@NonNull String comment) {
+	protected static String formatCommentForResponse(@NonNull String comment) {
 		requireNonNull(comment);
 
 		if (comment.isEmpty())
@@ -2106,10 +2270,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return stringBuilder.toString();
 	}
 
-	private void appendCommentLine(@NonNull StringBuilder stringBuilder,
-																 @NonNull String comment,
-																 int start,
-																 int end) {
+	private static void appendCommentLine(@NonNull StringBuilder stringBuilder,
+																				@NonNull String comment,
+																				int start,
+																				int end) {
 		stringBuilder.append(':');
 
 		if (end > start)
@@ -3372,6 +3536,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return new DefaultServerSentEventBroadcaster(
 				resourceMethod,
 				resourcePath,
+				this.metricsCollector,
 				handler,
 				(serverSentEventConnection) -> {
 					// When the broadcaster unregisters a connection it manages, remove it from the global set as well
@@ -3597,6 +3762,176 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						remoteAddressSnapshot,
 						reasonSnapshot,
 						throwableSnapshot));
+	}
+
+	private void notifyWillAcceptRequest(@Nullable InetSocketAddress remoteAddress,
+																			 @Nullable String requestTarget) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.willAcceptRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::willAcceptRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willAcceptRequest", MetricsCollector.class.getSimpleName()),
+				null,
+				null,
+				(metricsCollector) -> metricsCollector.willAcceptRequest(ServerType.SERVER_SENT_EVENT,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidAcceptRequest(@Nullable InetSocketAddress remoteAddress,
+																			@Nullable String requestTarget) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didAcceptRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didAcceptRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didAcceptRequest", MetricsCollector.class.getSimpleName()),
+				null,
+				null,
+				(metricsCollector) -> metricsCollector.didAcceptRequest(ServerType.SERVER_SENT_EVENT,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidFailToAcceptRequest(@Nullable InetSocketAddress remoteAddress,
+																						@Nullable String requestTarget,
+																						@NonNull RequestRejectionReason reason,
+																						@Nullable Throwable throwable) {
+		requireNonNull(reason);
+
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didFailToAcceptRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget, reason, throwable));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didFailToAcceptRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+		RequestRejectionReason reasonSnapshot = reason;
+		Throwable throwableSnapshot = throwable;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToAcceptRequest", MetricsCollector.class.getSimpleName()),
+				null,
+				null,
+				(metricsCollector) -> metricsCollector.didFailToAcceptRequest(ServerType.SERVER_SENT_EVENT,
+						remoteAddressSnapshot,
+						requestTargetSnapshot,
+						reasonSnapshot,
+						throwableSnapshot));
+	}
+
+	private void notifyWillReadRequest(@Nullable InetSocketAddress remoteAddress,
+																		 @Nullable String requestTarget) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.willReadRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_READ_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::willReadRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willReadRequest", MetricsCollector.class.getSimpleName()),
+				null,
+				null,
+				(metricsCollector) -> metricsCollector.willReadRequest(ServerType.SERVER_SENT_EVENT,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidReadRequest(@Nullable InetSocketAddress remoteAddress,
+																		@Nullable String requestTarget) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didReadRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_READ_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didReadRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didReadRequest", MetricsCollector.class.getSimpleName()),
+				null,
+				null,
+				(metricsCollector) -> metricsCollector.didReadRequest(ServerType.SERVER_SENT_EVENT,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidFailToReadRequest(@Nullable InetSocketAddress remoteAddress,
+																					@Nullable String requestTarget,
+																					@NonNull RequestReadFailureReason reason,
+																					@Nullable Throwable throwable) {
+		requireNonNull(reason);
+
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didFailToReadRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget, reason, throwable));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didFailToReadRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+		RequestReadFailureReason reasonSnapshot = reason;
+		Throwable throwableSnapshot = throwable;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToReadRequest", MetricsCollector.class.getSimpleName()),
+				null,
+				null,
+				(metricsCollector) -> metricsCollector.didFailToReadRequest(ServerType.SERVER_SENT_EVENT,
+						remoteAddressSnapshot,
+						requestTargetSnapshot,
+						reasonSnapshot,
+						throwableSnapshot));
+	}
+
+	@NonNull
+	private static RequestRejectionReason rejectionReasonFor(@NonNull ExecutorService executorService) {
+		requireNonNull(executorService);
+
+		if (executorService.isShutdown() || executorService.isTerminated())
+			return RequestRejectionReason.REQUEST_HANDLER_EXECUTOR_SHUTDOWN;
+
+		return RequestRejectionReason.REQUEST_HANDLER_QUEUE_FULL;
 	}
 
 	private void notifyDidFailToEstablishServerSentEventConnection(@NonNull Request request,

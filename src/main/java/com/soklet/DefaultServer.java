@@ -302,12 +302,20 @@ final class DefaultServer implements Server {
 			Handler handler = ((microhttpRequest, microHttpCallback) -> {
 				ExecutorService requestHandlerExecutorServiceReference = this.requestHandlerExecutorService;
 				ScheduledExecutorService requestHandlerTimeoutExecutorServiceReference = this.requestHandlerTimeoutExecutorService;
+				InetSocketAddress remoteAddress = microhttpRequest.remoteAddress();
+				String requestTarget = microhttpRequest.uri();
+
+				notifyWillAcceptRequest(remoteAddress, requestTarget);
 
 				if (requestHandlerExecutorServiceReference == null) {
+					IllegalStateException executorUnavailableException = new IllegalStateException("Request handler executor service is unavailable");
+
+					notifyDidFailToAcceptRequest(remoteAddress, requestTarget, RequestRejectionReason.INTERNAL_ERROR, executorUnavailableException);
+
 					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Request handler executor service is unavailable").build());
 					try {
 						microHttpCallback.accept(provideMicrohttpFailsafeResponse(503, microhttpRequest,
-								new IllegalStateException("Request handler executor service is unavailable")));
+								executorUnavailableException));
 					} catch (Throwable t2) {
 						safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 								.throwable(t2)
@@ -354,7 +362,11 @@ final class DefaultServer implements Server {
 						if (requestHandler == null)
 							return;
 
+						Request request = null;
+
 						try {
+							notifyWillReadRequest(remoteAddress, requestTarget);
+
 							// Normalize body
 							byte[] body = microhttpRequest.body();
 
@@ -378,7 +390,7 @@ final class DefaultServer implements Server {
 								throw new IllegalRequestException(format("Unsupported HTTP method specified: '%s'", microhttpRequest.method()));
 							}
 
-							Request request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
+							request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
 									.multipartParser(getMultipartParser())
 									.idGenerator(getIdGenerator())
 									.headers(headers)
@@ -386,6 +398,8 @@ final class DefaultServer implements Server {
 									.remoteAddress(microhttpRequest.remoteAddress())
 									.contentTooLarge(contentTooLarge)
 									.build();
+
+							notifyDidReadRequest(remoteAddress, requestTarget);
 
 							requestHandler.handleRequest(request, (requestResult -> {
 								try {
@@ -419,14 +433,17 @@ final class DefaultServer implements Server {
 							}));
 						} catch (Throwable t) {
 							Integer failsafeStatusCode = 500;
+							RequestReadFailureReason failureReason = RequestReadFailureReason.INTERNAL_ERROR;
 
 							if (t instanceof IllegalRequestException) {
 								failsafeStatusCode = 400;
+								failureReason = RequestReadFailureReason.UNPARSEABLE_REQUEST;
 								safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, t.getMessage())
 										.throwable(t)
 										.build());
 							} else if (t instanceof URISyntaxException) {
 								failsafeStatusCode = 400;
+								failureReason = RequestReadFailureReason.UNPARSEABLE_REQUEST;
 								safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, format("Unable to parse request URI: %s", microhttpRequest.uri()))
 										.throwable(t)
 										.build());
@@ -434,6 +451,13 @@ final class DefaultServer implements Server {
 								safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
 										.throwable(t)
 										.build());
+							}
+
+							if (request == null) {
+								notifyDidFailToReadRequest(microhttpRequest.remoteAddress(),
+										microhttpRequest.uri(),
+										failureReason,
+										t);
 							}
 
 							if (responseWritten.compareAndSet(false, true)) {
@@ -448,7 +472,12 @@ final class DefaultServer implements Server {
 							}
 						}
 					});
+
+					notifyDidAcceptRequest(remoteAddress, requestTarget);
 				} catch (RejectedExecutionException e) {
+					RequestRejectionReason rejectionReason = rejectionReasonFor(requestHandlerExecutorServiceReference);
+					notifyDidFailToAcceptRequest(remoteAddress, requestTarget, rejectionReason, e);
+
 					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
 							.throwable(e)
 							.build());
@@ -833,6 +862,164 @@ final class DefaultServer implements Server {
 						remoteAddressSnapshot,
 						reasonSnapshot,
 						throwableSnapshot));
+	}
+
+	private void notifyWillAcceptRequest(@Nullable InetSocketAddress remoteAddress,
+																			 @Nullable String requestTarget) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.willAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::willAcceptRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willAcceptRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.willAcceptRequest(ServerType.STANDARD_HTTP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidAcceptRequest(@Nullable InetSocketAddress remoteAddress,
+																			@Nullable String requestTarget) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didAcceptRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didAcceptRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didAcceptRequest(ServerType.STANDARD_HTTP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidFailToAcceptRequest(@Nullable InetSocketAddress remoteAddress,
+																						@Nullable String requestTarget,
+																						@NonNull RequestRejectionReason reason,
+																						@Nullable Throwable throwable) {
+		requireNonNull(reason);
+
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didFailToAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget, reason, throwable));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didFailToAcceptRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+		RequestRejectionReason reasonSnapshot = reason;
+		Throwable throwableSnapshot = throwable;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToAcceptRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didFailToAcceptRequest(ServerType.STANDARD_HTTP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot,
+						reasonSnapshot,
+						throwableSnapshot));
+	}
+
+	private void notifyWillReadRequest(@Nullable InetSocketAddress remoteAddress,
+																		 @Nullable String requestTarget) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.willReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_READ_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::willReadRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willReadRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.willReadRequest(ServerType.STANDARD_HTTP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidReadRequest(@Nullable InetSocketAddress remoteAddress,
+																		@Nullable String requestTarget) {
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_READ_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didReadRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didReadRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didReadRequest(ServerType.STANDARD_HTTP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidFailToReadRequest(@Nullable InetSocketAddress remoteAddress,
+																					@Nullable String requestTarget,
+																					@NonNull RequestReadFailureReason reason,
+																					@Nullable Throwable throwable) {
+		requireNonNull(reason);
+
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didFailToReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget, reason, throwable));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didFailToReadRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+		RequestReadFailureReason reasonSnapshot = reason;
+		Throwable throwableSnapshot = throwable;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToReadRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didFailToReadRequest(ServerType.STANDARD_HTTP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot,
+						reasonSnapshot,
+						throwableSnapshot));
+	}
+
+	@NonNull
+	private static RequestRejectionReason rejectionReasonFor(@NonNull ExecutorService executorService) {
+		requireNonNull(executorService);
+
+		if (executorService.isShutdown() || executorService.isTerminated())
+			return RequestRejectionReason.REQUEST_HANDLER_EXECUTOR_SHUTDOWN;
+
+		return RequestRejectionReason.REQUEST_HANDLER_QUEUE_FULL;
 	}
 
 	@NonNull

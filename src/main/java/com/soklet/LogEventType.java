@@ -56,6 +56,30 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
 	/**
+	 * Indicates {@link LifecycleObserver#willAcceptRequest(ServerType, java.net.InetSocketAddress, String)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_WILL_ACCEPT_REQUEST_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didAcceptRequest(ServerType, java.net.InetSocketAddress, String)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_ACCEPT_REQUEST_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didFailToAcceptRequest(ServerType, java.net.InetSocketAddress, String, RequestRejectionReason, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_REQUEST_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#willReadRequest(ServerType, java.net.InetSocketAddress, String)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_WILL_READ_REQUEST_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didReadRequest(ServerType, java.net.InetSocketAddress, String)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_READ_REQUEST_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didFailToReadRequest(ServerType, java.net.InetSocketAddress, String, RequestReadFailureReason, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,
+	/**
 	 * Indicates {@link LifecycleObserver#didStartRequestHandling(ServerType, Request, ResourceMethod)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,

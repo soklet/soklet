@@ -133,6 +133,92 @@ public interface MetricsCollector {
 	}
 
 	/**
+	 * Called when a request is about to be accepted for application-level handling.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 */
+	default void willAcceptRequest(@NonNull ServerType serverType,
+																 @Nullable InetSocketAddress remoteAddress,
+																 @Nullable String requestTarget) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a request is accepted for application-level handling.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 */
+	default void didAcceptRequest(@NonNull ServerType serverType,
+																@Nullable InetSocketAddress remoteAddress,
+																@Nullable String requestTarget) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when a request fails to be accepted before application-level handling begins.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 * @param reason        the rejection reason
+	 * @param throwable     an optional underlying cause, or {@code null} if not applicable
+	 */
+	default void didFailToAcceptRequest(@NonNull ServerType serverType,
+																			@Nullable InetSocketAddress remoteAddress,
+																			@Nullable String requestTarget,
+																			@NonNull RequestRejectionReason reason,
+																			@Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when Soklet is about to read or parse a request into a valid {@link Request}.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 */
+	default void willReadRequest(@NonNull ServerType serverType,
+															 @Nullable InetSocketAddress remoteAddress,
+															 @Nullable String requestTarget) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when a request was successfully read or parsed into a valid {@link Request}.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 */
+	default void didReadRequest(@NonNull ServerType serverType,
+															@Nullable InetSocketAddress remoteAddress,
+															@Nullable String requestTarget) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when a request could not be read or parsed into a valid {@link Request}.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 * @param reason        the failure reason
+	 * @param throwable     an optional underlying cause, or {@code null} if not applicable
+	 */
+	default void didFailToReadRequest(@NonNull ServerType serverType,
+																		@Nullable InetSocketAddress remoteAddress,
+																		@Nullable String requestTarget,
+																		@NonNull RequestReadFailureReason reason,
+																		@Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
 	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
 	 *
 	 * @param serverType the server type that received the request
@@ -328,6 +414,72 @@ public interface MetricsCollector {
 																										@Nullable Duration deliveryLag,
 																										@Nullable Integer payloadBytes,
 																										@Nullable Integer queueDepth) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an SSE event is dropped before it can be enqueued for delivery.
+	 *
+	 * @param serverSentEventConnection the connection the event was targeting
+	 * @param serverSentEvent           the event that was dropped
+	 * @param reason                    the drop reason
+	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
+	 * @param queueDepth                number of queued elements at drop time, or {@code null} if unknown
+	 */
+	default void didDropServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
+																			@NonNull ServerSentEvent serverSentEvent,
+																			@NonNull ServerSentEventDropReason reason,
+																			@Nullable Integer payloadBytes,
+																			@Nullable Integer queueDepth) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an SSE comment is dropped before it can be enqueued for delivery.
+	 *
+	 * @param serverSentEventConnection the connection the comment was targeting
+	 * @param serverSentEventComment    the comment that was dropped
+	 * @param reason                    the drop reason
+	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
+	 * @param queueDepth                number of queued elements at drop time, or {@code null} if unknown
+	 */
+	default void didDropServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
+																						 @NonNull ServerSentEventComment serverSentEventComment,
+																						 @NonNull ServerSentEventDropReason reason,
+																						 @Nullable Integer payloadBytes,
+																						 @Nullable Integer queueDepth) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a broadcast attempt for a Server-Sent Event payload.
+	 *
+	 * @param route     the route declaration that was broadcast to
+	 * @param attempted number of connections targeted
+	 * @param delivered number of connections for which enqueue succeeded
+	 * @param dropped   number of connections for which enqueue failed
+	 */
+	default void didBroadcastServerSentEvent(@NonNull ResourcePathDeclaration route,
+																				 int attempted,
+																				 int delivered,
+																				 int dropped) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a broadcast attempt for a Server-Sent Event comment payload.
+	 *
+	 * @param route       the route declaration that was broadcast to
+	 * @param commentType the comment type
+	 * @param attempted   number of connections targeted
+	 * @param delivered   number of connections for which enqueue succeeded
+	 * @param dropped     number of connections for which enqueue failed
+	 */
+	default void didBroadcastServerSentEventComment(@NonNull ResourcePathDeclaration route,
+																									ServerSentEventComment.@NonNull CommentType commentType,
+																									int attempted,
+																									int delivered,
+																									int dropped) {
 		// No-op by default
 	}
 
@@ -601,6 +753,7 @@ public interface MetricsCollector {
 	 * Durations are in nanoseconds, sizes are in bytes, and queue depths are raw counts.
 	 * Histogram values are captured as {@link HistogramSnapshot} instances.
 	 * Connection counts report total accepted/rejected connections for the HTTP and SSE servers.
+	 * Request read failures and request rejections are reported separately for HTTP and SSE traffic.
 	 * Instances are typically produced by {@link MetricsCollector#snapshot()} but can also be built
 	 * manually via {@link #builder()}.
 	 *
@@ -621,6 +774,14 @@ public interface MetricsCollector {
 		@NonNull
 		private final Long sseConnectionsRejected;
 		@NonNull
+		private final Map<@NonNull RequestReadFailureKey, @NonNull Long> httpRequestReadFailures;
+		@NonNull
+		private final Map<@NonNull RequestRejectionKey, @NonNull Long> httpRequestRejections;
+		@NonNull
+		private final Map<@NonNull RequestReadFailureKey, @NonNull Long> sseRequestReadFailures;
+		@NonNull
+		private final Map<@NonNull RequestRejectionKey, @NonNull Long> sseRequestRejections;
+		@NonNull
 		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
 		@NonNull
 		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations;
@@ -634,6 +795,14 @@ public interface MetricsCollector {
 		private final Map<@NonNull ServerSentEventRouteKey, @NonNull Long> sseHandshakesAccepted;
 		@NonNull
 		private final Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
+		@NonNull
+		private final Map<@NonNull ServerSentEventRouteBroadcastOutcomeKey, @NonNull Long> sseEventBroadcastOutcomes;
+		@NonNull
+		private final Map<@NonNull ServerSentEventCommentRouteBroadcastOutcomeKey, @NonNull Long> sseCommentBroadcastOutcomes;
+		@NonNull
+		private final Map<@NonNull ServerSentEventRouteDropKey, @NonNull Long> sseEventDrops;
+		@NonNull
+		private final Map<@NonNull ServerSentEventCommentRouteDropKey, @NonNull Long> sseCommentDrops;
 		@NonNull
 		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
 		@NonNull
@@ -672,6 +841,10 @@ public interface MetricsCollector {
 			this.httpConnectionsRejected = requireNonNull(builder.httpConnectionsRejected);
 			this.sseConnectionsAccepted = requireNonNull(builder.sseConnectionsAccepted);
 			this.sseConnectionsRejected = requireNonNull(builder.sseConnectionsRejected);
+			this.httpRequestReadFailures = copyOrEmpty(builder.httpRequestReadFailures);
+			this.httpRequestRejections = copyOrEmpty(builder.httpRequestRejections);
+			this.sseRequestReadFailures = copyOrEmpty(builder.sseRequestReadFailures);
+			this.sseRequestRejections = copyOrEmpty(builder.sseRequestRejections);
 			this.httpRequestDurations = copyOrEmpty(builder.httpRequestDurations);
 			this.httpHandlerDurations = copyOrEmpty(builder.httpHandlerDurations);
 			this.httpTimeToFirstByte = copyOrEmpty(builder.httpTimeToFirstByte);
@@ -679,6 +852,10 @@ public interface MetricsCollector {
 			this.httpResponseBodyBytes = copyOrEmpty(builder.httpResponseBodyBytes);
 			this.sseHandshakesAccepted = copyOrEmpty(builder.sseHandshakesAccepted);
 			this.sseHandshakesRejected = copyOrEmpty(builder.sseHandshakesRejected);
+			this.sseEventBroadcastOutcomes = copyOrEmpty(builder.sseEventBroadcastOutcomes);
+			this.sseCommentBroadcastOutcomes = copyOrEmpty(builder.sseCommentBroadcastOutcomes);
+			this.sseEventDrops = copyOrEmpty(builder.sseEventDrops);
+			this.sseCommentDrops = copyOrEmpty(builder.sseCommentDrops);
 			this.sseTimeToFirstEvent = copyOrEmpty(builder.sseTimeToFirstEvent);
 			this.sseEventWriteDurations = copyOrEmpty(builder.sseEventWriteDurations);
 			this.sseEventDeliveryLag = copyOrEmpty(builder.sseEventDeliveryLag);
@@ -751,6 +928,46 @@ public interface MetricsCollector {
 		}
 
 		/**
+		 * Returns HTTP request read failure counters keyed by failure reason.
+		 *
+		 * @return HTTP request read failure counters
+		 */
+		@NonNull
+		public Map<@NonNull RequestReadFailureKey, @NonNull Long> getHttpRequestReadFailures() {
+			return this.httpRequestReadFailures;
+		}
+
+		/**
+		 * Returns HTTP request rejection counters keyed by rejection reason.
+		 *
+		 * @return HTTP request rejection counters
+		 */
+		@NonNull
+		public Map<@NonNull RequestRejectionKey, @NonNull Long> getHttpRequestRejections() {
+			return this.httpRequestRejections;
+		}
+
+		/**
+		 * Returns SSE request read failure counters keyed by failure reason.
+		 *
+		 * @return SSE request read failure counters
+		 */
+		@NonNull
+		public Map<@NonNull RequestReadFailureKey, @NonNull Long> getSseRequestReadFailures() {
+			return this.sseRequestReadFailures;
+		}
+
+		/**
+		 * Returns SSE request rejection counters keyed by rejection reason.
+		 *
+		 * @return SSE request rejection counters
+		 */
+		@NonNull
+		public Map<@NonNull RequestRejectionKey, @NonNull Long> getSseRequestRejections() {
+			return this.sseRequestRejections;
+		}
+
+		/**
 		 * Returns HTTP request duration histograms keyed by server route and status class.
 		 *
 		 * @return HTTP request duration histograms
@@ -818,6 +1035,46 @@ public interface MetricsCollector {
 		@NonNull
 		public Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> getSseHandshakesRejected() {
 			return this.sseHandshakesRejected;
+		}
+
+		/**
+		 * Returns SSE event broadcast outcome counters keyed by route and outcome.
+		 *
+		 * @return SSE event broadcast outcome counters
+		 */
+		@NonNull
+		public Map<@NonNull ServerSentEventRouteBroadcastOutcomeKey, @NonNull Long> getSseEventBroadcastOutcomes() {
+			return this.sseEventBroadcastOutcomes;
+		}
+
+		/**
+		 * Returns SSE comment broadcast outcome counters keyed by route, comment type, and outcome.
+		 *
+		 * @return SSE comment broadcast outcome counters
+		 */
+		@NonNull
+		public Map<@NonNull ServerSentEventCommentRouteBroadcastOutcomeKey, @NonNull Long> getSseCommentBroadcastOutcomes() {
+			return this.sseCommentBroadcastOutcomes;
+		}
+
+		/**
+		 * Returns SSE event drop counters keyed by route and drop reason.
+		 *
+		 * @return SSE event drop counters
+		 */
+		@NonNull
+		public Map<@NonNull ServerSentEventRouteDropKey, @NonNull Long> getSseEventDrops() {
+			return this.sseEventDrops;
+		}
+
+		/**
+		 * Returns SSE comment drop counters keyed by route, comment type, and drop reason.
+		 *
+		 * @return SSE comment drop counters
+		 */
+		@NonNull
+		public Map<@NonNull ServerSentEventCommentRouteDropKey, @NonNull Long> getSseCommentDrops() {
+			return this.sseCommentDrops;
 		}
 
 		/**
@@ -937,6 +1194,14 @@ public interface MetricsCollector {
 			@NonNull
 			private Long sseConnectionsRejected;
 			@Nullable
+			private Map<@NonNull RequestReadFailureKey, @NonNull Long> httpRequestReadFailures;
+			@Nullable
+			private Map<@NonNull RequestRejectionKey, @NonNull Long> httpRequestRejections;
+			@Nullable
+			private Map<@NonNull RequestReadFailureKey, @NonNull Long> sseRequestReadFailures;
+			@Nullable
+			private Map<@NonNull RequestRejectionKey, @NonNull Long> sseRequestRejections;
+			@Nullable
 			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
 			@Nullable
 			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations;
@@ -950,6 +1215,14 @@ public interface MetricsCollector {
 			private Map<@NonNull ServerSentEventRouteKey, @NonNull Long> sseHandshakesAccepted;
 			@Nullable
 			private Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
+			@Nullable
+			private Map<@NonNull ServerSentEventRouteBroadcastOutcomeKey, @NonNull Long> sseEventBroadcastOutcomes;
+			@Nullable
+			private Map<@NonNull ServerSentEventCommentRouteBroadcastOutcomeKey, @NonNull Long> sseCommentBroadcastOutcomes;
+			@Nullable
+			private Map<@NonNull ServerSentEventRouteDropKey, @NonNull Long> sseEventDrops;
+			@Nullable
+			private Map<@NonNull ServerSentEventCommentRouteDropKey, @NonNull Long> sseCommentDrops;
 			@Nullable
 			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
 			@Nullable
@@ -1051,6 +1324,58 @@ public interface MetricsCollector {
 			}
 
 			/**
+			 * Sets HTTP request read failure counters keyed by failure reason.
+			 *
+			 * @param httpRequestReadFailures the HTTP request read failure counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder httpRequestReadFailures(
+					@Nullable Map<@NonNull RequestReadFailureKey, @NonNull Long> httpRequestReadFailures) {
+				this.httpRequestReadFailures = httpRequestReadFailures;
+				return this;
+			}
+
+			/**
+			 * Sets HTTP request rejection counters keyed by rejection reason.
+			 *
+			 * @param httpRequestRejections the HTTP request rejection counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder httpRequestRejections(
+					@Nullable Map<@NonNull RequestRejectionKey, @NonNull Long> httpRequestRejections) {
+				this.httpRequestRejections = httpRequestRejections;
+				return this;
+			}
+
+			/**
+			 * Sets SSE request read failure counters keyed by failure reason.
+			 *
+			 * @param sseRequestReadFailures the SSE request read failure counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseRequestReadFailures(
+					@Nullable Map<@NonNull RequestReadFailureKey, @NonNull Long> sseRequestReadFailures) {
+				this.sseRequestReadFailures = sseRequestReadFailures;
+				return this;
+			}
+
+			/**
+			 * Sets SSE request rejection counters keyed by rejection reason.
+			 *
+			 * @param sseRequestRejections the SSE request rejection counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseRequestRejections(
+					@Nullable Map<@NonNull RequestRejectionKey, @NonNull Long> sseRequestRejections) {
+				this.sseRequestRejections = sseRequestRejections;
+				return this;
+			}
+
+			/**
 			 * Sets HTTP request duration histograms keyed by server route and status class.
 			 *
 			 * @param httpRequestDurations the HTTP request duration histograms
@@ -1138,6 +1463,58 @@ public interface MetricsCollector {
 			public Builder sseHandshakesRejected(
 					@Nullable Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected) {
 				this.sseHandshakesRejected = sseHandshakesRejected;
+				return this;
+			}
+
+			/**
+			 * Sets SSE event broadcast outcome counters keyed by route and outcome.
+			 *
+			 * @param sseEventBroadcastOutcomes the SSE event broadcast outcome counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseEventBroadcastOutcomes(
+					@Nullable Map<@NonNull ServerSentEventRouteBroadcastOutcomeKey, @NonNull Long> sseEventBroadcastOutcomes) {
+				this.sseEventBroadcastOutcomes = sseEventBroadcastOutcomes;
+				return this;
+			}
+
+			/**
+			 * Sets SSE comment broadcast outcome counters keyed by route, comment type, and outcome.
+			 *
+			 * @param sseCommentBroadcastOutcomes the SSE comment broadcast outcome counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseCommentBroadcastOutcomes(
+					@Nullable Map<@NonNull ServerSentEventCommentRouteBroadcastOutcomeKey, @NonNull Long> sseCommentBroadcastOutcomes) {
+				this.sseCommentBroadcastOutcomes = sseCommentBroadcastOutcomes;
+				return this;
+			}
+
+			/**
+			 * Sets SSE event drop counters keyed by route and drop reason.
+			 *
+			 * @param sseEventDrops the SSE event drop counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseEventDrops(
+					@Nullable Map<@NonNull ServerSentEventRouteDropKey, @NonNull Long> sseEventDrops) {
+				this.sseEventDrops = sseEventDrops;
+				return this;
+			}
+
+			/**
+			 * Sets SSE comment drop counters keyed by route, comment type, and drop reason.
+			 *
+			 * @param sseCommentDrops the SSE comment drop counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder sseCommentDrops(
+					@Nullable Map<@NonNull ServerSentEventCommentRouteDropKey, @NonNull Long> sseCommentDrops) {
+				this.sseCommentDrops = sseCommentDrops;
 				return this;
 			}
 
@@ -1560,6 +1937,60 @@ public interface MetricsCollector {
 	}
 
 	/**
+	 * Outcomes for a Server-Sent Event broadcast attempt.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	enum ServerSentEventBroadcastOutcome {
+		/**
+		 * A broadcast attempt to a connection was made.
+		 */
+		ATTEMPTED,
+		/**
+		 * A broadcast was successfully enqueued for delivery.
+		 */
+		DELIVERED,
+		/**
+		 * A broadcast was dropped before it could be enqueued for delivery.
+		 */
+		DROPPED
+	}
+
+	/**
+	 * Reasons a Server-Sent Event payload or comment was dropped before it could be written.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	enum ServerSentEventDropReason {
+		/**
+		 * The per-connection write queue was full.
+		 */
+		QUEUE_FULL
+	}
+
+	/**
+	 * Key for request read failures grouped by reason.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record RequestReadFailureKey(@NonNull RequestReadFailureReason reason) {
+		public RequestReadFailureKey {
+			requireNonNull(reason);
+		}
+	}
+
+	/**
+	 * Key for request rejections grouped by reason.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record RequestRejectionKey(@NonNull RequestRejectionReason reason) {
+		public RequestRejectionKey {
+			requireNonNull(reason);
+		}
+	}
+
+	/**
 	 * Key for metrics grouped by HTTP method and route match information.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -1646,6 +2077,82 @@ public interface MetricsCollector {
 			if (routeType == RouteType.UNMATCHED && route != null)
 				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
 			requireNonNull(handshakeFailureReason);
+		}
+	}
+
+	/**
+	 * Key for metrics grouped by Server-Sent Event route match information and broadcast outcome.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record ServerSentEventRouteBroadcastOutcomeKey(@NonNull RouteType routeType,
+																								 @Nullable ResourcePathDeclaration route,
+																								 @NonNull ServerSentEventBroadcastOutcome outcome) {
+		public ServerSentEventRouteBroadcastOutcomeKey {
+			requireNonNull(routeType);
+			if (routeType == RouteType.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
+			if (routeType == RouteType.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
+			requireNonNull(outcome);
+		}
+	}
+
+	/**
+	 * Key for metrics grouped by Server-Sent Event comment type, route match information, and broadcast outcome.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record ServerSentEventCommentRouteBroadcastOutcomeKey(@NonNull RouteType routeType,
+																											 @Nullable ResourcePathDeclaration route,
+																											 ServerSentEventComment.@NonNull CommentType commentType,
+																											 @NonNull ServerSentEventBroadcastOutcome outcome) {
+		public ServerSentEventCommentRouteBroadcastOutcomeKey {
+			requireNonNull(routeType);
+			requireNonNull(commentType);
+			if (routeType == RouteType.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
+			if (routeType == RouteType.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
+			requireNonNull(outcome);
+		}
+	}
+
+	/**
+	 * Key for metrics grouped by Server-Sent Event route match information and drop reason.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record ServerSentEventRouteDropKey(@NonNull RouteType routeType,
+																		 @Nullable ResourcePathDeclaration route,
+																		 @NonNull ServerSentEventDropReason dropReason) {
+		public ServerSentEventRouteDropKey {
+			requireNonNull(routeType);
+			if (routeType == RouteType.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
+			if (routeType == RouteType.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
+			requireNonNull(dropReason);
+		}
+	}
+
+	/**
+	 * Key for metrics grouped by Server-Sent Event comment type, route match information, and drop reason.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record ServerSentEventCommentRouteDropKey(@NonNull RouteType routeType,
+																					 @Nullable ResourcePathDeclaration route,
+																					 ServerSentEventComment.@NonNull CommentType commentType,
+																					 @NonNull ServerSentEventDropReason dropReason) {
+		public ServerSentEventCommentRouteDropKey {
+			requireNonNull(routeType);
+			requireNonNull(commentType);
+			if (routeType == RouteType.MATCHED && route == null)
+				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
+			if (routeType == RouteType.UNMATCHED && route != null)
+				throw new IllegalArgumentException("Route must be null when RouteType is UNMATCHED");
+			requireNonNull(dropReason);
 		}
 	}
 

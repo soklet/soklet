@@ -164,6 +164,92 @@ public interface LifecycleObserver {
 	}
 
 	/**
+	 * Called when a request is about to be accepted for application-level handling.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 */
+	default void willAcceptRequest(@NonNull ServerType serverType,
+																 @Nullable InetSocketAddress remoteAddress,
+																 @Nullable String requestTarget) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a request is accepted for application-level handling.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 */
+	default void didAcceptRequest(@NonNull ServerType serverType,
+																@Nullable InetSocketAddress remoteAddress,
+																@Nullable String requestTarget) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when a request fails to be accepted before application-level handling begins.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 * @param reason        the rejection reason
+	 * @param throwable     an optional underlying cause, or {@code null} if not applicable
+	 */
+	default void didFailToAcceptRequest(@NonNull ServerType serverType,
+																			@Nullable InetSocketAddress remoteAddress,
+																			@Nullable String requestTarget,
+																			@NonNull RequestRejectionReason reason,
+																			@Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when Soklet is about to read or parse a request into a valid {@link Request}.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 */
+	default void willReadRequest(@NonNull ServerType serverType,
+															 @Nullable InetSocketAddress remoteAddress,
+															 @Nullable String requestTarget) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when a request was successfully read or parsed into a valid {@link Request}.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 */
+	default void didReadRequest(@NonNull ServerType serverType,
+															@Nullable InetSocketAddress remoteAddress,
+															@Nullable String requestTarget) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when a request could not be read or parsed into a valid {@link Request}.
+	 *
+	 * @param serverType    the server type that received the request
+	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
+	 * @param requestTarget the raw request target (path + query) if known, or {@code null} if unavailable
+	 * @param reason        the failure reason
+	 * @param throwable     an optional underlying cause, or {@code null} if not applicable
+	 */
+	default void didFailToReadRequest(@NonNull ServerType serverType,
+																		@Nullable InetSocketAddress remoteAddress,
+																		@Nullable String requestTarget,
+																		@NonNull RequestReadFailureReason reason,
+																		@Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
 	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
 	 *
 	 * @param serverType the server type that received the request
