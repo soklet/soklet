@@ -96,7 +96,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final AtomicBoolean includeSseMetrics;
 
 	@NonNull
-	public static DefaultMetricsCollector withDefaults() {
+	public static DefaultMetricsCollector defaultInstance() {
 		return new DefaultMetricsCollector();
 	}
 
@@ -480,7 +480,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	@NonNull
 	public Optional<Snapshot> snapshot() {
-		return Optional.of(Snapshot.withDefaults()
+		return Optional.of(Snapshot.builder()
 				.activeRequests(getActiveRequests())
 				.activeSseConnections(getActiveSseConnections())
 				.httpConnectionsAccepted(getHttpConnectionsAccepted())

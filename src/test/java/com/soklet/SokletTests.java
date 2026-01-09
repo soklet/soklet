@@ -417,7 +417,7 @@ public class SokletTests {
 	protected SokletConfig configurationForResourceClasses(@NonNull Set<Class<?>> resourceClasses) {
 		return SokletConfig.forSimulatorTesting()
 				// Use a resource method resolver that explicitly specifies resource classes
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(resourceClasses))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
 				// Quiet logging to keep the console clean
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -510,7 +510,7 @@ public class SokletTests {
 	@Test
 	public void encodedSpaceInPath_isDecodedInSimulatorToo() {
 		var cfg = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SimulatorDecodingResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SimulatorDecodingResource.class)))
 				.build();
 
 		Soklet.runSimulator(cfg, sim -> {
@@ -527,7 +527,7 @@ public class SokletTests {
 	@Test
 	public void duplicatePlaceholderNames_areRejected() {
 		assertThrows(IllegalArgumentException.class, () -> {
-			ResourcePathDeclaration.withPath("/a/{id}/b/{id}");
+			ResourcePathDeclaration.fromPath("/a/{id}/b/{id}");
 		}, "Duplicate placeholder names should be illegal");
 	}
 
@@ -607,7 +607,7 @@ public class SokletTests {
 				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
 				.build();
 
-		ResourceMethodResolver resolver = ResourceMethodResolver.withClasses(
+		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(
 				Set.of(MultipartResource2.class)
 		);
 
@@ -639,7 +639,7 @@ public class SokletTests {
 				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=\"" + boundary + "\"")))
 				.build();
 
-		ResourceMethodResolver resolver = ResourceMethodResolver.withClasses(
+		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(
 				Set.of(MultipartResource2.class)
 		);
 
@@ -680,7 +680,7 @@ public class SokletTests {
 	@Test
 	public void duplicateValueTests() {
 		SokletConfig config = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(DuplicateValueResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(DuplicateValueResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {

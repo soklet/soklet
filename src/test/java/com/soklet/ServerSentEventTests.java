@@ -81,7 +81,7 @@ public class ServerSentEventTests {
 		@ServerSentEventSource("/examples/{exampleId}")
 		public HandshakeResult example(@NonNull Request request,
 																	 @NonNull @PathParameter String exampleId) {
-			return HandshakeResult.acceptWithDefaults()
+			return HandshakeResult.Accepted.builder()
 					.headers(Map.of(
 							"X-Soklet-Example", Set.of(exampleId)
 					))
@@ -89,7 +89,7 @@ public class ServerSentEventTests {
 							ResponseCookie.with("cookie-test", exampleId).build()
 					))
 					.clientInitializer(unicaster -> {
-						unicaster.unicastComment(ServerSentEventComment.withComment("Unicast comment"));
+						unicaster.unicastComment(ServerSentEventComment.fromComment("Unicast comment"));
 						unicaster.unicastEvent(ServerSentEvent.withEvent("initial")
 								.data("unicast")
 								.build()
@@ -102,8 +102,8 @@ public class ServerSentEventTests {
 	@Test
 	public void serverSentEventServerSimulator() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.corsAuthorizer(CorsAuthorizer.withWhitelistedOrigins(Set.of("https://www.revetkn.com")))
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ServerSentEventSimulatorResource.class)))
+				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://www.revetkn.com")))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
 
 		List<ServerSentEvent> events = new ArrayList<>();
@@ -157,11 +157,11 @@ public class ServerSentEventTests {
 						.build();
 
 				// ...and broadcast it to all /examples/abc listeners
-				ServerSentEventBroadcaster broadcaster = configuration.getServerSentEventServer().get().acquireBroadcaster(ResourcePath.withPath("/examples/abc")).get();
+				ServerSentEventBroadcaster broadcaster = configuration.getServerSentEventServer().get().acquireBroadcaster(ResourcePath.fromPath("/examples/abc")).get();
 				broadcaster.broadcastEvent(serverSentEvent);
 
 				// Now try a comment
-				broadcaster.broadcastComment(ServerSentEventComment.withComment("just a test"));
+				broadcaster.broadcastComment(ServerSentEventComment.fromComment("just a test"));
 			} else if (requestResult instanceof HandshakeRejected handshakeRejected) {
 				Assertions.fail("SSE handshake rejected: " + handshakeRejected);
 			} else if (requestResult instanceof RequestFailed requestFailed) {
@@ -183,7 +183,7 @@ public class ServerSentEventTests {
 	@Test
 	public void serverSentEventServerSimulator_unicastErrorHandler() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ServerSentEventSimulatorResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ServerSentEventSimulatorResource.class)))
 				.build();
 
 		AtomicInteger errorCount = new AtomicInteger();
@@ -261,7 +261,7 @@ public class ServerSentEventTests {
 
 		@POST("/fire-server-sent-event")
 		public void fireServerSentEvent() {
-			ResourcePath resourcePath = ResourcePath.withPath("/examples/abc"); // Matches /examples/{exampleId}
+			ResourcePath resourcePath = ResourcePath.fromPath("/examples/abc"); // Matches /examples/{exampleId}
 			ServerSentEventBroadcaster broadcaster = this.serverSentEventServer.acquireBroadcaster(resourcePath).get();
 
 			ServerSentEvent serverSentEvent = ServerSentEvent.withEvent("test")
@@ -298,11 +298,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(1)).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle()) // no noise in test logs
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			// if stop hangs due to accept(), this test times out
 		} // try-with-resources stops both HTTP and SSE servers
@@ -321,11 +321,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle()) // no noise in test logs
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			DefaultServerSentEventServer internal = (DefaultServerSentEventServer) sse;
@@ -397,11 +397,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -425,7 +425,7 @@ public class ServerSentEventTests {
 				Assertions.assertTrue(headerValues("cache-control", headers).stream().map(String::toLowerCase).collect(Collectors.toSet()).contains("no-transform"), "Missing no-transform");
 
 				// Broadcast one event and verify frame formatting
-				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.withPath("/tests/abc")).get();
+				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/abc")).get();
 				ServerSentEvent ev = ServerSentEvent.withEvent("test")
 						.data("hello\nworld")
 						.id("e1")
@@ -460,11 +460,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -481,7 +481,7 @@ public class ServerSentEventTests {
 				int linesCount = 2048; // 2048 * 64 ~= 131072
 				String bigData = java.util.stream.Stream.generate(() -> line).limit(linesCount).collect(java.util.stream.Collectors.joining("\n"));
 
-				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.withPath("/tests/large")).get();
+				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/large")).get();
 				ServerSentEvent ev = ServerSentEvent.withEvent("big").id("big-1").data(bigData).build();
 				b.broadcastEvent(ev);
 
@@ -514,11 +514,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -529,7 +529,7 @@ public class ServerSentEventTests {
 				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
 				Assertions.assertNotNull(hdr);
 
-				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.withPath("/tests/backpressure")).get();
+				ServerSentEventBroadcaster b = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/backpressure")).get();
 
 				final int N = 1500;
 				for (int i = 0; i < N; i++) {
@@ -587,11 +587,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(lifecycle)
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -602,7 +602,7 @@ public class ServerSentEventTests {
 				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
 				Assertions.assertNotNull(hdr);
 
-				ServerSentEventBroadcaster broadcaster = sse.acquireBroadcaster(ResourcePath.withPath("/tests/backpressure-reason")).get();
+				ServerSentEventBroadcaster broadcaster = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/backpressure-reason")).get();
 				awaitClientConnection(broadcaster, 2000);
 
 				// First event will block in willWriteServerSentEvent.
@@ -633,11 +633,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000);
@@ -649,7 +649,7 @@ public class ServerSentEventTests {
 			Assertions.assertNotNull(hdr);
 
 			// Kick one message through so the writer loop is active
-			sse.acquireBroadcaster(ResourcePath.withPath("/tests/closeme")).get()
+			sse.acquireBroadcaster(ResourcePath.fromPath("/tests/closeme")).get()
 					.broadcastEvent(ServerSentEvent.withEvent("one").id("1").data("a").build());
 			readUntil(socket.getInputStream(), "\n\n", 4096); // consume it
 
@@ -678,11 +678,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(lifecycle)
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -693,7 +693,7 @@ public class ServerSentEventTests {
 				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
 				Assertions.assertNotNull(hdr);
 
-				ServerSentEventBroadcaster broadcaster = sse.acquireBroadcaster(ResourcePath.withPath("/tests/terminate")).get();
+				ServerSentEventBroadcaster broadcaster = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/terminate")).get();
 				awaitClientConnection(broadcaster, 2000);
 
 				app.stop();
@@ -720,11 +720,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseNetworkResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(lifecycle)
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -761,11 +761,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingHandshakeResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket1 = connectWithRetry("127.0.0.1", ssePort, 2000);
@@ -818,11 +818,11 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(sse)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingRejectHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingRejectHandshakeResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			ExecutorService requestExecutor = ((DefaultServerSentEventServer) sse).getRequestHandlerExecutorService().orElse(null);
@@ -916,11 +916,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RejectingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RejectingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -966,11 +966,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -1001,11 +1001,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
@@ -1037,11 +1037,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
@@ -1073,11 +1073,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
@@ -1107,11 +1107,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
@@ -1142,11 +1142,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
@@ -1178,11 +1178,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
@@ -1216,11 +1216,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
@@ -1257,11 +1257,11 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.requestHandlerTimeout(Duration.ofMillis(200))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingHandshakeResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
@@ -1289,11 +1289,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofMillis(200))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
@@ -1326,11 +1326,11 @@ public class ServerSentEventTests {
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RejectWithExplicitContentLength.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RejectWithExplicitContentLength.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
@@ -1358,7 +1358,7 @@ public class ServerSentEventTests {
 		String origin = "https://app.example";
 
 		// Accepts any Origin; credentials=true implies ACAO "*" -> normalized to request Origin + "Vary: Origin"
-		CorsAuthorizer cors = CorsAuthorizer.withAcceptAllPolicy();
+		CorsAuthorizer cors = CorsAuthorizer.fromAcceptAllPolicy();
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
@@ -1366,10 +1366,10 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.corsAuthorizer(cors)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseCorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseCorsResource.class)))
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
@@ -1405,7 +1405,7 @@ public class ServerSentEventTests {
 		int ssePort = findFreePort();
 		String origin = "https://app.example";
 
-		CorsAuthorizer cors = CorsAuthorizer.withAcceptAllPolicy();
+		CorsAuthorizer cors = CorsAuthorizer.fromAcceptAllPolicy();
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
@@ -1413,10 +1413,10 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.corsAuthorizer(cors)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RejectingSseCorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RejectingSseCorsResource.class)))
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
@@ -1451,7 +1451,7 @@ public class ServerSentEventTests {
 		String origin = "https://not-allowed.example";
 
 		// Only allow https://ok.example
-		CorsAuthorizer cors = CorsAuthorizer.withWhitelistAuthorizer(o -> "https://ok.example".equalsIgnoreCase(o));
+		CorsAuthorizer cors = CorsAuthorizer.fromWhitelistAuthorizer(o -> "https://ok.example".equalsIgnoreCase(o));
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
@@ -1459,10 +1459,10 @@ public class ServerSentEventTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.corsAuthorizer(cors)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(AcceptingSseCorsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseCorsResource.class)))
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
@@ -1628,10 +1628,10 @@ public class ServerSentEventTests {
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.verifyConnectionOnceEstablished(false)
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseBasicHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			// handshake
@@ -1663,7 +1663,7 @@ public class ServerSentEventTests {
 				ServerSentEventBroadcaster broadcaster;
 
 				while (true) {
-					broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.withPath("/sse")).get();
+					broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.fromPath("/sse")).get();
 					if (broadcaster.getClientCount() > 0) break;
 					if (System.nanoTime() > deadline) throw new AssertionError("SSE connection not registered in time");
 					Thread.sleep(10);
@@ -1712,7 +1712,7 @@ public class ServerSentEventTests {
 	@Test
 	public void idContainingNull_isRejected() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				ServerSentEvent.withDefaults().id("abc\u0000def").build());
+				ServerSentEvent.builder().id("abc\u0000def").build());
 	}
 
 	@Test
@@ -1723,10 +1723,10 @@ public class ServerSentEventTests {
 		SokletConfig config = SokletConfig
 				.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseBasicHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			// handshake
@@ -1755,10 +1755,10 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).host("127.0.0.1").build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseBasicHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
@@ -1783,10 +1783,10 @@ public class ServerSentEventTests {
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).host("127.0.0.1").build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseBasicHandshakeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {

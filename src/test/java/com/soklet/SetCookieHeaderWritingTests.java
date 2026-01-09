@@ -388,9 +388,9 @@ public class SetCookieHeaderWritingTests {
 
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port).build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(resourceClasses))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
 				.build();
-		Soklet app = Soklet.withConfig(cfg);
+		Soklet app = Soklet.fromConfig(cfg);
 		app.start();
 		return app;
 	}

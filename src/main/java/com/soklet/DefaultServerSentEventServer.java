@@ -167,7 +167,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// Create a sentinel ResourcePathDeclaration that represents "no match found".
 		// This allows us to cache negative lookups and avoid repeated O(n) scans.
-		NO_MATCH_SENTINEL = ResourcePathDeclaration.withPath("/__soklet_internal_no_match_sentinel__");
+		NO_MATCH_SENTINEL = ResourcePathDeclaration.fromPath("/__soklet_internal_no_match_sentinel__");
 
 		HEARTBEAT_COMMENT_PAYLOAD = ":\n\n";
 		HEARTBEAT_COMMENT_PAYLOAD_BYTES = HEARTBEAT_COMMENT_PAYLOAD.getBytes(StandardCharsets.UTF_8);
@@ -568,7 +568,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.verifyConnectionOnceEstablished = builder.verifyConnectionOnceEstablished != null ? builder.verifyConnectionOnceEstablished : DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
-		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.withDefaults();
+		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.defaultInstance();
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		int defaultRequestHandlerConcurrency = Math.max(1, Runtime.getRuntime().availableProcessors() * DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER);

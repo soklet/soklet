@@ -181,7 +181,7 @@ final class DefaultServer implements Server {
 		this.maximumConnections = builder.maximumConnections != null ? builder.maximumConnections : DEFAULT_MAXIMUM_CONNECTIONS;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.defaultInstance();
-		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.withDefaults();
+		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.defaultInstance();
 
 		int defaultRequestHandlerConcurrency = Utilities.virtualThreadsAvailable()
 				? Math.max(1, this.concurrency * DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER)

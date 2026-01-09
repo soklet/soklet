@@ -70,7 +70,7 @@ final class DefaultIdGenerator implements IdGenerator<String> {
 	 * @return a {@code DefaultIdGenerator} with default settings
 	 */
 	@NonNull
-	public static DefaultIdGenerator withDefaults() {
+	public static DefaultIdGenerator defaultInstance() {
 		return new DefaultIdGenerator(null);
 	}
 
@@ -85,7 +85,7 @@ final class DefaultIdGenerator implements IdGenerator<String> {
 	 * @return a {@code DefaultIdGenerator} configured with the given prefix
 	 */
 	@NonNull
-	public static DefaultIdGenerator withPrefix(@Nullable String prefix) {
+	public static DefaultIdGenerator fromPrefix(@Nullable String prefix) {
 		return new DefaultIdGenerator(prefix);
 	}
 

@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Instances can be acquired via these factory methods:
  * <ul>
- *   <li>{@link #withOrigin(HttpMethod, String)} (uses {@code Origin} header value)</li>
+ *   <li>{@link #fromOrigin(HttpMethod, String)} (uses {@code Origin} header value)</li>
  *   <li>{@link #fromHeaders(HttpMethod, Map)} (parses raw headers)</li>
  * </ul>
  * <p>
@@ -59,7 +59,7 @@ public final class Cors {
 	 * @return a {@link Cors} instance
 	 */
 	@NonNull
-	public static Cors withOrigin(@NonNull HttpMethod httpMethod,
+public static Cors fromOrigin(@NonNull HttpMethod httpMethod,
 																@NonNull String origin) {
 		requireNonNull(httpMethod);
 		requireNonNull(origin);

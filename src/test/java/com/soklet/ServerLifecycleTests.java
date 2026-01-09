@@ -57,14 +57,14 @@ public class ServerLifecycleTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(HealthResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HealthResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			Assertions.assertFalse(app.isStarted());
 			app.start();
 			Assertions.assertTrue(app.isStarted());
@@ -76,7 +76,7 @@ public class ServerLifecycleTests {
 		}
 		// try-with-resources calls close(), which stops the server
 		// Can't call isStarted() after close() directly; create again to check false
-		Soklet app2 = Soklet.withConfig(cfg);
+		Soklet app2 = Soklet.fromConfig(cfg);
 		try {
 			Assertions.assertFalse(app2.isStarted());
 		} finally {

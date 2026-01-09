@@ -44,7 +44,7 @@ import static java.util.Objects.requireNonNull;
  *   .build();
  *
  * // Run the app
- * try (Soklet soklet = Soklet.withConfig(config)) {
+ * try (Soklet soklet = Soklet.fromConfig(config)) {
  *   soklet.start();
  *   System.out.println("Soklet started, press [enter] to exit");
  *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);

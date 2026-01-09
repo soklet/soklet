@@ -69,7 +69,7 @@ import static java.util.Objects.requireNonNull;
  *   Server.withPort(8080).build()
  * ).build();
  *
- * try (Soklet soklet = Soklet.withConfig(config)) {
+ * try (Soklet soklet = Soklet.fromConfig(config)) {
  *   soklet.start();
  *   System.out.println("Soklet started, press [enter] to exit");
  *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
@@ -149,7 +149,7 @@ public final class Soklet implements AutoCloseable {
 	 * @return a Soklet instance
 	 */
 	@NonNull
-	public static Soklet withConfig(@NonNull SokletConfig sokletConfig) {
+public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
 		return new Soklet(sokletConfig);
 	}
@@ -1354,7 +1354,7 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(simulatorConsumer);
 
 		// Create Soklet instance - this initializes the REAL implementations through proxies
-		Soklet soklet = Soklet.withConfig(sokletConfig);
+		Soklet soklet = Soklet.fromConfig(sokletConfig);
 
 		// Extract proxies (they're guaranteed to be proxies now)
 		ServerProxy serverProxy = (ServerProxy) sokletConfig.getServer();

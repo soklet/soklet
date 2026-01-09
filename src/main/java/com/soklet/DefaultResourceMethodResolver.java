@@ -93,13 +93,13 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	public static DefaultResourceMethodResolver withClasses(@Nullable Set<@NonNull Class<?>> resourceClasses) {
+public static DefaultResourceMethodResolver fromClasses(@Nullable Set<@NonNull Class<?>> resourceClasses) {
 		requireNonNull(resourceClasses);
 		return new DefaultResourceMethodResolver(resourceClasses, null);
 	}
 
 	@NonNull
-	public static DefaultResourceMethodResolver withMethods(@NonNull Set<@NonNull Method> methods) {
+public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Method> methods) {
 		requireNonNull(methods);
 		return new DefaultResourceMethodResolver(null, methods);
 	}
@@ -129,13 +129,13 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 			// Declarations for this method
 			var decls = byMethod.computeIfAbsent(method, __ -> new HashSet<>());
-			var rpd = ResourcePathDeclaration.withPath(resourceMethodDeclaration.path());
+			var rpd = ResourcePathDeclaration.fromPath(resourceMethodDeclaration.path());
 			boolean sse = resourceMethodDeclaration.serverSentEventSource();
 			decls.add(new HttpMethodResourcePathDeclaration(resourceMethodDeclaration.httpMethod(), rpd, sse));
 
 			// Index by http method
 			byHttp.computeIfAbsent(resourceMethodDeclaration.httpMethod(), __ -> new HashSet<>()).add(method);
-			resourceMethods.add(ResourceMethod.withComponents(resourceMethodDeclaration.httpMethod(), rpd, method, sse));
+			resourceMethods.add(ResourceMethod.fromComponents(resourceMethodDeclaration.httpMethod(), rpd, method, sse));
 		}
 
 		this.methods = Collections.unmodifiableSet(allMethods);
@@ -308,7 +308,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 						throw new IllegalStateException(format("Resource Methods annotated with @%s must be declared to return an instance of %s (e.g. %s.accept()). Incorrect Resource Method was %s",
 								ServerSentEventSource.class.getSimpleName(), HandshakeResult.class.getSimpleName(), HandshakeResult.class.getSimpleName(), method));
 
-					ResourceMethod resourceMethod = ResourceMethod.withComponents(httpMethod, resourcePathDeclaration, method, serverSentEventSource);
+					ResourceMethod resourceMethod = ResourceMethod.fromComponents(httpMethod, resourcePathDeclaration, method, serverSentEventSource);
 					resourceMethods.add(resourceMethod);
 				}
 			}
@@ -347,7 +347,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 					if (isServerSentEventSource != isServerSentEventServer)
 						continue;
 
-					matchingResourceMethods.add(ResourceMethod.withComponents(
+					matchingResourceMethods.add(ResourceMethod.fromComponents(
 							request.getHttpMethod(),
 							httpMethodResourcePathDeclaration.getResourcePathDeclaration(),
 							method,
@@ -388,60 +388,60 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 			for (Annotation annotation : method.getAnnotations()) {
 				if (annotation instanceof GET) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.withPath
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
 							(((GET) annotation).value())));
 				} else if (annotation instanceof POST) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.POST, ResourcePathDeclaration.withPath
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.POST, ResourcePathDeclaration.fromPath
 							(((POST) annotation).value())));
 				} else if (annotation instanceof PUT) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PUT, ResourcePathDeclaration.withPath
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PUT, ResourcePathDeclaration.fromPath
 							(((PUT) annotation).value())));
 				} else if (annotation instanceof PATCH) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PATCH, ResourcePathDeclaration.withPath
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PATCH, ResourcePathDeclaration.fromPath
 							(((PATCH) annotation).value())));
 				} else if (annotation instanceof DELETE) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.DELETE, ResourcePathDeclaration.withPath
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.DELETE, ResourcePathDeclaration.fromPath
 							(((DELETE) annotation).value())));
 				} else if (annotation instanceof OPTIONS) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.OPTIONS, ResourcePathDeclaration.withPath
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.OPTIONS, ResourcePathDeclaration.fromPath
 							(((OPTIONS) annotation).value())));
 				} else if (annotation instanceof HEAD) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.withPath
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.fromPath
 							(((HEAD) annotation).value())));
 				} else if (annotation instanceof ServerSentEventSource) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.withPath
+					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
 							(((ServerSentEventSource) annotation).value()), true));
 				} else if (annotation instanceof GETs) {
 					for (GET get : ((GETs) annotation).value())
-						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.withPath
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
 								(get.value())));
 				} else if (annotation instanceof POSTs) {
 					for (POST post : ((POSTs) annotation).value())
-						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.POST, ResourcePathDeclaration.withPath
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.POST, ResourcePathDeclaration.fromPath
 								(post.value())));
 				} else if (annotation instanceof PUTs) {
 					for (PUT put : ((PUTs) annotation).value())
-						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PUT, ResourcePathDeclaration.withPath
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PUT, ResourcePathDeclaration.fromPath
 								(put.value())));
 				} else if (annotation instanceof PATCHes) {
 					for (PATCH patch : ((PATCHes) annotation).value())
-						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PATCH, ResourcePathDeclaration.withPath
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PATCH, ResourcePathDeclaration.fromPath
 								(patch.value())));
 				} else if (annotation instanceof DELETEs) {
 					for (DELETE delete : ((DELETEs) annotation).value())
-						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.DELETE, ResourcePathDeclaration.withPath
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.DELETE, ResourcePathDeclaration.fromPath
 								(delete.value())));
 				} else if (annotation instanceof OPTIONSes) {
 					for (OPTIONS options : ((OPTIONSes) annotation).value())
-						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.OPTIONS, ResourcePathDeclaration.withPath
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.OPTIONS, ResourcePathDeclaration.fromPath
 								(options.value())));
 				} else if (annotation instanceof HEADs) {
 					for (HEAD head : ((HEADs) annotation).value())
-						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.withPath
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.fromPath
 								(head.value())));
 				} else if (annotation instanceof ServerSentEventSources) {
 					for (ServerSentEventSource serverSentEventSource : ((ServerSentEventSources) annotation).value())
-						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.withPath
+						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
 								(serverSentEventSource.value()), true));
 				}
 

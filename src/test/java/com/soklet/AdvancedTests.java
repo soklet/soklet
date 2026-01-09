@@ -94,10 +94,10 @@ public class AdvancedTests {
 
 		SokletConfig config = SokletConfig.withServer(server)
 				.serverSentEventServer(sseServer)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SSETestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			// Simulate multiple concurrent connections
@@ -427,10 +427,10 @@ public class AdvancedTests {
 				.build();
 
 		SokletConfig config = SokletConfig.withServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ConcurrentTestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConcurrentTestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			int numThreads = 100;
@@ -577,17 +577,17 @@ public class AdvancedTests {
 
 		SokletConfig config = SokletConfig.withServer(server)
 				.serverSentEventServer(sseServer)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SSEMemoryTestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSEMemoryTestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			List<WeakReference<Object>> references = new ArrayList<>();
 
 			// Create many SSE connections and close them
 			for (int i = 0; i < 100; i++) {
-				ResourcePath path = ResourcePath.withPath("/events/" + i);
+				ResourcePath path = ResourcePath.fromPath("/events/" + i);
 				Optional<? extends ServerSentEventBroadcaster> broadcaster =
 						sseServer.acquireBroadcaster(path);
 
@@ -633,10 +633,10 @@ public class AdvancedTests {
 		Server server = Server.withPort(port).build();
 
 		SokletConfig config = SokletConfig.withServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			for (int i = 0; i < 5; i++) {
@@ -674,10 +674,10 @@ public class AdvancedTests {
 
 		SokletConfig config = SokletConfig.withServer(server)
 				.serverSentEventServer(sseServer)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SSETestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -722,10 +722,10 @@ public class AdvancedTests {
 		Server server = Server.withPort(port).build();
 
 		SokletConfig config = SokletConfig.withServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			forceGc();
@@ -765,10 +765,10 @@ public class AdvancedTests {
 
 		SokletConfig config = SokletConfig.withServer(server)
 				.serverSentEventServer(sseServer)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SSETestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			forceGc();
@@ -813,7 +813,7 @@ public class AdvancedTests {
 		Server server = Server.withPort(port).build();
 
 		SokletConfig config = SokletConfig.withServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.build();
 
 		AtomicInteger requestCount = new AtomicInteger();
@@ -821,7 +821,7 @@ public class AdvancedTests {
 		ConcurrentHashMap<String, AtomicInteger> errorCounts = new ConcurrentHashMap<>();
 		ConcurrentHashMap<String, String> errorSamples = new ConcurrentHashMap<>();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			ExecutorService executor = Executors.newFixedThreadPool(loadThreads);
@@ -892,13 +892,13 @@ public class AdvancedTests {
 
 		SokletConfig config = SokletConfig.withServer(server)
 				.serverSentEventServer(sseServer)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SSETestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
 
 		List<Socket> sockets = Collections.synchronizedList(new ArrayList<>());
 		AtomicInteger errors = new AtomicInteger();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			ExecutorService executor = Executors.newFixedThreadPool(Math.min(loadThreads, concurrentConnections));
@@ -949,10 +949,10 @@ public class AdvancedTests {
 				.build();
 
 		SokletConfig config = SokletConfig.withServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(LargeBodyTestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LargeBodyTestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			// Track memory usage
@@ -995,7 +995,7 @@ public class AdvancedTests {
 
 	@Test
 	public void testCustomValueConverterEdgeCases() {
-		ValueConverterRegistry registry = ValueConverterRegistry.withDefaults();
+		ValueConverterRegistry registry = ValueConverterRegistry.defaultInstance();
 
 		// Test null handling
 		try {
@@ -1029,7 +1029,7 @@ public class AdvancedTests {
 
 	@Test
 	public void testBlankSlateValueConverterRegistry() {
-		ValueConverterRegistry registry = ValueConverterRegistry.withBlankSlate();
+		ValueConverterRegistry registry = ValueConverterRegistry.blankSlate();
 
 		Assertions.assertTrue(registry.get(String.class, Integer.class).isEmpty(),
 				"Blank-slate registry should not include default converters");
@@ -1058,7 +1058,7 @@ public class AdvancedTests {
 			}
 		};
 
-		ValueConverterRegistry supplemented = ValueConverterRegistry.withBlankSlateSupplementedBy(Set.of(customConverter));
+		ValueConverterRegistry supplemented = ValueConverterRegistry.blankSlateSupplementedBy(Set.of(customConverter));
 		Assertions.assertTrue(supplemented.get(String.class, Integer.class).isPresent(),
 				"Custom converters should be available in blank-slate registries");
 		Assertions.assertTrue(supplemented.get(String.class, String.class).isEmpty(),
@@ -1102,8 +1102,8 @@ public class AdvancedTests {
 			String pattern = entry.getKey();
 			String testPath = entry.getValue();
 
-			ResourcePathDeclaration declaration = ResourcePathDeclaration.withPath(pattern);
-			boolean matched = declaration.matches(ResourcePath.withPath(testPath));
+			ResourcePathDeclaration declaration = ResourcePathDeclaration.fromPath(pattern);
+			boolean matched = declaration.matches(ResourcePath.fromPath(testPath));
 
 			Assertions.assertTrue(matched, "Failed to match pattern: " + pattern + " with path: " + testPath);
 		}
@@ -1118,8 +1118,8 @@ public class AdvancedTests {
 			String pattern = entry.getKey();
 			String testPath = entry.getValue();
 
-			ResourcePathDeclaration declaration = ResourcePathDeclaration.withPath(pattern);
-			boolean matched = declaration.matches(ResourcePath.withPath(testPath));
+			ResourcePathDeclaration declaration = ResourcePathDeclaration.fromPath(pattern);
+			boolean matched = declaration.matches(ResourcePath.fromPath(testPath));
 
 			Assertions.assertFalse(matched, "Should not match pattern: " + pattern +
 					" with path: " + testPath);
@@ -1129,7 +1129,7 @@ public class AdvancedTests {
 	@Test
 	public void testPathParameterInjection() {
 		// Test that path parameters can't be used for injection attacks
-		ResourcePathDeclaration declaration = ResourcePathDeclaration.withPath("/api/{param}");
+		ResourcePathDeclaration declaration = ResourcePathDeclaration.fromPath("/api/{param}");
 
 		String[] injectionAttempts = {
 				"../../../etc/passwd",
@@ -1271,7 +1271,7 @@ public class AdvancedTests {
 
 	private SokletConfig config(int port) {
 		return SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(2)).build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(TestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(LogEvent e) {} // quiet
@@ -1409,7 +1409,7 @@ public class AdvancedTests {
 		int port = findFreePort();
 		SokletConfig config = config(port);
 
-		try (Soklet app = Soklet.withConfig(config)) {
+		try (Soklet app = Soklet.fromConfig(config)) {
 			app.start();
 			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
 				// RFC 7230: A server MUST accept the absolute-form in requests
@@ -1430,7 +1430,7 @@ public class AdvancedTests {
 		int port = findFreePort();
 		SokletConfig config = config(port);
 
-		try (Soklet app = Soklet.withConfig(config)) {
+		try (Soklet app = Soklet.fromConfig(config)) {
 			app.start();
 			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
 				// Standard server health check
@@ -1450,7 +1450,7 @@ public class AdvancedTests {
 		int port = findFreePort();
 		SokletConfig config = config(port);
 
-		try (Soklet app = Soklet.withConfig(config)) {
+		try (Soklet app = Soklet.fromConfig(config)) {
 			app.start();
 			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
 				// Attack: try to access file with null byte terminator
@@ -1482,7 +1482,7 @@ public class AdvancedTests {
 				.build();
 
 		// 2. Define a custom ResponseMarshaler to verify we can control the 503 output
-		ResponseMarshaler customMarshaler = ResponseMarshaler.withDefaults()
+		ResponseMarshaler customMarshaler = ResponseMarshaler.builder()
 				.serviceUnavailableHandler((request, resourceMethod) ->
 						MarshaledResponse.withStatusCode(503)
 								.headers(Map.of("X-Soklet-Overload", Set.of("true")))
@@ -1494,7 +1494,7 @@ public class AdvancedTests {
 		// 3. Configure Soklet
 		SokletConfig config = SokletConfig.withServer(Server.withPort(findFreePort()).build())
 				.serverSentEventServer(sseServer)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(LimitTestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LimitTestResource.class)))
 				.responseMarshaler(customMarshaler)
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -1504,7 +1504,7 @@ public class AdvancedTests {
 				})
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			String sseUrl = "http://localhost:" + ssePort + "/limit-test";
@@ -1561,8 +1561,8 @@ public class AdvancedTests {
 		@ServerSentEventSource("/limit-test")
 		public HandshakeResult stream() {
 			// Return an accepted handshake that sends an initial comment so the test knows we're live.
-			return HandshakeResult.acceptWithDefaults()
-					.clientInitializer(unicaster -> unicaster.unicastComment(ServerSentEventComment.withComment("connected")))
+			return HandshakeResult.Accepted.builder()
+					.clientInitializer(unicaster -> unicaster.unicastComment(ServerSentEventComment.fromComment("connected")))
 					.build();
 		}
 	}

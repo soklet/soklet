@@ -56,14 +56,14 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	/**
 	 * Creates an authorizer with a fixed set of whitelisted origins.
 	 * <p>
-	 * For dynamic authorization, see {@link WhitelistedOriginsCorsAuthorizer#withAuthorizer(Function, Function)}.
+ * For dynamic authorization, see {@link WhitelistedOriginsCorsAuthorizer#fromAuthorizer(Function, Function)}.
 	 *
 	 * @param origins                  the set of whitelisted origins
 	 * @param allowCredentialsResolver function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise.
 	 * @return an instance of {@link WhitelistedOriginsCorsAuthorizer}
 	 */
 	@NonNull
-	public static WhitelistedOriginsCorsAuthorizer withOrigins(@NonNull Set<@NonNull String> origins,
+public static WhitelistedOriginsCorsAuthorizer fromOrigins(@NonNull Set<@NonNull String> origins,
 																														 @NonNull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(origins);
 		requireNonNull(allowCredentialsResolver);
@@ -78,14 +78,14 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	/**
 	 * Acquires a {@link WhitelistedOriginsCorsAuthorizer} instance backed by an authorization function which supports runtime authorization decisions.
 	 * <p>
-	 * For static "build time" authorization, see {@link WhitelistedOriginsCorsAuthorizer#withOrigins(Set, Function)}.
+ * For static "build time" authorization, see {@link WhitelistedOriginsCorsAuthorizer#fromOrigins(Set, Function)}.
 	 *
 	 * @param authorizer               a function that returns {@code true} if the input is a whitelisted origin and {@code false} otherwise
 	 * @param allowCredentialsResolver function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise.
 	 * @return an instance of {@link WhitelistedOriginsCorsAuthorizer}
 	 */
 	@NonNull
-	public static WhitelistedOriginsCorsAuthorizer withAuthorizer(@NonNull Function<String, Boolean> authorizer,
+public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<String, Boolean> authorizer,
 																																@NonNull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(authorizer);
 		requireNonNull(allowCredentialsResolver);

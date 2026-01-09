@@ -66,7 +66,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class MetricsCollectorTests {
 	@Test
 	public void httpMetricsSnapshotAndReset() {
-		DefaultMetricsCollector collector = DefaultMetricsCollector.withDefaults();
+		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		ResourceMethod resourceMethod = resourceMethodFor("/widgets/{id}", HttpMethod.POST, "createWidget", false);
 		Request request = Request.withPath(HttpMethod.POST, "/widgets/123")
 				.body(new byte[]{1, 2, 3})
@@ -83,7 +83,7 @@ public class MetricsCollectorTests {
 
 		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 
-		ResourcePathDeclaration widgetRoute = ResourcePathDeclaration.withPath("/widgets/{id}");
+		ResourcePathDeclaration widgetRoute = ResourcePathDeclaration.fromPath("/widgets/{id}");
 		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute, "2xx");
 		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute);
 
@@ -124,7 +124,7 @@ public class MetricsCollectorTests {
 
 	@Test
 	public void snapshotTextRespectsSseConfiguration() {
-		DefaultMetricsCollector collector = DefaultMetricsCollector.withDefaults();
+		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		MetricsCollector.SnapshotTextOptions prometheusOptions = MetricsCollector.SnapshotTextOptions
 				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)
 				.build();
@@ -214,12 +214,12 @@ public class MetricsCollectorTests {
 
 	@Test
 	public void sseMetricsSnapshot() {
-		DefaultMetricsCollector collector = DefaultMetricsCollector.withDefaults();
+		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		ResourceMethod resourceMethod = resourceMethodFor("/events/{id}", HttpMethod.GET, "events", true);
 		Request request = Request.withPath(HttpMethod.GET, "/events/42").build();
 		ServerSentEventConnection connection = new TestServerSentEventConnection(request, resourceMethod, Instant.now(), null);
 		ServerSentEvent event = ServerSentEvent.withData("payload").build();
-		ServerSentEventComment comment = ServerSentEventComment.withComment("ping");
+		ServerSentEventComment comment = ServerSentEventComment.fromComment("ping");
 		ServerSentEventComment heartbeat = ServerSentEventComment.heartbeatInstance();
 
 		collector.didFailToEstablishServerSentEventConnection(request, resourceMethod,
@@ -236,7 +236,7 @@ public class MetricsCollectorTests {
 
 		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 
-		ResourcePathDeclaration eventsRoute = ResourcePathDeclaration.withPath("/events/{id}");
+		ResourcePathDeclaration eventsRoute = ResourcePathDeclaration.fromPath("/events/{id}");
 		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteType.MATCHED, eventsRoute);
 		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteType.MATCHED, eventsRoute,
 				ServerSentEventComment.CommentType.COMMENT);
@@ -302,19 +302,19 @@ public class MetricsCollectorTests {
 	@Test
 	public void httpMetricsSnapshot_overNetwork() throws Exception {
 		int port = findFreePort();
-		DefaultMetricsCollector collector = DefaultMetricsCollector.withDefaults();
+		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 
 		SokletConfig config = SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(3)).build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(HttpMetricsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HttpMetricsResource.class)))
 				.metricsCollector(collector)
 				.build();
 
 		byte[] requestBody = "hello".getBytes(StandardCharsets.UTF_8);
-		ResourcePathDeclaration httpMetricsRoute = ResourcePathDeclaration.withPath("/metrics/http/{id}");
+		ResourcePathDeclaration httpMetricsRoute = ResourcePathDeclaration.fromPath("/metrics/http/{id}");
 		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute, "2xx");
 		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute);
 
-		try (Soklet app = Soklet.withConfig(config)) {
+		try (Soklet app = Soklet.fromConfig(config)) {
 			app.start();
 
 			URL url = new URL("http://127.0.0.1:" + port + "/metrics/http/123");
@@ -367,7 +367,7 @@ public class MetricsCollectorTests {
 	public void sseMetricsSnapshot_overNetwork() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
-		DefaultMetricsCollector collector = DefaultMetricsCollector.withDefaults();
+		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 
 		ServerSentEventServer serverSentEventServer = ServerSentEventServer.withPort(ssePort)
 				.host("127.0.0.1")
@@ -378,16 +378,16 @@ public class MetricsCollectorTests {
 
 		SokletConfig config = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(serverSentEventServer)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseMetricsResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseMetricsResource.class)))
 				.metricsCollector(collector)
 				.build();
 
-		ResourcePathDeclaration sseMetricsRoute = ResourcePathDeclaration.withPath("/metrics/sse/{id}");
+		ResourcePathDeclaration sseMetricsRoute = ResourcePathDeclaration.fromPath("/metrics/sse/{id}");
 		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteType.MATCHED, sseMetricsRoute);
 		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteType.MATCHED, sseMetricsRoute,
 				ServerSentEventComment.CommentType.COMMENT);
 
-		try (Soklet app = Soklet.withConfig(config)) {
+		try (Soklet app = Soklet.fromConfig(config)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -402,7 +402,7 @@ public class MetricsCollectorTests {
 				ServerSentEventBroadcaster broadcaster = awaitBroadcasterWithClient(serverSentEventServer,
 						"/metrics/sse/abc", Duration.ofSeconds(2));
 				broadcaster.broadcastEvent(ServerSentEvent.withData("payload").build());
-				broadcaster.broadcastComment(ServerSentEventComment.withComment("note"));
+				broadcaster.broadcastComment(ServerSentEventComment.fromComment("note"));
 
 				boolean sawData = false;
 				boolean sawComment = false;
@@ -462,9 +462,9 @@ public class MetricsCollectorTests {
 																									@NonNull HttpMethod method,
 																									@NonNull String methodName,
 																									boolean serverSentEventSource) {
-		ResourcePathDeclaration resourcePathDeclaration = ResourcePathDeclaration.withPath(path);
+		ResourcePathDeclaration resourcePathDeclaration = ResourcePathDeclaration.fromPath(path);
 		Method reflectedMethod = reflectedMethodFor(methodName);
-		return ResourceMethod.withComponents(method, resourcePathDeclaration, reflectedMethod, serverSentEventSource);
+		return ResourceMethod.fromComponents(method, resourcePathDeclaration, reflectedMethod, serverSentEventSource);
 	}
 
 	private static Method reflectedMethodFor(@NonNull String methodName) {
@@ -605,7 +605,7 @@ public class MetricsCollectorTests {
 		long deadline = System.nanoTime() + timeout.toNanos();
 
 		while (true) {
-			ServerSentEventBroadcaster broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.withPath(path)).orElseThrow();
+			ServerSentEventBroadcaster broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.fromPath(path)).orElseThrow();
 			if (broadcaster.getClientCount() > 0) return broadcaster;
 			if (System.nanoTime() > deadline)
 				throw new AssertionError("SSE connection not registered in time");

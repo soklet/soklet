@@ -42,7 +42,7 @@ public class ValueConversionTests {
 	@Test
 	public void converts_common_types_from_query_params() {
 		SokletConfig cfg = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ConversionResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConversionResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }

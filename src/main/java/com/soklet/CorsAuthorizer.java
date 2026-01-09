@@ -30,12 +30,12 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Standard threadsafe implementations can be acquired via these factory methods:
  * <ul>
- *   <li>{@link #withRejectAllPolicy()} (don't permit CORS requests)</li>
- *   <li>{@link #withAcceptAllPolicy()} (permit all CORS requests, not recommended for production)</li>
- *   <li>{@link #withWhitelistedOrigins(Set)} (permit whitelisted origins only)</li>
- *   <li>{@link #withWhitelistedOrigins(Set, Function)}  (permit whitelisted origins only + control credentials behavior)</li>
- *   <li>{@link #withWhitelistAuthorizer(Function)} (permit origins via function)</li>
- *   <li>{@link #withWhitelistAuthorizer(Function, Function)} (permit origins via function + control credentials behavior)</li>
+ *   <li>{@link #fromRejectAllPolicy()} (don't permit CORS requests)</li>
+ *   <li>{@link #fromAcceptAllPolicy()} (permit all CORS requests, not recommended for production)</li>
+ *   <li>{@link #fromWhitelistedOrigins(Set)} (permit whitelisted origins only)</li>
+ *   <li>{@link #fromWhitelistedOrigins(Set, Function)}  (permit whitelisted origins only + control credentials behavior)</li>
+ *   <li>{@link #fromWhitelistAuthorizer(Function)} (permit origins via function)</li>
+ *   <li>{@link #fromWhitelistAuthorizer(Function, Function)} (permit origins via function + control credentials behavior)</li>
  * </ul>
  * See <a href="https://www.soklet.com/docs/cors">https://www.soklet.com/docs/cors</a> for detailed documentation.
  *
@@ -71,12 +71,12 @@ public interface CorsAuthorizer {
 	 * <p>
 	 * The returned instance is guaranteed to be a JVM-wide singleton.
 	 * <p>
-	 * <strong>Note: the returned instance is generally unsafe for production - prefer {@link #withWhitelistedOrigins(Set)} or {@link #withWhitelistAuthorizer(Function)} for production systems.</strong>
+	 * <strong>Note: the returned instance is generally unsafe for production - prefer {@link #fromWhitelistedOrigins(Set)} or {@link #fromWhitelistAuthorizer(Function)} for production systems.</strong>
 	 *
 	 * @return a {@code CorsAuthorizer} configured to permit all cross-domain requests
 	 */
 	@NonNull
-	static CorsAuthorizer withAcceptAllPolicy() {
+	static CorsAuthorizer fromAcceptAllPolicy() {
 		return AllOriginsCorsAuthorizer.defaultInstance();
 	}
 
@@ -88,14 +88,14 @@ public interface CorsAuthorizer {
 	 * @return a {@code CorsAuthorizer} configured to reject all cross-domain requests
 	 */
 	@NonNull
-	static CorsAuthorizer withRejectAllPolicy() {
+	static CorsAuthorizer fromRejectAllPolicy() {
 		return NoOriginsCorsAuthorizer.defaultInstance();
 	}
 
 	/**
 	 * Acquires a threadsafe {@link CorsAuthorizer} configured to accept only those cross-domain requests whose {@code Origin} matches a value in the provided set of {@code whitelistedOrigins}.
 	 * <p>
-	 * The returned {@link CorsAuthorizer} will set {@code Access-Control-Allow-Credentials} header to {@code true}. This behavior can be customized via {@link #withWhitelistedOrigins(Set, Function)}.
+	 * The returned {@link CorsAuthorizer} will set {@code Access-Control-Allow-Credentials} header to {@code true}. This behavior can be customized via {@link #fromWhitelistedOrigins(Set, Function)}.
 	 * <p>
 	 * Callers should not rely on reference identity; this method may return a new or cached instance.
 	 *
@@ -103,9 +103,9 @@ public interface CorsAuthorizer {
 	 * @return a credentials-allowed {@code CorsAuthorizer} configured to accept only the specified {@code whitelistedOrigins}
 	 */
 	@NonNull
-	static CorsAuthorizer withWhitelistedOrigins(@NonNull Set<@NonNull String> whitelistedOrigins) {
+	static CorsAuthorizer fromWhitelistedOrigins(@NonNull Set<@NonNull String> whitelistedOrigins) {
 		requireNonNull(whitelistedOrigins);
-		return WhitelistedOriginsCorsAuthorizer.withOrigins(whitelistedOrigins, (origin) -> false);
+		return WhitelistedOriginsCorsAuthorizer.fromOrigins(whitelistedOrigins, (origin) -> false);
 	}
 
 	/**
@@ -113,7 +113,7 @@ public interface CorsAuthorizer {
 	 * <p>
 	 * The provided {@code allowCredentialsResolver} is used to control the value of {@code Access-Control-Allow-Credentials}: it's a function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise.
 	 * <p>
-	 * The returned {@link CorsAuthorizer} will omit the {@code Access-Control-Allow-Credentials} response header to reduce CSRF attack surface area. This behavior can be customized via {@link #withWhitelistAuthorizer(Function, Function)}.
+	 * The returned {@link CorsAuthorizer} will omit the {@code Access-Control-Allow-Credentials} response header to reduce CSRF attack surface area. This behavior can be customized via {@link #fromWhitelistAuthorizer(Function, Function)}.
 	 * <p>
 	 * Callers should not rely on reference identity; this method may return a new or cached instance.
 	 *
@@ -122,12 +122,12 @@ public interface CorsAuthorizer {
 	 * @return a {@code CorsAuthorizer} configured to accept only the specified {@code whitelistedOrigins}, with {@code allowCredentialsResolver} dictating whether credentials are allowed
 	 */
 	@NonNull
-	static CorsAuthorizer withWhitelistedOrigins(@NonNull Set<@NonNull String> whitelistedOrigins,
+	static CorsAuthorizer fromWhitelistedOrigins(@NonNull Set<@NonNull String> whitelistedOrigins,
 																							 @NonNull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(whitelistedOrigins);
 		requireNonNull(allowCredentialsResolver);
 
-		return WhitelistedOriginsCorsAuthorizer.withOrigins(whitelistedOrigins, allowCredentialsResolver);
+		return WhitelistedOriginsCorsAuthorizer.fromOrigins(whitelistedOrigins, allowCredentialsResolver);
 	}
 
 	/**
@@ -135,7 +135,7 @@ public interface CorsAuthorizer {
 	 * <p>
 	 * The {@code whitelistAuthorizer} function should return {@code true} if the supplied {@code Origin} is acceptable and {@code false} otherwise.
 	 * <p>
-	 * The returned {@link CorsAuthorizer} will omit the {@code Access-Control-Allow-Credentials} response header to reduce CSRF attack surface area. This behavior can be customized via {@link #withWhitelistAuthorizer(Function, Function)}.
+	 * The returned {@link CorsAuthorizer} will omit the {@code Access-Control-Allow-Credentials} response header to reduce CSRF attack surface area. This behavior can be customized via {@link #fromWhitelistAuthorizer(Function, Function)}.
 	 * <p>
 	 * Callers should not rely on reference identity; this method may return a new or cached instance.
 	 *
@@ -143,9 +143,9 @@ public interface CorsAuthorizer {
 	 * @return a credentials-allowed {@code CorsAuthorizer} configured to accept only the origins permitted by {@code whitelistAuthorizer}
 	 */
 	@NonNull
-	static CorsAuthorizer withWhitelistAuthorizer(@NonNull Function<String, Boolean> whitelistAuthorizer) {
+	static CorsAuthorizer fromWhitelistAuthorizer(@NonNull Function<String, Boolean> whitelistAuthorizer) {
 		requireNonNull(whitelistAuthorizer);
-		return WhitelistedOriginsCorsAuthorizer.withAuthorizer(whitelistAuthorizer, (origin) -> false);
+		return WhitelistedOriginsCorsAuthorizer.fromAuthorizer(whitelistAuthorizer, (origin) -> false);
 	}
 
 	/**
@@ -162,11 +162,11 @@ public interface CorsAuthorizer {
 	 * @return a {@code CorsAuthorizer} configured to accept only the origins permitted by {@code whitelistAuthorizer}, with {@code allowCredentialsResolver} dictating whether credentials are allowed
 	 */
 	@NonNull
-	static CorsAuthorizer withWhitelistAuthorizer(@NonNull Function<String, Boolean> whitelistAuthorizer,
-																								@NonNull Function<String, Boolean> allowCredentialsResolver) {
+	static CorsAuthorizer fromWhitelistAuthorizer(@NonNull Function<String, Boolean> whitelistAuthorizer,
+																									@NonNull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(whitelistAuthorizer);
 		requireNonNull(allowCredentialsResolver);
 
-		return WhitelistedOriginsCorsAuthorizer.withAuthorizer(whitelistAuthorizer, allowCredentialsResolver);
+		return WhitelistedOriginsCorsAuthorizer.fromAuthorizer(whitelistAuthorizer, allowCredentialsResolver);
 	}
 }

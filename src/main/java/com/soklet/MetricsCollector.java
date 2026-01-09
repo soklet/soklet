@@ -38,7 +38,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Contract for collecting operational metrics from Soklet.
  * <p>
- * Soklet's standard implementation, available via {@link #withDefaults()}, supports detailed histogram collection,
+ * Soklet's standard implementation, available via {@link #defaultInstance()}, supports detailed histogram collection,
  * connection accept/reject counters, immutable snapshots (via {@link #snapshot()}), and provides Prometheus
  * (text format v0.0.4) / OpenMetrics (1.0) export helpers for convenience.
  * To disable metrics collection without a custom implementation, use {@link #disabled()}.
@@ -50,7 +50,7 @@ import static java.util.Objects.requireNonNull;
  * <pre><code>
  * SokletConfig config = SokletConfig.withServer(Server.withPort(8080).build())
  *   // This is already the default; specifying it here is optional
- *   .metricsCollector(MetricsCollector.withDefaults())
+ *   .metricsCollector(MetricsCollector.defaultInstance())
  *   .build();
  * </code></pre>
  * <p>
@@ -602,7 +602,7 @@ public interface MetricsCollector {
 	 * Histogram values are captured as {@link HistogramSnapshot} instances.
 	 * Connection counts report total accepted/rejected connections for the HTTP and SSE servers.
 	 * Instances are typically produced by {@link MetricsCollector#snapshot()} but can also be built
-	 * manually via {@link #withDefaults()}.
+	 * manually via {@link #builder()}.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -659,7 +659,7 @@ public interface MetricsCollector {
 		 * @return the builder
 		 */
 		@NonNull
-		public static Builder withDefaults() {
+		public static Builder builder() {
 			return new Builder();
 		}
 
@@ -1675,8 +1675,8 @@ public interface MetricsCollector {
 	 * @return a {@code MetricsCollector} with default settings
 	 */
 	@NonNull
-	static MetricsCollector withDefaults() {
-		return DefaultMetricsCollector.withDefaults();
+	static MetricsCollector defaultInstance() {
+		return DefaultMetricsCollector.defaultInstance();
 	}
 
 	/**

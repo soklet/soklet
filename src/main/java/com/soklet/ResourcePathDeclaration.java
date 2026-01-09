@@ -43,7 +43,7 @@ import static java.util.stream.Collectors.toList;
 /**
  * A compile-time HTTP URL path declaration associated with an annotated <em>Resource Method</em>, such as {@code /users/{userId}}.
  * <p>
- * You may obtain instances via the {@link #withPath(String)} factory method.
+ * You may obtain instances via the {@link #fromPath(String)} factory method.
  * <p>
  * <strong>Note: this type is not normally used by Soklet applications unless they support <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Events</a> or choose to implement a custom {@link ResourceMethodResolver}.</strong>
  * <p>
@@ -108,7 +108,7 @@ public final class ResourcePathDeclaration {
 	 * @param path a compile-time path declaration that may include placeholders
 	 */
 	@NonNull
-	public static ResourcePathDeclaration withPath(@NonNull String path) {
+public static ResourcePathDeclaration fromPath(@NonNull String path) {
 		requireNonNull(path);
 		return new ResourcePathDeclaration(path);
 	}

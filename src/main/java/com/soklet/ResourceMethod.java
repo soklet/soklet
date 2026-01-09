@@ -29,7 +29,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Represents a <em>Resource Method</em>, which is a Java {@link Method} invoked by Soklet to handle an HTTP request.
  * <p>
- * Instances can be acquired via the {@link #withComponents(HttpMethod, ResourcePathDeclaration, Method, Boolean)} factory method.
+ * Instances can be acquired via the {@link #fromComponents(HttpMethod, ResourcePathDeclaration, Method, Boolean)} factory method.
  * <p>
  * Detailed documentation available at <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
  *
@@ -56,7 +56,7 @@ public final class ResourceMethod {
 	 * @return a <em>Resource Method</em> for the supplied components
 	 */
 	@NonNull
-	public static ResourceMethod withComponents(@NonNull HttpMethod httpMethod,
+public static ResourceMethod fromComponents(@NonNull HttpMethod httpMethod,
 																							@NonNull ResourcePathDeclaration resourcePathDeclaration,
 																							@NonNull Method method,
 																							@NonNull Boolean serverSentEventSource) {

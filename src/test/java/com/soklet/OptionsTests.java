@@ -34,7 +34,7 @@ public class OptionsTests {
 	@Test
 	public void options_includes_allow_header() {
 		SokletConfig cfg = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
@@ -56,7 +56,7 @@ public class OptionsTests {
 	@Test
 	public void options_excludes_head_when_no_get_or_head() {
 		SokletConfig cfg = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(PostOnlyResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(PostOnlyResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }

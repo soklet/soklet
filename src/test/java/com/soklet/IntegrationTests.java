@@ -118,10 +118,10 @@ public class IntegrationTests {
 
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(5)).build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(resourceClasses))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
-		Soklet app = Soklet.withConfig(cfg);
+		Soklet app = Soklet.fromConfig(cfg);
 		app.start();
 		return app;
 	}
@@ -191,11 +191,11 @@ public class IntegrationTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
@@ -220,11 +220,11 @@ public class IntegrationTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
@@ -251,11 +251,11 @@ public class IntegrationTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
@@ -279,11 +279,11 @@ public class IntegrationTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
@@ -308,11 +308,11 @@ public class IntegrationTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
@@ -337,11 +337,11 @@ public class IntegrationTests {
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
@@ -368,11 +368,11 @@ public class IntegrationTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.maximumConnections(1)
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(EchoResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket1 = connectWithRetry("127.0.0.1", port, 2000)) {
@@ -701,11 +701,11 @@ public class IntegrationTests {
 						.requestTimeout(Duration.ofSeconds(5))
 						.requestHandlerTimeout(Duration.ofMillis(200))
 						.build())
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(BlockingResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
@@ -749,11 +749,11 @@ public class IntegrationTests {
 						.build();
 
 		SokletConfig cfg = SokletConfig.withServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(QueueBlockingResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(QueueBlockingResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.withConfig(cfg)) {
+		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
 			ExecutorService requestExecutor = ((DefaultServer) server).getRequestHandlerExecutorService().orElse(null);

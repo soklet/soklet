@@ -67,7 +67,7 @@ public final class ServerSentEventComment {
 	 * @return the comment instance
 	 */
 	@NonNull
-	public static ServerSentEventComment withComment(@NonNull String comment) {
+public static ServerSentEventComment fromComment(@NonNull String comment) {
 		return new ServerSentEventComment(requireNonNull(comment), CommentType.COMMENT);
 	}
 

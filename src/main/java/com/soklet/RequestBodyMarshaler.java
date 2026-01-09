@@ -64,7 +64,7 @@ import static java.util.Objects.requireNonNull;
  *   }
  * }).build();}</pre>
  * <p>
- * A standard threadsafe implementation can be acquired via the {@link #withValueConverterRegistry(ValueConverterRegistry)} factory method.
+ * A standard threadsafe implementation can be acquired via the {@link #fromValueConverterRegistry(ValueConverterRegistry)} factory method.
  * <p>
  * See <a href="https://www.soklet.com/docs/request-handling#request-body">https://www.soklet.com/docs/request-handling#request-body</a> for detailed documentation.
  *
@@ -100,7 +100,7 @@ public interface RequestBodyMarshaler {
 	 * @return a default {@code RequestBodyMarshaler} backed by the given {@link ValueConverterRegistry}
 	 */
 	@NonNull
-	static RequestBodyMarshaler withValueConverterRegistry(@NonNull ValueConverterRegistry valueConverterRegistry) {
+	static RequestBodyMarshaler fromValueConverterRegistry(@NonNull ValueConverterRegistry valueConverterRegistry) {
 		requireNonNull(valueConverterRegistry);
 		return new DefaultRequestBodyMarshaler(valueConverterRegistry);
 	}

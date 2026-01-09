@@ -29,8 +29,8 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Standard threadsafe implementations can be acquired via these factory methods:
  * <ul>
- *   <li>{@link #withDefaults()}</li>
- *   <li>{@link #withPrefix(String)}</li>
+ *   <li>{@link #defaultInstance()}</li>
+ *   <li>{@link #fromPrefix(String)}</li>
  * </ul>
  *
  * @param <T> the type of identifier produced
@@ -60,8 +60,8 @@ public interface IdGenerator<T> {
 	 * @return an {@code IdGenerator} with default settings
 	 */
 	@NonNull
-	static IdGenerator<String> withDefaults() {
-		return DefaultIdGenerator.withDefaults();
+	static IdGenerator<String> defaultInstance() {
+		return DefaultIdGenerator.defaultInstance();
 	}
 
 
@@ -74,8 +74,8 @@ public interface IdGenerator<T> {
 	 * @return an {@code IdGenerator} configured with the given prefix
 	 */
 	@NonNull
-	static IdGenerator<String> withPrefix(@NonNull String prefix) {
+	static IdGenerator<String> fromPrefix(@NonNull String prefix) {
 		requireNonNull(prefix);
-		return DefaultIdGenerator.withPrefix(prefix);
+		return DefaultIdGenerator.fromPrefix(prefix);
 	}
 }

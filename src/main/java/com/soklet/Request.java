@@ -73,7 +73,7 @@ public final class Request {
 
 	static {
 		DEFAULT_CHARSET = StandardCharsets.UTF_8;
-		DEFAULT_ID_GENERATOR = DefaultIdGenerator.withDefaults();
+		DEFAULT_ID_GENERATOR = DefaultIdGenerator.defaultInstance();
 	}
 
 	@NonNull
@@ -311,7 +311,7 @@ public final class Request {
 		this.httpMethod = builderHttpMethod;
 		this.corsPreflight = this.httpMethod == HttpMethod.OPTIONS ? CorsPreflight.fromHeaders(this.headers).orElse(null) : null;
 		this.cors = this.corsPreflight == null ? Cors.fromHeaders(this.httpMethod, this.headers).orElse(null) : null;
-		this.resourcePath = this.path.equals("*") ? ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH : ResourcePath.withPath(this.path);
+		this.resourcePath = this.path.equals("*") ? ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH : ResourcePath.fromPath(this.path);
 		this.multipart = this.contentType != null && this.contentType.toLowerCase(Locale.ENGLISH).startsWith("multipart/");
 		this.contentTooLarge = builderContentTooLarge == null ? false : builderContentTooLarge;
 

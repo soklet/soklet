@@ -16,7 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.HandshakeResult.Accepted.Builder;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -77,7 +76,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Finally, broadcast to all clients who had their handshakes accepted:
  * <pre>{@code // Sometime later, acquire a broadcaster...
- * ResourcePath resourcePath = ResourcePath.withPath("/chats/123/event-source");
+ * ResourcePath resourcePath = ResourcePath.fromPath("/chats/123/event-source");
  * ServerSentEventBroadcaster broadcaster = sseServer.acquireBroadcaster(resourcePath).orElseThrow();
  *
  * // ...construct the payload...
@@ -96,6 +95,8 @@ import static java.util.Objects.requireNonNull;
 public sealed interface HandshakeResult permits HandshakeResult.Accepted, HandshakeResult.Rejected {
 	/**
 	 * Vends an instance that indicates a successful handshake, with no additional information provided.
+	 * <p>
+	 * For a customizable acceptance result, use {@link HandshakeResult.Accepted#builder()}.
 	 *
 	 * @return an instance that indicates a successful handshake
 	 */
@@ -105,15 +106,19 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	}
 
 	/**
-	 * Vends a builder for an instance that indicates a successful handshake.
+	 * Vends an instance that indicates a successful handshake with a custom client context.
 	 * <p>
-	 * The builder supports specifying optional response headers, cookies, and a post-handshake client initialization hook, which is useful to "catch up" in a {@code Last-Event-ID} handshake scenario.
+	 * This is a convenience method equivalent to {@link HandshakeResult.Accepted#builder()}
+	 * {@code .clientContext(clientContext).build()}.
 	 *
-	 * @return a builder for an instance that indicates a successful handshake
+	 * @param clientContext custom context to preserve for the lifetime of the SSE connection (may be {@code null})
+	 * @return an instance that indicates a successful handshake with the specified client context
 	 */
 	@NonNull
-	static Builder acceptWithDefaults() {
-		return new Builder();
+	static Accepted acceptWithClientContext(@Nullable Object clientContext) {
+		return Accepted.builder()
+			.clientContext(clientContext)
+			.build();
 	}
 
 	/**
@@ -131,7 +136,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	/**
 	 * Type which indicates a successful Server-Sent Event handshake.
 	 * <p>
-	 * A default, no-customization-permitted instance can be acquired via {@link #accept()} and a builder which enables customization can be acquired via {@link #acceptWithDefaults()}.
+	 * A default, no-customization-permitted instance can be acquired via {@link HandshakeResult#accept()} and a builder which enables customization can be acquired via {@link HandshakeResult.Accepted#builder()}.
 	 * <p>
 	 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events#accepting-handshakes">https://www.soklet.com/docs/server-sent-events#accepting-handshakes</a>.
 	 *
@@ -144,6 +149,18 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 
 		static {
 			DEFAULT_INSTANCE = new Builder().build();
+		}
+
+		/**
+		 * Vends a builder for an instance that indicates a successful handshake.
+		 * <p>
+		 * The builder supports specifying optional response headers, cookies, and a post-handshake client initialization hook, which is useful to "catch up" in a {@code Last-Event-ID} handshake scenario.
+		 *
+		 * @return a builder for an instance that indicates a successful handshake
+		 */
+		@NonNull
+		public static Builder builder() {
+			return new Builder();
 		}
 
 		/**

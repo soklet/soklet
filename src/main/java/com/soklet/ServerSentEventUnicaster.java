@@ -42,7 +42,7 @@ import org.jspecify.annotations.NonNull;
  *     catchupMessages.addAll(myChatService.findCatchups(chatId, lastEventId));
  *
  *   // Customize "accept" handshake with a client initializer
- *   return HandshakeResult.acceptWithDefaults()
+ *   return HandshakeResult.Accepted.builder()
  *     .clientInitializer((unicaster) -> {
  *       // Unicast "catchup" initialization events to this specific client.
  *       // The unicaster is guaranteed to write these events before any

@@ -44,8 +44,8 @@ public class RequestHandlingRegressionTests {
 	@Test
 	public void wrappedRequestIsUsedForInterceptAndResponseLogic() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(WrappedRequestResource.class)))
-				.corsAuthorizer(CorsAuthorizer.withAcceptAllPolicy())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestResource.class)))
+				.corsAuthorizer(CorsAuthorizer.fromAcceptAllPolicy())
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
 					public void wrapRequest(@NonNull ServerType serverType,
@@ -92,7 +92,7 @@ public class RequestHandlingRegressionTests {
 	@Test
 	public void responseMarshalerRespectsCaseInsensitiveContentType() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ContentTypeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ContentTypeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
@@ -114,7 +114,7 @@ public class RequestHandlingRegressionTests {
 		List<LogEvent> logEvents = new ArrayList<>();
 
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(WrappedRequestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
 					public void wrapRequest(@NonNull ServerType serverType,
@@ -147,7 +147,7 @@ public class RequestHandlingRegressionTests {
 		List<LogEvent> logEvents = new ArrayList<>();
 
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(WrappedRequestResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
 					public void interceptRequest(@NonNull ServerType serverType,
@@ -180,7 +180,7 @@ public class RequestHandlingRegressionTests {
 	@Test
 	public void wrappedRequestRewritesPathAndMethod() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(WrappedRequestRewriteResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestRewriteResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
 					public void wrapRequest(@NonNull ServerType serverType,
@@ -212,7 +212,7 @@ public class RequestHandlingRegressionTests {
 	@Test
 	public void explicitRouteBeatsPlaceholder() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(RouteSpecificityResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RouteSpecificityResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }

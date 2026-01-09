@@ -88,8 +88,8 @@ public final class ValueConverterRegistry {
 	 * @return a registry instance with sensible defaults
 	 */
 	@NonNull
-	public static ValueConverterRegistry withDefaults() {
-		return withDefaultsSupplementedBy(Set.of());
+	public static ValueConverterRegistry defaultInstance() {
+		return defaultsSupplementedBy(Set.of());
 	}
 
 	/**
@@ -101,7 +101,7 @@ public final class ValueConverterRegistry {
 	 * @return a registry instance with sensible defaults, supplemented with custom converters
 	 */
 	@NonNull
-	public static ValueConverterRegistry withDefaultsSupplementedBy(@NonNull Set<@NonNull ValueConverter<?, ?>> customValueConverters) {
+	public static ValueConverterRegistry defaultsSupplementedBy(@NonNull Set<@NonNull ValueConverter<?, ?>> customValueConverters) {
 		requireNonNull(customValueConverters);
 
 		Set<@NonNull ValueConverter<?, ?>> defaultValueConverters = ValueConverters.defaultValueConverters();
@@ -138,8 +138,8 @@ public final class ValueConverterRegistry {
 	 * @return a registry instance without defaults or automatic conversions
 	 */
 	@NonNull
-	public static ValueConverterRegistry withBlankSlate() {
-		return withBlankSlateSupplementedBy(Set.of());
+	public static ValueConverterRegistry blankSlate() {
+		return blankSlateSupplementedBy(Set.of());
 	}
 
 	/**
@@ -151,7 +151,7 @@ public final class ValueConverterRegistry {
 	 * @return a registry instance without defaults or automatic conversions, supplemented with custom converters
 	 */
 	@NonNull
-	public static ValueConverterRegistry withBlankSlateSupplementedBy(@NonNull Set<@NonNull ValueConverter<?, ?>> customValueConverters) {
+	public static ValueConverterRegistry blankSlateSupplementedBy(@NonNull Set<@NonNull ValueConverter<?, ?>> customValueConverters) {
 		requireNonNull(customValueConverters);
 
 		ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey = new ConcurrentHashMap<>(

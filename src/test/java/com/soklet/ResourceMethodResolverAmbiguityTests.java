@@ -34,7 +34,7 @@ public class ResourceMethodResolverAmbiguityTests {
 	@Test
 	public void ambiguousRoutesFailFast() {
 		IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
-			ResourceMethodResolver.withClasses(Set.of(AmbiguousRouteResource.class));
+			ResourceMethodResolver.fromClasses(Set.of(AmbiguousRouteResource.class));
 		});
 
 		assertTrue(exception.getMessage().toLowerCase().contains("ambiguous"),

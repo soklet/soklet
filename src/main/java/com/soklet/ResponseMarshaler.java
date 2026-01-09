@@ -32,13 +32,13 @@ import static java.util.Objects.requireNonNull;
  * The {@link MarshaledResponse} value returned from these methods is what is ultimately sent back to
  * clients as bytes over the wire.
  * <p>
- * A standard threadsafe implementation builder can be acquired via {@link #withDefaults()} or {@link #withCharset(Charset)} builder factory methods.
+ * A standard threadsafe implementation builder can be acquired via {@link #builder()} or {@link #withCharset(Charset)}.
  * This builder allows you to specify, for example, how to turn a <em>Resource Method</em> response object into a wire format (e.g. JSON) and is generally what you want.
  * <p>
  * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
  * This is generally not needed unless your implementation requires dynamic "fall back to default" behavior that is not otherwise accessible.
  * <p>
- * Example implementation using {@link #withDefaults()}:
+ * Example implementation using {@link #builder()}:
  * <pre>{@code // Let's use Gson to write response body data
  * // See https://github.com/google/gson
  * final Gson GSON = new Gson();
@@ -120,7 +120,7 @@ import static java.util.Objects.requireNonNull;
  * // Supply our custom handlers to the standard response marshaler
  * SokletConfig config = SokletConfig.withServer(
  *   Server.withPort(8080).build()
- * ).responseMarshaler(ResponseMarshaler.withDefaults()
+ * ).responseMarshaler(ResponseMarshaler.builder()
  *   .resourceMethodHandler(resourceMethodHandler)
  *   .throwableHandler(throwableHandler)
  *   .build()
@@ -327,7 +327,7 @@ public interface ResponseMarshaler {
 	 * @return a {@code ResponseMarshaler} builder
 	 */
 	@NonNull
-	static Builder withDefaults() {
+	static Builder builder() {
 		return new Builder(StandardCharsets.UTF_8);
 	}
 

@@ -51,10 +51,10 @@ public class SseLastEventIdTests {
 
 		SokletConfig config = SokletConfig.withServer(Server.withPort(port).build())
 				.serverSentEventServer(serverSentEventServer)
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(SseResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.withConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -99,7 +99,7 @@ public class SseLastEventIdTests {
 					throw new RuntimeException(e);
 				}
 
-				ServerSentEventBroadcaster broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.withPath("/sse/abc")).get();
+				ServerSentEventBroadcaster broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.fromPath("/sse/abc")).get();
 				broadcaster.broadcastEvent(ServerSentEvent.withData("lastEventId=" + last).build());
 			}).start();
 

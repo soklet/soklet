@@ -43,7 +43,7 @@ public class SokletProcessorTests {
 						public class Ok {
 							@ServerSentEventSource("/widgets/{id}")
 							public HandshakeResult sse(@NonNull @PathParameter(name="id") Integer id) {
-								return HandshakeResult.acceptWithDefaults().build();
+								return HandshakeResult.Accepted.builder().build();
 							}
 						}
 						""");
@@ -130,7 +130,7 @@ public class SokletProcessorTests {
 						
 						public class MissingParam {
 							@ServerSentEventSource("/widgets/{id}")
-							public HandshakeResult sse() { return HandshakeResult.acceptWithDefaults().build(); }
+							public HandshakeResult sse() { return HandshakeResult.Accepted.builder().build(); }
 						}
 						""");
 

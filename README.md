@@ -142,7 +142,7 @@ public class App {
       Server.withPort(8080).build()
     ).build();
 
-    try (Soklet soklet = Soklet.withConfig(config)) {
+    try (Soklet soklet = Soklet.fromConfig(config)) {
       soklet.start();
       System.out.println("Soklet started, press [enter] to exit");
       soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
@@ -461,7 +461,7 @@ ThrowableHandler throwableHandler = (
 // Supply our custom handlers to the standard response marshaler
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
-).responseMarshaler(ResponseMarshaler.withDefaults()
+).responseMarshaler(ResponseMarshaler.builder()
   .resourceMethod(resourceMethodHandler)
   .throwable(throwableHandler)
   .build()
@@ -523,7 +523,7 @@ public record ChatMessage(String message) {}
 public class ChatResource {
   @ServerSentEventSource("/chat")
   public HandshakeResult chat() {
-    return HandshakeResult.acceptWithDefaults()
+    return HandshakeResult.Accepted.builder()
       .clientInitializer(unicaster -> {
         unicaster.unicastEvent(ServerSentEvent.withEvent("hello")
           .data("welcome")
@@ -536,7 +536,7 @@ public class ChatResource {
   public void postMessage(@RequestBody ChatMessage message,
                           @NonNull ServerSentEventServer sseServer) {
     ServerSentEventBroadcaster broadcaster = sseServer
-      .acquireBroadcaster(ResourcePath.withPath("/chat"))
+      .acquireBroadcaster(ResourcePath.fromPath("/chat"))
       .orElseThrow();
 
     broadcaster.broadcastEvent(ServerSentEvent.withEvent("message")
@@ -554,7 +554,7 @@ SokletConfig config = SokletConfig.withServer(
 ).serverSentEventServer(
   ServerSentEventServer.withPort(8081).build()
 ).resourceMethodResolver(
-  ResourceMethodResolver.withClasses(Set.of(ChatResource.class))
+  ResourceMethodResolver.fromClasses(Set.of(ChatResource.class))
 ).build();
 ```
 
@@ -569,7 +569,7 @@ import org.junit.Test;
 public void sseTest() {
   SokletConfig config = SokletConfig.forSimulatorTesting()
     .serverSentEventServer(ServerSentEventServer.withPort(0).build())
-    .resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ChatResource.class)))
+    .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ChatResource.class)))
     .build();
 
   List<ServerSentEvent> events = new ArrayList<>();
@@ -582,7 +582,7 @@ public void sseTest() {
       accepted.registerEventConsumer(events::add);
 
       ServerSentEventBroadcaster broadcaster = config.getServerSentEventServer().orElseThrow()
-        .acquireBroadcaster(ResourcePath.withPath("/chat")).orElseThrow();
+        .acquireBroadcaster(ResourcePath.fromPath("/chat")).orElseThrow();
       broadcaster.broadcastEvent(ServerSentEvent.withEvent("message")
         .data("hello")
         .build());
@@ -1002,7 +1002,7 @@ Authorize Whitelisted Origins:
 Set<String> allowedOrigins = Set.of("https://www.revetware.com");
 
 SokletConfig config = SokletConfig.withServer(server)
-  .corsAuthorizer(WhitelistedOriginsCorsAuthorizer.withOrigins(allowedOrigins))
+  .corsAuthorizer(WhitelistedOriginsCorsAuthorizer.fromOrigins(allowedOrigins))
   .build();
 ```
 
@@ -1010,7 +1010,7 @@ SokletConfig config = SokletConfig.withServer(server)
 
 ```java
 SokletConfig config = SokletConfig.withServer(server)
-  .corsAuthorizer(WhitelistedOriginsCorsAuthorizer.withAuthorizer(
+  .corsAuthorizer(WhitelistedOriginsCorsAuthorizer.fromAuthorizer(
     (origin) -> origin.equals("https://www.revetware.com")
   ))
   .build();
@@ -1221,7 +1221,7 @@ collector is enabled automatically, but you can replace or disable it:
 SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
 ).metricsCollector(
-  MetricsCollector.withDefaults()
+  MetricsCollector.defaultInstance()
   // or MetricsCollector.disabled()
 ).build();
 ```

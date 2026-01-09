@@ -33,7 +33,7 @@ public class ResponseErrorMappingTests {
 	@Test
 	public void runtime_exception_maps_to_500() {
 		SokletConfig cfg = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ExplodeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
@@ -49,7 +49,7 @@ public class ResponseErrorMappingTests {
 	@Test
 	public void bad_request_exception_maps_to_400() {
 		SokletConfig cfg = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ExplodeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
@@ -65,7 +65,7 @@ public class ResponseErrorMappingTests {
 	@Test
 	public void bodyless_response_with_body_maps_to_500() {
 		SokletConfig cfg = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(ExplodeResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }

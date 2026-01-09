@@ -51,7 +51,7 @@ public class MultipartEdgeCaseTests {
 	@Test
 	public void missing_required_field_yields_400() {
 		SokletConfig cfg = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(UploadResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
@@ -75,7 +75,7 @@ public class MultipartEdgeCaseTests {
 	@Test
 	public void missing_optional_field_is_ok() {
 		SokletConfig cfg = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(UploadResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
@@ -99,7 +99,7 @@ public class MultipartEdgeCaseTests {
 	@Test
 	public void comma_in_boundary_is_accepted() {
 		SokletConfig cfg = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.withClasses(Set.of(UploadResource.class)))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(UploadResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }

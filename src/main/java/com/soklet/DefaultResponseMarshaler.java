@@ -62,7 +62,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	private static final DefaultResponseMarshaler DEFAULT_INSTANCE;
 
 	static {
-		DEFAULT_INSTANCE = new DefaultResponseMarshaler(ResponseMarshaler.withCharset(StandardCharsets.UTF_8));
+		DEFAULT_INSTANCE = new DefaultResponseMarshaler(ResponseMarshaler.builder());
 	}
 
 	@NonNull

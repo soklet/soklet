@@ -37,7 +37,7 @@ import static java.util.Objects.requireNonNull;
  *   Server.withPort(8080).build()
  * ).build();
  *
- * try (Soklet soklet = Soklet.withConfig(config)) {
+ * try (Soklet soklet = Soklet.fromConfig(config)) {
  *   soklet.start();
  *   System.out.println("Soklet started, press [enter] to exit");
  *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
