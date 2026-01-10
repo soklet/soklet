@@ -456,12 +456,12 @@ public interface MetricsCollector {
 	 *
 	 * @param route     the route declaration that was broadcast to
 	 * @param attempted number of connections targeted
-	 * @param delivered number of connections for which enqueue succeeded
+	 * @param enqueued  number of connections for which enqueue succeeded
 	 * @param dropped   number of connections for which enqueue failed
 	 */
 	default void didBroadcastServerSentEvent(@NonNull ResourcePathDeclaration route,
 																				 int attempted,
-																				 int delivered,
+																				 int enqueued,
 																				 int dropped) {
 		// No-op by default
 	}
@@ -472,13 +472,13 @@ public interface MetricsCollector {
 	 * @param route       the route declaration that was broadcast to
 	 * @param commentType the comment type
 	 * @param attempted   number of connections targeted
-	 * @param delivered   number of connections for which enqueue succeeded
+	 * @param enqueued    number of connections for which enqueue succeeded
 	 * @param dropped     number of connections for which enqueue failed
 	 */
 	default void didBroadcastServerSentEventComment(@NonNull ResourcePathDeclaration route,
 																									ServerSentEventComment.@NonNull CommentType commentType,
 																									int attempted,
-																									int delivered,
+																									int enqueued,
 																									int dropped) {
 		// No-op by default
 	}
@@ -796,9 +796,9 @@ public interface MetricsCollector {
 		@NonNull
 		private final Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteBroadcastOutcomeKey, @NonNull Long> sseEventBroadcastOutcomes;
+		private final Map<@NonNull ServerSentEventRouteEnqueueOutcomeKey, @NonNull Long> sseEventEnqueueOutcomes;
 		@NonNull
-		private final Map<@NonNull ServerSentEventCommentRouteBroadcastOutcomeKey, @NonNull Long> sseCommentBroadcastOutcomes;
+		private final Map<@NonNull ServerSentEventCommentRouteEnqueueOutcomeKey, @NonNull Long> sseCommentEnqueueOutcomes;
 		@NonNull
 		private final Map<@NonNull ServerSentEventRouteDropKey, @NonNull Long> sseEventDrops;
 		@NonNull
@@ -852,8 +852,8 @@ public interface MetricsCollector {
 			this.httpResponseBodyBytes = copyOrEmpty(builder.httpResponseBodyBytes);
 			this.sseHandshakesAccepted = copyOrEmpty(builder.sseHandshakesAccepted);
 			this.sseHandshakesRejected = copyOrEmpty(builder.sseHandshakesRejected);
-			this.sseEventBroadcastOutcomes = copyOrEmpty(builder.sseEventBroadcastOutcomes);
-			this.sseCommentBroadcastOutcomes = copyOrEmpty(builder.sseCommentBroadcastOutcomes);
+			this.sseEventEnqueueOutcomes = copyOrEmpty(builder.sseEventEnqueueOutcomes);
+			this.sseCommentEnqueueOutcomes = copyOrEmpty(builder.sseCommentEnqueueOutcomes);
 			this.sseEventDrops = copyOrEmpty(builder.sseEventDrops);
 			this.sseCommentDrops = copyOrEmpty(builder.sseCommentDrops);
 			this.sseTimeToFirstEvent = copyOrEmpty(builder.sseTimeToFirstEvent);
@@ -1038,23 +1038,23 @@ public interface MetricsCollector {
 		}
 
 		/**
-		 * Returns SSE event broadcast outcome counters keyed by route and outcome.
+		 * Returns SSE event enqueue outcome counters keyed by route and outcome.
 		 *
-		 * @return SSE event broadcast outcome counters
+		 * @return SSE event enqueue outcome counters
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteBroadcastOutcomeKey, @NonNull Long> getSseEventBroadcastOutcomes() {
-			return this.sseEventBroadcastOutcomes;
+		public Map<@NonNull ServerSentEventRouteEnqueueOutcomeKey, @NonNull Long> getSseEventEnqueueOutcomes() {
+			return this.sseEventEnqueueOutcomes;
 		}
 
 		/**
-		 * Returns SSE comment broadcast outcome counters keyed by route, comment type, and outcome.
+		 * Returns SSE comment enqueue outcome counters keyed by route, comment type, and outcome.
 		 *
-		 * @return SSE comment broadcast outcome counters
+		 * @return SSE comment enqueue outcome counters
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventCommentRouteBroadcastOutcomeKey, @NonNull Long> getSseCommentBroadcastOutcomes() {
-			return this.sseCommentBroadcastOutcomes;
+		public Map<@NonNull ServerSentEventCommentRouteEnqueueOutcomeKey, @NonNull Long> getSseCommentEnqueueOutcomes() {
+			return this.sseCommentEnqueueOutcomes;
 		}
 
 		/**
@@ -1216,9 +1216,9 @@ public interface MetricsCollector {
 			@Nullable
 			private Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteBroadcastOutcomeKey, @NonNull Long> sseEventBroadcastOutcomes;
+			private Map<@NonNull ServerSentEventRouteEnqueueOutcomeKey, @NonNull Long> sseEventEnqueueOutcomes;
 			@Nullable
-			private Map<@NonNull ServerSentEventCommentRouteBroadcastOutcomeKey, @NonNull Long> sseCommentBroadcastOutcomes;
+			private Map<@NonNull ServerSentEventCommentRouteEnqueueOutcomeKey, @NonNull Long> sseCommentEnqueueOutcomes;
 			@Nullable
 			private Map<@NonNull ServerSentEventRouteDropKey, @NonNull Long> sseEventDrops;
 			@Nullable
@@ -1467,28 +1467,28 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE event broadcast outcome counters keyed by route and outcome.
+			 * Sets SSE event enqueue outcome counters keyed by route and outcome.
 			 *
-			 * @param sseEventBroadcastOutcomes the SSE event broadcast outcome counters
+			 * @param sseEventEnqueueOutcomes the SSE event enqueue outcome counters
 			 * @return this builder
 			 */
 			@NonNull
-			public Builder sseEventBroadcastOutcomes(
-					@Nullable Map<@NonNull ServerSentEventRouteBroadcastOutcomeKey, @NonNull Long> sseEventBroadcastOutcomes) {
-				this.sseEventBroadcastOutcomes = sseEventBroadcastOutcomes;
+			public Builder sseEventEnqueueOutcomes(
+					@Nullable Map<@NonNull ServerSentEventRouteEnqueueOutcomeKey, @NonNull Long> sseEventEnqueueOutcomes) {
+				this.sseEventEnqueueOutcomes = sseEventEnqueueOutcomes;
 				return this;
 			}
 
 			/**
-			 * Sets SSE comment broadcast outcome counters keyed by route, comment type, and outcome.
+			 * Sets SSE comment enqueue outcome counters keyed by route, comment type, and outcome.
 			 *
-			 * @param sseCommentBroadcastOutcomes the SSE comment broadcast outcome counters
+			 * @param sseCommentEnqueueOutcomes the SSE comment enqueue outcome counters
 			 * @return this builder
 			 */
 			@NonNull
-			public Builder sseCommentBroadcastOutcomes(
-					@Nullable Map<@NonNull ServerSentEventCommentRouteBroadcastOutcomeKey, @NonNull Long> sseCommentBroadcastOutcomes) {
-				this.sseCommentBroadcastOutcomes = sseCommentBroadcastOutcomes;
+			public Builder sseCommentEnqueueOutcomes(
+					@Nullable Map<@NonNull ServerSentEventCommentRouteEnqueueOutcomeKey, @NonNull Long> sseCommentEnqueueOutcomes) {
+				this.sseCommentEnqueueOutcomes = sseCommentEnqueueOutcomes;
 				return this;
 			}
 
@@ -1937,21 +1937,21 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Outcomes for a Server-Sent Event broadcast attempt.
+	 * Outcomes for a Server-Sent Event enqueue attempt.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	enum ServerSentEventBroadcastOutcome {
+	enum ServerSentEventEnqueueOutcome {
 		/**
-		 * A broadcast attempt to a connection was made.
+		 * An enqueue attempt to a connection was made.
 		 */
 		ATTEMPTED,
 		/**
-		 * A broadcast was successfully enqueued for delivery.
+		 * An enqueue attempt succeeded.
 		 */
-		DELIVERED,
+		ENQUEUED,
 		/**
-		 * A broadcast was dropped before it could be enqueued for delivery.
+		 * An enqueue attempt failed because the payload was dropped.
 		 */
 		DROPPED
 	}
@@ -2081,14 +2081,14 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Key for metrics grouped by Server-Sent Event route match information and broadcast outcome.
+	 * Key for metrics grouped by Server-Sent Event route match information and enqueue outcome.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventRouteBroadcastOutcomeKey(@NonNull RouteType routeType,
+	record ServerSentEventRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
 																								 @Nullable ResourcePathDeclaration route,
-																								 @NonNull ServerSentEventBroadcastOutcome outcome) {
-		public ServerSentEventRouteBroadcastOutcomeKey {
+																								 @NonNull ServerSentEventEnqueueOutcome outcome) {
+		public ServerSentEventRouteEnqueueOutcomeKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
 				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
@@ -2099,15 +2099,15 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Key for metrics grouped by Server-Sent Event comment type, route match information, and broadcast outcome.
+	 * Key for metrics grouped by Server-Sent Event comment type, route match information, and enqueue outcome.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventCommentRouteBroadcastOutcomeKey(@NonNull RouteType routeType,
+	record ServerSentEventCommentRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
 																											 @Nullable ResourcePathDeclaration route,
 																											 ServerSentEventComment.@NonNull CommentType commentType,
-																											 @NonNull ServerSentEventBroadcastOutcome outcome) {
-		public ServerSentEventCommentRouteBroadcastOutcomeKey {
+																											 @NonNull ServerSentEventEnqueueOutcome outcome) {
+		public ServerSentEventCommentRouteEnqueueOutcomeKey {
 			requireNonNull(routeType);
 			requireNonNull(commentType);
 			if (routeType == RouteType.MATCHED && route == null)

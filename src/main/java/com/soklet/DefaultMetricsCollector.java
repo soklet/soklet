@@ -19,11 +19,11 @@ package com.soklet;
 import com.soklet.MetricsCollector.HistogramSnapshot;
 import com.soklet.MetricsCollector.RequestReadFailureKey;
 import com.soklet.MetricsCollector.RequestRejectionKey;
-import com.soklet.MetricsCollector.ServerSentEventBroadcastOutcome;
-import com.soklet.MetricsCollector.ServerSentEventCommentRouteBroadcastOutcomeKey;
+import com.soklet.MetricsCollector.ServerSentEventEnqueueOutcome;
+import com.soklet.MetricsCollector.ServerSentEventCommentRouteEnqueueOutcomeKey;
 import com.soklet.MetricsCollector.ServerSentEventCommentRouteDropKey;
 import com.soklet.MetricsCollector.ServerSentEventDropReason;
-import com.soklet.MetricsCollector.ServerSentEventRouteBroadcastOutcomeKey;
+import com.soklet.MetricsCollector.ServerSentEventRouteEnqueueOutcomeKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteDropKey;
 import com.soklet.MetricsCollector.Snapshot;
 import org.jspecify.annotations.NonNull;
@@ -90,8 +90,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final ConcurrentHashMap<IdentityKey<ServerSentEventConnection>, SseConnectionState> sseConnectionsByIdentity;
 	private final ConcurrentHashMap<ServerSentEventRouteKey, LongAdder> sseHandshakesAcceptedByRoute;
 	private final ConcurrentHashMap<ServerSentEventRouteHandshakeFailureKey, LongAdder> sseHandshakesRejectedByRouteAndReason;
-	private final ConcurrentHashMap<ServerSentEventRouteBroadcastOutcomeKey, LongAdder> sseEventBroadcastOutcomesByRoute;
-	private final ConcurrentHashMap<ServerSentEventCommentRouteBroadcastOutcomeKey, LongAdder> sseCommentBroadcastOutcomesByRoute;
+	private final ConcurrentHashMap<ServerSentEventRouteEnqueueOutcomeKey, LongAdder> sseEventEnqueueOutcomesByRoute;
+	private final ConcurrentHashMap<ServerSentEventCommentRouteEnqueueOutcomeKey, LongAdder> sseCommentEnqueueOutcomesByRoute;
 	private final ConcurrentHashMap<ServerSentEventRouteDropKey, LongAdder> sseEventDropsByRouteAndReason;
 	private final ConcurrentHashMap<ServerSentEventCommentRouteDropKey, LongAdder> sseCommentDropsByRouteAndReason;
 	private final ConcurrentHashMap<ServerSentEventRouteKey, Histogram> sseTimeToFirstEventByRoute;
@@ -131,8 +131,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.sseConnectionsByIdentity = new ConcurrentHashMap<>();
 		this.sseHandshakesAcceptedByRoute = new ConcurrentHashMap<>();
 		this.sseHandshakesRejectedByRouteAndReason = new ConcurrentHashMap<>();
-		this.sseEventBroadcastOutcomesByRoute = new ConcurrentHashMap<>();
-		this.sseCommentBroadcastOutcomesByRoute = new ConcurrentHashMap<>();
+		this.sseEventEnqueueOutcomesByRoute = new ConcurrentHashMap<>();
+		this.sseCommentEnqueueOutcomesByRoute = new ConcurrentHashMap<>();
 		this.sseEventDropsByRouteAndReason = new ConcurrentHashMap<>();
 		this.sseCommentDropsByRouteAndReason = new ConcurrentHashMap<>();
 		this.sseTimeToFirstEventByRoute = new ConcurrentHashMap<>();
@@ -582,25 +582,25 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	public void didBroadcastServerSentEvent(@NonNull ResourcePathDeclaration route,
 																					int attempted,
-																					int delivered,
+																					int enqueued,
 																					int dropped) {
 		requireNonNull(route);
 
 		if (attempted > 0) {
-			counterFor(this.sseEventBroadcastOutcomesByRoute,
-					new ServerSentEventRouteBroadcastOutcomeKey(RouteType.MATCHED, route, ServerSentEventBroadcastOutcome.ATTEMPTED))
+			counterFor(this.sseEventEnqueueOutcomesByRoute,
+					new ServerSentEventRouteEnqueueOutcomeKey(RouteType.MATCHED, route, ServerSentEventEnqueueOutcome.ATTEMPTED))
 					.add(attempted);
 		}
 
-		if (delivered > 0) {
-			counterFor(this.sseEventBroadcastOutcomesByRoute,
-					new ServerSentEventRouteBroadcastOutcomeKey(RouteType.MATCHED, route, ServerSentEventBroadcastOutcome.DELIVERED))
-					.add(delivered);
+		if (enqueued > 0) {
+			counterFor(this.sseEventEnqueueOutcomesByRoute,
+					new ServerSentEventRouteEnqueueOutcomeKey(RouteType.MATCHED, route, ServerSentEventEnqueueOutcome.ENQUEUED))
+					.add(enqueued);
 		}
 
 		if (dropped > 0) {
-			counterFor(this.sseEventBroadcastOutcomesByRoute,
-					new ServerSentEventRouteBroadcastOutcomeKey(RouteType.MATCHED, route, ServerSentEventBroadcastOutcome.DROPPED))
+			counterFor(this.sseEventEnqueueOutcomesByRoute,
+					new ServerSentEventRouteEnqueueOutcomeKey(RouteType.MATCHED, route, ServerSentEventEnqueueOutcome.DROPPED))
 					.add(dropped);
 		}
 	}
@@ -609,26 +609,26 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	public void didBroadcastServerSentEventComment(@NonNull ResourcePathDeclaration route,
 																									ServerSentEventComment.@NonNull CommentType commentType,
 																									int attempted,
-																									int delivered,
+																									int enqueued,
 																									int dropped) {
 		requireNonNull(route);
 		requireNonNull(commentType);
 
 		if (attempted > 0) {
-			counterFor(this.sseCommentBroadcastOutcomesByRoute,
-					new ServerSentEventCommentRouteBroadcastOutcomeKey(RouteType.MATCHED, route, commentType, ServerSentEventBroadcastOutcome.ATTEMPTED))
+			counterFor(this.sseCommentEnqueueOutcomesByRoute,
+					new ServerSentEventCommentRouteEnqueueOutcomeKey(RouteType.MATCHED, route, commentType, ServerSentEventEnqueueOutcome.ATTEMPTED))
 					.add(attempted);
 		}
 
-		if (delivered > 0) {
-			counterFor(this.sseCommentBroadcastOutcomesByRoute,
-					new ServerSentEventCommentRouteBroadcastOutcomeKey(RouteType.MATCHED, route, commentType, ServerSentEventBroadcastOutcome.DELIVERED))
-					.add(delivered);
+		if (enqueued > 0) {
+			counterFor(this.sseCommentEnqueueOutcomesByRoute,
+					new ServerSentEventCommentRouteEnqueueOutcomeKey(RouteType.MATCHED, route, commentType, ServerSentEventEnqueueOutcome.ENQUEUED))
+					.add(enqueued);
 		}
 
 		if (dropped > 0) {
-			counterFor(this.sseCommentBroadcastOutcomesByRoute,
-					new ServerSentEventCommentRouteBroadcastOutcomeKey(RouteType.MATCHED, route, commentType, ServerSentEventBroadcastOutcome.DROPPED))
+			counterFor(this.sseCommentEnqueueOutcomesByRoute,
+					new ServerSentEventCommentRouteEnqueueOutcomeKey(RouteType.MATCHED, route, commentType, ServerSentEventEnqueueOutcome.DROPPED))
 					.add(dropped);
 		}
 	}
@@ -670,8 +670,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.sseRequestRejections(snapshotSseRequestRejections())
 				.sseHandshakesAccepted(snapshotSseHandshakesAccepted())
 				.sseHandshakesRejected(snapshotSseHandshakesRejected())
-				.sseEventBroadcastOutcomes(snapshotSseEventBroadcastOutcomes())
-				.sseCommentBroadcastOutcomes(snapshotSseCommentBroadcastOutcomes())
+				.sseEventEnqueueOutcomes(snapshotSseEventEnqueueOutcomes())
+				.sseCommentEnqueueOutcomes(snapshotSseCommentEnqueueOutcomes())
 				.sseEventDrops(snapshotSseEventDrops())
 				.sseCommentDrops(snapshotSseCommentDrops())
 				.httpRequestDurations(snapshotHttpRequestDurations())
@@ -740,10 +740,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 					snapshot.getSseHandshakesAccepted(), DefaultMetricsCollector::labelsForSseRouteKey, options);
 			appendCounter(sb, "soklet_sse_handshakes_rejected_total", "Total rejected SSE handshakes",
 					snapshot.getSseHandshakesRejected(), DefaultMetricsCollector::labelsForSseHandshakeFailureKey, options);
-			appendCounter(sb, "soklet_sse_event_broadcasts_total", "Total SSE event broadcast outcomes",
-					snapshot.getSseEventBroadcastOutcomes(), DefaultMetricsCollector::labelsForSseBroadcastOutcomeKey, options);
-			appendCounter(sb, "soklet_sse_comment_broadcasts_total", "Total SSE comment broadcast outcomes",
-					snapshot.getSseCommentBroadcastOutcomes(), DefaultMetricsCollector::labelsForSseCommentBroadcastOutcomeKey, options);
+			appendCounter(sb, "soklet_sse_event_broadcasts_total", "Total SSE event enqueue outcomes",
+					snapshot.getSseEventEnqueueOutcomes(), DefaultMetricsCollector::labelsForSseEnqueueOutcomeKey, options);
+			appendCounter(sb, "soklet_sse_comment_broadcasts_total", "Total SSE comment enqueue outcomes",
+					snapshot.getSseCommentEnqueueOutcomes(), DefaultMetricsCollector::labelsForSseCommentEnqueueOutcomeKey, options);
 			appendCounter(sb, "soklet_sse_events_dropped_total", "Total SSE events dropped before enqueue",
 					snapshot.getSseEventDrops(), DefaultMetricsCollector::labelsForSseDropKey, options);
 			appendCounter(sb, "soklet_sse_comments_dropped_total", "Total SSE comments dropped before enqueue",
@@ -897,13 +897,13 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventRouteBroadcastOutcomeKey, @NonNull Long> snapshotSseEventBroadcastOutcomes() {
-		return snapshotCounterMap(this.sseEventBroadcastOutcomesByRoute);
+	Map<@NonNull ServerSentEventRouteEnqueueOutcomeKey, @NonNull Long> snapshotSseEventEnqueueOutcomes() {
+		return snapshotCounterMap(this.sseEventEnqueueOutcomesByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerSentEventCommentRouteBroadcastOutcomeKey, @NonNull Long> snapshotSseCommentBroadcastOutcomes() {
-		return snapshotCounterMap(this.sseCommentBroadcastOutcomesByRoute);
+	Map<@NonNull ServerSentEventCommentRouteEnqueueOutcomeKey, @NonNull Long> snapshotSseCommentEnqueueOutcomes() {
+		return snapshotCounterMap(this.sseCommentEnqueueOutcomesByRoute);
 	}
 
 	@NonNull
@@ -938,8 +938,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		resetCounterMap(this.sseRequestRejectionsByReason);
 		resetCounterMap(this.sseHandshakesAcceptedByRoute);
 		resetCounterMap(this.sseHandshakesRejectedByRouteAndReason);
-		resetCounterMap(this.sseEventBroadcastOutcomesByRoute);
-		resetCounterMap(this.sseCommentBroadcastOutcomesByRoute);
+		resetCounterMap(this.sseEventEnqueueOutcomesByRoute);
+		resetCounterMap(this.sseCommentEnqueueOutcomesByRoute);
 		resetCounterMap(this.sseEventDropsByRouteAndReason);
 		resetCounterMap(this.sseCommentDropsByRouteAndReason);
 		resetMap(this.httpRequestDurationByRouteStatus);
@@ -1325,7 +1325,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static LabelSet labelsForSseBroadcastOutcomeKey(@NonNull ServerSentEventRouteBroadcastOutcomeKey key) {
+	private static LabelSet labelsForSseEnqueueOutcomeKey(@NonNull ServerSentEventRouteEnqueueOutcomeKey key) {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
@@ -1335,7 +1335,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static LabelSet labelsForSseCommentBroadcastOutcomeKey(@NonNull ServerSentEventCommentRouteBroadcastOutcomeKey key) {
+	private static LabelSet labelsForSseCommentEnqueueOutcomeKey(@NonNull ServerSentEventCommentRouteEnqueueOutcomeKey key) {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(3);

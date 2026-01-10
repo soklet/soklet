@@ -386,18 +386,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			int attempted = 0;
-			int delivered = 0;
+			int enqueued = 0;
 			int dropped = 0;
 
 			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections()) {
 				attempted++;
 				if (enqueuePreSerializedEvent(this, serverSentEventConnection, preSerializedEvent, getBackpressureHandler()))
-					delivered++;
+					enqueued++;
 				else
 					dropped++;
 			}
 
-			recordBroadcastOutcome(attempted, delivered, dropped, null);
+			recordBroadcastOutcome(attempted, enqueued, dropped, null);
 		}
 
 		@Override
@@ -407,18 +407,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			int attempted = 0;
-			int delivered = 0;
+			int enqueued = 0;
 			int dropped = 0;
 
 			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections()) {
 				attempted++;
 				if (enqueueComment(this, serverSentEventConnection, serverSentEventComment, getBackpressureHandler()))
-					delivered++;
+					enqueued++;
 				else
 					dropped++;
 			}
 
-			recordBroadcastOutcome(attempted, delivered, dropped, serverSentEventComment.getCommentType());
+			recordBroadcastOutcome(attempted, enqueued, dropped, serverSentEventComment.getCommentType());
 		}
 
 		@Override
@@ -429,7 +429,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			Map<T, DefaultServerSentEventConnection.PreSerializedEvent> payloadCache = new HashMap<>();
 			int attempted = 0;
-			int delivered = 0;
+			int enqueued = 0;
 			int dropped = 0;
 
 			for (DefaultServerSentEventConnection connection : getServerSentEventConnections()) {
@@ -444,7 +444,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							payloadCache.computeIfAbsent(key, (cacheKey) -> preSerializeServerSentEvent(eventProvider.apply(cacheKey)));
 					attempted++;
 					if (enqueuePreSerializedEvent(this, connection, preSerializedEvent, getBackpressureHandler()))
-						delivered++;
+						enqueued++;
 					else
 						dropped++;
 				} catch (Throwable t) {
@@ -456,7 +456,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 			}
 
-			recordBroadcastOutcome(attempted, delivered, dropped, null);
+			recordBroadcastOutcome(attempted, enqueued, dropped, null);
 		}
 
 		@Override
@@ -539,10 +539,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		private void recordBroadcastOutcome(int attempted,
-																			 int delivered,
-																			 int dropped,
-																			 ServerSentEventComment.@Nullable CommentType commentType) {
-			if (attempted == 0 && delivered == 0 && dropped == 0)
+																		 int enqueued,
+																		 int dropped,
+																		 ServerSentEventComment.@Nullable CommentType commentType) {
+			if (attempted == 0 && enqueued == 0 && dropped == 0)
 				return;
 
 			ResourcePathDeclaration route = getResourceMethod().getResourcePathDeclaration();
@@ -551,11 +551,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			if (commentTypeSnapshot == null) {
 				safelyCollectMetrics(
 						format("An exception occurred while invoking %s::didBroadcastServerSentEvent", MetricsCollector.class.getSimpleName()),
-						(metricsCollector) -> metricsCollector.didBroadcastServerSentEvent(route, attempted, delivered, dropped));
+						(metricsCollector) -> metricsCollector.didBroadcastServerSentEvent(route, attempted, enqueued, dropped));
 			} else {
 				safelyCollectMetrics(
 						format("An exception occurred while invoking %s::didBroadcastServerSentEventComment", MetricsCollector.class.getSimpleName()),
-						(metricsCollector) -> metricsCollector.didBroadcastServerSentEventComment(route, commentTypeSnapshot, attempted, delivered, dropped));
+						(metricsCollector) -> metricsCollector.didBroadcastServerSentEventComment(route, commentTypeSnapshot, attempted, enqueued, dropped));
 			}
 		}
 
