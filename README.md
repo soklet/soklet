@@ -139,7 +139,7 @@ public class App {
   public static void main(String[] args) throws Exception {
     // Use out-of-the-box defaults
     SokletConfig config = SokletConfig.withServer(
-      Server.withPort(8080).build()
+      Server.fromPort(8080)
     ).build();
 
     try (Soklet soklet = Soklet.fromConfig(config)) {
@@ -328,7 +328,7 @@ Configure a [`RequestBodyMarshaler`](https://javadoc.soklet.com/com/soklet/Reque
 
 ```java
 SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
+  Server.fromPort(8080)
 ).requestBodyMarshaler(new RequestBodyMarshaler() {
   // This example uses Google's GSON
   static final Gson GSON = new Gson();
@@ -460,7 +460,7 @@ ThrowableHandler throwableHandler = (
 
 // Supply our custom handlers to the standard response marshaler
 SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
+  Server.fromPort(8080)
 ).responseMarshaler(ResponseMarshaler.builder()
   .resourceMethod(resourceMethodHandler)
   .throwable(throwableHandler)
@@ -550,9 +550,9 @@ Wire up both servers:
 
 ```java
 SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
+  Server.fromPort(8080)
 ).serverSentEventServer(
-  ServerSentEventServer.withPort(8081).build()
+  ServerSentEventServer.fromPort(8081)
 ).resourceMethodResolver(
   ResourceMethodResolver.fromClasses(Set.of(ChatResource.class))
 ).build();
@@ -568,14 +568,14 @@ import org.junit.Test;
 @Test
 public void sseTest() {
   SokletConfig config = SokletConfig.forSimulatorTesting()
-    .serverSentEventServer(ServerSentEventServer.withPort(0).build())
+    .serverSentEventServer(ServerSentEventServer.fromPort(0))
     .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ChatResource.class)))
     .build();
 
   List<ServerSentEvent> events = new ArrayList<>();
 
   Soklet.runSimulator(config, simulator -> {
-    Request request = Request.withPath(HttpMethod.GET, "/chat").build();
+    Request request = Request.fromPath(HttpMethod.GET, "/chat");
     ServerSentEventRequestResult result = simulator.performServerSentEventRequest(request);
 
     if (result instanceof ServerSentEventRequestResult.HandshakeAccepted accepted) {
@@ -744,7 +744,7 @@ Here's how it might look if you use [Google Guice](https://github.com/google/gui
 Injector injector = Guice.createInjector(new MyExampleAppModule());
 
 SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
+  Server.fromPort(8080)
 ).instanceProvider(new InstanceProvider() {
   @NonNull
   @Override  
@@ -782,7 +782,7 @@ Server Start/Stop: execute code immediately before and after [`Server`](https://
 
 ```java
 SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
+  Server.fromPort(8080)
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void willStartServer(@NonNull Server server) {
@@ -814,7 +814,7 @@ Request Handling: these methods are fired at the very start of [`Request`](https
 
 ```java
 SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
+  Server.fromPort(8080)
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void didStartRequestHandling(
@@ -868,7 +868,7 @@ static {
 }
 
 SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
+  Server.fromPort(8080)
 ).requestInterceptor(new RequestInterceptor() {
   @Override
   public void wrapRequest(
@@ -907,7 +907,7 @@ You must call `responseWriter.accept(...)` exactly once before returning; otherw
 
 ```java
 SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
+  Server.fromPort(8080)
 ).requestInterceptor(new RequestInterceptor() {
   @Override
   public void interceptRequest(
@@ -943,7 +943,7 @@ Response Writing: monitor the response writing process for each [`MarshaledRespo
 
 ```java
 SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
+  Server.fromPort(8080)
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void willStartResponseWriting(
@@ -1219,7 +1219,7 @@ collector is enabled automatically, but you can replace or disable it:
 
 ```java
 SokletConfig config = SokletConfig.withServer(
-  Server.withPort(8080).build()
+  Server.fromPort(8080)
 ).metricsCollector(
   MetricsCollector.defaultInstance()
   // or MetricsCollector.disabledInstance()
@@ -1244,7 +1244,7 @@ public MarshaledResponse getMetrics(@NonNull MetricsCollector metricsCollector) 
   String body = metricsCollector.snapshotText(options).orElse(null);
 
   if (body == null)
-    return MarshaledResponse.withStatusCode(204).build();
+    return MarshaledResponse.fromStatusCode(204);
 
   return MarshaledResponse.withStatusCode(200)
     .headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
