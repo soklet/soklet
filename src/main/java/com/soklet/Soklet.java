@@ -66,7 +66,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * <pre>{@code // Use out-of-the-box defaults
  * SokletConfig config = SokletConfig.withServer(
- *   Server.withPort(8080).build()
+ *   Server.fromPort(8080)
  * ).build();
  *
  * try (Soklet soklet = Soklet.fromConfig(config)) {

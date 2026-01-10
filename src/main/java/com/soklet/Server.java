@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * For example:
  * <pre>{@code  SokletConfig config = SokletConfig.withServer(
- *   Server.withPort(8080).build()
+ *   Server.fromPort(8080)
  * ).build();
  *
  * try (Soklet soklet = Soklet.fromConfig(config)) {

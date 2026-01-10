@@ -119,7 +119,7 @@ import static java.util.Objects.requireNonNull;
  *
  * // Supply our custom handlers to the standard response marshaler
  * SokletConfig config = SokletConfig.withServer(
- *   Server.withPort(8080).build()
+ *   Server.fromPort(8080)
  * ).responseMarshaler(ResponseMarshaler.builder()
  *   .resourceMethodHandler(resourceMethodHandler)
  *   .throwableHandler(throwableHandler)

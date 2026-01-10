@@ -48,7 +48,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Example configuration:
  * <pre><code>
- * SokletConfig config = SokletConfig.withServer(Server.withPort(8080).build())
+ * SokletConfig config = SokletConfig.withServer(Server.fromPort(8080))
  *   // This is already the default; specifying it here is optional
  *   .metricsCollector(MetricsCollector.defaultInstance())
  *   .build();
@@ -56,7 +56,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * To disable metrics collection entirely, specify Soklet's no-op implementation:
  * <pre><code>
- * SokletConfig config = SokletConfig.withServer(Server.withPort(8080).build())
+ * SokletConfig config = SokletConfig.withServer(Server.fromPort(8080))
  *   // Use this instead of null to disable metrics collection
  *   .metricsCollector(MetricsCollector.disabledInstance())
  *   .build();
@@ -74,13 +74,12 @@ import static java.util.Objects.requireNonNull;
  * {@literal @}GET("/metrics")
  * public MarshaledResponse getMetrics(@NonNull MetricsCollector metricsCollector) {
  *   SnapshotTextOptions options = SnapshotTextOptions
- *     .withMetricsFormat(MetricsFormat.PROMETHEUS)
- *     .build();
+ *     .fromMetricsFormat(MetricsFormat.PROMETHEUS);
  *
  *   String body = metricsCollector.snapshotText(options).orElse(null);
  *
  *   if (body == null)
- *     return MarshaledResponse.withStatusCode(204).build();
+ *     return MarshaledResponse.fromStatusCode(204);
  *
  *   return MarshaledResponse.withStatusCode(200)
  *     .headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))

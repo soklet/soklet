@@ -35,8 +35,8 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * For example:
  * <pre>{@code // Set up our HTTP and SSE servers
- * Server server = Server.withPort(8080).build;
- * ServerSentEventServer sseServer = ServerSentEventServer.withPort(8081).build();
+ * Server server = Server.fromPort(8080);
+ * ServerSentEventServer sseServer = ServerSentEventServer.fromPort(8081);
  *
  * // Wire servers into our config
  * SokletConfig config = SokletConfig.withServer(server)
