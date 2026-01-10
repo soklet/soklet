@@ -45,7 +45,7 @@ public class RequestHandlingRegressionTests {
 	public void wrappedRequestIsUsedForInterceptAndResponseLogic() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestResource.class)))
-				.corsAuthorizer(CorsAuthorizer.fromAcceptAllPolicy())
+				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
 					public void wrapRequest(@NonNull ServerType serverType,

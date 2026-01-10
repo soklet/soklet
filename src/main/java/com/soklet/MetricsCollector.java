@@ -41,7 +41,7 @@ import static java.util.Objects.requireNonNull;
  * Soklet's standard implementation, available via {@link #defaultInstance()}, supports detailed histogram collection,
  * connection accept/reject counters, immutable snapshots (via {@link #snapshot()}), and provides Prometheus
  * (text format v0.0.4) / OpenMetrics (1.0) export helpers for convenience.
- * To disable metrics collection without a custom implementation, use {@link #disabled()}.
+ * To disable metrics collection without a custom implementation, use {@link #disabledInstance()}.
  * <p>
  * If you prefer OpenTelemetry, Micrometer, or another metrics system for monitoring, you might choose to create your own
  * implementation of this interface.
@@ -58,7 +58,7 @@ import static java.util.Objects.requireNonNull;
  * <pre><code>
  * SokletConfig config = SokletConfig.withServer(Server.withPort(8080).build())
  *   // Use this instead of null to disable metrics collection
- *   .metricsCollector(MetricsCollector.disabled())
+ *   .metricsCollector(MetricsCollector.disabledInstance())
  *   .build();
  * </code></pre>
  * <p>
@@ -571,6 +571,17 @@ public interface MetricsCollector {
 		@NonNull
 		public static Builder withMetricsFormat(@NonNull MetricsFormat metricsFormat) {
 			return new Builder(metricsFormat);
+		}
+
+		/**
+		 * Creates options with the specified format and defaults for all other fields.
+		 *
+		 * @param metricsFormat the text exposition format
+		 * @return a {@link SnapshotTextOptions} instance
+		 */
+		@NonNull
+		public static SnapshotTextOptions fromMetricsFormat(@NonNull MetricsFormat metricsFormat) {
+			return withMetricsFormat(metricsFormat).build();
 		}
 
 		/**
@@ -2196,7 +2207,7 @@ public interface MetricsCollector {
 	 * @return a no-op {@code MetricsCollector}
 	 */
 	@NonNull
-	static MetricsCollector disabled() {
+	static MetricsCollector disabledInstance() {
 		return DisabledMetricsCollector.defaultInstance();
 	}
 }

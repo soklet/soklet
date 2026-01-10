@@ -55,6 +55,7 @@ import static java.util.Objects.requireNonNull;
  * Encapsulates information specified in an HTTP request.
  * <p>
  * Instances can be acquired via the {@link #withRawUrl(HttpMethod, String)} (e.g. provided by clients on a "raw" HTTP/1.1 request line, un-decoded) and {@link #withPath(HttpMethod, String)} (e.g. manually-constructed during integration testing, understood to be already-decoded) builder factory methods.
+ * Convenience instance factories are also available via {@link #fromRawUrl(HttpMethod, String)} and {@link #fromPath(HttpMethod, String)}.
  * <p>
  * Any necessary decoding (path, URL parameter, {@code Content-Type: application/x-www-form-urlencoded}, etc.) will be automatically performed.  Unless otherwise indicated, all accessor methods will return decoded data.
  * <p>
@@ -157,6 +158,19 @@ public final class Request {
 	}
 
 	/**
+	 * Creates a {@link Request} from a raw request target without additional customization.
+	 *
+	 * @param httpMethod the HTTP method
+	 * @param rawUrl     a raw HTTP/1.1 request target (not URL-decoded)
+	 * @return a {@link Request} instance
+	 */
+	@NonNull
+	public static Request fromRawUrl(@NonNull HttpMethod httpMethod,
+																	 @NonNull String rawUrl) {
+		return withRawUrl(httpMethod, rawUrl).build();
+	}
+
+	/**
 	 * Acquires a builder for {@link Request} instances from already-decoded path and query components - useful for manual construction, e.g. integration tests.
 	 * <p>
 	 * The provided {@code path} must start with the {@code /} character and already be decoded (e.g. {@code "/my path"}, not {@code "/my%20path"}).  It must not include query parameters. For {@code OPTIONS *} requests, the {@code path} must be {@code *} - the "splat" symbol.
@@ -176,6 +190,19 @@ public final class Request {
 		requireNonNull(path);
 
 		return new PathBuilder(httpMethod, path);
+	}
+
+	/**
+	 * Creates a {@link Request} from a path without additional customization.
+	 *
+	 * @param httpMethod the HTTP method
+	 * @param path       a decoded request path (e.g. {@code /widgets/123})
+	 * @return a {@link Request} instance
+	 */
+	@NonNull
+	public static Request fromPath(@NonNull HttpMethod httpMethod,
+																 @NonNull String path) {
+		return withPath(httpMethod, path).build();
 	}
 
 	/**

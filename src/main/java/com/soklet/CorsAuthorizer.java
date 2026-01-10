@@ -30,8 +30,8 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Standard threadsafe implementations can be acquired via these factory methods:
  * <ul>
- *   <li>{@link #fromRejectAllPolicy()} (don't permit CORS requests)</li>
- *   <li>{@link #fromAcceptAllPolicy()} (permit all CORS requests, not recommended for production)</li>
+ *   <li>{@link #rejectAllInstance()} (don't permit CORS requests)</li>
+ *   <li>{@link #acceptAllInstance()} (permit all CORS requests, not recommended for production)</li>
  *   <li>{@link #fromWhitelistedOrigins(Set)} (permit whitelisted origins only)</li>
  *   <li>{@link #fromWhitelistedOrigins(Set, Function)}  (permit whitelisted origins only + control credentials behavior)</li>
  *   <li>{@link #fromWhitelistAuthorizer(Function)} (permit origins via function)</li>
@@ -71,12 +71,12 @@ public interface CorsAuthorizer {
 	 * <p>
 	 * The returned instance is guaranteed to be a JVM-wide singleton.
 	 * <p>
-	 * <strong>Note: the returned instance is generally unsafe for production - prefer {@link #fromWhitelistedOrigins(Set)} or {@link #fromWhitelistAuthorizer(Function)} for production systems.</strong>
+ * <strong>Note: the returned instance is generally unsafe for production - prefer {@link #fromWhitelistedOrigins(Set)} or {@link #fromWhitelistAuthorizer(Function)} for production systems.</strong>
 	 *
 	 * @return a {@code CorsAuthorizer} configured to permit all cross-domain requests
 	 */
 	@NonNull
-	static CorsAuthorizer fromAcceptAllPolicy() {
+	static CorsAuthorizer acceptAllInstance() {
 		return AllOriginsCorsAuthorizer.defaultInstance();
 	}
 
@@ -88,7 +88,7 @@ public interface CorsAuthorizer {
 	 * @return a {@code CorsAuthorizer} configured to reject all cross-domain requests
 	 */
 	@NonNull
-	static CorsAuthorizer fromRejectAllPolicy() {
+	static CorsAuthorizer rejectAllInstance() {
 		return NoOriginsCorsAuthorizer.defaultInstance();
 	}
 

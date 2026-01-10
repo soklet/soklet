@@ -133,6 +133,17 @@ public interface Server extends AutoCloseable {
 	}
 
 	/**
+	 * Creates a {@link Server} configured with the given port and default settings.
+	 *
+	 * @param port the port number on which the server should listen
+	 * @return a {@link Server} instance
+	 */
+	@NonNull
+	static Server fromPort(@NonNull Integer port) {
+		return withPort(port).build();
+	}
+
+	/**
 	 * Builder used to construct a standard implementation of {@link Server}.
 	 * <p>
 	 * This class is intended for use by a single thread.

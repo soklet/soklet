@@ -1358,7 +1358,7 @@ public class ServerSentEventTests {
 		String origin = "https://app.example";
 
 		// Accepts any Origin; credentials=true implies ACAO "*" -> normalized to request Origin + "Vary: Origin"
-		CorsAuthorizer cors = CorsAuthorizer.fromAcceptAllPolicy();
+		CorsAuthorizer cors = CorsAuthorizer.acceptAllInstance();
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
@@ -1405,7 +1405,7 @@ public class ServerSentEventTests {
 		int ssePort = findFreePort();
 		String origin = "https://app.example";
 
-		CorsAuthorizer cors = CorsAuthorizer.fromAcceptAllPolicy();
+		CorsAuthorizer cors = CorsAuthorizer.acceptAllInstance();
 
 		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)

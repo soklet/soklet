@@ -33,7 +33,8 @@ import static java.util.Objects.requireNonNull;
 /**
  * Encapsulates the results of a request that would normally be handled by your {@link Server} (both logical response and bytes to be sent over the wire), used for integration testing via {@link Simulator#performRequest(Request)}.
  * <p>
- * Instances can be acquired via the {@link #withMarshaledResponse(MarshaledResponse)} factory method.
+ * Instances can be acquired via the {@link #withMarshaledResponse(MarshaledResponse)} builder factory method.
+ * A convenience instance factory is also available via {@link #fromMarshaledResponse(MarshaledResponse)}.
  * <p>
  * The Server-Sent Event equivalent of this type is {@link ServerSentEventRequestResult}, which is used for integration testing via {@link Simulator#performServerSentEventRequest(Request)}.
  * <p>
@@ -64,6 +65,17 @@ public final class RequestResult {
 	public static Builder withMarshaledResponse(@NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(marshaledResponse);
 		return new Builder(marshaledResponse);
+	}
+
+	/**
+	 * Creates a {@link RequestResult} from a marshaled response without additional customization.
+	 *
+	 * @param marshaledResponse the bytes that will ultimately be written over the wire
+	 * @return a {@link RequestResult} instance
+	 */
+	@NonNull
+	public static RequestResult fromMarshaledResponse(@NonNull MarshaledResponse marshaledResponse) {
+		return withMarshaledResponse(marshaledResponse).build();
 	}
 
 	/**

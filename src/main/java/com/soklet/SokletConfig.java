@@ -90,14 +90,14 @@ public final class SokletConfig {
 		this.server = serverProxy;
 		this.serverSentEventServer = serverSentEventServerProxy;
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.defaultInstance();
-		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.defaultInstance();
+		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.fromDefaults();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.fromValueConverterRegistry(getValueConverterRegistry());
 		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : ResourceMethodResolver.fromClasspathIntrospection();
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : ResponseMarshaler.defaultInstance();
 		this.requestInterceptor = builder.requestInterceptor != null ? builder.requestInterceptor : RequestInterceptor.defaultInstance();
 		this.lifecycleObserver = builder.lifecycleObserver != null ? builder.lifecycleObserver : LifecycleObserver.defaultInstance();
 		this.metricsCollector = builder.metricsCollector != null ? builder.metricsCollector : MetricsCollector.defaultInstance();
-		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : CorsAuthorizer.fromRejectAllPolicy();
+		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : CorsAuthorizer.rejectAllInstance();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(this);
 	}
 

@@ -992,7 +992,7 @@ Authorize All Origins:
 ```java
 SokletConfig config = SokletConfig.withServer(server)
   // "Wildcard" (*) CORS authorization. Don't use this in production!
-  .corsAuthorizer(AllOriginsCorsAuthorizer.sharedInstance())
+  .corsAuthorizer(CorsAuthorizer.acceptAllInstance())
   .build();
 ```
 
@@ -1222,7 +1222,7 @@ SokletConfig config = SokletConfig.withServer(
   Server.withPort(8080).build()
 ).metricsCollector(
   MetricsCollector.defaultInstance()
-  // or MetricsCollector.disabled()
+  // or MetricsCollector.disabledInstance()
 ).build();
 ```
 

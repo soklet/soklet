@@ -995,7 +995,7 @@ public class AdvancedTests {
 
 	@Test
 	public void testCustomValueConverterEdgeCases() {
-		ValueConverterRegistry registry = ValueConverterRegistry.defaultInstance();
+		ValueConverterRegistry registry = ValueConverterRegistry.fromDefaults();
 
 		// Test null handling
 		try {
@@ -1029,7 +1029,7 @@ public class AdvancedTests {
 
 	@Test
 	public void testBlankSlateValueConverterRegistry() {
-		ValueConverterRegistry registry = ValueConverterRegistry.blankSlate();
+		ValueConverterRegistry registry = ValueConverterRegistry.fromBlankSlate();
 
 		Assertions.assertTrue(registry.get(String.class, Integer.class).isEmpty(),
 				"Blank-slate registry should not include default converters");
@@ -1058,7 +1058,7 @@ public class AdvancedTests {
 			}
 		};
 
-		ValueConverterRegistry supplemented = ValueConverterRegistry.blankSlateSupplementedBy(Set.of(customConverter));
+		ValueConverterRegistry supplemented = ValueConverterRegistry.fromBlankSlateSupplementedBy(Set.of(customConverter));
 		Assertions.assertTrue(supplemented.get(String.class, Integer.class).isPresent(),
 				"Custom converters should be available in blank-slate registries");
 		Assertions.assertTrue(supplemented.get(String.class, String.class).isEmpty(),

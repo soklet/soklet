@@ -40,7 +40,7 @@ public class CorsTests {
 	public void preflight_allOrigins_allowed() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
-				.corsAuthorizer(CorsAuthorizer.fromAcceptAllPolicy())
+				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
@@ -72,7 +72,7 @@ public class CorsTests {
 	public void preflight_rejected_without_authorizer() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
-				.corsAuthorizer(CorsAuthorizer.fromRejectAllPolicy())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
@@ -97,7 +97,7 @@ public class CorsTests {
 	public void actual_request_includes_cors_headers_when_allowed() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
-				.corsAuthorizer(CorsAuthorizer.fromAcceptAllPolicy())
+				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
@@ -232,7 +232,7 @@ public class CorsTests {
 	public void allorigins_acceptall_echoes_origin_and_reflects_headers() {
 		SokletConfig configuration = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
-				.corsAuthorizer(CorsAuthorizer.fromAcceptAllPolicy())  // permissive: creds ON
+				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())  // permissive: creds ON
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {

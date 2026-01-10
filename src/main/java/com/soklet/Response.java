@@ -45,6 +45,7 @@ import static java.util.Objects.requireNonNull;
  *   <li>{@link #withStatusCode(Integer)} (builder primed with status code)</li>
  *   <li>{@link #withRedirect(RedirectType, String)} (builder primed with redirect info)</li>
  * </ul>
+ * Convenience instance factories are also available via {@link #fromStatusCode(Integer)} and {@link #fromRedirect(RedirectType, String)}.
  * <p>
  * For performance, header collections are shallow-copied and not defensively deep-copied. Treat returned collections as immutable.
  * <p>
@@ -76,6 +77,17 @@ public final class Response {
 	}
 
 	/**
+	 * Creates a {@link Response} with the given status code and no additional customization.
+	 *
+	 * @param statusCode the HTTP status code for this request ({@code 200, 201, etc.})
+	 * @return a {@link Response} instance
+	 */
+	@NonNull
+	public static Response fromStatusCode(@NonNull Integer statusCode) {
+		return withStatusCode(statusCode).build();
+	}
+
+	/**
 	 * Acquires a builder for {@link Response} instances that are intended to redirect the client.
 	 *
 	 * @param redirectType the kind of redirect to perform, for example {@link RedirectType#HTTP_307_TEMPORARY_REDIRECT}
@@ -88,6 +100,19 @@ public final class Response {
 		requireNonNull(redirectType);
 		requireNonNull(location);
 		return new Builder(redirectType, location);
+	}
+
+	/**
+	 * Creates a redirect {@link Response} with no additional customization.
+	 *
+	 * @param redirectType the kind of redirect to perform, for example {@link RedirectType#HTTP_307_TEMPORARY_REDIRECT}
+	 * @param location     the URL to redirect to
+	 * @return a {@link Response} instance
+	 */
+	@NonNull
+	public static Response fromRedirect(@NonNull RedirectType redirectType,
+																			@NonNull String location) {
+		return withRedirect(redirectType, location).build();
 	}
 
 	private Response(@NonNull Builder builder) {

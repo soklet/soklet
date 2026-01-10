@@ -14,9 +14,8 @@ It exists to keep future naming decisions consistent and avoid repeated debate.
 - **Builder entrypoints (required primary input):** use `withX(...)` and return a `Builder`.
 - **Instance factories:** use `fromX(...)` and return a fully built instance (never a builder).
 - **Builder convenience:** when a `withX(...)` builder is commonly used with only required inputs, add a `fromX(...)` convenience that calls `withX(...).build()`.
-- **Defaults (shared):** use `defaultInstance()` for cached singletons when sharing is safe (typically immutable or effectively immutable).
+- **Shared singletons:** prefer names that include `Instance` (e.g., `defaultInstance()`, `disabledInstance()`), but this is not a hard requirement if readability benefits.
 - **Defaults (fresh):** use `fromDefaults()` for a new instance configured with defaults.
-- **Policies/singletons:** prefer `from...Policy()` (or `from...`) even with zero args for clarity and searchability.
 - **Builder setters:** use property-name methods (`port(...)`, `requestHandlerQueueCapacity(...)`) or verbs
   (`addX`, `clearX`, `enableX`, `disableX`).
 - **Avoid** `of*`, `create*`, `new*` for public APIs to keep the search surface uniform.
@@ -30,9 +29,9 @@ Server server = Server.withPort(8080).build();
 MetricsCollector.Snapshot.Builder snapshot = MetricsCollector.Snapshot.builder();
 
 // Instance factories
-CorsAuthorizer cors = CorsAuthorizer.fromAcceptAllPolicy();
+CorsAuthorizer cors = CorsAuthorizer.acceptAllInstance();
 ResourcePathDeclaration decl = ResourcePathDeclaration.fromPath("/accounts/{id}");
-ValueConverterRegistry registry = ValueConverterRegistry.blankSlate();
+ValueConverterRegistry registry = ValueConverterRegistry.fromBlankSlate();
 SokletHttpServletRequest httpRequest = SokletHttpServletRequest.fromRequest(request);
 
 // Defaults

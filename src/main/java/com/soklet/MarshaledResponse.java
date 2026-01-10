@@ -45,6 +45,7 @@ import static java.util.Objects.requireNonNull;
  * To accomplish this, just have your <em>Resource Method</em> return a {@link MarshaledResponse} instance: this tells Soklet "I already know exactly what bytes I want to send; don't go through the normal marshaling process".
  * <p>
  * Instances can be acquired via the {@link #withResponse(Response)} or {@link #withStatusCode(Integer)} builder factory methods.
+ * Convenience instance factories are also available via {@link #fromResponse(Response)} and {@link #fromStatusCode(Integer)}.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
@@ -84,6 +85,17 @@ public final class MarshaledResponse {
 	}
 
 	/**
+	 * Creates a {@link MarshaledResponse} from a logical {@link Response} without additional customization.
+	 *
+	 * @param response the logical response whose values are used to construct this instance
+	 * @return a {@link MarshaledResponse} instance
+	 */
+	@NonNull
+	public static MarshaledResponse fromResponse(@NonNull Response response) {
+		return withResponse(response).build();
+	}
+
+	/**
 	 * Acquires a builder for {@link MarshaledResponse} instances.
 	 *
 	 * @param statusCode the HTTP status code for this response
@@ -93,6 +105,17 @@ public final class MarshaledResponse {
 	public static Builder withStatusCode(@NonNull Integer statusCode) {
 		requireNonNull(statusCode);
 		return new Builder(statusCode);
+	}
+
+	/**
+	 * Creates a {@link MarshaledResponse} with the given status code and no additional customization.
+	 *
+	 * @param statusCode the HTTP status code for this response
+	 * @return a {@link MarshaledResponse} instance
+	 */
+	@NonNull
+	public static MarshaledResponse fromStatusCode(@NonNull Integer statusCode) {
+		return withStatusCode(statusCode).build();
 	}
 
 	/**

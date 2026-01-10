@@ -163,6 +163,17 @@ public interface ServerSentEventServer extends AutoCloseable {
 	}
 
 	/**
+	 * Creates a {@link ServerSentEventServer} configured with the given port and default settings.
+	 *
+	 * @param port the port number on which the server should listen
+	 * @return a {@link ServerSentEventServer} instance
+	 */
+	@NonNull
+	static ServerSentEventServer fromPort(@NonNull Integer port) {
+		return withPort(port).build();
+	}
+
+	/**
 	 * Builder used to construct a standard implementation of {@link ServerSentEventServer}.
 	 * <p>
 	 * This class is intended for use by a single thread.
