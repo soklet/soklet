@@ -69,7 +69,7 @@ JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>2.0.0-SNAPSHOT</version>
+  <version>2.0.0</version>
 </dependency>
 ```
 
@@ -81,7 +81,7 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.soklet:soklet:2.0.0-SNAPSHOT'
+  implementation 'com.soklet:soklet:2.0.0'
 }
 ```
 
@@ -158,13 +158,13 @@ This example requires JDK 17+ to be installed on your machine ([or see this exam
 #### Build
 
 ```shell
-javac -parameters -cp soklet-2.0.0-SNAPSHOT.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java 
+javac -parameters -cp soklet-2.0.0.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java 
 ```
 
 #### Run
 
 ```shell
-java -cp soklet-2.0.0-SNAPSHOT.jar:build com/soklet/example/App
+java -cp soklet-2.0.0.jar:build com/soklet/example/App
 ```
 
 #### Test
