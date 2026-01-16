@@ -53,7 +53,11 @@ import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.Repeatable;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -91,7 +95,7 @@ import java.util.stream.Collectors;
  *     </configuration>
  * </plugin>}</pre>
  * Using <a href="https://gradle.org" target="_blank">Gradle</a>:
- * <pre>{@code def sokletVersion = "2.0.0" // (use your actual version)
+ * <pre>{@code def sokletVersion = "2.0.1" // (use your actual version)
  *
  * dependencies {
  *   // Soklet used by your code at compile/run time
@@ -517,7 +521,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private void mergeAndWriteIndex(List<ResourceMethodDeclaration> newlyCollected,
 																	Set<String> touchedTopLevelBinaries) {
-		Map<String, ResourceMethodDeclaration> merged = readExistingIndex();
+		Map<String, ResourceMethodDeclaration> merged = readExistingIndex(touchedTopLevelBinaries);
 
 		if (!touchedTopLevelBinaries.isEmpty()) {
 			merged.values().removeIf(r -> {
@@ -551,27 +555,85 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private static String binaryToCanonical(String binary) {return binary.replace('$', '.');}
 
-	private Map<String, ResourceMethodDeclaration> readExistingIndex() {
+	private Map<String, ResourceMethodDeclaration> readExistingIndex(Set<String> touchedTopLevelBinaries) {
 		Map<String, ResourceMethodDeclaration> out = new LinkedHashMap<>();
-		BufferedReader reader = null;
-		try {
-			FileObject fo = filer.getResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE_METHOD_LOOKUP_TABLE_PATH);
-			reader = new BufferedReader(new InputStreamReader(fo.openInputStream(), StandardCharsets.UTF_8));
-			String line;
-			while ((line = reader.readLine()) != null) {
-				line = line.trim();
-				if (line.isEmpty()) continue;
-				ResourceMethodDeclaration r = parseIndexLine(line);
-				if (r != null) out.put(generateKey(r), r);
-			}
-		} catch (IOException ignored) {
-		} finally {
-			if (reader != null) try {
-				reader.close();
-			} catch (IOException ignored) {
-			}
+		if (readIndexFromLocation(StandardLocation.CLASS_OUTPUT, out)) return out;
+
+		// Some compilers use a temp CLASS_OUTPUT; fall back to the previous output on the classpath.
+		Path fallbackRoot = findExistingClassOutputRoot(touchedTopLevelBinaries);
+		if (fallbackRoot != null) {
+			Path indexPath = fallbackRoot.resolve(RESOURCE_METHOD_LOOKUP_TABLE_PATH);
+			readIndexFromPath(indexPath, out);
 		}
 		return out;
+	}
+
+	private boolean readIndexFromLocation(StandardLocation location, Map<String, ResourceMethodDeclaration> out) {
+		try {
+			FileObject fo = filer.getResource(location, "", RESOURCE_METHOD_LOOKUP_TABLE_PATH);
+			try (BufferedReader reader = new BufferedReader(new InputStreamReader(fo.openInputStream(), StandardCharsets.UTF_8))) {
+				readIndexFromReader(reader, out);
+			}
+			return true;
+		} catch (IOException ignored) {
+			return false;
+		}
+	}
+
+	private boolean readIndexFromPath(Path path, Map<String, ResourceMethodDeclaration> out) {
+		if (path == null || !Files.isRegularFile(path)) return false;
+		try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+			readIndexFromReader(reader, out);
+			return true;
+		} catch (IOException ignored) {
+			return false;
+		}
+	}
+
+	private void readIndexFromReader(BufferedReader reader, Map<String, ResourceMethodDeclaration> out) throws IOException {
+		String line;
+		while ((line = reader.readLine()) != null) {
+			line = line.trim();
+			if (line.isEmpty()) continue;
+			ResourceMethodDeclaration r = parseIndexLine(line);
+			if (r != null) out.put(generateKey(r), r);
+		}
+	}
+
+	private Path findExistingClassOutputRoot(Set<String> touchedTopLevelBinaries) {
+		for (String binaryName : touchedTopLevelBinaries) {
+			Path root = classOutputRootForBinary(binaryName);
+			if (root != null) return root;
+		}
+		return null;
+	}
+
+	private Path classOutputRootForBinary(String binaryName) {
+		String classFilePath = binaryName.replace('.', '/') + ".class";
+		try {
+			FileObject fo = filer.getResource(StandardLocation.CLASS_PATH, "", classFilePath);
+			URI uri = fo.toUri();
+			if (!"file".equalsIgnoreCase(uri.getScheme())) return null;
+
+			Path classFile = Paths.get(uri);
+			int segments = countPathSegments(classFilePath);
+			Path root = classFile;
+			for (int i = 0; i < segments; i++) {
+				root = root.getParent();
+				if (root == null) return null;
+			}
+			return root;
+		} catch (IOException ignored) {
+			return null;
+		}
+	}
+
+	private static int countPathSegments(String path) {
+		int count = 1;
+		for (int i = 0; i < path.length(); i++) {
+			if (path.charAt(i) == '/') count++;
+		}
+		return count;
 	}
 
 	private ResourceMethodDeclaration parseIndexLine(String line) {
