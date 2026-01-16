@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.soklet</groupId>
     <artifactId>soklet</artifactId>
-    <version>2.0.0</version>
+    <version>2.0.1</version>
     <packaging>jar</packaging>
     <name>Soklet</name>
     <description>A zero-dependency HTTP 1.1 server and routing library for Java, well-suited for building RESTful APIs and broadcasting Server-Sent Events.</description>
