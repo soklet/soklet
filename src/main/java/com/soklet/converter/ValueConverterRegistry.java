@@ -28,6 +28,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.soklet.internal.util.ConcurrentLruMap;
+
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -77,6 +79,8 @@ public final class ValueConverterRegistry {
 	// it's preferable to have enum conversion "just work" for string names, which is almost always what's desired.
 	@NonNull
 	private final ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey;
+	@Nullable
+	private final ConcurrentLruMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> enumConverterCache;
 	private final boolean enableReflexiveConversion;
 	private final boolean enableEnumAutoConversion;
 
@@ -112,7 +116,6 @@ public final class ValueConverterRegistry {
 				defaultValueConverters.size()
 						+ customValueConverters.size()
 						+ 1 // reflexive converter
-						+ 100 // leave a little headroom for enum types that might accumulate over time
 		);
 
 		// By default, we include out-of-the-box converters
@@ -175,6 +178,7 @@ public final class ValueConverterRegistry {
 																 boolean enableEnumAutoConversion) {
 		requireNonNull(valueConvertersByCacheKey);
 		this.valueConvertersByCacheKey = valueConvertersByCacheKey;
+		this.enumConverterCache = enableEnumAutoConversion ? new ConcurrentLruMap<>(256) : null;
 		this.enableReflexiveConversion = enableReflexiveConversion;
 		this.enableEnumAutoConversion = enableEnumAutoConversion;
 	}
@@ -233,6 +237,10 @@ public final class ValueConverterRegistry {
 		CacheKey cacheKey = new CacheKey(normalizedFromType, normalizedToType);
 		ValueConverter<F, T> valueConverter = (ValueConverter<F, T>) getValueConvertersByCacheKey().get(cacheKey);
 
+		// Check the enum converter cache before falling through to creation
+		if (valueConverter == null && this.enumConverterCache != null)
+			valueConverter = (ValueConverter<F, T>) this.enumConverterCache.get(cacheKey);
+
 		// Special case for enums.
 		// If no converter was registered for converting a String to an Enum<?>, create a simple converter and cache it off
 		if (this.enableEnumAutoConversion && valueConverter == null && String.class.equals(normalizedFromType) && toType instanceof @SuppressWarnings("rawtypes")Class toClass) {
@@ -271,7 +279,7 @@ public final class ValueConverterRegistry {
 					}
 				};
 
-				getValueConvertersByCacheKey().putIfAbsent(new CacheKey(normalizedFromType, normalizedToType), valueConverter);
+				this.enumConverterCache.putIfAbsent(new CacheKey(normalizedFromType, normalizedToType), valueConverter);
 			}
 		}
 
