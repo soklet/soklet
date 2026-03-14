@@ -535,6 +535,8 @@ Protocol fields intentionally omitted from responses in v1 unless later added to
 - resource templates
 - tool annotations, execution metadata, and output schema
 
+Because unsolicited server-initiated capabilities are deferred in v1, the only public outbound server-message API is request-scoped `McpProgressReporter`. Session-scoped notification publishing remains internal until Soklet exposes a coherent public API for capabilities like logging or `*.listChanged`.
+
 Deterministic ordering rules:
 
 - `tools/list` returns tools sorted by tool name
@@ -621,7 +623,7 @@ Required on every `@McpServerEndpoint` class. The defaults are sensible no-ops. 
 
 - `McpSessionContext` — session data bag (tenant ID, user state, etc.)
 - `McpRequestContext` — current JSON-RPC request metadata (request ID wrapper, method name)
-- `McpToolCallContext` — tool-specific request data (request ID wrapper, progress token wrapper); only available in `@McpTool` methods
+- `McpToolCallContext` — tool-specific request data (request ID wrapper, optional progress reporter); only available in `@McpTool` methods
 - `McpInitializationContext` — initialization-time data (protocol version, endpoint path parameters, client info); only available in `initialize()`
 - `McpClientCapabilities` — negotiated client capabilities
 - `McpListResourcesContext` — pagination cursor and request metadata; only available in `@McpListResources` methods
@@ -631,7 +633,7 @@ These are flat, independently injectable types — no inheritance hierarchy betw
 Minimum fields exposed by the context types:
 
 - `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, `McpJsonRpcRequestId` if present, session ID if present, and negotiated protocol version if present
-- `McpToolCallContext` — `McpRequestContext` plus `McpProgressToken` if the client supplied one
+- `McpToolCallContext` — `McpRequestContext` plus `McpProgressReporter` if the client supplied a progress token
 - `McpInitializationContext` — protocol version, client capabilities, client info, endpoint path parameters, and the underlying `Request`
 - `McpListResourcesContext` — pagination cursor, request metadata, and session/endpoint context
 
@@ -707,7 +709,7 @@ public interface McpToolCallContext {
     McpRequestContext getRequestContext();
 
     @NonNull
-    Optional<@NonNull McpProgressToken> getProgressToken();
+    Optional<@NonNull McpProgressReporter> getProgressReporter();
 }
 
 @ThreadSafe
@@ -904,6 +906,30 @@ public record McpProgressToken(
     Optional<@NonNull BigDecimal> asNumber() { ... }
 }
 ```
+
+`McpProgressToken` is intentionally a small wrapper, not the reporting API itself. The reporting seam in v1 is request-scoped and tool-oriented:
+
+```java
+@ThreadSafe
+public interface McpProgressReporter {
+    @NonNull
+    McpProgressToken getProgressToken();
+
+    void reportProgress(@NonNull BigDecimal progress,
+                        @Nullable BigDecimal total,
+                        @Nullable String message);
+}
+```
+
+`McpProgressReporter` semantics:
+
+- v1 exposes progress reporting only through `McpToolCallContext.getProgressReporter()`. Although the MCP protocol permits progress tokens on other request types, Soklet does not yet expose prompt/resource/list progress reporting as a public API.
+- `reportProgress(...)` emits the standard MCP `notifications/progress` notification for the current request, using the associated `McpProgressToken`.
+- If the active `POST /mcp` request had not yet committed a response body, the first `reportProgress(...)` call upgrades that request to `200 OK` with `text/event-stream`; the terminal JSON-RPC response is then sent on the same stream.
+- `reportProgress(...)` is valid only while the current request is actively being handled. Calls after the request completes fail fast with `IllegalStateException`.
+- Soklet does not guarantee delivery to the client; successful return means the notification was accepted for the current request stream.
+
+The broader session-scoped outbound-message router is intentionally not public in v1. Because `logging`, `tools.listChanged`, `prompts.listChanged`, `resources.listChanged`, `tasks`, and other unsolicited server-initiated capabilities are all deferred, Soklet does not yet freeze a public `McpSessionNotificationPublisher` or similar API. Internal transport code should still keep a clear separation between request-scoped progress emission and future session-scoped notification routing.
 
 ### `McpServer` builder surface
 
@@ -1261,6 +1287,7 @@ Protocol/runtime:
 - `DefaultMcpRuntime`
 - `McpDispatcher`
 - `McpSessionManager` / `McpSessionState`
+- `McpOutboundMessageRouter` / `RequestScopedMcpProgressReporter`
 - `McpProtocolValidator`
 - `McpCapabilitiesNegotiator`
 - `DefaultMcpResponseMarshaler`
@@ -1316,6 +1343,7 @@ Header and lifecycle rules:
 - unknown, dead, or endpoint-mismatched `MCP-Session-Id` is `404`
 - before `notifications/initialized` is received, only `initialize`, `notifications/initialized`, and `ping` are accepted
 - JSON-RPC batch arrays are rejected with `400` in v1
+- the first `McpProgressReporter.reportProgress(...)` call on a `POST /mcp` request upgrades that request's response to `text/event-stream`
 
 ### `GET /mcp`
 
@@ -1328,8 +1356,8 @@ GET behavior:
 - `McpServer` always supports `GET` for configured MCP endpoints, so it does not use `405 Method Not Allowed` for normal endpoint paths
 - multiple live GET streams per session are allowed
 - each server-originated JSON-RPC message is written to exactly one stream, never broadcast to all streams
-- request-scoped progress or related server messages stay on the POST response stream if that POST was upgraded to SSE
-- unsolicited session-scoped server messages, if any, go to the most recently established live GET stream
+- request-scoped progress emitted via `McpProgressReporter` stays on the originating `POST` response stream
+- unsolicited session-scoped server messages are not part of the public v1 API; internal routing, if any, goes to the most recently established live GET stream
 - v1 does not implement resumability or redelivery; SSE events therefore omit `id`, and a GET request carrying `Last-Event-ID` is rejected with `400 Bad Request`
 
 ### `DELETE /mcp`
@@ -1398,7 +1426,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Add context types (`McpSessionContext`, `McpRequestContext`, `McpToolCallContext`, `McpInitializationContext`, `McpListResourcesContext`)
 - Add `McpJsonRpcError`
 - Add `McpRequestInterceptor`, `McpHandlerInvocation`
-- Add `McpJsonRpcRequestId`, `McpProgressToken`, `McpRequestOutcome`, `McpSessionTerminationReason`, `McpStreamTerminationReason`
+- Add `McpJsonRpcRequestId`, `McpProgressToken`, `McpProgressReporter`, `McpRequestOutcome`, `McpSessionTerminationReason`, `McpStreamTerminationReason`
 - Extend `ServerType` with `MCP`
 - Add MCP default methods to `LifecycleObserver` and `MetricsCollector`
 - Add MCP fields/getters/key records to `MetricsCollector.Snapshot`
@@ -1482,6 +1510,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Default `handleError` produces `-32603` with `"Internal error"`
 - Custom `handleError` override maps domain exceptions to specific codes
 - `McpRequestInterceptor` wraps handler invocation (verify invoke order)
+- `McpProgressReporter.reportProgress(...)` fails fast after request completion
 
 ### Integration tests (via `Simulator` or equivalent)
 
@@ -1508,6 +1537,8 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Prompt method exception → JSON-RPC `-32603` error
 - Resource method exception → JSON-RPC `-32603` error
 - `McpRequestInterceptor` invoked around handler dispatch
+- `McpProgressReporter.reportProgress(...)` upgrades `POST /mcp` to SSE on first use and emits `notifications/progress`
+- `McpProgressReporter` is absent when the client does not supply a progress token
 - Existing low-level `LifecycleObserver` / `MetricsCollector` callbacks fire for MCP traffic with `ServerType.MCP`
 - `LifecycleObserver` MCP callbacks fire at correct lifecycle points
 - `MetricsCollector` MCP callbacks track request count, duration, active session count, and active stream count
