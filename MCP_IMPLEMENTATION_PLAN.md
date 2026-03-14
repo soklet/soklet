@@ -46,7 +46,7 @@ User code does not write a raw `@POST("/mcp")` handler. The framework owns the e
 
 ### 3. Hybrid annotation model
 
-`@McpServerEndpoint` is the right home for static declarative metadata (path, name, version, instructions) because those values have no behavior and never change. `McpEndpoint` is the right home for `initialize()` because it is real code with types, overridable by default, and directly unit-testable.
+`@McpServerEndpoint` is the right home for static declarative metadata (path, name, version, instructions, title, description, website URL) because those values have no behavior and never change. `McpEndpoint` is the right home for `initialize()` because it is real code with types, overridable by default, and directly unit-testable.
 
 Every endpoint class must implement `McpEndpoint`. This is a hard requirement, not optional. Requiring it from day one means future methods can be added to the interface as deliberate overrides rather than silent default inheritances.
 
@@ -120,9 +120,11 @@ The extended `SokletProcessor` validates:
 - `@McpServerEndpoint` is on a class (not a method or field)
 - The class annotated with `@McpServerEndpoint` implements `McpEndpoint`
 - `@McpServerEndpoint` `path`, `name`, `version` are non-blank
+- Optional `@McpServerEndpoint` string attributes (`instructions`, `title`, `description`, `websiteUrl`) must be non-blank when present; `websiteUrl`, when present, must be an absolute `https://` or `http://` URL
 - Path template braces in `@McpServerEndpoint(path=...)` are balanced and non-empty
 - `@McpEndpointPathParameter` names in handler methods exist as placeholders in the endpoint path
 - `@McpTool`, `@McpPrompt` have non-blank `name` and `description`
+- Optional `@McpPrompt.title` must be non-blank when present
 - `@McpResource` has non-blank `uri`, `name`, `mimeType`; `description` is optional
 - URI template braces in `@McpResource(uri=...)` are balanced
 - `@McpUriParameter` names in resource methods match placeholders in `@McpResource(uri=...)`
@@ -524,14 +526,17 @@ Not advertised in v1:
 - `tasks`
 - `experimental`
 
+Low-risk optional metadata included in v1:
+
+- `serverInfo.title`, `serverInfo.description`, and `serverInfo.websiteUrl` via optional attributes on `@McpServerEndpoint`
+- prompt titles via an optional `title` attribute on `@McpPrompt` or `McpPromptHandler`
+- resource titles and size metadata via optional fields on `McpListedResource`
+
 Protocol fields intentionally omitted from responses in v1 unless later added to the public API:
 
-- `serverInfo.title`
-- `serverInfo.description`
 - `serverInfo.icons`
-- `serverInfo.websiteUrl`
-- prompt titles and icons
-- resource titles, icons, annotations, and size metadata
+- prompt icons
+- resource icons and annotations
 - resource templates
 - tool annotations, execution metadata, and output schema
 
@@ -552,7 +557,7 @@ Deferred until v2+:
 - Unsolicited server-initiated capabilities such as `tools.listChanged`, `prompts.listChanged`, `resources.listChanged`, `resources.subscribe`, `logging`, `completions`, `tasks`, and `experimental`. These all depend on a stable public session-scoped outbound messaging API, and v1 deliberately does not freeze that API yet.
 - A public session-scoped notification publisher. V1 exposes only request-scoped `McpProgressReporter`; broader session-scoped outbound routing remains internal until Soklet knows the right public shape for logging, `*.listChanged`, tasks, and similar server-originated messages.
 - Resumability and redelivery for SSE streams. Supporting `Last-Event-ID`, event replay, and reconnection semantics would require durable event IDs, buffering rules, and ordering guarantees that materially expand the session store and outbound routing design.
-- Rich optional response metadata including `serverInfo.title`, `serverInfo.description`, `serverInfo.icons`, `serverInfo.websiteUrl`, prompt titles/icons, resource titles/icons/annotations/size metadata, resource templates, and tool annotations/execution metadata/output schema. None of these are required for the core v1 transport and handler model, so they are deferred until Soklet is ready to expose a coherent public value model for them.
+- Model-heavy optional response metadata including `serverInfo.icons`, prompt icons, resource icons/annotations, resource templates, and tool annotations/execution metadata/output schema. These all require Soklet to standardize additional public value types and serialization rules, so they remain deferred until that API surface is worth freezing.
 - Built-in authorization and principal modeling. V1 is intentionally transport- and session-focused; applications that need user-aware authorization are expected to layer it through `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` until Soklet has a broader auth abstraction worth standardizing.
 - Broader progress-reporting surfaces beyond tool calls. The MCP protocol allows progress tokens more broadly, but v1 exposes progress reporting only for active tool calls so the first outbound message seam stays narrow, request-scoped, and easy to reason about.
 - JSON-RPC batch handling. Batch arrays are rejected with `400` in v1 because they complicate request lifecycle accounting, streaming response policy, and observability without being necessary for the initial Soklet MCP server value proposition.
@@ -621,14 +626,16 @@ Required on every `@McpServerEndpoint` class. The defaults are sensible no-ops. 
 
 **Class-level:**
 
-- `@McpServerEndpoint(path, name, version, instructions)` — declares the endpoint; `instructions` is optional
+- `@McpServerEndpoint(path, name, version, instructions, title, description, websiteUrl)` — declares the endpoint; `instructions`, `title`, `description`, and `websiteUrl` are optional
 
 **Method-level:**
 
 - `@McpTool(name, description)` — required attributes; method must return `McpToolResult`
-- `@McpPrompt(name, description)` — required attributes; method must return `McpPromptResult`
+- `@McpPrompt(name, description, title)` — `name` and `description` required; `title` optional; method must return `McpPromptResult`
 - `@McpResource(uri, name, mimeType, description)` — `uri`, `name`, `mimeType` required; `description` optional; method must return `McpResourceContents`
 - `@McpListResources` — method must return `McpListResourcesResult`; no `@McpArgument` allowed
+
+Because `resources/list` is application-generated in v1, resource title and size metadata live on `McpListedResource` rather than as separate attributes on `@McpResource`.
 
 **Parameter-level:**
 
@@ -804,6 +811,8 @@ McpResourceContents.fromBlob(uri, base64Data, mimeType)
 
 // Resource list entry
 McpListedResource.fromComponents(uri, name, mimeType)
+    .withTitle("Recipe card")
+    .withSizeBytes(2048L)
 
 // Resource list result
 McpListResourcesResult.fromResources(resources)
@@ -831,6 +840,37 @@ public record McpListResourcesResult(
             @NonNull String nextCursor) { ... }
 }
 ```
+
+`McpListedResource` is a small immutable type:
+
+```java
+@Immutable
+public record McpListedResource(
+    @NonNull String uri,
+    @NonNull String name,
+    @NonNull String mimeType,
+    @Nullable String title,
+    @Nullable Long sizeBytes
+) {
+    public McpListedResource {
+        if (sizeBytes != null && sizeBytes.longValue() < 0L)
+            throw new IllegalArgumentException("Resource size metadata must be non-negative.");
+    }
+
+    @NonNull
+    static McpListedResource fromComponents(@NonNull String uri,
+                                            @NonNull String name,
+                                            @NonNull String mimeType) { ... }
+
+    @NonNull
+    McpListedResource withTitle(@NonNull String title) { ... }
+
+    @NonNull
+    McpListedResource withSizeBytes(@NonNull Long sizeBytes) { ... }
+}
+```
+
+In v1, `McpListedResource.title` and `McpListedResource.sizeBytes` are the only extra resource-list metadata fields beyond the core identifier and MIME type. Icons, annotations, and templates remain deferred.
 
 Programmatic handlers and `McpResponseMarshaler` use a small public MCP value model rather than the internal `Json*` types:
 
@@ -1020,6 +1060,9 @@ public interface McpPromptHandler {
 
     @NonNull
     String getDescription();
+
+    @NonNull
+    default Optional<@NonNull String> getTitle() { return Optional.empty(); }
 
     @NonNull
     McpSchema getArgumentsSchema();
