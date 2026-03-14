@@ -196,7 +196,7 @@ Tool, prompt, and resource names only need to be unique within a single endpoint
 
 MCP handler methods need the same cross-cutting wrapper that HTTP resource methods get via `RequestInterceptor` — primarily transaction management (open transaction, invoke handler, commit on success, rollback on failure).
 
-`McpRequestInterceptor` is a separate interface configured on `McpServer.Builder`, consistent with how HTTP's `RequestInterceptor` is configured on `SokletConfig`. It is server-wide, not per-endpoint. If per-endpoint differentiation is needed, the interceptor can inspect `McpRequestContext` to determine which endpoint is handling the request.
+`McpRequestInterceptor` is a separate interface configured on `McpServer.Builder`, consistent with how HTTP's `RequestInterceptor` is configured on `SokletConfig`. It is server-wide, not per-endpoint. If per-endpoint differentiation is needed, the interceptor can inspect `McpRequestContext` to determine which endpoint is handling the request. The invocation callback is generic so the interceptor preserves the concrete handler result type rather than collapsing everything to raw `Object`.
 
 ```java
 McpServer.withPort(8082)
@@ -209,18 +209,16 @@ McpServer.withPort(8082)
 ```java
 @ThreadSafe
 public interface McpRequestInterceptor {
-    @Nullable
-    default Object interceptRequest(@NonNull McpRequestContext context,
-                                    @NonNull McpHandlerInvocation invocation) throws Exception {
+    default <T> @Nullable T interceptRequest(@NonNull McpRequestContext context,
+                                             @NonNull McpHandlerInvocation<T> invocation) throws Exception {
         return invocation.invoke();
     }
 }
 
 @ThreadSafe
 @FunctionalInterface
-public interface McpHandlerInvocation {
-    @Nullable
-    Object invoke() throws Exception;
+public interface McpHandlerInvocation<T> {
+    @Nullable T invoke() throws Exception;
 }
 ```
 
@@ -360,8 +358,8 @@ Required on every `@McpServerEndpoint` class. The defaults are sensible no-ops. 
 **Injectable by type (no annotation needed):**
 
 - `McpSessionContext` — session data bag (tenant ID, user state, etc.)
-- `McpRequestContext` — current JSON-RPC request metadata (request ID, method name)
-- `McpToolCallContext` — tool-specific request data (request ID, progress token); only available in `@McpTool` methods
+- `McpRequestContext` — current JSON-RPC request metadata (request ID wrapper, method name)
+- `McpToolCallContext` — tool-specific request data (request ID wrapper, progress token wrapper); only available in `@McpTool` methods
 - `McpInitializationContext` — initialization-time data (protocol version, endpoint path parameters, client info); only available in `initialize()`
 - `McpClientCapabilities` — negotiated client capabilities
 - `McpListResourcesContext` — pagination cursor and request metadata; only available in `@McpListResources` methods
@@ -370,8 +368,8 @@ These are flat, independently injectable types — no inheritance hierarchy betw
 
 Minimum fields exposed by the context types:
 
-- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, JSON-RPC request ID if present, session ID if present, and negotiated protocol version if present
-- `McpToolCallContext` — `McpRequestContext` plus progress token if the client supplied one
+- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, `McpJsonRpcRequestId` if present, session ID if present, and negotiated protocol version if present
+- `McpToolCallContext` — `McpRequestContext` plus `McpProgressToken` if the client supplied one
 - `McpInitializationContext` — protocol version, client capabilities, client info, endpoint path parameters, and the underlying `Request`
 - `McpListResourcesContext` — pagination cursor, request metadata, and session/endpoint context
 
@@ -432,7 +430,7 @@ public interface McpRequestContext {
     String getJsonRpcMethod();
 
     @NonNull
-    Optional<@NonNull Object> getJsonRpcRequestId();
+    Optional<@NonNull McpJsonRpcRequestId> getJsonRpcRequestId();
 
     @NonNull
     Optional<@NonNull String> getSessionId();
@@ -447,7 +445,7 @@ public interface McpToolCallContext {
     McpRequestContext getRequestContext();
 
     @NonNull
-    Optional<@NonNull Object> getProgressToken();
+    Optional<@NonNull McpProgressToken> getProgressToken();
 }
 
 @ThreadSafe
@@ -594,6 +592,56 @@ public enum McpNull implements McpValue {
 ```
 
 `McpObject` preserves insertion order. All public MCP value types are immutable snapshots.
+
+JSON-RPC request IDs and MCP progress tokens use specific wrapper types rather than raw `Object`:
+
+```java
+@Immutable
+public record McpJsonRpcRequestId(
+    @NonNull McpValue value
+) {
+    public McpJsonRpcRequestId {
+        // v1 accepts only JSON string or number IDs
+        if (!(value instanceof McpString) && !(value instanceof McpNumber))
+            throw new IllegalArgumentException("JSON-RPC request IDs must be strings or numbers.");
+    }
+
+    @NonNull
+    static McpJsonRpcRequestId fromString(@NonNull String value) { ... }
+
+    @NonNull
+    static McpJsonRpcRequestId fromNumber(@NonNull BigDecimal value) { ... }
+
+    @NonNull
+    Optional<@NonNull String> asString() { ... }
+
+    @NonNull
+    Optional<@NonNull BigDecimal> asNumber() { ... }
+}
+
+@Immutable
+public record McpProgressToken(
+    @NonNull McpValue value
+) {
+    public McpProgressToken {
+        // v1 accepts only JSON string or number progress tokens
+        if (!(value instanceof McpString) && !(value instanceof McpNumber))
+            throw new IllegalArgumentException("MCP progress tokens must be strings or numbers.");
+    }
+
+    @NonNull
+    static McpProgressToken fromString(@NonNull String value) { ... }
+
+    @NonNull
+    static McpProgressToken fromNumber(@NonNull BigDecimal value) { ... }
+
+    @NonNull
+    Optional<@NonNull String> asString() { ... }
+
+    @NonNull
+    Optional<@NonNull BigDecimal> asNumber() { ... }
+}
+```
 
 ### `McpServer` builder surface
 
