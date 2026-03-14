@@ -228,18 +228,280 @@ Rather than separate MCP-specific observer and collector interfaces, extend the 
 
 All new methods have no-op defaults, so existing implementations are unaffected.
 
-MCP lifecycle events for `LifecycleObserver`:
+`ServerType` gains a new `MCP` enum constant. Existing low-level callbacks such as `willAcceptConnection(...)`, `didAcceptRequest(...)`, `willReadRequest(...)`, `didReadRequest(...)`, and the corresponding `MetricsCollector` methods fire for MCP traffic with `ServerType.MCP`. This means plain HTTP transport issues for `POST /mcp`, `GET /mcp`, and `DELETE /mcp` show up through the existing low-level hooks. The new MCP-specific callbacks below are only for higher-level protocol events after the request has been parsed and resolved to an MCP endpoint.
 
-- MCP server starting / started / stopping / stopped
-- MCP session created / destroyed
-- MCP request received / completed
-- MCP SSE stream opened / closed
+```java
+public enum ServerType {
+    STANDARD_HTTP,
+    SERVER_SENT_EVENT,
+    MCP
+}
+```
 
-MCP metrics events for `MetricsCollector`:
+Concrete `LifecycleObserver` additions:
 
-- MCP request count, duration, error rate (by method: `tools/call`, `resources/read`, etc.)
-- Active session count
-- Active SSE stream count
+```java
+default void willStartMcpServer(@NonNull McpServer mcpServer) {
+    // No-op by default
+}
+
+default void didStartMcpServer(@NonNull McpServer mcpServer) {
+    // No-op by default
+}
+
+default void didFailToStartMcpServer(@NonNull McpServer mcpServer,
+                                     @NonNull Throwable throwable) {
+    // No-op by default
+}
+
+default void willStopMcpServer(@NonNull McpServer mcpServer) {
+    // No-op by default
+}
+
+default void didStopMcpServer(@NonNull McpServer mcpServer) {
+    // No-op by default
+}
+
+default void didFailToStopMcpServer(@NonNull McpServer mcpServer,
+                                    @NonNull Throwable throwable) {
+    // No-op by default
+}
+
+default void didCreateMcpSession(@NonNull Request request,
+                                 @NonNull Class<? extends McpEndpoint> endpointClass,
+                                 @NonNull String sessionId) {
+    // No-op by default
+}
+
+default void didTerminateMcpSession(@NonNull Class<? extends McpEndpoint> endpointClass,
+                                    @NonNull String sessionId,
+                                    @NonNull Duration sessionDuration,
+                                    @NonNull McpSessionTerminationReason terminationReason,
+                                    @Nullable Throwable throwable) {
+    // No-op by default
+}
+
+default void didStartMcpRequestHandling(@NonNull Request request,
+                                        @NonNull Class<? extends McpEndpoint> endpointClass,
+                                        @Nullable String sessionId,
+                                        @NonNull String jsonRpcMethod,
+                                        @Nullable McpJsonRpcRequestId jsonRpcRequestId) {
+    // No-op by default
+}
+
+default void didFinishMcpRequestHandling(@NonNull Request request,
+                                         @NonNull Class<? extends McpEndpoint> endpointClass,
+                                         @Nullable String sessionId,
+                                         @NonNull String jsonRpcMethod,
+                                         @Nullable McpJsonRpcRequestId jsonRpcRequestId,
+                                         @NonNull McpRequestOutcome requestOutcome,
+                                         @Nullable McpJsonRpcError jsonRpcError,
+                                         @NonNull Duration duration,
+                                         @NonNull List<@NonNull Throwable> throwables) {
+    // No-op by default
+}
+
+default void didEstablishMcpServerSentEventStream(@NonNull Request request,
+                                                  @NonNull Class<? extends McpEndpoint> endpointClass,
+                                                  @NonNull String sessionId) {
+    // No-op by default
+}
+
+default void willTerminateMcpServerSentEventStream(@NonNull Request request,
+                                                   @NonNull Class<? extends McpEndpoint> endpointClass,
+                                                   @NonNull String sessionId,
+                                                   @NonNull McpStreamTerminationReason terminationReason,
+                                                   @Nullable Throwable throwable) {
+    // No-op by default
+}
+
+default void didTerminateMcpServerSentEventStream(@NonNull Request request,
+                                                  @NonNull Class<? extends McpEndpoint> endpointClass,
+                                                  @NonNull String sessionId,
+                                                  @NonNull Duration connectionDuration,
+                                                  @NonNull McpStreamTerminationReason terminationReason,
+                                                  @Nullable Throwable throwable) {
+    // No-op by default
+}
+```
+
+Semantics:
+
+- `didStartMcpRequestHandling(...)` and `didFinishMcpRequestHandling(...)` apply only to `POST /mcp` JSON-RPC requests after protocol parsing succeeds. They do not fire for malformed JSON, batch arrays rejected at the transport boundary, `GET /mcp`, or `DELETE /mcp`; those remain visible via the existing low-level callbacks with `ServerType.MCP`.
+- `didFinishMcpRequestHandling(...)` always fires exactly once for a JSON-RPC request after `didStartMcpRequestHandling(...)`, even when the result is a JSON-RPC error or a tool result with `isError: true`.
+- `didCreateMcpSession(...)` fires only after the session record is durably created in `McpSessionStore`.
+- `didTerminateMcpSession(...)` fires after the session is marked terminated. Physical store deletion may occur later and does not trigger a second callback.
+- `didEstablishMcpServerSentEventStream(...)` and `didTerminateMcpServerSentEventStream(...)` apply to successful `GET /mcp` stream establishment and later closure. Failed `GET /mcp` attempts are surfaced via the existing low-level request callbacks with `ServerType.MCP`.
+
+Concrete `MetricsCollector` additions:
+
+```java
+default void didCreateMcpSession(@NonNull Request request,
+                                 @NonNull Class<? extends McpEndpoint> endpointClass,
+                                 @NonNull String sessionId) {
+    // No-op by default
+}
+
+default void didTerminateMcpSession(@NonNull Class<? extends McpEndpoint> endpointClass,
+                                    @NonNull String sessionId,
+                                    @NonNull Duration sessionDuration,
+                                    @NonNull McpSessionTerminationReason terminationReason,
+                                    @Nullable Throwable throwable) {
+    // No-op by default
+}
+
+default void didStartMcpRequestHandling(@NonNull Request request,
+                                        @NonNull Class<? extends McpEndpoint> endpointClass,
+                                        @Nullable String sessionId,
+                                        @NonNull String jsonRpcMethod,
+                                        @Nullable McpJsonRpcRequestId jsonRpcRequestId) {
+    // No-op by default
+}
+
+default void didFinishMcpRequestHandling(@NonNull Request request,
+                                         @NonNull Class<? extends McpEndpoint> endpointClass,
+                                         @Nullable String sessionId,
+                                         @NonNull String jsonRpcMethod,
+                                         @Nullable McpJsonRpcRequestId jsonRpcRequestId,
+                                         @NonNull McpRequestOutcome requestOutcome,
+                                         @Nullable McpJsonRpcError jsonRpcError,
+                                         @NonNull Duration duration,
+                                         @NonNull List<@NonNull Throwable> throwables) {
+    // No-op by default
+}
+
+default void didEstablishMcpServerSentEventStream(@NonNull Request request,
+                                                  @NonNull Class<? extends McpEndpoint> endpointClass,
+                                                  @NonNull String sessionId) {
+    // No-op by default
+}
+
+default void didTerminateMcpServerSentEventStream(@NonNull Request request,
+                                                  @NonNull Class<? extends McpEndpoint> endpointClass,
+                                                  @NonNull String sessionId,
+                                                  @NonNull Duration connectionDuration,
+                                                  @NonNull McpStreamTerminationReason terminationReason,
+                                                  @Nullable Throwable throwable) {
+    // No-op by default
+}
+```
+
+Public `MetricsCollector.Snapshot` additions:
+
+```java
+@NonNull
+Long getActiveMcpSessions();
+
+@NonNull
+Long getActiveMcpStreams();
+
+@NonNull
+Long getMcpConnectionsAccepted();
+
+@NonNull
+Long getMcpConnectionsRejected();
+
+@NonNull
+Map<@NonNull RequestReadFailureKey, @NonNull Long> getMcpRequestReadFailures();
+
+@NonNull
+Map<@NonNull RequestRejectionKey, @NonNull Long> getMcpRequestRejections();
+
+@NonNull
+Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull Long> getMcpRequests();
+
+@NonNull
+Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull HistogramSnapshot> getMcpRequestDurations();
+
+@NonNull
+Map<@NonNull McpEndpointSessionTerminationKey, @NonNull HistogramSnapshot> getMcpSessionDurations();
+
+@NonNull
+Map<@NonNull McpEndpointStreamTerminationKey, @NonNull HistogramSnapshot> getMcpStreamDurations();
+```
+
+`MetricsCollector.Snapshot.Builder` gains matching setter methods for each new MCP field/getter above, following the existing builder pattern used by the HTTP and SSE metrics fields.
+
+Supporting public metric key / outcome types:
+
+```java
+enum McpRequestOutcome {
+    SUCCESS_RESPONSE,
+    SUCCESS_NOTIFICATION,
+    TOOL_ERROR_RESULT,
+    JSON_RPC_ERROR
+}
+
+enum McpSessionTerminationReason {
+    CLIENT_REQUESTED,
+    SERVER_STOPPING,
+    INTERNAL_ERROR
+}
+
+enum McpStreamTerminationReason {
+    CLIENT_DISCONNECTED,
+    SESSION_TERMINATED,
+    SERVER_STOPPING,
+    WRITE_FAILED,
+    INTERNAL_ERROR
+}
+
+record McpEndpointRequestOutcomeKey(
+    @NonNull Class<? extends McpEndpoint> endpointClass,
+    @NonNull String jsonRpcMethod,
+    @NonNull McpRequestOutcome requestOutcome
+) {
+    public McpEndpointRequestOutcomeKey {
+        requireNonNull(endpointClass);
+        requireNonNull(jsonRpcMethod);
+        requireNonNull(requestOutcome);
+    }
+}
+
+record McpEndpointSessionTerminationKey(
+    @NonNull Class<? extends McpEndpoint> endpointClass,
+    @NonNull McpSessionTerminationReason terminationReason
+) {
+    public McpEndpointSessionTerminationKey {
+        requireNonNull(endpointClass);
+        requireNonNull(terminationReason);
+    }
+}
+
+record McpEndpointStreamTerminationKey(
+    @NonNull Class<? extends McpEndpoint> endpointClass,
+    @NonNull McpStreamTerminationReason terminationReason
+) {
+    public McpEndpointStreamTerminationKey {
+        requireNonNull(endpointClass);
+        requireNonNull(terminationReason);
+    }
+}
+```
+
+Default metrics semantics:
+
+- `getMcpConnectionsAccepted()`, `getMcpConnectionsRejected()`, `getMcpRequestReadFailures()`, and `getMcpRequestRejections()` are the MCP-specific analogues of the existing HTTP/SSE low-level transport counters and are driven by the generic callbacks using `ServerType.MCP`.
+- `getMcpRequests()` and `getMcpRequestDurations()` are keyed by resolved endpoint class, JSON-RPC method name, and final request outcome. No metric key includes path-parameter values, session context contents, JSON-RPC request IDs, or progress tokens.
+- `getActiveMcpSessions()` increments when `didCreateMcpSession(...)` fires and decrements when `didTerminateMcpSession(...)` fires.
+- `getActiveMcpStreams()` increments when `didEstablishMcpServerSentEventStream(...)` fires and decrements when `didTerminateMcpServerSentEventStream(...)` fires.
+- `getMcpSessionDurations()` and `getMcpStreamDurations()` are termination-reason histograms, not simple counters; applications can derive counts from histogram sample totals.
+
+`LogEventType` gains the following MCP-specific lifecycle observer failure entries:
+
+- `LIFECYCLE_OBSERVER_WILL_START_MCP_SERVER_FAILED`
+- `LIFECYCLE_OBSERVER_DID_START_MCP_SERVER_FAILED` — covers both `didStartMcpServer(...)` and `didFailToStartMcpServer(...)`
+- `LIFECYCLE_OBSERVER_WILL_STOP_MCP_SERVER_FAILED`
+- `LIFECYCLE_OBSERVER_DID_STOP_MCP_SERVER_FAILED` — covers both `didStopMcpServer(...)` and `didFailToStopMcpServer(...)`
+- `LIFECYCLE_OBSERVER_DID_CREATE_MCP_SESSION_FAILED`
+- `LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SESSION_FAILED`
+- `LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED`
+- `LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED`
+- `LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SERVER_SENT_EVENT_STREAM_FAILED`
+- `LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED`
+- `LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED`
+
+`MetricsCollector` callback failures continue to use the existing `METRICS_COLLECTOR_FAILED` event.
 
 ### 14. Conservative v1 capability profile
 
@@ -1136,7 +1398,11 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Add context types (`McpSessionContext`, `McpRequestContext`, `McpToolCallContext`, `McpInitializationContext`, `McpListResourcesContext`)
 - Add `McpJsonRpcError`
 - Add `McpRequestInterceptor`, `McpHandlerInvocation`
+- Add `McpJsonRpcRequestId`, `McpProgressToken`, `McpRequestOutcome`, `McpSessionTerminationReason`, `McpStreamTerminationReason`
+- Extend `ServerType` with `MCP`
 - Add MCP default methods to `LifecycleObserver` and `MetricsCollector`
+- Add MCP fields/getters/key records to `MetricsCollector.Snapshot`
+- Add MCP-specific `LogEventType` entries for `LifecycleObserver` callback failures
 - Add `SokletConfig.Builder#mcpServer(...)`
 
 ### Phase 2: Annotation processor extension
@@ -1161,7 +1427,8 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `DefaultMcpServer`
 - `POST`, `GET`, `DELETE` endpoint handling
 - SSE stream management
-- `LifecycleObserver` and `MetricsCollector` hooks
+- Existing low-level `LifecycleObserver` / `MetricsCollector` hooks using `ServerType.MCP`
+- MCP-specific `LifecycleObserver` / `MetricsCollector` hooks
 
 ### Phase 5: Handler dispatch
 
@@ -1241,5 +1508,8 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Prompt method exception → JSON-RPC `-32603` error
 - Resource method exception → JSON-RPC `-32603` error
 - `McpRequestInterceptor` invoked around handler dispatch
+- Existing low-level `LifecycleObserver` / `MetricsCollector` callbacks fire for MCP traffic with `ServerType.MCP`
 - `LifecycleObserver` MCP callbacks fire at correct lifecycle points
-- `MetricsCollector` MCP callbacks track request count and duration
+- `MetricsCollector` MCP callbacks track request count, duration, active session count, and active stream count
+- `MetricsCollector.Snapshot` exposes MCP counters and histograms with the expected key shapes
+- `LogEventType` surfaces MCP lifecycle observer callback failures with the documented names
