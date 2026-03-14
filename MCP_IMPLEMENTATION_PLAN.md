@@ -2,7 +2,7 @@
 
 Status: draft design
 
-Last updated: 2026-03-13
+Last updated: 2026-03-14
 
 Spec target: MCP Streamable HTTP transport, version `2025-11-25`
 
@@ -129,7 +129,7 @@ The extended `SokletProcessor` validates:
 - `@McpTool` methods return `McpToolResult`
 - `@McpPrompt` methods return `McpPromptResult`
 - `@McpResource` methods return `McpResourceContents`
-- `@McpListResources` methods return `List<McpListedResource>` (or raw `List`)
+- `@McpListResources` methods return `McpListResourcesResult`
 - `@McpListResources` methods have no `@McpArgument` parameters
 - `@McpArgument` parameter types are within the whitelist
 - No duplicate tool, prompt, or resource names within the same endpoint class
@@ -146,6 +146,10 @@ The framework generates `tools/list` and `prompts/list` responses automatically 
 
 `resources/list` in the MCP spec accepts only an optional pagination cursor, not arbitrary caller arguments. `@McpListResources` methods may only receive `@McpEndpointPathParameter` bindings and injectable framework types. `@McpArgument` is a compile error on these methods.
 
+To support pagination cleanly, `@McpListResources` returns `McpListResourcesResult` rather than a bare `List<McpListedResource>`.
+
+`tools/list` and `prompts/list` remain framework-generated in v1 and are not paginated. They always return the full, sorted list and omit `nextCursor`.
+
 ### 9. Programmatic escape hatch
 
 For tools with argument types outside the whitelist, or for dynamically-registered handlers, provide a `McpToolHandler` / `McpPromptHandler` / `McpResourceHandler` programmatic interface. These can be registered alongside annotation-discovered handlers:
@@ -157,10 +161,10 @@ McpHandlerResolver.fromClasspathIntrospection()
 
 The endpoint class argument scopes the programmatic handler to that endpoint. With multi-endpoint routing, this ensures a tool registered for the tenant endpoint is not visible on the admin endpoint's sessions.
 
-The programmatic interfaces use an explicit `Json.object()` fluent builder for schemas:
+The programmatic interfaces use an explicit `McpSchema.object()` fluent builder for schemas:
 
 ```java
-Json.object()
+McpSchema.object()
     .required("locationId", McpType.UUID)
     .optional("threshold", McpType.INTEGER)
     .build()
@@ -184,7 +188,7 @@ Path-based routing uses the same matching algorithm as HTTP path matching. Overl
 
 Sessions are scoped per endpoint. A session established on `/tenants/{tenantId}/mcp` only sees tools, prompts, and resources from that endpoint class. `tools/list`, `prompts/list`, and `resources/list` are scoped to the endpoint the session was established on.
 
-This means a single `McpServer` port can serve both `/tenants/{tenantId}/mcp` and `/admin/mcp` with completely separate capabilities, session stores, and initialization logic.
+This means a single `McpServer` port can serve both `/tenants/{tenantId}/mcp` and `/admin/mcp` with completely separate capabilities and initialization logic, while using one server-wide `McpSessionStore` partitioned by endpoint class.
 
 Tool, prompt, and resource names only need to be unique within a single endpoint class, not across the entire `McpServer`.
 
@@ -229,6 +233,44 @@ MCP metrics events for `MetricsCollector`:
 - MCP request count, duration, error rate (by method: `tools/call`, `resources/read`, etc.)
 - Active session count
 - Active SSE stream count
+
+### 14. Conservative v1 capability profile
+
+Although the spec target is `2025-11-25`, this proposal intentionally implements a conservative subset in v1 and omits optional metadata and capabilities until Soklet has a coherent public API for them.
+
+Server capability advertisement in v1:
+
+- `tools: {}` when at least one tool is available
+- `prompts: {}` when at least one prompt is available
+- `resources: {}` when at least one resource or resource-list handler is available
+
+Not advertised in v1:
+
+- `tools.listChanged`
+- `prompts.listChanged`
+- `resources.listChanged`
+- `resources.subscribe`
+- `logging`
+- `completions`
+- `tasks`
+- `experimental`
+
+Protocol fields intentionally omitted from responses in v1 unless later added to the public API:
+
+- `serverInfo.title`
+- `serverInfo.description`
+- `serverInfo.icons`
+- `serverInfo.websiteUrl`
+- prompt titles and icons
+- resource titles, icons, annotations, and size metadata
+- resource templates
+- tool annotations, execution metadata, and output schema
+
+Deterministic ordering rules:
+
+- `tools/list` returns tools sorted by tool name
+- `prompts/list` returns prompts sorted by prompt name
+- `resources/list` preserves application order from `McpListResourcesResult`
 
 ## Public API
 
@@ -294,7 +336,7 @@ Required on every `@McpServerEndpoint` class. The defaults are sensible no-ops. 
 - `@McpTool(name, description)` — required attributes; method must return `McpToolResult`
 - `@McpPrompt(name, description)` — required attributes; method must return `McpPromptResult`
 - `@McpResource(uri, name, mimeType, description)` — `uri`, `name`, `mimeType` required; `description` optional; method must return `McpResourceContents`
-- `@McpListResources` — method must return `List<McpListedResource>`; no `@McpArgument` allowed
+- `@McpListResources` — method must return `McpListResourcesResult`; no `@McpArgument` allowed
 
 **Parameter-level:**
 
@@ -313,6 +355,13 @@ Required on every `@McpServerEndpoint` class. The defaults are sensible no-ops. 
 
 These are flat, independently injectable types — no inheritance hierarchy between them. Context types like `McpToolCallContext` and `McpListResourcesContext` are only available in the method types where they make sense (enforced at compile time by the processor). General-purpose types like `McpSessionContext`, `McpRequestContext`, and `McpClientCapabilities` can be injected in any handler method.
 
+Minimum fields exposed by the context types:
+
+- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, JSON-RPC request ID if present, session ID if present, and negotiated protocol version if present
+- `McpToolCallContext` — `McpRequestContext` plus progress token if the client supplied one
+- `McpInitializationContext` — protocol version, client capabilities, client info, endpoint path parameters, and the underlying `Request`
+- `McpListResourcesContext` — pagination cursor, request metadata, and session/endpoint context
+
 ### Parameter injection priority
 
 1. Known injectable framework type → inject by type, no annotation needed
@@ -320,6 +369,16 @@ These are flat, independently injectable types — no inheritance hierarchy betw
 3. `@McpArgument` → bind from MCP JSON arguments
 4. `@McpUriParameter` → bind from resource URI template
 5. Otherwise → compile error (caught by processor) and startup error
+
+### Argument binding semantics
+
+- A missing required `@McpArgument` produces a JSON-RPC invalid-params error.
+- A missing optional `@McpArgument(optional = true)` binds to Java `null`.
+- Explicit JSON `null` is only accepted for optional reference-typed parameters; it is rejected for primitive parameters and for required arguments.
+- Type mismatches during binding produce a JSON-RPC invalid-params error.
+- Enum arguments are matched case-sensitively against enum constant names.
+- Annotation-derived tool and prompt schemas are root-level object schemas with `additionalProperties: false`. Unexpected arguments are rejected as invalid params.
+- `McpSchema.object()` follows the same default: root object plus `additionalProperties: false` unless a future API explicitly opts into looser validation.
 
 ### Result types
 
@@ -347,8 +406,25 @@ McpResourceContents.blob(uri, base64Data, mimeType)
 // Resource list entry
 McpListedResource.of(uri, name, mimeType)
 
+// Resource list result
+McpListResourcesResult.of(resources)
+McpListResourcesResult.page(resources, nextCursor)
+
 // JSON-RPC error (for handleError() hook)
 McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error")
+```
+
+`McpListResourcesResult` is a small immutable type:
+
+```java
+public record McpListResourcesResult(
+    List<McpListedResource> resources,
+    @Nullable String nextCursor
+) {
+    static McpListResourcesResult of(List<McpListedResource> resources) { ... }
+    static McpListResourcesResult page(List<McpListedResource> resources,
+                                       String nextCursor) { ... }
+}
 ```
 
 ### `McpServer` builder surface
@@ -360,12 +436,24 @@ McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error")
 - `responseMarshaler(McpResponseMarshaler)`
 - `originPolicy(McpOriginPolicy)` — defaults to `McpOriginPolicy.nonBrowserClientsOnlyInstance()`
 - `sessionStore(McpSessionStore)` — defaults to `McpSessionStore.inMemoryInstance()`
+- `requestTimeout(Duration)`
+- `requestHandlerTimeout(Duration)`
 - `requestHandlerConcurrency(Integer)`
 - `requestHandlerQueueCapacity(Integer)`
+- `requestHandlerExecutorServiceSupplier(Supplier<ExecutorService>)`
+- `maximumRequestSizeInBytes(Integer)`
+- `requestReadBufferSizeInBytes(Integer)`
+- `concurrentConnectionLimit(Integer)`
+- `connectionQueueCapacity(Integer)` — per-stream outbound queue capacity
 - `shutdownTimeout(Duration)`
 - `writeTimeout(Duration)`
 - `heartbeatInterval(Duration)`
-- `idGenerator(IdGenerator<?>)`
+- `idGenerator(IdGenerator<String>)` — session IDs must be visible ASCII for `MCP-Session-Id`
+
+Intentionally absent from `McpServer.Builder`:
+
+- no `multipartParser(...)` — MCP requests are JSON only
+- no `broadcasterCacheCapacity(...)` or `resourcePathCacheCapacity(...)` — unlike Soklet SSE, MCP streams are session-bound, not resource-path-bound
 
 ### `McpHandlerResolver`
 
@@ -374,6 +462,24 @@ McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error")
 - `.withTool(McpToolHandler, Class<? extends McpEndpoint>)` — programmatic escape hatch scoped to an endpoint class; composable on either factory result
 - `.withPrompt(McpPromptHandler, Class<? extends McpEndpoint>)`
 - `.withResource(McpResourceHandler, Class<? extends McpEndpoint>)`
+
+Resolver composition rules:
+
+- `fromClasspathIntrospection()` returns an immutable singleton base resolver.
+- `.withTool(...)`, `.withPrompt(...)`, and `.withResource(...)` never mutate that singleton; they return a new immutable composite resolver that delegates to the base resolver first and then overlays programmatic handlers.
+- A duplicate tool, prompt, or resource name within the same endpoint is a startup error even if the duplicate comes from mixing annotations and programmatic handlers.
+
+### Programmatic handler contracts
+
+Programmatic handlers participate in discovery exactly like annotated handlers. They appear in endpoint-scoped list and dispatch operations for the endpoint class they are registered against.
+
+The contract is intentionally JSON-first:
+
+- a programmatic tool or prompt handler declares its metadata and input schema explicitly
+- the runtime passes parsed JSON arguments to the handler rather than attempting reflective Java binding
+- a programmatic resource handler declares its URI template explicitly and receives extracted template values plus request/session context
+
+This keeps the escape hatch truly general-purpose and avoids reflection-heavy edge cases leaking back into the primary annotation path.
 
 ### `McpResponseMarshaler`
 
@@ -413,6 +519,7 @@ public record McpOriginCheckContext(
 - `Origin: null` is treated as the literal string `"null"` and is rejected unless explicitly permitted.
 - Rejection becomes `403 Forbidden`; `McpOriginPolicy` does not write CORS headers or attempt preflight handling.
 - `fromWhitelistedOrigins(...)` allows requests with no `Origin` and also allows requests whose `Origin` matches the provided normalized whitelist.
+- Origin normalization in v1 lowercases scheme and host, strips a trailing slash, and elides default ports (`:80` for `http`, `:443` for `https`).
 - The policy is endpoint-aware because `McpOriginCheckContext` includes the resolved endpoint class. A single `McpServer` can therefore allow browser access for `/admin/mcp` and reject it for `/tenants/{tenantId}/mcp`, or vice versa.
 
 ### `McpSessionStore`
@@ -439,6 +546,7 @@ public record McpStoredSession(
     Instant createdAt,
     Instant lastActivityAt,
     boolean initialized,
+    boolean initializedNotificationReceived,
     @Nullable String protocolVersion,
     @Nullable McpClientCapabilities clientCapabilities,
     McpSessionContext sessionContext,
@@ -453,6 +561,7 @@ public record McpStoredSession(
 - `deleteBySessionId(...)` physically removes a session record after protocol teardown. Normal session shutdown is modeled first as a successful `replace(...)` that sets `terminatedAt`, then a later delete once SSE streams are closed.
 - `inMemoryInstance()` returns a new in-process store for a single JVM. It is the default implementation for v1 and is not suitable for cross-JVM sharing without a custom store.
 - Endpoint isolation is part of the stored record: the session is bound to one endpoint class at creation time, and later requests must match that endpoint or be treated as invalid.
+- `McpSessionContext` values are opaque application objects. `inMemoryInstance()` can store arbitrary values. A custom out-of-process store is responsible for its own serialization policy and may therefore impose stricter constraints.
 
 ## Internal design
 
@@ -500,7 +609,7 @@ Types: `JsonValue`, `JsonObject`, `JsonArray`, `JsonString`, `JsonNumber`, `Json
 
 Rules: no reflection-based mapping; no general-purpose serializer; explicit mapping between JSON trees and MCP DTOs.
 
-`Json.object()` is a public fluent builder for schemas, used by the programmatic escape hatch.
+`McpSchema.object()` is the public fluent schema builder used by the programmatic escape hatch. The internal `Json*` types remain internal implementation details.
 
 ## MCP endpoint HTTP behavior
 
@@ -508,36 +617,66 @@ Assume `path("/mcp")`.
 
 ### `POST /mcp`
 
-- Validate `Content-Type: application/json`, `Accept`, `Origin`
-- Parse one JSON-RPC message
+- Validate `Content-Type: application/json`, `Accept`, `Origin`, `MCP-Protocol-Version`, and `MCP-Session-Id` as applicable to the current lifecycle stage
+- Parse exactly one JSON-RPC message
 - Enforce lifecycle and capability rules
 - Dispatch to handler
 
 Response policy:
 
-- JSON-RPC request → `200 OK` with `application/json`
-- Notification or client response → `202 Accepted`
+- notifications-only or responses-only input → `202 Accepted` with no body
+- request input with only terminal responses to send → `200 OK` with `application/json`
+- request input that must interleave server messages or multiple responses over time → `200 OK` with `text/event-stream`
 - Invalid request → protocol-appropriate JSON-RPC error payload
+
+Header and lifecycle rules:
+
+- `Accept` on `POST` must allow both `application/json` and `text/event-stream`
+- `initialize` must be a non-batched JSON-RPC request and must not include `MCP-Session-Id`
+- successful `initialize` responses include `MCP-Session-Id` and establish the session
+- after `initialize`, all client HTTP requests must include both `MCP-Session-Id` and `MCP-Protocol-Version`
+- `MCP-Protocol-Version` must match the negotiated session version or the request is rejected with `400`
+- missing required `MCP-Session-Id` on non-initialize requests is `400`
+- unknown, dead, or endpoint-mismatched `MCP-Session-Id` is `404`
+- before `notifications/initialized` is received, only `initialize`, `notifications/initialized`, and `ping` are accepted
+- JSON-RPC batch arrays are rejected with `400` in v1
 
 ### `GET /mcp`
 
-- Validate `Accept: text/event-stream`, `Origin`, session
-- Open SSE stream for outbound server-to-client messages (notifications, progress)
+- Validate `Accept: text/event-stream`, `Origin`, `MCP-Protocol-Version`, `MCP-Session-Id`, and `Last-Event-ID`
+- Open SSE stream for outbound server-to-client messages
+
+GET behavior:
+
+- `Accept` on `GET` must allow `text/event-stream`
+- `McpServer` always supports `GET` for configured MCP endpoints, so it does not use `405 Method Not Allowed` for normal endpoint paths
+- multiple live GET streams per session are allowed
+- each server-originated JSON-RPC message is written to exactly one stream, never broadcast to all streams
+- request-scoped progress or related server messages stay on the POST response stream if that POST was upgraded to SSE
+- unsolicited session-scoped server messages, if any, go to the most recently established live GET stream
+- v1 does not implement resumability or redelivery; SSE events therefore omit `id`, and a GET request carrying `Last-Event-ID` is rejected with `400 Bad Request`
 
 ### `DELETE /mcp`
 
-- Validate `Origin` and session ownership
+- Validate `Origin`, `MCP-Protocol-Version`, and `MCP-Session-Id`
 - Terminate session and close active SSE streams
 - Return `204 No Content`
+
+DELETE semantics:
+
+- v1 has no built-in principal model, so "session ownership" means possession of a valid session ID for the resolved endpoint path
+- applications that authenticate users should enforce user-to-session binding in `McpRequestInterceptor` and/or their custom `McpSessionStore`
+- deleting an already-terminated or unknown session returns `404`
 
 ## Session model
 
 Sessions are stateful in v1. Each session is scoped to a specific endpoint — a session established on `/tenants/{tenantId}/mcp` is entirely separate from one on `/admin/mcp`. Each session holds:
 
-- session ID (from `IdGenerator`)
+- session ID (from `IdGenerator<String>`)
 - endpoint class reference (which `@McpServerEndpoint` this session belongs to)
 - creation and last-activity timestamps
 - initialization status
+- whether `notifications/initialized` has been received
 - negotiated protocol version and capabilities
 - typed key/value bag for application data (e.g., `tenantId`)
 - termination status
@@ -549,8 +688,11 @@ Sessions are stateful in v1. Each session is scoped to a specific endpoint — a
 Typical runtime flow:
 
 - `initialize` creates an uninitialized session record, invokes `McpEndpoint.initialize(...)`, then persists the initialized `McpSessionContext` and negotiated capabilities via `replace(...)`
-- subsequent `POST` and `GET` requests load the record, verify endpoint match and non-terminated state, then update `lastActivityAt` via `replace(...)`
+- `notifications/initialized` flips `initializedNotificationReceived` to `true`
+- subsequent `POST` and `GET` requests load the record, verify endpoint match, negotiated protocol version, and non-terminated state, then update `lastActivityAt` via `replace(...)`
 - `DELETE` marks the session terminated via `replace(...)`, closes active SSE streams, and finally removes the record with `deleteBySessionId(...)`
+
+The configured `McpSessionStore` is server-wide, not endpoint-specific. Endpoint isolation comes from the stored `endpointClass` field and runtime validation against the resolved endpoint path.
 
 ## SSE model
 
@@ -561,13 +703,14 @@ Typical runtime flow:
 Minimum:
 
 - Validate `Origin`; reject invalid origins with `403`
-- Isolate session access by identity where applicable
+- Require `MCP-Session-Id` and `MCP-Protocol-Version` on all non-initialize requests
+- Isolate sessions by endpoint and session ID
 - Reject unknown/dead sessions with `404`
 - Reject unsupported protocol versions with `400`
 
 `McpOriginPolicy` is intentionally simpler than HTTP CORS. It is a request admission policy, not a response-header policy. The default behavior is "allow non-browser clients; reject browser-style `Origin` headers unless explicitly whitelisted."
 
-Authorization support is designed for but deferred.
+Authorization support is designed for but deferred. In v1, authenticated applications are expected to layer authorization via `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` rather than through a Soklet-owned auth abstraction.
 
 ## Implementation phases
 
@@ -575,7 +718,7 @@ Authorization support is designed for but deferred.
 
 - Add `McpServer`, `McpHandlerResolver`, `McpEndpoint` interface, `@McpServerEndpoint`
 - Add `McpTool`, `McpPrompt`, `McpResource`, `McpListResources`, parameter annotations
-- Add result types (`McpToolResult`, `McpPromptResult`, `McpResourceContents`, `McpListedResource`)
+- Add result types (`McpToolResult`, `McpPromptResult`, `McpResourceContents`, `McpListedResource`, `McpListResourcesResult`)
 - Add context types (`McpSessionContext`, `McpRequestContext`, `McpToolCallContext`, `McpInitializationContext`, `McpListResourcesContext`)
 - Add `McpJsonRpcError`
 - Add `McpRequestInterceptor`, `McpHandlerInvocation`
@@ -593,7 +736,7 @@ Authorization support is designed for but deferred.
 ### Phase 3: Protocol and JSON runtime
 
 - Internal JSON tree and parser
-- `Json.object()` fluent schema builder and `McpType` enum
+- `McpSchema.object()` fluent schema builder and `McpType` enum
 - JSON-RPC DTOs
 - MCP lifecycle handling
 - Capability negotiation
@@ -629,6 +772,7 @@ Authorization support is designed for but deferred.
 - Unsupported `@McpArgument` type → compile error
 - `@McpArgument` on `@McpListResources` → compile error
 - Wrong return type on `@McpTool` → compile error
+- Wrong return type on `@McpListResources` → compile error
 - URI template parameter mismatch on `@McpResource` → compile error
 - Endpoint path parameter mismatch → compile error
 - Duplicate tool name within a class → compile error
@@ -643,9 +787,11 @@ Authorization support is designed for but deferred.
 - JSON parser and writer
 - JSON-RPC validation
 - MCP lifecycle enforcement
+- JSON-RPC batch arrays are rejected with `400`
 - `McpOriginPolicy.nonBrowserClientsOnlyInstance()` allows missing `Origin` and rejects explicit browser-style origins
 - Session state transitions
 - `McpSessionStore.replace(...)` enforces compare-and-set semantics under concurrent updates
+- `McpHandlerResolver.fromClasspathIntrospection()` remains immutable when composed with programmatic handlers
 - `McpParameterBinder` — all parameter sources
 - Type whitelist schema generation
 - Default `handleToolError` produces `isError: true` with exception message
@@ -661,7 +807,11 @@ Authorization support is designed for but deferred.
 - `prompts/list` and `prompts/get`
 - `resources/list` and `resources/read`
 - Notification POST returning `202`
+- JSON-RPC batch array on POST → `400`
+- Missing `MCP-Session-Id` on non-initialize request → `400`
+- Mismatched `MCP-Protocol-Version` → `400`
 - GET SSE stream establishment
+- GET with `Last-Event-ID` → `400` in v1
 - DELETE session teardown
 - Invalid origin → `403`
 - Invalid session → `404`
