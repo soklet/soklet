@@ -543,6 +543,23 @@ Deterministic ordering rules:
 - `prompts/list` returns prompts sorted by prompt name
 - `resources/list` preserves application order from `McpListResourcesResult`
 
+### 15. Deferred until v2+
+
+The v1 cut is intentionally conservative. The line is simple: ship the transport, dispatch, session, validation, and observability core now, and defer features that would force Soklet to freeze broader public abstractions before enough usage pressure exists to shape them well.
+
+Deferred until v2+:
+
+- Unsolicited server-initiated capabilities such as `tools.listChanged`, `prompts.listChanged`, `resources.listChanged`, `resources.subscribe`, `logging`, `completions`, `tasks`, and `experimental`. These all depend on a stable public session-scoped outbound messaging API, and v1 deliberately does not freeze that API yet.
+- A public session-scoped notification publisher. V1 exposes only request-scoped `McpProgressReporter`; broader session-scoped outbound routing remains internal until Soklet knows the right public shape for logging, `*.listChanged`, tasks, and similar server-originated messages.
+- Resumability and redelivery for SSE streams. Supporting `Last-Event-ID`, event replay, and reconnection semantics would require durable event IDs, buffering rules, and ordering guarantees that materially expand the session store and outbound routing design.
+- Rich optional response metadata including `serverInfo.title`, `serverInfo.description`, `serverInfo.icons`, `serverInfo.websiteUrl`, prompt titles/icons, resource titles/icons/annotations/size metadata, resource templates, and tool annotations/execution metadata/output schema. None of these are required for the core v1 transport and handler model, so they are deferred until Soklet is ready to expose a coherent public value model for them.
+- Built-in authorization and principal modeling. V1 is intentionally transport- and session-focused; applications that need user-aware authorization are expected to layer it through `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` until Soklet has a broader auth abstraction worth standardizing.
+- Broader progress-reporting surfaces beyond tool calls. The MCP protocol allows progress tokens more broadly, but v1 exposes progress reporting only for active tool calls so the first outbound message seam stays narrow, request-scoped, and easy to reason about.
+- JSON-RPC batch handling. Batch arrays are rejected with `400` in v1 because they complicate request lifecycle accounting, streaming response policy, and observability without being necessary for the initial Soklet MCP server value proposition.
+- Pagination for framework-generated `tools/list` and `prompts/list`. V1 always returns the full sorted list; only `resources/list` supports pagination because that is the one list shape most likely to be dynamic and application-backed from the start.
+
+These deferments are intentional, not accidental omissions. The goal is to make v1 implementation-ready without locking Soklet into public APIs that are harder to change than to add later.
+
 ## Public API
 
 ### Soklet configuration (production)
