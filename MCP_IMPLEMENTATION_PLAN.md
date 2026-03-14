@@ -152,7 +152,7 @@ To support pagination cleanly, `@McpListResources` returns `McpListResourcesResu
 
 ### 9. Programmatic escape hatch
 
-For tools with argument types outside the whitelist, or for dynamically-registered handlers, provide a `McpToolHandler` / `McpPromptHandler` / `McpResourceHandler` programmatic interface. These can be registered alongside annotation-discovered handlers:
+For tools with argument types outside the whitelist, or for dynamically-registered handlers, provide `McpToolHandler` / `McpPromptHandler` / `McpResourceHandler` / `McpResourceListHandler` programmatic interfaces. These can be registered alongside annotation-discovered handlers:
 
 ```java
 McpHandlerResolver.fromClasspathIntrospection()
@@ -207,11 +207,20 @@ McpServer.withPort(8082)
 ```
 
 ```java
+@ThreadSafe
 public interface McpRequestInterceptor {
-    default Object interceptRequest(McpRequestContext context,
-                                     McpHandlerInvocation invocation) throws Exception {
+    @Nullable
+    default Object interceptRequest(@NonNull McpRequestContext context,
+                                    @NonNull McpHandlerInvocation invocation) throws Exception {
         return invocation.invoke();
     }
+}
+
+@ThreadSafe
+@FunctionalInterface
+public interface McpHandlerInvocation {
+    @Nullable
+    Object invoke() throws Exception;
 }
 ```
 
@@ -299,19 +308,23 @@ McpServer.withPort(8082)
 ### `McpEndpoint` interface
 
 ```java
+@ThreadSafe
 public interface McpEndpoint {
-    default McpSessionContext initialize(McpInitializationContext context,
-                                         McpSessionContext session) {
+    @NonNull
+    default McpSessionContext initialize(@NonNull McpInitializationContext context,
+                                         @NonNull McpSessionContext session) {
         return session;
     }
 
-    default McpToolResult handleToolError(Throwable throwable,
-                                           McpToolCallContext context) {
-        return McpToolResult.error(throwable.getMessage());
+    @NonNull
+    default McpToolResult handleToolError(@NonNull Throwable throwable,
+                                          @NonNull McpToolCallContext context) {
+        return McpToolResult.fromErrorMessage(throwable.getMessage());
     }
 
-    default McpJsonRpcError handleError(Throwable throwable,
-                                         McpRequestContext context) {
+    @NonNull
+    default McpJsonRpcError handleError(@NonNull Throwable throwable,
+                                        @NonNull McpRequestContext context) {
         return McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error");
     }
 }
@@ -362,6 +375,113 @@ Minimum fields exposed by the context types:
 - `McpInitializationContext` — protocol version, client capabilities, client info, endpoint path parameters, and the underlying `Request`
 - `McpListResourcesContext` — pagination cursor, request metadata, and session/endpoint context
 
+Concrete public contracts:
+
+All public MCP strategy interfaces are expected to be safely reusable across concurrent requests. Value and record-like carrier types are modeled as immutable snapshots; request-scoped accessors are exposed via `@ThreadSafe` interfaces.
+
+```java
+@ThreadSafe
+public interface McpSessionContext {
+    @NonNull
+    Optional<@NonNull Object> get(@NonNull String key);
+
+    @NonNull
+    <T> Optional<@NonNull T> get(@NonNull String key,
+                                 @NonNull Class<T> type);
+
+    @NonNull
+    Boolean contains(@NonNull String key);
+
+    @NonNull
+    McpSessionContext with(@NonNull String key,
+                           @NonNull Object value);
+
+    @NonNull
+    McpSessionContext without(@NonNull String key);
+
+    @NonNull
+    Map<@NonNull String, @NonNull Object> asMap();
+
+    @NonNull
+    static McpSessionContext fromBlankSlate() { ... }
+
+    @NonNull
+    static McpSessionContext fromValues(@NonNull Map<@NonNull String, @NonNull Object> values) { ... }
+}
+
+@Immutable
+public record McpClientInfo(
+    @NonNull String name,
+    @Nullable String version
+) {}
+
+@Immutable
+public record McpClientCapabilities(
+    @NonNull McpObject value
+) {}
+
+@ThreadSafe
+public interface McpRequestContext {
+    @NonNull
+    Request getRequest();
+
+    @NonNull
+    Class<? extends McpEndpoint> getEndpointClass();
+
+    @NonNull
+    String getJsonRpcMethod();
+
+    @NonNull
+    Optional<@NonNull Object> getJsonRpcRequestId();
+
+    @NonNull
+    Optional<@NonNull String> getSessionId();
+
+    @NonNull
+    Optional<@NonNull String> getProtocolVersion();
+}
+
+@ThreadSafe
+public interface McpToolCallContext {
+    @NonNull
+    McpRequestContext getRequestContext();
+
+    @NonNull
+    Optional<@NonNull Object> getProgressToken();
+}
+
+@ThreadSafe
+public interface McpInitializationContext {
+    @NonNull
+    Request getRequest();
+
+    @NonNull
+    String getProtocolVersion();
+
+    @NonNull
+    McpClientCapabilities getClientCapabilities();
+
+    @NonNull
+    Optional<@NonNull McpClientInfo> getClientInfo();
+
+    @NonNull
+    Optional<@NonNull String> getEndpointPathParameter(@NonNull String name);
+
+    @NonNull
+    <T> Optional<@NonNull T> getEndpointPathParameter(@NonNull String name,
+                                                      @NonNull Class<T> type);
+}
+
+@ThreadSafe
+public interface McpListResourcesContext {
+    @NonNull
+    McpRequestContext getRequestContext();
+
+    @NonNull
+    Optional<@NonNull String> getCursor();
+}
+```
+
 ### Parameter injection priority
 
 1. Known injectable framework type → inject by type, no annotation needed
@@ -386,29 +506,29 @@ Minimum fields exposed by the context types:
 // Tool result
 McpToolResult.builder()
     .structuredContent(payload)          // marshaled by McpResponseMarshaler
-    .content(McpTextContent.text("..."))
+    .content(McpTextContent.fromText("..."))
     .build()
 
 // Tool error result (isError = true)
-McpToolResult.error("Something went wrong.")
+McpToolResult.fromErrorMessage("Something went wrong.")
 
 // Prompt result
-McpPromptResult.withMessages(
-    McpPromptMessage.system("..."),
-    McpPromptMessage.user("..."),
-    McpPromptMessage.assistant("...")
+McpPromptResult.fromMessages(
+    McpPromptMessage.fromSystemText("..."),
+    McpPromptMessage.fromUserText("..."),
+    McpPromptMessage.fromAssistantText("...")
 )
 
 // Resource contents
-McpResourceContents.text(uri, text, mimeType)
-McpResourceContents.blob(uri, base64Data, mimeType)
+McpResourceContents.fromText(uri, text, mimeType)
+McpResourceContents.fromBlob(uri, base64Data, mimeType)
 
 // Resource list entry
-McpListedResource.of(uri, name, mimeType)
+McpListedResource.fromComponents(uri, name, mimeType)
 
 // Resource list result
-McpListResourcesResult.of(resources)
-McpListResourcesResult.page(resources, nextCursor)
+McpListResourcesResult.fromResources(resources)
+McpListResourcesResult.fromResourcesAndNextCursor(resources, nextCursor)
 
 // JSON-RPC error (for handleError() hook)
 McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error")
@@ -417,15 +537,63 @@ McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error")
 `McpListResourcesResult` is a small immutable type:
 
 ```java
+@Immutable
 public record McpListResourcesResult(
-    List<McpListedResource> resources,
+    @NonNull List<@NonNull McpListedResource> resources,
     @Nullable String nextCursor
 ) {
-    static McpListResourcesResult of(List<McpListedResource> resources) { ... }
-    static McpListResourcesResult page(List<McpListedResource> resources,
-                                       String nextCursor) { ... }
+    @NonNull
+    static McpListResourcesResult fromResources(
+            @NonNull List<@NonNull McpListedResource> resources) { ... }
+
+    @NonNull
+    static McpListResourcesResult fromResourcesAndNextCursor(
+            @NonNull List<@NonNull McpListedResource> resources,
+            @NonNull String nextCursor) { ... }
 }
 ```
+
+Programmatic handlers and `McpResponseMarshaler` use a small public MCP value model rather than the internal `Json*` types:
+
+```java
+@ThreadSafe
+public sealed interface McpValue permits McpObject, McpArray, McpString, McpNumber, McpBoolean, McpNull {}
+
+@Immutable
+public record McpObject(
+    @NonNull Map<@NonNull String, @NonNull McpValue> values
+) implements McpValue {
+    @NonNull
+    public Optional<@NonNull McpValue> get(@NonNull String name) { ... }
+}
+
+@Immutable
+public record McpArray(
+    @NonNull List<@NonNull McpValue> values
+) implements McpValue {}
+
+@Immutable
+public record McpString(
+    @NonNull String value
+) implements McpValue {}
+
+@Immutable
+public record McpNumber(
+    @NonNull BigDecimal value
+) implements McpValue {}
+
+@Immutable
+public record McpBoolean(
+    @NonNull Boolean value
+) implements McpValue {}
+
+@Immutable
+public enum McpNull implements McpValue {
+    INSTANCE
+}
+```
+
+`McpObject` preserves insertion order. All public MCP value types are immutable snapshots.
 
 ### `McpServer` builder surface
 
@@ -435,7 +603,7 @@ public record McpListResourcesResult(
 - `requestInterceptor(McpRequestInterceptor)`
 - `responseMarshaler(McpResponseMarshaler)`
 - `originPolicy(McpOriginPolicy)` — defaults to `McpOriginPolicy.nonBrowserClientsOnlyInstance()`
-- `sessionStore(McpSessionStore)` — defaults to `McpSessionStore.inMemoryInstance()`
+- `sessionStore(McpSessionStore)` — defaults to `McpSessionStore.fromInMemory()`
 - `requestTimeout(Duration)`
 - `requestHandlerTimeout(Duration)`
 - `requestHandlerConcurrency(Integer)`
@@ -462,11 +630,12 @@ Intentionally absent from `McpServer.Builder`:
 - `.withTool(McpToolHandler, Class<? extends McpEndpoint>)` — programmatic escape hatch scoped to an endpoint class; composable on either factory result
 - `.withPrompt(McpPromptHandler, Class<? extends McpEndpoint>)`
 - `.withResource(McpResourceHandler, Class<? extends McpEndpoint>)`
+- `.withResourceList(McpResourceListHandler, Class<? extends McpEndpoint>)`
 
 Resolver composition rules:
 
 - `fromClasspathIntrospection()` returns an immutable singleton base resolver.
-- `.withTool(...)`, `.withPrompt(...)`, and `.withResource(...)` never mutate that singleton; they return a new immutable composite resolver that delegates to the base resolver first and then overlays programmatic handlers.
+- `.withTool(...)`, `.withPrompt(...)`, `.withResource(...)`, and `.withResourceList(...)` never mutate that singleton; they return a new immutable composite resolver that delegates to the base resolver first and then overlays programmatic handlers.
 - A duplicate tool, prompt, or resource name within the same endpoint is a startup error even if the duplicate comes from mixing annotations and programmatic handlers.
 
 ### Programmatic handler contracts
@@ -475,40 +644,232 @@ Programmatic handlers participate in discovery exactly like annotated handlers. 
 
 The contract is intentionally JSON-first:
 
-- a programmatic tool or prompt handler declares its metadata and input schema explicitly
-- the runtime passes parsed JSON arguments to the handler rather than attempting reflective Java binding
-- a programmatic resource handler declares its URI template explicitly and receives extracted template values plus request/session context
+```java
+@ThreadSafe
+public interface McpToolHandler {
+    @NonNull
+    String getName();
+
+    @NonNull
+    String getDescription();
+
+    @NonNull
+    McpSchema getInputSchema();
+
+    @NonNull
+    McpToolResult handle(@NonNull McpToolHandlerContext context) throws Exception;
+}
+
+@ThreadSafe
+public interface McpPromptHandler {
+    @NonNull
+    String getName();
+
+    @NonNull
+    String getDescription();
+
+    @NonNull
+    McpSchema getArgumentsSchema();
+
+    @NonNull
+    McpPromptResult handle(@NonNull McpPromptHandlerContext context) throws Exception;
+}
+
+@ThreadSafe
+public interface McpResourceHandler {
+    @NonNull
+    String getUri();
+
+    @NonNull
+    String getName();
+
+    @NonNull
+    String getMimeType();
+
+    @NonNull
+    default Optional<@NonNull String> getDescription() { return Optional.empty(); }
+
+    @NonNull
+    McpResourceContents handle(@NonNull McpResourceHandlerContext context) throws Exception;
+}
+
+@ThreadSafe
+public interface McpResourceListHandler {
+    @NonNull
+    McpListResourcesResult handle(@NonNull McpResourceListHandlerContext context) throws Exception;
+}
+```
+
+Programmatic handler context contracts:
+
+```java
+@ThreadSafe
+public interface McpToolHandlerContext {
+    @NonNull
+    McpToolCallContext getToolCallContext();
+
+    @NonNull
+    McpSessionContext getSessionContext();
+
+    @NonNull
+    McpClientCapabilities getClientCapabilities();
+
+    @NonNull
+    McpObject getArguments();
+
+    @NonNull
+    Optional<@NonNull String> getEndpointPathParameter(@NonNull String name);
+
+    @NonNull
+    <T> Optional<@NonNull T> getEndpointPathParameter(@NonNull String name,
+                                                      @NonNull Class<T> type);
+}
+
+@ThreadSafe
+public interface McpPromptHandlerContext {
+    @NonNull
+    McpRequestContext getRequestContext();
+
+    @NonNull
+    McpSessionContext getSessionContext();
+
+    @NonNull
+    McpClientCapabilities getClientCapabilities();
+
+    @NonNull
+    McpObject getArguments();
+
+    @NonNull
+    Optional<@NonNull String> getEndpointPathParameter(@NonNull String name);
+
+    @NonNull
+    <T> Optional<@NonNull T> getEndpointPathParameter(@NonNull String name,
+                                                      @NonNull Class<T> type);
+}
+
+@ThreadSafe
+public interface McpResourceHandlerContext {
+    @NonNull
+    McpRequestContext getRequestContext();
+
+    @NonNull
+    McpSessionContext getSessionContext();
+
+    @NonNull
+    String getRequestedUri();
+
+    @NonNull
+    Optional<@NonNull String> getUriParameter(@NonNull String name);
+
+    @NonNull
+    <T> Optional<@NonNull T> getUriParameter(@NonNull String name,
+                                             @NonNull Class<T> type);
+
+    @NonNull
+    Optional<@NonNull String> getEndpointPathParameter(@NonNull String name);
+
+    @NonNull
+    <T> Optional<@NonNull T> getEndpointPathParameter(@NonNull String name,
+                                                      @NonNull Class<T> type);
+}
+
+@ThreadSafe
+public interface McpResourceListHandlerContext {
+    @NonNull
+    McpListResourcesContext getListResourcesContext();
+
+    @NonNull
+    McpSessionContext getSessionContext();
+
+    @NonNull
+    Optional<@NonNull String> getEndpointPathParameter(@NonNull String name);
+
+    @NonNull
+    <T> Optional<@NonNull T> getEndpointPathParameter(@NonNull String name,
+                                                      @NonNull Class<T> type);
+}
+```
 
 This keeps the escape hatch truly general-purpose and avoids reflection-heavy edge cases leaking back into the primary annotation path.
 
 ### `McpResponseMarshaler`
 
-Separate from HTTP `ResponseMarshaler`. Responsible for marshaling application objects into MCP tool `structuredContent`. Applications plug in their own Gson/Jackson implementation. Default implementation passes through explicit MCP result types unchanged and fails fast on arbitrary objects.
+Separate from HTTP `ResponseMarshaler`. Responsible only for marshaling application objects supplied to `McpToolResult.structuredContent(...)` into `McpValue`.
+
+```java
+@ThreadSafe
+public interface McpResponseMarshaler {
+    @NonNull
+    McpValue marshalStructuredContent(@Nullable Object value,
+                                      @NonNull McpStructuredContentContext context);
+
+    @NonNull
+    static McpResponseMarshaler defaultInstance() { ... }
+}
+
+@ThreadSafe
+public interface McpStructuredContentContext {
+    @NonNull
+    Class<? extends McpEndpoint> getEndpointClass();
+
+    @NonNull
+    String getToolName();
+
+    @NonNull
+    McpToolCallContext getToolCallContext();
+
+    @NonNull
+    McpSessionContext getSessionContext();
+}
+```
+
+Default behavior:
+
+- if `value` is `null`, return `McpNull.INSTANCE`
+- if `value` is already an `McpValue`, pass it through unchanged
+- otherwise fail fast with `IllegalArgumentException`
+
+`McpResponseMarshaler` is not used for:
+
+- JSON-RPC envelopes and protocol DTOs
+- prompt messages
+- resource contents returned from `McpResourceContents.fromText(...)` or `.fromBlob(...)`
+
+Applications that want Gson/Jackson-backed structured content supply a custom `McpResponseMarshaler` that maps domain objects into `McpValue` trees.
 
 ### `McpOriginPolicy`
 
 ```java
+@ThreadSafe
 public interface McpOriginPolicy {
-    boolean isAllowed(McpOriginCheckContext context);
+    @NonNull
+    Boolean isAllowed(@NonNull McpOriginCheckContext context);
 
+    @NonNull
     static McpOriginPolicy rejectAllInstance() { ... }
 
+    @NonNull
     static McpOriginPolicy nonBrowserClientsOnlyInstance() { ... }
 
+    @NonNull
     static McpOriginPolicy acceptAllInstance() { ... }
 
-    static McpOriginPolicy fromWhitelistedOrigins(Set<String> whitelistedOrigins) { ... }
+    @NonNull
+    static McpOriginPolicy fromWhitelistedOrigins(
+            @NonNull Set<@NonNull String> whitelistedOrigins) { ... }
 
+    @NonNull
     static McpOriginPolicy fromOriginAuthorizer(
-            Predicate<McpOriginCheckContext> originAuthorizer) { ... }
+            @NonNull Predicate<@NonNull McpOriginCheckContext> originAuthorizer) { ... }
 }
 ```
 
 ```java
+@Immutable
 public record McpOriginCheckContext(
-    Request request,
-    Class<? extends McpEndpoint> endpointClass,
-    HttpMethod httpMethod,
+    @NonNull Request request,
+    @NonNull Class<? extends McpEndpoint> endpointClass,
+    @NonNull HttpMethod httpMethod,
     @Nullable String origin,
     @Nullable String sessionId
 ) {}
@@ -525,33 +886,38 @@ public record McpOriginCheckContext(
 ### `McpSessionStore`
 
 ```java
+@ThreadSafe
 public interface McpSessionStore {
-    void create(McpStoredSession session);
+    void create(@NonNull McpStoredSession session);
 
-    Optional<McpStoredSession> findBySessionId(String sessionId);
+    @NonNull
+    Optional<@NonNull McpStoredSession> findBySessionId(@NonNull String sessionId);
 
-    boolean replace(McpStoredSession expected,
-                    McpStoredSession updated);
+    @NonNull
+    Boolean replace(@NonNull McpStoredSession expected,
+                    @NonNull McpStoredSession updated);
 
-    void deleteBySessionId(String sessionId);
+    void deleteBySessionId(@NonNull String sessionId);
 
-    static McpSessionStore inMemoryInstance() { ... }
+    @NonNull
+    static McpSessionStore fromInMemory() { ... }
 }
 ```
 
 ```java
+@Immutable
 public record McpStoredSession(
-    String sessionId,
-    Class<? extends McpEndpoint> endpointClass,
-    Instant createdAt,
-    Instant lastActivityAt,
-    boolean initialized,
-    boolean initializedNotificationReceived,
+    @NonNull String sessionId,
+    @NonNull Class<? extends McpEndpoint> endpointClass,
+    @NonNull Instant createdAt,
+    @NonNull Instant lastActivityAt,
+    @NonNull Boolean initialized,
+    @NonNull Boolean initializedNotificationReceived,
     @Nullable String protocolVersion,
     @Nullable McpClientCapabilities clientCapabilities,
-    McpSessionContext sessionContext,
+    @NonNull McpSessionContext sessionContext,
     @Nullable Instant terminatedAt,
-    long version
+    @NonNull Long version
 ) {}
 ```
 
@@ -559,9 +925,9 @@ public record McpStoredSession(
 - `create(...)` inserts a new session record and fails fast if the session ID already exists.
 - `replace(expected, updated)` is compare-and-set. It succeeds only if `expected` is still the current stored value, typically by matching `version`. This is the concurrency boundary for `POST`, `GET`, and `DELETE`.
 - `deleteBySessionId(...)` physically removes a session record after protocol teardown. Normal session shutdown is modeled first as a successful `replace(...)` that sets `terminatedAt`, then a later delete once SSE streams are closed.
-- `inMemoryInstance()` returns a new in-process store for a single JVM. It is the default implementation for v1 and is not suitable for cross-JVM sharing without a custom store.
+- `fromInMemory()` returns a new in-process store for a single JVM. It is the default implementation for v1 and is not suitable for cross-JVM sharing without a custom store.
 - Endpoint isolation is part of the stored record: the session is bound to one endpoint class at creation time, and later requests must match that endpoint or be treated as invalid.
-- `McpSessionContext` values are opaque application objects. `inMemoryInstance()` can store arbitrary values. A custom out-of-process store is responsible for its own serialization policy and may therefore impose stricter constraints.
+- `McpSessionContext` values are opaque application objects. `fromInMemory()` can store arbitrary values. A custom out-of-process store is responsible for its own serialization policy and may therefore impose stricter constraints.
 
 ## Internal design
 
@@ -598,7 +964,7 @@ Transport:
 Annotation adapter:
 
 - `AnnotationMcpHandlerResolver` — implements `McpHandlerResolver`; used by both `fromClasspathIntrospection()` and `fromClasses()`
-- `AnnotatedMcpToolHandler` / `AnnotatedMcpPromptHandler` / `AnnotatedMcpResourceHandler`
+- `AnnotatedMcpToolHandler` / `AnnotatedMcpPromptHandler` / `AnnotatedMcpResourceHandler` / `AnnotatedMcpResourceListHandler`
 - `McpParameterBinder`
 
 ### JSON layer
@@ -609,7 +975,7 @@ Types: `JsonValue`, `JsonObject`, `JsonArray`, `JsonString`, `JsonNumber`, `Json
 
 Rules: no reflection-based mapping; no general-purpose serializer; explicit mapping between JSON trees and MCP DTOs.
 
-`McpSchema.object()` is the public fluent schema builder used by the programmatic escape hatch. The internal `Json*` types remain internal implementation details.
+`McpSchema.object()` is the public fluent schema builder used by the programmatic escape hatch. The internal `Json*` types remain internal implementation details and are adapted to/from the public `McpValue` model at the API boundary.
 
 ## MCP endpoint HTTP behavior
 
@@ -683,7 +1049,7 @@ Sessions are stateful in v1. Each session is scoped to a specific endpoint — a
 
 `McpSessionContext` is immutable. `initialize()` returns an updated copy via `.with(key, value)`.
 
-`McpSessionStore` is a compare-and-set store over immutable `McpStoredSession` snapshots. `DefaultMcpSessionStore` is the in-process implementation returned by `McpSessionStore.inMemoryInstance()`.
+`McpSessionStore` is a compare-and-set store over immutable `McpStoredSession` snapshots. `DefaultMcpSessionStore` is the in-process implementation returned by `McpSessionStore.fromInMemory()`.
 
 Typical runtime flow:
 
@@ -755,7 +1121,8 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `McpParameterBinder` — resolve all parameter sources
 - `tools/list`, `tools/call`, `prompts/list`, `prompts/get`, `resources/list`, `resources/read`
 - Programmatic `McpToolHandler` / `McpPromptHandler` / `McpResourceHandler` interfaces
-- `.withTool(...)` / `.withPrompt(...)` / `.withResource(...)` composition
+- Programmatic `McpResourceListHandler` interface
+- `.withTool(...)` / `.withPrompt(...)` / `.withResource(...)` / `.withResourceList(...)` composition
 
 ### Phase 6: Documentation and examples
 
@@ -794,6 +1161,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `McpHandlerResolver.fromClasspathIntrospection()` remains immutable when composed with programmatic handlers
 - `McpParameterBinder` — all parameter sources
 - Type whitelist schema generation
+- `McpResponseMarshaler.defaultInstance()` passes through `McpValue` and fails fast on arbitrary objects
 - Default `handleToolError` produces `isError: true` with exception message
 - Custom `handleToolError` override is invoked
 - Default `handleError` produces `-32603` with `"Internal error"`
@@ -806,6 +1174,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `tools/list` and `tools/call`
 - `prompts/list` and `prompts/get`
 - `resources/list` and `resources/read`
+- Programmatic `McpToolHandler` / `McpPromptHandler` / `McpResourceHandler` / `McpResourceListHandler` dispatch
 - Notification POST returning `202`
 - JSON-RPC batch array on POST → `400`
 - Missing `MCP-Session-Id` on non-initialize request → `400`
