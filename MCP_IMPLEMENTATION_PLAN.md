@@ -339,8 +339,6 @@ public interface McpRequestAdmissionPolicy {
 }
 ```
 
-`McpRequestContext.dispatchesToApplicationCode()` is `true` for `initialize`, `tools/call`, `prompts/get`, `resources/read`, and `resources/list` when a real list handler exists. It is `false` for framework-handled operations such as `ping`, `notifications/initialized`, framework-generated `tools/list`, framework-generated `prompts/list`, and the default empty `resources/list` fallback. This allows transaction-oriented interceptors to remain broad without opening transactions for obviously framework-only work.
-
 `McpRequestAdmissionPolicy.checkRequest(...)` returns `Optional.empty()` to allow the request to proceed. Returning a `Response` rejects the request immediately and writes that HTTP response directly. For `POST /mcp`, this short-circuits JSON-RPC dispatch and does not wrap the rejection in a JSON-RPC error envelope; the admission policy is intentionally the transport-level/auth-style seam, analogous to SSE handshake admission.
 
 ### 13. Extend `LifecycleObserver` and `MetricsCollector` with MCP events
@@ -778,7 +776,7 @@ These are flat, independently injectable types — no inheritance hierarchy betw
 
 Minimum fields exposed by the context types:
 
-- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, operation kind, whether the request dispatches into application code, `McpJsonRpcRequestId` if present, session ID if present, session context if present, negotiated protocol version if present, and negotiated capabilities if present
+- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, operation kind, `McpJsonRpcRequestId` if present, session ID if present, session context if present, negotiated protocol version if present, and negotiated capabilities if present
 - `McpToolCallContext` — `McpRequestContext` plus `McpProgressReporter` if the client supplied a progress token
 - `McpInitializationContext` — protocol version, client capabilities, client info, endpoint path parameters, and the underlying `Request`
 - `McpListResourcesContext` — pagination cursor, request metadata, and session/endpoint context
@@ -846,9 +844,6 @@ public interface McpRequestContext {
 
     @NonNull
     McpOperationKind getOperationKind();
-
-    @NonNull
-    Boolean dispatchesToApplicationCode();
 
     @NonNull
     Optional<@NonNull McpJsonRpcRequestId> getJsonRpcRequestId();
