@@ -553,6 +553,7 @@ enum McpRequestOutcome {
 
 enum McpSessionTerminationReason {
     CLIENT_REQUESTED,
+    IDLE_TIMEOUT,
     SERVER_STOPPING,
     INTERNAL_ERROR
 }
@@ -677,6 +678,7 @@ Deferred until v2+:
 - Model-heavy optional response metadata including `serverInfo.icons`, prompt icons, resource icons/annotations, resource templates, and tool annotations/execution metadata/output schema. These all require Soklet to standardize additional public value types and serialization rules, so they remain deferred until that API surface is worth freezing.
 - Richer tool/prompt content block types including image, audio, resource-link, embedded-resource, and content-block annotation support. V1 intentionally exposes only `McpTextContent` in the public result model so the first content API surface stays small.
 - Built-in authorization and principal modeling. V1 is intentionally transport- and session-focused; applications that need user-aware authorization are expected to layer it through `McpRequestAdmissionPolicy`, `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` until Soklet has a broader auth abstraction worth standardizing.
+- Additional retention policies beyond the default idle-time expiry for `McpSessionStore.fromInMemory()`, especially max-size/LRU eviction of live sessions. V1 deliberately avoids cache-style eviction because sessions are protocol-visible state, not just an optimization cache.
 - Broader progress-reporting surfaces beyond tool calls. The MCP protocol allows progress tokens more broadly, but v1 exposes progress reporting only for active tool calls so the first outbound message seam stays narrow, request-scoped, and easy to reason about.
 - JSON-RPC batch handling. Batch arrays are rejected with `400` in v1 because they complicate request lifecycle accounting, streaming response policy, and observability without being necessary for the initial Soklet MCP server value proposition.
 - Pagination for framework-generated `tools/list` and `prompts/list`. V1 always returns the full sorted list; only `resources/list` supports pagination because that is the one list shape most likely to be dynamic and application-backed from the start.
@@ -1269,7 +1271,7 @@ The broader session-scoped outbound-message router is intentionally not public i
 - `requestInterceptor(McpRequestInterceptor)`
 - `responseMarshaler(McpResponseMarshaler)`
 - `originPolicy(McpOriginPolicy)` — defaults to `McpOriginPolicy.nonBrowserClientsOnlyInstance()`
-- `sessionStore(McpSessionStore)` — defaults to `McpSessionStore.fromInMemory()`
+- `sessionStore(McpSessionStore)` — defaults to `McpSessionStore.fromInMemory()` with a `24h` idle timeout
 - `requestTimeout(Duration)`
 - `requestHandlerTimeout(Duration)`
 - `requestHandlerConcurrency(Integer)`
@@ -1571,6 +1573,9 @@ public interface McpSessionStore {
 
     @NonNull
     static McpSessionStore fromInMemory() { ... }
+
+    @NonNull
+    static McpSessionStore fromInMemory(@NonNull Duration idleTimeout) { ... }
 }
 ```
 
@@ -1598,7 +1603,13 @@ public record McpStoredSession(
 - `replace(expected, updated)` is compare-and-set. It succeeds only if `expected` is still the current stored value, typically by matching `version`. This is the concurrency boundary for `POST`, `GET`, and `DELETE`.
 - successful `replace(...)` operations must persist an updated record whose `version` is strictly greater than the prior stored version
 - `deleteBySessionId(...)` physically removes a session record after protocol teardown. Normal session shutdown is modeled first as a successful `replace(...)` that sets `terminatedAt`, then a later delete once SSE streams are closed.
-- `fromInMemory()` returns a new in-process store for a single JVM. It is the default implementation for v1 and is not suitable for cross-JVM sharing without a custom store.
+- `fromInMemory()` returns a new in-process store for a single JVM with a default idle timeout of `Duration.ofHours(24)`. It is the default implementation for v1 and is not suitable for cross-JVM sharing without a custom store.
+- `fromInMemory(Duration idleTimeout)` returns the same in-process store with an explicit idle-timeout policy. `Duration.ZERO` disables idle expiry; negative durations are rejected.
+- Idle expiry is based on `lastActivityAt`, not LRU pressure. The in-memory store must not evict live sessions simply because many sessions exist.
+- Sessions with one or more active `GET /mcp` streams are not eligible for idle expiry, even if `lastActivityAt` is old.
+- An idle-expired session is terminated with `McpSessionTerminationReason.IDLE_TIMEOUT`, any live transport state is closed if needed, and the session is then removed from the store.
+- Cleanup may be lazy rather than timer-driven, but once a session is past its idle timeout it must be treated as expired on the next relevant access even if physical deletion happens immediately afterward rather than at the exact timeout boundary.
+- Applications that need a different retention policy, clustered durability, or more aggressive cleanup behavior should provide a custom `McpSessionStore`.
 - `negotiatedCapabilities` is the exact server capability object returned from the successful `initialize` response. Persisting it makes the session contract explicit rather than recomputing capabilities ad hoc on later requests.
 - Endpoint isolation is part of the stored record: the session is bound to one endpoint class at creation time, and later requests must match that endpoint or be treated as invalid.
 - `McpSessionContext` values are opaque application objects. `fromInMemory()` can store arbitrary values. A custom out-of-process store is responsible for its own serialization policy and may therefore impose stricter constraints.
@@ -1648,7 +1659,15 @@ Small internal JSON tree and codec. No third-party dependency.
 
 Types: `JsonValue`, `JsonObject`, `JsonArray`, `JsonString`, `JsonNumber`, `JsonBoolean`, `JsonNull`, `JsonParser`, `JsonWriter`
 
-Rules: no reflection-based mapping; no general-purpose serializer; explicit mapping between JSON trees and MCP DTOs.
+Rules:
+
+- full JSON value support in v1 (`object`, `array`, `string`, `number`, `boolean`, `null`); not a protocol-specific "subset of JSON"
+- strict UTF-8 on the wire for MCP transport bodies and SSE payloads
+- standard JSON string escaping and unescaping
+- strict parsing only: no comments, no trailing commas, no single-quoted strings, no `NaN`/`Infinity`, and no other lenient extensions
+- no reflection-based mapping
+- no general-purpose serializer
+- explicit mapping between JSON trees and MCP DTOs
 
 `McpSchema.object()` is the public fluent schema builder used by the programmatic escape hatch. The internal `Json*` types remain internal implementation details and are adapted to/from the public `McpValue` model at the API boundary.
 
@@ -1728,13 +1747,14 @@ Sessions are stateful in v1. Each session is scoped to a specific endpoint — a
 
 `McpSessionContext` is immutable. `initialize()` returns an updated copy via `.with(key, value)`.
 
-`McpSessionStore` is a compare-and-set store over immutable `McpStoredSession` snapshots. `DefaultMcpSessionStore` is the in-process implementation returned by `McpSessionStore.fromInMemory()`.
+`McpSessionStore` is a compare-and-set store over immutable `McpStoredSession` snapshots. `DefaultMcpSessionStore` is the in-process implementation returned by `McpSessionStore.fromInMemory()` and uses a `24h` default idle timeout unless overridden.
 
 Typical runtime flow:
 
 - `initialize` creates an uninitialized session record, invokes `McpEndpoint.initialize(...)`, then persists the initialized `McpSessionContext`, client capabilities, negotiated capabilities, and negotiated protocol version via `replace(...)`
 - `notifications/initialized` flips `initializedNotificationReceived` to `true`
 - subsequent `POST` and `GET` requests load the record, verify endpoint match, negotiated protocol version, negotiated capabilities as needed, and non-terminated state, then update `lastActivityAt` via `replace(...)`
+- the default in-memory store may lazily expire sessions that have been idle longer than their configured timeout and have no active `GET /mcp` streams; later requests then observe them as dead sessions
 - `DELETE` marks the session terminated via `replace(...)`, closes active SSE streams, and finally removes the record with `deleteBySessionId(...)`
 
 The configured `McpSessionStore` is server-wide, not endpoint-specific. Endpoint isolation comes from the stored `endpointClass` field and runtime validation against the resolved endpoint path.
@@ -1837,6 +1857,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 ### Unit tests
 
 - JSON parser and writer
+- JSON parser/writer handles UTF-8 and standard JSON escaping correctly and rejects lenient extensions
 - JSON-RPC validation
 - MCP lifecycle enforcement
 - JSON-RPC batch arrays are rejected with `400`
@@ -1844,6 +1865,10 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Session state transitions
 - `McpSessionStore.replace(...)` enforces compare-and-set semantics under concurrent updates
 - `McpStoredSession` persists negotiated capabilities from `initialize`
+- `McpSessionStore.fromInMemory()` uses a `24h` default idle timeout
+- `McpSessionStore.fromInMemory(Duration.ZERO)` disables idle expiry
+- Idle-expired in-memory sessions terminate with `McpSessionTerminationReason.IDLE_TIMEOUT`
+- Sessions with active `GET /mcp` streams are not expired by the default in-memory store
 - `McpHandlerResolver.fromClasspathIntrospection()` remains immutable when composed with programmatic handlers
 - `McpParameterBinder` — all parameter sources
 - Type whitelist schema generation
@@ -1874,6 +1899,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - GET SSE stream establishment
 - GET with `Last-Event-ID` → `400` in v1
 - DELETE session teardown
+- short idle-timeout in-memory store expires abandoned sessions and later requests observe the session as terminated/unknown
 - Invalid origin → `403`
 - Invalid session → `404`
 - Endpoint path parameter extraction in handler methods
