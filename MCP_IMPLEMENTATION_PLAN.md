@@ -133,6 +133,7 @@ The extended `SokletProcessor` validates:
 - `@McpResource` methods return `McpResourceContents`
 - `@McpListResources` methods return `McpListResourcesResult`
 - `@McpListResources` methods have no `@McpArgument` parameters
+- At most one `@McpListResources` method exists per endpoint class
 - `@McpArgument` parameter types are within the whitelist
 - No duplicate tool, prompt, or resource names within the same endpoint class
 - Handler methods are public and non-static
@@ -192,8 +193,16 @@ public interface McpSchema {
                                @NonNull McpType type);
 
         @NonNull
+        ObjectBuilder requiredEnum(@NonNull String name,
+                                   @NonNull List<@NonNull String> allowedValues);
+
+        @NonNull
         ObjectBuilder optional(@NonNull String name,
                                @NonNull McpType type);
+
+        @NonNull
+        ObjectBuilder optionalEnum(@NonNull String name,
+                                   @NonNull List<@NonNull String> allowedValues);
 
         @NonNull
         McpSchema build();
@@ -210,7 +219,9 @@ public enum McpType {
 }
 ```
 
-`McpSchema.object()` always produces a root object schema in v1 with `additionalProperties: false`. `McpType` is the same conservative type vocabulary used by annotation-derived tool/prompt schemas.
+`McpSchema.object()` always produces a root object schema in v1 with `additionalProperties: false`. `McpType` is the same conservative scalar vocabulary used by annotation-derived tool/prompt schemas. Enum-valued properties use `requiredEnum(...)` / `optionalEnum(...)`, which produce `{ "type": "string", "enum": [...] }`.
+
+Programmatic prompt handlers still declare arguments via `McpSchema` even though the MCP wire format for prompt arguments is a flat list rather than JSON Schema. In v1, Soklet derives the prompt argument list from the root object schema by taking property names as argument names and the required set as `required == true`; per-argument prompt descriptions are not exposed in the public API yet and are therefore omitted from the derived prompt argument descriptors.
 
 This escape hatch exists for edge cases. The primary path is annotations.
 
@@ -239,6 +250,15 @@ Tool, prompt, and resource names only need to be unique within a single endpoint
 MCP handler methods need the same cross-cutting wrapper that HTTP resource methods get via `RequestInterceptor` — primarily transaction management (open transaction, invoke handler, commit on success, rollback on failure).
 
 `McpRequestInterceptor` is a separate interface configured on `McpServer.Builder`, consistent with how HTTP's `RequestInterceptor` is configured on `SokletConfig`. It is server-wide, not per-endpoint. If per-endpoint differentiation is needed, the interceptor can inspect `McpRequestContext` to determine which endpoint is handling the request. The invocation callback is generic so the interceptor preserves the concrete handler result type rather than collapsing everything to raw `Object`.
+
+`McpRequestInterceptor` wraps only JSON-RPC operations that dispatch into application code:
+
+- `tools/call`
+- `prompts/get`
+- `resources/read`
+- `resources/list` when an endpoint defines `@McpListResources` or a programmatic `McpResourceListHandler`
+
+It does not wrap framework-handled operations such as `initialize`, `notifications/initialized`, `ping`, framework-generated `tools/list`, framework-generated `prompts/list`, or `resources/list` when no application list handler exists and Soklet returns the default empty list response.
 
 ```java
 McpServer.withPort(8082)
@@ -659,7 +679,7 @@ Required on every `@McpServerEndpoint` class. The defaults are sensible no-ops. 
 
 - `initialize()` — override for custom session initialization (e.g., extracting tenant ID from the endpoint path)
 - `handleToolError()` — override to customize how exceptions thrown by `@McpTool` methods become tool error results (`isError: true`). The default exposes the exception message.
-- `handleError()` — override to customize how exceptions thrown by `@McpPrompt` and `@McpResource` methods become JSON-RPC errors. The default returns `-32603 Internal error`, hiding exception details for safety. Override to map domain exceptions to specific codes and messages (e.g., `NotFoundException → -32002, "Recipe not found"`). `McpRequestContext` exposes `McpSessionContext` when the failing request is session-bound, so endpoint overrides can still inspect tenant or user-scoped session data.
+- `handleError()` — override to customize how exceptions thrown by non-tool handlers become JSON-RPC errors. This includes `@McpPrompt`, `@McpResource`, `@McpListResources`, and their programmatic handler equivalents. The default returns `-32603 Internal error`, hiding exception details for safety. Override to map domain exceptions to specific codes and messages (e.g., `NotFoundException → -32002, "Recipe not found"`). `McpRequestContext` exposes `McpSessionContext` when the failing request is session-bound, so endpoint overrides can still inspect tenant or user-scoped session data.
 
 `McpJsonRpcError` is a small immutable type with `code` (int) and `message` (String).
 
@@ -925,6 +945,7 @@ public final class McpToolResult {
 `McpToolResult` builder semantics:
 
 - builder defaults are empty content, no structured content, and `isError == false`
+- repeated `content(...)` calls are additive and preserve call order; they do not replace previously-added content blocks
 - `fromErrorMessage(...)` returns `isError == true` plus a single `McpTextContent`
 - `structuredContent(...)` accepts any application object; `McpResponseMarshaler` later decides how to turn it into `McpValue`
 - v1 tool result content is text-only; richer content blocks are deferred
@@ -1221,6 +1242,7 @@ Resolver composition rules:
 - `fromClasspathIntrospection()` returns an immutable singleton base resolver.
 - `.withTool(...)`, `.withPrompt(...)`, `.withResource(...)`, and `.withResourceList(...)` never mutate that singleton; they return a new immutable composite resolver that delegates to the base resolver first and then overlays programmatic handlers.
 - A duplicate tool, prompt, or resource name within the same endpoint is a startup error even if the duplicate comes from mixing annotations and programmatic handlers.
+- At most one resource-list handler may exist per endpoint. A second `@McpListResources` method is a compile-time error, and registering a second programmatic `McpResourceListHandler` for the same endpoint is a startup error.
 
 ### Programmatic handler contracts
 
@@ -1511,7 +1533,9 @@ public record McpStoredSession(
 
 - `McpSessionStore` is a threadsafe persistence contract over immutable `McpStoredSession` snapshots. The store is responsible for durability and atomic replacement; `McpSessionManager` is responsible for protocol state transitions and SSE cleanup.
 - `create(...)` inserts a new session record and fails fast if the session ID already exists.
+- newly-created sessions start at `version == 0L`
 - `replace(expected, updated)` is compare-and-set. It succeeds only if `expected` is still the current stored value, typically by matching `version`. This is the concurrency boundary for `POST`, `GET`, and `DELETE`.
+- successful `replace(...)` operations must persist an updated record whose `version` is strictly greater than the prior stored version
 - `deleteBySessionId(...)` physically removes a session record after protocol teardown. Normal session shutdown is modeled first as a successful `replace(...)` that sets `terminatedAt`, then a later delete once SSE streams are closed.
 - `fromInMemory()` returns a new in-process store for a single JVM. It is the default implementation for v1 and is not suitable for cross-JVM sharing without a custom store.
 - `negotiatedCapabilities` is the exact server capability object returned from the successful `initialize` response. Persisting it makes the session contract explicit rather than recomputing capabilities ad hoc on later requests.
@@ -1736,6 +1760,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `@McpArgument` on `@McpListResources` → compile error
 - Wrong return type on `@McpTool` → compile error
 - Wrong return type on `@McpListResources` → compile error
+- Multiple `@McpListResources` methods in one endpoint class → compile error
 - URI template parameter mismatch on `@McpResource` → compile error
 - Endpoint path parameter mismatch → compile error
 - Duplicate tool name within a class → compile error
