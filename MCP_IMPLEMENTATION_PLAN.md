@@ -1291,6 +1291,69 @@ Intentionally absent from `McpServer.Builder`:
 - no `multipartParser(...)` — MCP requests are JSON only
 - no `broadcasterCacheCapacity(...)` or `resourcePathCacheCapacity(...)` — unlike Soklet SSE, MCP streams are session-bound, not resource-path-bound
 
+### Simulator integration
+
+Networkless MCP integration testing should be first-class, just like existing HTTP and SSE simulation. `Soklet.runSimulator(...)` should honor the configured `mcpServer(...)` and expose a dedicated MCP entrypoint on `Simulator`, rather than forcing MCP requests through `performRequest(...)` or low-level SSE simulation.
+
+```java
+public interface Simulator {
+    @NonNull
+    RequestResult performRequest(@NonNull Request request);
+
+    @NonNull
+    ServerSentEventRequestResult performServerSentEventRequest(@NonNull Request request);
+
+    @NonNull
+    McpRequestResult performMcpRequest(@NonNull Request request);
+
+    @NonNull
+    Simulator onMcpStreamError(@Nullable Consumer<Throwable> onMcpStreamError);
+}
+```
+
+```java
+@ThreadSafe
+public sealed interface McpRequestResult permits McpRequestResult.ResponseCompleted, McpRequestResult.StreamOpened {
+    @NonNull
+    RequestResult getRequestResult();
+
+    @ThreadSafe
+    final class ResponseCompleted implements McpRequestResult {
+        @NonNull
+        public RequestResult getRequestResult() { ... }
+    }
+
+    @ThreadSafe
+    final class StreamOpened implements McpRequestResult {
+        public void registerMessageConsumer(@NonNull Consumer<@NonNull McpObject> messageConsumer) { ... }
+
+        public void close() { ... }
+
+        @NonNull
+        public Boolean isClosed() { ... }
+
+        @NonNull
+        public RequestResult getRequestResult() { ... }
+    }
+}
+```
+
+Simulator semantics:
+
+- `performMcpRequest(Request)` is for requests that would normally be handled by the configured `McpServer`; it should not be routed through `performRequest(...)` even though MCP transport uses HTTP requests.
+- If no `McpServer` is configured on `SokletConfig`, `performMcpRequest(...)` fails fast with `IllegalStateException`, mirroring the current SSE simulator behavior.
+- `ResponseCompleted` represents MCP requests that complete without leaving an open stream, including ordinary `POST /mcp` JSON responses, `DELETE /mcp`, rejected `GET /mcp`, and transport/protocol error responses.
+- `StreamOpened` represents requests that leave an open simulated MCP stream, specifically accepted `GET /mcp` requests and `POST /mcp` requests that upgrade to `text/event-stream`.
+- `StreamOpened.registerMessageConsumer(...)` delivers parsed top-level MCP JSON-RPC messages as `McpObject` values in wire order, abstracting away raw SSE framing for tests.
+- Each `StreamOpened` may have at most one message consumer. Messages emitted before registration are buffered and replayed immediately in order once the consumer is registered, mirroring the existing simulator treatment of SSE client-initializer messages.
+- `StreamOpened.close()` simulates client-side disconnect of that specific stream. It is idempotent and transitions the stream to `McpStreamTerminationReason.CLIENT_DISCONNECTED`.
+- `StreamOpened.isClosed()` exposes whether the simulated stream has already been terminated, either by `close()` or by server-side lifecycle events.
+- Closing a `GET /mcp` stream does not terminate the MCP session by itself; it only closes that stream. The session remains valid until later protocol/session teardown.
+- Closing a progress-upgraded `POST /mcp` stream simulates the client dropping the response stream for that request. Subsequent progress or terminal writes then follow the normal disconnected-stream behavior.
+- Exceptions thrown by MCP stream message consumers are surfaced to `Simulator.onMcpStreamError(...)`. If no handler is registered, the simulator falls back to its standard uncaught-consumer behavior.
+- Protocol/server behavior such as `DELETE /mcp`, session idle expiry, or server shutdown may also implicitly close affected `StreamOpened` instances.
+- The underlying `RequestResult` remains available on both result variants so tests can still inspect status code, headers, cookies, and raw marshaled bytes when needed.
+
 ### `McpHandlerResolver`
 
 - `McpHandlerResolver.fromClasspathIntrospection()` — reads processor-generated table; JVM-wide singleton
@@ -1647,6 +1710,11 @@ Transport:
 - `McpEndpointHandler`
 - `McpSseConnection` / `McpSseBroadcaster`
 
+Simulator/testing:
+
+- `McpServerProxy` / `MockMcpServer` — simulator-mode analogue of the existing HTTP and SSE proxies
+- `SimulatedMcpStream` — buffers MCP messages until a simulator consumer is registered, then drains in order and tracks explicit simulator-side close state
+
 Annotation adapter:
 
 - `AnnotationMcpHandlerResolver` — implements `McpHandlerResolver`; used by both `fromClasspathIntrospection()` and `fromClasses()`
@@ -1786,6 +1854,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Add result types (`McpToolResult`, `McpPromptResult`, `McpPromptMessage`, `McpPromptMessageRole`, `McpTextContent`, `McpResourceContents`, `McpListedResource`, `McpListResourcesResult`)
 - Add context types (`McpSessionContext`, `McpRequestContext`, `McpToolCallContext`, `McpInitializationContext`, `McpListResourcesContext`, `McpClientCapabilities`, `McpNegotiatedCapabilities`)
 - Add `McpJsonRpcError`
+- Extend `Simulator` with `performMcpRequest(Request)`, `onMcpStreamError(...)`, and add `McpRequestResult`, including `StreamOpened.close()` / `isClosed()` for client-disconnect simulation
 - Add `McpOperationKind`, `McpRequestInterceptor`, `McpHandlerInvocation`, `McpAdmissionContext`, `McpRequestAdmissionPolicy`
 - Add `McpJsonRpcRequestId`, `McpProgressToken`, `McpProgressReporter`, `McpRequestOutcome`, `McpSessionTerminationReason`, `McpStreamTerminationReason`
 - Extend `ServerType` with `MCP`
@@ -1816,6 +1885,9 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `DefaultMcpServer`
 - `POST`, `GET`, `DELETE` endpoint handling
 - SSE stream management
+- simulator-mode MCP server proxying and `McpRequestResult` stream delivery
+- `Simulator.onMcpStreamError(...)` wiring for MCP stream consumer failures
+- simulator-mode client-disconnect handling via `McpRequestResult.StreamOpened.close()`
 - Existing low-level `LifecycleObserver` / `MetricsCollector` hooks using `ServerType.MCP`
 - MCP-specific `LifecycleObserver` / `MetricsCollector` hooks
 
@@ -1884,7 +1956,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `McpRequestInterceptor` observes `POST /mcp` requests even when `McpRequestAdmissionPolicy` later rejects them
 - `McpProgressReporter.reportProgress(...)` fails fast after request completion
 
-### Integration tests (via `Simulator` or equivalent)
+### Integration tests (via `Simulator#performMcpRequest(Request)`)
 
 - `initialize` / `notifications/initialized`
 - `tools/list` and `tools/call`
@@ -1897,6 +1969,11 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Missing `MCP-Session-Id` on non-initialize request → `400`
 - Mismatched `MCP-Protocol-Version` → `400`
 - GET SSE stream establishment
+- `Simulator.performMcpRequest(Request)` returns `ResponseCompleted` for non-streaming MCP requests
+- `Simulator.performMcpRequest(Request)` returns `StreamOpened` for accepted `GET /mcp` and progress-upgraded `POST /mcp`
+- `McpRequestResult.StreamOpened` buffers early messages until `registerMessageConsumer(...)` is called, then replays them in order
+- `McpRequestResult.StreamOpened.close()` is idempotent and `isClosed()` reflects explicit client disconnect
+- `Simulator.onMcpStreamError(...)` receives exceptions thrown by simulated MCP stream message consumers
 - GET with `Last-Event-ID` → `400` in v1
 - DELETE session teardown
 - short idle-timeout in-memory store expires abandoned sessions and later requests observe the session as terminated/unknown
@@ -1914,6 +1991,11 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `McpRequestAdmissionPolicy` can reject `POST /mcp`, `GET /mcp`, and `DELETE /mcp` with ordinary HTTP responses
 - `McpRequestInterceptor` still observes `POST /mcp` requests that `McpRequestAdmissionPolicy` rejects
 - `McpProgressReporter.reportProgress(...)` upgrades `POST /mcp` to SSE on first use and emits `notifications/progress`
+- `Simulator.performMcpRequest(Request)` fails fast when no `McpServer` is configured on `SokletConfig`
+- closing a simulated `GET /mcp` stream via `McpRequestResult.StreamOpened.close()` terminates that stream with `McpStreamTerminationReason.CLIENT_DISCONNECTED` without terminating the session
+- closing a simulated progress-upgraded `POST /mcp` stream via `McpRequestResult.StreamOpened.close()` stops further stream delivery and exercises disconnected-stream handling for later progress/terminal writes
+- simulated `DELETE /mcp`, idle expiry, and server shutdown implicitly terminate affected `McpRequestResult.StreamOpened` instances
+- `McpRequestResult.StreamOpened.isClosed()` becomes `true` after explicit close and after implicit termination via `DELETE /mcp`, idle expiry, or server shutdown
 - `McpProgressReporter` is absent when the client does not supply a progress token
 - Existing low-level `LifecycleObserver` / `MetricsCollector` callbacks fire for MCP traffic with `ServerType.MCP`
 - `LifecycleObserver` MCP callbacks fire at correct lifecycle points
