@@ -150,6 +150,8 @@ The framework generates `tools/list` and `prompts/list` responses automatically 
 
 To support pagination cleanly, `@McpListResources` returns `McpListResourcesResult` rather than a bare `List<McpListedResource>`.
 
+If an endpoint exposes `@McpResource` methods but does not define `@McpListResources` and has no programmatic `McpResourceListHandler`, `resources/list` returns an empty `resources` array with no `nextCursor`. Resource read support still exists for clients that already know concrete resource URIs.
+
 `tools/list` and `prompts/list` remain framework-generated in v1 and are not paginated. They always return the full, sorted list and omit `nextCursor`.
 
 ### 9. Programmatic escape hatch
@@ -171,6 +173,44 @@ McpSchema.object()
     .optional("threshold", McpType.INTEGER)
     .build()
 ```
+
+`McpSchema` and `McpType` are public MCP-specific schema helpers, not a general JSON library:
+
+```java
+@ThreadSafe
+public interface McpSchema {
+    @NonNull
+    McpObject toJsonSchemaValue();
+
+    @NonNull
+    static ObjectBuilder object() { ... }
+
+    @ThreadSafe
+    interface ObjectBuilder {
+        @NonNull
+        ObjectBuilder required(@NonNull String name,
+                               @NonNull McpType type);
+
+        @NonNull
+        ObjectBuilder optional(@NonNull String name,
+                               @NonNull McpType type);
+
+        @NonNull
+        McpSchema build();
+    }
+}
+
+@Immutable
+public enum McpType {
+    STRING,
+    INTEGER,
+    NUMBER,
+    BOOLEAN,
+    UUID
+}
+```
+
+`McpSchema.object()` always produces a root object schema in v1 with `additionalProperties: false`. `McpType` is the same conservative type vocabulary used by annotation-derived tool/prompt schemas.
 
 This escape hatch exists for edge cases. The primary path is annotations.
 
@@ -619,7 +659,7 @@ Required on every `@McpServerEndpoint` class. The defaults are sensible no-ops. 
 
 - `initialize()` — override for custom session initialization (e.g., extracting tenant ID from the endpoint path)
 - `handleToolError()` — override to customize how exceptions thrown by `@McpTool` methods become tool error results (`isError: true`). The default exposes the exception message.
-- `handleError()` — override to customize how exceptions thrown by `@McpPrompt` and `@McpResource` methods become JSON-RPC errors. The default returns `-32603 Internal error`, hiding exception details for safety. Override to map domain exceptions to specific codes and messages (e.g., `NotFoundException → -32002, "Recipe not found"`).
+- `handleError()` — override to customize how exceptions thrown by `@McpPrompt` and `@McpResource` methods become JSON-RPC errors. The default returns `-32603 Internal error`, hiding exception details for safety. Override to map domain exceptions to specific codes and messages (e.g., `NotFoundException → -32002, "Recipe not found"`). `McpRequestContext` exposes `McpSessionContext` when the failing request is session-bound, so endpoint overrides can still inspect tenant or user-scoped session data.
 
 `McpJsonRpcError` is a small immutable type with `code` (int) and `message` (String).
 
@@ -652,13 +692,14 @@ Because `resources/list` is application-generated in v1, resource title, descrip
 - `McpInitializationContext` — initialization-time data (protocol version, endpoint path parameters, client info); only available in `initialize()`
 - `McpClientCapabilities` — negotiated client capabilities
 - `McpNegotiatedCapabilities` — negotiated server capability snapshot for the current session
+- `McpSessionContext` is also available through `McpRequestContext` for session-bound prompt/resource/list requests
 - `McpListResourcesContext` — pagination cursor and request metadata; only available in `@McpListResources` methods
 
 These are flat, independently injectable types — no inheritance hierarchy between them. Context types like `McpToolCallContext` and `McpListResourcesContext` are only available in the method types where they make sense (enforced at compile time by the processor). General-purpose types like `McpSessionContext`, `McpRequestContext`, `McpClientCapabilities`, and `McpNegotiatedCapabilities` can be injected in any handler method.
 
 Minimum fields exposed by the context types:
 
-- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, `McpJsonRpcRequestId` if present, session ID if present, negotiated protocol version if present, and negotiated capabilities if present
+- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, `McpJsonRpcRequestId` if present, session ID if present, session context if present, negotiated protocol version if present, and negotiated capabilities if present
 - `McpToolCallContext` — `McpRequestContext` plus `McpProgressReporter` if the client supplied a progress token
 - `McpInitializationContext` — protocol version, client capabilities, client info, endpoint path parameters, and the underlying `Request`
 - `McpListResourcesContext` — pagination cursor, request metadata, and session/endpoint context
@@ -735,6 +776,9 @@ public interface McpRequestContext {
 
     @NonNull
     Optional<@NonNull McpNegotiatedCapabilities> getNegotiatedCapabilities();
+
+    @NonNull
+    Optional<@NonNull McpSessionContext> getSessionContext();
 }
 
 @ThreadSafe
