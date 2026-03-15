@@ -245,23 +245,31 @@ This means a single `McpServer` port can serve both `/tenants/{tenantId}/mcp` an
 
 Tool, prompt, and resource names only need to be unique within a single endpoint class, not across the entire `McpServer`.
 
-### 12. `McpRequestInterceptor` on `McpServer.Builder`
+### 12. MCP request interception and admission on `McpServer.Builder`
 
-MCP handler methods need the same cross-cutting wrapper that HTTP resource methods get via `RequestInterceptor` — primarily transaction management (open transaction, invoke handler, commit on success, rollback on failure).
+`McpRequestInterceptor` is the MCP-side analogue of HTTP's `RequestInterceptor`. It is the broad cross-cutting wrapper for parsed JSON-RPC requests on `POST /mcp`, not just for operations that eventually dispatch into endpoint code. Typical uses are logging, tracing, transaction demarcation, and request-scoped auth context setup.
 
-`McpRequestInterceptor` is a separate interface configured on `McpServer.Builder`, consistent with how HTTP's `RequestInterceptor` is configured on `SokletConfig`. It is server-wide, not per-endpoint. If per-endpoint differentiation is needed, the interceptor can inspect `McpRequestContext` to determine which endpoint is handling the request. The invocation callback is generic so the interceptor preserves the concrete handler result type rather than collapsing everything to raw `Object`.
+`McpRequestInterceptor` is configured on `McpServer.Builder`, is server-wide rather than per-endpoint, and runs after Soklet has parsed a valid JSON-RPC request and resolved the target MCP endpoint. If per-endpoint differentiation is needed, the interceptor can inspect `McpRequestContext`. The invocation callback is generic so the interceptor preserves the concrete downstream result type rather than collapsing everything to raw `Object`.
 
-`McpRequestInterceptor` wraps only JSON-RPC operations that dispatch into application code:
+`McpRequestInterceptor` wraps every valid JSON-RPC operation sent to `POST /mcp`:
 
+- `initialize`
+- `notifications/initialized`
+- `ping`
+- `tools/list`
 - `tools/call`
+- `prompts/list`
 - `prompts/get`
+- `resources/list`
 - `resources/read`
-- `resources/list` when an endpoint defines `@McpListResources` or a programmatic `McpResourceListHandler`
 
-It does not wrap framework-handled operations such as `initialize`, `notifications/initialized`, `ping`, framework-generated `tools/list`, framework-generated `prompts/list`, or `resources/list` when no application list handler exists and Soklet returns the default empty list response.
+It does not apply to malformed HTTP requests, malformed JSON, or invalid JSON-RPC payloads that fail before Soklet can build an `McpRequestContext`. It also does not apply to `GET /mcp` or `DELETE /mcp`.
+
+`McpRequestAdmissionPolicy` is a second, narrower seam that models the handshake-style "allow or reject this MCP request" decision. It is configured on the same builder and applies to `POST /mcp`, `GET /mcp`, and `DELETE /mcp`. On `POST /mcp`, Soklet invokes the admission policy from inside `McpRequestInterceptor` before lifecycle/capability checks and before framework or application dispatch. This keeps `McpRequestInterceptor` as the broad outer request wrapper, which matches Soklet's existing `RequestInterceptor` mental model, while still giving MCP a transport/admission hook that feels like SSE handshake handling.
 
 ```java
 McpServer.withPort(8082)
+    .requestAdmissionPolicy(myMcpRequestAdmissionPolicy)
     .requestInterceptor(myMcpRequestInterceptor)
     .handlerResolver(McpHandlerResolver.fromClasspathIntrospection())
     .responseMarshaler(myMcpResponseMarshaler)
@@ -269,6 +277,18 @@ McpServer.withPort(8082)
 ```
 
 ```java
+public enum McpOperationKind {
+    INITIALIZE,
+    NOTIFICATIONS_INITIALIZED,
+    PING,
+    TOOLS_LIST,
+    TOOLS_CALL,
+    PROMPTS_LIST,
+    PROMPTS_GET,
+    RESOURCES_LIST,
+    RESOURCES_READ
+}
+
 @ThreadSafe
 public interface McpRequestInterceptor {
     default <T> @Nullable T interceptRequest(@NonNull McpRequestContext context,
@@ -282,7 +302,46 @@ public interface McpRequestInterceptor {
 public interface McpHandlerInvocation<T> {
     @Nullable T invoke() throws Exception;
 }
+
+@ThreadSafe
+public interface McpAdmissionContext {
+    @NonNull
+    Request getRequest();
+
+    @NonNull
+    HttpMethod getHttpMethod();
+
+    @NonNull
+    Class<? extends McpEndpoint> getEndpointClass();
+
+    @NonNull
+    Optional<@NonNull String> getJsonRpcMethod();
+
+    @NonNull
+    Optional<@NonNull McpOperationKind> getOperationKind();
+
+    @NonNull
+    Optional<@NonNull McpJsonRpcRequestId> getJsonRpcRequestId();
+
+    @NonNull
+    Optional<@NonNull String> getSessionId();
+}
+
+@ThreadSafe
+public interface McpRequestAdmissionPolicy {
+    @NonNull
+    default Optional<@NonNull Response> checkRequest(@NonNull McpAdmissionContext context) throws Exception {
+        return Optional.empty();
+    }
+
+    @NonNull
+    static McpRequestAdmissionPolicy defaultInstance() { ... }
+}
 ```
+
+`McpRequestContext.dispatchesToApplicationCode()` is `true` for `initialize`, `tools/call`, `prompts/get`, `resources/read`, and `resources/list` when a real list handler exists. It is `false` for framework-handled operations such as `ping`, `notifications/initialized`, framework-generated `tools/list`, framework-generated `prompts/list`, and the default empty `resources/list` fallback. This allows transaction-oriented interceptors to remain broad without opening transactions for obviously framework-only work.
+
+`McpRequestAdmissionPolicy.checkRequest(...)` returns `Optional.empty()` to allow the request to proceed. Returning a `Response` rejects the request immediately and writes that HTTP response directly. For `POST /mcp`, this short-circuits JSON-RPC dispatch and does not wrap the rejection in a JSON-RPC error envelope; the admission policy is intentionally the transport-level/auth-style seam, analogous to SSE handshake admission.
 
 ### 13. Extend `LifecycleObserver` and `MetricsCollector` with MCP events
 
@@ -619,7 +678,7 @@ Deferred until v2+:
 - Resumability and redelivery for SSE streams. Supporting `Last-Event-ID`, event replay, and reconnection semantics would require durable event IDs, buffering rules, and ordering guarantees that materially expand the session store and outbound routing design.
 - Model-heavy optional response metadata including `serverInfo.icons`, prompt icons, resource icons/annotations, resource templates, and tool annotations/execution metadata/output schema. These all require Soklet to standardize additional public value types and serialization rules, so they remain deferred until that API surface is worth freezing.
 - Richer tool/prompt content block types including image, audio, resource-link, embedded-resource, and content-block annotation support. V1 intentionally exposes only `McpTextContent` in the public result model so the first content API surface stays small.
-- Built-in authorization and principal modeling. V1 is intentionally transport- and session-focused; applications that need user-aware authorization are expected to layer it through `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` until Soklet has a broader auth abstraction worth standardizing.
+- Built-in authorization and principal modeling. V1 is intentionally transport- and session-focused; applications that need user-aware authorization are expected to layer it through `McpRequestAdmissionPolicy`, `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` until Soklet has a broader auth abstraction worth standardizing.
 - Broader progress-reporting surfaces beyond tool calls. The MCP protocol allows progress tokens more broadly, but v1 exposes progress reporting only for active tool calls so the first outbound message seam stays narrow, request-scoped, and easy to reason about.
 - JSON-RPC batch handling. Batch arrays are rejected with `400` in v1 because they complicate request lifecycle accounting, streaming response policy, and observability without being necessary for the initial Soklet MCP server value proposition.
 - Pagination for framework-generated `tools/list` and `prompts/list`. V1 always returns the full sorted list; only `resources/list` supports pagination because that is the one list shape most likely to be dynamic and application-backed from the start.
@@ -707,7 +766,7 @@ Because `resources/list` is application-generated in v1, resource title, descrip
 **Injectable by type (no annotation needed):**
 
 - `McpSessionContext` — session data bag (tenant ID, user state, etc.)
-- `McpRequestContext` — current JSON-RPC request metadata (request ID wrapper, method name)
+- `McpRequestContext` — current JSON-RPC request metadata (request ID wrapper, method name, operation kind)
 - `McpToolCallContext` — tool-specific request data (request ID wrapper, optional progress reporter); only available in `@McpTool` methods
 - `McpInitializationContext` — initialization-time data (protocol version, endpoint path parameters, client info); only available in `initialize()`
 - `McpClientCapabilities` — negotiated client capabilities
@@ -719,7 +778,7 @@ These are flat, independently injectable types — no inheritance hierarchy betw
 
 Minimum fields exposed by the context types:
 
-- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, `McpJsonRpcRequestId` if present, session ID if present, session context if present, negotiated protocol version if present, and negotiated capabilities if present
+- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, operation kind, whether the request dispatches into application code, `McpJsonRpcRequestId` if present, session ID if present, session context if present, negotiated protocol version if present, and negotiated capabilities if present
 - `McpToolCallContext` — `McpRequestContext` plus `McpProgressReporter` if the client supplied a progress token
 - `McpInitializationContext` — protocol version, client capabilities, client info, endpoint path parameters, and the underlying `Request`
 - `McpListResourcesContext` — pagination cursor, request metadata, and session/endpoint context
@@ -784,6 +843,12 @@ public interface McpRequestContext {
 
     @NonNull
     String getJsonRpcMethod();
+
+    @NonNull
+    McpOperationKind getOperationKind();
+
+    @NonNull
+    Boolean dispatchesToApplicationCode();
 
     @NonNull
     Optional<@NonNull McpJsonRpcRequestId> getJsonRpcRequestId();
@@ -1205,6 +1270,7 @@ The broader session-scoped outbound-message router is intentionally not public i
 - `port(Integer)` — required
 - `host(String)`
 - `handlerResolver(McpHandlerResolver)` — required
+- `requestAdmissionPolicy(McpRequestAdmissionPolicy)` — defaults to `McpRequestAdmissionPolicy.defaultInstance()`
 - `requestInterceptor(McpRequestInterceptor)`
 - `responseMarshaler(McpResponseMarshaler)`
 - `originPolicy(McpOriginPolicy)` — defaults to `McpOriginPolicy.nonBrowserClientsOnlyInstance()`
@@ -1599,14 +1665,15 @@ Assume `path("/mcp")`.
 
 - Validate `Content-Type: application/json`, `Accept`, `Origin`, `MCP-Protocol-Version`, and `MCP-Session-Id` as applicable to the current lifecycle stage
 - Parse exactly one JSON-RPC message
-- Enforce lifecycle and capability rules
-- Dispatch to handler
+- Build `McpRequestContext` and invoke `McpRequestInterceptor`
+- Within `McpHandlerInvocation.invoke()`, run `McpRequestAdmissionPolicy`, then enforce lifecycle and capability rules, then dispatch to framework or endpoint code
 
 Response policy:
 
 - notifications-only input → `202 Accepted` with no body
 - request input with exactly one terminal response to send → `200 OK` with `application/json`
 - request input that must interleave server messages or multiple responses over time → `200 OK` with `text/event-stream`
+- admission-policy rejection → the `Response` returned by `McpRequestAdmissionPolicy`
 - Invalid request → protocol-appropriate JSON-RPC error payload
 
 Header and lifecycle rules:
@@ -1625,6 +1692,7 @@ Header and lifecycle rules:
 ### `GET /mcp`
 
 - Validate `Accept: text/event-stream`, `Origin`, `MCP-Protocol-Version`, `MCP-Session-Id`, and `Last-Event-ID`
+- Invoke `McpRequestAdmissionPolicy`
 - Open SSE stream for outbound server-to-client messages
 
 GET behavior:
@@ -1640,13 +1708,14 @@ GET behavior:
 ### `DELETE /mcp`
 
 - Validate `Origin`, `MCP-Protocol-Version`, and `MCP-Session-Id`
+- Invoke `McpRequestAdmissionPolicy`
 - Terminate session and close active SSE streams
 - Return `204 No Content`
 
 DELETE semantics:
 
 - v1 has no built-in principal model, so "session ownership" means possession of a valid session ID for the resolved endpoint path
-- applications that authenticate users should enforce user-to-session binding in `McpRequestInterceptor` and/or their custom `McpSessionStore`
+- applications that authenticate users should enforce user-to-session binding in `McpRequestAdmissionPolicy`, `McpRequestInterceptor`, and/or their custom `McpSessionStore`
 - deleting an already-terminated or unknown session returns `404`
 
 ## Session model
@@ -1691,7 +1760,7 @@ Minimum:
 
 `McpOriginPolicy` is intentionally simpler than HTTP CORS. It is a request admission policy, not a response-header policy. The default behavior is "allow non-browser clients; reject browser-style `Origin` headers unless explicitly whitelisted."
 
-Authorization support is designed for but deferred. In v1, authenticated applications are expected to layer authorization via `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` rather than through a Soklet-owned auth abstraction.
+Authorization support is designed for but deferred. In v1, authenticated applications are expected to layer authorization via `McpRequestAdmissionPolicy`, `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` rather than through a Soklet-owned auth abstraction.
 
 ## Implementation phases
 
@@ -1702,7 +1771,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Add result types (`McpToolResult`, `McpPromptResult`, `McpPromptMessage`, `McpPromptMessageRole`, `McpTextContent`, `McpResourceContents`, `McpListedResource`, `McpListResourcesResult`)
 - Add context types (`McpSessionContext`, `McpRequestContext`, `McpToolCallContext`, `McpInitializationContext`, `McpListResourcesContext`, `McpClientCapabilities`, `McpNegotiatedCapabilities`)
 - Add `McpJsonRpcError`
-- Add `McpRequestInterceptor`, `McpHandlerInvocation`
+- Add `McpOperationKind`, `McpRequestInterceptor`, `McpHandlerInvocation`, `McpAdmissionContext`, `McpRequestAdmissionPolicy`
 - Add `McpJsonRpcRequestId`, `McpProgressToken`, `McpProgressReporter`, `McpRequestOutcome`, `McpSessionTerminationReason`, `McpStreamTerminationReason`
 - Extend `ServerType` with `MCP`
 - Add MCP default methods to `LifecycleObserver` and `MetricsCollector`
@@ -1790,7 +1859,9 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Custom `handleToolError` override is invoked
 - Default `handleError` produces `-32603` with `"Internal error"`
 - Custom `handleError` override maps domain exceptions to specific codes
-- `McpRequestInterceptor` wraps handler invocation (verify invoke order)
+- `McpRequestInterceptor` wraps every valid JSON-RPC `POST /mcp` request, including framework-handled methods like `initialize` and `ping`
+- `McpRequestAdmissionPolicy` runs inside `McpRequestInterceptor` for `POST /mcp` and directly for `GET /mcp` / `DELETE /mcp`
+- `McpRequestInterceptor` observes `POST /mcp` requests even when `McpRequestAdmissionPolicy` later rejects them
 - `McpProgressReporter.reportProgress(...)` fails fast after request completion
 
 ### Integration tests (via `Simulator` or equivalent)
@@ -1818,7 +1889,9 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - Tool method exception → `isError: true` via `handleToolError`
 - Prompt method exception → JSON-RPC `-32603` error
 - Resource method exception → JSON-RPC `-32603` error
-- `McpRequestInterceptor` invoked around handler dispatch
+- `McpRequestInterceptor` invoked around `initialize`, generated list operations, and handler-backed JSON-RPC methods
+- `McpRequestAdmissionPolicy` can reject `POST /mcp`, `GET /mcp`, and `DELETE /mcp` with ordinary HTTP responses
+- `McpRequestInterceptor` still observes `POST /mcp` requests that `McpRequestAdmissionPolicy` rejects
 - `McpProgressReporter.reportProgress(...)` upgrades `POST /mcp` to SSE on first use and emits `notifications/progress`
 - `McpProgressReporter` is absent when the client does not supply a progress token
 - Existing low-level `LifecycleObserver` / `MetricsCollector` callbacks fire for MCP traffic with `ServerType.MCP`
