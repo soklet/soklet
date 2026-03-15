@@ -2,7 +2,7 @@
 
 Status: draft design
 
-Last updated: 2026-03-14
+Last updated: 2026-03-15
 
 Spec target: MCP Streamable HTTP transport, version `2025-11-25`
 
@@ -82,10 +82,10 @@ The processor writes a separate lookup table at `META-INF/soklet/mcp-endpoint-lo
 The table format (one row per endpoint class):
 
 ```
-b64(className)|b64(path)|b64(name)|b64(version)|b64(instructions)
+b64(className)|b64(path)|b64(name)|b64(version)|b64(instructions)|b64(title)|b64(description)|b64(websiteUrl)
 ```
 
-`instructions` may be empty. All fields are base-64 encoded, consistent with `resource-method-lookup-table`.
+`instructions`, `title`, `description`, and `websiteUrl` may be empty. All fields are base-64 encoded, consistent with `resource-method-lookup-table`.
 
 ### 5. `McpHandlerResolver.fromClasspathIntrospection()` as primary production API
 
@@ -530,7 +530,7 @@ Low-risk optional metadata included in v1:
 
 - `serverInfo.title`, `serverInfo.description`, and `serverInfo.websiteUrl` via optional attributes on `@McpServerEndpoint`
 - prompt titles via an optional `title` attribute on `@McpPrompt` or `McpPromptHandler`
-- resource titles and size metadata via optional fields on `McpListedResource`
+- resource titles, descriptions, and size metadata via optional fields on `McpListedResource`
 
 Protocol fields intentionally omitted from responses in v1 unless later added to the public API:
 
@@ -558,6 +558,7 @@ Deferred until v2+:
 - A public session-scoped notification publisher. V1 exposes only request-scoped `McpProgressReporter`; broader session-scoped outbound routing remains internal until Soklet knows the right public shape for logging, `*.listChanged`, tasks, and similar server-originated messages.
 - Resumability and redelivery for SSE streams. Supporting `Last-Event-ID`, event replay, and reconnection semantics would require durable event IDs, buffering rules, and ordering guarantees that materially expand the session store and outbound routing design.
 - Model-heavy optional response metadata including `serverInfo.icons`, prompt icons, resource icons/annotations, resource templates, and tool annotations/execution metadata/output schema. These all require Soklet to standardize additional public value types and serialization rules, so they remain deferred until that API surface is worth freezing.
+- Richer tool/prompt content block types including image, audio, resource-link, embedded-resource, and content-block annotation support. V1 intentionally exposes only `McpTextContent` in the public result model so the first content API surface stays small.
 - Built-in authorization and principal modeling. V1 is intentionally transport- and session-focused; applications that need user-aware authorization are expected to layer it through `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` until Soklet has a broader auth abstraction worth standardizing.
 - Broader progress-reporting surfaces beyond tool calls. The MCP protocol allows progress tokens more broadly, but v1 exposes progress reporting only for active tool calls so the first outbound message seam stays narrow, request-scoped, and easy to reason about.
 - JSON-RPC batch handling. Batch arrays are rejected with `400` in v1 because they complicate request lifecycle accounting, streaming response policy, and observability without being necessary for the initial Soklet MCP server value proposition.
@@ -635,7 +636,7 @@ Required on every `@McpServerEndpoint` class. The defaults are sensible no-ops. 
 - `@McpResource(uri, name, mimeType, description)` — `uri`, `name`, `mimeType` required; `description` optional; method must return `McpResourceContents`
 - `@McpListResources` — method must return `McpListResourcesResult`; no `@McpArgument` allowed
 
-Because `resources/list` is application-generated in v1, resource title and size metadata live on `McpListedResource` rather than as separate attributes on `@McpResource`.
+Because `resources/list` is application-generated in v1, resource title, description, and size metadata live on `McpListedResource` rather than as separate attributes on `@McpResource`.
 
 **Parameter-level:**
 
@@ -650,13 +651,14 @@ Because `resources/list` is application-generated in v1, resource title and size
 - `McpToolCallContext` — tool-specific request data (request ID wrapper, optional progress reporter); only available in `@McpTool` methods
 - `McpInitializationContext` — initialization-time data (protocol version, endpoint path parameters, client info); only available in `initialize()`
 - `McpClientCapabilities` — negotiated client capabilities
+- `McpNegotiatedCapabilities` — negotiated server capability snapshot for the current session
 - `McpListResourcesContext` — pagination cursor and request metadata; only available in `@McpListResources` methods
 
-These are flat, independently injectable types — no inheritance hierarchy between them. Context types like `McpToolCallContext` and `McpListResourcesContext` are only available in the method types where they make sense (enforced at compile time by the processor). General-purpose types like `McpSessionContext`, `McpRequestContext`, and `McpClientCapabilities` can be injected in any handler method.
+These are flat, independently injectable types — no inheritance hierarchy between them. Context types like `McpToolCallContext` and `McpListResourcesContext` are only available in the method types where they make sense (enforced at compile time by the processor). General-purpose types like `McpSessionContext`, `McpRequestContext`, `McpClientCapabilities`, and `McpNegotiatedCapabilities` can be injected in any handler method.
 
 Minimum fields exposed by the context types:
 
-- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, `McpJsonRpcRequestId` if present, session ID if present, and negotiated protocol version if present
+- `McpRequestContext` — underlying Soklet `Request`, resolved endpoint class, JSON-RPC method name, `McpJsonRpcRequestId` if present, session ID if present, negotiated protocol version if present, and negotiated capabilities if present
 - `McpToolCallContext` — `McpRequestContext` plus `McpProgressReporter` if the client supplied a progress token
 - `McpInitializationContext` — protocol version, client capabilities, client info, endpoint path parameters, and the underlying `Request`
 - `McpListResourcesContext` — pagination cursor, request metadata, and session/endpoint context
@@ -706,6 +708,11 @@ public record McpClientCapabilities(
     @NonNull McpObject value
 ) {}
 
+@Immutable
+public record McpNegotiatedCapabilities(
+    @NonNull McpObject value
+) {}
+
 @ThreadSafe
 public interface McpRequestContext {
     @NonNull
@@ -725,6 +732,9 @@ public interface McpRequestContext {
 
     @NonNull
     Optional<@NonNull String> getProtocolVersion();
+
+    @NonNull
+    Optional<@NonNull McpNegotiatedCapabilities> getNegotiatedCapabilities();
 }
 
 @ThreadSafe
@@ -788,6 +798,8 @@ public interface McpListResourcesContext {
 
 ### Result types
 
+The v1 result surface is intentionally narrower than the full MCP schema. Tool results and prompt messages expose only text content blocks in v1. Image, audio, resource-link, embedded-resource, and content-block annotation support are deferred until v2+.
+
 ```java
 // Tool result
 McpToolResult.builder()
@@ -800,9 +812,14 @@ McpToolResult.fromErrorMessage("Something went wrong.")
 
 // Prompt result
 McpPromptResult.fromMessages(
-    McpPromptMessage.fromSystemText("..."),
     McpPromptMessage.fromUserText("..."),
     McpPromptMessage.fromAssistantText("...")
+)
+
+// Prompt result overriding the default prompt description
+McpPromptResult.fromDescriptionAndMessages(
+    "Custom prompt description",
+    McpPromptMessage.fromUserText("...")
 )
 
 // Resource contents
@@ -812,6 +829,7 @@ McpResourceContents.fromBlob(uri, base64Data, mimeType)
 // Resource list entry
 McpListedResource.fromComponents(uri, name, mimeType)
     .withTitle("Recipe card")
+    .withDescription("Full recipe card with ingredients and steps.")
     .withSizeBytes(2048L)
 
 // Resource list result
@@ -820,6 +838,129 @@ McpListResourcesResult.fromResourcesAndNextCursor(resources, nextCursor)
 
 // JSON-RPC error (for handleError() hook)
 McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error")
+```
+
+`McpToolResult` is a stable holder over a text content list, an `isError` flag, and an optional opaque structured-content reference. The structured-content object remains application-owned until `McpResponseMarshaler` turns it into `McpValue`, so callers should treat objects passed to `.structuredContent(...)` as write-once values once attached to a result.
+
+```java
+public final class McpToolResult {
+    @NonNull
+    List<@NonNull McpTextContent> getContent() { ... }
+
+    @NonNull
+    Optional<@NonNull Object> getStructuredContent() { ... }
+
+    @NonNull
+    Boolean isError() { ... }
+
+    @NonNull
+    static Builder builder() { ... }
+
+    @NonNull
+    static McpToolResult fromErrorMessage(@NonNull String message) { ... }
+
+    public interface Builder {
+        @NonNull
+        Builder content(@NonNull McpTextContent content);
+
+        @NonNull
+        Builder content(@NonNull List<@NonNull McpTextContent> content);
+
+        @NonNull
+        Builder structuredContent(@Nullable Object structuredContent);
+
+        @NonNull
+        Builder isError(@NonNull Boolean isError);
+
+        @NonNull
+        McpToolResult build();
+    }
+}
+```
+
+`McpToolResult` builder semantics:
+
+- builder defaults are empty content, no structured content, and `isError == false`
+- `fromErrorMessage(...)` returns `isError == true` plus a single `McpTextContent`
+- `structuredContent(...)` accepts any application object; `McpResponseMarshaler` later decides how to turn it into `McpValue`
+- v1 tool result content is text-only; richer content blocks are deferred
+
+`McpPromptResult`, `McpPromptMessage`, and `McpTextContent` are small immutable types:
+
+```java
+@Immutable
+public record McpPromptResult(
+    @Nullable String description,
+    @NonNull List<@NonNull McpPromptMessage> messages
+) {
+    @NonNull
+    static McpPromptResult fromMessages(@NonNull McpPromptMessage... messages) { ... }
+
+    @NonNull
+    static McpPromptResult fromDescriptionAndMessages(
+            @NonNull String description,
+            @NonNull McpPromptMessage... messages) { ... }
+}
+
+@Immutable
+public enum McpPromptMessageRole {
+    USER,
+    ASSISTANT
+}
+
+@Immutable
+public record McpPromptMessage(
+    @NonNull McpPromptMessageRole role,
+    @NonNull McpTextContent content
+) {
+    @NonNull
+    static McpPromptMessage fromUserText(@NonNull String text) { ... }
+
+    @NonNull
+    static McpPromptMessage fromAssistantText(@NonNull String text) { ... }
+}
+
+@Immutable
+public record McpTextContent(
+    @NonNull String text
+) {
+    @NonNull
+    static McpTextContent fromText(@NonNull String text) { ... }
+}
+```
+
+`McpPromptResult` semantics:
+
+- if `description` is absent, `prompts/get` falls back to the prompt definition description from `@McpPrompt` or `McpPromptHandler.getDescription()`
+- if `description` is present, it overrides that default for the concrete `prompts/get` response
+- prompt messages are role-constrained in v1: only `USER` and `ASSISTANT` are public, matching the current MCP prompt schema
+- prompt message content is text-only in v1
+
+`McpResourceContents` is a small immutable type:
+
+```java
+@Immutable
+public record McpResourceContents(
+    @NonNull String uri,
+    @NonNull String mimeType,
+    @Nullable String text,
+    @Nullable String blobBase64
+) {
+    public McpResourceContents {
+        if ((text == null) == (blobBase64 == null))
+            throw new IllegalArgumentException("Exactly one of text or blobBase64 must be present.");
+    }
+
+    @NonNull
+    static McpResourceContents fromText(@NonNull String uri,
+                                        @NonNull String text,
+                                        @NonNull String mimeType) { ... }
+
+    @NonNull
+    static McpResourceContents fromBlob(@NonNull String uri,
+                                        @NonNull String blobBase64,
+                                        @NonNull String mimeType) { ... }
+}
 ```
 
 `McpListResourcesResult` is a small immutable type:
@@ -850,6 +991,7 @@ public record McpListedResource(
     @NonNull String name,
     @NonNull String mimeType,
     @Nullable String title,
+    @Nullable String description,
     @Nullable Long sizeBytes
 ) {
     public McpListedResource {
@@ -866,11 +1008,16 @@ public record McpListedResource(
     McpListedResource withTitle(@NonNull String title) { ... }
 
     @NonNull
+    McpListedResource withDescription(@NonNull String description) { ... }
+
+    @NonNull
     McpListedResource withSizeBytes(@NonNull Long sizeBytes) { ... }
 }
 ```
 
-In v1, `McpListedResource.title` and `McpListedResource.sizeBytes` are the only extra resource-list metadata fields beyond the core identifier and MIME type. Icons, annotations, and templates remain deferred.
+In v1, `McpListedResource.title`, `McpListedResource.description`, and `McpListedResource.sizeBytes` are the only extra resource-list metadata fields beyond the core identifier and MIME type. Icons, annotations, and templates remain deferred.
+
+There is no automatic bridge from `@McpResource` metadata to `resources/list` entries in v1. Applications that expose `resources/list` are expected to return `McpListedResource` values with whatever title, description, and size metadata they want clients to see.
 
 Programmatic handlers and `McpResponseMarshaler` use a small public MCP value model rather than the internal `Json*` types:
 
@@ -1311,6 +1458,7 @@ public record McpStoredSession(
     @NonNull Boolean initializedNotificationReceived,
     @Nullable String protocolVersion,
     @Nullable McpClientCapabilities clientCapabilities,
+    @Nullable McpNegotiatedCapabilities negotiatedCapabilities,
     @NonNull McpSessionContext sessionContext,
     @Nullable Instant terminatedAt,
     @NonNull Long version
@@ -1322,6 +1470,7 @@ public record McpStoredSession(
 - `replace(expected, updated)` is compare-and-set. It succeeds only if `expected` is still the current stored value, typically by matching `version`. This is the concurrency boundary for `POST`, `GET`, and `DELETE`.
 - `deleteBySessionId(...)` physically removes a session record after protocol teardown. Normal session shutdown is modeled first as a successful `replace(...)` that sets `terminatedAt`, then a later delete once SSE streams are closed.
 - `fromInMemory()` returns a new in-process store for a single JVM. It is the default implementation for v1 and is not suitable for cross-JVM sharing without a custom store.
+- `negotiatedCapabilities` is the exact server capability object returned from the successful `initialize` response. Persisting it makes the session contract explicit rather than recomputing capabilities ad hoc on later requests.
 - Endpoint isolation is part of the stored record: the session is bound to one endpoint class at creation time, and later requests must match that endpoint or be treated as invalid.
 - `McpSessionContext` values are opaque application objects. `fromInMemory()` can store arbitrary values. A custom out-of-process store is responsible for its own serialization policy and may therefore impose stricter constraints.
 
@@ -1387,8 +1536,8 @@ Assume `path("/mcp")`.
 
 Response policy:
 
-- notifications-only or responses-only input → `202 Accepted` with no body
-- request input with only terminal responses to send → `200 OK` with `application/json`
+- notifications-only input → `202 Accepted` with no body
+- request input with exactly one terminal response to send → `200 OK` with `application/json`
 - request input that must interleave server messages or multiple responses over time → `200 OK` with `text/event-stream`
 - Invalid request → protocol-appropriate JSON-RPC error payload
 
@@ -1441,7 +1590,7 @@ Sessions are stateful in v1. Each session is scoped to a specific endpoint — a
 - creation and last-activity timestamps
 - initialization status
 - whether `notifications/initialized` has been received
-- negotiated protocol version and capabilities
+- negotiated protocol version, client capabilities, and negotiated server capabilities
 - typed key/value bag for application data (e.g., `tenantId`)
 - termination status
 
@@ -1451,9 +1600,9 @@ Sessions are stateful in v1. Each session is scoped to a specific endpoint — a
 
 Typical runtime flow:
 
-- `initialize` creates an uninitialized session record, invokes `McpEndpoint.initialize(...)`, then persists the initialized `McpSessionContext` and negotiated capabilities via `replace(...)`
+- `initialize` creates an uninitialized session record, invokes `McpEndpoint.initialize(...)`, then persists the initialized `McpSessionContext`, client capabilities, negotiated capabilities, and negotiated protocol version via `replace(...)`
 - `notifications/initialized` flips `initializedNotificationReceived` to `true`
-- subsequent `POST` and `GET` requests load the record, verify endpoint match, negotiated protocol version, and non-terminated state, then update `lastActivityAt` via `replace(...)`
+- subsequent `POST` and `GET` requests load the record, verify endpoint match, negotiated protocol version, negotiated capabilities as needed, and non-terminated state, then update `lastActivityAt` via `replace(...)`
 - `DELETE` marks the session terminated via `replace(...)`, closes active SSE streams, and finally removes the record with `deleteBySessionId(...)`
 
 The configured `McpSessionStore` is server-wide, not endpoint-specific. Endpoint isolation comes from the stored `endpointClass` field and runtime validation against the resolved endpoint path.
@@ -1482,8 +1631,8 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 
 - Add `McpServer`, `McpHandlerResolver`, `McpEndpoint` interface, `@McpServerEndpoint`
 - Add `McpTool`, `McpPrompt`, `McpResource`, `McpListResources`, parameter annotations
-- Add result types (`McpToolResult`, `McpPromptResult`, `McpResourceContents`, `McpListedResource`, `McpListResourcesResult`)
-- Add context types (`McpSessionContext`, `McpRequestContext`, `McpToolCallContext`, `McpInitializationContext`, `McpListResourcesContext`)
+- Add result types (`McpToolResult`, `McpPromptResult`, `McpPromptMessage`, `McpPromptMessageRole`, `McpTextContent`, `McpResourceContents`, `McpListedResource`, `McpListResourcesResult`)
+- Add context types (`McpSessionContext`, `McpRequestContext`, `McpToolCallContext`, `McpInitializationContext`, `McpListResourcesContext`, `McpClientCapabilities`, `McpNegotiatedCapabilities`)
 - Add `McpJsonRpcError`
 - Add `McpRequestInterceptor`, `McpHandlerInvocation`
 - Add `McpJsonRpcRequestId`, `McpProgressToken`, `McpProgressReporter`, `McpRequestOutcome`, `McpSessionTerminationReason`, `McpStreamTerminationReason`
@@ -1561,10 +1710,13 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `McpOriginPolicy.nonBrowserClientsOnlyInstance()` allows missing `Origin` and rejects explicit browser-style origins
 - Session state transitions
 - `McpSessionStore.replace(...)` enforces compare-and-set semantics under concurrent updates
+- `McpStoredSession` persists negotiated capabilities from `initialize`
 - `McpHandlerResolver.fromClasspathIntrospection()` remains immutable when composed with programmatic handlers
 - `McpParameterBinder` — all parameter sources
 - Type whitelist schema generation
 - `McpResponseMarshaler.defaultInstance()` passes through `McpValue` and fails fast on arbitrary objects
+- `McpResourceContents` rejects invalid text/blob combinations
+- `McpPromptResult` falls back to handler/annotation description unless explicitly overridden
 - Default `handleToolError` produces `isError: true` with exception message
 - Custom `handleToolError` override is invoked
 - Default `handleError` produces `-32603` with `"Internal error"`
@@ -1577,6 +1729,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `initialize` / `notifications/initialized`
 - `tools/list` and `tools/call`
 - `prompts/list` and `prompts/get`
+- `prompts/get` uses only `user` / `assistant` prompt message roles in v1
 - `resources/list` and `resources/read`
 - Programmatic `McpToolHandler` / `McpPromptHandler` / `McpResourceHandler` / `McpResourceListHandler` dispatch
 - Notification POST returning `202`
