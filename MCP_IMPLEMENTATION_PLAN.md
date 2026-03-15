@@ -315,22 +315,22 @@ public interface McpAdmissionContext {
     Class<? extends McpEndpoint> getEndpointClass();
 
     @NonNull
-    Optional<@NonNull String> getJsonRpcMethod();
+    Optional<String> getJsonRpcMethod();
 
     @NonNull
-    Optional<@NonNull McpOperationKind> getOperationKind();
+    Optional<McpOperationKind> getOperationKind();
 
     @NonNull
-    Optional<@NonNull McpJsonRpcRequestId> getJsonRpcRequestId();
+    Optional<McpJsonRpcRequestId> getJsonRpcRequestId();
 
     @NonNull
-    Optional<@NonNull String> getSessionId();
+    Optional<String> getSessionId();
 }
 
 @ThreadSafe
 public interface McpRequestAdmissionPolicy {
     @NonNull
-    default Optional<@NonNull Response> checkRequest(@NonNull McpAdmissionContext context) throws Exception {
+    default Optional<Response> checkRequest(@NonNull McpAdmissionContext context) throws Exception {
         return Optional.empty();
     }
 
@@ -340,6 +340,8 @@ public interface McpRequestAdmissionPolicy {
 ```
 
 `McpRequestAdmissionPolicy.checkRequest(...)` returns `Optional.empty()` to allow the request to proceed. Returning a `Response` rejects the request immediately and writes that HTTP response directly. For `POST /mcp`, this short-circuits JSON-RPC dispatch and does not wrap the rejection in a JSON-RPC error envelope; the admission policy is intentionally the transport-level/auth-style seam, analogous to SSE handshake admission.
+
+Like the rest of Soklet, MCP public APIs annotate the `Optional` return itself with `@NonNull` and use plain `Optional<T>` element types rather than `Optional<@NonNull T>`.
 
 ### 13. Extend `LifecycleObserver` and `MetricsCollector` with MCP events
 
@@ -450,6 +452,7 @@ Semantics:
 - `didFinishMcpRequestHandling(...)` always fires exactly once for a JSON-RPC request after `didStartMcpRequestHandling(...)`, even when the result is a JSON-RPC error or a tool result with `isError: true`.
 - `didCreateMcpSession(...)` fires only after the session record is durably created in `McpSessionStore`.
 - `didTerminateMcpSession(...)` fires after the session is marked terminated. Physical store deletion may occur later and does not trigger a second callback.
+- if `initialize()` throws after session creation, Soklet routes the exception through `handleError()`, marks the session terminated with `McpSessionTerminationReason.INITIALIZATION_FAILED`, fires `didTerminateMcpSession(...)`, and may then delete the record. No usable session is established for the client even though create/terminate callbacks both fire.
 - `didEstablishMcpServerSentEventStream(...)` and `didTerminateMcpServerSentEventStream(...)` apply to successful `GET /mcp` stream establishment and later closure. Failed `GET /mcp` attempts are surfaced via the existing low-level request callbacks with `ServerType.MCP`.
 
 Concrete `MetricsCollector` additions:
@@ -553,6 +556,7 @@ enum McpRequestOutcome {
 
 enum McpSessionTerminationReason {
     CLIENT_REQUESTED,
+    INITIALIZATION_FAILED,
     IDLE_TIMEOUT,
     SERVER_STOPPING,
     INTERNAL_ERROR
@@ -738,7 +742,7 @@ Required on every `@McpServerEndpoint` class. The defaults are sensible no-ops. 
 
 - `initialize()` — override for custom session initialization (e.g., extracting tenant ID from the endpoint path)
 - `handleToolError()` — override to customize how exceptions thrown by `@McpTool` methods become tool error results (`isError: true`). The default exposes the exception message.
-- `handleError()` — override to customize how exceptions thrown by non-tool handlers become JSON-RPC errors. This includes `@McpPrompt`, `@McpResource`, `@McpListResources`, and their programmatic handler equivalents. The default returns `-32603 Internal error`, hiding exception details for safety. Override to map domain exceptions to specific codes and messages (e.g., `NotFoundException → -32002, "Recipe not found"`). `McpRequestContext` exposes `McpSessionContext` when the failing request is session-bound, so endpoint overrides can still inspect tenant or user-scoped session data.
+- `handleError()` — override to customize how exceptions thrown by non-tool handlers become JSON-RPC errors. This includes `initialize()`, `@McpPrompt`, `@McpResource`, `@McpListResources`, and their programmatic handler equivalents. The default returns `-32603 Internal error`, hiding exception details for safety. Override to map domain exceptions to specific codes and messages (e.g., `NotFoundException → -32002, "Recipe not found"`). `McpRequestContext` exposes `McpSessionContext` when the failing request is session-bound, so endpoint overrides can still inspect tenant or user-scoped session data.
 
 `McpJsonRpcError` is a small immutable type with `code` (int) and `message` (String).
 
@@ -791,11 +795,11 @@ All public MCP strategy interfaces are expected to be safely reusable across con
 @ThreadSafe
 public interface McpSessionContext {
     @NonNull
-    Optional<@NonNull Object> get(@NonNull String key);
+    Optional<Object> get(@NonNull String key);
 
     @NonNull
-    <T> Optional<@NonNull T> get(@NonNull String key,
-                                 @NonNull Class<T> type);
+    <T> Optional<T> get(@NonNull String key,
+                        @NonNull Class<T> type);
 
     @NonNull
     Boolean contains(@NonNull String key);
@@ -848,19 +852,19 @@ public interface McpRequestContext {
     McpOperationKind getOperationKind();
 
     @NonNull
-    Optional<@NonNull McpJsonRpcRequestId> getJsonRpcRequestId();
+    Optional<McpJsonRpcRequestId> getJsonRpcRequestId();
 
     @NonNull
-    Optional<@NonNull String> getSessionId();
+    Optional<String> getSessionId();
 
     @NonNull
-    Optional<@NonNull String> getProtocolVersion();
+    Optional<String> getProtocolVersion();
 
     @NonNull
-    Optional<@NonNull McpNegotiatedCapabilities> getNegotiatedCapabilities();
+    Optional<McpNegotiatedCapabilities> getNegotiatedCapabilities();
 
     @NonNull
-    Optional<@NonNull McpSessionContext> getSessionContext();
+    Optional<McpSessionContext> getSessionContext();
 }
 
 @ThreadSafe
@@ -869,7 +873,7 @@ public interface McpToolCallContext {
     McpRequestContext getRequestContext();
 
     @NonNull
-    Optional<@NonNull McpProgressReporter> getProgressReporter();
+    Optional<McpProgressReporter> getProgressReporter();
 }
 
 @ThreadSafe
@@ -884,14 +888,14 @@ public interface McpInitializationContext {
     McpClientCapabilities getClientCapabilities();
 
     @NonNull
-    Optional<@NonNull McpClientInfo> getClientInfo();
+    Optional<McpClientInfo> getClientInfo();
 
     @NonNull
-    Optional<@NonNull String> getEndpointPathParameter(@NonNull String name);
+    Optional<String> getEndpointPathParameter(@NonNull String name);
 
     @NonNull
-    <T> Optional<@NonNull T> getEndpointPathParameter(@NonNull String name,
-                                                      @NonNull Class<T> type);
+    <T> Optional<T> getEndpointPathParameter(@NonNull String name,
+                                             @NonNull Class<T> type);
 }
 
 @ThreadSafe
@@ -900,9 +904,17 @@ public interface McpListResourcesContext {
     McpRequestContext getRequestContext();
 
     @NonNull
-    Optional<@NonNull String> getCursor();
+    Optional<String> getCursor();
 }
 ```
+
+`McpSessionContext` semantics:
+
+- `get(key)` returns `Optional.empty()` when no value exists for the key.
+- `get(key, type)` returns `Optional.empty()` when no value exists for the key and fails fast with `IllegalArgumentException` if a value exists but is not assignable to `type`.
+- `with(key, value)` returns a new context snapshot; storing a value for an existing key replaces that mapping in the returned snapshot.
+- `asMap()` returns an unmodifiable snapshot view of the current values. Implementations preserve insertion order.
+- `fromValues(...)` defensively copies the supplied map into an immutable snapshot; later mutations to the caller's map do not affect the context.
 
 ### Parameter injection priority
 
@@ -974,7 +986,7 @@ public final class McpToolResult {
     List<@NonNull McpTextContent> getContent() { ... }
 
     @NonNull
-    Optional<@NonNull Object> getStructuredContent() { ... }
+    Optional<Object> getStructuredContent() { ... }
 
     @NonNull
     Boolean isError() { ... }
@@ -1157,7 +1169,7 @@ public record McpObject(
     @NonNull Map<@NonNull String, @NonNull McpValue> values
 ) implements McpValue {
     @NonNull
-    public Optional<@NonNull McpValue> get(@NonNull String name) { ... }
+    public Optional<McpValue> get(@NonNull String name) { ... }
 }
 
 @Immutable
@@ -1208,10 +1220,10 @@ public record McpJsonRpcRequestId(
     static McpJsonRpcRequestId fromNumber(@NonNull BigDecimal value) { ... }
 
     @NonNull
-    Optional<@NonNull String> asString() { ... }
+    Optional<String> asString() { ... }
 
     @NonNull
-    Optional<@NonNull BigDecimal> asNumber() { ... }
+    Optional<BigDecimal> asNumber() { ... }
 }
 
 @Immutable
@@ -1231,10 +1243,10 @@ public record McpProgressToken(
     static McpProgressToken fromNumber(@NonNull BigDecimal value) { ... }
 
     @NonNull
-    Optional<@NonNull String> asString() { ... }
+    Optional<String> asString() { ... }
 
     @NonNull
-    Optional<@NonNull BigDecimal> asNumber() { ... }
+    Optional<BigDecimal> asNumber() { ... }
 }
 ```
 
@@ -1401,7 +1413,7 @@ public interface McpPromptHandler {
     String getDescription();
 
     @NonNull
-    default Optional<@NonNull String> getTitle() { return Optional.empty(); }
+    default Optional<String> getTitle() { return Optional.empty(); }
 
     @NonNull
     McpSchema getArgumentsSchema();
@@ -1422,7 +1434,7 @@ public interface McpResourceHandler {
     String getMimeType();
 
     @NonNull
-    default Optional<@NonNull String> getDescription() { return Optional.empty(); }
+    default Optional<String> getDescription() { return Optional.empty(); }
 
     @NonNull
     McpResourceContents handle(@NonNull McpResourceHandlerContext context) throws Exception;
@@ -1453,11 +1465,11 @@ public interface McpToolHandlerContext {
     McpObject getArguments();
 
     @NonNull
-    Optional<@NonNull String> getEndpointPathParameter(@NonNull String name);
+    Optional<String> getEndpointPathParameter(@NonNull String name);
 
     @NonNull
-    <T> Optional<@NonNull T> getEndpointPathParameter(@NonNull String name,
-                                                      @NonNull Class<T> type);
+    <T> Optional<T> getEndpointPathParameter(@NonNull String name,
+                                             @NonNull Class<T> type);
 }
 
 @ThreadSafe
@@ -1475,11 +1487,11 @@ public interface McpPromptHandlerContext {
     McpObject getArguments();
 
     @NonNull
-    Optional<@NonNull String> getEndpointPathParameter(@NonNull String name);
+    Optional<String> getEndpointPathParameter(@NonNull String name);
 
     @NonNull
-    <T> Optional<@NonNull T> getEndpointPathParameter(@NonNull String name,
-                                                      @NonNull Class<T> type);
+    <T> Optional<T> getEndpointPathParameter(@NonNull String name,
+                                             @NonNull Class<T> type);
 }
 
 @ThreadSafe
@@ -1494,18 +1506,18 @@ public interface McpResourceHandlerContext {
     String getRequestedUri();
 
     @NonNull
-    Optional<@NonNull String> getUriParameter(@NonNull String name);
+    Optional<String> getUriParameter(@NonNull String name);
 
     @NonNull
-    <T> Optional<@NonNull T> getUriParameter(@NonNull String name,
+    <T> Optional<T> getUriParameter(@NonNull String name,
+                                    @NonNull Class<T> type);
+
+    @NonNull
+    Optional<String> getEndpointPathParameter(@NonNull String name);
+
+    @NonNull
+    <T> Optional<T> getEndpointPathParameter(@NonNull String name,
                                              @NonNull Class<T> type);
-
-    @NonNull
-    Optional<@NonNull String> getEndpointPathParameter(@NonNull String name);
-
-    @NonNull
-    <T> Optional<@NonNull T> getEndpointPathParameter(@NonNull String name,
-                                                      @NonNull Class<T> type);
 }
 
 @ThreadSafe
@@ -1517,11 +1529,11 @@ public interface McpResourceListHandlerContext {
     McpSessionContext getSessionContext();
 
     @NonNull
-    Optional<@NonNull String> getEndpointPathParameter(@NonNull String name);
+    Optional<String> getEndpointPathParameter(@NonNull String name);
 
     @NonNull
-    <T> Optional<@NonNull T> getEndpointPathParameter(@NonNull String name,
-                                                      @NonNull Class<T> type);
+    <T> Optional<T> getEndpointPathParameter(@NonNull String name,
+                                             @NonNull Class<T> type);
 }
 ```
 
@@ -1626,7 +1638,7 @@ public interface McpSessionStore {
     void create(@NonNull McpStoredSession session);
 
     @NonNull
-    Optional<@NonNull McpStoredSession> findBySessionId(@NonNull String sessionId);
+    Optional<McpStoredSession> findBySessionId(@NonNull String sessionId);
 
     @NonNull
     Boolean replace(@NonNull McpStoredSession expected,
@@ -1761,8 +1773,12 @@ Response policy:
 Header and lifecycle rules:
 
 - `Accept` on `POST` must allow both `application/json` and `text/event-stream`
+- an omitted `Accept` header on `POST` is treated as `*/*`
+- `Accept` matching on `POST` is q-value-aware and succeeds if the effective media ranges permit both `application/json` and `text/event-stream`; examples that pass include `*/*`, `application/json, text/event-stream`, and `application/json, */*`
+- a `POST` request whose effective `Accept` header excludes either `application/json` or `text/event-stream` is rejected with `406 Not Acceptable`
 - `initialize` must be a non-batched JSON-RPC request and must not include `MCP-Session-Id`
 - successful `initialize` responses include `MCP-Session-Id` and establish the session
+- failed `initialize` responses do not include `MCP-Session-Id` and do not establish a usable session for the client
 - after `initialize`, all client HTTP requests must include both `MCP-Session-Id` and `MCP-Protocol-Version`
 - `MCP-Protocol-Version` must match the negotiated session version or the request is rejected with `400`
 - missing required `MCP-Session-Id` on non-initialize requests is `400`
@@ -1780,6 +1796,8 @@ Header and lifecycle rules:
 GET behavior:
 
 - `Accept` on `GET` must allow `text/event-stream`
+- an omitted `Accept` header on `GET` is treated as `*/*`
+- `Accept` matching on `GET` is q-value-aware and succeeds if the effective media ranges permit `text/event-stream`; a request whose effective `Accept` excludes `text/event-stream` is rejected with `406 Not Acceptable`
 - `McpServer` always supports `GET` for configured MCP endpoints, so it does not use `405 Method Not Allowed` for normal endpoint paths
 - multiple live GET streams per session are allowed
 - each server-originated JSON-RPC message is written to exactly one stream, never broadcast to all streams
@@ -1819,7 +1837,8 @@ Sessions are stateful in v1. Each session is scoped to a specific endpoint — a
 
 Typical runtime flow:
 
-- `initialize` creates an uninitialized session record, invokes `McpEndpoint.initialize(...)`, then persists the initialized `McpSessionContext`, client capabilities, negotiated capabilities, and negotiated protocol version via `replace(...)`
+- `initialize` creates an uninitialized session record, fires `didCreateMcpSession(...)`, invokes `McpEndpoint.initialize(...)`, then persists the initialized `McpSessionContext`, client capabilities, negotiated capabilities, and negotiated protocol version via `replace(...)`
+- if `McpEndpoint.initialize(...)` throws, Soklet maps the exception through `handleError()`, marks the session terminated with `McpSessionTerminationReason.INITIALIZATION_FAILED`, fires `didTerminateMcpSession(...)`, and may then delete the record. The response is a JSON-RPC error and does not establish a usable session for the client.
 - `notifications/initialized` flips `initializedNotificationReceived` to `true`
 - subsequent `POST` and `GET` requests load the record, verify endpoint match, negotiated protocol version, negotiated capabilities as needed, and non-terminated state, then update `lastActivityAt` via `replace(...)`
 - the default in-memory store may lazily expire sessions that have been idle longer than their configured timeout and have no active `GET /mcp` streams; later requests then observe them as dead sessions
@@ -1935,12 +1954,14 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - JSON-RPC batch arrays are rejected with `400`
 - `McpOriginPolicy.nonBrowserClientsOnlyInstance()` allows missing `Origin` and rejects explicit browser-style origins
 - Session state transitions
+- `initialize()` failure creates then terminates a session with `McpSessionTerminationReason.INITIALIZATION_FAILED`
 - `McpSessionStore.replace(...)` enforces compare-and-set semantics under concurrent updates
 - `McpStoredSession` persists negotiated capabilities from `initialize`
 - `McpSessionStore.fromInMemory()` uses a `24h` default idle timeout
 - `McpSessionStore.fromInMemory(Duration.ZERO)` disables idle expiry
 - Idle-expired in-memory sessions terminate with `McpSessionTerminationReason.IDLE_TIMEOUT`
 - Sessions with active `GET /mcp` streams are not expired by the default in-memory store
+- `McpSessionContext.get(key, type)` fails fast on type mismatch and `asMap()` is unmodifiable
 - `McpHandlerResolver.fromClasspathIntrospection()` remains immutable when composed with programmatic handlers
 - `McpParameterBinder` — all parameter sources
 - Type whitelist schema generation
@@ -1968,7 +1989,11 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - JSON-RPC batch array on POST → `400`
 - Missing `MCP-Session-Id` on non-initialize request → `400`
 - Mismatched `MCP-Protocol-Version` → `400`
+- omitted `Accept` on `POST /mcp` is treated as `*/*`
+- `POST /mcp` with an effective `Accept` that excludes either `application/json` or `text/event-stream` → `406`
 - GET SSE stream establishment
+- omitted `Accept` on `GET /mcp` is treated as `*/*`
+- `GET /mcp` with an effective `Accept` that excludes `text/event-stream` → `406`
 - `Simulator.performMcpRequest(Request)` returns `ResponseCompleted` for non-streaming MCP requests
 - `Simulator.performMcpRequest(Request)` returns `StreamOpened` for accepted `GET /mcp` and progress-upgraded `POST /mcp`
 - `McpRequestResult.StreamOpened` buffers early messages until `registerMessageConsumer(...)` is called, then replays them in order
@@ -1985,6 +2010,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - `InstanceProvider` called per-request for endpoint instantiation
 - `ValueConverterRegistry` used for `@McpEndpointPathParameter` conversion
 - Tool method exception → `isError: true` via `handleToolError`
+- `initialize()` exception → JSON-RPC error via `handleError()`, session terminated with `McpSessionTerminationReason.INITIALIZATION_FAILED`, and no usable `MCP-Session-Id` returned
 - Prompt method exception → JSON-RPC `-32603` error
 - Resource method exception → JSON-RPC `-32603` error
 - `McpRequestInterceptor` invoked around `initialize`, generated list operations, and handler-backed JSON-RPC methods
