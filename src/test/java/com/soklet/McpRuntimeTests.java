@@ -514,6 +514,19 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void oversizedMcpRequestReturns413() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			Request oversizedRequest = Request.withPath(HttpMethod.POST, "/tenants/acme/mcp")
+					.headers(Map.of("Content-Type", Set.of("application/json")))
+					.contentTooLarge(true)
+					.build();
+
+			McpRequestResult.ResponseCompleted responseCompleted = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(oversizedRequest);
+			Assertions.assertEquals(Integer.valueOf(413), responseCompleted.getRequestResult().getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	@Test
 	public void getMcpOpensStreamAndDeleteTerminatesIt() {
 		Soklet.runSimulator(configuration(), simulator -> {
 			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
@@ -623,8 +636,11 @@ public class McpRuntimeTests {
 
 	@Test
 	public void activeGetStreamPreventsIdleExpiryUntilClosed() throws Exception {
-		Soklet.runSimulator(configuration(LifecycleObserver.defaultInstance(),
-				MetricsCollector.disabledInstance(),
+		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+
+		Soklet.runSimulator(configuration(lifecycleObserver,
+				metricsCollector,
 				McpSessionStore.fromInMemory(Duration.ofMillis(50))), simulator -> {
 			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
 
@@ -665,6 +681,8 @@ public class McpRuntimeTests {
 							""", sessionHeaders));
 
 			Assertions.assertEquals(Integer.valueOf(404), expired.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(McpSessionTerminationReason.IDLE_TIMEOUT, lifecycleObserver.sessionTerminationReason);
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
 		});
 	}
 

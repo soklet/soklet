@@ -89,6 +89,9 @@ final class DefaultMcpRuntime {
 		requireNonNull(request);
 
 		try {
+			if (request.isContentTooLarge())
+				return plainTextResponse(request, 413, "Request entity too large");
+
 			McpServer mcpServer = getSoklet().getSokletConfig().getMcpServer().orElse(null);
 
 			if (mcpServer == null)
@@ -160,7 +163,12 @@ final class DefaultMcpRuntime {
 
 			storedSession = mcpServer.getSessionStore().findBySessionId(sessionId);
 
-			if (storedSession.isEmpty() || storedSession.get().terminatedAt() != null
+			if (storedSession.isEmpty()) {
+				observeIdleExpiredSessionIfPresent(mcpServer, sessionId);
+				return plainTextResponse(request, 404, "Unknown MCP session.");
+			}
+
+			if (storedSession.get().terminatedAt() != null
 					|| !storedSession.get().endpointClass().equals(resolvedEndpoint.endpointClass()))
 				return plainTextResponse(request, 404, "Unknown MCP session.");
 
@@ -225,7 +233,12 @@ final class DefaultMcpRuntime {
 
 		McpStoredSession storedSession = mcpServer.getSessionStore().findBySessionId(sessionId).orElse(null);
 
-		if (storedSession == null || storedSession.terminatedAt() != null || !storedSession.endpointClass().equals(resolvedEndpoint.endpointClass()))
+		if (storedSession == null) {
+			observeIdleExpiredSessionIfPresent(mcpServer, sessionId);
+			return plainTextResponse(request, 404, "Unknown MCP session.");
+		}
+
+		if (storedSession.terminatedAt() != null || !storedSession.endpointClass().equals(resolvedEndpoint.endpointClass()))
 			return plainTextResponse(request, 404, "Unknown MCP session.");
 
 		if (!Objects.equals(storedSession.protocolVersion(), protocolVersionHeader))
@@ -883,7 +896,12 @@ final class DefaultMcpRuntime {
 
 		McpStoredSession storedSession = mcpServer.getSessionStore().findBySessionId(sessionId).orElse(null);
 
-		if (storedSession == null || storedSession.terminatedAt() != null || !storedSession.endpointClass().equals(resolvedEndpoint.endpointClass()))
+		if (storedSession == null) {
+			observeIdleExpiredSessionIfPresent(mcpServer, sessionId);
+			return plainTextResponse(request, 404, "Unknown MCP session.");
+		}
+
+		if (storedSession.terminatedAt() != null || !storedSession.endpointClass().equals(resolvedEndpoint.endpointClass()))
 			return plainTextResponse(request, 404, "Unknown MCP session.");
 
 		if (!Objects.equals(storedSession.protocolVersion(), protocolVersionHeader))
@@ -967,6 +985,22 @@ final class DefaultMcpRuntime {
 		);
 
 		mcpServer.getSessionStore().replace(storedSession, updatedSession);
+	}
+
+	private void observeIdleExpiredSessionIfPresent(@NonNull McpServer mcpServer,
+																								 @NonNull String sessionId) {
+		requireNonNull(mcpServer);
+		requireNonNull(sessionId);
+
+		if (!(mcpServer.getSessionStore() instanceof DefaultMcpSessionStore defaultMcpSessionStore))
+			return;
+
+		defaultMcpSessionStore.takeExpiredSession(sessionId).ifPresent(expiredSession ->
+				observeSessionTerminated(expiredSession.endpointClass(),
+						expiredSession.sessionId(),
+						Duration.between(expiredSession.createdAt(), Instant.now()),
+						McpSessionTerminationReason.IDLE_TIMEOUT,
+						null));
 	}
 
 	@NonNull

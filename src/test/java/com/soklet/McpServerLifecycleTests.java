@@ -27,6 +27,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -36,8 +38,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.LockSupport;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
@@ -256,6 +265,169 @@ public class McpServerLifecycleTests {
 				Assertions.assertEquals("latest", sessionNotificationValue(messageFrame));
 				Assertions.assertThrows(java.net.SocketTimeoutException.class, () -> firstSocket.getInputStream().read());
 			}
+		}
+	}
+
+	@Test
+	public void startedDefaultMcpServerRejectsTransferEncodingRequests() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.mcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeRawRequest(socket, """
+						POST /mcp HTTP/1.1\r
+						Host: 127.0.0.1:%d\r
+						Content-Type: application/json\r
+						Transfer-Encoding: chunked\r
+						\r
+						""".formatted(mcpPort));
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 400"));
+			}
+		}
+	}
+
+	@Test
+	public void startedDefaultMcpServerRejectsOversizedRequestBodiesWith413() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.mcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.maximumRequestSizeInBytes(8)
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeRawRequest(socket, """
+						POST /mcp HTTP/1.1\r
+						Host: 127.0.0.1:%d\r
+						Content-Type: application/json\r
+						Content-Length: 1024\r
+						\r
+						""".formatted(mcpPort));
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 413"));
+			}
+		}
+	}
+
+	@Test
+	public void stoppingDefaultMcpServerClosesLiveGetStreams() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.mcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.heartbeatInterval(Duration.ofSeconds(5))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			String sessionId = initializedSessionId(mcpPort);
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2500);
+				writeMcpGet(socket, mcpPort, sessionId);
+				Assertions.assertNotNull(readUntil(socket.getInputStream(), "\r\n\r\n", 8192));
+
+				soklet.stop();
+
+				Assertions.assertTrue(waitForEof(socket, 3000));
+			}
+		}
+	}
+
+	@Test
+	public void startedDefaultMcpServerEnforcesConcurrentConnectionLimitForGetStreams() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.mcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.concurrentConnectionLimit(1)
+						.heartbeatInterval(Duration.ofSeconds(5))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+			String sessionId = initializedSessionId(mcpPort);
+
+			try (Socket firstSocket = connectWithRetry("127.0.0.1", mcpPort, 2000);
+					 Socket secondSocket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				firstSocket.setSoTimeout(2000);
+				secondSocket.setSoTimeout(2000);
+				writeMcpGet(firstSocket, mcpPort, sessionId);
+				String firstHandshake = readUntil(firstSocket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(firstHandshake);
+				Assertions.assertTrue(firstHandshake.startsWith("HTTP/1.1 200"));
+
+				writeMcpGet(secondSocket, mcpPort, sessionId);
+				String secondHandshake = readUntil(secondSocket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(secondHandshake);
+				Assertions.assertTrue(secondHandshake.startsWith("HTTP/1.1 503"));
+			}
+		}
+	}
+
+	@Test
+	public void defaultMcpServerWriteTimeoutClosesSlowSocketWrites() throws Exception {
+		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(0)
+				.writeTimeout(Duration.ofMillis(50))
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		ScheduledExecutorService timeoutExecutor = new ScheduledThreadPoolExecutor(1);
+		Field timeoutExecutorField = DefaultMcpServer.class.getDeclaredField("requestHandlerTimeoutExecutorService");
+		timeoutExecutorField.setAccessible(true);
+		timeoutExecutorField.set(defaultMcpServer, timeoutExecutor);
+
+		Method writeMethod = DefaultMcpServer.class.getDeclaredMethod("writeMarshaledResponse", Socket.class, MarshaledResponse.class, Boolean.class);
+		writeMethod.setAccessible(true);
+		BlockingSocket blockingSocket = new BlockingSocket();
+
+		try {
+			InvocationTargetException invocationTargetException = Assertions.assertThrows(InvocationTargetException.class,
+					() -> writeMethod.invoke(defaultMcpServer,
+							blockingSocket,
+							MarshaledResponse.withStatusCode(200)
+									.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+									.body("hello".getBytes(StandardCharsets.UTF_8))
+									.build(),
+							Boolean.TRUE));
+
+			Assertions.assertInstanceOf(SocketTimeoutException.class, invocationTargetException.getCause());
+			Assertions.assertTrue(blockingSocket.closed.get());
+		} finally {
+			timeoutExecutor.shutdownNow();
+			timeoutExecutor.awaitTermination(1, TimeUnit.SECONDS);
 		}
 	}
 
@@ -539,6 +711,11 @@ public class McpServerLifecycleTests {
 		socket.getOutputStream().flush();
 	}
 
+	private static void writeRawRequest(Socket socket, String request) throws IOException {
+		socket.getOutputStream().write(request.getBytes(StandardCharsets.UTF_8));
+		socket.getOutputStream().flush();
+	}
+
 	private static String readUntil(InputStream inputStream, String terminator, int maxBytes) throws IOException {
 		byte[] terminatorBytes = terminator.getBytes(StandardCharsets.UTF_8);
 		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -633,5 +810,43 @@ public class McpServerLifecycleTests {
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
 		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
+	}
+
+	private static final class BlockingSocket extends Socket {
+		private final AtomicBoolean closed;
+		private final OutputStream outputStream;
+
+		private BlockingSocket() {
+			this.closed = new AtomicBoolean(false);
+			this.outputStream = new OutputStream() {
+				@Override
+				public void write(int b) throws IOException {
+					write(new byte[]{(byte) b}, 0, 1);
+				}
+
+				@Override
+				public void write(byte[] b, int off, int len) throws IOException {
+					long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+
+					while (!closed.get() && System.nanoTime() < deadline)
+						LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(5));
+
+					if (closed.get())
+						throw new SocketException("Socket closed");
+
+					throw new IOException("Timed test write did not unblock");
+				}
+			};
+		}
+
+		@Override
+		public OutputStream getOutputStream() {
+			return this.outputStream;
+		}
+
+		@Override
+		public synchronized void close() {
+			this.closed.set(true);
+		}
 	}
 }

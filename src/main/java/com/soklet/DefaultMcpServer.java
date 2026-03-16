@@ -60,6 +60,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
@@ -164,6 +165,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	private final AtomicBoolean stopPoisonPill;
 	@NonNull
 	private final ConcurrentHashMap<@NonNull String, @NonNull CopyOnWriteArrayList<@NonNull McpLiveConnection>> liveConnectionsBySessionId;
+	@NonNull
+	private final AtomicInteger activeConnectionCount;
 	@Nullable
 	private volatile SokletConfig sokletConfig;
 	@Nullable
@@ -212,6 +215,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.lock = new ReentrantLock();
 		this.stopPoisonPill = new AtomicBoolean(false);
 		this.liveConnectionsBySessionId = new ConcurrentHashMap<>();
+		this.activeConnectionCount = new AtomicInteger(0);
 		this.started = false;
 		this.stopping = false;
 
@@ -242,6 +246,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		if (this.connectionQueueCapacity < 1)
 			throw new IllegalArgumentException("Connection queue capacity must be > 0");
 
+		if (this.concurrentConnectionLimit < 0)
+			throw new IllegalArgumentException("Concurrent connection limit must be >= 0");
+
 		if (this.requestTimeout.isNegative() || this.requestTimeout.isZero())
 			throw new IllegalArgumentException("Request timeout must be > 0");
 
@@ -260,7 +267,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null
 				? builder.requestHandlerExecutorServiceSupplier
 				: () -> createExecutorService("mcp-request-handler-", this.requestHandlerConcurrency, this.requestHandlerQueueCapacity);
-		this.connectionExecutorServiceSupplier = () -> createExecutorService("mcp-stream-", this.requestHandlerConcurrency, this.requestHandlerQueueCapacity);
+		this.connectionExecutorServiceSupplier = () -> createExecutorService("mcp-stream-", this.requestHandlerConcurrency, this.connectionQueueCapacity);
 	}
 
 	void mcpRuntime(@NonNull DefaultMcpRuntime mcpRuntime) {
@@ -509,6 +516,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 		Request request = null;
 		boolean handedOffToStreamProcessor = false;
+		AtomicBoolean connectionSlotReserved = new AtomicBoolean(false);
 
 		try {
 			request = readRequest(socket);
@@ -520,12 +528,26 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			}
 
 			if (isLiveEventStreamResponse(request, requestResult)) {
+				McpLiveConnection liveConnection = null;
+
 				try {
+					if (!reserveConnectionSlot(connectionSlotReserved)) {
+						writeMarshaledResponse(socket, serviceUnavailableResponse(request), true);
+						return;
+					}
+
+					liveConnection = registerLiveConnection(socket, request, connectionSlotReserved);
 					writeAcceptedEventStreamResponse(socket, requestResult.getMarshaledResponse());
-					registerLiveConnection(socket, request);
+					markConnectionEstablished(liveConnection);
+					startConnectionProcessor(liveConnection);
 					handedOffToStreamProcessor = true;
 					return;
 				} catch (Throwable throwable) {
+					if (liveConnection != null) {
+						releaseReservedConnectionSlot(liveConnection.slotReserved());
+						removeConnection(liveConnection);
+					}
+
 					DefaultMcpRuntime runtime = this.mcpRuntime;
 					String sessionId = request.getHeader("MCP-Session-Id").orElse(null);
 
@@ -562,8 +584,30 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			writePlainTextResponse(socket, 500, "Internal server error");
 		} finally {
 			if (!handedOffToStreamProcessor)
+				releaseReservedConnectionSlot(connectionSlotReserved);
+
+			if (!handedOffToStreamProcessor)
 				closeQuietly(socket);
 		}
+	}
+
+	@NonNull
+	private MarshaledResponse serviceUnavailableResponse(@NonNull Request request) {
+		requireNonNull(request);
+
+		SokletConfig sokletConfig = this.sokletConfig;
+
+		if (sokletConfig == null) {
+			return MarshaledResponse.withStatusCode(503)
+					.headers(Map.of(
+							"Content-Type", Set.of("text/plain; charset=UTF-8"),
+							"Connection", Set.of("close")
+					))
+					.body("HTTP 503: Service Unavailable".getBytes(StandardCharsets.UTF_8))
+					.build();
+		}
+
+		return sokletConfig.getResponseMarshaler().forServiceUnavailable(request, null);
 	}
 
 	@Nullable
@@ -645,10 +689,13 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		}, Math.max(1L, this.requestHandlerTimeout.toMillis()), TimeUnit.MILLISECONDS);
 	}
 
-	private void registerLiveConnection(@NonNull Socket socket,
-																			@NonNull Request request) throws IOException {
+	@NonNull
+	private McpLiveConnection registerLiveConnection(@NonNull Socket socket,
+																									 @NonNull Request request,
+																									 @NonNull AtomicBoolean slotReserved) throws IOException {
 		requireNonNull(socket);
 		requireNonNull(request);
+		requireNonNull(slotReserved);
 
 		String sessionId = request.getHeader("MCP-Session-Id").orElseThrow(() ->
 				new IllegalStateException("Missing MCP-Session-Id for live MCP stream"));
@@ -657,11 +704,12 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				request,
 				sessionId,
 				Instant.now(),
-				new ArrayBlockingQueue<>(this.connectionQueueCapacity)
+				new ArrayBlockingQueue<>(this.connectionQueueCapacity),
+				slotReserved
 		);
 
 		this.liveConnectionsBySessionId.computeIfAbsent(sessionId, ignored -> new CopyOnWriteArrayList<>()).add(connection);
-		startConnectionProcessor(connection);
+		return connection;
 	}
 
 	@NonNull
@@ -689,7 +737,6 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 			closeLiveConnection(connection, McpStreamTerminationReason.WRITE_FAILED,
 					new IllegalStateException("MCP stream write queue is full"), true);
-			return false;
 		}
 
 		return false;
@@ -746,11 +793,13 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		requireNonNull(connection);
 		requireNonNull(payload);
 
-		synchronized (connection.outputLock()) {
-			OutputStream outputStream = connection.socket().getOutputStream();
-			outputStream.write(payload);
-			outputStream.flush();
-		}
+		performWriteWithTimeout(connection.socket(), () -> {
+			synchronized (connection.outputLock()) {
+				OutputStream outputStream = connection.socket().getOutputStream();
+				outputStream.write(payload);
+				outputStream.flush();
+			}
+		});
 	}
 
 	private void finishConnection(@NonNull McpLiveConnection connection,
@@ -758,6 +807,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		requireNonNull(connection);
 
 		removeConnection(connection);
+		releaseReservedConnectionSlot(connection.slotReserved());
 		closeQuietly(connection.socket());
 
 		if (!connection.notifyRuntimeOnClose().get())
@@ -817,6 +867,18 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 		if (connections.isEmpty())
 			this.liveConnectionsBySessionId.remove(connection.sessionId(), connections);
+	}
+
+	private void markConnectionEstablished(@NonNull McpLiveConnection connection) {
+		requireNonNull(connection);
+
+		CopyOnWriteArrayList<McpLiveConnection> connections = this.liveConnectionsBySessionId.get(connection.sessionId());
+
+		if (connections == null)
+			return;
+
+		if (connections.remove(connection))
+			connections.add(connection);
 	}
 
 	private boolean isLiveEventStreamResponse(@NonNull Request request,
@@ -1063,91 +1125,101 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		requireNonNull(socket);
 		requireNonNull(marshaledResponse);
 
-		PrintWriter printWriter = new PrintWriter(socket.getOutputStream(), false, StandardCharsets.ISO_8859_1);
-		printWriter.print("HTTP/1.1 200 OK\r\n");
+		performWriteWithTimeout(socket, () -> {
+			PrintWriter printWriter = new PrintWriter(socket.getOutputStream(), false, StandardCharsets.ISO_8859_1);
+			printWriter.print("HTTP/1.1 200 OK\r\n");
 
-		for (Map.Entry<String, Set<String>> headerEntry : marshaledResponse.getHeaders().entrySet()) {
-			String headerName = headerEntry.getKey();
+			for (Map.Entry<String, Set<String>> headerEntry : marshaledResponse.getHeaders().entrySet()) {
+				String headerName = headerEntry.getKey();
 
-			if (headerName == null)
-				continue;
+				if (headerName == null)
+					continue;
 
-			String normalizedHeaderName = headerName.toLowerCase(Locale.ENGLISH);
+				String normalizedHeaderName = headerName.toLowerCase(Locale.ENGLISH);
 
-			if ("content-length".equals(normalizedHeaderName) || "connection".equals(normalizedHeaderName))
-				continue;
+				if ("content-length".equals(normalizedHeaderName) || "connection".equals(normalizedHeaderName))
+					continue;
 
-			for (String headerValue : normalizeHeaderValues(headerEntry.getValue()))
-				printWriter.printf("%s: %s\r\n", headerName, headerValue);
-		}
+				for (String headerValue : normalizeHeaderValues(headerEntry.getValue()))
+					printWriter.printf("%s: %s\r\n", headerName, headerValue);
+			}
 
-		for (ResponseCookie responseCookie : marshaledResponse.getCookies())
-			printWriter.printf("Set-Cookie: %s\r\n", responseCookie.toSetCookieHeaderRepresentation());
+			for (ResponseCookie responseCookie : marshaledResponse.getCookies())
+				printWriter.printf("Set-Cookie: %s\r\n", responseCookie.toSetCookieHeaderRepresentation());
 
-		printWriter.print("\r\n");
-		printWriter.flush();
+			printWriter.print("\r\n");
+			printWriter.flush();
 
-		byte[] body = marshaledResponse.getBody().orElse(null);
+			if (printWriter.checkError())
+				throw new IOException("Unable to write MCP event stream response headers");
 
-		if (body != null && body.length > 0) {
-			OutputStream outputStream = socket.getOutputStream();
-			outputStream.write(body);
-			outputStream.flush();
-		}
+			byte[] body = marshaledResponse.getBody().orElse(null);
+
+			if (body != null && body.length > 0) {
+				OutputStream outputStream = socket.getOutputStream();
+				outputStream.write(body);
+				outputStream.flush();
+			}
+		});
 	}
 
 	private void writeMarshaledResponse(@NonNull Socket socket,
-																			@NonNull MarshaledResponse marshaledResponse,
-																			@NonNull Boolean closeConnection) throws IOException {
+																		 @NonNull MarshaledResponse marshaledResponse,
+																		 @NonNull Boolean closeConnection) throws IOException {
 		requireNonNull(socket);
 		requireNonNull(marshaledResponse);
 		requireNonNull(closeConnection);
 
-		byte[] body = marshaledResponse.getBody().orElse(emptyByteArray());
-		OutputStream outputStream = socket.getOutputStream();
-		PrintWriter printWriter = new PrintWriter(outputStream, false, StandardCharsets.ISO_8859_1);
-		Integer statusCode = marshaledResponse.getStatusCode();
-		String reasonPhrase = StatusCode.fromStatusCode(statusCode).map(StatusCode::getReasonPhrase).orElse("Unknown");
+		performWriteWithTimeout(socket, () -> {
+			byte[] body = marshaledResponse.getBody().orElse(emptyByteArray());
+			OutputStream outputStream = socket.getOutputStream();
+			PrintWriter printWriter = new PrintWriter(outputStream, false, StandardCharsets.ISO_8859_1);
+			Integer statusCode = marshaledResponse.getStatusCode();
+			String reasonPhrase = StatusCode.fromStatusCode(statusCode).map(StatusCode::getReasonPhrase).orElse("Unknown");
 
-		printWriter.printf("HTTP/1.1 %d %s\r\n", statusCode, reasonPhrase);
+			printWriter.printf("HTTP/1.1 %d %s\r\n", statusCode, reasonPhrase);
 
-		boolean hasContentLength = false;
-		boolean hasConnectionHeader = false;
+			boolean hasContentLength = false;
+			boolean hasConnectionHeader = false;
 
-		for (Map.Entry<String, Set<String>> headerEntry : marshaledResponse.getHeaders().entrySet()) {
-			String headerName = headerEntry.getKey();
+			for (Map.Entry<String, Set<String>> headerEntry : marshaledResponse.getHeaders().entrySet()) {
+				String headerName = headerEntry.getKey();
 
-			if (headerName == null)
-				continue;
+				if (headerName == null)
+					continue;
 
-			String normalizedHeaderName = headerName.toLowerCase(Locale.ENGLISH);
+				String normalizedHeaderName = headerName.toLowerCase(Locale.ENGLISH);
 
-			if ("content-length".equals(normalizedHeaderName))
-				hasContentLength = true;
+				if ("content-length".equals(normalizedHeaderName))
+					hasContentLength = true;
 
-			if ("connection".equals(normalizedHeaderName))
-				hasConnectionHeader = true;
+				if ("connection".equals(normalizedHeaderName))
+					hasConnectionHeader = true;
 
-			for (String headerValue : normalizeHeaderValues(headerEntry.getValue()))
-				printWriter.printf("%s: %s\r\n", headerName, headerValue);
-		}
+				for (String headerValue : normalizeHeaderValues(headerEntry.getValue()))
+					printWriter.printf("%s: %s\r\n", headerName, headerValue);
+			}
 
-		for (ResponseCookie responseCookie : marshaledResponse.getCookies())
-			printWriter.printf("Set-Cookie: %s\r\n", responseCookie.toSetCookieHeaderRepresentation());
+			for (ResponseCookie responseCookie : marshaledResponse.getCookies())
+				printWriter.printf("Set-Cookie: %s\r\n", responseCookie.toSetCookieHeaderRepresentation());
 
-		if (!hasContentLength)
-			printWriter.printf("Content-Length: %d\r\n", body.length);
+			if (!hasContentLength)
+				printWriter.printf("Content-Length: %d\r\n", body.length);
 
-		if (closeConnection && !hasConnectionHeader)
-			printWriter.print("Connection: close\r\n");
+			if (closeConnection && !hasConnectionHeader)
+				printWriter.print("Connection: close\r\n");
 
-		printWriter.print("\r\n");
-		printWriter.flush();
+			printWriter.print("\r\n");
+			printWriter.flush();
 
-		if (body.length > 0) {
-			outputStream.write(body);
-			outputStream.flush();
-		}
+			if (printWriter.checkError())
+				throw new IOException("Unable to write MCP response headers");
+
+			if (body.length > 0) {
+				outputStream.write(body);
+				outputStream.flush();
+			}
+		});
 	}
 
 	private void writePlainTextResponse(@NonNull Socket socket,
@@ -1219,6 +1291,47 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	private void cancelTimeout(@Nullable ScheduledFuture<?> timeoutFuture) {
 		if (timeoutFuture != null)
 			timeoutFuture.cancel(false);
+	}
+
+	private void performWriteWithTimeout(@NonNull Socket socket,
+																			 @NonNull IoWriteOperation ioWriteOperation) throws IOException {
+		requireNonNull(socket);
+		requireNonNull(ioWriteOperation);
+
+		if (this.writeTimeout.isZero()) {
+			ioWriteOperation.write();
+			return;
+		}
+
+		ScheduledExecutorService timeoutExecutor = this.requestHandlerTimeoutExecutorService;
+
+		if (timeoutExecutor == null || timeoutExecutor.isShutdown()) {
+			ioWriteOperation.write();
+			return;
+		}
+
+		AtomicBoolean timedOut = new AtomicBoolean(false);
+		ScheduledFuture<?> timeoutFuture = timeoutExecutor.schedule(() -> {
+			timedOut.set(true);
+			closeQuietly(socket);
+		}, Math.max(1L, this.writeTimeout.toMillis()), TimeUnit.MILLISECONDS);
+
+		try {
+			ioWriteOperation.write();
+		} catch (IOException e) {
+			if (timedOut.get()) {
+				SocketTimeoutException socketTimeoutException = new SocketTimeoutException("MCP write timed out");
+				socketTimeoutException.initCause(e);
+				throw socketTimeoutException;
+			}
+
+			throw e;
+		} finally {
+			cancelTimeout(timeoutFuture);
+		}
+
+		if (timedOut.get())
+			throw new SocketTimeoutException("MCP write timed out");
 	}
 
 	@Nullable
@@ -1293,6 +1406,34 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				TimeUnit.MILLISECONDS,
 				new ArrayBlockingQueue<>(queueCapacity),
 				new DefaultServer.NonvirtualThreadFactory(threadNamePrefix));
+	}
+
+	private boolean reserveConnectionSlot(@NonNull AtomicBoolean slotReserved) {
+		requireNonNull(slotReserved);
+
+		if (this.concurrentConnectionLimit == 0)
+			return true;
+
+		while (true) {
+			int current = this.activeConnectionCount.get();
+
+			if (current >= this.concurrentConnectionLimit)
+				return false;
+
+			if (this.activeConnectionCount.compareAndSet(current, current + 1)) {
+				slotReserved.set(true);
+				return true;
+			}
+		}
+	}
+
+	private void releaseReservedConnectionSlot(@NonNull AtomicBoolean slotReserved) {
+		requireNonNull(slotReserved);
+
+		if (!slotReserved.getAndSet(false))
+			return;
+
+		this.activeConnectionCount.updateAndGet(current -> Math.max(0, current - 1));
 	}
 
 	private static boolean isRemoteClose(@Nullable Throwable throwable) {
@@ -1447,6 +1588,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			@NonNull String sessionId,
 			@NonNull Instant establishedAt,
 			@NonNull BlockingQueue<@NonNull WriteQueueElement> writeQueue,
+			@NonNull AtomicBoolean slotReserved,
 			@NonNull AtomicBoolean closing,
 			@NonNull AtomicReference<@Nullable McpStreamTerminationReason> terminationReason,
 			@NonNull AtomicReference<@Nullable Throwable> terminationThrowable,
@@ -1458,8 +1600,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 															@NonNull Request request,
 															@NonNull String sessionId,
 															@NonNull Instant establishedAt,
-															@NonNull BlockingQueue<@NonNull WriteQueueElement> writeQueue) {
-			this(socket, request, sessionId, establishedAt, writeQueue, new AtomicBoolean(false), new AtomicReference<>(),
+															@NonNull BlockingQueue<@NonNull WriteQueueElement> writeQueue,
+															@NonNull AtomicBoolean slotReserved) {
+			this(socket, request, sessionId, establishedAt, writeQueue, slotReserved, new AtomicBoolean(false), new AtomicReference<>(),
 					new AtomicReference<>(), new AtomicBoolean(true), new AtomicReference<>(), new Object());
 		}
 
@@ -1469,6 +1612,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			requireNonNull(sessionId);
 			requireNonNull(establishedAt);
 			requireNonNull(writeQueue);
+			requireNonNull(slotReserved);
 			requireNonNull(closing);
 			requireNonNull(terminationReason);
 			requireNonNull(terminationThrowable);
@@ -1476,6 +1620,11 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			requireNonNull(processingThread);
 			requireNonNull(outputLock);
 		}
+	}
+
+	@FunctionalInterface
+	private interface IoWriteOperation {
+		void write() throws IOException;
 	}
 
 	private record WriteQueueElement(

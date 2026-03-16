@@ -100,10 +100,8 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 		if (storedSession == null)
 			return Optional.empty();
 
-		if (isExpired(storedSession)) {
-			this.sessions.remove(sessionId, storedSession);
+		if (isExpired(storedSession))
 			return Optional.empty();
-		}
 
 		return Optional.of(storedSession);
 	}
@@ -138,6 +136,20 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 	void pinnedSessionPredicate(@NonNull Predicate<String> pinnedSessionPredicate) {
 		requireNonNull(pinnedSessionPredicate);
 		this.pinnedSessionPredicate = pinnedSessionPredicate;
+	}
+
+	@NonNull
+	Optional<McpStoredSession> takeExpiredSession(@NonNull String sessionId) {
+		requireNonNull(sessionId);
+
+		McpStoredSession storedSession = this.sessions.get(sessionId);
+
+		if (storedSession == null || !isExpired(storedSession))
+			return Optional.empty();
+
+		return this.sessions.remove(sessionId, storedSession)
+				? Optional.of(storedSession)
+				: Optional.empty();
 	}
 
 	private boolean isExpired(@NonNull McpStoredSession storedSession) {
