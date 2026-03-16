@@ -61,12 +61,43 @@ public class McpRuntimeTests {
 			McpObject body = jsonBody(requestResult);
 			McpObject result = (McpObject) body.get("result").orElseThrow();
 			Assertions.assertEquals("2025-11-25", ((McpString) result.get("protocolVersion").orElseThrow()).value());
+			McpObject capabilities = (McpObject) result.get("capabilities").orElseThrow();
+			Assertions.assertTrue(capabilities.get("tools").isPresent());
+			Assertions.assertTrue(capabilities.get("prompts").isPresent());
+			Assertions.assertTrue(capabilities.get("resources").isPresent());
 
 			McpObject serverInfo = (McpObject) result.get("serverInfo").orElseThrow();
 			Assertions.assertEquals("catalog", ((McpString) serverInfo.get("name").orElseThrow()).value());
 			Assertions.assertEquals("1.0.0", ((McpString) serverInfo.get("version").orElseThrow()).value());
 			Assertions.assertEquals("Catalog MCP", ((McpString) serverInfo.get("title").orElseThrow()).value());
 			Assertions.assertEquals("Use read-only mode.", ((McpString) result.get("instructions").orElseThrow()).value());
+		});
+	}
+
+	@Test
+	public void initializeNegotiatesSupportedProtocolVersionWhenClientRequestsUnknownVersion() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-1", "9999-01-01"), Map.of()));
+
+			String sessionId = headerValue(initializeResult, "MCP-Session-Id");
+			McpObject body = jsonBody(initializeResult);
+			McpObject result = (McpObject) body.get("result").orElseThrow();
+			Assertions.assertEquals("2025-11-25", ((McpString) result.get("protocolVersion").orElseThrow()).value());
+
+			McpRequestResult.ResponseCompleted initializedNotification = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "method":"notifications/initialized",
+							  "params":{}
+							}
+							""", Map.of(
+							"MCP-Session-Id", Set.of(sessionId),
+							"MCP-Protocol-Version", Set.of("2025-11-25")
+					)));
+
+			Assertions.assertEquals(Integer.valueOf(202), initializedNotification.getRequestResult().getMarshaledResponse().getStatusCode());
 		});
 	}
 
@@ -209,6 +240,47 @@ public class McpRuntimeTests {
 			McpObject resourcesListBody = jsonBody(resourcesList);
 			McpArray resources = (McpArray) ((McpObject) resourcesListBody.get("result").orElseThrow()).get("resources").orElseThrow();
 			Assertions.assertTrue(resources.values().isEmpty());
+		});
+	}
+
+	@Test
+	public void resourcesListFallsBackToLiteralStaticResourcesWhenNoHandlerExists() {
+		Soklet.runSimulator(literalResourceConfiguration(), simulator -> {
+			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/literal/mcp", initializeJson("req-1"), Map.of()));
+			String sessionId = headerValue(initializeResult, "MCP-Session-Id");
+			Map<String, Set<String>> sessionHeaders = Map.of(
+					"MCP-Session-Id", Set.of(sessionId),
+					"MCP-Protocol-Version", Set.of("2025-11-25")
+			);
+
+			simulator.performMcpRequest(post("/literal/mcp", """
+					{
+					  "jsonrpc":"2.0",
+					  "method":"notifications/initialized",
+					  "params":{}
+					}
+					""", sessionHeaders));
+
+			McpRequestResult.ResponseCompleted resourcesList = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/literal/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-2",
+							  "method":"resources/list",
+							  "params":{}
+							}
+							""", sessionHeaders));
+
+			McpObject resourcesListBody = jsonBody(resourcesList);
+			McpArray resources = (McpArray) ((McpObject) resourcesListBody.get("result").orElseThrow()).get("resources").orElseThrow();
+			Assertions.assertEquals(1, resources.values().size());
+
+			McpObject listedResource = (McpObject) resources.values().get(0);
+			Assertions.assertEquals("catalog://status", ((McpString) listedResource.get("uri").orElseThrow()).value());
+			Assertions.assertEquals("status", ((McpString) listedResource.get("name").orElseThrow()).value());
+			Assertions.assertEquals("text/plain", ((McpString) listedResource.get("mimeType").orElseThrow()).value());
+			Assertions.assertEquals("Service status.", ((McpString) listedResource.get("description").orElseThrow()).value());
 		});
 	}
 
@@ -862,6 +934,17 @@ public class McpRuntimeTests {
 				.build();
 	}
 
+	private static SokletConfig literalResourceConfiguration() {
+		return SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(LifecycleObserver.defaultInstance())
+				.metricsCollector(MetricsCollector.defaultInstance())
+				.mcpServer(McpServer.withPort(0)
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(LiteralResourceEndpoint.class)))
+						.build())
+				.build();
+	}
+
 	private static Map<String, Set<String>> initializedSessionHeaders(Simulator simulator) {
 		McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
 				post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
@@ -895,18 +978,23 @@ public class McpRuntimeTests {
 	}
 
 	private static String initializeJson(String requestId) {
+		return initializeJson(requestId, "2025-11-25");
+	}
+
+	private static String initializeJson(String requestId,
+																			 String protocolVersion) {
 		return """
 				{
 				  "jsonrpc":"2.0",
 				  "id":"%s",
 				  "method":"initialize",
 				  "params":{
-				    "protocolVersion":"2025-11-25",
+				    "protocolVersion":"%s",
 				    "capabilities":{},
 				    "clientInfo":{"name":"test-client","version":"1.0.0"}
 				  }
 				}
-				""".formatted(requestId);
+				""".formatted(requestId, protocolVersion);
 	}
 
 	private static void sleepUnchecked(long durationInMillis) {
@@ -1105,6 +1193,14 @@ public class McpRuntimeTests {
 		public McpSessionContext initialize(McpInitializationContext context,
 																				McpSessionContext session) {
 			throw new IllegalStateException("boom");
+		}
+	}
+
+	@McpServerEndpoint(path = "/literal/mcp", name = "literal", version = "1.0.0")
+	public static class LiteralResourceEndpoint implements McpEndpoint {
+		@McpResource(uri = "catalog://status", name = "status", mimeType = "text/plain", description = "Service status.")
+		public McpResourceContents status() {
+			return McpResourceContents.fromText("catalog://status", "ok", "text/plain");
 		}
 	}
 

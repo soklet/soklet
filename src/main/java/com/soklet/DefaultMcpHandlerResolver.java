@@ -652,6 +652,12 @@ final class DefaultMcpHandlerResolver implements McpHandlerResolver {
 
 		@NonNull
 		String name();
+
+		@NonNull
+		String mimeType();
+
+		@NonNull
+		Optional<String> optionalDescription();
 	}
 
 	sealed interface ResourceListBinding permits AnnotatedResourceListBinding, ProgrammaticResourceListBinding {}
@@ -739,6 +745,12 @@ final class DefaultMcpHandlerResolver implements McpHandlerResolver {
 			requireNonNull(name);
 			requireNonNull(mimeType);
 		}
+
+		@NonNull
+		@Override
+		public Optional<String> optionalDescription() {
+			return Optional.ofNullable(this.description);
+		}
 	}
 
 	@Immutable
@@ -759,6 +771,18 @@ final class DefaultMcpHandlerResolver implements McpHandlerResolver {
 		@Override
 		public String name() {
 			return this.resourceHandler.getName();
+		}
+
+		@NonNull
+		@Override
+		public String mimeType() {
+			return this.resourceHandler.getMimeType();
+		}
+
+		@NonNull
+		@Override
+		public Optional<String> optionalDescription() {
+			return this.resourceHandler.getDescription();
 		}
 	}
 

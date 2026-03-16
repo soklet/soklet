@@ -253,9 +253,9 @@ public class McpServerLifecycleTests {
 				firstSocket.setSoTimeout(300);
 				secondSocket.setSoTimeout(2000);
 				writeMcpGet(firstSocket, mcpPort, sessionId);
-				writeMcpGet(secondSocket, mcpPort, sessionId);
-
 				Assertions.assertNotNull(readUntil(firstSocket.getInputStream(), "\r\n\r\n", 8192));
+
+				writeMcpGet(secondSocket, mcpPort, sessionId);
 				Assertions.assertNotNull(readUntil(secondSocket.getInputStream(), "\r\n\r\n", 8192));
 
 				Assertions.assertTrue(defaultMcpServer.publishSessionMessage(sessionId, internalSessionNotification("latest")));

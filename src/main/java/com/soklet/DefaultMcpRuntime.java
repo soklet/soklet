@@ -72,6 +72,8 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class DefaultMcpRuntime {
 	@NonNull
+	private static final String SUPPORTED_PROTOCOL_VERSION = "2025-11-25";
+	@NonNull
 	private static final McpObject EMPTY_OBJECT = new McpObject(Map.of());
 	@NonNull
 	private final Soklet soklet;
@@ -421,7 +423,8 @@ final class DefaultMcpRuntime {
 			return jsonRpcErrorResponse(request, null, McpJsonRpcError.fromCodeAndMessage(-32600, "initialize requires a request id"));
 
 		McpObject params = parsedRequest.params();
-		String protocolVersion = requiredString(params, "protocolVersion");
+		String requestedProtocolVersion = requiredString(params, "protocolVersion");
+		String protocolVersion = negotiateProtocolVersion(requestedProtocolVersion);
 		McpObject capabilitiesValue = requiredObject(params, "capabilities");
 		McpObject clientInfoValue = optionalObject(params, "clientInfo").orElse(null);
 		McpClientCapabilities clientCapabilities = new McpClientCapabilities(capabilitiesValue);
@@ -459,7 +462,7 @@ final class DefaultMcpRuntime {
 
 		try {
 			McpSessionContext sessionContext = endpoint.initialize(initializationContext, McpSessionContext.fromBlankSlate());
-			McpNegotiatedCapabilities negotiatedCapabilities = new McpNegotiatedCapabilities(EMPTY_OBJECT);
+			McpNegotiatedCapabilities negotiatedCapabilities = negotiatedCapabilitiesFor(resolvedEndpoint);
 			McpStoredSession updatedSession = new McpStoredSession(
 					initialSession.sessionId(),
 					initialSession.endpointClass(),
@@ -802,7 +805,7 @@ final class DefaultMcpRuntime {
 		Optional<String> cursor = optionalString(parsedRequest.params(), "cursor");
 		DefaultMcpListResourcesContext listResourcesContext = new DefaultMcpListResourcesContext(requestContext, cursor);
 		McpListResourcesResult listResourcesResult = resolvedEndpoint.resourceListBinding() == null
-				? McpListResourcesResult.fromResources(List.of())
+				? literalFallbackResourcesListResult(resolvedEndpoint)
 				: invokeResourcesListBinding(resolvedEndpoint, resolvedEndpoint.resourceListBinding(), endpointPathParameters, storedSession.sessionContext(), listResourcesContext);
 
 		List<McpValue> resources = new ArrayList<>(listResourcesResult.resources().size());
@@ -987,6 +990,54 @@ final class DefaultMcpRuntime {
 
 		// Lost CAS here is acceptable: a concurrent successful replace also implies session activity.
 		mcpServer.getSessionStore().replace(storedSession, updatedSession);
+	}
+
+	@NonNull
+	private String negotiateProtocolVersion(@NonNull String requestedProtocolVersion) {
+		requireNonNull(requestedProtocolVersion);
+		return SUPPORTED_PROTOCOL_VERSION;
+	}
+
+	@NonNull
+	private McpNegotiatedCapabilities negotiatedCapabilitiesFor(@NonNull ResolvedEndpoint resolvedEndpoint) {
+		requireNonNull(resolvedEndpoint);
+
+		Map<String, McpValue> capabilities = new LinkedHashMap<>();
+
+		if (!resolvedEndpoint.toolsByName().isEmpty())
+			capabilities.put("tools", EMPTY_OBJECT);
+
+		if (!resolvedEndpoint.promptsByName().isEmpty())
+			capabilities.put("prompts", EMPTY_OBJECT);
+
+		if (resolvedEndpoint.resourceListBinding() != null || !resolvedEndpoint.resourcesByUri().isEmpty())
+			capabilities.put("resources", EMPTY_OBJECT);
+
+		return new McpNegotiatedCapabilities(new McpObject(capabilities));
+	}
+
+	@NonNull
+	private McpListResourcesResult literalFallbackResourcesListResult(@NonNull ResolvedEndpoint resolvedEndpoint) {
+		requireNonNull(resolvedEndpoint);
+
+		List<McpListedResource> resources = new ArrayList<>();
+
+		for (ResourceBinding resourceBinding : resolvedEndpoint.resourcesByUri().values()) {
+			if (isUriTemplate(resourceBinding.uri()))
+				continue;
+
+			McpListedResource listedResource = McpListedResource.fromComponents(
+					resourceBinding.uri(),
+					resourceBinding.name(),
+					resourceBinding.mimeType());
+
+			if (resourceBinding.optionalDescription().isPresent())
+				listedResource = listedResource.withDescription(resourceBinding.optionalDescription().orElseThrow());
+
+			resources.add(listedResource);
+		}
+
+		return McpListResourcesResult.fromResources(resources);
 	}
 
 	private void observeIdleExpiredSessionIfPresent(@NonNull McpServer mcpServer,
@@ -1814,10 +1865,15 @@ final class DefaultMcpRuntime {
 			McpObject error = optionalObject(object, "error").orElse(null);
 
 			if (error != null) {
-				BigDecimal code = ((McpNumber) error.get("code").orElseThrow()).value();
-				String message = ((McpString) error.get("message").orElseThrow()).value();
-				return new ObservedMcpResult(McpRequestOutcome.JSON_RPC_ERROR,
-						McpJsonRpcError.fromCodeAndMessage(code.intValueExact(), message));
+				McpValue codeValue = error.get("code").orElse(null);
+				McpValue messageValue = error.get("message").orElse(null);
+
+				if (codeValue instanceof McpNumber code && messageValue instanceof McpString message) {
+					return new ObservedMcpResult(McpRequestOutcome.JSON_RPC_ERROR,
+							McpJsonRpcError.fromCodeAndMessage(code.value().intValueExact(), message.value()));
+				}
+
+				return new ObservedMcpResult(McpRequestOutcome.JSON_RPC_ERROR, null);
 			}
 
 			if (parsedJsonRpcRequest.operationKind() == McpOperationKind.TOOLS_CALL) {
@@ -2479,6 +2535,16 @@ final class DefaultMcpRuntime {
 	private boolean isUriPlaceholder(@NonNull String value) {
 		requireNonNull(value);
 		return value.length() >= 2 && value.startsWith("{") && value.endsWith("}");
+	}
+
+	private boolean isUriTemplate(@NonNull String uri) {
+		requireNonNull(uri);
+
+		for (String component : uri.split("/", -1))
+			if (isUriPlaceholder(component))
+				return true;
+
+		return false;
 	}
 
 	private long placeholderCount(@NonNull String uriTemplate) {
