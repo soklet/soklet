@@ -883,6 +883,28 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void initializeFailureStillCleansUpWhenHandleErrorThrows() {
+		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
+		McpSessionStore sessionStore = McpSessionStore.fromInMemory();
+
+		Soklet.runSimulator(failingHandleErrorConfiguration(lifecycleObserver, sessionStore), simulator -> {
+			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/failing-handle-error/mcp", initializeJson("req-1"), Map.of()));
+
+			McpObject responseBody = jsonBody(initializeResult);
+			McpObject error = (McpObject) responseBody.get("error").orElseThrow();
+			Assertions.assertEquals("-32603", ((McpNumber) error.get("code").orElseThrow()).value().toPlainString());
+			Assertions.assertEquals("Internal error", ((McpString) error.get("message").orElseThrow()).value());
+			Assertions.assertFalse(initializeResult.getRequestResult().getMarshaledResponse().getHeaders().containsKey("MCP-Session-Id"));
+		});
+
+		Assertions.assertEquals(1, lifecycleObserver.createdSessionIds.size());
+		Assertions.assertEquals(McpSessionTerminationReason.INITIALIZATION_FAILED, lifecycleObserver.sessionTerminationReason);
+		String sessionId = lifecycleObserver.createdSessionIds.get(0);
+		Assertions.assertTrue(sessionStore.findBySessionId(sessionId).isEmpty());
+	}
+
+	@Test
 	public void mcpMetricsAreRecordedSeparatelyFromHttpMetrics() {
 		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
 
@@ -975,6 +997,19 @@ public class McpRuntimeTests {
 				.mcpServer(McpServer.withPort(0)
 						.sessionStore(sessionStore)
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(FailingInitializeEndpoint.class)))
+						.build())
+				.build();
+	}
+
+	private static SokletConfig failingHandleErrorConfiguration(LifecycleObserver lifecycleObserver,
+																										 McpSessionStore sessionStore) {
+		return SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(MetricsCollector.disabledInstance())
+				.mcpServer(McpServer.withPort(0)
+						.sessionStore(sessionStore)
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(FailingHandleErrorEndpoint.class)))
 						.build())
 				.build();
 	}
@@ -1238,6 +1273,21 @@ public class McpRuntimeTests {
 		public McpSessionContext initialize(McpInitializationContext context,
 																				McpSessionContext session) {
 			throw new IllegalStateException("boom");
+		}
+	}
+
+	@McpServerEndpoint(path = "/failing-handle-error/mcp", name = "failing-handle-error", version = "1.0.0")
+	public static class FailingHandleErrorEndpoint implements McpEndpoint {
+		@Override
+		public McpSessionContext initialize(McpInitializationContext context,
+																				McpSessionContext session) {
+			throw new IllegalStateException("boom");
+		}
+
+		@Override
+		public McpJsonRpcError handleError(Throwable throwable,
+																			 McpRequestContext requestContext) {
+			throw new IllegalStateException("handleError boom");
 		}
 	}
 

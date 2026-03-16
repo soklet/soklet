@@ -486,18 +486,29 @@ final class DefaultMcpRuntime {
 			McpObject result = initializeResultObject(resolvedEndpoint, protocolVersion, negotiatedCapabilities);
 			return jsonRpcSuccessResponse(request, parsedRequest.requestId(), result, Map.of("MCP-Session-Id", Set.of(sessionId)));
 		} catch (Throwable throwable) {
-			McpJsonRpcError error = endpoint.handleError(unwrapInvocationThrowable(throwable),
-					new DefaultMcpRequestContext(
-							request,
-							resolvedEndpoint.endpointClass(),
-							parsedRequest.method(),
-							parsedRequest.operationKind(),
-							Optional.ofNullable(parsedRequest.requestId()),
-							Optional.of(sessionId),
-							Optional.of(protocolVersion),
-							Optional.empty(),
-							Optional.of(McpSessionContext.fromBlankSlate())
-					));
+			McpJsonRpcError error;
+
+			try {
+				error = endpoint.handleError(unwrapInvocationThrowable(throwable),
+						new DefaultMcpRequestContext(
+								request,
+								resolvedEndpoint.endpointClass(),
+								parsedRequest.method(),
+								parsedRequest.operationKind(),
+								Optional.ofNullable(parsedRequest.requestId()),
+								Optional.of(sessionId),
+								Optional.of(protocolVersion),
+								Optional.empty(),
+								Optional.of(McpSessionContext.fromBlankSlate())
+						));
+			} catch (Throwable handleErrorThrowable) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
+								format("An exception occurred while invoking %s::handleError during MCP initialization", McpEndpoint.class.getSimpleName()))
+						.throwable(handleErrorThrowable)
+						.request(request)
+						.build());
+				error = McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error");
+			}
 
 			McpStoredSession terminatedSession = new McpStoredSession(
 					initialSession.sessionId(),
