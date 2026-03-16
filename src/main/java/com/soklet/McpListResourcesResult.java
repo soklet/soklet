@@ -47,7 +47,7 @@ public record McpListResourcesResult(
 
 	@NonNull
 	public static McpListResourcesResult fromResourcesAndNextCursor(@NonNull List<@NonNull McpListedResource> resources,
-																																								@NonNull String nextCursor) {
+																																	@NonNull String nextCursor) {
 		requireNonNull(resources);
 		requireNonNull(nextCursor);
 		return new McpListResourcesResult(resources, nextCursor);

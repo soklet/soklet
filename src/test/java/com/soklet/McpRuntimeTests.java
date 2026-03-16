@@ -17,16 +17,23 @@
 package com.soklet;
 
 import com.soklet.annotation.McpArgument;
+import com.soklet.annotation.McpEndpointPathParameter;
 import com.soklet.annotation.McpPrompt;
+import com.soklet.annotation.McpResource;
 import com.soklet.annotation.McpServerEndpoint;
 import com.soklet.annotation.McpTool;
+import com.soklet.annotation.McpUriParameter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 @ThreadSafe
 public class McpRuntimeTests {
@@ -205,13 +212,633 @@ public class McpRuntimeTests {
 		});
 	}
 
+	@Test
+	public void annotatedHandlersSupportToolCallPromptGetAndResourceRead() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult.ResponseCompleted toolCall = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-10",
+							  "method":"tools/call",
+							  "params":{
+							    "name":"sum",
+							    "arguments":{
+							      "count":5,
+							      "mode":"FORMAL"
+							    }
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject toolCallBody = jsonBody(toolCall);
+			McpObject toolResult = (McpObject) toolCallBody.get("result").orElseThrow();
+			McpArray toolContent = (McpArray) toolResult.get("content").orElseThrow();
+			McpObject firstToolContent = (McpObject) toolContent.values().get(0);
+			Assertions.assertEquals("5:FORMAL:acme", ((McpString) firstToolContent.get("text").orElseThrow()).value());
+			McpObject structuredContent = (McpObject) toolResult.get("structuredContent").orElseThrow();
+			Assertions.assertEquals("acme", ((McpString) structuredContent.get("tenantId").orElseThrow()).value());
+			Assertions.assertEquals("5", ((McpNumber) structuredContent.get("count").orElseThrow()).value().toPlainString());
+
+			McpRequestResult.ResponseCompleted promptGet = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-11",
+							  "method":"prompts/get",
+							  "params":{
+							    "name":"greet",
+							    "arguments":{
+							      "name":"Nina",
+							      "style":"FORMAL"
+							    }
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject promptBody = jsonBody(promptGet);
+			McpObject promptResult = (McpObject) promptBody.get("result").orElseThrow();
+			Assertions.assertEquals("Creates a greeting.", ((McpString) promptResult.get("description").orElseThrow()).value());
+			McpArray messages = (McpArray) promptResult.get("messages").orElseThrow();
+			McpObject firstMessage = (McpObject) messages.values().get(0);
+			Assertions.assertEquals("assistant", ((McpString) firstMessage.get("role").orElseThrow()).value());
+			McpObject messageContent = (McpObject) firstMessage.get("content").orElseThrow();
+			Assertions.assertEquals("Hello Nina from acme in FORMAL", ((McpString) messageContent.get("text").orElseThrow()).value());
+
+			McpRequestResult.ResponseCompleted resourceRead = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-12",
+							  "method":"resources/read",
+							  "params":{
+							    "uri":"catalog://tenants/acme/recipes/latte"
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject resourceBody = jsonBody(resourceRead);
+			McpArray contents = (McpArray) ((McpObject) resourceBody.get("result").orElseThrow()).get("contents").orElseThrow();
+			McpObject firstContent = (McpObject) contents.values().get(0);
+			Assertions.assertEquals("catalog://tenants/acme/recipes/latte", ((McpString) firstContent.get("uri").orElseThrow()).value());
+			Assertions.assertEquals("tenant=acme recipe=latte session=acme", ((McpString) firstContent.get("text").orElseThrow()).value());
+		});
+	}
+
+	@Test
+	public void programmaticHandlersAreInvokedForToolPromptAndResourceCalls() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult.ResponseCompleted toolCall = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-20",
+							  "method":"tools/call",
+							  "params":{
+							    "name":"zz_programmatic_tool",
+							    "arguments":{
+							      "message":"ping"
+							    }
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject toolBody = jsonBody(toolCall);
+			McpObject toolResult = (McpObject) toolBody.get("result").orElseThrow();
+			McpArray toolContent = (McpArray) toolResult.get("content").orElseThrow();
+			Assertions.assertEquals("acme:ping", ((McpString) ((McpObject) toolContent.values().get(0)).get("text").orElseThrow()).value());
+
+			McpRequestResult.ResponseCompleted promptGet = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-21",
+							  "method":"prompts/get",
+							  "params":{
+							    "name":"zz_programmatic_prompt",
+							    "arguments":{
+							      "subject":"latte"
+							    }
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject promptBody = jsonBody(promptGet);
+			McpObject promptResult = (McpObject) promptBody.get("result").orElseThrow();
+			Assertions.assertEquals("Programmatic prompt response", ((McpString) promptResult.get("description").orElseThrow()).value());
+
+			McpRequestResult.ResponseCompleted resourceRead = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-22",
+							  "method":"resources/read",
+							  "params":{
+							    "uri":"catalog://notes/programmatic-1"
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject resourceBody = jsonBody(resourceRead);
+			McpArray contents = (McpArray) ((McpObject) resourceBody.get("result").orElseThrow()).get("contents").orElseThrow();
+			McpObject firstContent = (McpObject) contents.values().get(0);
+			Assertions.assertEquals("note=programmatic-1 tenant=acme", ((McpString) firstContent.get("text").orElseThrow()).value());
+		});
+	}
+
+	@Test
+	public void toolErrorsAreMappedThroughHandleToolError() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult.ResponseCompleted toolCall = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-30",
+							  "method":"tools/call",
+							  "params":{
+							    "name":"zz_fail",
+							    "arguments":{}
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject toolBody = jsonBody(toolCall);
+			McpObject toolResult = (McpObject) toolBody.get("result").orElseThrow();
+			Assertions.assertEquals(Boolean.TRUE, ((McpBoolean) toolResult.get("isError").orElseThrow()).value());
+			McpArray toolContent = (McpArray) toolResult.get("content").orElseThrow();
+			Assertions.assertEquals("tool:boom", ((McpString) ((McpObject) toolContent.values().get(0)).get("text").orElseThrow()).value());
+		});
+	}
+
+	@Test
+	public void toolCallWithoutProgressTokenUsesNormalJsonResponse() {
+		CatalogEndpoint.capturedProgressReporter.set(null);
+
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult requestResult = simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-35",
+							  "method":"tools/call",
+							  "params":{
+							    "name":"zz_progress",
+							    "arguments":{}
+							  }
+							}
+							""", sessionHeaders));
+
+			Assertions.assertInstanceOf(McpRequestResult.ResponseCompleted.class, requestResult);
+			McpObject body = jsonBody((McpRequestResult.ResponseCompleted) requestResult);
+			McpObject result = (McpObject) body.get("result").orElseThrow();
+			McpArray content = (McpArray) result.get("content").orElseThrow();
+			Assertions.assertEquals("progress:false:acme",
+					((McpString) ((McpObject) content.values().get(0)).get("text").orElseThrow()).value());
+			Assertions.assertNull(CatalogEndpoint.capturedProgressReporter.get());
+		});
+	}
+
+	@Test
+	public void toolCallWithProgressTokenUpgradesToEventStreamAndClosesAfterReplay() {
+		CatalogEndpoint.capturedProgressReporter.set(null);
+
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult requestResult = simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-36",
+							  "method":"tools/call",
+							  "params":{
+							    "name":"zz_progress",
+							    "arguments":{},
+							    "_meta":{
+							      "progressToken":"progress-1"
+							    }
+							  }
+							}
+							""", sessionHeaders));
+
+			Assertions.assertInstanceOf(McpRequestResult.StreamOpened.class, requestResult);
+			McpRequestResult.StreamOpened streamOpened = (McpRequestResult.StreamOpened) requestResult;
+			List<McpObject> messages = new ArrayList<>();
+			streamOpened.registerMessageConsumer(messages::add);
+
+			Assertions.assertEquals(Integer.valueOf(200), streamOpened.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals("text/event-stream; charset=UTF-8",
+					streamOpened.getRequestResult().getMarshaledResponse().getHeaders().get("Content-Type").iterator().next());
+			Assertions.assertEquals(3, messages.size());
+
+			McpObject firstMessage = messages.get(0);
+			Assertions.assertEquals("notifications/progress", ((McpString) firstMessage.get("method").orElseThrow()).value());
+			McpObject firstParams = (McpObject) firstMessage.get("params").orElseThrow();
+			Assertions.assertEquals("progress-1", ((McpString) firstParams.get("progressToken").orElseThrow()).value());
+			Assertions.assertEquals("1", ((McpNumber) firstParams.get("progress").orElseThrow()).value().toPlainString());
+			Assertions.assertEquals("2", ((McpNumber) firstParams.get("total").orElseThrow()).value().toPlainString());
+			Assertions.assertEquals("warming", ((McpString) firstParams.get("message").orElseThrow()).value());
+
+			McpObject terminalMessage = messages.get(2);
+			McpObject terminalResult = (McpObject) terminalMessage.get("result").orElseThrow();
+			McpArray terminalContent = (McpArray) terminalResult.get("content").orElseThrow();
+			Assertions.assertEquals("progress:true:acme",
+					((McpString) ((McpObject) terminalContent.values().get(0)).get("text").orElseThrow()).value());
+			Assertions.assertTrue(streamOpened.isClosed());
+		});
+	}
+
+	@Test
+	public void progressReporterFailsFastAfterRequestCompletion() {
+		CatalogEndpoint.capturedProgressReporter.set(null);
+
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult.StreamOpened streamOpened = (McpRequestResult.StreamOpened) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-37",
+							  "method":"tools/call",
+							  "params":{
+							    "name":"zz_progress",
+							    "arguments":{},
+							    "_meta":{
+							      "progressToken":"progress-2"
+							    }
+							  }
+							}
+							""", sessionHeaders));
+
+			streamOpened.registerMessageConsumer(ignored -> {
+			});
+
+			McpProgressReporter progressReporter = CatalogEndpoint.capturedProgressReporter.get();
+			Assertions.assertNotNull(progressReporter);
+			Assertions.assertThrows(IllegalStateException.class,
+					() -> progressReporter.reportProgress(new java.math.BigDecimal("3"), null, "late"));
+		});
+	}
+
+	@Test
+	public void postAndGetRejectIncompatibleAcceptHeaders() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			McpRequestResult.ResponseCompleted rejectedPost = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-60"), Map.of(
+							"Accept", Set.of("application/json")
+					)));
+
+			Assertions.assertEquals(Integer.valueOf(406), rejectedPost.getRequestResult().getMarshaledResponse().getStatusCode());
+
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+			McpRequestResult.ResponseCompleted rejectedGet = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+							.headers(Map.of(
+									"MCP-Session-Id", sessionHeaders.get("MCP-Session-Id"),
+									"MCP-Protocol-Version", sessionHeaders.get("MCP-Protocol-Version"),
+									"Accept", Set.of("application/json")
+							))
+							.build());
+
+			Assertions.assertEquals(Integer.valueOf(406), rejectedGet.getRequestResult().getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	@Test
+	public void getMcpOpensStreamAndDeleteTerminatesIt() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult requestResult = simulator.performMcpRequest(Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+					.headers(Map.of(
+							"MCP-Session-Id", sessionHeaders.get("MCP-Session-Id"),
+							"MCP-Protocol-Version", sessionHeaders.get("MCP-Protocol-Version"),
+							"Accept", Set.of("text/event-stream")
+					))
+					.build());
+
+			Assertions.assertInstanceOf(McpRequestResult.StreamOpened.class, requestResult);
+			McpRequestResult.StreamOpened streamOpened = (McpRequestResult.StreamOpened) requestResult;
+			Assertions.assertEquals(Integer.valueOf(200), streamOpened.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertFalse(streamOpened.isClosed());
+
+			McpRequestResult.ResponseCompleted deleteResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.DELETE, "/tenants/acme/mcp")
+							.headers(sessionHeaders)
+							.build());
+
+			Assertions.assertEquals(Integer.valueOf(204), deleteResult.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertTrue(streamOpened.isClosed());
+		});
+	}
+
+	@Test
+	public void simulatorRoutesInternalSessionMessagesToMostRecentLiveGetStream() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			Soklet.DefaultSimulator defaultSimulator = (Soklet.DefaultSimulator) simulator;
+			Soklet.MockMcpServer mockMcpServer = defaultSimulator.getMcpServer().orElseThrow();
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+			String sessionId = sessionHeaders.get("MCP-Session-Id").iterator().next();
+			McpObject message = internalSessionNotification("latest");
+
+			Assertions.assertFalse(mockMcpServer.publishSessionMessage(sessionId, message));
+
+			McpRequestResult.StreamOpened firstStream = (McpRequestResult.StreamOpened) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+							.headers(Map.of(
+									"MCP-Session-Id", sessionHeaders.get("MCP-Session-Id"),
+									"MCP-Protocol-Version", sessionHeaders.get("MCP-Protocol-Version"),
+									"Accept", Set.of("text/event-stream")
+							))
+							.build());
+			McpRequestResult.StreamOpened secondStream = (McpRequestResult.StreamOpened) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+							.headers(Map.of(
+									"MCP-Session-Id", sessionHeaders.get("MCP-Session-Id"),
+									"MCP-Protocol-Version", sessionHeaders.get("MCP-Protocol-Version"),
+									"Accept", Set.of("text/event-stream")
+							))
+							.build());
+			List<McpObject> firstMessages = new ArrayList<>();
+			List<McpObject> secondMessages = new ArrayList<>();
+			firstStream.registerMessageConsumer(firstMessages::add);
+			secondStream.registerMessageConsumer(secondMessages::add);
+
+			Assertions.assertTrue(mockMcpServer.publishSessionMessage(sessionId, message));
+			Assertions.assertTrue(firstMessages.isEmpty());
+			Assertions.assertEquals(List.of(message), secondMessages);
+
+			secondStream.close();
+
+			McpObject fallbackMessage = internalSessionNotification("fallback");
+			Assertions.assertTrue(mockMcpServer.publishSessionMessage(sessionId, fallbackMessage));
+			Assertions.assertEquals(List.of(fallbackMessage), firstMessages);
+		});
+	}
+
+	@Test
+	public void closingGetStreamSimulatesClientDisconnectWithoutEndingSession() {
+		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+
+		Soklet.runSimulator(configuration(lifecycleObserver, metricsCollector), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult.StreamOpened streamOpened = (McpRequestResult.StreamOpened) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+							.headers(Map.of(
+									"MCP-Session-Id", sessionHeaders.get("MCP-Session-Id"),
+									"MCP-Protocol-Version", sessionHeaders.get("MCP-Protocol-Version"),
+									"Accept", Set.of("text/event-stream")
+							))
+							.build());
+
+			Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpStreams());
+			streamOpened.close();
+			streamOpened.close();
+
+			Assertions.assertTrue(streamOpened.isClosed());
+			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED, lifecycleObserver.streamTerminationReason);
+			Assertions.assertNull(lifecycleObserver.sessionTerminationReason);
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpStreams());
+
+			McpRequestResult.ResponseCompleted deleteResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.DELETE, "/tenants/acme/mcp")
+							.headers(sessionHeaders)
+							.build());
+
+			Assertions.assertEquals(Integer.valueOf(204), deleteResult.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED, lifecycleObserver.streamTerminationReason);
+		});
+	}
+
+	@Test
+	public void activeGetStreamPreventsIdleExpiryUntilClosed() throws Exception {
+		Soklet.runSimulator(configuration(LifecycleObserver.defaultInstance(),
+				MetricsCollector.disabledInstance(),
+				McpSessionStore.fromInMemory(Duration.ofMillis(50))), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult.StreamOpened streamOpened = (McpRequestResult.StreamOpened) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+							.headers(Map.of(
+									"MCP-Session-Id", sessionHeaders.get("MCP-Session-Id"),
+									"MCP-Protocol-Version", sessionHeaders.get("MCP-Protocol-Version"),
+									"Accept", Set.of("text/event-stream")
+							))
+							.build());
+
+			sleepUnchecked(120L);
+
+			McpRequestResult.ResponseCompleted stillAlive = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-70",
+							  "method":"ping",
+							  "params":{}
+							}
+							""", sessionHeaders));
+
+			Assertions.assertEquals(Integer.valueOf(200), stillAlive.getRequestResult().getMarshaledResponse().getStatusCode());
+
+			streamOpened.close();
+			sleepUnchecked(120L);
+
+			McpRequestResult.ResponseCompleted expired = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-71",
+							  "method":"ping",
+							  "params":{}
+							}
+							""", sessionHeaders));
+
+			Assertions.assertEquals(Integer.valueOf(404), expired.getRequestResult().getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	@Test
+	public void lifecycleObserverReceivesMcpSessionRequestAndStreamCallbacks() {
+		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
+
+		Soklet.runSimulator(configuration(lifecycleObserver, MetricsCollector.disabledInstance()), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			simulator.performMcpRequest(post("/tenants/acme/mcp", """
+					{
+					  "jsonrpc":"2.0",
+					  "id":"req-40",
+					  "method":"tools/call",
+					  "params":{
+					    "name":"sum",
+					    "arguments":{
+					      "count":2
+					    }
+					  }
+					}
+					""", sessionHeaders));
+
+			simulator.performMcpRequest(Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+					.headers(Map.of(
+							"MCP-Session-Id", sessionHeaders.get("MCP-Session-Id"),
+							"MCP-Protocol-Version", sessionHeaders.get("MCP-Protocol-Version"),
+							"Accept", Set.of("text/event-stream")
+					))
+					.build());
+
+			simulator.performMcpRequest(Request.withPath(HttpMethod.DELETE, "/tenants/acme/mcp")
+					.headers(sessionHeaders)
+					.build());
+		});
+
+		Assertions.assertEquals(1, lifecycleObserver.createdSessionIds.size());
+		Assertions.assertTrue(lifecycleObserver.startedMethods.contains("initialize"));
+		Assertions.assertTrue(lifecycleObserver.startedMethods.contains("notifications/initialized"));
+		Assertions.assertTrue(lifecycleObserver.startedMethods.contains("tools/call"));
+		Assertions.assertEquals(McpRequestOutcome.SUCCESS_RESPONSE, lifecycleObserver.outcomesByMethod.get("initialize"));
+		Assertions.assertEquals(McpRequestOutcome.SUCCESS_NOTIFICATION, lifecycleObserver.outcomesByMethod.get("notifications/initialized"));
+		Assertions.assertEquals(McpRequestOutcome.SUCCESS_RESPONSE, lifecycleObserver.outcomesByMethod.get("tools/call"));
+		Assertions.assertEquals(1, lifecycleObserver.establishedStreamSessionIds.size());
+		Assertions.assertEquals(McpSessionTerminationReason.CLIENT_REQUESTED, lifecycleObserver.sessionTerminationReason);
+		Assertions.assertEquals(McpStreamTerminationReason.SESSION_TERMINATED, lifecycleObserver.streamTerminationReason);
+	}
+
+	@Test
+	public void initializeFailureCreatesThenTerminatesSession() {
+		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
+
+		Soklet.runSimulator(failingInitializeConfiguration(lifecycleObserver), simulator -> {
+			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/failing/mcp", initializeJson("req-1"), Map.of()));
+
+			McpObject responseBody = jsonBody(initializeResult);
+			Assertions.assertTrue(responseBody.get("error").isPresent());
+		});
+
+		Assertions.assertEquals(1, lifecycleObserver.createdSessionIds.size());
+		Assertions.assertEquals(McpSessionTerminationReason.INITIALIZATION_FAILED, lifecycleObserver.sessionTerminationReason);
+	}
+
+	@Test
+	public void mcpMetricsAreRecordedSeparatelyFromHttpMetrics() {
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+
+		Soklet.runSimulator(configuration(LifecycleObserver.defaultInstance(), metricsCollector), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			simulator.performMcpRequest(post("/tenants/acme/mcp", """
+					{
+					  "jsonrpc":"2.0",
+					  "id":"req-50",
+					  "method":"tools/call",
+					  "params":{
+					    "name":"zz_fail",
+					    "arguments":{}
+					  }
+					}
+					""", sessionHeaders));
+
+			simulator.performMcpRequest(Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+					.headers(Map.of(
+							"MCP-Session-Id", sessionHeaders.get("MCP-Session-Id"),
+							"MCP-Protocol-Version", sessionHeaders.get("MCP-Protocol-Version"),
+							"Accept", Set.of("text/event-stream")
+					))
+					.build());
+
+			simulator.performMcpRequest(Request.withPath(HttpMethod.DELETE, "/tenants/acme/mcp")
+					.headers(sessionHeaders)
+					.build());
+		});
+
+		MetricsCollector.Snapshot snapshot = metricsCollector.snapshot().orElseThrow();
+		Assertions.assertTrue(snapshot.getHttpRequestDurations().isEmpty());
+		Assertions.assertEquals(0L, snapshot.getActiveRequests());
+		Assertions.assertEquals(0L, snapshot.getActiveMcpSessions());
+		Assertions.assertEquals(0L, snapshot.getActiveMcpStreams());
+		Assertions.assertEquals(1L, snapshot.getMcpRequests().get(new MetricsCollector.McpEndpointRequestOutcomeKey(
+				CatalogEndpoint.class, "initialize", McpRequestOutcome.SUCCESS_RESPONSE)));
+		Assertions.assertEquals(1L, snapshot.getMcpRequests().get(new MetricsCollector.McpEndpointRequestOutcomeKey(
+				CatalogEndpoint.class, "notifications/initialized", McpRequestOutcome.SUCCESS_NOTIFICATION)));
+		Assertions.assertEquals(1L, snapshot.getMcpRequests().get(new MetricsCollector.McpEndpointRequestOutcomeKey(
+				CatalogEndpoint.class, "tools/call", McpRequestOutcome.TOOL_ERROR_RESULT)));
+		Assertions.assertEquals(1L, snapshot.getMcpSessionDurations().get(new MetricsCollector.McpEndpointSessionTerminationKey(
+				CatalogEndpoint.class, McpSessionTerminationReason.CLIENT_REQUESTED)).getCount());
+		Assertions.assertEquals(1L, snapshot.getMcpStreamDurations().get(new MetricsCollector.McpEndpointStreamTerminationKey(
+				CatalogEndpoint.class, McpStreamTerminationReason.SESSION_TERMINATED)).getCount());
+	}
+
 	private static SokletConfig configuration() {
+		return configuration(LifecycleObserver.defaultInstance(), MetricsCollector.defaultInstance());
+	}
+
+	private static SokletConfig configuration(LifecycleObserver lifecycleObserver,
+																							 MetricsCollector metricsCollector) {
+		return configuration(lifecycleObserver, metricsCollector, null);
+	}
+
+	private static SokletConfig configuration(LifecycleObserver lifecycleObserver,
+																							 MetricsCollector metricsCollector,
+																							 McpSessionStore sessionStore) {
+		McpHandlerResolver handlerResolver = McpHandlerResolver.fromClasses(Set.of(CatalogEndpoint.class))
+				.withTool(new ProgrammaticEchoToolHandler(), CatalogEndpoint.class)
+				.withPrompt(new ProgrammaticCatalogPromptHandler(), CatalogEndpoint.class)
+				.withResource(new ProgrammaticNoteResourceHandler(), CatalogEndpoint.class);
+
+		McpServer.Builder mcpServerBuilder = McpServer.withPort(0)
+				.handlerResolver(handlerResolver);
+
+		if (sessionStore != null)
+			mcpServerBuilder.sessionStore(sessionStore);
+
 		return SokletConfig.withServer(Server.withPort(0).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(metricsCollector)
+				.mcpServer(mcpServerBuilder.build())
+				.build();
+	}
+
+	private static SokletConfig failingInitializeConfiguration(LifecycleObserver lifecycleObserver) {
+		return SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(MetricsCollector.disabledInstance())
 				.mcpServer(McpServer.withPort(0)
-						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(CatalogEndpoint.class)))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(FailingInitializeEndpoint.class)))
 						.build())
 				.build();
+	}
+
+	private static Map<String, Set<String>> initializedSessionHeaders(Simulator simulator) {
+		McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+				post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
+		String sessionId = headerValue(initializeResult, "MCP-Session-Id");
+		Map<String, Set<String>> sessionHeaders = Map.of(
+				"MCP-Session-Id", Set.of(sessionId),
+				"MCP-Protocol-Version", Set.of("2025-11-25")
+		);
+
+		simulator.performMcpRequest(post("/tenants/acme/mcp", """
+				{
+				  "jsonrpc":"2.0",
+				  "method":"notifications/initialized",
+				  "params":{}
+				}
+				""", sessionHeaders));
+
+		return sessionHeaders;
 	}
 
 	private static Request post(String path,
@@ -241,6 +868,15 @@ public class McpRuntimeTests {
 				""".formatted(requestId);
 	}
 
+	private static void sleepUnchecked(long durationInMillis) {
+		try {
+			Thread.sleep(durationInMillis);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new RuntimeException(e);
+		}
+	}
+
 	private static String headerValue(McpRequestResult.ResponseCompleted responseCompleted,
 																		String headerName) {
 		return responseCompleted.getRequestResult().getMarshaledResponse().getHeaders().get(headerName).stream().findFirst().orElseThrow();
@@ -248,6 +884,14 @@ public class McpRuntimeTests {
 
 	private static McpObject jsonBody(McpRequestResult.ResponseCompleted responseCompleted) {
 		return (McpObject) McpJsonCodec.parse(responseCompleted.getRequestResult().getMarshaledResponse().getBody().orElseThrow());
+	}
+
+	private static McpObject internalSessionNotification(String value) {
+		return new McpObject(Map.of(
+				"jsonrpc", new McpString("2.0"),
+				"method", new McpString("notifications/test"),
+				"params", new McpObject(Map.of("value", new McpString(value)))
+		));
 	}
 
 	@McpServerEndpoint(
@@ -258,29 +902,239 @@ public class McpRuntimeTests {
 			instructions = "Use read-only mode."
 	)
 	public static class CatalogEndpoint implements McpEndpoint {
+		private static final AtomicReference<McpProgressReporter> capturedProgressReporter = new AtomicReference<>();
+
 		@Override
 		public McpSessionContext initialize(McpInitializationContext context,
 																				McpSessionContext session) {
 			return session.with("tenantId", context.getEndpointPathParameter("tenantId").orElseThrow());
 		}
 
+		@Override
+		public McpToolResult handleToolError(Throwable throwable,
+																				 McpToolCallContext context) {
+			return McpToolResult.fromErrorMessage("tool:%s".formatted(throwable.getMessage()));
+		}
+
+		@McpTool(name = "zz_fail", description = "Fails for testing.")
+		public McpToolResult fail() {
+			throw new IllegalStateException("boom");
+		}
+
 		@McpTool(name = "sum", description = "Adds numbers.")
 		public McpToolResult sum(@McpArgument("count") Integer count,
-													 @McpArgument(value = "mode", optional = true) Optional<Mode> mode) {
+													 @McpArgument(value = "mode", optional = true) Optional<Mode> mode,
+													 McpSessionContext sessionContext) {
+			String tenantId = sessionContext.get("tenantId", String.class).orElseThrow();
 			return McpToolResult.builder()
-					.content(McpTextContent.fromText("%s:%s".formatted(count, mode.orElse(Mode.SIMPLE))))
+					.content(McpTextContent.fromText("%s:%s:%s".formatted(count, mode.orElse(Mode.SIMPLE), tenantId)))
+					.structuredContent(new McpObject(Map.of(
+							"tenantId", new McpString(tenantId),
+							"count", new McpNumber(new java.math.BigDecimal(count))
+					)))
+					.build();
+		}
+
+		@McpTool(name = "zz_progress", description = "Reports progress when requested.")
+		public McpToolResult progress(McpToolCallContext toolCallContext,
+																	McpSessionContext sessionContext) {
+			Optional<McpProgressReporter> progressReporter = toolCallContext.getProgressReporter();
+			capturedProgressReporter.set(progressReporter.orElse(null));
+			progressReporter.ifPresent(reporter -> {
+				reporter.reportProgress(new java.math.BigDecimal("1"), new java.math.BigDecimal("2"), "warming");
+				reporter.reportProgress(new java.math.BigDecimal("2"), new java.math.BigDecimal("2"), "done");
+			});
+			return McpToolResult.builder()
+					.content(McpTextContent.fromText("progress:%s:%s".formatted(progressReporter.isPresent(),
+							sessionContext.get("tenantId", String.class).orElseThrow())))
 					.build();
 		}
 
 		@McpPrompt(name = "greet", description = "Creates a greeting.", title = "Greeting")
 		public McpPromptResult greet(@McpArgument("name") String name,
-																 @McpArgument(value = "style", optional = true) Optional<Mode> style) {
-			return McpPromptResult.fromMessages(McpPromptMessage.fromAssistantText("Hello %s".formatted(name)));
+																 @McpArgument(value = "style", optional = true) Optional<Mode> style,
+																 McpSessionContext sessionContext) {
+			return McpPromptResult.fromMessages(McpPromptMessage.fromAssistantText("Hello %s from %s in %s".formatted(
+					name,
+					sessionContext.get("tenantId", String.class).orElseThrow(),
+					style.orElse(Mode.SIMPLE))));
+		}
+
+		@McpResource(uri = "catalog://tenants/{tenantId}/recipes/{recipeId}", name = "recipe", mimeType = "text/plain")
+		public McpResourceContents recipe(@McpEndpointPathParameter("tenantId") String tenantId,
+																			@McpUriParameter("recipeId") String recipeId,
+																			McpSessionContext sessionContext) {
+			return McpResourceContents.fromText(
+					"catalog://tenants/%s/recipes/%s".formatted(tenantId, recipeId),
+					"tenant=%s recipe=%s session=%s".formatted(
+							tenantId,
+							recipeId,
+							sessionContext.get("tenantId", String.class).orElseThrow()),
+					"text/plain");
+		}
+	}
+
+	private static final class ProgrammaticEchoToolHandler implements McpToolHandler {
+		@Override
+		public String getName() {
+			return "zz_programmatic_tool";
+		}
+
+		@Override
+		public String getDescription() {
+			return "Programmatic echo tool.";
+		}
+
+		@Override
+		public McpSchema getInputSchema() {
+			return McpSchema.object()
+					.required("message", McpType.STRING)
+					.build();
+		}
+
+		@Override
+		public McpToolResult handle(McpToolHandlerContext context) {
+			String message = ((McpString) context.getArguments().get("message").orElseThrow()).value();
+			String tenantId = context.getEndpointPathParameter("tenantId").orElseThrow();
+			return McpToolResult.builder()
+					.content(McpTextContent.fromText("%s:%s".formatted(tenantId, message)))
+					.build();
+		}
+	}
+
+	private static final class ProgrammaticCatalogPromptHandler implements McpPromptHandler {
+		@Override
+		public String getName() {
+			return "zz_programmatic_prompt";
+		}
+
+		@Override
+		public String getDescription() {
+			return "Programmatic prompt.";
+		}
+
+		@Override
+		public McpSchema getArgumentsSchema() {
+			return McpSchema.object()
+					.required("subject", McpType.STRING)
+					.build();
+		}
+
+		@Override
+		public McpPromptResult handle(McpPromptHandlerContext context) {
+			String tenantId = context.getSessionContext().get("tenantId", String.class).orElseThrow();
+			String subject = ((McpString) context.getArguments().get("subject").orElseThrow()).value();
+			return new McpPromptResult("Programmatic prompt response",
+					java.util.List.of(McpPromptMessage.fromAssistantText("%s:%s".formatted(tenantId, subject))));
+		}
+	}
+
+	private static final class ProgrammaticNoteResourceHandler implements McpResourceHandler {
+		@Override
+		public String getUri() {
+			return "catalog://notes/{noteId}";
+		}
+
+		@Override
+		public String getName() {
+			return "programmatic-note";
+		}
+
+		@Override
+		public String getMimeType() {
+			return "text/plain";
+		}
+
+		@Override
+		public McpResourceContents handle(McpResourceHandlerContext context) {
+			String noteId = context.getUriParameter("noteId").orElseThrow();
+			String tenantId = context.getSessionContext().get("tenantId", String.class).orElseThrow();
+			return McpResourceContents.fromText(context.getRequestedUri(), "note=%s tenant=%s".formatted(noteId, tenantId), "text/plain");
 		}
 	}
 
 	public enum Mode {
 		SIMPLE,
 		FORMAL
+	}
+
+	@McpServerEndpoint(path = "/failing/mcp", name = "failing", version = "1.0.0")
+	public static class FailingInitializeEndpoint implements McpEndpoint {
+		@Override
+		public McpSessionContext initialize(McpInitializationContext context,
+																				McpSessionContext session) {
+			throw new IllegalStateException("boom");
+		}
+	}
+
+	private static final class RecordingLifecycleObserver implements LifecycleObserver {
+		private final List<String> createdSessionIds;
+		private final List<String> startedMethods;
+		private final Map<String, McpRequestOutcome> outcomesByMethod;
+		private final List<String> establishedStreamSessionIds;
+		private McpSessionTerminationReason sessionTerminationReason;
+		private McpStreamTerminationReason streamTerminationReason;
+
+		private RecordingLifecycleObserver() {
+			this.createdSessionIds = new ArrayList<>();
+			this.startedMethods = new ArrayList<>();
+			this.outcomesByMethod = new java.util.LinkedHashMap<>();
+			this.establishedStreamSessionIds = new ArrayList<>();
+		}
+
+		@Override
+		public void didCreateMcpSession(Request request,
+																	 Class<? extends McpEndpoint> endpointClass,
+																	 String sessionId) {
+			this.createdSessionIds.add(sessionId);
+		}
+
+		@Override
+		public void didStartMcpRequestHandling(Request request,
+																				 Class<? extends McpEndpoint> endpointClass,
+																				 String sessionId,
+																				 String jsonRpcMethod,
+																				 McpJsonRpcRequestId jsonRpcRequestId) {
+			this.startedMethods.add(jsonRpcMethod);
+		}
+
+		@Override
+		public void didFinishMcpRequestHandling(Request request,
+																						Class<? extends McpEndpoint> endpointClass,
+																						String sessionId,
+																						String jsonRpcMethod,
+																						McpJsonRpcRequestId jsonRpcRequestId,
+																						McpRequestOutcome requestOutcome,
+																						McpJsonRpcError jsonRpcError,
+																						Duration duration,
+																						List<Throwable> throwables) {
+			this.outcomesByMethod.put(jsonRpcMethod, requestOutcome);
+		}
+
+		@Override
+		public void didEstablishMcpServerSentEventStream(Request request,
+																									 Class<? extends McpEndpoint> endpointClass,
+																									 String sessionId) {
+			this.establishedStreamSessionIds.add(sessionId);
+		}
+
+		@Override
+		public void didTerminateMcpSession(Class<? extends McpEndpoint> endpointClass,
+																		 String sessionId,
+																		 Duration sessionDuration,
+																		 McpSessionTerminationReason terminationReason,
+																		 Throwable throwable) {
+			this.sessionTerminationReason = terminationReason;
+		}
+
+		@Override
+		public void didTerminateMcpServerSentEventStream(Request request,
+																										 Class<? extends McpEndpoint> endpointClass,
+																										 String sessionId,
+																										 Duration connectionDuration,
+																										 McpStreamTerminationReason terminationReason,
+																										 Throwable throwable) {
+			this.streamTerminationReason = terminationReason;
+		}
 	}
 }

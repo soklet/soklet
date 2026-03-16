@@ -17,17 +17,21 @@
 package com.soklet;
 
 import com.soklet.DefaultMcpHandlerResolver.AnnotatedPromptBinding;
+import com.soklet.DefaultMcpHandlerResolver.AnnotatedResourceBinding;
 import com.soklet.DefaultMcpHandlerResolver.AnnotatedResourceListBinding;
 import com.soklet.DefaultMcpHandlerResolver.AnnotatedToolBinding;
 import com.soklet.DefaultMcpHandlerResolver.ProgrammaticPromptBinding;
+import com.soklet.DefaultMcpHandlerResolver.ProgrammaticResourceBinding;
 import com.soklet.DefaultMcpHandlerResolver.ProgrammaticResourceListBinding;
 import com.soklet.DefaultMcpHandlerResolver.ProgrammaticToolBinding;
 import com.soklet.DefaultMcpHandlerResolver.PromptBinding;
 import com.soklet.DefaultMcpHandlerResolver.ResolvedEndpoint;
+import com.soklet.DefaultMcpHandlerResolver.ResourceBinding;
 import com.soklet.DefaultMcpHandlerResolver.ResourceListBinding;
 import com.soklet.DefaultMcpHandlerResolver.ToolBinding;
 import com.soklet.annotation.McpArgument;
 import com.soklet.annotation.McpEndpointPathParameter;
+import com.soklet.annotation.McpUriParameter;
 import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
 import org.jspecify.annotations.NonNull;
@@ -41,6 +45,7 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -51,6 +56,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 import static com.soklet.Utilities.extractContentTypeFromHeaderValue;
 import static java.lang.String.format;
@@ -67,10 +75,13 @@ final class DefaultMcpRuntime {
 	private static final McpObject EMPTY_OBJECT = new McpObject(Map.of());
 	@NonNull
 	private final Soklet soklet;
+	@NonNull
+	private final ConcurrentHashMap<@NonNull String, @NonNull CopyOnWriteArrayList<@NonNull McpStreamState>> mcpStreamsBySessionId;
 
 	DefaultMcpRuntime(@NonNull Soklet soklet) {
 		requireNonNull(soklet);
 		this.soklet = soklet;
+		this.mcpStreamsBySessionId = new ConcurrentHashMap<>();
 	}
 
 	@NonNull
@@ -97,9 +108,10 @@ final class DefaultMcpRuntime {
 
 			return switch (request.getHttpMethod()) {
 				case POST -> handlePostRequest(request, mcpServer, resolvedEndpoint);
+				case GET -> handleGetRequest(request, mcpServer, resolvedEndpoint);
 				case DELETE -> handleDeleteRequest(request, mcpServer, resolvedEndpoint);
 				default -> requestResultFromMarshaledResponse(request,
-						getSoklet().getSokletConfig().getResponseMarshaler().forMethodNotAllowed(request, Set.of(HttpMethod.POST, HttpMethod.DELETE)));
+						getSoklet().getSokletConfig().getResponseMarshaler().forMethodNotAllowed(request, Set.of(HttpMethod.POST, HttpMethod.GET, HttpMethod.DELETE)));
 			};
 		} catch (Throwable throwable) {
 			return RequestResult.fromMarshaledResponse(getSoklet().provideFailsafeMarshaledResponse(request, throwable));
@@ -120,6 +132,9 @@ final class DefaultMcpRuntime {
 				.filter("application/json"::equalsIgnoreCase)
 				.isPresent())
 			return plainTextResponse(request, 400, "MCP POST requests must use Content-Type: application/json");
+
+		if (!acceptsMediaType(request, "application/json") || !acceptsMediaType(request, "text/event-stream"))
+			return plainTextResponse(request, 406, "MCP POST requests must accept both application/json and text/event-stream.");
 
 		ParsedJsonRpcRequest parsedRequest;
 
@@ -159,9 +174,9 @@ final class DefaultMcpRuntime {
 				resolvedEndpoint.endpointClass(),
 				parsedRequest.method(),
 				parsedRequest.operationKind(),
-					Optional.ofNullable(parsedRequest.requestId()),
-					Optional.ofNullable(sessionId),
-					Optional.ofNullable(protocolVersionHeader),
+				Optional.ofNullable(parsedRequest.requestId()),
+				Optional.ofNullable(sessionId),
+				Optional.ofNullable(protocolVersionHeader),
 				storedSession.map(McpStoredSession::negotiatedCapabilities),
 				storedSession.map(McpStoredSession::sessionContext)
 		);
@@ -169,26 +184,86 @@ final class DefaultMcpRuntime {
 
 		try {
 			RequestResult requestResult = mcpServer.getRequestInterceptor().interceptRequest(requestContext, () ->
-					dispatchPostRequest(request, mcpServer, resolvedEndpoint, endpointPathParameters, parsedRequest, finalStoredSession, requestContext));
+					dispatchObservedPostRequest(request, mcpServer, resolvedEndpoint, endpointPathParameters, parsedRequest, finalStoredSession, requestContext));
 
 			if (requestResult == null)
 				throw new IllegalStateException(format("%s::interceptRequest returned null for MCP operation %s",
 						McpRequestInterceptor.class.getSimpleName(), parsedRequest.method()));
 
 			return requestResult;
+		} catch (JsonRpcErrorTransport transport) {
+			return jsonRpcErrorResponse(request,
+					transport.requestId() == null ? parsedRequest.requestId() : transport.requestId(),
+					transport.error());
 		} catch (Throwable throwable) {
 			return jsonRpcErrorResponse(request, parsedRequest.requestId(), McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error"));
 		}
 	}
 
 	@NonNull
-	private RequestResult dispatchPostRequest(@NonNull Request request,
-																					 @NonNull McpServer mcpServer,
-																					 @NonNull ResolvedEndpoint resolvedEndpoint,
-																					 @NonNull Map<String, String> endpointPathParameters,
-																					 @NonNull ParsedJsonRpcRequest parsedRequest,
-																					 @NonNull Optional<McpStoredSession> storedSession,
-																					 @NonNull DefaultMcpRequestContext requestContext) throws Exception {
+	private RequestResult handleGetRequest(@NonNull Request request,
+																				 @NonNull McpServer mcpServer,
+																				 @NonNull ResolvedEndpoint resolvedEndpoint) throws Exception {
+		requireNonNull(request);
+		requireNonNull(mcpServer);
+		requireNonNull(resolvedEndpoint);
+
+		String sessionId = request.getHeader("MCP-Session-Id").orElse(null);
+		String protocolVersionHeader = request.getHeader("MCP-Protocol-Version").orElse(null);
+
+		if (!acceptsMediaType(request, "text/event-stream"))
+			return plainTextResponse(request, 406, "MCP GET requests must accept text/event-stream.");
+
+		if (request.getHeader("Last-Event-ID").isPresent())
+			return plainTextResponse(request, 400, "Last-Event-ID is not supported for MCP GET streams.");
+
+		if (sessionId == null)
+			return plainTextResponse(request, 400, "Missing MCP-Session-Id header.");
+
+		if (protocolVersionHeader == null)
+			return plainTextResponse(request, 400, "Missing MCP-Protocol-Version header.");
+
+		McpStoredSession storedSession = mcpServer.getSessionStore().findBySessionId(sessionId).orElse(null);
+
+		if (storedSession == null || storedSession.terminatedAt() != null || !storedSession.endpointClass().equals(resolvedEndpoint.endpointClass()))
+			return plainTextResponse(request, 404, "Unknown MCP session.");
+
+		if (!Objects.equals(storedSession.protocolVersion(), protocolVersionHeader))
+			return plainTextResponse(request, 400, "MCP-Protocol-Version does not match the negotiated session version.");
+
+		Optional<Response> admissionResponse = mcpServer.getRequestAdmissionPolicy().checkRequest(
+				new DefaultMcpAdmissionContext(
+						request,
+						request.getHttpMethod(),
+						resolvedEndpoint.endpointClass(),
+						Optional.empty(),
+						Optional.empty(),
+						Optional.empty(),
+						Optional.of(sessionId)
+				));
+
+		if (admissionResponse.isPresent())
+			return httpResponse(request, admissionResponse.get());
+
+		if (!storedSession.initialized())
+			return plainTextResponse(request, 400, "MCP session is not initialized.");
+
+		if (!storedSession.initializedNotificationReceived())
+			return plainTextResponse(request, 400, "MCP session has not received notifications/initialized.");
+
+		touchSession(mcpServer, storedSession);
+		registerMcpStream(request, resolvedEndpoint.endpointClass(), sessionId);
+		return requestResultFromMarshaledResponse(request, eventStreamResponse());
+	}
+
+	@NonNull
+	private RequestResult dispatchObservedPostRequest(@NonNull Request request,
+																										@NonNull McpServer mcpServer,
+																										@NonNull ResolvedEndpoint resolvedEndpoint,
+																										@NonNull Map<String, String> endpointPathParameters,
+																										@NonNull ParsedJsonRpcRequest parsedRequest,
+																										@NonNull Optional<McpStoredSession> storedSession,
+																										@NonNull DefaultMcpRequestContext requestContext) throws Exception {
 		requireNonNull(request);
 		requireNonNull(mcpServer);
 		requireNonNull(resolvedEndpoint);
@@ -211,14 +286,106 @@ final class DefaultMcpRuntime {
 		if (admissionResponse.isPresent())
 			return httpResponse(request, admissionResponse.get());
 
+		Instant handlingStarted = Instant.now();
+		List<Throwable> throwables = new ArrayList<>(2);
+		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
+				format("An exception occurred while invoking %s::didStartMcpRequestHandling", LifecycleObserver.class.getSimpleName()),
+				request,
+				throwables,
+				lifecycleObserver -> lifecycleObserver.didStartMcpRequestHandling(request,
+						resolvedEndpoint.endpointClass(),
+						requestContext.getSessionId().orElse(null),
+						parsedRequest.method(),
+						parsedRequest.requestId()));
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didStartMcpRequestHandling", MetricsCollector.class.getSimpleName()),
+				request,
+				metricsCollector -> metricsCollector.didStartMcpRequestHandling(request,
+						resolvedEndpoint.endpointClass(),
+						requestContext.getSessionId().orElse(null),
+						parsedRequest.method(),
+						parsedRequest.requestId()));
+
+		RequestResult requestResult;
+
+		try {
+			requestResult = dispatchPostRequestAfterAdmission(request, mcpServer, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession, requestContext);
+		} catch (JsonRpcErrorTransport transport) {
+			requestResult = jsonRpcErrorResponse(request,
+					transport.requestId() == null ? parsedRequest.requestId() : transport.requestId(),
+					transport.error());
+		} catch (Throwable throwable) {
+			throwables.add(throwable);
+			requestResult = jsonRpcErrorResponse(request, parsedRequest.requestId(), McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error"));
+		}
+
+		ObservedMcpResult observedMcpResult = observeMcpResult(requestResult, parsedRequest);
+		Duration duration = Duration.between(handlingStarted, Instant.now());
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFinishMcpRequestHandling", MetricsCollector.class.getSimpleName()),
+				request,
+				metricsCollector -> metricsCollector.didFinishMcpRequestHandling(request,
+						resolvedEndpoint.endpointClass(),
+						requestContext.getSessionId().orElse(null),
+						parsedRequest.method(),
+						parsedRequest.requestId(),
+						observedMcpResult.requestOutcome(),
+						observedMcpResult.jsonRpcError(),
+						duration,
+						List.copyOf(throwables)));
+		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
+				format("An exception occurred while invoking %s::didFinishMcpRequestHandling", LifecycleObserver.class.getSimpleName()),
+				request,
+				null,
+				lifecycleObserver -> lifecycleObserver.didFinishMcpRequestHandling(request,
+						resolvedEndpoint.endpointClass(),
+						requestContext.getSessionId().orElse(null),
+						parsedRequest.method(),
+						parsedRequest.requestId(),
+						observedMcpResult.requestOutcome(),
+						observedMcpResult.jsonRpcError(),
+						duration,
+						List.copyOf(throwables)));
+
+		return requestResult;
+	}
+
+	@NonNull
+	private RequestResult dispatchPostRequestAfterAdmission(@NonNull Request request,
+																													@NonNull McpServer mcpServer,
+																													@NonNull ResolvedEndpoint resolvedEndpoint,
+																													@NonNull Map<String, String> endpointPathParameters,
+																													@NonNull ParsedJsonRpcRequest parsedRequest,
+																													@NonNull Optional<McpStoredSession> storedSession,
+																													@NonNull DefaultMcpRequestContext requestContext) throws Exception {
+		requireNonNull(request);
+		requireNonNull(mcpServer);
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(endpointPathParameters);
+		requireNonNull(parsedRequest);
+		requireNonNull(storedSession);
+		requireNonNull(requestContext);
+
 		return switch (parsedRequest.operationKind()) {
 			case INITIALIZE -> handleInitialize(request, mcpServer, resolvedEndpoint, endpointPathParameters, parsedRequest);
-			case NOTIFICATIONS_INITIALIZED -> handleInitializedNotification(request, mcpServer, parsedRequest, storedSession.orElseThrow(), requestContext);
+			case NOTIFICATIONS_INITIALIZED ->
+					handleInitializedNotification(request, mcpServer, parsedRequest, storedSession.orElseThrow(), requestContext);
 			case PING -> handlePing(request, mcpServer, parsedRequest, storedSession.orElse(null));
-			case TOOLS_LIST -> handleToolsList(request, resolvedEndpoint, parsedRequest, storedSession.orElseThrow(), requestContext);
-			case PROMPTS_LIST -> handlePromptsList(request, resolvedEndpoint, parsedRequest, storedSession.orElseThrow(), requestContext);
-			case RESOURCES_LIST -> handleResourcesList(request, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession.orElseThrow(), requestContext);
-			default -> jsonRpcErrorResponse(request, parsedRequest.requestId(), McpJsonRpcError.fromCodeAndMessage(-32601, "Method not found"));
+			case TOOLS_LIST ->
+					handleToolsList(request, resolvedEndpoint, parsedRequest, storedSession.orElseThrow(), requestContext);
+			case TOOLS_CALL ->
+					handleToolCall(request, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession.orElseThrow(), requestContext);
+			case PROMPTS_LIST ->
+					handlePromptsList(request, resolvedEndpoint, parsedRequest, storedSession.orElseThrow(), requestContext);
+			case PROMPTS_GET ->
+					handlePromptGet(request, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession.orElseThrow(), requestContext);
+			case RESOURCES_LIST ->
+					handleResourcesList(request, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession.orElseThrow(), requestContext);
+			case RESOURCES_READ ->
+					handleResourceRead(request, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession.orElseThrow(), requestContext);
+			default ->
+					jsonRpcErrorResponse(request, parsedRequest.requestId(), McpJsonRpcError.fromCodeAndMessage(-32601, "Method not found"));
 		};
 	}
 
@@ -265,6 +432,7 @@ final class DefaultMcpRuntime {
 		);
 
 		mcpServer.getSessionStore().create(initialSession);
+		observeSessionCreated(request, resolvedEndpoint.endpointClass(), sessionId);
 
 		McpEndpoint endpoint = endpointInstance(resolvedEndpoint.endpointClass());
 		DefaultMcpInitializationContext initializationContext = new DefaultMcpInitializationContext(
@@ -328,6 +496,9 @@ final class DefaultMcpRuntime {
 					initialSession.version() + 1L
 			);
 			mcpServer.getSessionStore().replace(initialSession, terminatedSession);
+			observeSessionTerminated(resolvedEndpoint.endpointClass(), sessionId,
+					Duration.between(initialSession.createdAt(), terminatedSession.terminatedAt()),
+					McpSessionTerminationReason.INITIALIZATION_FAILED, throwable);
 			return jsonRpcErrorResponse(request, parsedRequest.requestId(), error);
 		}
 	}
@@ -423,10 +594,10 @@ final class DefaultMcpRuntime {
 
 	@NonNull
 	private RequestResult handlePromptsList(@NonNull Request request,
-																						@NonNull ResolvedEndpoint resolvedEndpoint,
-																						@NonNull ParsedJsonRpcRequest parsedRequest,
-																						@NonNull McpStoredSession storedSession,
-																						@NonNull DefaultMcpRequestContext requestContext) {
+																					@NonNull ResolvedEndpoint resolvedEndpoint,
+																					@NonNull ParsedJsonRpcRequest parsedRequest,
+																					@NonNull McpStoredSession storedSession,
+																					@NonNull DefaultMcpRequestContext requestContext) {
 		requireNonNull(request);
 		requireNonNull(resolvedEndpoint);
 		requireNonNull(parsedRequest);
@@ -470,6 +641,127 @@ final class DefaultMcpRuntime {
 
 		return jsonRpcSuccessResponse(request, parsedRequest.requestId(),
 				new McpObject(Map.of("prompts", new McpArray(prompts))), Map.of());
+	}
+
+	@NonNull
+	private RequestResult handleToolCall(@NonNull Request request,
+																			 @NonNull ResolvedEndpoint resolvedEndpoint,
+																			 @NonNull Map<String, String> endpointPathParameters,
+																			 @NonNull ParsedJsonRpcRequest parsedRequest,
+																			 @NonNull McpStoredSession storedSession,
+																			 @NonNull DefaultMcpRequestContext requestContext) throws Exception {
+		requireNonNull(request);
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(endpointPathParameters);
+		requireNonNull(parsedRequest);
+		requireNonNull(storedSession);
+		requireNonNull(requestContext);
+
+		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+
+		if (gateResult != null)
+			return gateResult;
+
+		String toolName = requiredString(parsedRequest.params(), "name");
+		McpObject arguments = optionalArgumentsObject(parsedRequest.params(), "arguments");
+		ToolBinding toolBinding = resolvedEndpoint.toolsByName().get(toolName);
+
+		if (toolBinding == null)
+			return jsonRpcErrorResponse(request, parsedRequest.requestId(),
+					McpJsonRpcError.fromCodeAndMessage(-32602, "Unknown tool '%s'".formatted(toolName)));
+
+		validateArgumentsAgainstSchema(arguments, schemaForToolBinding(toolBinding));
+		touchSession(getMcpServer(), storedSession);
+
+		DefaultMcpProgressReporter progressReporter = progressReporter(parsedRequest);
+		DefaultMcpToolCallContext toolCallContext = new DefaultMcpToolCallContext(requestContext, Optional.ofNullable(progressReporter));
+		McpToolResult toolResult;
+
+		try {
+			toolResult = invokeToolBinding(resolvedEndpoint, toolBinding, endpointPathParameters, storedSession.sessionContext(),
+					requireClientCapabilities(storedSession), arguments, toolCallContext);
+		} catch (JsonRpcErrorTransport transport) {
+			if (progressReporter != null && progressReporter.hasMessages()) {
+				List<McpObject> messages = new ArrayList<>(progressReporter.messages());
+				messages.add(jsonRpcErrorEnvelope(
+						transport.requestId() == null ? parsedRequest.requestId() : transport.requestId(),
+						transport.error()));
+				progressReporter.markCompleted();
+				return jsonRpcEventStreamResponse(request, messages, true);
+			}
+
+			if (progressReporter != null)
+				progressReporter.markCompleted();
+
+			throw transport;
+		} catch (Exception e) {
+			McpToolResult errorResult = endpointInstance(resolvedEndpoint.endpointClass()).handleToolError(e, toolCallContext);
+
+			if (errorResult == null)
+				throw new IllegalStateException("%s::handleToolError returned null".formatted(resolvedEndpoint.endpointClass().getName()));
+
+			toolResult = errorResult;
+		}
+
+		McpValue result = toolResultValue(resolvedEndpoint.endpointClass(), toolBinding.name(), storedSession.sessionContext(), toolCallContext, toolResult);
+		McpObject terminalEnvelope = jsonRpcSuccessEnvelope(parsedRequest.requestId(), result);
+
+		if (progressReporter == null || !progressReporter.hasMessages()) {
+			if (progressReporter != null)
+				progressReporter.markCompleted();
+
+			return jsonRpcSuccessResponse(request, parsedRequest.requestId(), result, Map.of());
+		}
+
+		List<McpObject> messages = new ArrayList<>(progressReporter.messages());
+		messages.add(terminalEnvelope);
+		progressReporter.markCompleted();
+		return jsonRpcEventStreamResponse(request, messages, true);
+	}
+
+	@NonNull
+	private RequestResult handlePromptGet(@NonNull Request request,
+																				@NonNull ResolvedEndpoint resolvedEndpoint,
+																				@NonNull Map<String, String> endpointPathParameters,
+																				@NonNull ParsedJsonRpcRequest parsedRequest,
+																				@NonNull McpStoredSession storedSession,
+																				@NonNull DefaultMcpRequestContext requestContext) throws Exception {
+		requireNonNull(request);
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(endpointPathParameters);
+		requireNonNull(parsedRequest);
+		requireNonNull(storedSession);
+		requireNonNull(requestContext);
+
+		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+
+		if (gateResult != null)
+			return gateResult;
+
+		String promptName = requiredString(parsedRequest.params(), "name");
+		McpObject arguments = optionalArgumentsObject(parsedRequest.params(), "arguments");
+		PromptBinding promptBinding = resolvedEndpoint.promptsByName().get(promptName);
+
+		if (promptBinding == null)
+			return jsonRpcErrorResponse(request, parsedRequest.requestId(),
+					McpJsonRpcError.fromCodeAndMessage(-32602, "Unknown prompt '%s'".formatted(promptName)));
+
+		validateArgumentsAgainstSchema(arguments, schemaForPromptBinding(promptBinding));
+		touchSession(getMcpServer(), storedSession);
+
+		McpPromptResult promptResult;
+
+		try {
+			promptResult = invokePromptBinding(resolvedEndpoint, promptBinding, endpointPathParameters, storedSession.sessionContext(),
+					requireClientCapabilities(storedSession), arguments, requestContext);
+		} catch (JsonRpcErrorTransport transport) {
+			throw transport;
+		} catch (Exception e) {
+			McpJsonRpcError error = endpointInstance(resolvedEndpoint.endpointClass()).handleError(e, requestContext);
+			return jsonRpcErrorResponse(request, parsedRequest.requestId(), error);
+		}
+
+		return jsonRpcSuccessResponse(request, parsedRequest.requestId(), promptResultValue(promptBinding, promptResult), Map.of());
 	}
 
 	@NonNull
@@ -529,6 +821,50 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
+	private RequestResult handleResourceRead(@NonNull Request request,
+																					 @NonNull ResolvedEndpoint resolvedEndpoint,
+																					 @NonNull Map<String, String> endpointPathParameters,
+																					 @NonNull ParsedJsonRpcRequest parsedRequest,
+																					 @NonNull McpStoredSession storedSession,
+																					 @NonNull DefaultMcpRequestContext requestContext) throws Exception {
+		requireNonNull(request);
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(endpointPathParameters);
+		requireNonNull(parsedRequest);
+		requireNonNull(storedSession);
+		requireNonNull(requestContext);
+
+		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+
+		if (gateResult != null)
+			return gateResult;
+
+		String requestedUri = requiredString(parsedRequest.params(), "uri");
+		MatchedResourceBinding matchedResourceBinding = matchResourceBinding(resolvedEndpoint, requestedUri).orElse(null);
+
+		if (matchedResourceBinding == null)
+			return jsonRpcErrorResponse(request, parsedRequest.requestId(),
+					McpJsonRpcError.fromCodeAndMessage(-32602, "Unknown resource '%s'".formatted(requestedUri)));
+
+		touchSession(getMcpServer(), storedSession);
+
+		McpResourceContents resourceContents;
+
+		try {
+			resourceContents = invokeResourceBinding(resolvedEndpoint, matchedResourceBinding.binding(), endpointPathParameters,
+					matchedResourceBinding.uriParameters(), storedSession.sessionContext(), requestedUri, requestContext);
+		} catch (JsonRpcErrorTransport transport) {
+			throw transport;
+		} catch (Exception e) {
+			McpJsonRpcError error = endpointInstance(resolvedEndpoint.endpointClass()).handleError(e, requestContext);
+			return jsonRpcErrorResponse(request, parsedRequest.requestId(), error);
+		}
+
+		return jsonRpcSuccessResponse(request, parsedRequest.requestId(),
+				new McpObject(Map.of("contents", new McpArray(List.of(resourceContentsValue(resourceContents))))), Map.of());
+	}
+
+	@NonNull
 	private RequestResult handleDeleteRequest(@NonNull Request request,
 																						@NonNull McpServer mcpServer,
 																						@NonNull ResolvedEndpoint resolvedEndpoint) throws Exception {
@@ -567,6 +903,29 @@ final class DefaultMcpRuntime {
 		if (admissionResponse.isPresent())
 			return httpResponse(request, admissionResponse.get());
 
+		Instant terminatedAt = Instant.now();
+		McpStoredSession terminatedSession = new McpStoredSession(
+				storedSession.sessionId(),
+				storedSession.endpointClass(),
+				storedSession.createdAt(),
+				terminatedAt,
+				storedSession.initialized(),
+				storedSession.initializedNotificationReceived(),
+				storedSession.protocolVersion(),
+				storedSession.clientCapabilities(),
+				storedSession.negotiatedCapabilities(),
+				storedSession.sessionContext(),
+				terminatedAt,
+				storedSession.version() + 1L
+		);
+
+		if (!mcpServer.getSessionStore().replace(storedSession, terminatedSession))
+			return plainTextResponse(request, 404, "Unknown MCP session.");
+
+		observeSessionTerminated(resolvedEndpoint.endpointClass(), sessionId,
+				Duration.between(storedSession.createdAt(), terminatedAt),
+				McpSessionTerminationReason.CLIENT_REQUESTED, null);
+		terminateStreamsForSession(request, resolvedEndpoint.endpointClass(), sessionId, McpStreamTerminationReason.SESSION_TERMINATED, null);
 		mcpServer.getSessionStore().deleteBySessionId(sessionId);
 		return requestResultFromMarshaledResponse(request, MarshaledResponse.withStatusCode(204).build());
 	}
@@ -648,6 +1007,141 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
+	private McpToolResult invokeToolBinding(@NonNull ResolvedEndpoint resolvedEndpoint,
+																					@NonNull ToolBinding toolBinding,
+																					@NonNull Map<String, String> endpointPathParameters,
+																					@NonNull McpSessionContext sessionContext,
+																					@NonNull McpClientCapabilities clientCapabilities,
+																					@NonNull McpObject arguments,
+																					@NonNull DefaultMcpToolCallContext toolCallContext) throws Exception {
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(toolBinding);
+		requireNonNull(endpointPathParameters);
+		requireNonNull(sessionContext);
+		requireNonNull(clientCapabilities);
+		requireNonNull(arguments);
+		requireNonNull(toolCallContext);
+
+		if (toolBinding instanceof ProgrammaticToolBinding programmaticToolBinding)
+			return programmaticToolBinding.toolHandler().handle(new DefaultMcpToolHandlerContext(
+					toolCallContext,
+					sessionContext,
+					clientCapabilities,
+					arguments,
+					endpointPathParameters,
+					getSoklet().getSokletConfig().getValueConverterRegistry()));
+
+		if (toolBinding instanceof AnnotatedToolBinding annotatedToolBinding) {
+			Object endpointInstance = endpointInstance(resolvedEndpoint.endpointClass());
+			Method method = annotatedToolBinding.method();
+			List<Object> argumentsForMethod = new ArrayList<>(method.getParameterCount());
+
+			for (Parameter parameter : method.getParameters())
+				argumentsForMethod.add(valueForAnnotatedToolParameter(parameter, endpointPathParameters, sessionContext, clientCapabilities, arguments, toolCallContext));
+
+			Object result = invokeMethod(endpointInstance, method, argumentsForMethod);
+
+			if (result instanceof McpToolResult mcpToolResult)
+				return mcpToolResult;
+
+			throw new IllegalStateException("Expected McpToolResult from %s::%s".formatted(
+					method.getDeclaringClass().getName(), method.getName()));
+		}
+
+		throw new IllegalStateException("Unsupported tool binding type: %s".formatted(toolBinding.getClass().getName()));
+	}
+
+	@NonNull
+	private McpPromptResult invokePromptBinding(@NonNull ResolvedEndpoint resolvedEndpoint,
+																							@NonNull PromptBinding promptBinding,
+																							@NonNull Map<String, String> endpointPathParameters,
+																							@NonNull McpSessionContext sessionContext,
+																							@NonNull McpClientCapabilities clientCapabilities,
+																							@NonNull McpObject arguments,
+																							@NonNull DefaultMcpRequestContext requestContext) throws Exception {
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(promptBinding);
+		requireNonNull(endpointPathParameters);
+		requireNonNull(sessionContext);
+		requireNonNull(clientCapabilities);
+		requireNonNull(arguments);
+		requireNonNull(requestContext);
+
+		if (promptBinding instanceof ProgrammaticPromptBinding programmaticPromptBinding)
+			return programmaticPromptBinding.promptHandler().handle(new DefaultMcpPromptHandlerContext(
+					requestContext,
+					sessionContext,
+					clientCapabilities,
+					arguments,
+					endpointPathParameters,
+					getSoklet().getSokletConfig().getValueConverterRegistry()));
+
+		if (promptBinding instanceof AnnotatedPromptBinding annotatedPromptBinding) {
+			Object endpointInstance = endpointInstance(resolvedEndpoint.endpointClass());
+			Method method = annotatedPromptBinding.method();
+			List<Object> argumentsForMethod = new ArrayList<>(method.getParameterCount());
+
+			for (Parameter parameter : method.getParameters())
+				argumentsForMethod.add(valueForAnnotatedPromptParameter(parameter, endpointPathParameters, sessionContext, clientCapabilities, arguments, requestContext));
+
+			Object result = invokeMethod(endpointInstance, method, argumentsForMethod);
+
+			if (result instanceof McpPromptResult mcpPromptResult)
+				return mcpPromptResult;
+
+			throw new IllegalStateException("Expected McpPromptResult from %s::%s".formatted(
+					method.getDeclaringClass().getName(), method.getName()));
+		}
+
+		throw new IllegalStateException("Unsupported prompt binding type: %s".formatted(promptBinding.getClass().getName()));
+	}
+
+	@NonNull
+	private McpResourceContents invokeResourceBinding(@NonNull ResolvedEndpoint resolvedEndpoint,
+																										@NonNull ResourceBinding resourceBinding,
+																										@NonNull Map<String, String> endpointPathParameters,
+																										@NonNull Map<String, String> uriParameters,
+																										@NonNull McpSessionContext sessionContext,
+																										@NonNull String requestedUri,
+																										@NonNull DefaultMcpRequestContext requestContext) throws Exception {
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(resourceBinding);
+		requireNonNull(endpointPathParameters);
+		requireNonNull(uriParameters);
+		requireNonNull(sessionContext);
+		requireNonNull(requestedUri);
+		requireNonNull(requestContext);
+
+		if (resourceBinding instanceof ProgrammaticResourceBinding programmaticResourceBinding)
+			return programmaticResourceBinding.resourceHandler().handle(new DefaultMcpResourceHandlerContext(
+					requestContext,
+					sessionContext,
+					requestedUri,
+					uriParameters,
+					endpointPathParameters,
+					getSoklet().getSokletConfig().getValueConverterRegistry()));
+
+		if (resourceBinding instanceof AnnotatedResourceBinding annotatedResourceBinding) {
+			Object endpointInstance = endpointInstance(resolvedEndpoint.endpointClass());
+			Method method = annotatedResourceBinding.method();
+			List<Object> argumentsForMethod = new ArrayList<>(method.getParameterCount());
+
+			for (Parameter parameter : method.getParameters())
+				argumentsForMethod.add(valueForAnnotatedResourceParameter(parameter, endpointPathParameters, uriParameters, sessionContext, requestContext));
+
+			Object result = invokeMethod(endpointInstance, method, argumentsForMethod);
+
+			if (result instanceof McpResourceContents mcpResourceContents)
+				return mcpResourceContents;
+
+			throw new IllegalStateException("Expected McpResourceContents from %s::%s".formatted(
+					method.getDeclaringClass().getName(), method.getName()));
+		}
+
+		throw new IllegalStateException("Unsupported resource binding type: %s".formatted(resourceBinding.getClass().getName()));
+	}
+
+	@NonNull
 	private Object valueForAnnotatedResourcesListParameter(@NonNull Parameter parameter,
 																												 @NonNull Map<String, String> endpointPathParameters,
 																												 @NonNull McpSessionContext sessionContext,
@@ -682,6 +1176,199 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
+	private Object valueForAnnotatedToolParameter(@NonNull Parameter parameter,
+																								@NonNull Map<String, String> endpointPathParameters,
+																								@NonNull McpSessionContext sessionContext,
+																								@NonNull McpClientCapabilities clientCapabilities,
+																								@NonNull McpObject arguments,
+																								@NonNull DefaultMcpToolCallContext toolCallContext) throws JsonRpcErrorTransport {
+		requireNonNull(parameter);
+		requireNonNull(endpointPathParameters);
+		requireNonNull(sessionContext);
+		requireNonNull(clientCapabilities);
+		requireNonNull(arguments);
+		requireNonNull(toolCallContext);
+
+		if (McpToolCallContext.class.equals(parameter.getType()))
+			return toolCallContext;
+
+		if (McpRequestContext.class.equals(parameter.getType()))
+			return toolCallContext.getRequestContext();
+
+		if (McpSessionContext.class.equals(parameter.getType()))
+			return sessionContext;
+
+		if (McpClientCapabilities.class.equals(parameter.getType()))
+			return clientCapabilities;
+
+		McpEndpointPathParameter endpointPathParameter = parameter.getAnnotation(McpEndpointPathParameter.class);
+
+		if (endpointPathParameter != null) {
+			String parameterName = annotationValueOrParameterName(endpointPathParameter.value(), parameter);
+			String value = endpointPathParameters.get(parameterName);
+
+			if (value == null)
+				throw invalidParams("Missing endpoint path parameter '%s'".formatted(parameterName));
+
+			return valueForPathParameter(parameter, value);
+		}
+
+		McpArgument argument = parameter.getAnnotation(McpArgument.class);
+
+		if (argument != null)
+			return valueForAnnotatedArgument(parameter, argument, arguments);
+
+		throw new IllegalArgumentException("Unsupported @McpTool parameter type: %s".formatted(parameter.getType().getName()));
+	}
+
+	@NonNull
+	private Object valueForAnnotatedPromptParameter(@NonNull Parameter parameter,
+																									@NonNull Map<String, String> endpointPathParameters,
+																									@NonNull McpSessionContext sessionContext,
+																									@NonNull McpClientCapabilities clientCapabilities,
+																									@NonNull McpObject arguments,
+																									@NonNull DefaultMcpRequestContext requestContext) throws JsonRpcErrorTransport {
+		requireNonNull(parameter);
+		requireNonNull(endpointPathParameters);
+		requireNonNull(sessionContext);
+		requireNonNull(clientCapabilities);
+		requireNonNull(arguments);
+		requireNonNull(requestContext);
+
+		if (McpRequestContext.class.equals(parameter.getType()))
+			return requestContext;
+
+		if (McpSessionContext.class.equals(parameter.getType()))
+			return sessionContext;
+
+		if (McpClientCapabilities.class.equals(parameter.getType()))
+			return clientCapabilities;
+
+		McpEndpointPathParameter endpointPathParameter = parameter.getAnnotation(McpEndpointPathParameter.class);
+
+		if (endpointPathParameter != null) {
+			String parameterName = annotationValueOrParameterName(endpointPathParameter.value(), parameter);
+			String value = endpointPathParameters.get(parameterName);
+
+			if (value == null)
+				throw invalidParams("Missing endpoint path parameter '%s'".formatted(parameterName));
+
+			return valueForPathParameter(parameter, value);
+		}
+
+		McpArgument argument = parameter.getAnnotation(McpArgument.class);
+
+		if (argument != null)
+			return valueForAnnotatedArgument(parameter, argument, arguments);
+
+		throw new IllegalArgumentException("Unsupported @McpPrompt parameter type: %s".formatted(parameter.getType().getName()));
+	}
+
+	@NonNull
+	private Object valueForAnnotatedResourceParameter(@NonNull Parameter parameter,
+																										@NonNull Map<String, String> endpointPathParameters,
+																										@NonNull Map<String, String> uriParameters,
+																										@NonNull McpSessionContext sessionContext,
+																										@NonNull DefaultMcpRequestContext requestContext) throws JsonRpcErrorTransport {
+		requireNonNull(parameter);
+		requireNonNull(endpointPathParameters);
+		requireNonNull(uriParameters);
+		requireNonNull(sessionContext);
+		requireNonNull(requestContext);
+
+		if (McpRequestContext.class.equals(parameter.getType()))
+			return requestContext;
+
+		if (McpSessionContext.class.equals(parameter.getType()))
+			return sessionContext;
+
+		McpEndpointPathParameter endpointPathParameter = parameter.getAnnotation(McpEndpointPathParameter.class);
+
+		if (endpointPathParameter != null) {
+			String parameterName = annotationValueOrParameterName(endpointPathParameter.value(), parameter);
+			String value = endpointPathParameters.get(parameterName);
+
+			if (value == null)
+				throw invalidParams("Missing endpoint path parameter '%s'".formatted(parameterName));
+
+			return valueForPathParameter(parameter, value);
+		}
+
+		McpUriParameter uriParameter = parameter.getAnnotation(McpUriParameter.class);
+
+		if (uriParameter != null) {
+			String parameterName = annotationValueOrParameterName(uriParameter.value(), parameter);
+			String value = uriParameters.get(parameterName);
+
+			if (value == null)
+				throw invalidParams("Missing resource URI parameter '%s'".formatted(parameterName));
+
+			return valueForPathParameter(parameter, value);
+		}
+
+		throw new IllegalArgumentException("Unsupported @McpResource parameter type: %s".formatted(parameter.getType().getName()));
+	}
+
+	@NonNull
+	private Object valueForAnnotatedArgument(@NonNull Parameter parameter,
+																					 @NonNull McpArgument argument,
+																					 @NonNull McpObject arguments) throws JsonRpcErrorTransport {
+		requireNonNull(parameter);
+		requireNonNull(argument);
+		requireNonNull(arguments);
+
+		String argumentName = annotationValueOrParameterName(argument.value(), parameter);
+		McpValue value = arguments.get(argumentName).orElse(null);
+		boolean optional = argument.optional();
+		Class<?> parameterType = parameter.getType();
+		Type genericType = parameter.getParameterizedType();
+
+		if (Optional.class.equals(parameterType)) {
+			if (!(genericType instanceof ParameterizedType parameterizedType))
+				throw invalidParams("Optional MCP argument '%s' is missing a generic type".formatted(argumentName));
+
+			Type optionalType = parameterizedType.getActualTypeArguments()[0];
+
+			if (!(optionalType instanceof Class<?> optionalTypeClass))
+				throw invalidParams("Unsupported Optional MCP argument type for '%s'".formatted(argumentName));
+
+			if (value == null || value instanceof McpNull)
+				return Optional.empty();
+
+			return Optional.of(convertMcpValue(value, optionalTypeClass, argumentName));
+		}
+
+		if (value == null || value instanceof McpNull) {
+			if (!optional)
+				throw invalidParams("Missing required argument '%s'".formatted(argumentName));
+
+			if (parameterType.isPrimitive())
+				throw invalidParams("Argument '%s' cannot be null".formatted(argumentName));
+
+			return null;
+		}
+
+		return convertMcpValue(value, parameterType, argumentName);
+	}
+
+	@NonNull
+	private Object valueForPathParameter(@NonNull Parameter parameter,
+																			 @NonNull String value) {
+		requireNonNull(parameter);
+		requireNonNull(value);
+
+		if (Optional.class.equals(parameter.getType())) {
+			Type genericType = parameter.getParameterizedType();
+
+			if (genericType instanceof ParameterizedType parameterizedType
+					&& parameterizedType.getActualTypeArguments()[0] instanceof Class<?> optionalTypeClass)
+				return Optional.of(convertStringValue(value, optionalTypeClass));
+		}
+
+		return convertStringValue(value, parameter.getType());
+	}
+
+	@NonNull
 	private McpEndpoint endpointInstance(@NonNull Class<? extends McpEndpoint> endpointClass) {
 		requireNonNull(endpointClass);
 		return getSoklet().getSokletConfig().getInstanceProvider().provide(endpointClass);
@@ -698,6 +1385,19 @@ final class DefaultMcpRuntime {
 			return schemaForMethod(annotatedToolBinding.method());
 
 		throw new IllegalStateException("Unsupported tool binding type: %s".formatted(toolBinding.getClass().getName()));
+	}
+
+	@NonNull
+	private McpSchema schemaForPromptBinding(@NonNull PromptBinding promptBinding) {
+		requireNonNull(promptBinding);
+
+		if (promptBinding instanceof ProgrammaticPromptBinding programmaticPromptBinding)
+			return programmaticPromptBinding.promptHandler().getArgumentsSchema();
+
+		if (promptBinding instanceof AnnotatedPromptBinding annotatedPromptBinding)
+			return schemaForMethod(annotatedPromptBinding.method());
+
+		throw new IllegalStateException("Unsupported prompt binding type: %s".formatted(promptBinding.getClass().getName()));
 	}
 
 	@NonNull
@@ -803,6 +1503,24 @@ final class DefaultMcpRuntime {
 		}
 
 		return new McpArray(arguments);
+	}
+
+	private void validateArgumentsAgainstSchema(@NonNull McpObject arguments,
+																							@NonNull McpSchema schema) throws JsonRpcErrorTransport {
+		requireNonNull(arguments);
+		requireNonNull(schema);
+
+		McpObject schemaValue = schema.toValue();
+		McpObject properties = optionalObject(schemaValue, "properties").orElse(new McpObject(Map.of()));
+		McpValue additionalPropertiesValue = schemaValue.get("additionalProperties").orElse(McpNull.INSTANCE);
+		boolean additionalPropertiesAllowed = !(additionalPropertiesValue instanceof McpBoolean mcpBoolean) || mcpBoolean.value();
+
+		if (additionalPropertiesAllowed)
+			return;
+
+		for (String argumentName : arguments.values().keySet())
+			if (!properties.values().containsKey(argumentName))
+				throw invalidParams("Unexpected argument '%s'".formatted(argumentName));
 	}
 
 	@NonNull
@@ -933,18 +1651,13 @@ final class DefaultMcpRuntime {
 
 	@NonNull
 	private RequestResult jsonRpcSuccessResponse(@NonNull Request request,
-																						 @Nullable McpJsonRpcRequestId requestId,
-																						 @NonNull McpValue result,
-																						 @NonNull Map<String, Set<String>> headers) {
+																							 @Nullable McpJsonRpcRequestId requestId,
+																							 @NonNull McpValue result,
+																							 @NonNull Map<String, Set<String>> headers) {
 		requireNonNull(request);
 		requireNonNull(result);
 		requireNonNull(headers);
-
-		Map<String, McpValue> envelope = new LinkedHashMap<>();
-		envelope.put("jsonrpc", new McpString("2.0"));
-		envelope.put("id", requestId == null ? McpNull.INSTANCE : requestId.value());
-		envelope.put("result", result);
-		return requestResultFromMarshaledResponse(request, jsonResponse(new McpObject(envelope), headers));
+		return requestResultFromMarshaledResponse(request, jsonResponse(jsonRpcSuccessEnvelope(requestId, result), headers));
 	}
 
 	@NonNull
@@ -953,20 +1666,12 @@ final class DefaultMcpRuntime {
 																						 @NonNull McpJsonRpcError error) {
 		requireNonNull(request);
 		requireNonNull(error);
-
-		Map<String, McpValue> envelope = new LinkedHashMap<>();
-		envelope.put("jsonrpc", new McpString("2.0"));
-		envelope.put("id", requestId == null ? McpNull.INSTANCE : requestId.value());
-		envelope.put("error", new McpObject(Map.of(
-				"code", new McpNumber(new BigDecimal(error.code())),
-				"message", new McpString(error.message())
-		)));
-		return requestResultFromMarshaledResponse(request, jsonResponse(new McpObject(envelope), Map.of()));
+		return requestResultFromMarshaledResponse(request, jsonResponse(jsonRpcErrorEnvelope(requestId, error), Map.of()));
 	}
 
 	@NonNull
 	private MarshaledResponse jsonResponse(@NonNull McpObject envelope,
-																			 @NonNull Map<String, Set<String>> headers) {
+																				 @NonNull Map<String, Set<String>> headers) {
 		requireNonNull(envelope);
 		requireNonNull(headers);
 
@@ -975,6 +1680,39 @@ final class DefaultMcpRuntime {
 		return MarshaledResponse.withStatusCode(200)
 				.headers(finalHeaders)
 				.body(McpJsonCodec.toUtf8Bytes(envelope))
+				.build();
+	}
+
+	@NonNull
+	private RequestResult jsonRpcEventStreamResponse(@NonNull Request request,
+																									 @NonNull List<@NonNull McpObject> messages,
+																									 @NonNull Boolean closeAfterReplay) {
+		requireNonNull(request);
+		requireNonNull(messages);
+		requireNonNull(closeAfterReplay);
+
+		return requestResultFromMarshaledResponse(request, eventStreamResponse(messages))
+				.copy()
+				.mcpStreamMessages(messages)
+				.mcpStreamClosedAfterReplay(closeAfterReplay)
+				.finish();
+	}
+
+	@NonNull
+	private MarshaledResponse eventStreamResponse() {
+		return eventStreamResponse(List.of());
+	}
+
+	@NonNull
+	private MarshaledResponse eventStreamResponse(@NonNull List<@NonNull McpObject> messages) {
+		requireNonNull(messages);
+
+		return MarshaledResponse.withStatusCode(200)
+				.headers(Map.of(
+						"Content-Type", Set.of("text/event-stream; charset=UTF-8"),
+						"Cache-Control", Set.of("no-cache")
+				))
+				.body(messages.isEmpty() ? null : encodeEventStreamMessages(messages))
 				.build();
 	}
 
@@ -1011,8 +1749,269 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
+	private ObservedMcpResult observeMcpResult(@NonNull RequestResult requestResult,
+																						 @NonNull ParsedJsonRpcRequest parsedJsonRpcRequest) {
+		requireNonNull(requestResult);
+		requireNonNull(parsedJsonRpcRequest);
+
+		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
+
+		if (Integer.valueOf(202).equals(marshaledResponse.getStatusCode()))
+			return new ObservedMcpResult(McpRequestOutcome.SUCCESS_NOTIFICATION, null);
+
+		McpObject terminalMessage = null;
+
+		if (!requestResult.getMcpStreamMessages().isEmpty())
+			terminalMessage = requestResult.getMcpStreamMessages().get(requestResult.getMcpStreamMessages().size() - 1);
+
+		byte[] body = marshaledResponse.getBody().orElse(null);
+
+		if (terminalMessage == null && (body == null || body.length == 0))
+			return new ObservedMcpResult(McpRequestOutcome.SUCCESS_RESPONSE, null);
+
+		try {
+			McpValue parsedBody = terminalMessage == null ? McpJsonCodec.parse(body) : terminalMessage;
+
+			if (!(parsedBody instanceof McpObject object))
+				return new ObservedMcpResult(McpRequestOutcome.SUCCESS_RESPONSE, null);
+
+			McpObject error = optionalObject(object, "error").orElse(null);
+
+			if (error != null) {
+				BigDecimal code = ((McpNumber) error.get("code").orElseThrow()).value();
+				String message = ((McpString) error.get("message").orElseThrow()).value();
+				return new ObservedMcpResult(McpRequestOutcome.JSON_RPC_ERROR,
+						McpJsonRpcError.fromCodeAndMessage(code.intValueExact(), message));
+			}
+
+			if (parsedJsonRpcRequest.operationKind() == McpOperationKind.TOOLS_CALL) {
+				McpObject result = optionalObject(object, "result").orElse(null);
+
+				if (result != null) {
+					McpValue isErrorValue = result.get("isError").orElse(null);
+
+					if (isErrorValue instanceof McpBoolean isError && isError.value())
+						return new ObservedMcpResult(McpRequestOutcome.TOOL_ERROR_RESULT, null);
+				}
+			}
+		} catch (RuntimeException ignored) {
+			// If the body is not parseable as JSON-RPC, fall through to success classification.
+		}
+
+		return new ObservedMcpResult(McpRequestOutcome.SUCCESS_RESPONSE, null);
+	}
+
+	private void observeSessionCreated(@NonNull Request request,
+																		 @NonNull Class<? extends McpEndpoint> endpointClass,
+																		 @NonNull String sessionId) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+		requireNonNull(sessionId);
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didCreateMcpSession", MetricsCollector.class.getSimpleName()),
+				request,
+				metricsCollector -> metricsCollector.didCreateMcpSession(request, endpointClass, sessionId));
+		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_CREATE_MCP_SESSION_FAILED,
+				format("An exception occurred while invoking %s::didCreateMcpSession", LifecycleObserver.class.getSimpleName()),
+				request,
+				null,
+				lifecycleObserver -> lifecycleObserver.didCreateMcpSession(request, endpointClass, sessionId));
+	}
+
+	private void observeSessionTerminated(@NonNull Class<? extends McpEndpoint> endpointClass,
+																				@NonNull String sessionId,
+																				@NonNull Duration sessionDuration,
+																				@NonNull McpSessionTerminationReason terminationReason,
+																				@Nullable Throwable throwable) {
+		requireNonNull(endpointClass);
+		requireNonNull(sessionId);
+		requireNonNull(sessionDuration);
+		requireNonNull(terminationReason);
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didTerminateMcpSession", MetricsCollector.class.getSimpleName()),
+				null,
+				metricsCollector -> metricsCollector.didTerminateMcpSession(endpointClass, sessionId, sessionDuration, terminationReason, throwable));
+		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SESSION_FAILED,
+				format("An exception occurred while invoking %s::didTerminateMcpSession", LifecycleObserver.class.getSimpleName()),
+				null,
+				null,
+				lifecycleObserver -> lifecycleObserver.didTerminateMcpSession(endpointClass, sessionId, sessionDuration, terminationReason, throwable));
+	}
+
+	private void registerMcpStream(@NonNull Request request,
+																 @NonNull Class<? extends McpEndpoint> endpointClass,
+																 @NonNull String sessionId) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+		requireNonNull(sessionId);
+
+		this.mcpStreamsBySessionId.computeIfAbsent(sessionId, ignored -> new CopyOnWriteArrayList<>())
+				.add(new McpStreamState(request, endpointClass, sessionId, Instant.now()));
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didEstablishMcpServerSentEventStream", MetricsCollector.class.getSimpleName()),
+				request,
+				metricsCollector -> metricsCollector.didEstablishMcpServerSentEventStream(request, endpointClass, sessionId));
+		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
+				format("An exception occurred while invoking %s::didEstablishMcpServerSentEventStream", LifecycleObserver.class.getSimpleName()),
+				request,
+				null,
+				lifecycleObserver -> lifecycleObserver.didEstablishMcpServerSentEventStream(request, endpointClass, sessionId));
+	}
+
+	void handleClientDisconnectedStream(@NonNull Request request,
+																			@NonNull String sessionId) {
+		requireNonNull(request);
+		requireNonNull(sessionId);
+
+		handleTerminatedStream(request, sessionId, McpStreamTerminationReason.CLIENT_DISCONNECTED, null);
+	}
+
+	void handleTerminatedStream(@NonNull Request request,
+															@NonNull String sessionId,
+															@NonNull McpStreamTerminationReason terminationReason,
+															@Nullable Throwable throwable) {
+		requireNonNull(request);
+		requireNonNull(sessionId);
+		requireNonNull(terminationReason);
+
+		CopyOnWriteArrayList<McpStreamState> streamStates = this.mcpStreamsBySessionId.get(sessionId);
+
+		if (streamStates == null)
+			return;
+
+		McpStreamState matchedStreamState = null;
+
+		for (McpStreamState streamState : streamStates) {
+			if (streamState.request() == request) {
+				matchedStreamState = streamState;
+				break;
+			}
+		}
+
+		if (matchedStreamState == null)
+			return;
+
+		streamStates.remove(matchedStreamState);
+
+		if (streamStates.isEmpty())
+			this.mcpStreamsBySessionId.remove(sessionId, streamStates);
+
+		observeTerminatedMcpStream(matchedStreamState, terminationReason, throwable);
+	}
+
+	private void terminateStreamsForSession(@NonNull Request request,
+																					@NonNull Class<? extends McpEndpoint> endpointClass,
+																					@NonNull String sessionId,
+																					@NonNull McpStreamTerminationReason terminationReason,
+																					@Nullable Throwable throwable) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+		requireNonNull(sessionId);
+		requireNonNull(terminationReason);
+
+		List<McpStreamState> streamStates = this.mcpStreamsBySessionId.remove(sessionId);
+
+		if (streamStates == null)
+			return;
+
+		for (McpStreamState streamState : streamStates)
+			observeTerminatedMcpStream(streamState, terminationReason, throwable);
+	}
+
+	private void observeTerminatedMcpStream(@NonNull McpStreamState streamState,
+																					@NonNull McpStreamTerminationReason terminationReason,
+																					@Nullable Throwable throwable) {
+		requireNonNull(streamState);
+		requireNonNull(terminationReason);
+
+		Duration streamDuration = Duration.between(streamState.establishedAt(), Instant.now());
+		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
+				format("An exception occurred while invoking %s::willTerminateMcpServerSentEventStream", LifecycleObserver.class.getSimpleName()),
+				streamState.request(),
+				null,
+				lifecycleObserver -> lifecycleObserver.willTerminateMcpServerSentEventStream(
+						streamState.request(),
+						streamState.endpointClass(),
+						streamState.sessionId(),
+						terminationReason,
+						throwable));
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didTerminateMcpServerSentEventStream", MetricsCollector.class.getSimpleName()),
+				streamState.request(),
+				metricsCollector -> metricsCollector.didTerminateMcpServerSentEventStream(
+						streamState.request(),
+						streamState.endpointClass(),
+						streamState.sessionId(),
+						streamDuration,
+						terminationReason,
+						throwable));
+		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
+				format("An exception occurred while invoking %s::didTerminateMcpServerSentEventStream", LifecycleObserver.class.getSimpleName()),
+				streamState.request(),
+				null,
+				lifecycleObserver -> lifecycleObserver.didTerminateMcpServerSentEventStream(
+						streamState.request(),
+						streamState.endpointClass(),
+						streamState.sessionId(),
+						streamDuration,
+						terminationReason,
+						throwable));
+	}
+
+	private void safelyCollectMetrics(@NonNull String message,
+																		@Nullable Request request,
+																		@NonNull Consumer<MetricsCollector> invocation) {
+		requireNonNull(message);
+		requireNonNull(invocation);
+
+		try {
+			invocation.accept(getSoklet().getSokletConfig().getMetricsCollector());
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED, message)
+					.throwable(throwable)
+					.request(request)
+					.build());
+		}
+	}
+
+	private void safelyInvokeLifecycleObserver(@NonNull LogEventType logEventType,
+																						 @NonNull String message,
+																						 @Nullable Request request,
+																						 @Nullable List<Throwable> throwables,
+																						 @NonNull Consumer<LifecycleObserver> invocation) {
+		requireNonNull(logEventType);
+		requireNonNull(message);
+		requireNonNull(invocation);
+
+		try {
+			invocation.accept(getSoklet().getSokletConfig().getLifecycleObserver());
+		} catch (Throwable throwable) {
+			if (throwables != null)
+				throwables.add(throwable);
+
+			safelyLog(LogEvent.with(logEventType, message)
+					.throwable(throwable)
+					.request(request)
+					.build());
+		}
+	}
+
+	private void safelyLog(@NonNull LogEvent logEvent) {
+		requireNonNull(logEvent);
+
+		try {
+			getSoklet().getSokletConfig().getLifecycleObserver().didReceiveLogEvent(logEvent);
+		} catch (Throwable ignored) {
+			ignored.printStackTrace();
+		}
+	}
+
+	@NonNull
 	private Optional<ResolvedEndpoint> resolveEndpoint(@NonNull Request request,
-																									 @NonNull McpServer mcpServer) {
+																										 @NonNull McpServer mcpServer) {
 		requireNonNull(request);
 		requireNonNull(mcpServer);
 
@@ -1032,18 +2031,37 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
+	private McpClientCapabilities requireClientCapabilities(@NonNull McpStoredSession storedSession) {
+		requireNonNull(storedSession);
+
+		McpClientCapabilities clientCapabilities = storedSession.clientCapabilities();
+
+		if (clientCapabilities == null)
+			throw new IllegalStateException("No client capabilities available for session '%s'".formatted(storedSession.sessionId()));
+
+		return clientCapabilities;
+	}
+
+	@NonNull
 	@SuppressWarnings("unchecked")
 	private <T> T convertStringValue(@NonNull String value,
 																	 @NonNull Class<T> targetType) {
+		return convertStringValue(getSoklet().getSokletConfig().getValueConverterRegistry(), value, targetType);
+	}
+
+	@NonNull
+	@SuppressWarnings("unchecked")
+	private static <T> T convertStringValue(@NonNull ValueConverterRegistry valueConverterRegistry,
+																					@NonNull String value,
+																					@NonNull Class<T> targetType) {
+		requireNonNull(valueConverterRegistry);
 		requireNonNull(value);
 		requireNonNull(targetType);
 
 		if (String.class.equals(targetType))
 			return (T) value;
 
-		ValueConverter<Object, Object> valueConverter = getSoklet().getSokletConfig().getValueConverterRegistry()
-				.get(String.class, targetType)
-				.orElse(null);
+		ValueConverter<Object, Object> valueConverter = valueConverterRegistry.get(String.class, targetType).orElse(null);
 
 		if (valueConverter == null)
 			throw new IllegalArgumentException("No ValueConverter registered for String -> %s".formatted(targetType.getName()));
@@ -1060,6 +2078,134 @@ final class DefaultMcpRuntime {
 			throw new IllegalArgumentException("Unable to convert '%s' to %s".formatted(value, targetType.getName()));
 
 		return (T) convertedValue;
+	}
+
+	@NonNull
+	@SuppressWarnings({"unchecked", "rawtypes"})
+	private Object convertMcpValue(@NonNull McpValue value,
+																 @NonNull Class<?> targetType,
+																 @NonNull String argumentName) throws JsonRpcErrorTransport {
+		requireNonNull(value);
+		requireNonNull(targetType);
+		requireNonNull(argumentName);
+
+		if (McpValue.class.equals(targetType))
+			return value;
+
+		if (McpObject.class.equals(targetType)) {
+			if (value instanceof McpObject mcpObject)
+				return mcpObject;
+
+			throw invalidParams("Argument '%s' must be an object".formatted(argumentName));
+		}
+
+		if (McpArray.class.equals(targetType)) {
+			if (value instanceof McpArray mcpArray)
+				return mcpArray;
+
+			throw invalidParams("Argument '%s' must be an array".formatted(argumentName));
+		}
+
+		if (McpString.class.equals(targetType)) {
+			if (value instanceof McpString mcpString)
+				return mcpString;
+
+			throw invalidParams("Argument '%s' must be a string".formatted(argumentName));
+		}
+
+		if (McpNumber.class.equals(targetType)) {
+			if (value instanceof McpNumber mcpNumber)
+				return mcpNumber;
+
+			throw invalidParams("Argument '%s' must be a number".formatted(argumentName));
+		}
+
+		if (McpBoolean.class.equals(targetType)) {
+			if (value instanceof McpBoolean mcpBoolean)
+				return mcpBoolean;
+
+			throw invalidParams("Argument '%s' must be a boolean".formatted(argumentName));
+		}
+
+		if (String.class.equals(targetType)) {
+			if (value instanceof McpString mcpString)
+				return mcpString.value();
+
+			throw invalidParams("Argument '%s' must be a string".formatted(argumentName));
+		}
+
+		if (Boolean.class.equals(targetType) || Boolean.TYPE.equals(targetType)) {
+			if (value instanceof McpBoolean mcpBoolean)
+				return mcpBoolean.value();
+
+			throw invalidParams("Argument '%s' must be a boolean".formatted(argumentName));
+		}
+
+		if (targetType.isEnum()) {
+			if (!(value instanceof McpString mcpString))
+				throw invalidParams("Argument '%s' must be a string".formatted(argumentName));
+
+			try {
+				return Enum.valueOf((Class<? extends Enum>) targetType, mcpString.value());
+			} catch (IllegalArgumentException e) {
+				throw invalidParams("Argument '%s' has invalid enum value '%s'".formatted(argumentName, mcpString.value()));
+			}
+		}
+
+		if (java.util.UUID.class.equals(targetType)) {
+			if (!(value instanceof McpString mcpString))
+				throw invalidParams("Argument '%s' must be a string".formatted(argumentName));
+
+			try {
+				return convertStringValue(mcpString.value(), (Class<?>) targetType);
+			} catch (IllegalArgumentException e) {
+				throw invalidParams("Argument '%s' is invalid".formatted(argumentName));
+			}
+		}
+
+		if (value instanceof McpNumber mcpNumber)
+			return convertNumberValue(mcpNumber.value(), targetType, argumentName);
+
+		throw invalidParams("Argument '%s' has unsupported type".formatted(argumentName));
+	}
+
+	@NonNull
+	private Object convertNumberValue(@NonNull BigDecimal value,
+																		@NonNull Class<?> targetType,
+																		@NonNull String argumentName) throws JsonRpcErrorTransport {
+		requireNonNull(value);
+		requireNonNull(targetType);
+		requireNonNull(argumentName);
+
+		try {
+			if (BigDecimal.class.equals(targetType))
+				return value;
+
+			if (java.math.BigInteger.class.equals(targetType))
+				return value.toBigIntegerExact();
+
+			if (Byte.class.equals(targetType) || Byte.TYPE.equals(targetType))
+				return value.byteValueExact();
+
+			if (Short.class.equals(targetType) || Short.TYPE.equals(targetType))
+				return value.shortValueExact();
+
+			if (Integer.class.equals(targetType) || Integer.TYPE.equals(targetType))
+				return value.intValueExact();
+
+			if (Long.class.equals(targetType) || Long.TYPE.equals(targetType))
+				return value.longValueExact();
+
+			if (Float.class.equals(targetType) || Float.TYPE.equals(targetType))
+				return value.floatValue();
+
+			if (Double.class.equals(targetType) || Double.TYPE.equals(targetType))
+				return value.doubleValue();
+		} catch (ArithmeticException e) {
+			throw invalidParams("Argument '%s' has invalid numeric value".formatted(argumentName));
+		}
+
+		throw invalidParams("Argument '%s' has unsupported numeric target type".formatted(argumentName));
 	}
 
 	@NonNull
@@ -1090,12 +2236,235 @@ final class DefaultMcpRuntime {
 
 	@NonNull
 	private Optional<McpObject> optionalObject(@NonNull McpObject object,
-																					 @NonNull String propertyName) {
+																						 @NonNull String propertyName) {
 		requireNonNull(object);
 		requireNonNull(propertyName);
 
 		McpValue value = object.get(propertyName).orElse(null);
 		return value instanceof McpObject mcpObject ? Optional.of(mcpObject) : Optional.empty();
+	}
+
+	@NonNull
+	private Optional<McpProgressToken> optionalProgressToken(@NonNull McpObject object,
+																													 @NonNull String propertyName) throws JsonRpcErrorTransport {
+		requireNonNull(object);
+		requireNonNull(propertyName);
+
+		McpValue value = object.get(propertyName).orElse(null);
+
+		if (value == null || value instanceof McpNull)
+			return Optional.empty();
+
+		try {
+			return Optional.of(new McpProgressToken(value));
+		} catch (IllegalArgumentException e) {
+			throw invalidParams("Missing or invalid parameter '%s'".formatted(propertyName));
+		}
+	}
+
+	@NonNull
+	private McpObject optionalArgumentsObject(@NonNull McpObject object,
+																						@NonNull String propertyName) throws JsonRpcErrorTransport {
+		requireNonNull(object);
+		requireNonNull(propertyName);
+
+		McpValue value = object.get(propertyName).orElse(null);
+
+		if (value == null || value instanceof McpNull)
+			return EMPTY_OBJECT;
+
+		if (value instanceof McpObject mcpObject)
+			return mcpObject;
+
+		throw invalidParams("Missing or invalid parameter '%s'".formatted(propertyName));
+	}
+
+	@NonNull
+	private McpJsonRpcError invalidParamsError(@NonNull String message) {
+		requireNonNull(message);
+		return McpJsonRpcError.fromCodeAndMessage(-32602, message);
+	}
+
+	@NonNull
+	private JsonRpcErrorTransport invalidParams(@NonNull String message) {
+		requireNonNull(message);
+		return new JsonRpcErrorTransport(null, invalidParamsError(message));
+	}
+
+	@Nullable
+	private DefaultMcpProgressReporter progressReporter(@NonNull ParsedJsonRpcRequest parsedRequest) throws JsonRpcErrorTransport {
+		requireNonNull(parsedRequest);
+
+		McpObject meta = optionalObject(parsedRequest.params(), "_meta").orElse(null);
+
+		if (meta == null)
+			return null;
+
+		McpProgressToken progressToken = optionalProgressToken(meta, "progressToken").orElse(null);
+		return progressToken == null ? null : new DefaultMcpProgressReporter(progressToken);
+	}
+
+	@NonNull
+	private McpValue toolResultValue(@NonNull Class<? extends McpEndpoint> endpointClass,
+																	 @NonNull String toolName,
+																	 @NonNull McpSessionContext sessionContext,
+																	 @NonNull DefaultMcpToolCallContext toolCallContext,
+																	 @NonNull McpToolResult toolResult) {
+		requireNonNull(endpointClass);
+		requireNonNull(toolName);
+		requireNonNull(sessionContext);
+		requireNonNull(toolCallContext);
+		requireNonNull(toolResult);
+
+		Map<String, McpValue> result = new LinkedHashMap<>();
+		List<McpValue> content = new ArrayList<>(toolResult.getContent().size());
+
+		for (McpTextContent textContent : toolResult.getContent())
+			content.add(textContentValue(textContent));
+
+		result.put("content", new McpArray(content));
+		result.put("isError", new McpBoolean(toolResult.isError()));
+
+		toolResult.getStructuredContent().ifPresent(structuredContent ->
+				result.put("structuredContent", getMcpServer().getResponseMarshaler().marshalStructuredContent(structuredContent,
+						new DefaultMcpStructuredContentContext(endpointClass, toolName, toolCallContext, sessionContext))));
+
+		return new McpObject(result);
+	}
+
+	@NonNull
+	private McpValue promptResultValue(@NonNull PromptBinding promptBinding,
+																		 @NonNull McpPromptResult promptResult) {
+		requireNonNull(promptBinding);
+		requireNonNull(promptResult);
+
+		Map<String, McpValue> result = new LinkedHashMap<>();
+		String description = promptResult.description() == null ? promptBinding.description() : promptResult.description();
+
+		if (description != null)
+			result.put("description", new McpString(description));
+
+		List<McpValue> messages = new ArrayList<>(promptResult.messages().size());
+
+		for (McpPromptMessage message : promptResult.messages()) {
+			Map<String, McpValue> messageValue = new LinkedHashMap<>();
+			messageValue.put("role", new McpString(message.role().name().toLowerCase()));
+			messageValue.put("content", textContentValue(message.content()));
+			messages.add(new McpObject(messageValue));
+		}
+
+		result.put("messages", new McpArray(messages));
+		return new McpObject(result);
+	}
+
+	@NonNull
+	private McpValue resourceContentsValue(@NonNull McpResourceContents resourceContents) {
+		requireNonNull(resourceContents);
+
+		Map<String, McpValue> value = new LinkedHashMap<>();
+		value.put("uri", new McpString(resourceContents.uri()));
+		value.put("mimeType", new McpString(resourceContents.mimeType()));
+
+		if (resourceContents.text() != null)
+			value.put("text", new McpString(resourceContents.text()));
+
+		if (resourceContents.blobBase64() != null)
+			value.put("blob", new McpString(resourceContents.blobBase64()));
+
+		return new McpObject(value);
+	}
+
+	@NonNull
+	private McpValue textContentValue(@NonNull McpTextContent textContent) {
+		requireNonNull(textContent);
+		return new McpObject(Map.of(
+				"type", new McpString("text"),
+				"text", new McpString(textContent.text())
+		));
+	}
+
+	@NonNull
+	private Optional<MatchedResourceBinding> matchResourceBinding(@NonNull ResolvedEndpoint resolvedEndpoint,
+																																@NonNull String requestedUri) {
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(requestedUri);
+
+		List<MatchedResourceBinding> matches = new ArrayList<>();
+
+		for (ResourceBinding resourceBinding : resolvedEndpoint.resourcesByUri().values()) {
+			Map<String, String> uriParameters = uriParametersForTemplate(resourceBinding.uri(), requestedUri).orElse(null);
+
+			if (uriParameters != null)
+				matches.add(new MatchedResourceBinding(resourceBinding, uriParameters));
+		}
+
+		if (matches.isEmpty())
+			return Optional.empty();
+
+		if (matches.size() == 1)
+			return Optional.of(matches.get(0));
+
+		matches.sort(Comparator
+				.comparingLong((MatchedResourceBinding matchedResourceBinding) -> placeholderCount(matchedResourceBinding.binding().uri()))
+				.thenComparingLong(matchedResourceBinding -> -literalCount(matchedResourceBinding.binding().uri())));
+		return Optional.of(matches.get(0));
+	}
+
+	@NonNull
+	private Optional<Map<String, String>> uriParametersForTemplate(@NonNull String template,
+																																 @NonNull String requestedUri) {
+		requireNonNull(template);
+		requireNonNull(requestedUri);
+
+		String[] templateComponents = template.split("/", -1);
+		String[] requestedComponents = requestedUri.split("/", -1);
+
+		if (templateComponents.length != requestedComponents.length)
+			return Optional.empty();
+
+		Map<String, String> uriParameters = new LinkedHashMap<>();
+
+		for (int i = 0; i < templateComponents.length; i++) {
+			String templateComponent = templateComponents[i];
+			String requestedComponent = requestedComponents[i];
+
+			if (isUriPlaceholder(templateComponent)) {
+				uriParameters.put(templateComponent.substring(1, templateComponent.length() - 1), requestedComponent);
+				continue;
+			}
+
+			if (!templateComponent.equals(requestedComponent))
+				return Optional.empty();
+		}
+
+		return Optional.of(uriParameters);
+	}
+
+	private boolean isUriPlaceholder(@NonNull String value) {
+		requireNonNull(value);
+		return value.length() >= 2 && value.startsWith("{") && value.endsWith("}");
+	}
+
+	private long placeholderCount(@NonNull String uriTemplate) {
+		requireNonNull(uriTemplate);
+		long count = 0L;
+
+		for (String component : uriTemplate.split("/", -1))
+			if (isUriPlaceholder(component))
+				count++;
+
+		return count;
+	}
+
+	private long literalCount(@NonNull String uriTemplate) {
+		requireNonNull(uriTemplate);
+		long count = 0L;
+
+		for (String component : uriTemplate.split("/", -1))
+			if (!isUriPlaceholder(component))
+				count++;
+
+		return count;
 	}
 
 	@NonNull
@@ -1128,6 +2497,78 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
+	private McpObject jsonRpcSuccessEnvelope(@Nullable McpJsonRpcRequestId requestId,
+																					 @NonNull McpValue result) {
+		requireNonNull(result);
+
+		Map<String, McpValue> envelope = new LinkedHashMap<>();
+		envelope.put("jsonrpc", new McpString("2.0"));
+		envelope.put("id", requestId == null ? McpNull.INSTANCE : requestId.value());
+		envelope.put("result", result);
+		return new McpObject(envelope);
+	}
+
+	@NonNull
+	private McpObject jsonRpcErrorEnvelope(@Nullable McpJsonRpcRequestId requestId,
+																				 @NonNull McpJsonRpcError error) {
+		requireNonNull(error);
+
+		Map<String, McpValue> envelope = new LinkedHashMap<>();
+		envelope.put("jsonrpc", new McpString("2.0"));
+		envelope.put("id", requestId == null ? McpNull.INSTANCE : requestId.value());
+		envelope.put("error", new McpObject(Map.of(
+				"code", new McpNumber(new BigDecimal(error.code())),
+				"message", new McpString(error.message())
+		)));
+		return new McpObject(envelope);
+	}
+
+	@NonNull
+	private byte[] encodeEventStreamMessages(@NonNull List<@NonNull McpObject> messages) {
+		requireNonNull(messages);
+		return McpEventStreamPayloads.fromMessages(messages);
+	}
+
+	@NonNull
+	private Boolean acceptsMediaType(@NonNull Request request,
+																	 @NonNull String mediaType) {
+		requireNonNull(request);
+		requireNonNull(mediaType);
+
+		Set<String> acceptHeaderValues = request.getHeaders().get("Accept");
+
+		if (acceptHeaderValues == null || acceptHeaderValues.isEmpty())
+			return true;
+
+		String[] requestedTypeAndSubtype = mediaType.toLowerCase().split("/", 2);
+
+		if (requestedTypeAndSubtype.length != 2)
+			throw new IllegalArgumentException("Invalid media type '%s'".formatted(mediaType));
+
+		AcceptMediaRange bestMatch = null;
+
+		for (String acceptHeaderValue : acceptHeaderValues) {
+			if (acceptHeaderValue == null)
+				continue;
+
+			for (String fragment : acceptHeaderValue.split(",")) {
+				AcceptMediaRange mediaRange = AcceptMediaRange.parse(fragment).orElse(null);
+
+				if (mediaRange == null || !mediaRange.matches(requestedTypeAndSubtype[0], requestedTypeAndSubtype[1]))
+					continue;
+
+				if (bestMatch == null
+						|| mediaRange.specificity() > bestMatch.specificity()
+						|| (mediaRange.specificity() == bestMatch.specificity()
+						&& mediaRange.quality().compareTo(bestMatch.quality()) > 0))
+					bestMatch = mediaRange;
+			}
+		}
+
+		return bestMatch != null && bestMatch.quality().compareTo(BigDecimal.ZERO) > 0;
+	}
+
+	@NonNull
 	private Soklet getSoklet() {
 		return this.soklet;
 	}
@@ -1135,6 +2576,92 @@ final class DefaultMcpRuntime {
 	@NonNull
 	private McpServer getMcpServer() {
 		return getSoklet().getSokletConfig().getMcpServer().orElseThrow();
+	}
+
+	@NonNull
+	Boolean hasActiveStream(@NonNull String sessionId) {
+		requireNonNull(sessionId);
+
+		CopyOnWriteArrayList<McpStreamState> streamStates = this.mcpStreamsBySessionId.get(sessionId);
+		return streamStates != null && !streamStates.isEmpty();
+	}
+
+	private static final class DefaultMcpProgressReporter implements McpProgressReporter {
+		@NonNull
+		private final McpProgressToken progressToken;
+		@NonNull
+		private final List<@NonNull McpObject> messages;
+		@Nullable
+		private BigDecimal lastProgress;
+		@NonNull
+		private Boolean completed;
+
+		private DefaultMcpProgressReporter(@NonNull McpProgressToken progressToken) {
+			requireNonNull(progressToken);
+			this.progressToken = progressToken;
+			this.messages = new ArrayList<>();
+			this.lastProgress = null;
+			this.completed = false;
+		}
+
+		@NonNull
+		@Override
+		public synchronized McpProgressToken getProgressToken() {
+			return this.progressToken;
+		}
+
+		@Override
+		public synchronized void reportProgress(@NonNull BigDecimal progress,
+																						@Nullable BigDecimal total,
+																						@Nullable String message) {
+			requireNonNull(progress);
+
+			if (this.completed)
+				throw new IllegalStateException("This MCP progress reporter is no longer active.");
+
+			if (this.lastProgress != null && progress.compareTo(this.lastProgress) < 0)
+				throw new IllegalArgumentException("MCP progress values must be monotonically increasing.");
+
+			Map<String, McpValue> params = new LinkedHashMap<>();
+			params.put("progressToken", this.progressToken.value());
+			params.put("progress", new McpNumber(progress));
+
+			if (total != null)
+				params.put("total", new McpNumber(total));
+
+			if (message != null)
+				params.put("message", new McpString(message));
+
+			this.messages.add(new McpObject(Map.of(
+					"jsonrpc", new McpString("2.0"),
+					"method", new McpString("notifications/progress"),
+					"params", new McpObject(params)
+			)));
+			this.lastProgress = progress;
+		}
+
+		@NonNull
+		private synchronized List<@NonNull McpObject> messages() {
+			return List.copyOf(this.messages);
+		}
+
+		@NonNull
+		private synchronized Boolean hasMessages() {
+			return !this.messages.isEmpty();
+		}
+
+		private synchronized void markCompleted() {
+			this.completed = true;
+		}
+	}
+
+	private record ObservedMcpResult(
+			@NonNull McpRequestOutcome requestOutcome,
+			@Nullable McpJsonRpcError jsonRpcError
+	) {
+		private ObservedMcpResult {
+			requireNonNull(requestOutcome);
+		}
 	}
 
 	private record ParsedJsonRpcRequest(
@@ -1146,6 +2673,82 @@ final class DefaultMcpRuntime {
 		private ParsedJsonRpcRequest {
 			requireNonNull(method);
 			requireNonNull(params);
+		}
+	}
+
+	private record AcceptMediaRange(
+			@NonNull String type,
+			@NonNull String subtype,
+			@NonNull BigDecimal quality
+	) {
+		private AcceptMediaRange {
+			requireNonNull(type);
+			requireNonNull(subtype);
+			requireNonNull(quality);
+		}
+
+		@NonNull
+		private static Optional<AcceptMediaRange> parse(@Nullable String fragment) {
+			fragment = fragment == null ? null : fragment.trim();
+
+			if (fragment == null || fragment.isBlank())
+				return Optional.empty();
+
+			String[] segments = fragment.split(";");
+			String[] typeAndSubtype = segments[0].trim().toLowerCase().split("/", 2);
+
+			if (typeAndSubtype.length != 2)
+				return Optional.empty();
+
+			BigDecimal quality = BigDecimal.ONE;
+
+			for (int i = 1; i < segments.length; i++) {
+				String segment = segments[i].trim();
+				int equalsIndex = segment.indexOf('=');
+
+				if (equalsIndex == -1)
+					continue;
+
+				String name = segment.substring(0, equalsIndex).trim();
+				String value = segment.substring(equalsIndex + 1).trim();
+
+				if (!"q".equalsIgnoreCase(name))
+					continue;
+
+				try {
+					quality = new BigDecimal(value);
+				} catch (NumberFormatException e) {
+					return Optional.empty();
+				}
+			}
+
+			return Optional.of(new AcceptMediaRange(typeAndSubtype[0], typeAndSubtype[1], quality));
+		}
+
+		@NonNull
+		private Boolean matches(@NonNull String requestedType,
+														@NonNull String requestedSubtype) {
+			requireNonNull(requestedType);
+			requireNonNull(requestedSubtype);
+
+			if ("*".equals(this.type) && "*".equals(this.subtype))
+				return true;
+
+			if (Objects.equals(this.type, requestedType) && "*".equals(this.subtype))
+				return true;
+
+			return Objects.equals(this.type, requestedType) && Objects.equals(this.subtype, requestedSubtype);
+		}
+
+		@NonNull
+		private Integer specificity() {
+			if ("*".equals(this.type) && "*".equals(this.subtype))
+				return 0;
+
+			if ("*".equals(this.subtype))
+				return 1;
+
+			return 2;
 		}
 	}
 
@@ -1171,6 +2774,20 @@ final class DefaultMcpRuntime {
 		@NonNull
 		McpJsonRpcError error() {
 			return this.error;
+		}
+	}
+
+	private record McpStreamState(
+			@NonNull Request request,
+			@NonNull Class<? extends McpEndpoint> endpointClass,
+			@NonNull String sessionId,
+			@NonNull Instant establishedAt
+	) {
+		private McpStreamState {
+			requireNonNull(request);
+			requireNonNull(endpointClass);
+			requireNonNull(sessionId);
+			requireNonNull(establishedAt);
 		}
 	}
 
@@ -1470,27 +3087,265 @@ final class DefaultMcpRuntime {
 													@NonNull String value) {
 			requireNonNull(type);
 			requireNonNull(value);
+			return convertStringValue(this.valueConverterRegistry, value, type);
+		}
+	}
 
-			if (String.class.equals(type))
-				return type.cast(value);
+	private record DefaultMcpToolCallContext(
+			@NonNull McpRequestContext requestContext,
+			@NonNull Optional<McpProgressReporter> progressReporter
+	) implements McpToolCallContext {
+		private DefaultMcpToolCallContext {
+			requireNonNull(requestContext);
+			requireNonNull(progressReporter);
+		}
 
-			ValueConverter<Object, Object> valueConverter = this.valueConverterRegistry.get(String.class, type).orElse(null);
+		@NonNull
+		@Override
+		public McpRequestContext getRequestContext() {
+			return this.requestContext;
+		}
 
-			if (valueConverter == null)
-				throw new IllegalArgumentException("No ValueConverter registered for String -> %s".formatted(type.getName()));
+		@NonNull
+		@Override
+		public Optional<McpProgressReporter> getProgressReporter() {
+			return this.progressReporter;
+		}
+	}
 
-			Object convertedValue;
+	private record DefaultMcpToolHandlerContext(
+			@NonNull McpToolCallContext toolCallContext,
+			@NonNull McpSessionContext sessionContext,
+			@NonNull McpClientCapabilities clientCapabilities,
+			@NonNull McpObject arguments,
+			@NonNull Map<String, String> endpointPathParameters,
+			@NonNull ValueConverterRegistry valueConverterRegistry
+	) implements McpToolHandlerContext {
+		private DefaultMcpToolHandlerContext {
+			requireNonNull(toolCallContext);
+			requireNonNull(sessionContext);
+			requireNonNull(clientCapabilities);
+			requireNonNull(arguments);
+			requireNonNull(endpointPathParameters);
+			requireNonNull(valueConverterRegistry);
+		}
 
-			try {
-				convertedValue = valueConverter.convert(value).orElse(null);
-			} catch (com.soklet.converter.ValueConversionException e) {
-				throw new IllegalArgumentException("Unable to convert '%s' to %s".formatted(value, type.getName()), e);
-			}
+		@NonNull
+		@Override
+		public McpToolCallContext getToolCallContext() {
+			return this.toolCallContext;
+		}
 
-			if (convertedValue == null)
-				throw new IllegalArgumentException("Unable to convert '%s' to %s".formatted(value, type.getName()));
+		@NonNull
+		@Override
+		public McpSessionContext getSessionContext() {
+			return this.sessionContext;
+		}
 
-			return type.cast(convertedValue);
+		@NonNull
+		@Override
+		public McpClientCapabilities getClientCapabilities() {
+			return this.clientCapabilities;
+		}
+
+		@NonNull
+		@Override
+		public McpObject getArguments() {
+			return this.arguments;
+		}
+
+		@NonNull
+		@Override
+		public Optional<String> getEndpointPathParameter(@NonNull String name) {
+			requireNonNull(name);
+			return Optional.ofNullable(this.endpointPathParameters.get(name));
+		}
+
+		@NonNull
+		@Override
+		public <T> Optional<T> getEndpointPathParameter(@NonNull String name,
+																										@NonNull Class<T> type) {
+			requireNonNull(name);
+			requireNonNull(type);
+			String value = this.endpointPathParameters.get(name);
+			return value == null ? Optional.empty() : Optional.of(convertStringValue(this.valueConverterRegistry, value, type));
+		}
+	}
+
+	private record DefaultMcpPromptHandlerContext(
+			@NonNull McpRequestContext requestContext,
+			@NonNull McpSessionContext sessionContext,
+			@NonNull McpClientCapabilities clientCapabilities,
+			@NonNull McpObject arguments,
+			@NonNull Map<String, String> endpointPathParameters,
+			@NonNull ValueConverterRegistry valueConverterRegistry
+	) implements McpPromptHandlerContext {
+		private DefaultMcpPromptHandlerContext {
+			requireNonNull(requestContext);
+			requireNonNull(sessionContext);
+			requireNonNull(clientCapabilities);
+			requireNonNull(arguments);
+			requireNonNull(endpointPathParameters);
+			requireNonNull(valueConverterRegistry);
+		}
+
+		@NonNull
+		@Override
+		public McpRequestContext getRequestContext() {
+			return this.requestContext;
+		}
+
+		@NonNull
+		@Override
+		public McpSessionContext getSessionContext() {
+			return this.sessionContext;
+		}
+
+		@NonNull
+		@Override
+		public McpClientCapabilities getClientCapabilities() {
+			return this.clientCapabilities;
+		}
+
+		@NonNull
+		@Override
+		public McpObject getArguments() {
+			return this.arguments;
+		}
+
+		@NonNull
+		@Override
+		public Optional<String> getEndpointPathParameter(@NonNull String name) {
+			requireNonNull(name);
+			return Optional.ofNullable(this.endpointPathParameters.get(name));
+		}
+
+		@NonNull
+		@Override
+		public <T> Optional<T> getEndpointPathParameter(@NonNull String name,
+																										@NonNull Class<T> type) {
+			requireNonNull(name);
+			requireNonNull(type);
+			String value = this.endpointPathParameters.get(name);
+			return value == null ? Optional.empty() : Optional.of(convertStringValue(this.valueConverterRegistry, value, type));
+		}
+	}
+
+	private record DefaultMcpResourceHandlerContext(
+			@NonNull McpRequestContext requestContext,
+			@NonNull McpSessionContext sessionContext,
+			@NonNull String requestedUri,
+			@NonNull Map<String, String> uriParameters,
+			@NonNull Map<String, String> endpointPathParameters,
+			@NonNull ValueConverterRegistry valueConverterRegistry
+	) implements McpResourceHandlerContext {
+		private DefaultMcpResourceHandlerContext {
+			requireNonNull(requestContext);
+			requireNonNull(sessionContext);
+			requireNonNull(requestedUri);
+			requireNonNull(uriParameters);
+			requireNonNull(endpointPathParameters);
+			requireNonNull(valueConverterRegistry);
+		}
+
+		@NonNull
+		@Override
+		public McpRequestContext getRequestContext() {
+			return this.requestContext;
+		}
+
+		@NonNull
+		@Override
+		public McpSessionContext getSessionContext() {
+			return this.sessionContext;
+		}
+
+		@NonNull
+		@Override
+		public String getRequestedUri() {
+			return this.requestedUri;
+		}
+
+		@NonNull
+		@Override
+		public Optional<String> getUriParameter(@NonNull String name) {
+			requireNonNull(name);
+			return Optional.ofNullable(this.uriParameters.get(name));
+		}
+
+		@NonNull
+		@Override
+		public <T> Optional<T> getUriParameter(@NonNull String name,
+																					 @NonNull Class<T> type) {
+			requireNonNull(name);
+			requireNonNull(type);
+			String value = this.uriParameters.get(name);
+			return value == null ? Optional.empty() : Optional.of(convertStringValue(this.valueConverterRegistry, value, type));
+		}
+
+		@NonNull
+		@Override
+		public Optional<String> getEndpointPathParameter(@NonNull String name) {
+			requireNonNull(name);
+			return Optional.ofNullable(this.endpointPathParameters.get(name));
+		}
+
+		@NonNull
+		@Override
+		public <T> Optional<T> getEndpointPathParameter(@NonNull String name,
+																										@NonNull Class<T> type) {
+			requireNonNull(name);
+			requireNonNull(type);
+			String value = this.endpointPathParameters.get(name);
+			return value == null ? Optional.empty() : Optional.of(convertStringValue(this.valueConverterRegistry, value, type));
+		}
+	}
+
+	private record DefaultMcpStructuredContentContext(
+			@NonNull Class<? extends McpEndpoint> endpointClass,
+			@NonNull String toolName,
+			@NonNull McpToolCallContext toolCallContext,
+			@NonNull McpSessionContext sessionContext
+	) implements McpStructuredContentContext {
+		private DefaultMcpStructuredContentContext {
+			requireNonNull(endpointClass);
+			requireNonNull(toolName);
+			requireNonNull(toolCallContext);
+			requireNonNull(sessionContext);
+		}
+
+		@NonNull
+		@Override
+		public Class<? extends McpEndpoint> getEndpointClass() {
+			return this.endpointClass;
+		}
+
+		@NonNull
+		@Override
+		public String getToolName() {
+			return this.toolName;
+		}
+
+		@NonNull
+		@Override
+		public McpToolCallContext getToolCallContext() {
+			return this.toolCallContext;
+		}
+
+		@NonNull
+		@Override
+		public McpSessionContext getSessionContext() {
+			return this.sessionContext;
+		}
+	}
+
+	private record MatchedResourceBinding(
+			@NonNull ResourceBinding binding,
+			@NonNull Map<String, String> uriParameters
+	) {
+		private MatchedResourceBinding {
+			requireNonNull(binding);
+			requireNonNull(uriParameters);
 		}
 	}
 }

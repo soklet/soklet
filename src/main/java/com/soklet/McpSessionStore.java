@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Predicate;
 
 import static java.time.Duration.ZERO;
 import static java.time.Duration.between;
@@ -69,11 +70,14 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 	private final Duration idleTimeout;
 	@NonNull
 	private final ConcurrentMap<String, McpStoredSession> sessions;
+	@NonNull
+	private volatile Predicate<String> pinnedSessionPredicate;
 
 	DefaultMcpSessionStore(@NonNull Duration idleTimeout) {
 		requireNonNull(idleTimeout);
 		this.idleTimeout = idleTimeout;
 		this.sessions = new ConcurrentHashMap<>();
+		this.pinnedSessionPredicate = sessionId -> false;
 	}
 
 	@Override
@@ -131,6 +135,11 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 		this.sessions.remove(sessionId);
 	}
 
+	void pinnedSessionPredicate(@NonNull Predicate<String> pinnedSessionPredicate) {
+		requireNonNull(pinnedSessionPredicate);
+		this.pinnedSessionPredicate = pinnedSessionPredicate;
+	}
+
 	private boolean isExpired(@NonNull McpStoredSession storedSession) {
 		requireNonNull(storedSession);
 
@@ -138,6 +147,9 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 			return false;
 
 		if (storedSession.terminatedAt() != null)
+			return false;
+
+		if (this.pinnedSessionPredicate.test(storedSession.sessionId()))
 			return false;
 
 		Duration idleDuration = between(storedSession.lastActivityAt(), Instant.now());

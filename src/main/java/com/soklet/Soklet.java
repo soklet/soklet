@@ -47,6 +47,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -150,7 +151,7 @@ public final class Soklet implements AutoCloseable {
 	 * @return a Soklet instance
 	 */
 	@NonNull
-public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
+	public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
 		return new Soklet(sokletConfig);
 	}
@@ -161,6 +162,8 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 	private final ReentrantLock lock;
 	@NonNull
 	private final AtomicReference<CountDownLatch> awaitShutdownLatchReference;
+	@NonNull
+	private final DefaultMcpRuntime defaultMcpRuntime;
 
 	/**
 	 * Creates a Soklet instance with the given configuration.
@@ -173,11 +176,24 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		this.sokletConfig = sokletConfig;
 		this.lock = new ReentrantLock();
 		this.awaitShutdownLatchReference = new AtomicReference<>(new CountDownLatch(1));
+		this.defaultMcpRuntime = new DefaultMcpRuntime(this);
+
+		sokletConfig.getMcpServer()
+				.map(McpServer::getSessionStore)
+				.filter(DefaultMcpSessionStore.class::isInstance)
+				.map(DefaultMcpSessionStore.class::cast)
+				.ifPresent(sessionStore -> sessionStore.pinnedSessionPredicate(this.defaultMcpRuntime::hasActiveStream));
+
+		sokletConfig.getMcpServer()
+				.map(mcpServer -> mcpServer instanceof McpServerProxy mcpServerProxy ? mcpServerProxy.getRealImplementation() : mcpServer)
+				.filter(DefaultMcpServer.class::isInstance)
+				.map(DefaultMcpServer.class::cast)
+				.ifPresent(defaultMcpServer -> defaultMcpServer.mcpRuntime(this.defaultMcpRuntime));
 
 		// Fail fast in the event that Soklet appears misconfigured
 		if (sokletConfig.getResourceMethodResolver().getResourceMethods().size() == 0
 				&& sokletConfig.getMcpServer().isEmpty())
-			throw new IllegalStateException(format("No Soklet Resource Methods were found. Please ensure your %s is configured correctly. "
+			throw new IllegalStateException(format("No Soklet Resource Methods were found. First, try to rebuild and see if that solves the problem. If not, please ensure your %s is configured correctly. "
 					+ "See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.", ResourceMethodResolver.class.getSimpleName()));
 
 		// SSE misconfiguration check: @ServerSentEventSource resource methods are declared, but not ServerSentEventServer exists
@@ -1223,7 +1239,15 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(request);
 		requireNonNull(requestResultConsumer);
 
-		requestResultConsumer.accept(new DefaultMcpRuntime(this).handleRequest(request));
+		requestResultConsumer.accept(this.defaultMcpRuntime.handleRequest(request));
+	}
+
+	protected void handleSimulatedMcpStreamDisconnect(@NonNull Request request,
+																										@NonNull String sessionId) {
+		requireNonNull(request);
+		requireNonNull(sessionId);
+
+		this.defaultMcpRuntime.handleClientDisconnectedStream(request, sessionId);
 	}
 
 	@NonNull
@@ -1442,6 +1466,9 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 			if (mockMcpServer != null)
 				mockMcpServer.initialize(sokletConfig, soklet::handleMcpRequest);
 
+			if (mockMcpServer != null)
+				mockMcpServer.onClientDisconnectedMcpStream(soklet::handleSimulatedMcpStreamDisconnect);
+
 			// Create and provide simulator
 			Simulator simulator = new DefaultSimulator(mockServer, mockServerSentEventServer, mockMcpServer);
 			simulatorConsumer.accept(simulator);
@@ -1580,8 +1607,24 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 
 			if (extractContentTypeFromHeaders(requestResult.getMarshaledResponse().getHeaders())
 					.filter(contentType -> contentType.equalsIgnoreCase("text/event-stream"))
-					.isPresent())
-				return new McpRequestResult.StreamOpened(requestResult, mcpServer.getMcpStreamErrorHandler());
+					.isPresent()) {
+				McpRequestResult.StreamOpened streamOpened = new McpRequestResult.StreamOpened(
+						requestResult,
+						mcpServer.getMcpStreamErrorHandler(),
+						requestResult.isMcpStreamClosedAfterReplay());
+
+				for (McpObject mcpStreamMessage : requestResult.getMcpStreamMessages())
+					streamOpened.emitMessage(mcpStreamMessage);
+
+				if (!requestResult.isMcpStreamClosedAfterReplay())
+					request.getHeader("MCP-Session-Id").ifPresent(sessionId -> mcpServer.registerOpenStream(sessionId, request, streamOpened));
+
+				return streamOpened;
+			}
+
+			if (request.getHttpMethod() == HttpMethod.DELETE
+					&& Objects.equals(requestResult.getMarshaledResponse().getStatusCode(), 204))
+				request.getHeader("MCP-Session-Id").ifPresent(mcpServer::terminateStreamsForSession);
 
 			return new McpRequestResult.ResponseCompleted(requestResult);
 		}
@@ -1686,7 +1729,7 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 	 * Mock MCP server that doesn't touch the network at all, useful for testing.
 	 */
 	@ThreadSafe
-	static class MockMcpServer implements McpServer {
+	static class MockMcpServer implements McpServer, InternalMcpSessionMessagePublisher {
 		@NonNull
 		private final McpServer realImplementation;
 		@Nullable
@@ -1694,12 +1737,18 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		private McpServer.@Nullable RequestHandler requestHandler;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> mcpStreamErrorHandler;
+		@NonNull
+		private final ConcurrentHashMap<@NonNull String, @NonNull CopyOnWriteArrayList<McpRequestResult.StreamOpened>> openStreamsBySessionId;
+		@NonNull
+		private final AtomicReference<@Nullable BiConsumer<Request, String>> clientDisconnectedMcpStreamHandler;
 
 		public MockMcpServer(@NonNull McpServer realImplementation) {
 			requireNonNull(realImplementation);
 
 			this.realImplementation = realImplementation;
 			this.mcpStreamErrorHandler = new AtomicReference<>();
+			this.openStreamsBySessionId = new ConcurrentHashMap<>();
+			this.clientDisconnectedMcpStreamHandler = new AtomicReference<>();
 		}
 
 		@Override
@@ -1792,6 +1841,88 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		@NonNull
 		protected AtomicReference<Consumer<Throwable>> getMcpStreamErrorHandler() {
 			return this.mcpStreamErrorHandler;
+		}
+
+		protected void registerOpenStream(@NonNull String sessionId,
+																			@NonNull Request request,
+																			McpRequestResult.StreamOpened streamOpened) {
+			requireNonNull(sessionId);
+			requireNonNull(request);
+			requireNonNull(streamOpened);
+
+			getOpenStreamsBySessionId()
+					.computeIfAbsent(sessionId, ignored -> new CopyOnWriteArrayList<>())
+					.add(streamOpened);
+
+			streamOpened.onClose(() -> closeOpenStream(sessionId, request, streamOpened));
+		}
+
+		protected void terminateStreamsForSession(@NonNull String sessionId) {
+			requireNonNull(sessionId);
+
+			CopyOnWriteArrayList<McpRequestResult.StreamOpened> streams = getOpenStreamsBySessionId().remove(sessionId);
+
+			if (streams == null)
+				return;
+
+			for (McpRequestResult.StreamOpened streamOpened : streams)
+				streamOpened.terminate();
+		}
+
+		@NonNull
+		@Override
+		public Boolean publishSessionMessage(@NonNull String sessionId,
+																				 @NonNull McpObject message) {
+			requireNonNull(sessionId);
+			requireNonNull(message);
+
+			CopyOnWriteArrayList<McpRequestResult.StreamOpened> streams = getOpenStreamsBySessionId().get(sessionId);
+
+			if (streams == null || streams.isEmpty())
+				return false;
+
+			for (int i = streams.size() - 1; i >= 0; i--) {
+				McpRequestResult.StreamOpened streamOpened = streams.get(i);
+
+				if (streamOpened.isClosed())
+					continue;
+
+				streamOpened.emitMessage(message);
+				return true;
+			}
+
+			return false;
+		}
+
+		protected void onClientDisconnectedMcpStream(@Nullable BiConsumer<Request, String> clientDisconnectedMcpStreamHandler) {
+			this.clientDisconnectedMcpStreamHandler.set(clientDisconnectedMcpStreamHandler);
+		}
+
+		protected void closeOpenStream(@NonNull String sessionId,
+																	 @NonNull Request request,
+																	 McpRequestResult.StreamOpened streamOpened) {
+			requireNonNull(sessionId);
+			requireNonNull(request);
+			requireNonNull(streamOpened);
+
+			CopyOnWriteArrayList<McpRequestResult.StreamOpened> streams = getOpenStreamsBySessionId().get(sessionId);
+
+			if (streams != null) {
+				streams.remove(streamOpened);
+
+				if (streams.isEmpty())
+					getOpenStreamsBySessionId().remove(sessionId, streams);
+			}
+
+			BiConsumer<Request, String> handler = this.clientDisconnectedMcpStreamHandler.get();
+
+			if (handler != null)
+				handler.accept(request, sessionId);
+		}
+
+		@NonNull
+		protected ConcurrentHashMap<@NonNull String, @NonNull CopyOnWriteArrayList<McpRequestResult.StreamOpened>> getOpenStreamsBySessionId() {
+			return this.openStreamsBySessionId;
 		}
 	}
 

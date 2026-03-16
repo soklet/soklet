@@ -96,6 +96,34 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_WRITE_RESPONSE_FAILED,
 	/**
+	 * Indicates {@link LifecycleObserver#didCreateMcpSession(Request, Class, String)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_CREATE_MCP_SESSION_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didTerminateMcpSession(Class, String, Duration, McpSessionTerminationReason, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SESSION_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didStartMcpRequestHandling(Request, Class, String, String, McpJsonRpcRequestId)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didFinishMcpRequestHandling(Request, Class, String, String, McpJsonRpcRequestId, McpRequestOutcome, McpJsonRpcError, Duration, List)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didEstablishMcpServerSentEventStream(Request, Class, String)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#willTerminateMcpServerSentEventStream(Request, Class, String, McpStreamTerminationReason, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didTerminateMcpServerSentEventStream(Request, Class, String, Duration, McpStreamTerminationReason, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
+	/**
 	 * Indicates {@link LifecycleObserver#willEstablishServerSentEventConnection(Request, ResourceMethod)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_WILL_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,

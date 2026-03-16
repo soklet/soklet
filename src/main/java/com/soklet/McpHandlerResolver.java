@@ -59,7 +59,7 @@ public interface McpHandlerResolver {
 	/**
 	 * Returns a new resolver with the given tool handler layered onto the specified endpoint class.
 	 *
-	 * @param toolHandler the tool handler to add
+	 * @param toolHandler   the tool handler to add
 	 * @param endpointClass the endpoint class to which the handler belongs
 	 * @return a new resolver instance containing the overlay
 	 */
@@ -82,7 +82,7 @@ public interface McpHandlerResolver {
 	 * Returns a new resolver with the given resource handler layered onto the specified endpoint class.
 	 *
 	 * @param resourceHandler the resource handler to add
-	 * @param endpointClass the endpoint class to which the handler belongs
+	 * @param endpointClass   the endpoint class to which the handler belongs
 	 * @return a new resolver instance containing the overlay
 	 */
 	@NonNull
@@ -93,7 +93,7 @@ public interface McpHandlerResolver {
 	 * Returns a new resolver with the given resource-list handler layered onto the specified endpoint class.
 	 *
 	 * @param resourceListHandler the resource-list handler to add
-	 * @param endpointClass the endpoint class to which the handler belongs
+	 * @param endpointClass       the endpoint class to which the handler belongs
 	 * @return a new resolver instance containing the overlay
 	 */
 	@NonNull

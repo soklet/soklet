@@ -16,16 +16,7 @@
 
 package com.soklet;
 
-import com.soklet.MetricsCollector.HistogramSnapshot;
-import com.soklet.MetricsCollector.RequestReadFailureKey;
-import com.soklet.MetricsCollector.RequestRejectionKey;
-import com.soklet.MetricsCollector.ServerSentEventEnqueueOutcome;
-import com.soklet.MetricsCollector.ServerSentEventCommentRouteEnqueueOutcomeKey;
-import com.soklet.MetricsCollector.ServerSentEventCommentRouteDropKey;
-import com.soklet.MetricsCollector.ServerSentEventDropReason;
-import com.soklet.MetricsCollector.ServerSentEventRouteEnqueueOutcomeKey;
-import com.soklet.MetricsCollector.ServerSentEventRouteDropKey;
-import com.soklet.MetricsCollector.Snapshot;
+import com.soklet.internal.util.ConcurrentLruMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -39,8 +30,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import com.soklet.internal.util.ConcurrentLruMap;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -79,12 +68,20 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024
 	};
 
+	private static final long[] MCP_DURATION_BUCKETS_NANOS = nanosFromMillis(
+			1, 2, 5, 10, 25, 50, 100, 200, 400, 800, 1500, 3000, 7000, 15000, 30000);
+
+	private static final long[] MCP_SESSION_DURATION_BUCKETS_NANOS = nanosFromSeconds(
+			1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 14400);
+
 	private final ConcurrentHashMap<IdentityKey<Request>, RequestState> requestsInFlightByIdentity;
 	private final ConcurrentHashMap<Object, RequestState> requestsInFlightById;
 	private final ConcurrentLruMap<RequestReadFailureKey, LongAdder> httpRequestReadFailuresByReason;
 	private final ConcurrentLruMap<RequestRejectionKey, LongAdder> httpRequestRejectionsByReason;
 	private final ConcurrentLruMap<RequestReadFailureKey, LongAdder> sseRequestReadFailuresByReason;
 	private final ConcurrentLruMap<RequestRejectionKey, LongAdder> sseRequestRejectionsByReason;
+	private final ConcurrentLruMap<RequestReadFailureKey, LongAdder> mcpRequestReadFailuresByReason;
+	private final ConcurrentLruMap<RequestRejectionKey, LongAdder> mcpRequestRejectionsByReason;
 	private final ConcurrentLruMap<ServerRouteStatusKey, Histogram> httpRequestDurationByRouteStatus;
 	private final ConcurrentLruMap<ServerRouteStatusKey, Histogram> httpHandlerDurationByRouteStatus;
 	private final ConcurrentLruMap<ServerRouteStatusKey, Histogram> httpTimeToFirstByteByRouteStatus;
@@ -106,13 +103,22 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final ConcurrentLruMap<ServerSentEventCommentRouteKey, Histogram> sseCommentSizeByRoute;
 	private final ConcurrentLruMap<ServerSentEventCommentRouteKey, Histogram> sseCommentQueueDepthByRoute;
 	private final ConcurrentLruMap<ServerSentEventRouteTerminationKey, Histogram> sseConnectionDurationByRouteAndReason;
+	private final ConcurrentLruMap<McpEndpointRequestOutcomeKey, LongAdder> mcpRequestsByOutcome;
+	private final ConcurrentLruMap<McpEndpointRequestOutcomeKey, Histogram> mcpRequestDurationByOutcome;
+	private final ConcurrentLruMap<McpEndpointSessionTerminationKey, Histogram> mcpSessionDurationByEndpointAndReason;
+	private final ConcurrentLruMap<McpEndpointStreamTerminationKey, Histogram> mcpStreamDurationByEndpointAndReason;
 	private final LongAdder activeRequests;
 	private final LongAdder activeSseConnections;
+	private final LongAdder activeMcpSessions;
+	private final LongAdder activeMcpStreams;
 	private final LongAdder httpConnectionsAccepted;
 	private final LongAdder httpConnectionsRejected;
 	private final LongAdder sseConnectionsAccepted;
 	private final LongAdder sseConnectionsRejected;
+	private final LongAdder mcpConnectionsAccepted;
+	private final LongAdder mcpConnectionsRejected;
 	private final AtomicBoolean includeSseMetrics;
+	private final AtomicBoolean includeMcpMetrics;
 
 	@NonNull
 	public static DefaultMetricsCollector defaultInstance() {
@@ -126,6 +132,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.httpRequestRejectionsByReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.sseRequestReadFailuresByReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.sseRequestRejectionsByReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpRequestReadFailuresByReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpRequestRejectionsByReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.httpRequestDurationByRouteStatus = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.httpHandlerDurationByRouteStatus = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.httpTimeToFirstByteByRouteStatus = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
@@ -147,18 +155,28 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.sseCommentSizeByRoute = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.sseCommentQueueDepthByRoute = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.sseConnectionDurationByRouteAndReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpRequestsByOutcome = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpRequestDurationByOutcome = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpSessionDurationByEndpointAndReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpStreamDurationByEndpointAndReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.activeRequests = new LongAdder();
 		this.activeSseConnections = new LongAdder();
+		this.activeMcpSessions = new LongAdder();
+		this.activeMcpStreams = new LongAdder();
 		this.httpConnectionsAccepted = new LongAdder();
 		this.httpConnectionsRejected = new LongAdder();
 		this.sseConnectionsAccepted = new LongAdder();
 		this.sseConnectionsRejected = new LongAdder();
+		this.mcpConnectionsAccepted = new LongAdder();
+		this.mcpConnectionsRejected = new LongAdder();
 		this.includeSseMetrics = new AtomicBoolean(false);
+		this.includeMcpMetrics = new AtomicBoolean(false);
 	}
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
 		this.includeSseMetrics.set(sokletConfig.getServerSentEventServer().isPresent());
+		this.includeMcpMetrics.set(sokletConfig.getMcpServer().isPresent());
 	}
 
 	@Override
@@ -176,6 +194,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			this.httpConnectionsAccepted.increment();
 		else if (serverType == ServerType.SERVER_SENT_EVENT)
 			this.sseConnectionsAccepted.increment();
+		else if (serverType == ServerType.MCP)
+			this.mcpConnectionsAccepted.increment();
 	}
 
 	@Override
@@ -190,6 +210,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			this.httpConnectionsRejected.increment();
 		else if (serverType == ServerType.SERVER_SENT_EVENT)
 			this.sseConnectionsRejected.increment();
+		else if (serverType == ServerType.MCP)
+			this.mcpConnectionsRejected.increment();
 	}
 
 	@Override
@@ -235,6 +257,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			counterFor(this.httpRequestReadFailuresByReason, key).increment();
 		else if (serverType == ServerType.SERVER_SENT_EVENT)
 			counterFor(this.sseRequestReadFailuresByReason, key).increment();
+		else if (serverType == ServerType.MCP)
+			counterFor(this.mcpRequestReadFailuresByReason, key).increment();
 	}
 
 	@Override
@@ -252,6 +276,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			counterFor(this.httpRequestRejectionsByReason, key).increment();
 		else if (serverType == ServerType.SERVER_SENT_EVENT)
 			counterFor(this.sseRequestRejectionsByReason, key).increment();
+		else if (serverType == ServerType.MCP)
+			counterFor(this.mcpRequestRejectionsByReason, key).increment();
 	}
 
 	@Override
@@ -260,6 +286,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																			@Nullable ResourceMethod resourceMethod) {
 		requireNonNull(serverType);
 		requireNonNull(request);
+
+		if (serverType != ServerType.STANDARD_HTTP)
+			return;
 
 		RouteContext routeContext = routeFor(resourceMethod);
 		HttpMethod method = request.getHttpMethod();
@@ -288,6 +317,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(serverType);
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
+
+		if (serverType != ServerType.STANDARD_HTTP)
+			return;
 
 		RequestState state = requestStateFor(request);
 
@@ -323,6 +355,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(duration);
 		requireNonNull(throwables);
 
+		if (serverType != ServerType.STANDARD_HTTP)
+			return;
+
 		this.activeRequests.decrement();
 		removeRequestState(request);
 
@@ -344,6 +379,100 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@Override
+	public void didCreateMcpSession(@NonNull Request request,
+																	@NonNull Class<? extends McpEndpoint> endpointClass,
+																	@NonNull String sessionId) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+		requireNonNull(sessionId);
+
+		this.activeMcpSessions.increment();
+	}
+
+	@Override
+	public void didTerminateMcpSession(@NonNull Class<? extends McpEndpoint> endpointClass,
+																		 @NonNull String sessionId,
+																		 @NonNull Duration sessionDuration,
+																		 @NonNull McpSessionTerminationReason terminationReason,
+																		 @Nullable Throwable throwable) {
+		requireNonNull(endpointClass);
+		requireNonNull(sessionId);
+		requireNonNull(sessionDuration);
+		requireNonNull(terminationReason);
+
+		this.activeMcpSessions.decrement();
+		histogramFor(this.mcpSessionDurationByEndpointAndReason,
+				new McpEndpointSessionTerminationKey(endpointClass, terminationReason),
+				MCP_SESSION_DURATION_BUCKETS_NANOS)
+				.record(sessionDuration.toNanos());
+	}
+
+	@Override
+	public void didStartMcpRequestHandling(@NonNull Request request,
+																				 @NonNull Class<? extends McpEndpoint> endpointClass,
+																				 @Nullable String sessionId,
+																				 @NonNull String jsonRpcMethod,
+																				 @Nullable McpJsonRpcRequestId jsonRpcRequestId) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+		requireNonNull(jsonRpcMethod);
+	}
+
+	@Override
+	public void didFinishMcpRequestHandling(@NonNull Request request,
+																					@NonNull Class<? extends McpEndpoint> endpointClass,
+																					@Nullable String sessionId,
+																					@NonNull String jsonRpcMethod,
+																					@Nullable McpJsonRpcRequestId jsonRpcRequestId,
+																					@NonNull McpRequestOutcome requestOutcome,
+																					@Nullable McpJsonRpcError jsonRpcError,
+																					@NonNull Duration duration,
+																					@NonNull List<@NonNull Throwable> throwables) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+		requireNonNull(jsonRpcMethod);
+		requireNonNull(requestOutcome);
+		requireNonNull(duration);
+		requireNonNull(throwables);
+
+		McpEndpointRequestOutcomeKey key = new McpEndpointRequestOutcomeKey(endpointClass, jsonRpcMethod, requestOutcome);
+		counterFor(this.mcpRequestsByOutcome, key).increment();
+		histogramFor(this.mcpRequestDurationByOutcome, key, MCP_DURATION_BUCKETS_NANOS)
+				.record(duration.toNanos());
+	}
+
+	@Override
+	public void didEstablishMcpServerSentEventStream(@NonNull Request request,
+																									 @NonNull Class<? extends McpEndpoint> endpointClass,
+																									 @NonNull String sessionId) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+		requireNonNull(sessionId);
+
+		this.activeMcpStreams.increment();
+	}
+
+	@Override
+	public void didTerminateMcpServerSentEventStream(@NonNull Request request,
+																									 @NonNull Class<? extends McpEndpoint> endpointClass,
+																									 @NonNull String sessionId,
+																									 @NonNull Duration connectionDuration,
+																									 @NonNull McpStreamTerminationReason terminationReason,
+																									 @Nullable Throwable throwable) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+		requireNonNull(sessionId);
+		requireNonNull(connectionDuration);
+		requireNonNull(terminationReason);
+
+		this.activeMcpStreams.decrement();
+		histogramFor(this.mcpStreamDurationByEndpointAndReason,
+				new McpEndpointStreamTerminationKey(endpointClass, terminationReason),
+				MCP_SESSION_DURATION_BUCKETS_NANOS)
+				.record(connectionDuration.toNanos());
+	}
+
+	@Override
 	public void didEstablishServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection) {
 		requireNonNull(serverSentEventConnection);
 
@@ -358,9 +487,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didFailToEstablishServerSentEventConnection(@NonNull Request request,
-																													 @Nullable ResourceMethod resourceMethod,
-																													 ServerSentEventConnection.@NonNull HandshakeFailureReason reason,
-																													 @Nullable Throwable throwable) {
+																													@Nullable ResourceMethod resourceMethod,
+																													ServerSentEventConnection.@NonNull HandshakeFailureReason reason,
+																													@Nullable Throwable throwable) {
 		requireNonNull(request);
 		requireNonNull(reason);
 
@@ -610,10 +739,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didBroadcastServerSentEventComment(@NonNull ResourcePathDeclaration route,
-																									ServerSentEventComment.@NonNull CommentType commentType,
-																									int attempted,
-																									int enqueued,
-																									int dropped) {
+																								 ServerSentEventComment.@NonNull CommentType commentType,
+																								 int attempted,
+																								 int enqueued,
+																								 int dropped) {
 		requireNonNull(route);
 		requireNonNull(commentType);
 
@@ -663,14 +792,20 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return Optional.of(Snapshot.builder()
 				.activeRequests(getActiveRequests())
 				.activeSseConnections(getActiveSseConnections())
+				.activeMcpSessions(getActiveMcpSessions())
+				.activeMcpStreams(getActiveMcpStreams())
 				.httpConnectionsAccepted(getHttpConnectionsAccepted())
 				.httpConnectionsRejected(getHttpConnectionsRejected())
 				.sseConnectionsAccepted(getSseConnectionsAccepted())
 				.sseConnectionsRejected(getSseConnectionsRejected())
+				.mcpConnectionsAccepted(getMcpConnectionsAccepted())
+				.mcpConnectionsRejected(getMcpConnectionsRejected())
 				.httpRequestReadFailures(snapshotHttpRequestReadFailures())
 				.httpRequestRejections(snapshotHttpRequestRejections())
 				.sseRequestReadFailures(snapshotSseRequestReadFailures())
 				.sseRequestRejections(snapshotSseRequestRejections())
+				.mcpRequestReadFailures(snapshotMcpRequestReadFailures())
+				.mcpRequestRejections(snapshotMcpRequestRejections())
 				.sseHandshakesAccepted(snapshotSseHandshakesAccepted())
 				.sseHandshakesRejected(snapshotSseHandshakesRejected())
 				.sseEventEnqueueOutcomes(snapshotSseEventEnqueueOutcomes())
@@ -691,6 +826,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.sseCommentSizes(snapshotSseCommentSizes())
 				.sseCommentQueueDepth(snapshotSseCommentQueueDepth())
 				.sseConnectionDurations(snapshotSseConnectionDurations())
+				.mcpRequests(snapshotMcpRequests())
+				.mcpRequestDurations(snapshotMcpRequestDurations())
+				.mcpSessionDurations(snapshotMcpSessionDurations())
+				.mcpStreamDurations(snapshotMcpStreamDurations())
 				.build());
 	}
 
@@ -727,6 +866,29 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshot.getHttpRequestBodyBytes(), DefaultMetricsCollector::labelsForHttpRouteKey, options);
 		appendHistogram(sb, "soklet_http_response_body_bytes", "HTTP response body size in bytes",
 				snapshot.getHttpResponseBodyBytes(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
+
+		if (this.includeMcpMetrics.get()) {
+			appendGauge(sb, "soklet_mcp_sessions_active", "Currently active MCP sessions",
+					snapshot.getActiveMcpSessions(), options);
+			appendGauge(sb, "soklet_mcp_streams_active", "Currently active MCP streams",
+					snapshot.getActiveMcpStreams(), options);
+			appendCounter(sb, "soklet_mcp_connections_accepted_total", "Total accepted MCP connections",
+					snapshot.getMcpConnectionsAccepted(), options);
+			appendCounter(sb, "soklet_mcp_connections_rejected_total", "Total rejected MCP connections",
+					snapshot.getMcpConnectionsRejected(), options);
+			appendCounter(sb, "soklet_mcp_request_read_failures_total", "Total MCP request read failures",
+					snapshot.getMcpRequestReadFailures(), DefaultMetricsCollector::labelsForRequestReadFailureKey, options);
+			appendCounter(sb, "soklet_mcp_requests_rejected_total", "Total MCP requests rejected before handling",
+					snapshot.getMcpRequestRejections(), DefaultMetricsCollector::labelsForRequestRejectionKey, options);
+			appendCounter(sb, "soklet_mcp_requests_total", "Total MCP requests by endpoint, method, and outcome",
+					snapshot.getMcpRequests(), DefaultMetricsCollector::labelsForMcpRequestOutcomeKey, options);
+			appendHistogram(sb, "soklet_mcp_request_duration_nanos", "MCP request duration in nanoseconds",
+					snapshot.getMcpRequestDurations(), DefaultMetricsCollector::labelsForMcpRequestOutcomeKey, options);
+			appendHistogram(sb, "soklet_mcp_session_duration_nanos", "MCP session duration in nanoseconds",
+					snapshot.getMcpSessionDurations(), DefaultMetricsCollector::labelsForMcpSessionTerminationKey, options);
+			appendHistogram(sb, "soklet_mcp_stream_duration_nanos", "MCP stream duration in nanoseconds",
+					snapshot.getMcpStreamDurations(), DefaultMetricsCollector::labelsForMcpStreamTerminationKey, options);
+		}
 
 		if (this.includeSseMetrics.get()) {
 			appendCounter(sb, "soklet_sse_connections_accepted_total", "Total accepted SSE connections",
@@ -788,6 +950,14 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return this.activeSseConnections.sum();
 	}
 
+	long getActiveMcpSessions() {
+		return this.activeMcpSessions.sum();
+	}
+
+	long getActiveMcpStreams() {
+		return this.activeMcpStreams.sum();
+	}
+
 	long getHttpConnectionsAccepted() {
 		return this.httpConnectionsAccepted.sum();
 	}
@@ -802,6 +972,14 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	long getSseConnectionsRejected() {
 		return this.sseConnectionsRejected.sum();
+	}
+
+	long getMcpConnectionsAccepted() {
+		return this.mcpConnectionsAccepted.sum();
+	}
+
+	long getMcpConnectionsRejected() {
+		return this.mcpConnectionsRejected.sum();
 	}
 
 	@NonNull
@@ -822,6 +1000,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@NonNull
 	Map<@NonNull RequestRejectionKey, @NonNull Long> snapshotSseRequestRejections() {
 		return snapshotCounterMap(this.sseRequestRejectionsByReason);
+	}
+
+	@NonNull
+	Map<@NonNull RequestReadFailureKey, @NonNull Long> snapshotMcpRequestReadFailures() {
+		return snapshotCounterMap(this.mcpRequestReadFailuresByReason);
+	}
+
+	@NonNull
+	Map<@NonNull RequestRejectionKey, @NonNull Long> snapshotMcpRequestRejections() {
+		return snapshotCounterMap(this.mcpRequestRejectionsByReason);
 	}
 
 	@NonNull
@@ -924,14 +1112,38 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return snapshotMap(this.sseConnectionDurationByRouteAndReason);
 	}
 
+	@NonNull
+	Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull Long> snapshotMcpRequests() {
+		return snapshotCounterMap(this.mcpRequestsByOutcome);
+	}
+
+	@NonNull
+	Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull HistogramSnapshot> snapshotMcpRequestDurations() {
+		return snapshotMap(this.mcpRequestDurationByOutcome);
+	}
+
+	@NonNull
+	Map<@NonNull McpEndpointSessionTerminationKey, @NonNull HistogramSnapshot> snapshotMcpSessionDurations() {
+		return snapshotMap(this.mcpSessionDurationByEndpointAndReason);
+	}
+
+	@NonNull
+	Map<@NonNull McpEndpointStreamTerminationKey, @NonNull HistogramSnapshot> snapshotMcpStreamDurations() {
+		return snapshotMap(this.mcpStreamDurationByEndpointAndReason);
+	}
+
 	@Override
 	public void reset() {
 		this.activeRequests.reset();
 		this.activeSseConnections.reset();
+		this.activeMcpSessions.reset();
+		this.activeMcpStreams.reset();
 		this.httpConnectionsAccepted.reset();
 		this.httpConnectionsRejected.reset();
 		this.sseConnectionsAccepted.reset();
 		this.sseConnectionsRejected.reset();
+		this.mcpConnectionsAccepted.reset();
+		this.mcpConnectionsRejected.reset();
 		this.requestsInFlightByIdentity.clear();
 		this.requestsInFlightById.clear();
 		this.sseConnectionsByIdentity.clear();
@@ -939,6 +1151,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		resetCounterMap(this.httpRequestRejectionsByReason);
 		resetCounterMap(this.sseRequestReadFailuresByReason);
 		resetCounterMap(this.sseRequestRejectionsByReason);
+		resetCounterMap(this.mcpRequestReadFailuresByReason);
+		resetCounterMap(this.mcpRequestRejectionsByReason);
 		resetCounterMap(this.sseHandshakesAcceptedByRoute);
 		resetCounterMap(this.sseHandshakesRejectedByRouteAndReason);
 		resetCounterMap(this.sseEventEnqueueOutcomesByRoute);
@@ -959,6 +1173,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		resetMap(this.sseCommentSizeByRoute);
 		resetMap(this.sseCommentQueueDepthByRoute);
 		resetMap(this.sseConnectionDurationByRouteAndReason);
+		resetCounterMap(this.mcpRequestsByOutcome);
+		resetMap(this.mcpRequestDurationByOutcome);
+		resetMap(this.mcpSessionDurationByEndpointAndReason);
+		resetMap(this.mcpStreamDurationByEndpointAndReason);
 	}
 
 	@NonNull
@@ -1315,6 +1533,37 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		Map<String, String> labels = new LinkedHashMap<>(1);
 		labels.put("reason", key.reason().name());
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForMcpRequestOutcomeKey(@NonNull McpEndpointRequestOutcomeKey key) {
+		requireNonNull(key);
+
+		Map<String, String> labels = new LinkedHashMap<>(3);
+		labels.put("endpoint_class", key.endpointClass().getName());
+		labels.put("json_rpc_method", key.jsonRpcMethod());
+		labels.put("request_outcome", key.requestOutcome().name());
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForMcpSessionTerminationKey(@NonNull McpEndpointSessionTerminationKey key) {
+		requireNonNull(key);
+
+		Map<String, String> labels = new LinkedHashMap<>(2);
+		labels.put("endpoint_class", key.endpointClass().getName());
+		labels.put("termination_reason", key.terminationReason().name());
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForMcpStreamTerminationKey(@NonNull McpEndpointStreamTerminationKey key) {
+		requireNonNull(key);
+
+		Map<String, String> labels = new LinkedHashMap<>(2);
+		labels.put("endpoint_class", key.endpointClass().getName());
+		labels.put("termination_reason", key.terminationReason().name());
 		return new LabelSet(labels);
 	}
 

@@ -22,13 +22,26 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.Socket;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static com.soklet.TestSupport.connectWithRetry;
+import static com.soklet.TestSupport.findFreePort;
+import static com.soklet.TestSupport.readAll;
 
 @ThreadSafe
 public class McpServerLifecycleTests {
@@ -57,7 +70,7 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
-	public void sokletMcpHandlerRejectsUnsupportedGetUntilStreamingIsImplemented() throws Exception {
+	public void sokletMcpHandlerOpensGetStreamsForReadySessions() throws Exception {
 		FakeStandardServer fakeStandardServer = new FakeStandardServer();
 		FakeMcpServer fakeMcpServer = new FakeMcpServer();
 		SokletConfig sokletConfig = SokletConfig.withServer(fakeStandardServer)
@@ -68,13 +81,55 @@ public class McpServerLifecycleTests {
 
 		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
 			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
+			Request initializeRequest = Request.withPath(HttpMethod.POST, "/mcp")
+					.headers(Map.of("Content-Type", Set.of("application/json")))
+					.body("""
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-1",
+							  "method":"initialize",
+							  "params":{
+							    "protocolVersion":"2025-11-25",
+							    "capabilities":{},
+							    "clientInfo":{"name":"test-client","version":"1.0.0"}
+							  }
+							}
+							""".getBytes(StandardCharsets.UTF_8))
+					.build();
+			fakeMcpServer.getRequestHandler().orElseThrow().handleRequest(initializeRequest, requestResultHolder::set);
+			RequestResult initializeResult = requestResultHolder.get();
+			String sessionId = initializeResult.getMarshaledResponse().getHeaders().get("MCP-Session-Id").iterator().next();
+
+			requestResultHolder.set(null);
+			fakeMcpServer.getRequestHandler().orElseThrow().handleRequest(Request.withPath(HttpMethod.POST, "/mcp")
+					.headers(Map.of(
+							"Content-Type", Set.of("application/json"),
+							"MCP-Session-Id", Set.of(sessionId),
+							"MCP-Protocol-Version", Set.of("2025-11-25")
+					))
+					.body("""
+							{
+							  "jsonrpc":"2.0",
+							  "method":"notifications/initialized",
+							  "params":{}
+							}
+							""".getBytes(StandardCharsets.UTF_8))
+					.build(), requestResultHolder::set);
+
+			requestResultHolder.set(null);
 			fakeMcpServer.getRequestHandler().orElseThrow()
-					.handleRequest(Request.fromPath(HttpMethod.GET, "/mcp"), requestResultHolder::set);
+					.handleRequest(Request.withPath(HttpMethod.GET, "/mcp")
+							.headers(Map.of(
+									"MCP-Session-Id", Set.of(sessionId),
+									"MCP-Protocol-Version", Set.of("2025-11-25"),
+									"Accept", Set.of("text/event-stream")
+							))
+							.build(), requestResultHolder::set);
 
 			RequestResult requestResult = requestResultHolder.get();
-			Assertions.assertEquals(Integer.valueOf(405), requestResult.getMarshaledResponse().getStatusCode());
-			Assertions.assertTrue(new String(requestResult.getMarshaledResponse().getBody().orElseThrow(), StandardCharsets.UTF_8)
-					.startsWith("HTTP 405: Method Not Allowed"));
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals("text/event-stream; charset=UTF-8",
+					requestResult.getMarshaledResponse().getHeaders().get("Content-Type").iterator().next());
 		}
 	}
 
@@ -95,6 +150,116 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void startedDefaultMcpServerKeepsGetStreamsOpenAndSendsHeartbeats() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.mcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.heartbeatInterval(Duration.ofMillis(100))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			String sessionId = initializedSessionId(mcpPort);
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2500);
+				writeMcpGet(socket, mcpPort, sessionId);
+
+				String handshake = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(handshake);
+				Assertions.assertTrue(handshake.startsWith("HTTP/1.1 200"));
+				Assertions.assertTrue(handshake.toLowerCase(Locale.ROOT).contains("content-type: text/event-stream"));
+				Assertions.assertFalse(handshake.toLowerCase(Locale.ROOT).contains("content-length:"));
+
+				String heartbeat = readUntil(socket.getInputStream(), "\n\n", 64);
+				Assertions.assertEquals(":\n\n", heartbeat);
+			}
+		}
+	}
+
+	@Test
+	public void startedDefaultMcpServerClosesLiveGetStreamsAfterDelete() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.mcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.heartbeatInterval(Duration.ofMillis(100))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			String sessionId = initializedSessionId(mcpPort);
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2500);
+				writeMcpGet(socket, mcpPort, sessionId);
+				Assertions.assertNotNull(readUntil(socket.getInputStream(), "\r\n\r\n", 8192));
+
+				HttpURLConnection deleteConnection = (HttpURLConnection) new URL("http://127.0.0.1:" + mcpPort + "/mcp").openConnection();
+				deleteConnection.setRequestMethod("DELETE");
+				deleteConnection.setConnectTimeout(2000);
+				deleteConnection.setReadTimeout(2000);
+				deleteConnection.setRequestProperty("MCP-Session-Id", sessionId);
+				deleteConnection.setRequestProperty("MCP-Protocol-Version", "2025-11-25");
+				Assertions.assertEquals(204, deleteConnection.getResponseCode());
+
+				Assertions.assertTrue(waitForEof(socket, 3000));
+			}
+		}
+	}
+
+	@Test
+	public void startedDefaultMcpServerRoutesInternalSessionMessagesToMostRecentLiveGetStream() throws Exception {
+		int mcpPort = findFreePort();
+		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(mcpPort)
+				.host("127.0.0.1")
+				.heartbeatInterval(Duration.ofSeconds(5))
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.mcpServer(defaultMcpServer)
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			String sessionId = initializedSessionId(mcpPort);
+			Assertions.assertFalse(defaultMcpServer.publishSessionMessage(sessionId, internalSessionNotification("no-stream")));
+
+			try (Socket firstSocket = connectWithRetry("127.0.0.1", mcpPort, 2000);
+					 Socket secondSocket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				firstSocket.setSoTimeout(300);
+				secondSocket.setSoTimeout(2000);
+				writeMcpGet(firstSocket, mcpPort, sessionId);
+				writeMcpGet(secondSocket, mcpPort, sessionId);
+
+				Assertions.assertNotNull(readUntil(firstSocket.getInputStream(), "\r\n\r\n", 8192));
+				Assertions.assertNotNull(readUntil(secondSocket.getInputStream(), "\r\n\r\n", 8192));
+
+				Assertions.assertTrue(defaultMcpServer.publishSessionMessage(sessionId, internalSessionNotification("latest")));
+
+				String messageFrame = readUntil(secondSocket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(messageFrame);
+				Assertions.assertEquals("latest", sessionNotificationValue(messageFrame));
+				Assertions.assertThrows(java.net.SocketTimeoutException.class, () -> firstSocket.getInputStream().read());
+			}
+		}
+	}
+
+	@Test
 	public void simulatorCanPerformMcpRequestsThroughConfiguredMcpServer() {
 		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
@@ -105,9 +270,47 @@ public class McpServerLifecycleTests {
 				.build();
 
 		Soklet.runSimulator(sokletConfig, simulator -> {
-			McpRequestResult requestResult = simulator.performMcpRequest(Request.fromPath(HttpMethod.GET, "/mcp"));
-			Assertions.assertInstanceOf(McpRequestResult.ResponseCompleted.class, requestResult);
-			Assertions.assertEquals(Integer.valueOf(405), requestResult.getRequestResult().getMarshaledResponse().getStatusCode());
+			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.POST, "/mcp")
+							.headers(Map.of("Content-Type", Set.of("application/json")))
+							.body("""
+									{
+									  "jsonrpc":"2.0",
+									  "id":"req-1",
+									  "method":"initialize",
+									  "params":{
+									    "protocolVersion":"2025-11-25",
+									    "capabilities":{},
+									    "clientInfo":{"name":"test-client","version":"1.0.0"}
+									  }
+									}
+									""".getBytes(StandardCharsets.UTF_8))
+							.build());
+			String sessionId = initializeResult.getRequestResult().getMarshaledResponse().getHeaders().get("MCP-Session-Id").iterator().next();
+
+			simulator.performMcpRequest(Request.withPath(HttpMethod.POST, "/mcp")
+					.headers(Map.of(
+							"Content-Type", Set.of("application/json"),
+							"MCP-Session-Id", Set.of(sessionId),
+							"MCP-Protocol-Version", Set.of("2025-11-25")
+					))
+					.body("""
+							{
+							  "jsonrpc":"2.0",
+							  "method":"notifications/initialized",
+							  "params":{}
+							}
+							""".getBytes(StandardCharsets.UTF_8))
+					.build());
+
+			McpRequestResult requestResult = simulator.performMcpRequest(Request.withPath(HttpMethod.GET, "/mcp")
+					.headers(Map.of(
+							"MCP-Session-Id", Set.of(sessionId),
+							"MCP-Protocol-Version", Set.of("2025-11-25"),
+							"Accept", Set.of("text/event-stream")
+					))
+					.build());
+			Assertions.assertInstanceOf(McpRequestResult.StreamOpened.class, requestResult);
 		});
 	}
 
@@ -165,6 +368,8 @@ public class McpServerLifecycleTests {
 		private final AtomicBoolean initialized;
 		private final AtomicBoolean started;
 		private final AtomicBoolean stopped;
+		private final McpSessionStore sessionStore;
+		private final IdGenerator<String> idGenerator;
 		private SokletConfig sokletConfig;
 		private RequestHandler requestHandler;
 
@@ -172,6 +377,8 @@ public class McpServerLifecycleTests {
 			this.initialized = new AtomicBoolean();
 			this.started = new AtomicBoolean();
 			this.stopped = new AtomicBoolean();
+			this.sessionStore = McpSessionStore.fromInMemory();
+			this.idGenerator = IdGenerator.defaultInstance();
 		}
 
 		@Override
@@ -232,13 +439,13 @@ public class McpServerLifecycleTests {
 		@NonNull
 		@Override
 		public McpSessionStore getSessionStore() {
-			return McpSessionStore.fromInMemory();
+			return this.sessionStore;
 		}
 
 		@NonNull
 		@Override
 		public IdGenerator<String> getIdGenerator() {
-			return IdGenerator.defaultInstance();
+			return this.idGenerator;
 		}
 
 		@NonNull
@@ -265,6 +472,126 @@ public class McpServerLifecycleTests {
 		protected Optional<RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
 		}
+	}
+
+	private static String initializedSessionId(int mcpPort) throws IOException {
+		HttpURLConnection initializeConnection = (HttpURLConnection) new URL("http://127.0.0.1:" + mcpPort + "/mcp").openConnection();
+		initializeConnection.setRequestMethod("POST");
+		initializeConnection.setDoOutput(true);
+		initializeConnection.setConnectTimeout(2000);
+		initializeConnection.setReadTimeout(2000);
+		initializeConnection.setRequestProperty("Content-Type", "application/json");
+		initializeConnection.setRequestProperty("Accept", "application/json, text/event-stream");
+
+		try (OutputStream outputStream = initializeConnection.getOutputStream()) {
+			outputStream.write("""
+					{
+					  "jsonrpc":"2.0",
+					  "id":"req-1",
+					  "method":"initialize",
+					  "params":{
+					    "protocolVersion":"2025-11-25",
+					    "capabilities":{},
+					    "clientInfo":{"name":"test-client","version":"1.0.0"}
+					  }
+					}
+					""".getBytes(StandardCharsets.UTF_8));
+		}
+
+		Assertions.assertEquals(200, initializeConnection.getResponseCode());
+		readAll(initializeConnection.getInputStream());
+		String sessionId = initializeConnection.getHeaderField("MCP-Session-Id");
+		Assertions.assertNotNull(sessionId);
+
+		HttpURLConnection initializedConnection = (HttpURLConnection) new URL("http://127.0.0.1:" + mcpPort + "/mcp").openConnection();
+		initializedConnection.setRequestMethod("POST");
+		initializedConnection.setDoOutput(true);
+		initializedConnection.setConnectTimeout(2000);
+		initializedConnection.setReadTimeout(2000);
+		initializedConnection.setRequestProperty("Content-Type", "application/json");
+		initializedConnection.setRequestProperty("Accept", "application/json, text/event-stream");
+		initializedConnection.setRequestProperty("MCP-Session-Id", sessionId);
+		initializedConnection.setRequestProperty("MCP-Protocol-Version", "2025-11-25");
+
+		try (OutputStream outputStream = initializedConnection.getOutputStream()) {
+			outputStream.write("""
+					{
+					  "jsonrpc":"2.0",
+					  "method":"notifications/initialized",
+					  "params":{}
+					}
+					""".getBytes(StandardCharsets.UTF_8));
+		}
+
+		Assertions.assertEquals(202, initializedConnection.getResponseCode());
+		return sessionId;
+	}
+
+	private static void writeMcpGet(Socket socket, int port, String sessionId) throws IOException {
+		String request = "GET /mcp HTTP/1.1\r\n"
+				+ "Host: 127.0.0.1:" + port + "\r\n"
+				+ "Accept: text/event-stream\r\n"
+				+ "MCP-Session-Id: " + sessionId + "\r\n"
+				+ "MCP-Protocol-Version: 2025-11-25\r\n"
+				+ "Connection: keep-alive\r\n"
+				+ "\r\n";
+		socket.getOutputStream().write(request.getBytes(StandardCharsets.UTF_8));
+		socket.getOutputStream().flush();
+	}
+
+	private static String readUntil(InputStream inputStream, String terminator, int maxBytes) throws IOException {
+		byte[] terminatorBytes = terminator.getBytes(StandardCharsets.UTF_8);
+		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+		int match = 0;
+		int value;
+
+		while (outputStream.size() < maxBytes && (value = inputStream.read()) != -1) {
+			outputStream.write(value);
+
+			if (value == terminatorBytes[match]) {
+				match++;
+
+				if (match == terminatorBytes.length)
+					return outputStream.toString(StandardCharsets.UTF_8);
+			} else {
+				match = value == terminatorBytes[0] ? 1 : 0;
+			}
+		}
+
+		return null;
+	}
+
+	private static boolean waitForEof(Socket socket, int timeoutMs) throws IOException {
+		long deadline = System.currentTimeMillis() + timeoutMs;
+		socket.setSoTimeout(Math.max(100, timeoutMs));
+		InputStream inputStream = socket.getInputStream();
+		byte[] buffer = new byte[1];
+
+		while (System.currentTimeMillis() < deadline) {
+			try {
+				if (inputStream.read(buffer) == -1)
+					return true;
+			} catch (java.net.SocketTimeoutException ignored) {
+				// Keep trying until the deadline is reached.
+			}
+		}
+
+		return false;
+	}
+
+	private static McpObject internalSessionNotification(String value) {
+		return new McpObject(Map.of(
+				"jsonrpc", new McpString("2.0"),
+				"method", new McpString("notifications/test"),
+				"params", new McpObject(Map.of("value", new McpString(value)))
+		));
+	}
+
+	private static String sessionNotificationValue(String frame) {
+		Assertions.assertTrue(frame.startsWith("data: "));
+		McpObject payload = (McpObject) McpJsonCodec.parse(frame.substring("data: ".length(), frame.length() - 2).getBytes(StandardCharsets.UTF_8));
+		McpObject params = (McpObject) payload.get("params").orElseThrow();
+		return ((McpString) params.get("value").orElseThrow()).value();
 	}
 
 	private static final class FakeStandardServer implements Server {

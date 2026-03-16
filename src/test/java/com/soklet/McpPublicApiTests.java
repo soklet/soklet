@@ -132,7 +132,7 @@ public class McpPublicApiTests {
 	@Test
 	public void mcpRequestResultStreamOpenedBuffersMessagesAndCanBeClosed() {
 		RequestResult requestResult = RequestResult.fromMarshaledResponse(MarshaledResponse.fromStatusCode(200));
-		McpRequestResult.StreamOpened streamOpened = new McpRequestResult.StreamOpened(requestResult, null);
+		McpRequestResult.StreamOpened streamOpened = new McpRequestResult.StreamOpened(requestResult, null, false);
 		AtomicInteger consumedCount = new AtomicInteger();
 
 		streamOpened.emitMessage(new McpObject(Map.of("kind", new McpString("one"))));

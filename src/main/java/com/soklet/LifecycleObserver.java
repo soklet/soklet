@@ -350,6 +350,84 @@ public interface LifecycleObserver {
 	}
 
 	/**
+	 * Called after an MCP session is durably created.
+	 */
+	default void didCreateMcpSession(@NonNull Request request,
+																	 @NonNull Class<? extends McpEndpoint> endpointClass,
+																	 @NonNull String sessionId) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an MCP session is terminated.
+	 */
+	default void didTerminateMcpSession(@NonNull Class<? extends McpEndpoint> endpointClass,
+																			@NonNull String sessionId,
+																			@NonNull Duration sessionDuration,
+																			@NonNull McpSessionTerminationReason terminationReason,
+																			@Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after a valid MCP JSON-RPC request begins handling.
+	 */
+	default void didStartMcpRequestHandling(@NonNull Request request,
+																					@NonNull Class<? extends McpEndpoint> endpointClass,
+																					@Nullable String sessionId,
+																					@NonNull String jsonRpcMethod,
+																					@Nullable McpJsonRpcRequestId jsonRpcRequestId) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after MCP JSON-RPC request handling finishes.
+	 */
+	default void didFinishMcpRequestHandling(@NonNull Request request,
+																					 @NonNull Class<? extends McpEndpoint> endpointClass,
+																					 @Nullable String sessionId,
+																					 @NonNull String jsonRpcMethod,
+																					 @Nullable McpJsonRpcRequestId jsonRpcRequestId,
+																					 @NonNull McpRequestOutcome requestOutcome,
+																					 @Nullable McpJsonRpcError jsonRpcError,
+																					 @NonNull Duration duration,
+																					 @NonNull List<@NonNull Throwable> throwables) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an MCP GET stream is established.
+	 */
+	default void didEstablishMcpServerSentEventStream(@NonNull Request request,
+																										@NonNull Class<? extends McpEndpoint> endpointClass,
+																										@NonNull String sessionId) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before an MCP GET stream is terminated.
+	 */
+	default void willTerminateMcpServerSentEventStream(@NonNull Request request,
+																										 @NonNull Class<? extends McpEndpoint> endpointClass,
+																										 @NonNull String sessionId,
+																										 @NonNull McpStreamTerminationReason terminationReason,
+																										 @Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an MCP GET stream is terminated.
+	 */
+	default void didTerminateMcpServerSentEventStream(@NonNull Request request,
+																										@NonNull Class<? extends McpEndpoint> endpointClass,
+																										@NonNull String sessionId,
+																										@NonNull Duration connectionDuration,
+																										@NonNull McpStreamTerminationReason terminationReason,
+																										@Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
 	 * Called before the SSE server starts.
 	 */
 	default void willStartServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {

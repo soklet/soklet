@@ -30,7 +30,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class McpServerProxy implements McpServer {
+final class McpServerProxy implements McpServer, InternalMcpSessionMessagePublisher {
 	@NonNull
 	private final McpServer realImplementation;
 	@NonNull
@@ -124,5 +124,20 @@ final class McpServerProxy implements McpServer {
 	@NonNull
 	McpServer getActiveImplementation() {
 		return this.activeImplementation.get();
+	}
+
+	@NonNull
+	@Override
+	public Boolean publishSessionMessage(@NonNull String sessionId,
+																			 @NonNull McpObject message) {
+		requireNonNull(sessionId);
+		requireNonNull(message);
+
+		McpServer activeImplementation = getActiveImplementation();
+
+		if (activeImplementation instanceof InternalMcpSessionMessagePublisher internalMcpSessionMessagePublisher)
+			return internalMcpSessionMessagePublisher.publishSessionMessage(sessionId, message);
+
+		return false;
 	}
 }

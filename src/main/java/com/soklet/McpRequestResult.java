@@ -74,19 +74,27 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 		@NonNull
 		private final List<@NonNull McpObject> bufferedMessages;
 		@NonNull
+		private final Boolean closeAfterBufferedReplay;
+		@NonNull
 		private final AtomicBoolean closed;
+		@NonNull
+		private final AtomicReference<@Nullable Runnable> onClose;
 		@Nullable
 		private volatile Consumer<McpObject> messageConsumer;
 
 		StreamOpened(@NonNull RequestResult requestResult,
-								 @Nullable AtomicReference<@Nullable Consumer<Throwable>> streamErrorHandler) {
+								 @Nullable AtomicReference<@Nullable Consumer<Throwable>> streamErrorHandler,
+								 @NonNull Boolean closeAfterBufferedReplay) {
 			requireNonNull(requestResult);
+			requireNonNull(closeAfterBufferedReplay);
 
 			this.requestResult = requestResult;
 			this.streamErrorHandler = streamErrorHandler == null ? new AtomicReference<>() : streamErrorHandler;
 			this.lock = new ReentrantLock();
 			this.bufferedMessages = new CopyOnWriteArrayList<>();
+			this.closeAfterBufferedReplay = closeAfterBufferedReplay;
 			this.closed = new AtomicBoolean(false);
+			this.onClose = new AtomicReference<>();
 			this.messageConsumer = null;
 		}
 
@@ -110,13 +118,22 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 				}
 
 				this.bufferedMessages.clear();
+
+				if (this.closeAfterBufferedReplay)
+					terminate();
 			} finally {
 				this.lock.unlock();
 			}
 		}
 
 		public void close() {
-			this.closed.set(true);
+			if (!this.closed.compareAndSet(false, true))
+				return;
+
+			Runnable onClose = this.onClose.get();
+
+			if (onClose != null)
+				onClose.run();
 		}
 
 		@NonNull
@@ -152,6 +169,10 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 
 		void terminate() {
 			this.closed.set(true);
+		}
+
+		void onClose(@Nullable Runnable onClose) {
+			this.onClose.set(onClose);
 		}
 
 		private void handleMessageConsumerError(@NonNull Throwable throwable) {
