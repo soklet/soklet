@@ -244,6 +244,51 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void resourcesTemplatesListExposesTemplateResources() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
+			String sessionId = headerValue(initializeResult, "MCP-Session-Id");
+			Map<String, Set<String>> sessionHeaders = Map.of(
+					"MCP-Session-Id", Set.of(sessionId),
+					"MCP-Protocol-Version", Set.of("2025-11-25")
+			);
+
+			simulator.performMcpRequest(post("/tenants/acme/mcp", """
+					{
+					  "jsonrpc":"2.0",
+					  "method":"notifications/initialized",
+					  "params":{}
+					}
+					""", sessionHeaders));
+
+			McpRequestResult.ResponseCompleted templatesList = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-2",
+							  "method":"resources/templates/list",
+							  "params":{}
+							}
+							""", sessionHeaders));
+
+			McpObject templatesListBody = jsonBody(templatesList);
+			McpArray resourceTemplates = (McpArray) ((McpObject) templatesListBody.get("result").orElseThrow()).get("resourceTemplates").orElseThrow();
+			Set<String> uriTemplates = new java.util.LinkedHashSet<>();
+
+			for (McpValue resourceTemplateValue : resourceTemplates.values()) {
+				McpObject resourceTemplate = (McpObject) resourceTemplateValue;
+				uriTemplates.add(((McpString) resourceTemplate.get("uriTemplate").orElseThrow()).value());
+			}
+
+			Assertions.assertEquals(Set.of(
+					"catalog://tenants/{tenantId}/recipes/{recipeId}",
+					"catalog://notes/{noteId}"
+			), uriTemplates);
+		});
+	}
+
+	@Test
 	public void resourcesListFallsBackToLiteralStaticResourcesWhenNoHandlerExists() {
 		Soklet.runSimulator(literalResourceConfiguration(), simulator -> {
 			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(

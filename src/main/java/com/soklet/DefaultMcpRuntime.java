@@ -397,6 +397,8 @@ final class DefaultMcpRuntime {
 					handlePromptGet(request, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession.orElseThrow(), requestContext);
 			case RESOURCES_LIST ->
 					handleResourcesList(request, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession.orElseThrow(), requestContext);
+			case RESOURCES_TEMPLATES_LIST ->
+					handleResourceTemplatesList(request, resolvedEndpoint, parsedRequest, storedSession.orElseThrow(), requestContext);
 			case RESOURCES_READ ->
 					handleResourceRead(request, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession.orElseThrow(), requestContext);
 			default ->
@@ -834,6 +836,47 @@ final class DefaultMcpRuntime {
 		if (listResourcesResult.nextCursor() != null)
 			result.put("nextCursor", new McpString(listResourcesResult.nextCursor()));
 
+		return jsonRpcSuccessResponse(request, parsedRequest.requestId(), new McpObject(result), Map.of());
+	}
+
+	@NonNull
+	private RequestResult handleResourceTemplatesList(@NonNull Request request,
+																								 @NonNull ResolvedEndpoint resolvedEndpoint,
+																								 @NonNull ParsedJsonRpcRequest parsedRequest,
+																								 @NonNull McpStoredSession storedSession,
+																								 @NonNull DefaultMcpRequestContext requestContext) {
+		requireNonNull(request);
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(parsedRequest);
+		requireNonNull(storedSession);
+		requireNonNull(requestContext);
+
+		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+
+		if (gateResult != null)
+			return gateResult;
+
+		touchSession(getMcpServer(), storedSession);
+
+		List<McpValue> resourceTemplates = new ArrayList<>();
+
+		for (ResourceBinding resourceBinding : resolvedEndpoint.resourcesByUri().values()) {
+			if (!isUriTemplate(resourceBinding.uri()))
+				continue;
+
+			Map<String, McpValue> templateValue = new LinkedHashMap<>();
+			templateValue.put("uriTemplate", new McpString(resourceBinding.uri()));
+			templateValue.put("name", new McpString(resourceBinding.name()));
+			templateValue.put("mimeType", new McpString(resourceBinding.mimeType()));
+
+			if (resourceBinding.optionalDescription().isPresent())
+				templateValue.put("description", new McpString(resourceBinding.optionalDescription().orElseThrow()));
+
+			resourceTemplates.add(new McpObject(templateValue));
+		}
+
+		Map<String, McpValue> result = new LinkedHashMap<>();
+		result.put("resourceTemplates", new McpArray(resourceTemplates));
 		return jsonRpcSuccessResponse(request, parsedRequest.requestId(), new McpObject(result), Map.of());
 	}
 
@@ -1703,6 +1746,7 @@ final class DefaultMcpRuntime {
 			case "prompts/list" -> Optional.of(McpOperationKind.PROMPTS_LIST);
 			case "prompts/get" -> Optional.of(McpOperationKind.PROMPTS_GET);
 			case "resources/list" -> Optional.of(McpOperationKind.RESOURCES_LIST);
+			case "resources/templates/list" -> Optional.of(McpOperationKind.RESOURCES_TEMPLATES_LIST);
 			case "resources/read" -> Optional.of(McpOperationKind.RESOURCES_READ);
 			default -> Optional.empty();
 		};
@@ -1986,10 +2030,12 @@ final class DefaultMcpRuntime {
 		if (matchedStreamState == null)
 			return;
 
-		streamStates.remove(matchedStreamState);
+		McpStreamState matchedStreamStateSnapshot = matchedStreamState;
 
-		if (streamStates.isEmpty())
-			this.mcpStreamsBySessionId.remove(sessionId, streamStates);
+		this.mcpStreamsBySessionId.computeIfPresent(sessionId, (ignored, states) -> {
+			states.remove(matchedStreamStateSnapshot);
+			return states.isEmpty() ? null : states;
+		});
 
 		observeTerminatedMcpStream(matchedStreamState, terminationReason, throwable);
 	}
