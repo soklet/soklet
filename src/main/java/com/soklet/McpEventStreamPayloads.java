@@ -41,7 +41,7 @@ final class McpEventStreamPayloads {
 		for (McpObject message : messages) {
 			requireNonNull(message);
 			stringBuilder.append("data: ")
-					.append(new String(McpJsonCodec.toUtf8Bytes(message), StandardCharsets.UTF_8))
+					.append(McpJsonCodec.toJson(message))
 					.append('\n')
 					.append('\n');
 		}

@@ -512,6 +512,7 @@ final class DefaultMcpRuntime {
 			observeSessionTerminated(resolvedEndpoint.endpointClass(), sessionId,
 					Duration.between(initialSession.createdAt(), terminatedSession.terminatedAt()),
 					McpSessionTerminationReason.INITIALIZATION_FAILED, throwable);
+			mcpServer.getSessionStore().deleteBySessionId(sessionId);
 			return jsonRpcErrorResponse(request, parsedRequest.requestId(), error);
 		}
 	}
@@ -984,6 +985,7 @@ final class DefaultMcpRuntime {
 				storedSession.version() + 1L
 		);
 
+		// Lost CAS here is acceptable: a concurrent successful replace also implies session activity.
 		mcpServer.getSessionStore().replace(storedSession, updatedSession);
 	}
 

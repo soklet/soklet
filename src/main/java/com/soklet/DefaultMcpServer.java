@@ -858,15 +858,10 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	private void removeConnection(@NonNull McpLiveConnection connection) {
 		requireNonNull(connection);
 
-		CopyOnWriteArrayList<McpLiveConnection> connections = this.liveConnectionsBySessionId.get(connection.sessionId());
-
-		if (connections == null)
-			return;
-
-		connections.remove(connection);
-
-		if (connections.isEmpty())
-			this.liveConnectionsBySessionId.remove(connection.sessionId(), connections);
+		this.liveConnectionsBySessionId.computeIfPresent(connection.sessionId(), (sessionId, connections) -> {
+			connections.remove(connection);
+			return connections.isEmpty() ? null : connections;
+		});
 	}
 
 	private void markConnectionEstablished(@NonNull McpLiveConnection connection) {

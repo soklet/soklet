@@ -749,6 +749,23 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void initializeFailureDeletesTerminatedSessionFromDefaultInMemoryStore() {
+		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
+		McpSessionStore sessionStore = McpSessionStore.fromInMemory();
+
+		Soklet.runSimulator(failingInitializeConfiguration(lifecycleObserver, sessionStore), simulator -> {
+			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/failing/mcp", initializeJson("req-1"), Map.of()));
+
+			McpObject responseBody = jsonBody(initializeResult);
+			Assertions.assertTrue(responseBody.get("error").isPresent());
+		});
+
+		String sessionId = lifecycleObserver.createdSessionIds.get(0);
+		Assertions.assertTrue(sessionStore.findBySessionId(sessionId).isEmpty());
+	}
+
+	@Test
 	public void mcpMetricsAreRecordedSeparatelyFromHttpMetrics() {
 		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
 
@@ -829,11 +846,17 @@ public class McpRuntimeTests {
 	}
 
 	private static SokletConfig failingInitializeConfiguration(LifecycleObserver lifecycleObserver) {
+		return failingInitializeConfiguration(lifecycleObserver, McpSessionStore.fromInMemory());
+	}
+
+	private static SokletConfig failingInitializeConfiguration(LifecycleObserver lifecycleObserver,
+																										 McpSessionStore sessionStore) {
 		return SokletConfig.withServer(Server.withPort(0).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycleObserver)
 				.metricsCollector(MetricsCollector.disabledInstance())
 				.mcpServer(McpServer.withPort(0)
+						.sessionStore(sessionStore)
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(FailingInitializeEndpoint.class)))
 						.build())
 				.build();

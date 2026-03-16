@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import javax.annotation.concurrent.NotThreadSafe;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -159,7 +160,7 @@ final class McpJsonCodec {
 		json.append('"');
 	}
 
-	@ThreadSafe
+	@NotThreadSafe
 	private static final class Parser {
 		@NonNull
 		private final String json;
