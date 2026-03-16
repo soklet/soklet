@@ -23,6 +23,9 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 import static com.google.testing.compile.CompilationSubject.assertThat;
 
@@ -293,6 +296,110 @@ public class SokletProcessorTests {
 		assertThat(compilation)
 				.hadErrorContaining("Resource Method path parameter {cssPath*} not bound to a @PathParameter argument")
 				.inFile(src);
+	}
+
+	@Test
+	void validMcpEndpointCompilesAndGeneratesLookupTable() {
+		JavaFileObject src = JavaFileObjects.forSourceString("example.OkMcp",
+				"""
+						package example;
+						
+						import com.soklet.McpEndpoint;
+						import com.soklet.McpListResourcesResult;
+						import com.soklet.McpPromptResult;
+						import com.soklet.McpResourceContents;
+						import com.soklet.McpToolResult;
+						import com.soklet.annotation.McpListResources;
+						import com.soklet.annotation.McpPrompt;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						
+						@McpServerEndpoint(path="/mcp", name="ok-mcp", version="1.0.0")
+						public class OkMcp implements McpEndpoint {
+							@McpTool(name="lookup_recipe", description="Find a recipe")
+							public McpToolResult lookupRecipe() {
+								return McpToolResult.builder().build();
+							}
+						
+							@McpPrompt(name="render_recipe_prompt", description="Render a prompt")
+							public McpPromptResult renderPrompt() {
+								return McpPromptResult.fromMessages();
+							}
+						
+							@McpResource(uri="mcp://recipes/{recipeId}", name="recipe", mimeType="application/json")
+							public McpResourceContents recipe() {
+								return McpResourceContents.fromText("mcp://recipes/1", "{}", "application/json");
+							}
+						
+							@McpListResources
+							public McpListResourcesResult listResources() {
+								return McpListResourcesResult.fromResources(java.util.List.of());
+							}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(src);
+
+		assertThat(compilation).succeeded();
+
+		String expectedLine = Base64.getEncoder().encodeToString("example.OkMcp".getBytes(StandardCharsets.UTF_8));
+		assertThat(compilation)
+				.generatedFile(StandardLocation.CLASS_OUTPUT, "", SokletProcessor.MCP_ENDPOINT_LOOKUP_TABLE_PATH)
+				.contentsAsUtf8String()
+				.contains(expectedLine);
+	}
+
+	@Test
+	void rejectsMcpEndpointThatDoesNotImplementMcpEndpoint() {
+		JavaFileObject src = JavaFileObjects.forSourceString("example.BadMcpEndpoint",
+				"""
+						import com.soklet.annotation.McpServerEndpoint;
+						
+						@McpServerEndpoint(path="/mcp", name="bad-mcp", version="1.0.0")
+						public class BadMcpEndpoint {
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(src);
+
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining("must implement McpEndpoint");
+	}
+
+	@Test
+	void rejectsDuplicateAnnotatedMcpResourceListMethods() {
+		JavaFileObject src = JavaFileObjects.forSourceString("example.BadMcpLists",
+				"""
+						import com.soklet.McpEndpoint;
+						import com.soklet.McpListResourcesResult;
+						import com.soklet.annotation.McpListResources;
+						import com.soklet.annotation.McpServerEndpoint;
+						
+						@McpServerEndpoint(path="/mcp", name="bad-mcp-lists", version="1.0.0")
+						public class BadMcpLists implements McpEndpoint {
+							@McpListResources
+							public McpListResourcesResult first() {
+								return McpListResourcesResult.fromResources(java.util.List.of());
+							}
+						
+							@McpListResources
+							public McpListResourcesResult second() {
+								return McpListResourcesResult.fromResources(java.util.List.of());
+							}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(src);
+
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining("At most one @McpListResources method may be declared");
 	}
 
 }

@@ -16,22 +16,29 @@
 
 package com.soklet;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+import javax.annotation.concurrent.Immutable;
+
+import static java.util.Objects.requireNonNull;
+
 /**
- * Types of servers supported by Soklet - currently {@link #STANDARD_HTTP}, {@link #SERVER_SENT_EVENT}, and {@link #MCP}.
+ * Request metadata used by {@link McpOriginPolicy}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public enum ServerType {
-	/**
-	 * A server which speaks HTTP over TCP (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, etc.)
-	 */
-	STANDARD_HTTP,
-	/**
-	 * A Server-Sent Event server which handles SSE connections (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.ServerSentEventSource}).
-	 */
-	SERVER_SENT_EVENT,
-	/**
-	 * An MCP server which handles MCP transport traffic over HTTP.
-	 */
-	MCP
+@Immutable
+public record McpOriginCheckContext(
+		@NonNull Request request,
+		@NonNull Class<? extends McpEndpoint> endpointClass,
+		@NonNull HttpMethod httpMethod,
+		@Nullable String origin,
+		@Nullable String sessionId
+) {
+	public McpOriginCheckContext {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+		requireNonNull(httpMethod);
+	}
 }

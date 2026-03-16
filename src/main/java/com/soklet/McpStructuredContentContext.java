@@ -16,22 +16,26 @@
 
 package com.soklet;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
- * Types of servers supported by Soklet - currently {@link #STANDARD_HTTP}, {@link #SERVER_SENT_EVENT}, and {@link #MCP}.
+ * Context supplied to {@link McpResponseMarshaler} during structured-content conversion.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public enum ServerType {
-	/**
-	 * A server which speaks HTTP over TCP (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, etc.)
-	 */
-	STANDARD_HTTP,
-	/**
-	 * A Server-Sent Event server which handles SSE connections (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.ServerSentEventSource}).
-	 */
-	SERVER_SENT_EVENT,
-	/**
-	 * An MCP server which handles MCP transport traffic over HTTP.
-	 */
-	MCP
+@ThreadSafe
+public interface McpStructuredContentContext {
+	@NonNull
+	Class<? extends McpEndpoint> getEndpointClass();
+
+	@NonNull
+	String getToolName();
+
+	@NonNull
+	McpToolCallContext getToolCallContext();
+
+	@NonNull
+	McpSessionContext getSessionContext();
 }

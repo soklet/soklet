@@ -16,22 +16,23 @@
 
 package com.soklet;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+import javax.annotation.concurrent.ThreadSafe;
+import java.math.BigDecimal;
+
 /**
- * Types of servers supported by Soklet - currently {@link #STANDARD_HTTP}, {@link #SERVER_SENT_EVENT}, and {@link #MCP}.
+ * Request-scoped progress reporting seam for MCP tool calls.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public enum ServerType {
-	/**
-	 * A server which speaks HTTP over TCP (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, etc.)
-	 */
-	STANDARD_HTTP,
-	/**
-	 * A Server-Sent Event server which handles SSE connections (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.ServerSentEventSource}).
-	 */
-	SERVER_SENT_EVENT,
-	/**
-	 * An MCP server which handles MCP transport traffic over HTTP.
-	 */
-	MCP
+@ThreadSafe
+public interface McpProgressReporter {
+	@NonNull
+	McpProgressToken getProgressToken();
+
+	void reportProgress(@NonNull BigDecimal progress,
+											@Nullable BigDecimal total,
+											@Nullable String message);
 }

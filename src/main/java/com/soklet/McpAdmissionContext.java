@@ -16,22 +16,36 @@
 
 package com.soklet;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
+import java.util.Optional;
+
 /**
- * Types of servers supported by Soklet - currently {@link #STANDARD_HTTP}, {@link #SERVER_SENT_EVENT}, and {@link #MCP}.
+ * Transport/admission context for MCP request rejection or acceptance.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public enum ServerType {
-	/**
-	 * A server which speaks HTTP over TCP (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, etc.)
-	 */
-	STANDARD_HTTP,
-	/**
-	 * A Server-Sent Event server which handles SSE connections (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.ServerSentEventSource}).
-	 */
-	SERVER_SENT_EVENT,
-	/**
-	 * An MCP server which handles MCP transport traffic over HTTP.
-	 */
-	MCP
+@ThreadSafe
+public interface McpAdmissionContext {
+	@NonNull
+	Request getRequest();
+
+	@NonNull
+	HttpMethod getHttpMethod();
+
+	@NonNull
+	Class<? extends McpEndpoint> getEndpointClass();
+
+	@NonNull
+	Optional<String> getJsonRpcMethod();
+
+	@NonNull
+	Optional<McpOperationKind> getOperationKind();
+
+	@NonNull
+	Optional<McpJsonRpcRequestId> getJsonRpcRequestId();
+
+	@NonNull
+	Optional<String> getSessionId();
 }

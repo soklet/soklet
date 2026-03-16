@@ -19,6 +19,11 @@ package com.soklet;
 import com.soklet.annotation.DELETE;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
+import com.soklet.annotation.McpListResources;
+import com.soklet.annotation.McpPrompt;
+import com.soklet.annotation.McpResource;
+import com.soklet.annotation.McpServerEndpoint;
+import com.soklet.annotation.McpTool;
 import com.soklet.annotation.OPTIONS;
 import com.soklet.annotation.PATCH;
 import com.soklet.annotation.POST;
@@ -145,14 +150,17 @@ public final class SokletProcessor extends AbstractProcessor {
 	private static final String PROCESSOR_OPTION_DEBUG = "soklet.debug";
 
 	private static final String PERSISTENT_CACHE_INDEX_DIR = "resource-methods";
+	private static final String MCP_PERSISTENT_CACHE_INDEX_DIR = "mcp-endpoints";
 
 	// ---- Index paths ---------------------------------------------------------
 
 	static final String RESOURCE_METHOD_LOOKUP_TABLE_PATH = "META-INF/soklet/resource-method-lookup-table";
+	static final String MCP_ENDPOINT_LOOKUP_TABLE_PATH = "META-INF/soklet/mcp-endpoint-lookup-table";
 	private static final String OUTPUT_ROOT_MARKER_PATH = "META-INF/soklet/.soklet-output-root";
 
 	private static final String SIDE_CAR_DIR_NAME = "soklet";
 	private static final String SIDE_CAR_INDEX_FILENAME = "resource-method-lookup-table";
+	private static final String MCP_SIDE_CAR_INDEX_FILENAME = "mcp-endpoint-lookup-table";
 
 	// ---- JSR-269 services ----------------------------------------------------
 
@@ -168,9 +176,11 @@ public final class SokletProcessor extends AbstractProcessor {
 	// Cached mirrors resolved in init()
 	private TypeMirror handshakeResultType;      // com.soklet.HandshakeResult
 	private TypeElement pathParameterElement;    // com.soklet.annotation.PathParameter
+	private TypeElement mcpEndpointElement;      // com.soklet.McpEndpoint
 
 	// Collected during this compilation invocation
 	private final List<ResourceMethodDeclaration> collected = new ArrayList<>();
+	private final List<McpEndpointDeclaration> collectedMcpEndpoints = new ArrayList<>();
 	private final Set<String> touchedTopLevelBinaries = new LinkedHashSet<>();
 
 	// ---- Supported annotations ----------------------------------------------
@@ -178,6 +188,9 @@ public final class SokletProcessor extends AbstractProcessor {
 	private static final List<Class<? extends Annotation>> HTTP_AND_SSE_ANNOTATIONS = List.of(
 			GET.class, POST.class, PUT.class, PATCH.class, DELETE.class, HEAD.class, OPTIONS.class,
 			ServerSentEventSource.class
+	);
+	private static final List<Class<? extends Annotation>> MCP_ANNOTATIONS = List.of(
+			McpServerEndpoint.class, McpTool.class, McpPrompt.class, McpResource.class, McpListResources.class
 	);
 
 	// ---- Cache modes ---------------------------------------------------------
@@ -203,6 +216,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		TypeElement hr = elements.getTypeElement("com.soklet.HandshakeResult");
 		this.handshakeResultType = (hr == null ? null : hr.asType());
 		this.pathParameterElement = elements.getTypeElement("com.soklet.annotation.PathParameter");
+		this.mcpEndpointElement = elements.getTypeElement("com.soklet.McpEndpoint");
 
 		// If persistent mode was requested but cacheDir isn't configured, downgrade to SIDECAR.
 		if (this.cacheMode == CacheMode.PERSISTENT && persistentCacheRoot() == null) {
@@ -220,6 +234,8 @@ public final class SokletProcessor extends AbstractProcessor {
 			Class<? extends Annotation> container = findRepeatableContainer(c);
 			if (container != null) out.add(container.getCanonicalName());
 		}
+		for (Class<? extends Annotation> c : MCP_ANNOTATIONS)
+			out.add(c.getCanonicalName());
 		return out;
 	}
 
@@ -260,6 +276,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		collect(roundEnv, HttpMethod.HEAD, HEAD.class, false);
 		collect(roundEnv, HttpMethod.OPTIONS, OPTIONS.class, false);
 		collect(roundEnv, HttpMethod.GET, ServerSentEventSource.class, true); // SSE as GET + flag
+		collectMcpEndpoints(roundEnv);
 
 		if (roundEnv.processingOver()) {
 			// Critical: don't overwrite a good index with a partial/failed compile.
@@ -268,6 +285,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				return false;
 			}
 			mergeAndWriteIndex(collected, touchedTopLevelBinaries);
+			mergeAndWriteMcpIndex(collectedMcpEndpoints, touchedTopLevelBinaries);
 		}
 
 		return false;
@@ -500,6 +518,208 @@ public final class SokletProcessor extends AbstractProcessor {
 		return token;
 	}
 
+	// --- MCP collection/validation --------------------------------------------
+
+	private void collectMcpEndpoints(RoundEnvironment roundEnv) {
+		TypeElement mcpServerEndpointType = elements.getTypeElement(McpServerEndpoint.class.getCanonicalName());
+
+		if (mcpServerEndpointType != null) {
+			for (Element element : roundEnv.getElementsAnnotatedWith(mcpServerEndpointType)) {
+				if (element.getKind() != ElementKind.CLASS) {
+					error(element, "Soklet: @%s can only be applied to classes.", McpServerEndpoint.class.getSimpleName());
+					continue;
+				}
+
+				validateAndCollectMcpEndpoint((TypeElement) element);
+			}
+		}
+
+		validateMcpAnnotatedMethodsBelongToEndpoint(roundEnv, McpTool.class);
+		validateMcpAnnotatedMethodsBelongToEndpoint(roundEnv, McpPrompt.class);
+		validateMcpAnnotatedMethodsBelongToEndpoint(roundEnv, McpResource.class);
+		validateMcpAnnotatedMethodsBelongToEndpoint(roundEnv, McpListResources.class);
+	}
+
+	private void validateAndCollectMcpEndpoint(TypeElement endpointType) {
+		boolean valid = true;
+
+		if (mcpEndpointElement == null || !types.isAssignable(endpointType.asType(), mcpEndpointElement.asType())) {
+			error(endpointType, "Soklet: Classes annotated with @%s must implement %s.",
+					McpServerEndpoint.class.getSimpleName(), McpEndpoint.class.getSimpleName());
+			valid = false;
+		}
+
+		McpServerEndpoint endpoint = endpointType.getAnnotation(McpServerEndpoint.class);
+
+		if (endpoint == null)
+			return;
+
+		if (endpoint.path().isBlank()) {
+			error(endpointType, "Soklet: @%s path must be non-empty", McpServerEndpoint.class.getSimpleName());
+			valid = false;
+		} else {
+			ValidationResult validationResult = validatePathTemplate(endpointType, normalizePath(endpoint.path()));
+			valid = valid && validationResult.ok;
+		}
+
+		if (endpoint.name().isBlank()) {
+			error(endpointType, "Soklet: @%s name must be non-empty", McpServerEndpoint.class.getSimpleName());
+			valid = false;
+		}
+
+		if (endpoint.version().isBlank()) {
+			error(endpointType, "Soklet: @%s version must be non-empty", McpServerEndpoint.class.getSimpleName());
+			valid = false;
+		}
+
+		String websiteUrl = endpoint.websiteUrl();
+		if (websiteUrl != null && !websiteUrl.isBlank()
+				&& !(websiteUrl.startsWith("https://") || websiteUrl.startsWith("http://"))) {
+			error(endpointType, "Soklet: @%s websiteUrl must start with http:// or https://", McpServerEndpoint.class.getSimpleName());
+			valid = false;
+		}
+
+		Set<String> toolNames = new LinkedHashSet<>();
+		Set<String> promptNames = new LinkedHashSet<>();
+		Set<String> resourceUris = new LinkedHashSet<>();
+		Set<String> resourceNames = new LinkedHashSet<>();
+		int resourceListMethodCount = 0;
+
+		for (Element enclosedElement : endpointType.getEnclosedElements()) {
+			if (enclosedElement.getKind() != ElementKind.METHOD)
+				continue;
+
+			ExecutableElement method = (ExecutableElement) enclosedElement;
+
+			if (method.getAnnotation(McpTool.class) != null) {
+				if (!validateMcpAnnotatedMethod(method, McpTool.class.getSimpleName()))
+					valid = false;
+
+				McpTool tool = method.getAnnotation(McpTool.class);
+
+				if (tool.name().isBlank()) {
+					error(method, "Soklet: @%s name must be non-empty", McpTool.class.getSimpleName());
+					valid = false;
+				} else if (!toolNames.add(tool.name())) {
+					error(method, "Soklet: Duplicate MCP tool name '%s'", tool.name());
+					valid = false;
+				}
+
+				if (tool.description().isBlank()) {
+					error(method, "Soklet: @%s description must be non-empty", McpTool.class.getSimpleName());
+					valid = false;
+				}
+			}
+
+			if (method.getAnnotation(McpPrompt.class) != null) {
+				if (!validateMcpAnnotatedMethod(method, McpPrompt.class.getSimpleName()))
+					valid = false;
+
+				McpPrompt prompt = method.getAnnotation(McpPrompt.class);
+
+				if (prompt.name().isBlank()) {
+					error(method, "Soklet: @%s name must be non-empty", McpPrompt.class.getSimpleName());
+					valid = false;
+				} else if (!promptNames.add(prompt.name())) {
+					error(method, "Soklet: Duplicate MCP prompt name '%s'", prompt.name());
+					valid = false;
+				}
+
+				if (prompt.description().isBlank()) {
+					error(method, "Soklet: @%s description must be non-empty", McpPrompt.class.getSimpleName());
+					valid = false;
+				}
+			}
+
+			if (method.getAnnotation(McpResource.class) != null) {
+				if (!validateMcpAnnotatedMethod(method, McpResource.class.getSimpleName()))
+					valid = false;
+
+				McpResource resource = method.getAnnotation(McpResource.class);
+
+				if (resource.uri().isBlank()) {
+					error(method, "Soklet: @%s uri must be non-empty", McpResource.class.getSimpleName());
+					valid = false;
+				} else {
+					ValidationResult validationResult = validatePathTemplate(method, resource.uri());
+					valid = valid && validationResult.ok;
+
+					if (!resourceUris.add(resource.uri())) {
+						error(method, "Soklet: Duplicate MCP resource URI '%s'", resource.uri());
+						valid = false;
+					}
+				}
+
+				if (resource.name().isBlank()) {
+					error(method, "Soklet: @%s name must be non-empty", McpResource.class.getSimpleName());
+					valid = false;
+				} else if (!resourceNames.add(resource.name())) {
+					error(method, "Soklet: Duplicate MCP resource name '%s'", resource.name());
+					valid = false;
+				}
+
+				if (resource.mimeType().isBlank()) {
+					error(method, "Soklet: @%s mimeType must be non-empty", McpResource.class.getSimpleName());
+					valid = false;
+				}
+			}
+
+			if (method.getAnnotation(McpListResources.class) != null) {
+				if (!validateMcpAnnotatedMethod(method, McpListResources.class.getSimpleName()))
+					valid = false;
+
+				resourceListMethodCount++;
+			}
+		}
+
+		if (resourceListMethodCount > 1) {
+			error(endpointType, "Soklet: At most one @%s method may be declared on an MCP endpoint class.",
+					McpListResources.class.getSimpleName());
+			valid = false;
+		}
+
+		if (valid)
+			collectedMcpEndpoints.add(new McpEndpointDeclaration(elements.getBinaryName(endpointType).toString()));
+	}
+
+	private void validateMcpAnnotatedMethodsBelongToEndpoint(RoundEnvironment roundEnv,
+																										 Class<? extends Annotation> annotationType) {
+		TypeElement annotationElement = elements.getTypeElement(annotationType.getCanonicalName());
+
+		if (annotationElement == null)
+			return;
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(annotationElement)) {
+			if (element.getKind() != ElementKind.METHOD) {
+				error(element, "Soklet: @%s can only be applied to methods.", annotationType.getSimpleName());
+				continue;
+			}
+
+			Element enclosingElement = element.getEnclosingElement();
+			if (!(enclosingElement instanceof TypeElement enclosingType)
+					|| enclosingType.getAnnotation(McpServerEndpoint.class) == null) {
+				error(element, "Soklet: Methods annotated with @%s must be declared on a class annotated with @%s.",
+						annotationType.getSimpleName(), McpServerEndpoint.class.getSimpleName());
+			}
+		}
+	}
+
+	private boolean validateMcpAnnotatedMethod(ExecutableElement method, String annotationSimpleName) {
+		boolean valid = true;
+
+		if (!method.getModifiers().contains(Modifier.PUBLIC)) {
+			error(method, "Soklet: Methods annotated with @%s must be public.", annotationSimpleName);
+			valid = false;
+		}
+
+		if (method.getModifiers().contains(Modifier.STATIC)) {
+			error(method, "Soklet: Methods annotated with @%s must not be static.", annotationSimpleName);
+			valid = false;
+		}
+
+		return valid;
+	}
+
 	// --- Existing utilities ----------------------------------------------------
 
 	private static String normalizePath(String p) {
@@ -671,12 +891,55 @@ public final class SokletProcessor extends AbstractProcessor {
 		debug("SokletProcessor: wroteIndexSize=%d", toWrite.size());
 	}
 
+	private void mergeAndWriteMcpIndex(List<McpEndpointDeclaration> newlyCollected,
+																		 Set<String> touchedTopLevelBinaries) {
+		Path classOutputRoot = findClassOutputRoot();
+		Path classOutputIndexPath = (classOutputRoot == null ? null : classOutputRoot.resolve(MCP_ENDPOINT_LOOKUP_TABLE_PATH));
+		Path sideCarIndexPath = (cacheMode == CacheMode.NONE ? null : sideCarMcpIndexPath(classOutputRoot));
+		Path persistentIndexPath = (cacheMode == CacheMode.PERSISTENT ? persistentMcpIndexPath(classOutputRoot) : null);
+
+		Map<String, McpEndpointDeclaration> merged = new LinkedHashMap<>();
+
+		if (persistentIndexPath != null) readMcpIndexFromPath(persistentIndexPath, merged);
+		if (sideCarIndexPath != null) readMcpIndexFromPath(sideCarIndexPath, merged);
+		if (classOutputIndexPath != null) readMcpIndexFromPath(classOutputIndexPath, merged);
+		readMcpIndexFromLocation(StandardLocation.CLASS_OUTPUT, merged);
+
+		removeTouchedMcpEntries(merged, touchedTopLevelBinaries);
+
+		for (McpEndpointDeclaration endpointDeclaration : dedupeAndOrderMcpEndpoints(newlyCollected))
+			merged.put(generateMcpEndpointKey(endpointDeclaration), endpointDeclaration);
+
+		if (pruneDeletedEnabled && classOutputRoot != null)
+			merged.values().removeIf(endpointDeclaration -> !classFileExistsInOutputRoot(classOutputRoot, endpointDeclaration.className()));
+
+		List<McpEndpointDeclaration> toWrite = dedupeAndOrderMcpEndpoints(new ArrayList<>(merged.values()));
+
+		writeMcpIndexResource(toWrite, classOutputIndexPath, touchedTopLevelBinaries, newlyCollected);
+
+		if (sideCarIndexPath != null) writeMcpIndexFileAtomically(sideCarIndexPath, toWrite);
+		if (persistentIndexPath != null) writeMcpIndexFileAtomically(persistentIndexPath, toWrite);
+	}
+
 	private void removeTouchedEntries(Map<String, ResourceMethodDeclaration> merged,
 																		Set<String> touchedTopLevelBinaries) {
 		if (touchedTopLevelBinaries == null || touchedTopLevelBinaries.isEmpty()) return;
 
 		merged.values().removeIf(r -> {
 			String ownerBin = r.className();
+			for (String top : touchedTopLevelBinaries) {
+				if (ownerBin.equals(top) || ownerBin.startsWith(top + "$")) return true;
+			}
+			return false;
+		});
+	}
+
+	private void removeTouchedMcpEntries(Map<String, McpEndpointDeclaration> merged,
+																			 Set<String> touchedTopLevelBinaries) {
+		if (touchedTopLevelBinaries == null || touchedTopLevelBinaries.isEmpty()) return;
+
+		merged.values().removeIf(endpointDeclaration -> {
+			String ownerBin = endpointDeclaration.className();
 			for (String top : touchedTopLevelBinaries) {
 				if (ownerBin.equals(top) || ownerBin.startsWith(top + "$")) return true;
 			}
@@ -696,10 +959,32 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
+	private boolean readMcpIndexFromLocation(StandardLocation location, Map<String, McpEndpointDeclaration> out) {
+		try {
+			FileObject fo = filer.getResource(location, "", MCP_ENDPOINT_LOOKUP_TABLE_PATH);
+			try (BufferedReader reader = new BufferedReader(new InputStreamReader(fo.openInputStream(), StandardCharsets.UTF_8))) {
+				readMcpIndexFromReader(reader, out);
+			}
+			return true;
+		} catch (IOException ignored) {
+			return false;
+		}
+	}
+
 	private boolean readIndexFromPath(Path path, Map<String, ResourceMethodDeclaration> out) {
 		if (path == null || !Files.isRegularFile(path)) return false;
 		try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
 			readIndexFromReader(reader, out);
+			return true;
+		} catch (IOException ignored) {
+			return false;
+		}
+	}
+
+	private boolean readMcpIndexFromPath(Path path, Map<String, McpEndpointDeclaration> out) {
+		if (path == null || !Files.isRegularFile(path)) return false;
+		try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+			readMcpIndexFromReader(reader, out);
 			return true;
 		} catch (IOException ignored) {
 			return false;
@@ -713,6 +998,16 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (line.isEmpty()) continue;
 			ResourceMethodDeclaration r = parseIndexLine(line);
 			if (r != null) out.put(generateKey(r), r);
+		}
+	}
+
+	private void readMcpIndexFromReader(BufferedReader reader, Map<String, McpEndpointDeclaration> out) throws IOException {
+		String line;
+		while ((line = reader.readLine()) != null) {
+			line = line.trim();
+			if (line.isEmpty()) continue;
+			McpEndpointDeclaration endpointDeclaration = parseMcpIndexLine(line);
+			if (endpointDeclaration != null) out.put(generateMcpEndpointKey(endpointDeclaration), endpointDeclaration);
 		}
 	}
 
@@ -752,6 +1047,23 @@ public final class SokletProcessor extends AbstractProcessor {
 
 		String key = hashPath(classOutputRoot.toAbsolutePath().normalize().toString());
 		return cacheRoot.resolve(PERSISTENT_CACHE_INDEX_DIR).resolve(key).resolve(SIDE_CAR_INDEX_FILENAME);
+	}
+
+	private Path sideCarMcpIndexPath(Path classOutputRoot) {
+		if (classOutputRoot == null) return null;
+		Path parent = classOutputRoot.getParent();
+		if (parent == null) return null;
+		String outputRootName = classOutputRoot.getFileName().toString();
+		return parent.resolve(SIDE_CAR_DIR_NAME).resolve(outputRootName).resolve(MCP_SIDE_CAR_INDEX_FILENAME);
+	}
+
+	private Path persistentMcpIndexPath(Path classOutputRoot) {
+		if (classOutputRoot == null) return null;
+		Path cacheRoot = persistentCacheRoot();
+		if (cacheRoot == null) return null;
+
+		String key = hashPath(classOutputRoot.toAbsolutePath().normalize().toString());
+		return cacheRoot.resolve(MCP_PERSISTENT_CACHE_INDEX_DIR).resolve(key).resolve(MCP_SIDE_CAR_INDEX_FILENAME);
 	}
 
 	/**
@@ -816,6 +1128,15 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
+	private McpEndpointDeclaration parseMcpIndexLine(String line) {
+		try {
+			String className = new String(Base64.getDecoder().decode(line), StandardCharsets.UTF_8);
+			return new McpEndpointDeclaration(className);
+		} catch (Throwable t) {
+			return null;
+		}
+	}
+
 	/**
 	 * Writes the merged index to CLASS_OUTPUT.
 	 * Uses originating elements (best effort) so incremental build tools can track dependencies.
@@ -867,6 +1188,44 @@ public final class SokletProcessor extends AbstractProcessor {
 		throw new UncheckedIOException("Failed to write " + RESOURCE_METHOD_LOOKUP_TABLE_PATH, new IOException("No writable CLASS_OUTPUT path available"));
 	}
 
+	private void writeMcpIndexResource(List<McpEndpointDeclaration> endpoints,
+																		 Path classOutputIndexPath,
+																		 Set<String> touchedTopLevelBinaries,
+																		 List<McpEndpointDeclaration> newlyCollected) {
+		Element[] origins = computeMcpOriginatingElements(touchedTopLevelBinaries, newlyCollected);
+
+		try {
+			FileObject fo = filer.createResource(StandardLocation.CLASS_OUTPUT, "", MCP_ENDPOINT_LOOKUP_TABLE_PATH, origins);
+			try (Writer w = fo.openWriter()) {
+				writeMcpIndexToWriter(w, endpoints);
+			}
+			return;
+		} catch (FilerException exists) {
+			try {
+				FileObject fo = filer.getResource(StandardLocation.CLASS_OUTPUT, "", MCP_ENDPOINT_LOOKUP_TABLE_PATH);
+				try (Writer w = fo.openWriter()) {
+					writeMcpIndexToWriter(w, endpoints);
+				}
+				return;
+			} catch (IOException ignored) {
+				// Fall through to direct path write if available
+			}
+		} catch (IOException e) {
+			debug("SokletProcessor: filer.createResource/openWriter for MCP index failed (%s); attempting direct write.", e);
+		}
+
+		if (classOutputIndexPath != null) {
+			try {
+				writeMcpIndexFileAtomicallyOrThrow(classOutputIndexPath, endpoints);
+				return;
+			} catch (IOException e) {
+				throw new UncheckedIOException("Failed to write " + MCP_ENDPOINT_LOOKUP_TABLE_PATH, e);
+			}
+		}
+
+		throw new UncheckedIOException("Failed to write " + MCP_ENDPOINT_LOOKUP_TABLE_PATH, new IOException("No writable CLASS_OUTPUT path available"));
+	}
+
 	private Element[] computeOriginatingElements(Set<String> touchedTopLevelBinaries,
 																							 List<ResourceMethodDeclaration> newlyCollected) {
 		Set<Element> origins = new LinkedHashSet<>();
@@ -883,6 +1242,31 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (newlyCollected != null) {
 			for (ResourceMethodDeclaration r : newlyCollected) {
 				String bin = r.className();
+				int dollar = bin.indexOf('$');
+				String top = (dollar >= 0) ? bin.substring(0, dollar) : bin;
+
+				TypeElement te = elements.getTypeElement(top);
+				if (te != null) origins.add(te);
+			}
+		}
+
+		return origins.toArray(new Element[0]);
+	}
+
+	private Element[] computeMcpOriginatingElements(Set<String> touchedTopLevelBinaries,
+																									List<McpEndpointDeclaration> newlyCollected) {
+		Set<Element> origins = new LinkedHashSet<>();
+
+		if (touchedTopLevelBinaries != null) {
+			for (String top : touchedTopLevelBinaries) {
+				TypeElement te = elements.getTypeElement(top);
+				if (te != null) origins.add(te);
+			}
+		}
+
+		if (newlyCollected != null) {
+			for (McpEndpointDeclaration endpointDeclaration : newlyCollected) {
+				String bin = endpointDeclaration.className();
 				int dollar = bin.indexOf('$');
 				String top = (dollar >= 0) ? bin.substring(0, dollar) : bin;
 
@@ -911,6 +1295,14 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
+	private void writeMcpIndexToWriter(Writer w, List<McpEndpointDeclaration> endpoints) throws IOException {
+		Base64.Encoder b64 = Base64.getEncoder();
+		for (McpEndpointDeclaration endpointDeclaration : endpoints) {
+			w.write(b64encode(b64, endpointDeclaration.className()));
+			w.write('\n');
+		}
+	}
+
 	/**
 	 * Best-effort atomic write. Failures are logged (if debug enabled) and ignored.
 	 */
@@ -923,6 +1315,15 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
+	private void writeMcpIndexFileAtomically(Path target, List<McpEndpointDeclaration> endpoints) {
+		if (target == null) return;
+		try {
+			writeMcpIndexFileAtomicallyOrThrow(target, endpoints);
+		} catch (IOException e) {
+			debug("SokletProcessor: failed to write MCP cache index %s (%s)", target, e);
+		}
+	}
+
 	private void writeIndexFileAtomicallyOrThrow(Path target, List<ResourceMethodDeclaration> routes) throws IOException {
 		Path parent = target.getParent();
 		if (parent != null) Files.createDirectories(parent);
@@ -931,6 +1332,22 @@ public final class SokletProcessor extends AbstractProcessor {
 		Path tmp = Files.createTempFile(parent, target.getFileName().toString(), ".tmp");
 		try (Writer w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
 			writeIndexToWriter(w, routes);
+		}
+
+		try {
+			Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		} catch (AtomicMoveNotSupportedException e) {
+			Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+		}
+	}
+
+	private void writeMcpIndexFileAtomicallyOrThrow(Path target, List<McpEndpointDeclaration> endpoints) throws IOException {
+		Path parent = target.getParent();
+		if (parent != null) Files.createDirectories(parent);
+
+		Path tmp = Files.createTempFile(parent, target.getFileName().toString(), ".tmp");
+		try (Writer w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
+			writeMcpIndexToWriter(w, endpoints);
 		}
 
 		try {
@@ -1020,6 +1437,10 @@ public final class SokletProcessor extends AbstractProcessor {
 				r.serverSentEventSource();
 	}
 
+	private static String generateMcpEndpointKey(McpEndpointDeclaration endpointDeclaration) {
+		return endpointDeclaration.className();
+	}
+
 	private static List<ResourceMethodDeclaration> dedupeAndOrder(List<ResourceMethodDeclaration> in) {
 		Map<String, ResourceMethodDeclaration> byKey = new LinkedHashMap<>();
 		for (ResourceMethodDeclaration r : in) byKey.putIfAbsent(generateKey(r), r);
@@ -1032,4 +1453,16 @@ public final class SokletProcessor extends AbstractProcessor {
 				.thenComparing(ResourceMethodDeclaration::methodName));
 		return out;
 	}
+
+	private static List<McpEndpointDeclaration> dedupeAndOrderMcpEndpoints(List<McpEndpointDeclaration> in) {
+		Map<String, McpEndpointDeclaration> byKey = new LinkedHashMap<>();
+		for (McpEndpointDeclaration endpointDeclaration : in)
+			byKey.putIfAbsent(generateMcpEndpointKey(endpointDeclaration), endpointDeclaration);
+
+		List<McpEndpointDeclaration> out = new ArrayList<>(byKey.values());
+		out.sort(Comparator.comparing(McpEndpointDeclaration::className));
+		return out;
+	}
+
+	private record McpEndpointDeclaration(String className) {}
 }

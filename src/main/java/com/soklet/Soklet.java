@@ -58,6 +58,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.emptyByteArray;
+import static com.soklet.Utilities.extractContentTypeFromHeaders;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -174,7 +175,8 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		this.awaitShutdownLatchReference = new AtomicReference<>(new CountDownLatch(1));
 
 		// Fail fast in the event that Soklet appears misconfigured
-		if (sokletConfig.getResourceMethodResolver().getResourceMethods().size() == 0)
+		if (sokletConfig.getResourceMethodResolver().getResourceMethods().size() == 0
+				&& sokletConfig.getMcpServer().isEmpty())
 			throw new IllegalStateException(format("No Soklet Resource Methods were found. Please ensure your %s is configured correctly. "
 					+ "See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.", ResourceMethodResolver.class.getSimpleName()));
 
@@ -217,6 +219,11 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 				// Delegate to Soklet's internal request handling method
 				soklet.handleRequest(request, ServerType.SERVER_SENT_EVENT, marshaledResponseConsumer);
 			});
+
+		McpServer mcpServer = sokletConfig.getMcpServer().orElse(null);
+
+		if (mcpServer != null)
+			mcpServer.initialize(sokletConfig, soklet::handleMcpRequest);
 	}
 
 	/**
@@ -263,6 +270,19 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 					} catch (Throwable t) {
 						lifecycleObserver.didFailToStartServerSentEventServer(serverSentEventServer, t);
 						throw t; // Rethrow to trigger outer catch block
+					}
+				}
+
+				McpServer mcpServer = sokletConfig.getMcpServer().orElse(null);
+
+				if (mcpServer != null) {
+					lifecycleObserver.willStartMcpServer(mcpServer);
+					try {
+						mcpServer.start();
+						lifecycleObserver.didStartMcpServer(mcpServer);
+					} catch (Throwable t) {
+						lifecycleObserver.didFailToStartMcpServer(mcpServer, t);
+						throw t;
 					}
 				}
 
@@ -327,6 +347,21 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 							firstEncounteredException = t;
 
 						lifecycleObserver.didFailToStopServerSentEventServer(serverSentEventServer, t);
+					}
+				}
+
+				McpServer mcpServer = sokletConfig.getMcpServer().orElse(null);
+
+				if (mcpServer != null && mcpServer.isStarted()) {
+					lifecycleObserver.willStopMcpServer(mcpServer);
+					try {
+						mcpServer.stop();
+						lifecycleObserver.didStopMcpServer(mcpServer);
+					} catch (Throwable t) {
+						if (firstEncounteredException == null)
+							firstEncounteredException = t;
+
+						lifecycleObserver.didFailToStopMcpServer(mcpServer, t);
 					}
 				}
 
@@ -1183,6 +1218,14 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		return applyCommonPropertiesToMarshaledResponse(request, marshaledResponse, false);
 	}
 
+	protected void handleMcpRequest(@NonNull Request request,
+																	@NonNull Consumer<RequestResult> requestResultConsumer) {
+		requireNonNull(request);
+		requireNonNull(requestResultConsumer);
+
+		requestResultConsumer.accept(new DefaultMcpRuntime(this).handleRequest(request));
+	}
+
 	@NonNull
 	protected MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
 																																			 @NonNull MarshaledResponse marshaledResponse,
@@ -1334,7 +1377,11 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 				return true;
 
 			ServerSentEventServer serverSentEventServer = getSokletConfig().getServerSentEventServer().orElse(null);
-			return serverSentEventServer != null && serverSentEventServer.isStarted();
+			if (serverSentEventServer != null && serverSentEventServer.isStarted())
+				return true;
+
+			McpServer mcpServer = getSokletConfig().getMcpServer().orElse(null);
+			return mcpServer != null && mcpServer.isStarted();
 		} finally {
 			getLock().unlock();
 		}
@@ -1361,16 +1408,23 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		ServerSentEventServerProxy serverSentEventServerProxy = sokletConfig.getServerSentEventServer()
 				.map(s -> (ServerSentEventServerProxy) s)
 				.orElse(null);
+		McpServerProxy mcpServerProxy = sokletConfig.getMcpServer()
+				.map(mcpServer -> (McpServerProxy) mcpServer)
+				.orElse(null);
 
 		// Create mock implementations
 		MockServer mockServer = new MockServer();
 		MockServerSentEventServer mockServerSentEventServer = new MockServerSentEventServer();
+		MockMcpServer mockMcpServer = mcpServerProxy == null ? null : new MockMcpServer(mcpServerProxy.getRealImplementation());
 
 		// Switch proxies to simulator mode
 		serverProxy.enableSimulatorMode(mockServer);
 
 		if (serverSentEventServerProxy != null)
 			serverSentEventServerProxy.enableSimulatorMode(mockServerSentEventServer);
+
+		if (mcpServerProxy != null)
+			mcpServerProxy.enableSimulatorMode(mockMcpServer);
 
 		try {
 			// Initialize mocks with request handlers that delegate to Soklet's processing
@@ -1385,8 +1439,11 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 					soklet.handleRequest(request, ServerType.SERVER_SENT_EVENT, marshaledResponseConsumer);
 				});
 
+			if (mockMcpServer != null)
+				mockMcpServer.initialize(sokletConfig, soklet::handleMcpRequest);
+
 			// Create and provide simulator
-			Simulator simulator = new DefaultSimulator(mockServer, mockServerSentEventServer);
+			Simulator simulator = new DefaultSimulator(mockServer, mockServerSentEventServer, mockMcpServer);
 			simulatorConsumer.accept(simulator);
 		} finally {
 			// Always restore to real implementations
@@ -1394,6 +1451,9 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 
 			if (serverSentEventServerProxy != null)
 				serverSentEventServerProxy.disableSimulatorMode();
+
+			if (mcpServerProxy != null)
+				mcpServerProxy.disableSimulatorMode();
 		}
 	}
 
@@ -1418,13 +1478,17 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		private MockServer server;
 		@Nullable
 		private MockServerSentEventServer serverSentEventServer;
+		@Nullable
+		private MockMcpServer mcpServer;
 
 		public DefaultSimulator(@NonNull MockServer server,
-														@Nullable MockServerSentEventServer serverSentEventServer) {
+														@Nullable MockServerSentEventServer serverSentEventServer,
+														@Nullable MockMcpServer mcpServer) {
 			requireNonNull(server);
 
 			this.server = server;
 			this.serverSentEventServer = serverSentEventServer;
+			this.mcpServer = mcpServer;
 		}
 
 		@NonNull
@@ -1492,6 +1556,38 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 
 		@NonNull
 		@Override
+		public McpRequestResult performMcpRequest(@NonNull Request request) {
+			requireNonNull(request);
+
+			MockMcpServer mcpServer = getMcpServer().orElse(null);
+
+			if (mcpServer == null)
+				throw new IllegalStateException(format("You must specify an MCP server in your %s to simulate MCP requests",
+						SokletConfig.class.getSimpleName()));
+
+			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
+			McpServer.RequestHandler requestHandler = mcpServer.getRequestHandler().orElse(null);
+
+			if (requestHandler == null)
+				throw new IllegalStateException("You must register a request handler prior to simulating MCP requests");
+
+			requestHandler.handleRequest(request, requestResultHolder::set);
+
+			RequestResult requestResult = requestResultHolder.get();
+
+			if (requestResult == null)
+				throw new IllegalStateException("No MCP request result was produced by the simulator");
+
+			if (extractContentTypeFromHeaders(requestResult.getMarshaledResponse().getHeaders())
+					.filter(contentType -> contentType.equalsIgnoreCase("text/event-stream"))
+					.isPresent())
+				return new McpRequestResult.StreamOpened(requestResult, mcpServer.getMcpStreamErrorHandler());
+
+			return new McpRequestResult.ResponseCompleted(requestResult);
+		}
+
+		@NonNull
+		@Override
 		public Simulator onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
 			MockServerSentEventServer serverSentEventServer = getServerSentEventServer().orElse(null);
 
@@ -1513,6 +1609,17 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		}
 
 		@NonNull
+		@Override
+		public Simulator onMcpStreamError(@Nullable Consumer<Throwable> onMcpStreamError) {
+			MockMcpServer mcpServer = getMcpServer().orElse(null);
+
+			if (mcpServer != null)
+				mcpServer.onMcpStreamError(onMcpStreamError);
+
+			return this;
+		}
+
+		@NonNull
 		MockServer getServer() {
 			return this.server;
 		}
@@ -1520,6 +1627,11 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		@NonNull
 		Optional<MockServerSentEventServer> getServerSentEventServer() {
 			return Optional.ofNullable(this.serverSentEventServer);
+		}
+
+		@NonNull
+		Optional<MockMcpServer> getMcpServer() {
+			return Optional.ofNullable(this.mcpServer);
 		}
 	}
 
@@ -1567,6 +1679,119 @@ public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		@NonNull
 		protected Optional<RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
+		}
+	}
+
+	/**
+	 * Mock MCP server that doesn't touch the network at all, useful for testing.
+	 */
+	@ThreadSafe
+	static class MockMcpServer implements McpServer {
+		@NonNull
+		private final McpServer realImplementation;
+		@Nullable
+		private SokletConfig sokletConfig;
+		private McpServer.@Nullable RequestHandler requestHandler;
+		@NonNull
+		private final AtomicReference<Consumer<Throwable>> mcpStreamErrorHandler;
+
+		public MockMcpServer(@NonNull McpServer realImplementation) {
+			requireNonNull(realImplementation);
+
+			this.realImplementation = realImplementation;
+			this.mcpStreamErrorHandler = new AtomicReference<>();
+		}
+
+		@Override
+		public void start() {
+			// No-op
+		}
+
+		@Override
+		public void stop() {
+			// No-op
+		}
+
+		@NonNull
+		@Override
+		public Boolean isStarted() {
+			return true;
+		}
+
+		@Override
+		public void initialize(@NonNull SokletConfig sokletConfig,
+													 @NonNull RequestHandler requestHandler) {
+			requireNonNull(sokletConfig);
+			requireNonNull(requestHandler);
+
+			this.sokletConfig = sokletConfig;
+			this.requestHandler = requestHandler;
+		}
+
+		@NonNull
+		@Override
+		public McpHandlerResolver getHandlerResolver() {
+			return getRealImplementation().getHandlerResolver();
+		}
+
+		@NonNull
+		@Override
+		public McpRequestAdmissionPolicy getRequestAdmissionPolicy() {
+			return getRealImplementation().getRequestAdmissionPolicy();
+		}
+
+		@NonNull
+		@Override
+		public McpRequestInterceptor getRequestInterceptor() {
+			return getRealImplementation().getRequestInterceptor();
+		}
+
+		@NonNull
+		@Override
+		public McpResponseMarshaler getResponseMarshaler() {
+			return getRealImplementation().getResponseMarshaler();
+		}
+
+		@NonNull
+		@Override
+		public McpOriginPolicy getOriginPolicy() {
+			return getRealImplementation().getOriginPolicy();
+		}
+
+		@NonNull
+		@Override
+		public McpSessionStore getSessionStore() {
+			return getRealImplementation().getSessionStore();
+		}
+
+		@NonNull
+		@Override
+		public IdGenerator<String> getIdGenerator() {
+			return getRealImplementation().getIdGenerator();
+		}
+
+		@NonNull
+		protected McpServer getRealImplementation() {
+			return this.realImplementation;
+		}
+
+		@NonNull
+		protected Optional<SokletConfig> getSokletConfig() {
+			return Optional.ofNullable(this.sokletConfig);
+		}
+
+		@NonNull
+		protected Optional<RequestHandler> getRequestHandler() {
+			return Optional.ofNullable(this.requestHandler);
+		}
+
+		protected void onMcpStreamError(@Nullable Consumer<Throwable> onMcpStreamError) {
+			this.mcpStreamErrorHandler.set(onMcpStreamError);
+		}
+
+		@NonNull
+		protected AtomicReference<Consumer<Throwable>> getMcpStreamErrorHandler() {
+			return this.mcpStreamErrorHandler;
 		}
 	}
 

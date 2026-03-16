@@ -306,6 +306,50 @@ public interface LifecycleObserver {
 	}
 
 	/**
+	 * Called before the MCP server starts.
+	 */
+	default void willStartMcpServer(@NonNull McpServer mcpServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the MCP server starts.
+	 */
+	default void didStartMcpServer(@NonNull McpServer mcpServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an {@link McpServer} instance was asked to start, but failed due to an exception.
+	 */
+	default void didFailToStartMcpServer(@NonNull McpServer mcpServer,
+																			 @NonNull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before the MCP server stops.
+	 */
+	default void willStopMcpServer(@NonNull McpServer mcpServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the MCP server stops.
+	 */
+	default void didStopMcpServer(@NonNull McpServer mcpServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an {@link McpServer} instance was asked to stop, but failed due to an exception.
+	 */
+	default void didFailToStopMcpServer(@NonNull McpServer mcpServer,
+																			@NonNull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
 	 * Called before the SSE server starts.
 	 */
 	default void willStartServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {

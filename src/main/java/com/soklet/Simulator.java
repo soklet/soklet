@@ -21,6 +21,8 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.function.Consumer;
 
+import static java.lang.String.format;
+
 /**
  * Simulates server behavior of accepting a request and returning a response without touching the network, useful for writing integration tests.
  * <p>
@@ -126,6 +128,20 @@ public interface Simulator {
 	ServerSentEventRequestResult performServerSentEventRequest(@NonNull Request request);
 
 	/**
+	 * Given a request that would normally be handled by your MCP server, process it and return the corresponding MCP-oriented simulator result.
+	 * <p>
+	 * The default implementation fails fast until MCP simulator support is wired in.
+	 *
+	 * @param request the MCP HTTP request to process
+	 * @return the MCP simulator result
+	 */
+	@NonNull
+	default McpRequestResult performMcpRequest(@NonNull Request request) {
+		throw new IllegalStateException(format("You must specify an MCP server in your %s to simulate MCP requests",
+				SokletConfig.class.getSimpleName()));
+	}
+
+	/**
 	 * Registers a handler for exceptions thrown by simulated Server-Sent Event consumers.
 	 * <p>
 	 * This only applies to simulator-mode SSE broadcasts.
@@ -148,6 +164,17 @@ public interface Simulator {
 	 */
 	@NonNull
 	default Simulator onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
+		return this;
+	}
+
+	/**
+	 * Registers a handler for exceptions thrown by simulated MCP stream consumers.
+	 *
+	 * @param onMcpStreamError handler for MCP stream consumer errors, or {@code null} to clear
+	 * @return this simulator
+	 */
+	@NonNull
+	default Simulator onMcpStreamError(@Nullable Consumer<Throwable> onMcpStreamError) {
 		return this;
 	}
 }

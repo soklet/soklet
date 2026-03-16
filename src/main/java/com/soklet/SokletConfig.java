@@ -59,6 +59,8 @@ public final class SokletConfig {
 	private final Server server;
 	@Nullable
 	private final ServerSentEventServer serverSentEventServer;
+	@Nullable
+	private final McpServer mcpServer;
 
 	/**
 	 * Vends a configuration builder, primed with the given {@link Server}.
@@ -86,9 +88,11 @@ public final class SokletConfig {
 		// Wrap servers in proxies transparently
 		ServerProxy serverProxy = new ServerProxy(builder.server);
 		ServerSentEventServerProxy serverSentEventServerProxy = builder.serverSentEventServer == null ? null : new ServerSentEventServerProxy(builder.serverSentEventServer);
+		McpServerProxy mcpServerProxy = builder.mcpServer == null ? null : new McpServerProxy(builder.mcpServer);
 
 		this.server = serverProxy;
 		this.serverSentEventServer = serverSentEventServerProxy;
+		this.mcpServer = mcpServerProxy;
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.defaultInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.fromDefaults();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.fromValueConverterRegistry(getValueConverterRegistry());
@@ -232,6 +236,16 @@ public final class SokletConfig {
 	}
 
 	/**
+	 * The MCP server managed by Soklet, if configured.
+	 *
+	 * @return the MCP server, if configured
+	 */
+	@NonNull
+	public Optional<McpServer> getMcpServer() {
+		return Optional.ofNullable(this.mcpServer);
+	}
+
+	/**
 	 * Builder used to construct instances of {@link SokletConfig}.
 	 * <p>
 	 * Instances are created by invoking {@link SokletConfig#withServer(Server)}.
@@ -246,6 +260,8 @@ public final class SokletConfig {
 		private Server server;
 		@Nullable
 		private ServerSentEventServer serverSentEventServer;
+		@Nullable
+		private McpServer mcpServer;
 		@Nullable
 		private InstanceProvider instanceProvider;
 		@Nullable
@@ -282,6 +298,12 @@ public final class SokletConfig {
 		@NonNull
 		public Builder serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
 			this.serverSentEventServer = serverSentEventServer;
+			return this;
+		}
+
+		@NonNull
+		public Builder mcpServer(@Nullable McpServer mcpServer) {
+			this.mcpServer = mcpServer;
 			return this;
 		}
 
@@ -391,6 +413,19 @@ public final class SokletConfig {
 			return serverSentEventServer;
 		}
 
+		/**
+		 * Unwraps an McpServer proxy to get the underlying real implementation.
+		 */
+		@NonNull
+		private static McpServer unwrapMcpServer(@NonNull McpServer mcpServer) {
+			requireNonNull(mcpServer);
+
+			if (mcpServer instanceof McpServerProxy)
+				return ((McpServerProxy) mcpServer).getRealImplementation();
+
+			return mcpServer;
+		}
+
 		Copier(@NonNull SokletConfig sokletConfig) {
 			requireNonNull(sokletConfig);
 
@@ -399,9 +434,13 @@ public final class SokletConfig {
 			ServerSentEventServer realServerSentEventServer = sokletConfig.getServerSentEventServer()
 					.map(Copier::unwrapServerSentEventServer)
 					.orElse(null);
+			McpServer realMcpServer = sokletConfig.getMcpServer()
+					.map(Copier::unwrapMcpServer)
+					.orElse(null);
 
 			this.builder = new Builder(realServer)
 					.serverSentEventServer(realServerSentEventServer)
+					.mcpServer(realMcpServer)
 					.instanceProvider(sokletConfig.getInstanceProvider())
 					.valueConverterRegistry(sokletConfig.valueConverterRegistry)
 					.requestBodyMarshaler(sokletConfig.requestBodyMarshaler)
@@ -424,6 +463,12 @@ public final class SokletConfig {
 		@NonNull
 		public Copier serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
 			this.builder.serverSentEventServer(serverSentEventServer);
+			return this;
+		}
+
+		@NonNull
+		public Copier mcpServer(@Nullable McpServer mcpServer) {
+			this.builder.mcpServer(mcpServer);
 			return this;
 		}
 
