@@ -76,6 +76,8 @@ final class DefaultMcpRuntime {
 	@NonNull
 	private static final McpObject EMPTY_OBJECT = new McpObject(Map.of());
 	@NonNull
+	private static final Set<HttpMethod> MCP_TRANSPORT_HTTP_METHODS = Set.of(HttpMethod.POST, HttpMethod.GET, HttpMethod.DELETE);
+	@NonNull
 	private final Soklet soklet;
 	@NonNull
 	private final ConcurrentHashMap<@NonNull String, @NonNull CopyOnWriteArrayList<@NonNull McpStreamState>> mcpStreamsBySessionId;
@@ -104,23 +106,52 @@ final class DefaultMcpRuntime {
 			if (resolvedEndpoint == null)
 				return requestResultFromMarshaledResponse(request, getSoklet().getSokletConfig().getResponseMarshaler().forNotFound(request));
 
-			String sessionId = request.getHeader("MCP-Session-Id").orElse(null);
-			String origin = request.getHeader("Origin").orElse(null);
-
-			if (!mcpServer.getOriginPolicy().isAllowed(new McpOriginCheckContext(request, resolvedEndpoint.endpointClass(),
-					request.getHttpMethod(), origin, sessionId)))
-				return plainTextResponse(request, 403, "Forbidden");
-
 			return switch (request.getHttpMethod()) {
-				case POST -> handlePostRequest(request, mcpServer, resolvedEndpoint);
-				case GET -> handleGetRequest(request, mcpServer, resolvedEndpoint);
-				case DELETE -> handleDeleteRequest(request, mcpServer, resolvedEndpoint);
+				case OPTIONS -> handleOptionsRequest(request, mcpServer, resolvedEndpoint);
+				case POST -> applyCorsIfApplicable(request, mcpServer, resolvedEndpoint,
+						handlePostRequest(request, mcpServer, resolvedEndpoint));
+				case GET -> applyCorsIfApplicable(request, mcpServer, resolvedEndpoint,
+						handleGetRequest(request, mcpServer, resolvedEndpoint));
+				case DELETE -> applyCorsIfApplicable(request, mcpServer, resolvedEndpoint,
+						handleDeleteRequest(request, mcpServer, resolvedEndpoint));
 				default -> requestResultFromMarshaledResponse(request,
-						getSoklet().getSokletConfig().getResponseMarshaler().forMethodNotAllowed(request, Set.of(HttpMethod.POST, HttpMethod.GET, HttpMethod.DELETE)));
+						getSoklet().getSokletConfig().getResponseMarshaler().forMethodNotAllowed(request, Set.of(HttpMethod.POST, HttpMethod.GET, HttpMethod.DELETE, HttpMethod.OPTIONS)));
 			};
 		} catch (Throwable throwable) {
 			return RequestResult.fromMarshaledResponse(getSoklet().provideFailsafeMarshaledResponse(request, throwable));
 		}
+	}
+
+	@NonNull
+	private RequestResult handleOptionsRequest(@NonNull Request request,
+																						 @NonNull McpServer mcpServer,
+																						 @NonNull ResolvedEndpoint resolvedEndpoint) {
+		requireNonNull(request);
+		requireNonNull(mcpServer);
+		requireNonNull(resolvedEndpoint);
+
+		CorsPreflight corsPreflight = request.getCorsPreflight().orElse(null);
+
+		if (corsPreflight != null) {
+			CorsPreflightResponse corsPreflightResponse = mcpServer.getCorsAuthorizer().authorizePreflight(
+					mcpCorsContext(request, resolvedEndpoint.endpointClass(), request.getHeader("MCP-Session-Id").orElse(null)),
+					corsPreflight,
+					MCP_TRANSPORT_HTTP_METHODS).orElse(null);
+
+			if (corsPreflightResponse != null)
+				return RequestResult.withMarshaledResponse(getSoklet().getSokletConfig().getResponseMarshaler()
+								.forCorsPreflightAllowed(request, corsPreflight, corsPreflightResponse))
+						.corsPreflightResponse(corsPreflightResponse)
+						.build();
+
+			return RequestResult.withMarshaledResponse(getSoklet().getSokletConfig().getResponseMarshaler()
+							.forCorsPreflightRejected(request, corsPreflight))
+					.build();
+		}
+
+		return requestResultFromMarshaledResponse(request,
+				getSoklet().getSokletConfig().getResponseMarshaler().forOptions(request,
+						Set.of(HttpMethod.POST, HttpMethod.GET, HttpMethod.DELETE, HttpMethod.OPTIONS)));
 	}
 
 	@NonNull
@@ -1008,6 +1039,39 @@ final class DefaultMcpRuntime {
 		terminateStreamsForSession(request, resolvedEndpoint.endpointClass(), sessionId, McpStreamTerminationReason.SESSION_TERMINATED, null);
 		mcpServer.getSessionStore().deleteBySessionId(sessionId);
 		return requestResultFromMarshaledResponse(request, MarshaledResponse.withStatusCode(204).build());
+	}
+
+	@NonNull
+	private RequestResult applyCorsIfApplicable(@NonNull Request request,
+																							@NonNull McpServer mcpServer,
+																							@NonNull ResolvedEndpoint resolvedEndpoint,
+																							@NonNull RequestResult requestResult) {
+		requireNonNull(request);
+		requireNonNull(mcpServer);
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(requestResult);
+
+		Cors cors = request.getCors().orElse(null);
+
+		if (cors == null)
+			return requestResult;
+
+		CorsResponse corsResponse = mcpServer.getCorsAuthorizer().authorize(
+				mcpCorsContext(request, resolvedEndpoint.endpointClass(), request.getHeader("MCP-Session-Id").orElse(null)),
+				cors).orElse(null);
+
+		if (corsResponse == null)
+			return requestResult;
+
+		MarshaledResponse marshaledResponse = getSoklet().getSokletConfig().getResponseMarshaler().forCorsAllowed(
+				request,
+				cors,
+				corsResponse,
+				requestResult.getMarshaledResponse());
+
+		return requestResult.copy()
+				.marshaledResponse(marshaledResponse)
+				.finish();
 	}
 
 	@Nullable
@@ -2186,6 +2250,22 @@ final class DefaultMcpRuntime {
 			throw new IllegalStateException("Unsupported McpHandlerResolver implementation: %s".formatted(handlerResolver.getClass().getName()));
 
 		return defaultMcpHandlerResolver.resolvedEndpointForRequest(request);
+	}
+
+	@NonNull
+	private McpCorsContext mcpCorsContext(@NonNull Request request,
+																				@NonNull Class<? extends McpEndpoint> endpointClass,
+																				@Nullable String sessionId) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+
+		return new McpCorsContext(
+				request,
+				endpointClass,
+				request.getHttpMethod(),
+				request.getHeader("Origin").orElse(null),
+				sessionId
+		);
 	}
 
 	@NonNull

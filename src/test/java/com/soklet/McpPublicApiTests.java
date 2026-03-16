@@ -101,13 +101,17 @@ public class McpPublicApiTests {
 	}
 
 	@Test
-	public void originPolicyWhitelistNormalizesOrigins() {
+	public void corsAuthorizerWhitelistNormalizesOrigins() {
 		Request request = Request.fromPath(HttpMethod.GET, "/mcp");
-		McpOriginPolicy policy = McpOriginPolicy.fromWhitelistedOrigins(java.util.Set.of("https://Example.com:443"));
+		McpCorsAuthorizer corsAuthorizer = McpCorsAuthorizer.fromWhitelistedOrigins(java.util.Set.of("https://Example.com:443"));
+		CorsResponse allowedResponse = corsAuthorizer.authorize(
+				new McpCorsContext(request, TestEndpoint.class, HttpMethod.GET, "https://example.com", null),
+				Cors.fromOrigin(HttpMethod.GET, "https://example.com")).orElseThrow();
 
-		assertTrue(policy.isAllowed(new McpOriginCheckContext(request, TestEndpoint.class, HttpMethod.GET, "https://example.com", null)));
-		assertFalse(policy.isAllowed(new McpOriginCheckContext(request, TestEndpoint.class, HttpMethod.GET, "https://example.com:8443", null)));
-		assertTrue(policy.isAllowed(new McpOriginCheckContext(request, TestEndpoint.class, HttpMethod.GET, null, null)));
+		assertEquals(Set.of("MCP-Session-Id", "WWW-Authenticate"), allowedResponse.getAccessControlExposeHeaders());
+		assertFalse(corsAuthorizer.authorize(
+				new McpCorsContext(request, TestEndpoint.class, HttpMethod.GET, "https://example.com:8443", null),
+				Cors.fromOrigin(HttpMethod.GET, "https://example.com:8443")).isPresent());
 	}
 
 	@Test

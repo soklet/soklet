@@ -128,7 +128,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@NonNull
 	private final McpResponseMarshaler responseMarshaler;
 	@NonNull
-	private final McpOriginPolicy originPolicy;
+	private final McpCorsAuthorizer corsAuthorizer;
 	@NonNull
 	private final McpSessionStore sessionStore;
 	@NonNull
@@ -198,7 +198,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.requestAdmissionPolicy = builder.requestAdmissionPolicy != null ? builder.requestAdmissionPolicy : McpRequestAdmissionPolicy.defaultInstance();
 		this.requestInterceptor = builder.requestInterceptor != null ? builder.requestInterceptor : new McpRequestInterceptor() {};
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : McpResponseMarshaler.defaultInstance();
-		this.originPolicy = builder.originPolicy != null ? builder.originPolicy : McpOriginPolicy.nonBrowserClientsOnlyInstance();
+		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : McpCorsAuthorizer.nonBrowserClientsOnlyInstance();
 		this.sessionStore = builder.sessionStore != null ? builder.sessionStore : McpSessionStore.fromInMemory();
 		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.defaultInstance();
 		this.port = builder.port;
@@ -434,8 +434,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 	@NonNull
 	@Override
-	public McpOriginPolicy getOriginPolicy() {
-		return this.originPolicy;
+	public McpCorsAuthorizer getCorsAuthorizer() {
+		return this.corsAuthorizer;
 	}
 
 	@NonNull

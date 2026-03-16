@@ -56,7 +56,7 @@ public interface McpServer extends AutoCloseable {
 	McpResponseMarshaler getResponseMarshaler();
 
 	@NonNull
-	McpOriginPolicy getOriginPolicy();
+	McpCorsAuthorizer getCorsAuthorizer();
 
 	@NonNull
 	McpSessionStore getSessionStore();
@@ -102,7 +102,7 @@ public interface McpServer extends AutoCloseable {
 		@Nullable
 		McpResponseMarshaler responseMarshaler;
 		@Nullable
-		McpOriginPolicy originPolicy;
+		McpCorsAuthorizer corsAuthorizer;
 		@Nullable
 		McpSessionStore sessionStore;
 		@Nullable
@@ -175,8 +175,8 @@ public interface McpServer extends AutoCloseable {
 		}
 
 		@NonNull
-		public Builder originPolicy(@Nullable McpOriginPolicy originPolicy) {
-			this.originPolicy = originPolicy;
+		public Builder corsAuthorizer(@Nullable McpCorsAuthorizer corsAuthorizer) {
+			this.corsAuthorizer = corsAuthorizer;
 			return this;
 		}
 

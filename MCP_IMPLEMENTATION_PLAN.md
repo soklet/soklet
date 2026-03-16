@@ -683,7 +683,6 @@ Deferred until v2+:
 - Richer tool/prompt content block types including image, audio, resource-link, embedded-resource, and content-block annotation support. V1 intentionally exposes only `McpTextContent` in the public result model so the first content API surface stays small.
 - Optional JSON-RPC `error.data` support on `McpJsonRpcError` and the corresponding error envelope. V1 standardizes only `code` and `message` so the initial public error model stays small; richer structured error payloads can be added later once there is pressure to standardize them.
 - Built-in authorization and principal modeling. V1 is intentionally transport- and session-focused; applications that need user-aware authorization are expected to layer it through `McpRequestAdmissionPolicy`, `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` until Soklet has a broader auth abstraction worth standardizing.
-- Browser-oriented MCP CORS support, including `OPTIONS` preflight handling and `Access-Control-*` response headers on the MCP transport. V1 intentionally keeps `McpOriginPolicy` as an admission check rather than a full browser CORS layer, and the default policy rejects browser-style origins unless applications or an upstream proxy add broader browser support.
 - Additional retention policies beyond the default idle-time expiry for `McpSessionStore.fromInMemory()`, especially max-size/LRU eviction of live sessions. V1 deliberately avoids cache-style eviction because sessions are protocol-visible state, not just an optimization cache.
 - Broader progress-reporting surfaces beyond tool calls. The MCP protocol allows progress tokens more broadly, but v1 exposes progress reporting only for active tool calls so the first outbound message seam stays narrow, request-scoped, and easy to reason about.
 - JSON-RPC batch handling. Batch arrays are rejected with `400` in v1 because they complicate request lifecycle accounting, streaming response policy, and observability without being necessary for the initial Soklet MCP server value proposition.
@@ -1284,7 +1283,7 @@ The broader session-scoped outbound-message router is intentionally not public i
 - `requestAdmissionPolicy(McpRequestAdmissionPolicy)` — defaults to `McpRequestAdmissionPolicy.defaultInstance()`
 - `requestInterceptor(McpRequestInterceptor)`
 - `responseMarshaler(McpResponseMarshaler)`
-- `originPolicy(McpOriginPolicy)` — defaults to `McpOriginPolicy.nonBrowserClientsOnlyInstance()`
+- `corsAuthorizer(McpCorsAuthorizer)` — defaults to `McpCorsAuthorizer.nonBrowserClientsOnlyInstance()`
 - `sessionStore(McpSessionStore)` — defaults to `McpSessionStore.fromInMemory()` with a `24h` idle timeout
 - `requestTimeout(Duration)`
 - `requestHandlerTimeout(Duration)`
@@ -1586,36 +1585,52 @@ Default behavior:
 
 Applications that want Gson/Jackson-backed structured content supply a custom `McpResponseMarshaler` that maps domain objects into `McpValue` trees.
 
-### `McpOriginPolicy`
+### `McpCorsAuthorizer`
 
 ```java
 @ThreadSafe
-public interface McpOriginPolicy {
+public interface McpCorsAuthorizer {
     @NonNull
-    Boolean isAllowed(@NonNull McpOriginCheckContext context);
+    Optional<CorsResponse> authorize(@NonNull McpCorsContext context,
+                                     @NonNull Cors cors);
 
     @NonNull
-    static McpOriginPolicy rejectAllInstance() { ... }
+    Optional<CorsPreflightResponse> authorizePreflight(@NonNull McpCorsContext context,
+                                                       @NonNull CorsPreflight corsPreflight,
+                                                       @NonNull Set<@NonNull HttpMethod> availableHttpMethods);
 
     @NonNull
-    static McpOriginPolicy nonBrowserClientsOnlyInstance() { ... }
+    static McpCorsAuthorizer rejectAllInstance() { ... }
 
     @NonNull
-    static McpOriginPolicy acceptAllInstance() { ... }
+    static McpCorsAuthorizer nonBrowserClientsOnlyInstance() { ... }
 
     @NonNull
-    static McpOriginPolicy fromWhitelistedOrigins(
+    static McpCorsAuthorizer acceptAllInstance() { ... }
+
+    @NonNull
+    static McpCorsAuthorizer fromWhitelistedOrigins(
             @NonNull Set<@NonNull String> whitelistedOrigins) { ... }
 
     @NonNull
-    static McpOriginPolicy fromOriginAuthorizer(
-            @NonNull Predicate<@NonNull McpOriginCheckContext> originAuthorizer) { ... }
+    static McpCorsAuthorizer fromWhitelistedOrigins(
+            @NonNull Set<@NonNull String> whitelistedOrigins,
+            @NonNull Function<String, Boolean> allowCredentialsResolver) { ... }
+
+    @NonNull
+    static McpCorsAuthorizer fromOriginAuthorizer(
+            @NonNull Predicate<@NonNull McpCorsContext> originAuthorizer) { ... }
+
+    @NonNull
+    static McpCorsAuthorizer fromOriginAuthorizer(
+            @NonNull Predicate<@NonNull McpCorsContext> originAuthorizer,
+            @NonNull Function<String, Boolean> allowCredentialsResolver) { ... }
 }
 ```
 
 ```java
 @Immutable
-public record McpOriginCheckContext(
+public record McpCorsContext(
     @NonNull Request request,
     @NonNull Class<? extends McpEndpoint> endpointClass,
     @NonNull HttpMethod httpMethod,
@@ -1624,13 +1639,15 @@ public record McpOriginCheckContext(
 ) {}
 ```
 
-- Invoked before MCP protocol dispatch on `POST`, `GET`, and `DELETE`.
-- `origin == null` means the client did not send an `Origin` header. The default `nonBrowserClientsOnlyInstance()` allows this case and rejects any request that does send `Origin`.
-- `Origin: null` is treated as the literal string `"null"` and is rejected unless explicitly permitted.
-- Rejection becomes `403 Forbidden`; `McpOriginPolicy` does not write CORS headers or attempt preflight handling.
-- `fromWhitelistedOrigins(...)` allows requests with no `Origin` and also allows requests whose `Origin` matches the provided normalized whitelist.
+- Invoked for browser-style MCP requests: non-preflight `POST` / `GET` / `DELETE` requests that include `Origin`, plus `OPTIONS` CORS preflights.
+- `origin == null` means the client did not send an `Origin` header. In that case no MCP CORS processing occurs and the transport behaves like a normal non-browser MCP request.
+- The default `nonBrowserClientsOnlyInstance()` therefore keeps browser CORS disabled by rejecting browser-originated preflights and withholding `Access-Control-*` response headers from browser-originated MCP requests.
+- Applications that want browser-capable MCP configure `McpCorsAuthorizer` explicitly, for example with `fromWhitelistedOrigins(...)`.
+- Successful non-preflight authorization writes standard CORS response headers and exposes `MCP-Session-Id` so browser clients can read the negotiated session identifier.
+- Successful preflight authorization writes normal CORS preflight headers; rejected preflights use the standard CORS preflight rejection response.
+- `fromWhitelistedOrigins(...)` authorizes requests whose `Origin` matches the provided normalized whitelist.
 - Origin normalization in v1 lowercases scheme and host, strips a trailing slash, and elides default ports (`:80` for `http`, `:443` for `https`).
-- The policy is endpoint-aware because `McpOriginCheckContext` includes the resolved endpoint class. A single `McpServer` can therefore allow browser access for `/admin/mcp` and reject it for `/tenants/{tenantId}/mcp`, or vice versa.
+- The authorizer is endpoint-aware because `McpCorsContext` includes the resolved endpoint class. A single `McpServer` can therefore allow browser access for `/admin/mcp` and reject it for `/tenants/{tenantId}/mcp`, or vice versa.
 
 ### `McpSessionStore`
 
@@ -1862,7 +1879,7 @@ Minimum:
 - Reject unknown/dead sessions with `404`
 - Reject unsupported protocol versions with `400`
 
-`McpOriginPolicy` is intentionally simpler than HTTP CORS. It is a request admission policy, not a response-header policy. The default behavior is "allow non-browser clients; reject browser-style `Origin` headers unless explicitly whitelisted."
+`McpCorsAuthorizer` is the MCP-side browser transport policy. It covers both origin authorization and CORS response shaping for `POST`, `GET`, `DELETE`, and `OPTIONS` preflight on the MCP transport. The default behavior remains conservative: `nonBrowserClientsOnlyInstance()` allows non-browser clients while keeping browser CORS disabled unless applications explicitly configure broader browser support.
 
 Authorization support is designed for but deferred. In v1, authenticated applications are expected to layer authorization via `McpRequestAdmissionPolicy`, `McpRequestInterceptor`, endpoint code, and/or a custom `McpSessionStore` rather than through a Soklet-owned auth abstraction.
 
@@ -1954,7 +1971,7 @@ Authorization support is designed for but deferred. In v1, authenticated applica
 - JSON-RPC validation
 - MCP lifecycle enforcement
 - JSON-RPC batch arrays are rejected with `400`
-- `McpOriginPolicy.nonBrowserClientsOnlyInstance()` allows missing `Origin` and rejects explicit browser-style origins
+- `McpCorsAuthorizer.nonBrowserClientsOnlyInstance()` allows missing `Origin`, rejects browser preflights, and withholds CORS headers from explicit browser-style origins
 - Session state transitions
 - `initialize()` failure creates then terminates a session with `McpSessionTerminationReason.INITIALIZATION_FAILED`
 - `McpSessionStore.replace(...)` enforces compare-and-set semantics under concurrent updates

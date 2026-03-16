@@ -24,19 +24,19 @@ import javax.annotation.concurrent.Immutable;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Request metadata used by {@link McpOriginPolicy}.
+ * Request metadata used by {@link McpCorsAuthorizer}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @Immutable
-public record McpOriginCheckContext(
+public record McpCorsContext(
 		@NonNull Request request,
 		@NonNull Class<? extends McpEndpoint> endpointClass,
 		@NonNull HttpMethod httpMethod,
 		@Nullable String origin,
 		@Nullable String sessionId
 ) {
-	public McpOriginCheckContext {
+	public McpCorsContext {
 		requireNonNull(request);
 		requireNonNull(endpointClass);
 		requireNonNull(httpMethod);

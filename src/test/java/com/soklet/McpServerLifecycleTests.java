@@ -153,9 +153,50 @@ public class McpServerLifecycleTests {
 		Assertions.assertNotNull(mcpServer.getRequestAdmissionPolicy());
 		Assertions.assertNotNull(mcpServer.getRequestInterceptor());
 		Assertions.assertNotNull(mcpServer.getResponseMarshaler());
-		Assertions.assertNotNull(mcpServer.getOriginPolicy());
+		Assertions.assertNotNull(mcpServer.getCorsAuthorizer());
 		Assertions.assertNotNull(mcpServer.getSessionStore());
 		Assertions.assertNotNull(mcpServer.getIdGenerator());
+	}
+
+	@Test
+	public void startedDefaultMcpServerServesCorsPreflightForWhitelistedOrigin() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.mcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.corsAuthorizer(McpCorsAuthorizer.fromWhitelistedOrigins(Set.of("https://chat.openai.com"), origin -> true))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				String request = "OPTIONS /mcp HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1:" + mcpPort + "\r\n"
+						+ "Origin: https://chat.openai.com\r\n"
+						+ "Access-Control-Request-Method: POST\r\n"
+						+ "Access-Control-Request-Headers: Authorization, MCP-Session-Id, MCP-Protocol-Version, Content-Type\r\n"
+						+ "Connection: close\r\n"
+						+ "\r\n";
+				writeRawRequest(socket, request);
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				String normalizedResponse = response.toLowerCase(Locale.ROOT);
+				Assertions.assertTrue(normalizedResponse.startsWith("http/1.1 204"));
+				Assertions.assertTrue(normalizedResponse.contains("access-control-allow-origin: https://chat.openai.com"));
+				Assertions.assertTrue(normalizedResponse.contains("access-control-allow-credentials: true"));
+				Assertions.assertTrue(normalizedResponse.contains("access-control-allow-methods:"));
+				Assertions.assertTrue(normalizedResponse.contains("post"));
+				Assertions.assertTrue(normalizedResponse.contains("access-control-allow-headers:"));
+				Assertions.assertTrue(normalizedResponse.contains("authorization"));
+				Assertions.assertTrue(normalizedResponse.contains("mcp-session-id"));
+			}
+		}
 	}
 
 	@Test
@@ -604,8 +645,8 @@ public class McpServerLifecycleTests {
 
 		@NonNull
 		@Override
-		public McpOriginPolicy getOriginPolicy() {
-			return McpOriginPolicy.nonBrowserClientsOnlyInstance();
+		public McpCorsAuthorizer getCorsAuthorizer() {
+			return McpCorsAuthorizer.nonBrowserClientsOnlyInstance();
 		}
 
 		@NonNull

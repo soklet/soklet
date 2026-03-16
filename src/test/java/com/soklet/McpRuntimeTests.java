@@ -170,6 +170,81 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void mcpCorsPreflightIsAuthorizedWhenOriginIsWhitelisted() {
+		Soklet.runSimulator(configuration(
+				LifecycleObserver.defaultInstance(),
+				MetricsCollector.disabledInstance(),
+				null,
+				McpCorsAuthorizer.fromWhitelistedOrigins(Set.of("https://chat.openai.com"), origin -> true)), simulator -> {
+			McpRequestResult.ResponseCompleted preflightResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.OPTIONS, "/tenants/acme/mcp")
+							.headers(Map.of(
+									"Origin", Set.of("https://chat.openai.com"),
+									"Access-Control-Request-Method", Set.of("POST"),
+									"Access-Control-Request-Headers", Set.of("Authorization, MCP-Session-Id, MCP-Protocol-Version, Content-Type")
+							))
+							.build());
+
+			MarshaledResponse marshaledResponse = preflightResult.getRequestResult().getMarshaledResponse();
+			Assertions.assertEquals(Integer.valueOf(204), marshaledResponse.getStatusCode());
+			Assertions.assertEquals(Set.of("https://chat.openai.com"), marshaledResponse.getHeaders().get("Access-Control-Allow-Origin"));
+			Assertions.assertEquals(Set.of("true"), marshaledResponse.getHeaders().get("Access-Control-Allow-Credentials"));
+			Assertions.assertTrue(marshaledResponse.getHeaders().get("Access-Control-Allow-Methods").contains("POST"));
+			Assertions.assertTrue(marshaledResponse.getHeaders().get("Access-Control-Allow-Headers").contains("Authorization"));
+			Assertions.assertTrue(marshaledResponse.getHeaders().get("Access-Control-Allow-Headers").contains("MCP-Session-Id"));
+		});
+	}
+
+	@Test
+	public void mcpCorsHeadersAreAppliedToInitializeAndGetStreamResponses() {
+		Soklet.runSimulator(configuration(
+				LifecycleObserver.defaultInstance(),
+				MetricsCollector.disabledInstance(),
+				null,
+				McpCorsAuthorizer.fromWhitelistedOrigins(Set.of("https://chat.openai.com"), origin -> true)), simulator -> {
+			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of(
+							"Origin", Set.of("https://chat.openai.com")
+					)));
+			String sessionId = headerValue(initializeResult, "MCP-Session-Id");
+			MarshaledResponse initializeMarshaledResponse = initializeResult.getRequestResult().getMarshaledResponse();
+
+			Assertions.assertEquals(Set.of("https://chat.openai.com"), initializeMarshaledResponse.getHeaders().get("Access-Control-Allow-Origin"));
+			Assertions.assertEquals(Set.of("true"), initializeMarshaledResponse.getHeaders().get("Access-Control-Allow-Credentials"));
+			Assertions.assertTrue(initializeMarshaledResponse.getHeaders().get("Access-Control-Expose-Headers").contains("MCP-Session-Id"));
+
+			Map<String, Set<String>> sessionHeaders = Map.of(
+					"MCP-Session-Id", Set.of(sessionId),
+					"MCP-Protocol-Version", Set.of("2025-11-25"),
+					"Origin", Set.of("https://chat.openai.com")
+			);
+
+			simulator.performMcpRequest(post("/tenants/acme/mcp", """
+					{
+					  "jsonrpc":"2.0",
+					  "method":"notifications/initialized",
+					  "params":{}
+					}
+					""", sessionHeaders));
+
+			McpRequestResult.StreamOpened streamOpened = (McpRequestResult.StreamOpened) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+							.headers(Map.of(
+									"MCP-Session-Id", Set.of(sessionId),
+									"MCP-Protocol-Version", Set.of("2025-11-25"),
+									"Accept", Set.of("text/event-stream"),
+									"Origin", Set.of("https://chat.openai.com")
+							))
+							.build());
+
+			MarshaledResponse streamMarshaledResponse = streamOpened.getRequestResult().getMarshaledResponse();
+			Assertions.assertEquals(Set.of("https://chat.openai.com"), streamMarshaledResponse.getHeaders().get("Access-Control-Allow-Origin"));
+			Assertions.assertEquals(Set.of("true"), streamMarshaledResponse.getHeaders().get("Access-Control-Allow-Credentials"));
+			Assertions.assertTrue(streamMarshaledResponse.getHeaders().get("Access-Control-Expose-Headers").contains("MCP-Session-Id"));
+		});
+	}
+
+	@Test
 	public void generatedListsRequireInitializedNotificationAndExposeSchemas() {
 		Soklet.runSimulator(configuration(), simulator -> {
 			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
@@ -1049,6 +1124,13 @@ public class McpRuntimeTests {
 	private static SokletConfig configuration(LifecycleObserver lifecycleObserver,
 																							 MetricsCollector metricsCollector,
 																							 McpSessionStore sessionStore) {
+		return configuration(lifecycleObserver, metricsCollector, sessionStore, null);
+	}
+
+	private static SokletConfig configuration(LifecycleObserver lifecycleObserver,
+																							 MetricsCollector metricsCollector,
+																							 McpSessionStore sessionStore,
+																							 McpCorsAuthorizer corsAuthorizer) {
 		McpHandlerResolver handlerResolver = McpHandlerResolver.fromClasses(Set.of(CatalogEndpoint.class))
 				.withTool(new ProgrammaticEchoToolHandler(), CatalogEndpoint.class)
 				.withPrompt(new ProgrammaticCatalogPromptHandler(), CatalogEndpoint.class)
@@ -1059,6 +1141,9 @@ public class McpRuntimeTests {
 
 		if (sessionStore != null)
 			mcpServerBuilder.sessionStore(sessionStore);
+
+		if (corsAuthorizer != null)
+			mcpServerBuilder.corsAuthorizer(corsAuthorizer);
 
 		return SokletConfig.withServer(Server.withPort(0).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))

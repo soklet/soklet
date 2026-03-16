@@ -1803,8 +1803,8 @@ public final class Soklet implements AutoCloseable {
 
 		@NonNull
 		@Override
-		public McpOriginPolicy getOriginPolicy() {
-			return getRealImplementation().getOriginPolicy();
+		public McpCorsAuthorizer getCorsAuthorizer() {
+			return getRealImplementation().getCorsAuthorizer();
 		}
 
 		@NonNull

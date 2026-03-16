@@ -652,6 +652,27 @@ SokletConfig config = SokletConfig.withServer(
 ).build();
 ```
 
+Browser-based MCP clients can be enabled with
+[`McpCorsAuthorizer`](https://javadoc.soklet.com/com/soklet/McpCorsAuthorizer.html):
+
+```java
+SokletConfig config = SokletConfig.withServer(
+  Server.fromPort(8080)
+).mcpServer(
+  McpServer.withPort(8082)
+    .handlerResolver(McpHandlerResolver.fromClasses(Set.of(CatalogMcpEndpoint.class)))
+    .corsAuthorizer(McpCorsAuthorizer.fromWhitelistedOrigins(
+      Set.of("https://chat.openai.com"),
+      origin -> true
+    ))
+    .build()
+).build();
+```
+
+That enables `OPTIONS` preflight handling plus `Access-Control-*` response headers on MCP
+`POST` / `GET` / `DELETE` responses for the configured origins. The default
+`nonBrowserClientsOnlyInstance()` remains conservative and keeps browser CORS disabled.
+
 Soklet's MCP v1 support is intentionally conservative: single-request JSON-RPC only, framework-generated
 `tools/list` / `prompts/list` / `resources/templates/list` responses without cursor pagination, and
 application-backed pagination only for `resources/list`. JSON-RPC batch arrays and resumable SSE event IDs
