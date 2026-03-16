@@ -145,15 +145,15 @@ These map directly onto the existing `error(element, ...)` pattern in `SokletPro
 
 ### 8. `@McpListResources` takes no user arguments
 
-The framework generates `tools/list` and `prompts/list` responses automatically from annotation metadata — no user code required. Only `resources/list` requires a user-provided `@McpListResources` method because resource lists can be dynamic (e.g., populated from a database query).
+The framework generates `tools/list`, `prompts/list`, and `resources/templates/list` responses automatically from annotation metadata — no user code required. Only `resources/list` requires a user-provided `@McpListResources` method because resource lists can be dynamic (e.g., populated from a database query).
 
 `resources/list` in the MCP spec accepts only an optional pagination cursor, not arbitrary caller arguments. `@McpListResources` methods may only receive `@McpEndpointPathParameter` bindings and injectable framework types. `@McpArgument` is a compile error on these methods.
 
 To support pagination cleanly, `@McpListResources` returns `McpListResourcesResult` rather than a bare `List<McpListedResource>`.
 
-If an endpoint exposes `@McpResource` methods but does not define `@McpListResources` and has no programmatic `McpResourceListHandler`, `resources/list` returns an empty `resources` array with no `nextCursor`. Resource read support still exists for clients that already know concrete resource URIs.
+If an endpoint exposes `@McpResource` methods but does not define `@McpListResources` and has no programmatic `McpResourceListHandler`, `resources/list` falls back to literal static resource URIs only and omits URI-template resources. Resource read support still exists for clients that already know concrete resource URIs, and URI-template discovery remains available through framework-generated `resources/templates/list`.
 
-`tools/list` and `prompts/list` remain framework-generated in v1 and are not paginated. They always return the full, sorted list and omit `nextCursor`.
+`tools/list`, `prompts/list`, and `resources/templates/list` remain framework-generated in v1 and are not paginated. They always return the full, sorted list and omit `nextCursor`.
 
 ### 9. Programmatic escape hatch
 
@@ -687,7 +687,7 @@ Deferred until v2+:
 - Additional retention policies beyond the default idle-time expiry for `McpSessionStore.fromInMemory()`, especially max-size/LRU eviction of live sessions. V1 deliberately avoids cache-style eviction because sessions are protocol-visible state, not just an optimization cache.
 - Broader progress-reporting surfaces beyond tool calls. The MCP protocol allows progress tokens more broadly, but v1 exposes progress reporting only for active tool calls so the first outbound message seam stays narrow, request-scoped, and easy to reason about.
 - JSON-RPC batch handling. Batch arrays are rejected with `400` in v1 because they complicate request lifecycle accounting, streaming response policy, and observability without being necessary for the initial Soklet MCP server value proposition.
-- Pagination for framework-generated `tools/list` and `prompts/list`. V1 always returns the full sorted list; only `resources/list` supports pagination because that is the one list shape most likely to be dynamic and application-backed from the start.
+- Pagination for framework-generated `tools/list`, `prompts/list`, and `resources/templates/list`. V1 always returns the full sorted list for those methods; only `resources/list` supports pagination because that is the one list shape most likely to be dynamic and application-backed from the start.
 
 These deferments are intentional, not accidental omissions. The goal is to make v1 implementation-ready without locking Soklet into public APIs that are harder to change than to add later.
 

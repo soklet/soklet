@@ -535,15 +535,19 @@ final class DefaultMcpRuntime {
 
 	@NonNull
 	private RequestResult handleInitializedNotification(@NonNull Request request,
-																											@NonNull McpServer mcpServer,
-																											@NonNull ParsedJsonRpcRequest parsedRequest,
-																											@NonNull McpStoredSession storedSession,
-																											@NonNull DefaultMcpRequestContext requestContext) {
+																												@NonNull McpServer mcpServer,
+																												@NonNull ParsedJsonRpcRequest parsedRequest,
+																												@NonNull McpStoredSession storedSession,
+																												@NonNull DefaultMcpRequestContext requestContext) {
 		requireNonNull(request);
 		requireNonNull(mcpServer);
 		requireNonNull(parsedRequest);
 		requireNonNull(storedSession);
 		requireNonNull(requestContext);
+
+		if (!storedSession.initialized())
+			return jsonRpcErrorResponse(request, parsedRequest.requestId(),
+					McpJsonRpcError.fromCodeAndMessage(-32603, "Session not initialized"));
 
 		McpStoredSession updatedSession = new McpStoredSession(
 				storedSession.sessionId(),
@@ -1647,14 +1651,26 @@ final class DefaultMcpRuntime {
 	}
 
 	private void validateArgumentsAgainstSchema(@NonNull McpObject arguments,
-																							@NonNull McpSchema schema) throws JsonRpcErrorTransport {
+																								@NonNull McpSchema schema) throws JsonRpcErrorTransport {
 		requireNonNull(arguments);
 		requireNonNull(schema);
 
 		McpObject schemaValue = schema.toValue();
 		McpObject properties = optionalObject(schemaValue, "properties").orElse(new McpObject(Map.of()));
+		McpValue requiredValue = schemaValue.get("required").orElse(McpNull.INSTANCE);
+		McpArray required = requiredValue instanceof McpArray mcpArray ? mcpArray : null;
 		McpValue additionalPropertiesValue = schemaValue.get("additionalProperties").orElse(McpNull.INSTANCE);
 		boolean additionalPropertiesAllowed = !(additionalPropertiesValue instanceof McpBoolean mcpBoolean) || mcpBoolean.value();
+
+		if (required != null) {
+			for (McpValue requiredEntry : required.values()) {
+				if (!(requiredEntry instanceof McpString requiredName))
+					continue;
+
+				if (!arguments.get(requiredName.value()).isPresent())
+					throw invalidParams("Missing required argument '%s'".formatted(requiredName.value()));
+			}
+		}
 
 		if (additionalPropertiesAllowed)
 			return;

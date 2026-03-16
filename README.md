@@ -652,6 +652,11 @@ SokletConfig config = SokletConfig.withServer(
 ).build();
 ```
 
+Soklet's MCP v1 support is intentionally conservative: single-request JSON-RPC only, framework-generated
+`tools/list` / `prompts/list` / `resources/templates/list` responses without cursor pagination, and
+application-backed pagination only for `resources/list`. JSON-RPC batch arrays and resumable SSE event IDs
+remain deferred.
+
 MCP test via the [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html)
 (see [`McpRequestResult`](https://javadoc.soklet.com/com/soklet/McpRequestResult.html)):
 

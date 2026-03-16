@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -125,6 +126,46 @@ public class McpRuntimeTests {
 			McpObject body = jsonBody(pingResult);
 			McpObject result = (McpObject) body.get("result").orElseThrow();
 			Assertions.assertTrue(result.values().isEmpty());
+		});
+	}
+
+	@Test
+	public void initializedNotificationRejectsSessionsThatHaveNotCompletedInitialization() {
+		McpSessionStore sessionStore = McpSessionStore.fromInMemory();
+		Instant now = Instant.now();
+		String sessionId = "session-not-initialized";
+		sessionStore.create(new McpStoredSession(
+				sessionId,
+				CatalogEndpoint.class,
+				now,
+				now,
+				false,
+				false,
+				"2025-11-25",
+				new McpClientCapabilities(new McpObject(Map.of())),
+				new McpNegotiatedCapabilities(new McpObject(Map.of())),
+				McpSessionContext.fromBlankSlate(),
+				null,
+				0L
+		));
+
+		Soklet.runSimulator(configuration(LifecycleObserver.defaultInstance(), MetricsCollector.disabledInstance(), sessionStore), simulator -> {
+			McpRequestResult.ResponseCompleted initializedNotification = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "method":"notifications/initialized",
+							  "params":{}
+							}
+							""", Map.of(
+							"MCP-Session-Id", Set.of(sessionId),
+							"MCP-Protocol-Version", Set.of("2025-11-25")
+					)));
+
+			McpObject body = jsonBody(initializedNotification);
+			McpObject error = (McpObject) body.get("error").orElseThrow();
+			Assertions.assertEquals("-32603", ((McpNumber) error.get("code").orElseThrow()).value().toPlainString());
+			Assertions.assertEquals("Session not initialized", ((McpString) error.get("message").orElseThrow()).value());
 		});
 	}
 
@@ -464,6 +505,49 @@ public class McpRuntimeTests {
 			McpArray contents = (McpArray) ((McpObject) resourceBody.get("result").orElseThrow()).get("contents").orElseThrow();
 			McpObject firstContent = (McpObject) contents.values().get(0);
 			Assertions.assertEquals("note=programmatic-1 tenant=acme", ((McpString) firstContent.get("text").orElseThrow()).value());
+		});
+	}
+
+	@Test
+	public void programmaticHandlersRejectMissingRequiredArgumentsFromSchema() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult.ResponseCompleted toolCall = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-23",
+							  "method":"tools/call",
+							  "params":{
+							    "name":"zz_programmatic_tool",
+							    "arguments":{}
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject toolBody = jsonBody(toolCall);
+			McpObject toolError = (McpObject) toolBody.get("error").orElseThrow();
+			Assertions.assertEquals("-32602", ((McpNumber) toolError.get("code").orElseThrow()).value().toPlainString());
+			Assertions.assertEquals("Missing required argument 'message'", ((McpString) toolError.get("message").orElseThrow()).value());
+
+			McpRequestResult.ResponseCompleted promptGet = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-24",
+							  "method":"prompts/get",
+							  "params":{
+							    "name":"zz_programmatic_prompt",
+							    "arguments":{}
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject promptBody = jsonBody(promptGet);
+			McpObject promptError = (McpObject) promptBody.get("error").orElseThrow();
+			Assertions.assertEquals("-32602", ((McpNumber) promptError.get("code").orElseThrow()).value().toPlainString());
+			Assertions.assertEquals("Missing required argument 'subject'", ((McpString) promptError.get("message").orElseThrow()).value());
 		});
 	}
 
