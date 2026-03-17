@@ -223,7 +223,7 @@ public enum StatusCode {
 	 */
 	HTTP_410(410, "Gone"),
 	/**
-	 * Server rejected the request because the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Length">Content-Length</a> header field is not defined and the server requires it.
+	 * HttpServer rejected the request because the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Length">Content-Length</a> header field is not defined and the server requires it.
 	 */
 	HTTP_411(411, "Length Required"),
 	/**
@@ -311,7 +311,7 @@ public enum StatusCode {
 	 * <p>
 	 * This error is generic, indicating that the server cannot find a more appropriate {@code 5XX} status code to respond with.
 	 */
-	HTTP_500(500, "Internal Server Error"),
+	HTTP_500(500, "Internal HttpServer Error"),
 	/**
 	 * The request method is not supported by the server and cannot be handled.
 	 * <p>

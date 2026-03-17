@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import com.soklet.Soklet.MockServer;
+import com.soklet.Soklet.MockHttpServer;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -25,25 +25,25 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Package-private internal proxy for {@link Server} which enables transparent mock usage in {@link Simulator}.
+ * Package-private internal proxy for {@link HttpServer} which enables transparent mock usage in {@link Simulator}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class ServerProxy implements Server {
+final class HttpServerProxy implements HttpServer {
 	@NonNull
-	private final Server realImplementation;
+	private final HttpServer realImplementation;
 	@NonNull
-	private final AtomicReference<Server> activeImplementation;
+	private final AtomicReference<HttpServer> activeImplementation;
 
-	ServerProxy(@NonNull Server realImplementation) {
+	HttpServerProxy(@NonNull HttpServer realImplementation) {
 		requireNonNull(realImplementation);
 
 		this.realImplementation = realImplementation;
 		this.activeImplementation = new AtomicReference<>(realImplementation);
 	}
 
-	void enableSimulatorMode(@NonNull MockServer mockServer) {
+	void enableSimulatorMode(@NonNull MockHttpServer mockServer) {
 		requireNonNull(mockServer);
 		this.activeImplementation.set(mockServer);
 	}
@@ -80,12 +80,12 @@ final class ServerProxy implements Server {
 	}
 
 	@NonNull
-	Server getRealImplementation() {
+	HttpServer getRealImplementation() {
 		return this.realImplementation;
 	}
 
 	@NonNull
-	Server getActiveImplementation() {
+	HttpServer getActiveImplementation() {
 		return this.activeImplementation.get();
 	}
 }

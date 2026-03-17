@@ -296,7 +296,7 @@ public class ServerSentEventTests {
 				.shutdownTimeout(Duration.ofSeconds(1))
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(1)).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(1)).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle()) // no noise in test logs
@@ -319,7 +319,7 @@ public class ServerSentEventTests {
 				.shutdownTimeout(Duration.ofSeconds(2))
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle()) // no noise in test logs
@@ -395,7 +395,7 @@ public class ServerSentEventTests {
 				.verifyConnectionOnceEstablished(false)
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -458,7 +458,7 @@ public class ServerSentEventTests {
 				.verifyConnectionOnceEstablished(false)
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -512,7 +512,7 @@ public class ServerSentEventTests {
 				.requestTimeout(Duration.ofSeconds(5))
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -585,7 +585,7 @@ public class ServerSentEventTests {
 				.verifyConnectionOnceEstablished(false)
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(lifecycle)
@@ -631,7 +631,7 @@ public class ServerSentEventTests {
 				.requestTimeout(Duration.ofSeconds(5))
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -676,7 +676,7 @@ public class ServerSentEventTests {
 				.requestTimeout(Duration.ofSeconds(5))
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(lifecycle)
@@ -718,7 +718,7 @@ public class ServerSentEventTests {
 				.verifyConnectionOnceEstablished(false)
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(lifecycle)
@@ -759,7 +759,7 @@ public class ServerSentEventTests {
 				.concurrentConnectionLimit(1)
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingHandshakeResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -816,7 +816,7 @@ public class ServerSentEventTests {
 				.verifyConnectionOnceEstablished(false)
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingRejectHandshakeResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -911,7 +911,7 @@ public class ServerSentEventTests {
 		int ssePort = findFreePort();
 
 		// Resource returns a REJECTED handshake with 403, a body, a header, and a Set-Cookie
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -961,7 +961,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -996,7 +996,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1032,7 +1032,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1068,7 +1068,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1102,7 +1102,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1137,7 +1137,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1173,7 +1173,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1211,7 +1211,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1251,7 +1251,7 @@ public class ServerSentEventTests {
 
 		BlockingHandshakeResource.prepare(1);
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1284,7 +1284,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofMillis(200))
@@ -1321,7 +1321,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1360,7 +1360,7 @@ public class ServerSentEventTests {
 		// Accepts any Origin; credentials=true implies ACAO "*" -> normalized to request Origin + "Vary: Origin"
 		CorsAuthorizer cors = CorsAuthorizer.acceptAllInstance();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1407,7 +1407,7 @@ public class ServerSentEventTests {
 
 		CorsAuthorizer cors = CorsAuthorizer.acceptAllInstance();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1453,7 +1453,7 @@ public class ServerSentEventTests {
 		// Only allow https://ok.example
 		CorsAuthorizer cors = CorsAuthorizer.fromWhitelistAuthorizer(o -> "https://ok.example".equalsIgnoreCase(o));
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.host("127.0.0.1")
 						.requestTimeout(Duration.ofSeconds(5))
@@ -1624,7 +1624,7 @@ public class ServerSentEventTests {
 		int ssePort = findFreePort();
 
 		SokletConfig config = SokletConfig
-				.withServer(Server.withPort(httpPort).build())
+				.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort)
 						.verifyConnectionOnceEstablished(false)
 						.build())
@@ -1721,7 +1721,7 @@ public class ServerSentEventTests {
 		int ssePort = findFreePort();
 
 		SokletConfig config = SokletConfig
-				.withServer(Server.withPort(httpPort).build())
+				.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
@@ -1753,7 +1753,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).host("127.0.0.1").build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
@@ -1781,7 +1781,7 @@ public class ServerSentEventTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(ssePort).host("127.0.0.1").build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();

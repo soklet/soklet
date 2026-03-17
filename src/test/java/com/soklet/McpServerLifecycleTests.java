@@ -61,11 +61,9 @@ public class McpServerLifecycleTests {
 
 	@Test
 	public void mcpOnlyConfigDoesNotRequireHttpResourceMethodsAndStartsConfiguredMcpServer() throws Exception {
-		FakeStandardServer fakeStandardServer = new FakeStandardServer();
 		FakeMcpServer fakeMcpServer = new FakeMcpServer();
-		SokletConfig sokletConfig = SokletConfig.withServer(fakeStandardServer)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(fakeMcpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(fakeMcpServer)
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -80,11 +78,9 @@ public class McpServerLifecycleTests {
 
 	@Test
 	public void sokletMcpHandlerOpensGetStreamsForReadySessions() throws Exception {
-		FakeStandardServer fakeStandardServer = new FakeStandardServer();
 		FakeMcpServer fakeMcpServer = new FakeMcpServer();
-		SokletConfig sokletConfig = SokletConfig.withServer(fakeStandardServer)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(fakeMcpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(fakeMcpServer)
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -161,13 +157,12 @@ public class McpServerLifecycleTests {
 	@Test
 	public void startedDefaultMcpServerServesCorsPreflightForWhitelistedOrigin() throws Exception {
 		int mcpPort = findFreePort();
-		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(McpServer.withPort(mcpPort)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
 						.corsAuthorizer(McpCorsAuthorizer.fromWhitelistedOrigins(Set.of("https://chat.openai.com"), origin -> true))
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -202,13 +197,12 @@ public class McpServerLifecycleTests {
 	@Test
 	public void startedDefaultMcpServerKeepsGetStreamsOpenAndSendsHeartbeats() throws Exception {
 		int mcpPort = findFreePort();
-		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(McpServer.withPort(mcpPort)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
 						.heartbeatInterval(Duration.ofMillis(100))
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -236,13 +230,12 @@ public class McpServerLifecycleTests {
 	@Test
 	public void startedDefaultMcpServerClosesLiveGetStreamsAfterDelete() throws Exception {
 		int mcpPort = findFreePort();
-		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(McpServer.withPort(mcpPort)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
 						.heartbeatInterval(Duration.ofMillis(100))
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -277,9 +270,8 @@ public class McpServerLifecycleTests {
 				.heartbeatInterval(Duration.ofSeconds(5))
 				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 				.build();
-		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(defaultMcpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(defaultMcpServer)
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -312,12 +304,11 @@ public class McpServerLifecycleTests {
 	@Test
 	public void startedDefaultMcpServerRejectsTransferEncodingRequests() throws Exception {
 		int mcpPort = findFreePort();
-		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(McpServer.withPort(mcpPort)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -344,13 +335,12 @@ public class McpServerLifecycleTests {
 	@Test
 	public void startedDefaultMcpServerRejectsOversizedRequestBodiesWith413() throws Exception {
 		int mcpPort = findFreePort();
-		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(McpServer.withPort(mcpPort)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
 						.maximumRequestSizeInBytes(8)
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -377,13 +367,12 @@ public class McpServerLifecycleTests {
 	@Test
 	public void stoppingDefaultMcpServerClosesLiveGetStreams() throws Exception {
 		int mcpPort = findFreePort();
-		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(McpServer.withPort(mcpPort)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
 						.heartbeatInterval(Duration.ofSeconds(5))
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -407,14 +396,13 @@ public class McpServerLifecycleTests {
 	@Test
 	public void startedDefaultMcpServerEnforcesConcurrentConnectionLimitForGetStreams() throws Exception {
 		int mcpPort = findFreePort();
-		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(McpServer.withPort(mcpPort)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
 						.concurrentConnectionLimit(1)
 						.heartbeatInterval(Duration.ofSeconds(5))
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -474,11 +462,10 @@ public class McpServerLifecycleTests {
 
 	@Test
 	public void simulatorCanPerformMcpRequestsThroughConfiguredMcpServer() {
-		SokletConfig sokletConfig = SokletConfig.withServer(Server.withPort(0).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(McpServer.withPort(0)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(0)
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -529,13 +516,12 @@ public class McpServerLifecycleTests {
 
 	@Test
 	public void simulatorTreatsEventStreamResponsesAsOpenMcpStreams() {
-		Soklet.MockServer mockServer = new Soklet.MockServer();
+		Soklet.MockHttpServer mockServer = new Soklet.MockHttpServer();
 		Soklet.MockMcpServer mockMcpServer = new Soklet.MockMcpServer(new FakeMcpServer());
 		Soklet.DefaultSimulator simulator = new Soklet.DefaultSimulator(mockServer, null, mockMcpServer);
 
-		mockMcpServer.initialize(SokletConfig.withServer(Server.withPort(0).build())
+		mockMcpServer.initialize(SokletConfig.withMcpServer(new FakeMcpServer())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(new FakeMcpServer())
 				.lifecycleObserver(new QuietLifecycle())
 				.build(), (request, requestResultConsumer) -> requestResultConsumer.accept(
 				RequestResult.fromMarshaledResponse(MarshaledResponse.withStatusCode(200)
@@ -548,14 +534,13 @@ public class McpServerLifecycleTests {
 
 	@Test
 	public void simulatorRoutesMcpStreamConsumerErrorsThroughDedicatedHandler() {
-		Soklet.MockServer mockServer = new Soklet.MockServer();
+		Soklet.MockHttpServer mockServer = new Soklet.MockHttpServer();
 		Soklet.MockMcpServer mockMcpServer = new Soklet.MockMcpServer(new FakeMcpServer());
 		Soklet.DefaultSimulator simulator = new Soklet.DefaultSimulator(mockServer, null, mockMcpServer);
 		AtomicReference<Throwable> streamErrorHolder = new AtomicReference<>();
 
-		mockMcpServer.initialize(SokletConfig.withServer(Server.withPort(0).build())
+		mockMcpServer.initialize(SokletConfig.withMcpServer(new FakeMcpServer())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.mcpServer(new FakeMcpServer())
 				.lifecycleObserver(new QuietLifecycle())
 				.build(), (request, requestResultConsumer) -> requestResultConsumer.accept(
 				RequestResult.fromMarshaledResponse(MarshaledResponse.withStatusCode(200)
@@ -810,42 +795,6 @@ public class McpServerLifecycleTests {
 		McpObject payload = (McpObject) McpJsonCodec.parse(frame.substring("data: ".length(), frame.length() - 2).getBytes(StandardCharsets.UTF_8));
 		McpObject params = (McpObject) payload.get("params").orElseThrow();
 		return ((McpString) params.get("value").orElseThrow()).value();
-	}
-
-	private static final class FakeStandardServer implements Server {
-		private final AtomicBoolean started;
-		private RequestHandler requestHandler;
-
-		private FakeStandardServer() {
-			this.started = new AtomicBoolean();
-		}
-
-		@Override
-		public void start() {
-			this.started.set(true);
-		}
-
-		@Override
-		public void stop() {
-			this.started.set(false);
-		}
-
-		@NonNull
-		@Override
-		public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-													 @NonNull RequestHandler requestHandler) {
-			this.requestHandler = requestHandler;
-		}
-
-		@NonNull
-		protected Optional<RequestHandler> getRequestHandler() {
-			return Optional.ofNullable(this.requestHandler);
-		}
 	}
 
 	private static class QuietLifecycle implements LifecycleObserver {

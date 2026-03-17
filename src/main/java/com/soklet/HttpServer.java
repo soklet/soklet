@@ -30,11 +30,11 @@ import static java.util.Objects.requireNonNull;
 /**
  * Contract for HTTP server implementations that are designed to be managed by a {@link com.soklet.Soklet} instance.
  * <p>
- * <strong>Most Soklet applications will use the default {@link Server} (constructed via the {@link #withPort(Integer)} builder factory method) and therefore do not need to implement this interface directly.</strong>
+ * <strong>Most Soklet applications will use the default {@link HttpServer} (constructed via the {@link #withPort(Integer)} builder factory method) and therefore do not need to implement this interface directly.</strong>
  * <p>
  * For example:
- * <pre>{@code  SokletConfig config = SokletConfig.withServer(
- *   Server.fromPort(8080)
+ * <pre>{@code  SokletConfig config = SokletConfig.withHttpServer(
+ *   HttpServer.fromPort(8080)
  * ).build();
  *
  * try (Soklet soklet = Soklet.fromConfig(config)) {
@@ -45,7 +45,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface Server extends AutoCloseable {
+public interface HttpServer extends AutoCloseable {
 	/**
 	 * Starts the server, which makes it able to accept requests from clients.
 	 * <p>
@@ -73,12 +73,12 @@ public interface Server extends AutoCloseable {
 	Boolean isStarted();
 
 	/**
-	 * The {@link com.soklet.Soklet} instance which manages this {@link Server} will invoke this method exactly once at initialization time - this allows {@link com.soklet.Soklet} to "talk" to your {@link Server}.
+	 * The {@link com.soklet.Soklet} instance which manages this {@link HttpServer} will invoke this method exactly once at initialization time - this allows {@link com.soklet.Soklet} to "talk" to your {@link HttpServer}.
 	 * <p>
 	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 *
 	 * @param sokletConfig   configuration for the Soklet instance that controls this server
-	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link Server}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link Server} to write back to the client
+	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link HttpServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link HttpServer} to write back to the client
 	 */
 	void initialize(@NonNull SokletConfig sokletConfig,
 									@NonNull RequestHandler requestHandler);
@@ -96,32 +96,32 @@ public interface Server extends AutoCloseable {
 	}
 
 	/**
-	 * Request/response processing contract for {@link Server} implementations.
+	 * Request/response processing contract for {@link HttpServer} implementations.
 	 * <p>
-	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link Server} via {@link Server#initialize(SokletConfig, RequestHandler)}.  It's the responsibility of the {@link Server} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link HttpServer} via {@link HttpServer#initialize(SokletConfig, RequestHandler)}.  It's the responsibility of the {@link HttpServer} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
-	 * <strong>Most Soklet applications will use Soklet's default {@link Server} implementation and therefore do not need to implement this interface directly.</strong>
+	 * <strong>Most Soklet applications will use Soklet's default {@link HttpServer} implementation and therefore do not need to implement this interface directly.</strong>
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@FunctionalInterface
 	interface RequestHandler {
 		/**
-		 * Callback to be invoked by a {@link Server} implementation after it has received an HTTP request but prior to writing an HTTP response.
+		 * Callback to be invoked by a {@link HttpServer} implementation after it has received an HTTP request but prior to writing an HTTP response.
 		 * <p>
-		 * The {@link Server} is responsible for converting its internal request representation into a {@link Request}, which a {@link com.soklet.Soklet} instance consumes and performs Soklet application request processing logic.
+		 * The {@link HttpServer} is responsible for converting its internal request representation into a {@link Request}, which a {@link com.soklet.Soklet} instance consumes and performs Soklet application request processing logic.
 		 * <p>
-		 * The {@link com.soklet.Soklet} instance will generate a {@link MarshaledResponse} for the request, which it "hands back" to the {@link Server} to be sent over the wire to the client.
+		 * The {@link com.soklet.Soklet} instance will generate a {@link MarshaledResponse} for the request, which it "hands back" to the {@link HttpServer} to be sent over the wire to the client.
 		 *
-		 * @param request               a Soklet {@link Request} representation of the {@link Server}'s internal HTTP request data
-		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link Server} to write HTTP response data to the client
+		 * @param request               a Soklet {@link Request} representation of the {@link HttpServer}'s internal HTTP request data
+		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link HttpServer} to write HTTP response data to the client
 		 */
 		void handleRequest(@NonNull Request request,
 											 @NonNull Consumer<RequestResult> requestResultConsumer);
 	}
 
 	/**
-	 * Acquires a builder for {@link Server} instances.
+	 * Acquires a builder for {@link HttpServer} instances.
 	 *
 	 * @param port the port number on which the server should listen
 	 * @return the builder
@@ -133,18 +133,18 @@ public interface Server extends AutoCloseable {
 	}
 
 	/**
-	 * Creates a {@link Server} configured with the given port and default settings.
+	 * Creates a {@link HttpServer} configured with the given port and default settings.
 	 *
 	 * @param port the port number on which the server should listen
-	 * @return a {@link Server} instance
+	 * @return a {@link HttpServer} instance
 	 */
 	@NonNull
-	static Server fromPort(@NonNull Integer port) {
+	static HttpServer fromPort(@NonNull Integer port) {
 		return withPort(port).build();
 	}
 
 	/**
-	 * Builder used to construct a standard implementation of {@link Server}.
+	 * Builder used to construct a standard implementation of {@link HttpServer}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -289,8 +289,8 @@ public interface Server extends AutoCloseable {
 		}
 
 		@NonNull
-		public Server build() {
-			return new DefaultServer(this);
+		public HttpServer build() {
+			return new DefaultHttpServer(this);
 		}
 	}
 }

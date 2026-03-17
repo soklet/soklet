@@ -36,8 +36,8 @@ import static java.util.Objects.requireNonNull;
  * }}</pre>
  * <p>
  * You might implement a {@link RequestBodyMarshaler} to accept JSON like this:
- * <pre>{@code  SokletConfig config = SokletConfig.withServer(
- *   Server.fromPort(8080)
+ * <pre>{@code  SokletConfig config = SokletConfig.withHttpServer(
+ *   HttpServer.fromPort(8080)
  * ).requestBodyMarshaler(new RequestBodyMarshaler() {
  *   // This example uses Google's GSON
  *   static final Gson GSON = new Gson();

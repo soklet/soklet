@@ -97,17 +97,17 @@ This mirrors `ResourceMethodResolver.fromClasspathIntrospection()`. Users do not
 
 The processor and runtime both use a documented whitelist to map `@McpArgument` parameter types to JSON Schema. There is no reflection-based schema synthesis. Types outside the whitelist cause a compile error.
 
-| Java type              | JSON Schema                                    |
-|------------------------|------------------------------------------------|
-| `String`               | `{ "type": "string" }`                        |
-| `Integer` / `int`      | `{ "type": "integer" }`                       |
-| `Long` / `long`        | `{ "type": "integer" }`                       |
-| `Double` / `double`    | `{ "type": "number" }`                        |
-| `Float` / `float`      | `{ "type": "number" }`                        |
-| `BigDecimal`           | `{ "type": "number" }`                        |
-| `Boolean` / `boolean`  | `{ "type": "boolean" }`                       |
-| `UUID`                 | `{ "type": "string", "format": "uuid" }`      |
-| `Enum` subtype         | `{ "type": "string", "enum": [...values] }`   |
+| Java type             | JSON Schema                                 |
+| --------------------- | ------------------------------------------- |
+| `String`              | `{ "type": "string" }`                      |
+| `Integer` / `int`     | `{ "type": "integer" }`                     |
+| `Long` / `long`       | `{ "type": "integer" }`                     |
+| `Double` / `double`   | `{ "type": "number" }`                      |
+| `Float` / `float`     | `{ "type": "number" }`                      |
+| `BigDecimal`          | `{ "type": "number" }`                      |
+| `Boolean` / `boolean` | `{ "type": "boolean" }`                     |
+| `UUID`                | `{ "type": "string", "format": "uuid" }`    |
+| `Enum` subtype        | `{ "type": "string", "enum": [...values] }` |
 
 `optional = true` on `@McpArgument` omits the parameter from the `required` array.
 
@@ -695,7 +695,7 @@ These deferments are intentional, not accidental omissions. The goal is to make 
 ### Soklet configuration (production)
 
 ```java
-SokletConfig config = SokletConfig.withServer(Server.withPort(8080).build())
+SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(8080).build())
     .serverSentEventServer(ServerSentEventServer.withPort(8081).build())
     .instanceProvider(myInstanceProvider)
     .mcpServer(McpServer.withPort(8082)

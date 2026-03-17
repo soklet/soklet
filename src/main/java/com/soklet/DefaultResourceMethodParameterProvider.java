@@ -168,8 +168,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		if (basicParameterType.isAssignableFrom(CorsAuthorizer.class))
 			return sokletConfig.getCorsAuthorizer();
 
-		if (basicParameterType.isAssignableFrom(Server.class))
-			return sokletConfig.getServer();
+		if (basicParameterType.isAssignableFrom(HttpServer.class))
+			return sokletConfig.getHttpServer().orElseThrow(() -> new IllegalStateException(format("You cannot inject a parameter of type %s because your %s instance is not configured with one. Offending resource method: %s",
+					HttpServer.class.getSimpleName(), Soklet.class.getSimpleName(), resourceMethod)));
 
 		if (basicParameterType.isAssignableFrom(ServerSentEventServer.class)) {
 			ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);

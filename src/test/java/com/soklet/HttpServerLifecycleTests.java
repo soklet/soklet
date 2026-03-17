@@ -41,7 +41,7 @@ import static com.soklet.TestSupport.readAll;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public class ServerLifecycleTests {
+public class HttpServerLifecycleTests {
 	private static HttpURLConnection open(String method, URL url, Map<String, String> headers) throws IOException {
 		HttpURLConnection c = (HttpURLConnection) url.openConnection();
 		c.setRequestMethod(method);
@@ -54,7 +54,7 @@ public class ServerLifecycleTests {
 	@Test
 	public void start_stop_isStarted_toggles_and_serves_requests() throws Exception {
 		int port = findFreePort();
-		SokletConfig cfg = SokletConfig.withServer(Server.withPort(port)
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HealthResource.class)))
@@ -86,7 +86,7 @@ public class ServerLifecycleTests {
 
 	@Test
 	public void start_without_initialize_fails_fast() {
-		Server server = Server.withPort(0).build();
+		HttpServer server = HttpServer.withPort(0).build();
 
 		IllegalStateException exception =
 				Assertions.assertThrows(IllegalStateException.class, server::start);
@@ -101,9 +101,9 @@ public class ServerLifecycleTests {
 		try (ServerSocket ss = new ServerSocket(port)) {
 			ss.setReuseAddress(true);
 
-			Server server = Server.withPort(port).build();
+			HttpServer server = HttpServer.withPort(port).build();
 
-			SokletConfig cfg = SokletConfig.withServer(server)
+			SokletConfig cfg = SokletConfig.withHttpServer(server)
 					.lifecycleObserver(new QuietLifecycle())
 					.build();
 
@@ -118,7 +118,7 @@ public class ServerLifecycleTests {
 			Assertions.assertThrows(UncheckedIOException.class, server::start);
 			Assertions.assertFalse(server.isStarted());
 
-			DefaultServer internal = (DefaultServer) server;
+			DefaultHttpServer internal = (DefaultHttpServer) server;
 			Assertions.assertTrue(internal.getEventLoop().isEmpty());
 			Assertions.assertTrue(internal.getRequestHandlerExecutorService().isEmpty());
 		}
@@ -130,12 +130,12 @@ public class ServerLifecycleTests {
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 		executor.shutdown();
 
-		Server server = Server.withPort(port)
+		HttpServer server = HttpServer.withPort(port)
 				.requestTimeout(Duration.ofSeconds(5))
 				.requestHandlerExecutorServiceSupplier(() -> executor)
 				.build();
 
-		SokletConfig cfg = SokletConfig.withServer(server)
+		SokletConfig cfg = SokletConfig.withHttpServer(server)
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
@@ -167,11 +167,11 @@ public class ServerLifecycleTests {
 	@Test
 	public void requestHandlerDefaults_useExpectedConcurrencyAndQueueCapacity() {
 		int concurrency = 3;
-		Server server = Server.withPort(0)
+		HttpServer server = HttpServer.withPort(0)
 				.concurrency(concurrency)
 				.build();
 
-		DefaultServer internal = (DefaultServer) server;
+		DefaultHttpServer internal = (DefaultHttpServer) server;
 
 		boolean virtualThreadsAvailable = Boolean.TRUE.equals(Utilities.virtualThreadsAvailable());
 		int expectedConcurrency = virtualThreadsAvailable ? concurrency * 16 : concurrency;
@@ -183,11 +183,11 @@ public class ServerLifecycleTests {
 
 	@Test
 	public void requestHandlerQueueCapacity_defaultsFromExplicitConcurrency() {
-		Server server = Server.withPort(0)
+		HttpServer server = HttpServer.withPort(0)
 				.requestHandlerConcurrency(4)
 				.build();
 
-		DefaultServer internal = (DefaultServer) server;
+		DefaultHttpServer internal = (DefaultHttpServer) server;
 		Assertions.assertEquals(Integer.valueOf(4), internal.getRequestHandlerConcurrency());
 		Assertions.assertEquals(Integer.valueOf(4 * 64), internal.getRequestHandlerQueueCapacity());
 	}
@@ -195,7 +195,7 @@ public class ServerLifecycleTests {
 	@Test
 	public void requestHandlerConcurrency_requiresPositiveValue() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				Server.withPort(0)
+				HttpServer.withPort(0)
 						.requestHandlerConcurrency(0)
 						.build());
 	}
@@ -203,7 +203,7 @@ public class ServerLifecycleTests {
 	@Test
 	public void requestHandlerQueueCapacity_requiresPositiveValue() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				Server.withPort(0)
+				HttpServer.withPort(0)
 						.requestHandlerQueueCapacity(0)
 						.build());
 	}

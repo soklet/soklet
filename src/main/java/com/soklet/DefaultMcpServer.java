@@ -298,7 +298,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			this.serverSocket = serverSocket;
 			this.requestHandlerExecutorService = this.requestHandlerExecutorServiceSupplier.get();
 			ScheduledThreadPoolExecutor timeoutExecutor = new ScheduledThreadPoolExecutor(1,
-					new DefaultServer.NonvirtualThreadFactory("mcp-request-timeout"));
+					new DefaultHttpServer.NonvirtualThreadFactory("mcp-request-timeout"));
 			timeoutExecutor.setRemoveOnCancelPolicy(true);
 			this.requestHandlerTimeoutExecutorService = timeoutExecutor;
 			this.connectionExecutorService = this.connectionExecutorServiceSupplier.get();
@@ -1400,7 +1400,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				0L,
 				TimeUnit.MILLISECONDS,
 				new ArrayBlockingQueue<>(queueCapacity),
-				new DefaultServer.NonvirtualThreadFactory(threadNamePrefix));
+				new DefaultHttpServer.NonvirtualThreadFactory(threadNamePrefix));
 	}
 
 	private boolean reserveConnectionSlot(@NonNull AtomicBoolean slotReserved) {

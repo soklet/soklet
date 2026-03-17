@@ -85,21 +85,21 @@ public interface LifecycleObserver {
 	/**
 	 * Called before the server starts.
 	 */
-	default void willStartServer(@NonNull Server server) {
+	default void willStartHttpServer(@NonNull HttpServer server) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after the server starts.
 	 */
-	default void didStartServer(@NonNull Server server) {
+	default void didStartHttpServer(@NonNull HttpServer server) {
 		// No-op by default
 	}
 
 	/**
-	 * Called after a {@link Server} instance was asked to start, but failed due to an exception.
+	 * Called after a {@link HttpServer} instance was asked to start, but failed due to an exception.
 	 */
-	default void didFailToStartServer(@NonNull Server server,
+	default void didFailToStartHttpServer(@NonNull HttpServer server,
 																		@NonNull Throwable throwable) {
 		// No-op by default
 	}
@@ -107,21 +107,21 @@ public interface LifecycleObserver {
 	/**
 	 * Called before the server stops.
 	 */
-	default void willStopServer(@NonNull Server server) {
+	default void willStopHttpServer(@NonNull HttpServer server) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after the server stops.
 	 */
-	default void didStopServer(@NonNull Server server) {
+	default void didStopHttpServer(@NonNull HttpServer server) {
 		// No-op by default
 	}
 
 	/**
-	 * Called after a {@link Server} instance was asked to stop, but failed due to an exception.
+	 * Called after a {@link HttpServer} instance was asked to stop, but failed due to an exception.
 	 */
-	default void didFailToStopServer(@NonNull Server server,
+	default void didFailToStopHttpServer(@NonNull HttpServer server,
 																	 @NonNull Throwable throwable) {
 		// No-op by default
 	}

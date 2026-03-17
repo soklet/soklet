@@ -63,8 +63,8 @@ public class CorsWildcardWithCredentialsTests {
 			}
 		};
 
-		SokletConfig cfg = SokletConfig.withServer(
-						Server.withPort(port).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(
+						HttpServer.withPort(port).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(authorizer)
 				.build();

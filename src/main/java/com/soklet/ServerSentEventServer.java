@@ -31,17 +31,18 @@ import static java.util.Objects.requireNonNull;
 /**
  * A special HTTP server whose only purpose is to provide <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> functionality.
  * <p>
- * A Soklet application which supports Server-Sent Events will be configured with both a {@link Server} and a {@link ServerSentEventServer}.
+ * A Soklet application which supports Server-Sent Events will be configured with a {@link ServerSentEventServer}.
+ * A regular {@link HttpServer} is only required if the same application also serves ordinary HTTP <em>Resource Methods</em>.
  * <p>
  * For example:
- * <pre>{@code // Set up our HTTP and SSE servers
- * Server server = Server.fromPort(8080);
+ * <pre>{@code // Set up our SSE server
  * ServerSentEventServer sseServer = ServerSentEventServer.fromPort(8081);
  *
- * // Wire servers into our config
- * SokletConfig config = SokletConfig.withServer(server)
- *   .serverSentEventServer(sseServer)
+ * // Wire the SSE server into our config
+ * SokletConfig config = SokletConfig.withServerSentEventServer(sseServer)
  *   .build();
+ *
+ * // Add .httpServer(HttpServer.fromPort(8080)) if you also serve ordinary HTTP resources
  *
  * // Run the app
  * try (Soklet soklet = Soklet.fromConfig(config)) {

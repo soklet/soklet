@@ -82,11 +82,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final ConcurrentLruMap<RequestRejectionKey, LongAdder> sseRequestRejectionsByReason;
 	private final ConcurrentLruMap<RequestReadFailureKey, LongAdder> mcpRequestReadFailuresByReason;
 	private final ConcurrentLruMap<RequestRejectionKey, LongAdder> mcpRequestRejectionsByReason;
-	private final ConcurrentLruMap<ServerRouteStatusKey, Histogram> httpRequestDurationByRouteStatus;
-	private final ConcurrentLruMap<ServerRouteStatusKey, Histogram> httpHandlerDurationByRouteStatus;
-	private final ConcurrentLruMap<ServerRouteStatusKey, Histogram> httpTimeToFirstByteByRouteStatus;
-	private final ConcurrentLruMap<ServerRouteKey, Histogram> httpRequestBodyBytesByRoute;
-	private final ConcurrentLruMap<ServerRouteStatusKey, Histogram> httpResponseBodyBytesByRouteStatus;
+	private final ConcurrentLruMap<HttpServerRouteStatusKey, Histogram> httpRequestDurationByRouteStatus;
+	private final ConcurrentLruMap<HttpServerRouteStatusKey, Histogram> httpHandlerDurationByRouteStatus;
+	private final ConcurrentLruMap<HttpServerRouteStatusKey, Histogram> httpTimeToFirstByteByRouteStatus;
+	private final ConcurrentLruMap<HttpServerRouteKey, Histogram> httpRequestBodyBytesByRoute;
+	private final ConcurrentLruMap<HttpServerRouteStatusKey, Histogram> httpResponseBodyBytesByRouteStatus;
 	private final ConcurrentHashMap<IdentityKey<ServerSentEventConnection>, SseConnectionState> sseConnectionsByIdentity;
 	private final ConcurrentLruMap<ServerSentEventRouteKey, LongAdder> sseHandshakesAcceptedByRoute;
 	private final ConcurrentLruMap<ServerSentEventRouteHandshakeFailureKey, LongAdder> sseHandshakesRejectedByRouteAndReason;
@@ -304,7 +304,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.orElse(0L);
 
 		Histogram requestBodyHistogram = histogramFor(this.httpRequestBodyBytesByRoute,
-				new ServerRouteKey(method, routeContext.getRouteType(), routeContext.getRoute()),
+				new HttpServerRouteKey(method, routeContext.getRouteType(), routeContext.getRoute()),
 				HTTP_BODY_BYTES_BUCKETS);
 		requestBodyHistogram.record(requestBodyBytes);
 	}
@@ -332,7 +332,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		long elapsedNanos = System.nanoTime() - state.getStartedAtNanos();
 		String statusClass = statusClassFor(marshaledResponse.getStatusCode());
 
-		ServerRouteStatusKey key = new ServerRouteStatusKey(state.getMethod(), state.getRouteType(),
+		HttpServerRouteStatusKey key = new HttpServerRouteStatusKey(state.getMethod(), state.getRouteType(),
 				state.getRoute(), statusClass);
 		histogramFor(this.httpHandlerDurationByRouteStatus, key, HTTP_LATENCY_BUCKETS_NANOS)
 				.record(elapsedNanos);
@@ -365,7 +365,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		HttpMethod method = request.getHttpMethod();
 		String statusClass = statusClassFor(marshaledResponse.getStatusCode());
 
-		ServerRouteStatusKey key = new ServerRouteStatusKey(method, routeContext.getRouteType(),
+		HttpServerRouteStatusKey key = new HttpServerRouteStatusKey(method, routeContext.getRouteType(),
 				routeContext.getRoute(), statusClass);
 		histogramFor(this.httpRequestDurationByRouteStatus, key, HTTP_LATENCY_BUCKETS_NANOS)
 				.record(duration.toNanos());
@@ -1013,27 +1013,27 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpRequestDurations() {
+	Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpRequestDurations() {
 		return snapshotMap(this.httpRequestDurationByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpHandlerDurations() {
+	Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpHandlerDurations() {
 		return snapshotMap(this.httpHandlerDurationByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpTimeToFirstByte() {
+	Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpTimeToFirstByte() {
 		return snapshotMap(this.httpTimeToFirstByteByRouteStatus);
 	}
 
 	@NonNull
-	Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> snapshotHttpRequestBodyBytes() {
+	Map<@NonNull HttpServerRouteKey, @NonNull HistogramSnapshot> snapshotHttpRequestBodyBytes() {
 		return snapshotMap(this.httpRequestBodyBytesByRoute);
 	}
 
 	@NonNull
-	Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpResponseBodyBytes() {
+	Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> snapshotHttpResponseBodyBytes() {
 		return snapshotMap(this.httpResponseBodyBytesByRouteStatus);
 	}
 
@@ -1498,7 +1498,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static LabelSet labelsForHttpStatusKey(@NonNull ServerRouteStatusKey key) {
+	private static LabelSet labelsForHttpStatusKey(@NonNull HttpServerRouteStatusKey key) {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(3);
@@ -1509,7 +1509,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static LabelSet labelsForHttpRouteKey(@NonNull ServerRouteKey key) {
+	private static LabelSet labelsForHttpRouteKey(@NonNull HttpServerRouteKey key) {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);

@@ -2980,7 +2980,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			ExecutorService requestReaderExecutorService = getRequestReaderExecutorService().orElse(null);
 
 			if (requestReaderExecutorService == null || requestReaderExecutorService.isShutdown())
-				throw new IOException("Server is shutting down");
+				throw new IOException("HttpServer is shutting down");
 
 			try {
 				readFuture = requestReaderExecutorService.submit(() -> {

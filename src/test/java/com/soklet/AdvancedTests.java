@@ -86,13 +86,13 @@ public class AdvancedTests {
 		// This test attempts to trigger race conditions in SSE connection management
 		// by rapidly connecting and disconnecting multiple clients concurrently
 
-		Server server = Server.withPort(findFreePort()).build();
+		HttpServer server = HttpServer.withPort(findFreePort()).build();
 		ServerSentEventServer sseServer = ServerSentEventServer.withPort(findFreePort())
 				.concurrentConnectionLimit(100)
 				.heartbeatInterval(Duration.ofMillis(100))
 				.build();
 
-		SokletConfig config = SokletConfig.withServer(server)
+		SokletConfig config = SokletConfig.withHttpServer(server)
 				.serverSentEventServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
@@ -419,14 +419,14 @@ public class AdvancedTests {
 	@Test
 	public void testConcurrentRequestProcessing() throws Exception {
 		// Test thread safety of request processing under high concurrency
-		Server server = Server.withPort(findFreePort())
+		HttpServer server = HttpServer.withPort(findFreePort())
 				.requestHandlerExecutorServiceSupplier(() ->
 						Utilities.createVirtualThreadsNewThreadPerTaskExecutor("test-thread", (Thread thread, Throwable throwable) -> {
 							throwable.printStackTrace();
 						}))
 				.build();
 
-		SokletConfig config = SokletConfig.withServer(server)
+		SokletConfig config = SokletConfig.withHttpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConcurrentTestResource.class)))
 				.build();
 
@@ -570,12 +570,12 @@ public class AdvancedTests {
 	@Test
 	public void testSSEBroadcasterMemoryLeak() throws Exception {
 		// Test that SSE broadcasters don't leak memory when connections are closed
-		Server server = Server.withPort(findFreePort()).build();
+		HttpServer server = HttpServer.withPort(findFreePort()).build();
 		ServerSentEventServer sseServer = ServerSentEventServer.withPort(findFreePort())
 				.broadcasterCacheCapacity(10) // Small cache to test eviction
 				.build();
 
-		SokletConfig config = SokletConfig.withServer(server)
+		SokletConfig config = SokletConfig.withHttpServer(server)
 				.serverSentEventServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSEMemoryTestResource.class)))
 				.build();
@@ -628,11 +628,11 @@ public class AdvancedTests {
 	}
 
 	@Test
-	public void testDefaultServerReleasesExecutorsOnStop() throws Exception {
+	public void testDefaultHttpServerReleasesExecutorsOnStop() throws Exception {
 		int port = findFreePort();
-		Server server = Server.withPort(port).build();
+		HttpServer server = HttpServer.withPort(port).build();
 
-		SokletConfig config = SokletConfig.withServer(server)
+		SokletConfig config = SokletConfig.withHttpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.build();
 
@@ -653,7 +653,7 @@ public class AdvancedTests {
 			}
 		}
 
-		DefaultServer defaultServer = (DefaultServer) server;
+		DefaultHttpServer defaultServer = (DefaultHttpServer) server;
 		Assertions.assertTrue(defaultServer.getEventLoop().isEmpty(), "Event loop should be cleared after stop");
 		Assertions.assertTrue(defaultServer.getRequestHandlerExecutorService().isEmpty(),
 				"Request handler executor should be cleared after stop");
@@ -665,14 +665,14 @@ public class AdvancedTests {
 	public void testSseServerClearsCachesOnStop() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
-		Server server = Server.withPort(httpPort).build();
+		HttpServer server = HttpServer.withPort(httpPort).build();
 		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
 				.broadcasterCacheCapacity(4)
 				.resourcePathCacheCapacity(4)
 				.build();
 		DefaultServerSentEventServer defaultSseServer = (DefaultServerSentEventServer) sseServer;
 
-		SokletConfig config = SokletConfig.withServer(server)
+		SokletConfig config = SokletConfig.withHttpServer(server)
 				.serverSentEventServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
@@ -717,11 +717,11 @@ public class AdvancedTests {
 
 	@Disabled("Long-running memory stability test")
 	@Test
-	public void testDefaultServerMemoryStabilityUnderLoad() throws Exception {
+	public void testDefaultHttpServerMemoryStabilityUnderLoad() throws Exception {
 		int port = findFreePort();
-		Server server = Server.withPort(port).build();
+		HttpServer server = HttpServer.withPort(port).build();
 
-		SokletConfig config = SokletConfig.withServer(server)
+		SokletConfig config = SokletConfig.withHttpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.build();
 
@@ -756,14 +756,14 @@ public class AdvancedTests {
 	public void testSseServerMemoryStabilityUnderLoad() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
-		Server server = Server.withPort(httpPort).build();
+		HttpServer server = HttpServer.withPort(httpPort).build();
 		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
 				.broadcasterCacheCapacity(32)
 				.resourcePathCacheCapacity(64)
 				.build();
 		DefaultServerSentEventServer defaultSseServer = (DefaultServerSentEventServer) sseServer;
 
-		SokletConfig config = SokletConfig.withServer(server)
+		SokletConfig config = SokletConfig.withHttpServer(server)
 				.serverSentEventServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
@@ -805,14 +805,14 @@ public class AdvancedTests {
 
 	@Disabled("Heavy load test; enable manually")
 	@Test
-	public void testDefaultServerHeavyLoad() throws Exception {
+	public void testDefaultHttpServerHeavyLoad() throws Exception {
 		int durationSeconds = 45;
 		int loadThreads = 200;
 
 		int port = findFreePort();
-		Server server = Server.withPort(port).build();
+		HttpServer server = HttpServer.withPort(port).build();
 
-		SokletConfig config = SokletConfig.withServer(server)
+		SokletConfig config = SokletConfig.withHttpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.build();
 
@@ -885,12 +885,12 @@ public class AdvancedTests {
 
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
-		Server server = Server.withPort(httpPort).build();
+		HttpServer server = HttpServer.withPort(httpPort).build();
 		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
 				.concurrentConnectionLimit(Math.max(0, concurrentConnections * 2))
 				.build();
 
-		SokletConfig config = SokletConfig.withServer(server)
+		SokletConfig config = SokletConfig.withHttpServer(server)
 				.serverSentEventServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
@@ -944,11 +944,11 @@ public class AdvancedTests {
 	@Test
 	public void testLargeRequestBodyMemoryHandling() throws Exception {
 		// Test memory handling for large request bodies
-		Server server = Server.withPort(findFreePort())
+		HttpServer server = HttpServer.withPort(findFreePort())
 				.maximumRequestSizeInBytes(10 * 1024 * 1024) // 10MB limit
 				.build();
 
-		SokletConfig config = SokletConfig.withServer(server)
+		SokletConfig config = SokletConfig.withHttpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LargeBodyTestResource.class)))
 				.build();
 
@@ -1270,7 +1270,7 @@ public class AdvancedTests {
 	}
 
 	private SokletConfig config(int port) {
-		return SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(2)).build())
+		return SokletConfig.withHttpServer(HttpServer.withPort(port).requestTimeout(Duration.ofSeconds(2)).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -1420,7 +1420,7 @@ public class AdvancedTests {
 				String response = readResponse(socket);
 
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 200"),
-						"Server rejected absolute URI form: " + firstLine(response));
+						"HttpServer rejected absolute URI form: " + firstLine(response));
 			}
 		}
 	}
@@ -1440,7 +1440,7 @@ public class AdvancedTests {
 				write(socket, request);
 				String response = readResponse(socket);
 
-				Assertions.assertFalse(response.startsWith("HTTP/1.1 500"), "Server did not handle OPTIONS *");
+				Assertions.assertFalse(response.startsWith("HTTP/1.1 500"), "HttpServer did not handle OPTIONS *");
 			}
 		}
 	}
@@ -1461,7 +1461,7 @@ public class AdvancedTests {
 				String response = readResponse(socket);
 
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 400"),
-						"Server should reject paths containing null bytes with 400 Bad Request");
+						"HttpServer should reject paths containing null bytes with 400 Bad Request");
 			}
 		}
 	}
@@ -1492,7 +1492,7 @@ public class AdvancedTests {
 				.build();
 
 		// 3. Configure Soklet
-		SokletConfig config = SokletConfig.withServer(Server.withPort(findFreePort()).build())
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(findFreePort()).build())
 				.serverSentEventServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LimitTestResource.class)))
 				.responseMarshaler(customMarshaler)

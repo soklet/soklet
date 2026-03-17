@@ -64,11 +64,12 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Soklet's main class - manages a {@link Server} (and optionally a {@link ServerSentEventServer}) using the provided system configuration.
+ * Soklet's main class - manages one or more configured transport servers ({@link HttpServer}, {@link ServerSentEventServer}, and/or {@link McpServer})
+ * using the provided system configuration.
  * <p>
  * <pre>{@code // Use out-of-the-box defaults
- * SokletConfig config = SokletConfig.withServer(
- *   Server.fromPort(8080)
+ * SokletConfig config = SokletConfig.withHttpServer(
+ *   HttpServer.fromPort(8080)
  * ).build();
  *
  * try (Soklet soklet = Soklet.fromConfig(config)) {
@@ -190,14 +191,23 @@ public final class Soklet implements AutoCloseable {
 				.map(DefaultMcpServer.class::cast)
 				.ifPresent(defaultMcpServer -> defaultMcpServer.mcpRuntime(this.defaultMcpRuntime));
 
+		Set<ResourceMethod> resourceMethods = sokletConfig.getResourceMethodResolver().getResourceMethods();
+
 		// Fail fast in the event that Soklet appears misconfigured
-		if (sokletConfig.getResourceMethodResolver().getResourceMethods().size() == 0
+		if (resourceMethods.size() == 0
 				&& sokletConfig.getMcpServer().isEmpty())
 			throw new IllegalStateException(format("No Soklet Resource Methods were found. First, try to rebuild and see if that solves the problem. If not, please ensure your %s is configured correctly. "
 					+ "See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.", ResourceMethodResolver.class.getSimpleName()));
 
+		boolean hasStandardHttpResourceMethods = resourceMethods.stream()
+				.anyMatch(resourceMethod -> !resourceMethod.isServerSentEventSource());
+
+		if (hasStandardHttpResourceMethods && sokletConfig.getHttpServer().isEmpty())
+			throw new IllegalStateException(format("Resource Methods were found, but no %s is configured. See https://www.soklet.com/docs/server-configuration for details.",
+					HttpServer.class.getSimpleName()));
+
 		// SSE misconfiguration check: @ServerSentEventSource resource methods are declared, but not ServerSentEventServer exists
-		boolean hasSseResourceMethods = sokletConfig.getResourceMethodResolver().getResourceMethods().stream()
+		boolean hasSseResourceMethods = resourceMethods.stream()
 				.anyMatch(resourceMethod -> resourceMethod.isServerSentEventSource());
 
 		if (hasSseResourceMethods && sokletConfig.getServerSentEventServer().isEmpty())
@@ -220,13 +230,13 @@ public final class Soklet implements AutoCloseable {
 
 		// Use a layer of indirection here so the Soklet type does not need to directly implement the `RequestHandler` interface.
 		// Reasoning: the `handleRequest` method for Soklet should not be public, which might lead to accidental invocation by users.
-		// That method should only be called by the managed `Server` instance.
+		// That method should only be called by the managed `HttpServer` instance.
 		Soklet soklet = this;
 
-		sokletConfig.getServer().initialize(getSokletConfig(), (request, marshaledResponseConsumer) -> {
+		sokletConfig.getHttpServer().ifPresent(server -> server.initialize(getSokletConfig(), (request, marshaledResponseConsumer) -> {
 			// Delegate to Soklet's internal request handling method
 			soklet.handleRequest(request, ServerType.STANDARD_HTTP, marshaledResponseConsumer);
-		});
+		}));
 
 		ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
 
@@ -263,19 +273,21 @@ public final class Soklet implements AutoCloseable {
 			lifecycleObserver.willStartSoklet(this);
 
 			try {
-				Server server = sokletConfig.getServer();
+					HttpServer server = sokletConfig.getHttpServer().orElse(null);
 
-				// 2. Attempt to start Main Server
-				lifecycleObserver.willStartServer(server);
-				try {
-					server.start();
-					lifecycleObserver.didStartServer(server);
-				} catch (Throwable t) {
-					lifecycleObserver.didFailToStartServer(server, t);
-					throw t; // Rethrow to trigger outer catch block
-				}
+					// 2. Attempt to start Main HttpServer
+					if (server != null) {
+						lifecycleObserver.willStartHttpServer(server);
+						try {
+							server.start();
+							lifecycleObserver.didStartHttpServer(server);
+						} catch (Throwable t) {
+							lifecycleObserver.didFailToStartHttpServer(server, t);
+							throw t; // Rethrow to trigger outer catch block
+						}
+					}
 
-				// 3. Attempt to start SSE Server (if present)
+					// 3. Attempt to start SSE HttpServer (if present)
 				ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
 
 				if (serverSentEventServer != null) {
@@ -336,21 +348,21 @@ public final class Soklet implements AutoCloseable {
 				lifecycleObserver.willStopSoklet(this);
 
 				Throwable firstEncounteredException = null;
-				Server server = sokletConfig.getServer();
+					HttpServer server = sokletConfig.getHttpServer().orElse(null);
 
-				// 2. Attempt to stop Main Server
-				if (server.isStarted()) {
-					lifecycleObserver.willStopServer(server);
-					try {
-						server.stop();
-						lifecycleObserver.didStopServer(server);
+					// 2. Attempt to stop Main HttpServer
+					if (server != null && server.isStarted()) {
+						lifecycleObserver.willStopHttpServer(server);
+						try {
+							server.stop();
+						lifecycleObserver.didStopHttpServer(server);
 					} catch (Throwable t) {
 						firstEncounteredException = t;
-						lifecycleObserver.didFailToStopServer(server, t);
+						lifecycleObserver.didFailToStopHttpServer(server, t);
 					}
 				}
 
-				// 3. Attempt to stop SSE Server
+				// 3. Attempt to stop SSE HttpServer
 				ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
 
 				if (serverSentEventServer != null && serverSentEventServer.isStarted()) {
@@ -545,9 +557,9 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Nonpublic "informal" implementation of {@link com.soklet.Server.RequestHandler} so Soklet does not need to expose {@code handleRequest} publicly.
+	 * Nonpublic "informal" implementation of {@link com.soklet.HttpServer.RequestHandler} so Soklet does not need to expose {@code handleRequest} publicly.
 	 * Reasoning: users of this library should never call {@code handleRequest} directly - it should only be invoked in response to events
-	 * provided by a {@link Server} or {@link ServerSentEventServer} implementation.
+	 * provided by a {@link HttpServer} or {@link ServerSentEventServer} implementation.
 	 */
 	protected void handleRequest(@NonNull Request request,
 															 @NonNull ServerType serverType,
@@ -1388,16 +1400,18 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Is either the managed {@link Server} or {@link ServerSentEventServer} started?
+	 * Is any managed transport server started?
 	 *
-	 * @return {@code true} if at least one is started, {@code false} otherwise
+	 * @return {@code true} if at least one configured transport server is started, {@code false} otherwise
 	 */
 	@NonNull
 	public Boolean isStarted() {
 		getLock().lock();
 
 		try {
-			if (getSokletConfig().getServer().isStarted())
+			HttpServer server = getSokletConfig().getHttpServer().orElse(null);
+
+			if (server != null && server.isStarted())
 				return true;
 
 			ServerSentEventServer serverSentEventServer = getSokletConfig().getServerSentEventServer().orElse(null);
@@ -1412,7 +1426,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Runs Soklet with special non-network "simulator" implementations of {@link Server} and {@link ServerSentEventServer} - useful for integration testing.
+	 * Runs Soklet with special non-network "simulator" implementations of the configured transport servers - useful for integration testing.
 	 * <p>
 	 * See <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a> for how to write these tests.
 	 *
@@ -1428,7 +1442,9 @@ public final class Soklet implements AutoCloseable {
 		Soklet soklet = Soklet.fromConfig(sokletConfig);
 
 		// Extract proxies (they're guaranteed to be proxies now)
-		ServerProxy serverProxy = (ServerProxy) sokletConfig.getServer();
+		HttpServerProxy serverProxy = sokletConfig.getHttpServer()
+				.map(server -> (HttpServerProxy) server)
+				.orElse(null);
 		ServerSentEventServerProxy serverSentEventServerProxy = sokletConfig.getServerSentEventServer()
 				.map(s -> (ServerSentEventServerProxy) s)
 				.orElse(null);
@@ -1437,12 +1453,13 @@ public final class Soklet implements AutoCloseable {
 				.orElse(null);
 
 		// Create mock implementations
-		MockServer mockServer = new MockServer();
+		MockHttpServer mockServer = serverProxy == null ? null : new MockHttpServer();
 		MockServerSentEventServer mockServerSentEventServer = new MockServerSentEventServer();
 		MockMcpServer mockMcpServer = mcpServerProxy == null ? null : new MockMcpServer(mcpServerProxy.getRealImplementation());
 
 		// Switch proxies to simulator mode
-		serverProxy.enableSimulatorMode(mockServer);
+		if (serverProxy != null)
+			serverProxy.enableSimulatorMode(mockServer);
 
 		if (serverSentEventServerProxy != null)
 			serverSentEventServerProxy.enableSimulatorMode(mockServerSentEventServer);
@@ -1452,10 +1469,11 @@ public final class Soklet implements AutoCloseable {
 
 		try {
 			// Initialize mocks with request handlers that delegate to Soklet's processing
-			mockServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
-				// Delegate to Soklet's internal request handling
-				soklet.handleRequest(request, ServerType.STANDARD_HTTP, marshaledResponseConsumer);
-			});
+				if (mockServer != null)
+					mockServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
+						// Delegate to Soklet's internal request handling
+						soklet.handleRequest(request, ServerType.STANDARD_HTTP, marshaledResponseConsumer);
+					});
 
 			if (mockServerSentEventServer != null)
 				mockServerSentEventServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
@@ -1474,7 +1492,8 @@ public final class Soklet implements AutoCloseable {
 			simulatorConsumer.accept(simulator);
 		} finally {
 			// Always restore to real implementations
-			serverProxy.disableSimulatorMode();
+				if (serverProxy != null)
+					serverProxy.disableSimulatorMode();
 
 			if (serverSentEventServerProxy != null)
 				serverSentEventServerProxy.disableSimulatorMode();
@@ -1500,29 +1519,33 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@ThreadSafe
-	static class DefaultSimulator implements Simulator {
-		@Nullable
-		private MockServer server;
+		static class DefaultSimulator implements Simulator {
+			@Nullable
+			private MockHttpServer server;
 		@Nullable
 		private MockServerSentEventServer serverSentEventServer;
 		@Nullable
 		private MockMcpServer mcpServer;
 
-		public DefaultSimulator(@NonNull MockServer server,
-														@Nullable MockServerSentEventServer serverSentEventServer,
-														@Nullable MockMcpServer mcpServer) {
-			requireNonNull(server);
-
-			this.server = server;
-			this.serverSentEventServer = serverSentEventServer;
-			this.mcpServer = mcpServer;
+			public DefaultSimulator(@Nullable MockHttpServer server,
+															@Nullable MockServerSentEventServer serverSentEventServer,
+															@Nullable MockMcpServer mcpServer) {
+				this.server = server;
+				this.serverSentEventServer = serverSentEventServer;
+				this.mcpServer = mcpServer;
 		}
 
 		@NonNull
-		@Override
-		public RequestResult performRequest(@NonNull Request request) {
-			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
-			Server.RequestHandler requestHandler = getServer().getRequestHandler().orElse(null);
+			@Override
+			public RequestResult performRequest(@NonNull Request request) {
+				MockHttpServer server = getHttpServer().orElse(null);
+
+				if (server == null)
+					throw new IllegalStateException(format("You must specify a %s in your %s to simulate requests",
+							HttpServer.class.getSimpleName(), SokletConfig.class.getSimpleName()));
+
+				AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
+				HttpServer.RequestHandler requestHandler = server.getRequestHandler().orElse(null);
 
 			if (requestHandler == null)
 				throw new IllegalStateException("You must register a request handler prior to simulating requests");
@@ -1663,8 +1686,8 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		MockServer getServer() {
-			return this.server;
+		Optional<MockHttpServer> getHttpServer() {
+			return Optional.ofNullable(this.server);
 		}
 
 		@NonNull
@@ -1684,10 +1707,10 @@ public final class Soklet implements AutoCloseable {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	static class MockServer implements Server {
+	static class MockHttpServer implements HttpServer {
 		@Nullable
 		private SokletConfig sokletConfig;
-		private Server.@Nullable RequestHandler requestHandler;
+		private HttpServer.@Nullable RequestHandler requestHandler;
 
 		@Override
 		public void start() {

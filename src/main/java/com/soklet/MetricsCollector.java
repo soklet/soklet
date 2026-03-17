@@ -48,7 +48,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Example configuration:
  * <pre><code>
- * SokletConfig config = SokletConfig.withServer(Server.fromPort(8080))
+ * SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(8080))
  *   // This is already the default; specifying it here is optional
  *   .metricsCollector(MetricsCollector.defaultInstance())
  *   .build();
@@ -56,7 +56,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * To disable metrics collection entirely, specify Soklet's no-op implementation:
  * <pre><code>
- * SokletConfig config = SokletConfig.withServer(Server.fromPort(8080))
+ * SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(8080))
  *   // Use this instead of null to disable metrics collection
  *   .metricsCollector(MetricsCollector.disabledInstance())
  *   .build();
@@ -871,15 +871,15 @@ public interface MetricsCollector {
 		@NonNull
 		private final Map<@NonNull RequestRejectionKey, @NonNull Long> mcpRequestRejections;
 		@NonNull
-		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
+		private final Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
 		@NonNull
-		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations;
+		private final Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations;
 		@NonNull
-		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte;
+		private final Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte;
 		@NonNull
-		private final Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes;
+		private final Map<@NonNull HttpServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes;
 		@NonNull
-		private final Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
+		private final Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
 		@NonNull
 		private final Map<@NonNull ServerSentEventRouteKey, @NonNull Long> sseHandshakesAccepted;
 		@NonNull
@@ -1140,7 +1140,7 @@ public interface MetricsCollector {
 		 * @return HTTP request duration histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpRequestDurations() {
+		public Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpRequestDurations() {
 			return this.httpRequestDurations;
 		}
 
@@ -1150,7 +1150,7 @@ public interface MetricsCollector {
 		 * @return HTTP handler duration histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpHandlerDurations() {
+		public Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpHandlerDurations() {
 			return this.httpHandlerDurations;
 		}
 
@@ -1160,7 +1160,7 @@ public interface MetricsCollector {
 		 * @return HTTP time-to-first-byte histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpTimeToFirstByte() {
+		public Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpTimeToFirstByte() {
 			return this.httpTimeToFirstByte;
 		}
 
@@ -1170,7 +1170,7 @@ public interface MetricsCollector {
 		 * @return HTTP request body size histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> getHttpRequestBodyBytes() {
+		public Map<@NonNull HttpServerRouteKey, @NonNull HistogramSnapshot> getHttpRequestBodyBytes() {
 			return this.httpRequestBodyBytes;
 		}
 
@@ -1180,7 +1180,7 @@ public interface MetricsCollector {
 		 * @return HTTP response body size histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpResponseBodyBytes() {
+		public Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> getHttpResponseBodyBytes() {
 			return this.httpResponseBodyBytes;
 		}
 
@@ -1421,15 +1421,15 @@ public interface MetricsCollector {
 			@Nullable
 			private Map<@NonNull RequestRejectionKey, @NonNull Long> mcpRequestRejections;
 			@Nullable
-			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
+			private Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
 			@Nullable
-			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations;
+			private Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations;
 			@Nullable
-			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte;
+			private Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte;
 			@Nullable
-			private Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes;
+			private Map<@NonNull HttpServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes;
 			@Nullable
-			private Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
+			private Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
 			@Nullable
 			private Map<@NonNull ServerSentEventRouteKey, @NonNull Long> sseHandshakesAccepted;
 			@Nullable
@@ -1688,7 +1688,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder httpRequestDurations(
-					@Nullable Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations) {
+					@Nullable Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations) {
 				this.httpRequestDurations = httpRequestDurations;
 				return this;
 			}
@@ -1701,7 +1701,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder httpHandlerDurations(
-					@Nullable Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations) {
+					@Nullable Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpHandlerDurations) {
 				this.httpHandlerDurations = httpHandlerDurations;
 				return this;
 			}
@@ -1714,7 +1714,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder httpTimeToFirstByte(
-					@Nullable Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte) {
+					@Nullable Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpTimeToFirstByte) {
 				this.httpTimeToFirstByte = httpTimeToFirstByte;
 				return this;
 			}
@@ -1727,7 +1727,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder httpRequestBodyBytes(
-					@Nullable Map<@NonNull ServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes) {
+					@Nullable Map<@NonNull HttpServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes) {
 				this.httpRequestBodyBytes = httpRequestBodyBytes;
 				return this;
 			}
@@ -1740,7 +1740,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder httpResponseBodyBytes(
-					@Nullable Map<@NonNull ServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes) {
+					@Nullable Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes) {
 				this.httpResponseBodyBytes = httpResponseBodyBytes;
 				return this;
 			}
@@ -2352,10 +2352,10 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerRouteKey(@NonNull HttpMethod method,
+	record HttpServerRouteKey(@NonNull HttpMethod method,
 												@NonNull RouteType routeType,
 												@Nullable ResourcePathDeclaration route) {
-		public ServerRouteKey {
+		public HttpServerRouteKey {
 			requireNonNull(method);
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
@@ -2370,11 +2370,11 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerRouteStatusKey(@NonNull HttpMethod method,
+	record HttpServerRouteStatusKey(@NonNull HttpMethod method,
 															@NonNull RouteType routeType,
 															@Nullable ResourcePathDeclaration route,
 															@NonNull String statusClass) {
-		public ServerRouteStatusKey {
+		public HttpServerRouteStatusKey {
 			requireNonNull(method);
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)

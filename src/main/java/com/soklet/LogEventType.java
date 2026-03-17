@@ -168,11 +168,11 @@ public enum LogEventType {
 	 */
 	RESOURCE_METHOD_RESOLUTION_FAILED,
 	/**
-	 * Indicates that the {@link Server} received a request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
+	 * Indicates that the {@link HttpServer} received a request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
 	 */
 	SERVER_UNPARSEABLE_REQUEST,
 	/**
-	 * Indicates an internal {@link Server} error occurred.
+	 * Indicates an internal {@link HttpServer} error occurred.
 	 */
 	SERVER_INTERNAL_ERROR,
 	/**

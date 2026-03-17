@@ -106,7 +106,7 @@ import static java.lang.String.format;
  */
 public interface Simulator {
 	/**
-	 * Given a request that would normally be handled by your standard {@link Server}, process it and return response data (both logical {@link Response}, if present, and the {@link MarshaledResponse} bytes to be sent over the wire) as well as the matching <em>Resource Method</em>, if available.
+	 * Given a request that would normally be handled by your standard {@link HttpServer}, process it and return response data (both logical {@link Response}, if present, and the {@link MarshaledResponse} bytes to be sent over the wire) as well as the matching <em>Resource Method</em>, if available.
 	 * <p>
 	 * To make requests that would normally be handled by your {@link ServerSentEventServer}, use {@link #performServerSentEventRequest(Request)}.
 	 *
@@ -119,7 +119,7 @@ public interface Simulator {
 	/**
 	 * Given a request that would normally be handled by your {@link ServerSentEventServer} (that is, for a <em>Resource Method</em> decorated with the {@link com.soklet.annotation.ServerSentEventSource} annotation), process it and return response data ({@link com.soklet.ServerSentEventRequestResult.HandshakeAccepted}, {@link com.soklet.ServerSentEventRequestResult.HandshakeRejected}, or {@link com.soklet.ServerSentEventRequestResult.RequestFailed});
 	 * <p>
-	 * To make requests that would normally be handled by your {@link Server}, use {@link #performRequest(Request)}.
+	 * To make requests that would normally be handled by your {@link HttpServer}, use {@link #performRequest(Request)}.
 	 *
 	 * @param request the Server-Sent Event HTTP request to process
 	 * @return the result (handshake outcode, etc.) that corresponds to the request

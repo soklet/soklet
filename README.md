@@ -8,7 +8,7 @@
 ### What Is It?
 
 A small [HTTP/1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs, broadcasting [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events), and providing [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) functionality.<br/><br/>
-Zero dependencies.  Dependency Injection friendly.<br/>
+Zero dependencies. Dependency Injection friendly.<br/>
 Optionally powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
 
 Soklet codes like a library, not a framework.
@@ -22,38 +22,38 @@ The Java web ecosystem is missing a server solution that is dependency-free but 
 
 Soklet provides the plumbing to build "transactional" REST APIs that exchange small amounts of data with clients.
 It is well-suited for building tool-backed agentic systems that stream results via SSE or expose tools, prompts, and resources via MCP.
-It does not make technology choices on your behalf (but [an example of how to build a full-featured API is available](https://www.soklet.com/docs/toystore-app)). It does not natively support [Reactive Programming](https://en.wikipedia.org/wiki/Reactive_programming) or similar methodologies.  It _does_ give you the foundation to build your system, your way.
+It does not make technology choices on your behalf (but [an example of how to build a full-featured API is available](https://www.soklet.com/docs/toystore-app)). It does not natively support [Reactive Programming](https://en.wikipedia.org/wiki/Reactive_programming) or similar methodologies. It _does_ give you the foundation to build your system, your way.
 
 Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/docs/licensing), proudly powering production systems since 2015.
 
 ### Design Goals
 
-* Main focus: routing HTTP/1.1 requests to Java methods
-* Near-instant startup
-* Zero dependencies
-* Immutability/thread-safety
-* Small, comprehensible codebase
-* Support for automated unit and integration testing
-* Emphasis on configurability
-* Thorough, high-quality documentation
-* Best-in-class support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
-* First-class support for [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
-* [Servlet Integration](https://www.soklet.com/docs/servlet-integration) for legacy code
+- Main focus: routing HTTP/1.1 requests to Java methods
+- Near-instant startup
+- Zero dependencies
+- Immutability/thread-safety
+- Small, comprehensible codebase
+- Support for automated unit and integration testing
+- Emphasis on configurability
+- Thorough, high-quality documentation
+- Best-in-class support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
+- First-class support for [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
+- [Servlet Integration](https://www.soklet.com/docs/servlet-integration) for legacy code
 
 ### Design Non-Goals
 
-* SSL/TLS (your load balancer should provide TLS termination)
-* Traditional HTTP streaming
-* WebSockets
-* Dictate which technologies to use (Guice vs. Dagger, Gson vs. Jackson, etc.)
-* "Batteries included" authentication and authorization
+- SSL/TLS (your load balancer should provide TLS termination)
+- Traditional HTTP streaming
+- WebSockets
+- Dictate which technologies to use (Guice vs. Dagger, Gson vs. Jackson, etc.)
+- "Batteries included" authentication and authorization
 
 ### Do Zero-Dependency Libraries Interest You?
 
 Similarly-flavored commercially-friendly OSS libraries are available.
 
-* [Pyranid](https://www.pyranid.com) - makes working with JDBC pleasant
-* [Lokalized](https://www.lokalized.com) - natural-sounding translations (i18n) via expression language
+- [Pyranid](https://www.pyranid.com) - makes working with JDBC pleasant
+- [Lokalized](https://www.lokalized.com) - natural-sounding translations (i18n) via expression language
 
 ### License
 
@@ -89,11 +89,11 @@ dependencies {
 
 #### Direct Download
 
-If you don't use Maven or Gradle, you can drop [soklet-2.1.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.1.0-SNAPSHOT/soklet-2.1.0-SNAPSHOT.jar) directly into your project.  No other dependencies are required.
+If you don't use Maven or Gradle, you can drop [soklet-2.1.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.1.0-SNAPSHOT/soklet-2.1.0-SNAPSHOT.jar) directly into your project. No other dependencies are required.
 
 ### Code Sample
 
-Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-2.1.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.1.0-SNAPSHOT/soklet-2.1.0-SNAPSHOT.jar) and the JDK.  There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
+Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-2.1.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.1.0-SNAPSHOT/soklet-2.1.0-SNAPSHOT.jar) and the JDK. There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
 
 Soklet systems can be structurally as simple as a "hello world" app.
 
@@ -108,7 +108,7 @@ public class App {
   public String index() {
     return "Hello, world!";
   }
-  
+
   // Echoes back the path parameter, which must be a LocalDate
   @GET("/echo/{date}")
   public LocalDate echo(@PathParameter LocalDate date) {
@@ -133,15 +133,15 @@ public class App {
           .maxAge(Duration.ofMinutes(5))
           .sameSite(SameSite.LAX)
           .build()
-      ))        
+      ))
       .build();
   }
 
   // Start the server and listen on :8080
   public static void main(String[] args) throws Exception {
     // Use out-of-the-box defaults
-    SokletConfig config = SokletConfig.withServer(
-      Server.fromPort(8080)
+    SokletConfig config = SokletConfig.withHttpServer(
+      HttpServer.fromPort(8080)
     ).build();
 
     try (Soklet soklet = Soklet.fromConfig(config)) {
@@ -155,12 +155,12 @@ public class App {
 
 Here we use raw `javac` to build and `java` to run.
 
-This example requires JDK 17+ to be installed on your machine ([or see this example of using Docker for Soklet apps](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)).  If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
+This example requires JDK 17+ to be installed on your machine ([or see this example of using Docker for Soklet apps](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)). If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
 
 #### Build
 
 ```shell
-javac -parameters -cp soklet-2.1.0-SNAPSHOT.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java 
+javac -parameters -cp soklet-2.1.0-SNAPSHOT.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
 ```
 
 #### Run
@@ -184,7 +184,7 @@ Hello, world!
 
 ```shell
 # Acceptable path parameter
-% curl -i 'http://localhost:8080/echo/2024-12-31' 
+% curl -i 'http://localhost:8080/echo/2024-12-31'
 HTTP/1.1 200 OK
 Content-Length: 10
 Content-Type: text/plain; charset=UTF-8
@@ -225,17 +225,17 @@ Of course, real-world apps have more moving parts than a "hello world" example.
 
 Feature highlights include:
 
-* Authentication and role-based authorization
-* Basic CRUD operations
-* Dependency injection via [Google Guice](https://github.com/google/guice)
-* Relational database integration via [Pyranid](https://www.pyranid.com)
-* Context-awareness via [ScopedValue (JEP 481)](https://openjdk.org/jeps/481)
-* Internationalization via the JDK and [Lokalized](https://www.lokalized.com)
-* JSON requests/responses via [Gson](https://github.com/google/gson)
-* Logging via [SLF4J](https://slf4j.org/) / [Logback](https://logback.qos.ch/)
-* Metrics collection via [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
-* Automated unit and integration tests via [JUnit](https://junit.org)
-* Ability to run in [Docker](https://www.docker.com/)
+- Authentication and role-based authorization
+- Basic CRUD operations
+- Dependency injection via [Google Guice](https://github.com/google/guice)
+- Relational database integration via [Pyranid](https://www.pyranid.com)
+- Context-awareness via [ScopedValue (JEP 481)](https://openjdk.org/jeps/481)
+- Internationalization via the JDK and [Lokalized](https://www.lokalized.com)
+- JSON requests/responses via [Gson](https://github.com/google/gson)
+- Logging via [SLF4J](https://slf4j.org/) / [Logback](https://logback.qos.ch/)
+- Metrics collection via [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
+- Automated unit and integration tests via [JUnit](https://junit.org)
+- Ability to run in [Docker](https://www.docker.com/)
 
 ### What Else Does It Do?
 
@@ -271,7 +271,7 @@ public void example(Request request /* param name is arbitrary */) {
   // Here, it would be HttpMethod.GET
   HttpMethod httpMethod = request.getHttpMethod();
   // Just the path, e.g. "/example"
-  String path = request.getPath(); 
+  String path = request.getPath();
   // The raw path and query, e.g. "/example?test=123"
   String rawPathAndQuery = request.getRawPathAndQuery();
   // Request body as bytes, if available
@@ -295,13 +295,13 @@ public void example(Request request /* param name is arbitrary */) {
   // Form parameters by name (application/x-www-form-urlencoded)
   Map<String, Set<String>> fps = request.getFormParameters();
   // Shorthand for plucking the first form parameter value by name
-  Optional<String> fp = request.getFormParameter("fp-name");  
+  Optional<String> fp = request.getFormParameter("fp-name");
   // Is this a multipart request?
   boolean multipart = request.isMultipart();
   // Multipart fields by name
   Map<String, Set<MultipartField>> mpfs = request.getMultipartFields();
   // Shorthand for plucking the first multipart field by name
-  Optional<MultipartField> mpf = request.getMultipartField("file-input");  
+  Optional<MultipartField> mpf = request.getMultipartField("file-input");
   // CORS information, if available
   Optional<Cors> cors = request.getCors();
   // Ordered locales via Accept-Language parsing
@@ -333,8 +333,8 @@ Supply your own registry (or additional converters) via
 Configure a [`RequestBodyMarshaler`](https://javadoc.soklet.com/com/soklet/RequestBodyMarshaler.html) however you like - here we accept JSON:
 
 ```java
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
+SokletConfig config = SokletConfig.withHttpServer(
+  HttpServer.fromPort(8080)
 ).requestBodyMarshaler(new RequestBodyMarshaler() {
   // This example uses Google's GSON
   static final Gson GSON = new Gson();
@@ -350,7 +350,7 @@ SokletConfig config = SokletConfig.withServer(
     // Let GSON turn the request body into an instance
     // of the specified type.
     //
-    // Note that this method has access to all runtime information 
+    // Note that this method has access to all runtime information
     // about the request, which provides the opportunity to, for example,
     // examine annotations on the method/parameter which might
     // inform custom marshaling strategies.
@@ -394,7 +394,7 @@ final Gson GSON = new Gson();
 ResourceMethodHandler resourceMethodHandler = (
   @NonNull Request request,
   @NonNull Response response,
-  @NonNull ResourceMethod resourceMethod		
+  @NonNull ResourceMethod resourceMethod
 ) -> {
   // Turn response body into JSON bytes with Gson
   Object bodyObject = response.getBody().orElse(null);
@@ -423,7 +423,7 @@ ThrowableHandler throwableHandler = (
   String message;
   int statusCode;
 
-  // Examine the exception that bubbled out and determine what 
+  // Examine the exception that bubbled out and determine what
   // the HTTP status and a user-facing message should be.
   // Note: real systems should localize these messages
   switch (throwable) {
@@ -434,13 +434,13 @@ ThrowableHandler throwableHandler = (
         e.getQueryParameterName());
       statusCode = 400;
     }
-    
+
     // Generically handle other BadRequestExceptions
     case BadRequestException ignored -> {
       message = "Your request was improperly formatted.";
       statusCode = 400;
     }
-    
+
     // Something else?  Fall back to a 500
     default -> {
       message = "An unexpected error occurred.";
@@ -465,8 +465,8 @@ ThrowableHandler throwableHandler = (
 };
 
 // Supply our custom handlers to the standard response marshaler
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
+SokletConfig config = SokletConfig.withHttpServer(
+  HttpServer.fromPort(8080)
 ).responseMarshaler(ResponseMarshaler.builder()
   .resourceMethod(resourceMethodHandler)
   .throwable(throwableHandler)
@@ -481,7 +481,7 @@ Already know exactly what bytes you want to send over the wire? Use [`MarshaledR
 public MarshaledResponse exampleImage() throws IOException {
   Path imageFile = Path.of("/home/user/test.png");
   byte[] image = Files.readAllBytes(imageFile);
-  
+
   // Serve "final" bytes over the wire
   return MarshaledResponse.withStatusCode(200)
     .headers(Map.of(
@@ -507,9 +507,9 @@ public Response exampleRedirect() {
 }
 ```
 
-#### Server Configuration
+#### HTTP Server Configuration
 
-Soklet ships with an embedded HTTP/1.1 [`Server`](https://javadoc.soklet.com/com/soklet/Server.html), a dedicated
+Soklet ships with an embedded HTTP/1.1 [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html), a dedicated
 [`ServerSentEventServer`](https://javadoc.soklet.com/com/soklet/ServerSentEventServer.html), and a dedicated
 [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
 These builders let you configure host, timeouts, handler concurrency/queueing, request size limits, and connection caps; you
@@ -543,7 +543,7 @@ public class ChatResource {
   @POST("/chat")
   public void postMessage(@RequestBody ChatMessage message,
                           @NonNull ServerSentEventServer sseServer) {
-    ServerSentEventBroadcaster broadcaster = sseServer
+   @NonNull ServerSentEventBroadcaster broadcaster = sseServer
       .acquireBroadcaster(ResourcePath.fromPath("/chat"))
       .orElseThrow();
 
@@ -554,17 +554,21 @@ public class ChatResource {
 }
 ```
 
-Wire up both servers:
+Because this example exposes both an SSE event source and a regular `POST /chat`
+resource method, it needs both servers:
 
 ```java
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
+SokletConfig config = SokletConfig.withHttpServer(
+  HttpServer.fromPort(8080)
 ).serverSentEventServer(
   ServerSentEventServer.fromPort(8081)
 ).resourceMethodResolver(
   ResourceMethodResolver.fromClasses(Set.of(ChatResource.class))
 ).build();
 ```
+
+If your application only exposes SSE event source methods, you can omit the regular
+HTTP server and start with `SokletConfig.withServerSentEventServer(...)` instead.
 
 SSE test via the [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html)
 (see [`ServerSentEventRequestResult`](https://javadoc.soklet.com/com/soklet/ServerSentEventRequestResult.html)):
@@ -575,7 +579,7 @@ import org.junit.Test;
 
 @Test
 public void sseTest() {
-  SokletConfig config = SokletConfig.forSimulatorTesting()
+  SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0).build())
     .serverSentEventServer(ServerSentEventServer.fromPort(0))
     .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ChatResource.class)))
     .build();
@@ -584,12 +588,12 @@ public void sseTest() {
 
   Soklet.runSimulator(config, simulator -> {
     Request request = Request.fromPath(HttpMethod.GET, "/chat");
-    ServerSentEventRequestResult result = simulator.performServerSentEventRequest(request);
+   @NonNull ServerSentEventRequestResult result = simulator.performServerSentEventRequest(request);
 
     if (result instanceof ServerSentEventRequestResult.HandshakeAccepted accepted) {
       accepted.registerEventConsumer(events::add);
 
-      ServerSentEventBroadcaster broadcaster = config.getServerSentEventServer().orElseThrow()
+     @NonNull ServerSentEventBroadcaster broadcaster = config.getServerSentEventServer().orElseThrow()
         .acquireBroadcaster(ResourcePath.fromPath("/chat")).orElseThrow();
       broadcaster.broadcastEvent(ServerSentEvent.withEvent("message")
         .data("hello")
@@ -640,25 +644,24 @@ public class CatalogMcpEndpoint implements McpEndpoint {
 }
 ```
 
-Wire up the MCP server:
+Wire up an MCP-only app:
 
 ```java
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
-).mcpServer(
+SokletConfig config = SokletConfig.withMcpServer(
   McpServer.withPort(8082)
     .handlerResolver(McpHandlerResolver.fromClasses(Set.of(CatalogMcpEndpoint.class)))
     .build()
 ).build();
 ```
 
+If the same application also serves ordinary HTTP resource methods, add
+`.httpServer(HttpServer.fromPort(8080))` to the builder.
+
 Browser-based MCP clients can be enabled with
 [`McpCorsAuthorizer`](https://javadoc.soklet.com/com/soklet/McpCorsAuthorizer.html):
 
 ```java
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
-).mcpServer(
+SokletConfig config = SokletConfig.withMcpServer(
   McpServer.withPort(8082)
     .handlerResolver(McpHandlerResolver.fromClasses(Set.of(CatalogMcpEndpoint.class)))
     .corsAuthorizer(McpCorsAuthorizer.fromWhitelistedOrigins(
@@ -687,33 +690,34 @@ import org.junit.Test;
 
 @Test
 public void mcpTest() {
-  SokletConfig config = SokletConfig.forSimulatorTesting()
-    .mcpServer(McpServer.withPort(0)
-      .handlerResolver(McpHandlerResolver.fromClasses(Set.of(CatalogMcpEndpoint.class)))
-      .build()
-    ).build();
+  SokletConfig config = SokletConfig.withMcpServer(McpServer.withPort(0)
+    .handlerResolver(McpHandlerResolver.fromClasses(Set.of(CatalogMcpEndpoint.class)))
+    .build()
+  ).build();
 
   Soklet.runSimulator(config, simulator -> {
-    McpRequestResult.ResponseCompleted initializeResult =
-      (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
-        Request.withPath(HttpMethod.POST, "/catalog/mcp")
-          .headers(Map.of("Content-Type", Set.of("application/json")))
-          .body("""
-            {
-              "jsonrpc":"2.0",
-              "id":"req-1",
-              "method":"initialize",
-              "params":{
-                "protocolVersion":"2025-11-25",
-                "capabilities":{},
-                "clientInfo":{"name":"test-client","version":"1.0.0"}
-              }
+    McpRequestResult initializeResult = simulator.performMcpRequest(
+      Request.withPath(HttpMethod.POST, "/catalog/mcp")
+        .headers(Map.of("Content-Type", Set.of("application/json")))
+        .body("""
+          {
+            "jsonrpc":"2.0",
+            "id":"req-1",
+            "method":"initialize",
+            "params":{
+              "protocolVersion":"2025-11-25",
+              "capabilities":{},
+              "clientInfo":{"name":"test-client","version":"1.0.0"}
             }
-            """.getBytes(StandardCharsets.UTF_8))
-          .build()
-      );
+          }
+          """.getBytes(StandardCharsets.UTF_8))
+        .build()
+    );
 
-    String sessionId = initializeResult.getRequestResult().getMarshaledResponse()
+    if (!(initializeResult instanceof McpRequestResult.ResponseCompleted initializeResponse))
+      throw new IllegalStateException("Expected initialize to complete without opening a stream");
+
+    String sessionId = initializeResponse.getRequestResult().getMarshaledResponse()
       .getHeaders().get("MCP-Session-Id").iterator().next();
 
     Assert.assertNotNull(sessionId);
@@ -726,10 +730,11 @@ public void mcpTest() {
 Frontend:
 
 ```html
-<form 
+<form
   enctype="application/x-www-form-urlencoded"
   action="https://example.soklet.com/form?id=123"
-  method="POST">
+  method="POST"
+>
   <!-- User can type whatever text they like -->
   <input type="number" name="numericValue" />
   <!-- Multiple values for the same name are supported -->
@@ -738,8 +743,8 @@ Frontend:
   <!-- Names with special characters can be remapped -->
   <textarea name="long-text"></textarea>
   <!-- Note: browsers send "on" string to indicate "checked" -->
-  <input type="checkbox" name="enabled"/>
-  <input type="submit"/>
+  <input type="checkbox" name="enabled" />
+  <input type="submit" />
 </form>
 ```
 
@@ -787,28 +792,25 @@ on
 Frontend:
 
 ```html
-<form 
+<form
   enctype="multipart/form-data"
   action="https://example.soklet.com/multipart?id=123"
-  method="POST">
+  method="POST"
+>
   <!-- User can type whatever text they like -->
   <input type="text" name="freeform" />
   <!-- Multiple values for the same name are supported -->
   <input type="hidden" name="multi" value="1" />
   <input type="hidden" name="multi" value="2" />
   <!-- Prompt user to upload a file -->
-  <p>
-    Please attach your document: <input name="doc" type="file" />
-  </p>
+  <p>Please attach your document: <input name="doc" type="file" /></p>
   <!-- Multiple file uploads are supported -->
   <p>
-    Supplement 1: <input name="extra" type="file" />
-    Supplement 2: <input name="extra" type="file" />
-  </p>  
+    Supplement 1: <input name="extra" type="file" /> Supplement 2:
+    <input name="extra" type="file" />
+  </p>
   <!-- An optional file -->
-  <p>
-    Optionally, attach a photo: <input name="photo" type="file" />
-  </p>  
+  <p>Optionally, attach a photo: <input name="photo" type="file" /></p>
   <input type="submit" value="Upload" />
 </form>
 ```
@@ -842,7 +844,7 @@ public Response multipart(
   // Form field name, always available, e.g. "document"
   String name = document.getName();
   // Browser may provide this for files, e.g. "test.pdf"
-  Optional<String> filename = document.getFilename();  
+  Optional<String> filename = document.getFilename();
   // Browser may provide this for files, e.g. "application/pdf"
   Optional<String> contentType = document.getContentType();
   // Field data as bytes, if available
@@ -853,7 +855,7 @@ public Response multipart(
   // Apply the standard redirect-after-POST pattern
   return Response.withRedirect(
     RedirectType.HTTP_307_TEMPORARY_REDIRECT, "/thanks"
-  ).build();  
+  ).build();
 }
 ```
 
@@ -869,14 +871,14 @@ Here's how it might look if you use [Google Guice](https://github.com/google/gui
 // Standard Guice setup
 Injector injector = Guice.createInjector(new MyExampleAppModule());
 
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
+SokletConfig config = SokletConfig.withHttpServer(
+  HttpServer.fromPort(8080)
 ).instanceProvider(new InstanceProvider() {
   @NonNull
-  @Override  
+  @Override
   public <T> T provide(@NonNull Class<T> instanceClass) {
     // Have Soklet ask the Guice Injector for the instance
-    return injector.getInstance(instanceClass);     
+    return injector.getInstance(instanceClass);
   }
 }).build();
 ```
@@ -904,34 +906,34 @@ public class WidgetResource {
 Implement [`LifecycleObserver`](https://javadoc.soklet.com/com/soklet/LifecycleObserver.html) and
 [`RequestInterceptor`](https://javadoc.soklet.com/com/soklet/RequestInterceptor.html) to hook into server and request lifecycles.
 
-Server Start/Stop: execute code immediately before and after [`Server`](https://javadoc.soklet.com/com/soklet/Server.html) startup and shutdown.
+HTTP Server Start/Stop: execute code immediately before and after [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html) startup and shutdown.
 
 ```java
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
+SokletConfig config = SokletConfig.withHttpServer(
+  HttpServer.fromPort(8080)
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
-  public void willStartServer(@NonNull Server server) {
+  public void willStartHttpServer(@NonNull HttpServer httpServer) {
     // Perform startup tasks required prior to server launch
     MyPayrollSystem.INSTANCE.startLengthyWarmupProcess();
   }
 
   @Override
-  public void didStartServer(@NonNull Server server) {
-    // Server has fully started up and is listening
-    System.out.println("Server started.");
+  public void didStartHttpServer(@NonNull HttpServer httpServer) {
+    // HTTP server has fully started up and is listening
+    System.out.println("HTTP server started.");
   }
 
   @Override
-  public void willStopServer(@NonNull Server server) {
+  public void willStopHttpServer(@NonNull HttpServer httpServer) {
     // Perform shutdown tasks required prior to server teardown
-    MyPayrollSystem.INSTANCE.destroy();    
+    MyPayrollSystem.INSTANCE.destroy();
   }
 
   @Override
-  public void didStopServer(@NonNull Server server) {
-    // Server has fully shut down
-    System.out.println("Server stopped.");
+  public void didStopHttpServer(@NonNull HttpServer httpServer) {
+    // HTTP server has fully shut down
+    System.out.println("HTTP server stopped.");
   }
 }).build();
 ```
@@ -939,8 +941,8 @@ SokletConfig config = SokletConfig.withServer(
 Request Handling: these methods are fired at the very start of [`Request`](https://javadoc.soklet.com/com/soklet/Request.html) processing and the very end, respectively.
 
 ```java
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
+SokletConfig config = SokletConfig.withHttpServer(
+  HttpServer.fromPort(8080)
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void didStartRequestHandling(
@@ -969,14 +971,14 @@ SokletConfig config = SokletConfig.withServer(
     // We have access to a few things here...
     // * marshaledResponse is what was ultimately sent
     //    over the wire
-    // * processingDuration is how long everything took, 
+    // * processingDuration is how long everything took,
     //    including sending the response to the client
     // * throwables is the ordered list of exceptions
     //    thrown during execution (if any)
     long millis = processingDuration.toMillis();
     System.out.printf("Entire request took %dms\n", millis);
   }
-}).build();                  
+}).build();
 ```
 
 Request Wrapping: wraps around the whole "outside" of an entire [`Request`](https://javadoc.soklet.com/com/soklet/Request.html) handling flow.
@@ -993,8 +995,8 @@ static {
   CURRENT_LOCALE = ScopedValue.newInstance();
 }
 
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
+SokletConfig config = SokletConfig.withHttpServer(
+  HttpServer.fromPort(8080)
 ).requestInterceptor(new RequestInterceptor() {
   @Override
   public void wrapRequest(
@@ -1004,7 +1006,7 @@ SokletConfig config = SokletConfig.withServer(
   ) {
     // Make the locale accessible by other code during this request...
     Locale locale = request.getLocales().get(0);
-    
+
     // ...by binding it to a ScopedValue (or ThreadLocal).
     ScopedValue.where(CURRENT_LOCALE, locale).run(() -> {
       // You must call this so downstream processing can proceed
@@ -1032,8 +1034,8 @@ Request Intercepting (via [`RequestInterceptor`](https://javadoc.soklet.com/com/
 You must call `responseWriter.accept(...)` exactly once before returning; otherwise Soklet logs an error and returns a 500 response.
 
 ```java
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
+SokletConfig config = SokletConfig.withHttpServer(
+  HttpServer.fromPort(8080)
 ).requestInterceptor(new RequestInterceptor() {
   @Override
   public void interceptRequest(
@@ -1068,8 +1070,8 @@ SokletConfig config = SokletConfig.withServer(
 Response Writing: monitor the response writing process for each [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) - sending bytes over the wire - which may terminate exceptionally (e.g. unexpected client disconnect).
 
 ```java
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
+SokletConfig config = SokletConfig.withHttpServer(
+  HttpServer.fromPort(8080)
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
   public void willStartResponseWriting(
@@ -1080,7 +1082,7 @@ SokletConfig config = SokletConfig.withServer(
     // Access to marshaledResponse here lets us see exactly
     // what will be going over the wire
     byte[] body = marshaledResponse.getBody().orElse(new byte[] {});
-    System.out.printf("About to start writing response with " + 
+    System.out.printf("About to start writing response with " +
       "a %d-byte body...\n", body.length);
   }
 
@@ -1116,7 +1118,7 @@ CORS is handled by [`CorsAuthorizer`](https://javadoc.soklet.com/com/soklet/Cors
 Authorize All Origins:
 
 ```java
-SokletConfig config = SokletConfig.withServer(server)
+SokletConfig config = SokletConfig.withHttpServer(server)
   // "Wildcard" (*) CORS authorization. Don't use this in production!
   .corsAuthorizer(CorsAuthorizer.acceptAllInstance())
   .build();
@@ -1127,7 +1129,7 @@ Authorize Whitelisted Origins:
 ```java
 Set<String> allowedOrigins = Set.of("https://www.revetware.com");
 
-SokletConfig config = SokletConfig.withServer(server)
+SokletConfig config = SokletConfig.withHttpServer(server)
   .corsAuthorizer(WhitelistedOriginsCorsAuthorizer.fromOrigins(allowedOrigins))
   .build();
 ```
@@ -1135,7 +1137,7 @@ SokletConfig config = SokletConfig.withServer(server)
 ...or be dynamic:
 
 ```java
-SokletConfig config = SokletConfig.withServer(server)
+SokletConfig config = SokletConfig.withHttpServer(server)
   .corsAuthorizer(WhitelistedOriginsCorsAuthorizer.fromAuthorizer(
     (origin) -> origin.equals("https://www.revetware.com")
   ))
@@ -1145,7 +1147,7 @@ SokletConfig config = SokletConfig.withServer(server)
 Custom CORS logic:
 
 ```java
-SokletConfig config = SokletConfig.withServer(server)
+SokletConfig config = SokletConfig.withHttpServer(server)
   .corsAuthorizer(new CorsAuthorizer() {
     // Any subdomain under soklet.com is permitted
     boolean originMatchesValidSubdomain(@NonNull Cors cors) {
@@ -1168,12 +1170,12 @@ SokletConfig config = SokletConfig.withServer(server)
             .accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
             .accessControlAllowHeaders(Set.of("*"))
             .accessControlAllowCredentials(true)
-            .accessControlMaxAge(Duration.ofMinutes(10))        
+            .accessControlMaxAge(Duration.ofMinutes(10))
             .build()
         );
 
       return Optional.empty();
-    }    
+    }
 
     @NonNull
     @Override
@@ -1274,7 +1276,7 @@ public void reverseAgainUnitTest() {
   Assert.assertEquals("Bad status code", expectedCode, actualCode);
   Assert.assertEquals("Reverse failed", expectedBody, actualBody);
   Assert.assertEquals("Largest header failed", expectedLargest, actualLargest);
-  Assert.assertTrue("Last request too early", actualLastRequest.isAfter(lastRequestAfter));  
+  Assert.assertTrue("Last request too early", actualLastRequest.isAfter(lastRequestAfter));
 }
 ```
 
@@ -1320,7 +1322,7 @@ public void basicIntegrationTest() {
 
     // Perform the request and get a handle to the response
     MarshaledResponse marshaledResponse = simulator.performRequest(request);
-    
+
     // Verify status code
     Integer expectedCode = 200;
     Integer actualCode = marshaledResponse.getStatusCode();
@@ -1344,8 +1346,8 @@ Soklet includes a [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/Met
 collector is enabled automatically, but you can replace or disable it:
 
 ```java
-SokletConfig config = SokletConfig.withServer(
-  Server.fromPort(8080)
+SokletConfig config = SokletConfig.withHttpServer(
+  HttpServer.fromPort(8080)
 ).metricsCollector(
   MetricsCollector.defaultInstance()
   // or MetricsCollector.disabledInstance()
@@ -1381,7 +1383,7 @@ public MarshaledResponse getMetrics(@NonNull MetricsCollector metricsCollector) 
 
 #### Servlet Integration
 
-Optional support is available for both legacy [`javax.servlet`](https://github.com/soklet/soklet-servlet-javax) and current [`jakarta.servlet`](https://github.com/soklet/soklet-servlet-jakarta) specifications.  Just add the appropriate JAR to your project and you're good to go.
+Optional support is available for both legacy [`javax.servlet`](https://github.com/soklet/soklet-servlet-javax) and current [`jakarta.servlet`](https://github.com/soklet/soklet-servlet-jakarta) specifications. Just add the appropriate JAR to your project and you're good to go.
 
 The Soklet website has in-depth [Servlet integration documentation](https://www.soklet.com/docs/servlet-integration).
 
@@ -1391,9 +1393,9 @@ Please refer to the official Soklet website [https://www.soklet.com](https://www
 
 ### Credits
 
-Soklet stands on the shoulders of giants.  Internally, it embeds code from the following OSS projects:
+Soklet stands on the shoulders of giants. Internally, it embeds code from the following OSS projects:
 
-* [Microhttp](https://github.com/ebarlas/microhttp) by [Elliot Barlas](https://github.com/ebarlas) - MIT License
-* [Selenium](https://github.com/SeleniumHQ/selenium) - Apache 2.0 License
-* [Apache Commons FileUpload](https://commons.apache.org/proper/commons-fileupload/) - Apache 2.0 License
-* [The Spring Framework](https://spring.io/) - Apache 2.0 License
+- [Microhttp](https://github.com/ebarlas/microhttp) by [Elliot Barlas](https://github.com/ebarlas) - MIT License
+- [Selenium](https://github.com/SeleniumHQ/selenium) - Apache 2.0 License
+- [Apache Commons FileUpload](https://commons.apache.org/proper/commons-fileupload/) - Apache 2.0 License
+- [The Spring Framework](https://spring.io/) - Apache 2.0 License

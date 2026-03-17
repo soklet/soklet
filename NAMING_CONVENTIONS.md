@@ -19,13 +19,13 @@ It exists to keep future naming decisions consistent and avoid repeated debate.
 - **Builder setters:** use property-name methods (`port(...)`, `requestHandlerQueueCapacity(...)`) or verbs
   (`addX`, `clearX`, `enableX`, `disableX`).
 - **Avoid** `of*`, `create*`, `new*` for public APIs to keep the search surface uniform.
-- **Renames:** when changing a public name, keep a deprecated alias for one release (docs should use the new name immediately).
+- **Renames:** prefer a deprecated alias for one release once an API is established, but do a clean hard rename early if adoption is still low and compatibility backfills would just preserve ambiguity.
 
 ## Examples
 
 ```java
 // Builder entrypoints
-Server server = Server.withPort(8080).build();
+HttpServer httpServer = HttpServer.withPort(8080).build();
 MetricsCollector.Snapshot.Builder snapshot = MetricsCollector.Snapshot.builder();
 
 // Instance factories

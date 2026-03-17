@@ -24,6 +24,7 @@ import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
 import com.soklet.annotation.RequestHeader;
+import com.soklet.annotation.ServerSentEventSource;
 import com.soklet.exception.IllegalRequestBodyException;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -429,6 +430,25 @@ public class SokletTests {
 	}
 
 	@Test
+	public void httpResourceMethodsRequireHttpServer() {
+		SokletConfig config = SokletConfig.withServerSentEventServer(ServerSentEventServer.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RequestHandlingBasicsResource.class)))
+				.build();
+
+		assertThrows(IllegalStateException.class, () -> Soklet.fromConfig(config));
+	}
+
+	@Test
+	public void simulatorPerformRequestFailsFastWhenNoHttpServerConfigured() {
+		SokletConfig config = SokletConfig.withServerSentEventServer(ServerSentEventServer.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseOnlyResource.class)))
+				.build();
+
+		Soklet.runSimulator(config, simulator -> assertThrows(IllegalStateException.class,
+				() -> simulator.performRequest(Request.fromPath(HttpMethod.GET, "/sse-only"))));
+	}
+
+	@Test
 	public void verifyHeaderValidation() {
 		Map<String, Set<String>> headers = new LinkedHashMap<>();
 		headers.put("X-Test", Set.of("ok\r\nInjected-Header: yes"));
@@ -674,6 +694,13 @@ public class SokletTests {
 		@GET("/header")
 		public void header(@RequestHeader String singleOnly) {
 			// Nothing to do
+		}
+	}
+
+	public static class SseOnlyResource {
+		@ServerSentEventSource("/sse-only")
+		public HandshakeResult sseOnly() {
+			return HandshakeResult.accept();
 		}
 	}
 

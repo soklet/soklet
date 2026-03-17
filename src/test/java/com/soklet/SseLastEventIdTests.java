@@ -42,15 +42,13 @@ public class SseLastEventIdTests {
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	public void lastEventIdHeaderIsVisibleToResource() throws Exception {
-		int port = findFreePort();
 		int ssePort = findFreePort();
 
 		ServerSentEventServer serverSentEventServer = ServerSentEventServer.withPort(ssePort)
 				.verifyConnectionOnceEstablished(false)
 				.build();
 
-		SokletConfig config = SokletConfig.withServer(Server.withPort(port).build())
-				.serverSentEventServer(serverSentEventServer)
+		SokletConfig config = SokletConfig.withServerSentEventServer(serverSentEventServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseResource.class)))
 				.build();
 
@@ -80,7 +78,7 @@ public class SseLastEventIdTests {
 					sawEcho = data.contains("lastEventId=123");
 				}
 
-				Assertions.assertTrue(sawEcho, "Server did not receive Last-Event-ID");
+				Assertions.assertTrue(sawEcho, "HttpServer did not receive Last-Event-ID");
 			}
 		}
 	}

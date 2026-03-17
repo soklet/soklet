@@ -76,7 +76,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class DefaultServer implements Server {
+final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private static final String DEFAULT_HOST;
 	@NonNull
@@ -164,7 +164,7 @@ final class DefaultServer implements Server {
 	@Nullable
 	private volatile EventLoop eventLoop;
 
-	protected DefaultServer(@NonNull Builder builder) {
+	protected DefaultHttpServer(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.lock = new ReentrantLock();

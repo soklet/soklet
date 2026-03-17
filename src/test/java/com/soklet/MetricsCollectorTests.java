@@ -19,8 +19,8 @@ package com.soklet;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.ServerSentEventSource;
-import com.soklet.MetricsCollector.ServerRouteKey;
-import com.soklet.MetricsCollector.ServerRouteStatusKey;
+import com.soklet.MetricsCollector.HttpServerRouteKey;
+import com.soklet.MetricsCollector.HttpServerRouteStatusKey;
 import com.soklet.MetricsCollector.RouteType;
 import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
 import com.soklet.MetricsCollector.ServerSentEventRouteHandshakeFailureKey;
@@ -84,8 +84,8 @@ public class MetricsCollectorTests {
 		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 
 		ResourcePathDeclaration widgetRoute = ResourcePathDeclaration.fromPath("/widgets/{id}");
-		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute, "2xx");
-		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute);
+		HttpServerRouteStatusKey statusKey = new HttpServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute, "2xx");
+		HttpServerRouteKey routeKey = new HttpServerRouteKey(HttpMethod.POST, RouteType.MATCHED, widgetRoute);
 
 		HistogramSnapshot requestDurations = snapshot.getHttpRequestDurations().get(statusKey);
 		assertNotNull(requestDurations);
@@ -129,7 +129,7 @@ public class MetricsCollectorTests {
 				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)
 				.build();
 
-		SokletConfig noSseConfig = SokletConfig.withServer(Server.withPort(0).build())
+		SokletConfig noSseConfig = SokletConfig.withHttpServer(HttpServer.withPort(0).build())
 				.metricsCollector(collector)
 				.build();
 		collector.initialize(noSseConfig);
@@ -140,7 +140,7 @@ public class MetricsCollectorTests {
 		assertFalse(noSseSnapshot.contains("soklet_sse_connections_active"));
 		assertFalse(noSseSnapshot.contains("soklet_sse_connections_accepted_total"));
 
-		SokletConfig withSseConfig = SokletConfig.withServer(Server.withPort(0).build())
+		SokletConfig withSseConfig = SokletConfig.withHttpServer(HttpServer.withPort(0).build())
 				.serverSentEventServer(ServerSentEventServer.withPort(0).build())
 				.metricsCollector(collector)
 				.build();
@@ -304,15 +304,15 @@ public class MetricsCollectorTests {
 		int port = findFreePort();
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 
-		SokletConfig config = SokletConfig.withServer(Server.withPort(port).requestTimeout(Duration.ofSeconds(3)).build())
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port).requestTimeout(Duration.ofSeconds(3)).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HttpMetricsResource.class)))
 				.metricsCollector(collector)
 				.build();
 
 		byte[] requestBody = "hello".getBytes(StandardCharsets.UTF_8);
 		ResourcePathDeclaration httpMetricsRoute = ResourcePathDeclaration.fromPath("/metrics/http/{id}");
-		ServerRouteStatusKey statusKey = new ServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute, "2xx");
-		ServerRouteKey routeKey = new ServerRouteKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute);
+		HttpServerRouteStatusKey statusKey = new HttpServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute, "2xx");
+		HttpServerRouteKey routeKey = new HttpServerRouteKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute);
 
 		try (Soklet app = Soklet.fromConfig(config)) {
 			app.start();
@@ -376,7 +376,7 @@ public class MetricsCollectorTests {
 				.requestTimeout(Duration.ofSeconds(3))
 				.build();
 
-		SokletConfig config = SokletConfig.withServer(Server.withPort(httpPort).build())
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.serverSentEventServer(serverSentEventServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseMetricsResource.class)))
 				.metricsCollector(collector)

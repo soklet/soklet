@@ -1145,11 +1145,10 @@ public class McpRuntimeTests {
 		if (corsAuthorizer != null)
 			mcpServerBuilder.corsAuthorizer(corsAuthorizer);
 
-		return SokletConfig.withServer(Server.withPort(0).build())
+		return SokletConfig.withMcpServer(mcpServerBuilder.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycleObserver)
 				.metricsCollector(metricsCollector)
-				.mcpServer(mcpServerBuilder.build())
 				.build();
 	}
 
@@ -1159,38 +1158,35 @@ public class McpRuntimeTests {
 
 	private static SokletConfig failingInitializeConfiguration(LifecycleObserver lifecycleObserver,
 																										 McpSessionStore sessionStore) {
-		return SokletConfig.withServer(Server.withPort(0).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecycleObserver(lifecycleObserver)
-				.metricsCollector(MetricsCollector.disabledInstance())
-				.mcpServer(McpServer.withPort(0)
+		return SokletConfig.withMcpServer(McpServer.withPort(0)
 						.sessionStore(sessionStore)
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(FailingInitializeEndpoint.class)))
 						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(MetricsCollector.disabledInstance())
 				.build();
 	}
 
 	private static SokletConfig failingHandleErrorConfiguration(LifecycleObserver lifecycleObserver,
 																										 McpSessionStore sessionStore) {
-		return SokletConfig.withServer(Server.withPort(0).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecycleObserver(lifecycleObserver)
-				.metricsCollector(MetricsCollector.disabledInstance())
-				.mcpServer(McpServer.withPort(0)
+		return SokletConfig.withMcpServer(McpServer.withPort(0)
 						.sessionStore(sessionStore)
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(FailingHandleErrorEndpoint.class)))
 						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(MetricsCollector.disabledInstance())
 				.build();
 	}
 
 	private static SokletConfig literalResourceConfiguration() {
-		return SokletConfig.withServer(Server.withPort(0).build())
+		return SokletConfig.withMcpServer(McpServer.withPort(0)
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(LiteralResourceEndpoint.class)))
+						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(LifecycleObserver.defaultInstance())
 				.metricsCollector(MetricsCollector.defaultInstance())
-				.mcpServer(McpServer.withPort(0)
-						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(LiteralResourceEndpoint.class)))
-						.build())
 				.build();
 	}
 
