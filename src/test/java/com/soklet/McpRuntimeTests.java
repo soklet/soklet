@@ -1480,6 +1480,11 @@ public class McpRuntimeTests {
 		}
 
 		@Override
+		public void didReceiveLogEvent(LogEvent logEvent) {
+			// Keep expected MCP error-path tests quiet.
+		}
+
+		@Override
 		public void didCreateMcpSession(Request request,
 																	 Class<? extends McpEndpoint> endpointClass,
 																	 String sessionId) {
