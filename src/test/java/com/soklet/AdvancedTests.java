@@ -1239,8 +1239,8 @@ public class AdvancedTests {
 
 	public static class SSEMemoryTestResource {
 		@SseEventSource("/events/{id}")
-		public HandshakeResult handleSSE(@PathParameter String id) {
-			return HandshakeResult.accept();
+		public SseHandshakeResult handleSSE(@PathParameter String id) {
+			return SseHandshakeResult.accept();
 		}
 	}
 
@@ -1264,8 +1264,8 @@ public class AdvancedTests {
 
 	public static class SSETestResource {
 		@SseEventSource("/events")
-		public HandshakeResult handleSSE(Request request) {
-			return HandshakeResult.accept();
+		public SseHandshakeResult handleSSE(Request request) {
+			return SseHandshakeResult.accept();
 		}
 	}
 
@@ -1559,9 +1559,9 @@ public class AdvancedTests {
 	// Helper Resource for the test
 	public static class LimitTestResource {
 		@SseEventSource("/limit-test")
-		public HandshakeResult stream() {
+		public SseHandshakeResult stream() {
 			// Return an accepted handshake that sends an initial comment so the test knows we're live.
-			return HandshakeResult.Accepted.builder()
+			return SseHandshakeResult.Accepted.builder()
 					.clientInitializer(unicaster -> unicaster.unicastComment(SseComment.fromComment("connected")))
 					.build();
 		}

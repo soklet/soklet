@@ -53,7 +53,7 @@ public final class RequestResult {
 	@Nullable
 	private final ResourceMethod resourceMethod;
 	@Nullable
-	private final HandshakeResult handshakeResult;
+	private final SseHandshakeResult sseHandshakeResult;
 	@NonNull
 	private final List<@NonNull McpObject> mcpStreamMessages;
 	@NonNull
@@ -99,7 +99,7 @@ public final class RequestResult {
 		this.response = builder.response;
 		this.corsPreflightResponse = builder.corsPreflightResponse;
 		this.resourceMethod = builder.resourceMethod;
-		this.handshakeResult = builder.handshakeResult;
+		this.sseHandshakeResult = builder.sseHandshakeResult;
 		this.mcpStreamMessages = List.copyOf(builder.mcpStreamMessages);
 		this.mcpStreamClosedAfterReplay = builder.mcpStreamClosedAfterReplay;
 	}
@@ -127,10 +127,10 @@ public final class RequestResult {
 
 		// Hide this for now because handshake info is package-private and we don't want it to leak out
 
-		// HandshakeResult handshakeResult = getHandshakeResult().orElse(null);
+		// SseHandshakeResult sseHandshakeResult = getSseHandshakeResult().orElse(null);
 
-		// if (handshakeResult != null)
-		//	components.add(format("handshakeResult=%s", handshakeResult));
+		// if (sseHandshakeResult != null)
+		//	components.add(format("sseHandshakeResult=%s", sseHandshakeResult));
 
 		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
 	}
@@ -147,14 +147,14 @@ public final class RequestResult {
 				&& Objects.equals(getResponse(), requestResult.getResponse())
 				&& Objects.equals(getCorsPreflightResponse(), requestResult.getCorsPreflightResponse())
 				&& Objects.equals(getResourceMethod(), requestResult.getResourceMethod())
-				&& Objects.equals(getHandshakeResult(), requestResult.getHandshakeResult())
+				&& Objects.equals(getSseHandshakeResult(), requestResult.getSseHandshakeResult())
 				&& Objects.equals(getMcpStreamMessages(), requestResult.getMcpStreamMessages())
 				&& Objects.equals(isMcpStreamClosedAfterReplay(), requestResult.isMcpStreamClosedAfterReplay());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getMarshaledResponse(), getResponse(), getCorsPreflightResponse(), getResourceMethod(), getHandshakeResult(),
+		return Objects.hash(getMarshaledResponse(), getResponse(), getCorsPreflightResponse(), getResourceMethod(), getSseHandshakeResult(),
 				getMcpStreamMessages(), isMcpStreamClosedAfterReplay());
 	}
 
@@ -205,8 +205,8 @@ public final class RequestResult {
 	 * @return the SSE handshake result
 	 */
 	@NonNull
-	Optional<HandshakeResult> getHandshakeResult() {
-		return Optional.ofNullable(this.handshakeResult);
+	Optional<SseHandshakeResult> getSseHandshakeResult() {
+		return Optional.ofNullable(this.sseHandshakeResult);
 	}
 
 	@NonNull
@@ -237,7 +237,7 @@ public final class RequestResult {
 		@Nullable
 		private ResourceMethod resourceMethod;
 		@Nullable
-		private HandshakeResult handshakeResult;
+		private SseHandshakeResult sseHandshakeResult;
 		@NonNull
 		private List<@NonNull McpObject> mcpStreamMessages;
 		@NonNull
@@ -276,8 +276,8 @@ public final class RequestResult {
 		}
 
 		@NonNull
-		Builder handshakeResult(@Nullable HandshakeResult handshakeResult) {
-			this.handshakeResult = handshakeResult;
+		Builder sseHandshakeResult(@Nullable SseHandshakeResult sseHandshakeResult) {
+			this.sseHandshakeResult = sseHandshakeResult;
 			return this;
 		}
 
@@ -319,7 +319,7 @@ public final class RequestResult {
 					.response(requestResult.getResponse().orElse(null))
 					.corsPreflightResponse(requestResult.getCorsPreflightResponse().orElse(null))
 					.resourceMethod(requestResult.getResourceMethod().orElse(null))
-					.handshakeResult(requestResult.getHandshakeResult().orElse(null))
+					.sseHandshakeResult(requestResult.getSseHandshakeResult().orElse(null))
 					.mcpStreamMessages(requestResult.getMcpStreamMessages())
 					.mcpStreamClosedAfterReplay(requestResult.isMcpStreamClosedAfterReplay());
 		}
@@ -350,8 +350,8 @@ public final class RequestResult {
 		}
 
 		@NonNull
-		Copier handshakeResult(@Nullable HandshakeResult handshakeResult) {
-			this.builder.handshakeResult(handshakeResult);
+		Copier sseHandshakeResult(@Nullable SseHandshakeResult sseHandshakeResult) {
+			this.builder.sseHandshakeResult(sseHandshakeResult);
 			return this;
 		}
 

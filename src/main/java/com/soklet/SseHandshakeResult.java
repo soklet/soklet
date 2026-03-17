@@ -54,7 +54,7 @@ import static java.util.Objects.requireNonNull;
  * And then a Soklet Server-Sent Event Source that looks like this, which performs the handshake:
  * <pre>{@code // Resource Method that acts as a Server-Sent Event Source
  * @SseEventSource("/chats/{chatId}/event-source")
- * public HandshakeResult chatEventSource(
+ * public SseHandshakeResult chatEventSource(
  *   @PathParameter Long chatId,
  *   @QueryParameter String signingToken
  * ) {
@@ -70,8 +70,8 @@ import static java.util.Objects.requireNonNull;
  *
  *   // Accept the handshake with no additional data
  *   // (or use a variant to send headers/cookies).
- *   // Can also reject via HandshakeResult.rejectWithResponse(...)
- *   return HandshakeResult.accept();
+ *   // Can also reject via SseHandshakeResult.rejectWithResponse(...)
+ *   return SseHandshakeResult.accept();
  * }}</pre>
  * <p>
  * Finally, broadcast to all clients who had their handshakes accepted:
@@ -92,11 +92,11 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public sealed interface HandshakeResult permits HandshakeResult.Accepted, HandshakeResult.Rejected {
+public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, SseHandshakeResult.Rejected {
 	/**
 	 * Vends an instance that indicates a successful handshake, with no additional information provided.
 	 * <p>
-	 * For a customizable acceptance result, use {@link HandshakeResult.Accepted#builder()}.
+	 * For a customizable acceptance result, use {@link SseHandshakeResult.Accepted#builder()}.
 	 *
 	 * @return an instance that indicates a successful handshake
 	 */
@@ -108,7 +108,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	/**
 	 * Vends an instance that indicates a successful handshake with a custom client context.
 	 * <p>
-	 * This is a convenience method equivalent to {@link HandshakeResult.Accepted#builder()}
+	 * This is a convenience method equivalent to {@link SseHandshakeResult.Accepted#builder()}
 	 * {@code .clientContext(clientContext).build()}.
 	 *
 	 * @param clientContext custom context to preserve for the lifetime of the SSE connection (may be {@code null})
@@ -136,14 +136,14 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	/**
 	 * Type which indicates a successful Server-Sent Event handshake.
 	 * <p>
-	 * A default, no-customization-permitted instance can be acquired via {@link HandshakeResult#accept()} and a builder which enables customization can be acquired via {@link HandshakeResult.Accepted#builder()}.
+	 * A default, no-customization-permitted instance can be acquired via {@link SseHandshakeResult#accept()} and a builder which enables customization can be acquired via {@link SseHandshakeResult.Accepted#builder()}.
 	 * <p>
 	 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events#accepting-handshakes">https://www.soklet.com/docs/server-sent-events#accepting-handshakes</a>.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	final class Accepted implements HandshakeResult {
+	final class Accepted implements SseHandshakeResult {
 		@NonNull
 		static final Accepted DEFAULT_INSTANCE;
 
@@ -343,14 +343,14 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 	/**
 	 * Type which indicates a rejected Server-Sent Event handshake.
 	 * <p>
-	 * Instances can be acquired via the {@link HandshakeResult#rejectWithResponse(Response)} factory method.
+	 * Instances can be acquired via the {@link SseHandshakeResult#rejectWithResponse(Response)} factory method.
 	 * <p>
 	 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events#rejecting-handshakes">https://www.soklet.com/docs/server-sent-events#rejecting-handshakes</a>.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	final class Rejected implements HandshakeResult {
+	final class Rejected implements SseHandshakeResult {
 		@NonNull
 		private final Response response;
 

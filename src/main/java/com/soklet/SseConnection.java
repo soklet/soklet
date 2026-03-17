@@ -58,7 +58,7 @@ public interface SseConnection {
 	/**
 	 * Returns the connection-specific context as provided by an accepted handshake.
 	 * <p>
-	 * This will always be the value returned by {@link HandshakeResult.Accepted#getClientContext()}.
+	 * This will always be the value returned by {@link SseHandshakeResult.Accepted#getClientContext()}.
 	 *
 	 * @return the connection-specific context, or {@link Optional#empty()} if none was specified
 	 */

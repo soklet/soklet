@@ -496,8 +496,8 @@ public class MetricsCollectorTests {
 	@ThreadSafe
 	public static class SseMetricsResource {
 		@SseEventSource("/metrics/sse/{id}")
-		public HandshakeResult handleSse(@NonNull @PathParameter String id) {
-			return HandshakeResult.accept();
+		public SseHandshakeResult handleSse(@NonNull @PathParameter String id) {
+			return SseHandshakeResult.accept();
 		}
 	}
 

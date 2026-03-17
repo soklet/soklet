@@ -1211,7 +1211,7 @@ final class DefaultSseServer implements SseServer {
 		Request request = null;
 		ResourceMethod resourceMethod = null;
 
-		AtomicReference<HandshakeResult.Accepted> handshakeAcceptedReference = new AtomicReference<>();
+		AtomicReference<SseHandshakeResult.Accepted> handshakeAcceptedReference = new AtomicReference<>();
 		AtomicBoolean connectionSlotReserved = new AtomicBoolean(false);
 		boolean connectionProcessingStarted = false;
 
@@ -1437,12 +1437,12 @@ final class DefaultSseServer implements SseServer {
 					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 
 					// Set to the value Soklet processing gives us. Will be the empty Optional if no resource method was matched
-					HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
+					SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
 
 					RequestResult effectiveRequestResult = requestResult;
 
 					// Store a reference to the accepted handshake if we have it and there is capacity
-					if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted accepted) {
+					if (sseHandshakeResult != null && sseHandshakeResult instanceof SseHandshakeResult.Accepted accepted) {
 						if (reserveConnectionSlot()) {
 							connectionSlotReserved.set(true);
 							handshakeAcceptedReference.set(accepted);
@@ -1457,7 +1457,7 @@ final class DefaultSseServer implements SseServer {
 
 							effectiveRequestResult = requestResult.copy()
 									.marshaledResponse(response)
-									.handshakeResult(null)
+									.sseHandshakeResult(null)
 									.finish();
 						}
 					}
@@ -1521,7 +1521,7 @@ final class DefaultSseServer implements SseServer {
 
 			// Happy path: register the channel for future SseEvent writes and keep it open.
 			// Otherwise, we're done immediately now that initial data has been written - shut it all down.
-			HandshakeResult.Accepted handshakeAccepted = handshakeAcceptedReference.get();
+			SseHandshakeResult.Accepted handshakeAccepted = handshakeAcceptedReference.get();
 
 			if (handshakeAccepted != null) {
 				try {
@@ -2018,14 +2018,14 @@ final class DefaultSseServer implements SseServer {
 		requireNonNull(requestResult);
 
 		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
-		HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
+		SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
 
 		// Shared buffer for building the header section
 		try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream(1024);
 				 OutputStreamWriter outputStreamWriter = new OutputStreamWriter(outputStream, StandardCharsets.ISO_8859_1);
 				 PrintWriter printWriter = new PrintWriter(outputStreamWriter, false)) {
 
-			if (handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted) {
+			if (sseHandshakeResult != null && sseHandshakeResult instanceof SseHandshakeResult.Accepted) {
 				final Set<String> ILLEGAL_LOWERCASE_HEADER_NAMES = Set.of("content-length");
 
 				// HTTP status line
@@ -2040,7 +2040,7 @@ final class DefaultSseServer implements SseServer {
 
 					if (ILLEGAL_LOWERCASE_HEADER_NAMES.contains(headerName.toLowerCase(Locale.ENGLISH)))
 						throw new IllegalArgumentException(format("You may not specify the '%s' header for %s.%s responses",
-								headerName, HandshakeResult.class.getSimpleName(), HandshakeResult.Accepted.class.getSimpleName()));
+								headerName, SseHandshakeResult.class.getSimpleName(), SseHandshakeResult.Accepted.class.getSimpleName()));
 
 						Set<String> values = entry.getValue();
 						if (values == null || values.isEmpty())
@@ -2064,7 +2064,7 @@ final class DefaultSseServer implements SseServer {
 
 				// No body for SSE handshakes
 				return outputStream.toByteArray();
-			} else if (handshakeResult == null || handshakeResult instanceof HandshakeResult.Rejected) {
+			} else if (sseHandshakeResult == null || sseHandshakeResult instanceof SseHandshakeResult.Rejected) {
 				// Status line
 				int statusCode = marshaledResponse.getStatusCode();
 				String reasonPhrase = StatusCode.fromStatusCode(statusCode).map(StatusCode::getReasonPhrase).orElse("");
@@ -2128,7 +2128,7 @@ final class DefaultSseServer implements SseServer {
 
 				return outputStream.toByteArray();
 			} else {
-				throw new IllegalStateException(format("Unsupported %s: %s", HandshakeResult.class.getSimpleName(), handshakeResult));
+				throw new IllegalStateException(format("Unsupported %s: %s", SseHandshakeResult.class.getSimpleName(), sseHandshakeResult));
 			}
 		}
 	}
@@ -2601,7 +2601,7 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private Optional<ClientSocketChannelRegistration> registerClientSocketChannel(@NonNull SocketChannel clientSocketChannel,
 																																								@NonNull Request request,
-																																								HandshakeResult.@NonNull Accepted handshakeAccepted) {
+																																								SseHandshakeResult.@NonNull Accepted handshakeAccepted) {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(request);
 		requireNonNull(handshakeAccepted);

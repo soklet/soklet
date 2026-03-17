@@ -85,7 +85,7 @@ public class SseLastEventIdTests {
 
 	public static class SseResource {
 		@SseEventSource("/sse/{id}")
-		public HandshakeResult sse(@NonNull Request request,
+		public SseHandshakeResult sse(@NonNull Request request,
 															 @NonNull SseServer sseServer) {
 			String last = request.getHeaders().getOrDefault("Last-Event-ID", Set.of()).stream().findFirst().orElse("none");
 
@@ -101,7 +101,7 @@ public class SseLastEventIdTests {
 				broadcaster.broadcastEvent(SseEvent.withData("lastEventId=" + last).build());
 			}).start();
 
-			return HandshakeResult.accept();
+			return SseHandshakeResult.accept();
 		}
 	}
 

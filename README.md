@@ -522,7 +522,7 @@ Provide the configured servers via [`SokletConfig`](https://javadoc.soklet.com/c
 #### Server-Sent Events (SSE)
 
 SSE endpoints are declared with [`@SseEventSource`](https://javadoc.soklet.com/com/soklet/annotation/SseEventSource.html) and return a
-[`HandshakeResult`](https://javadoc.soklet.com/com/soklet/HandshakeResult.html), served from a dedicated
+[`SseHandshakeResult`](https://javadoc.soklet.com/com/soklet/SseHandshakeResult.html), served from a dedicated
 [`SseServer`](https://javadoc.soklet.com/com/soklet/SseServer.html) port (separate from your standard HTTP server port).
 
 ```java
@@ -530,8 +530,8 @@ public record ChatMessage(String message) {}
 
 public class ChatResource {
   @SseEventSource("/chat")
-  public HandshakeResult chat() {
-    return HandshakeResult.Accepted.builder()
+  public SseHandshakeResult chat() {
+    return SseHandshakeResult.Accepted.builder()
       .clientInitializer(unicaster -> {
         unicaster.unicastEvent(SseEvent.withEvent("hello")
           .data("welcome")

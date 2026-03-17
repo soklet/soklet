@@ -79,9 +79,9 @@ public class SseTests {
 	@ThreadSafe
 	public static class SseEventSimulatorResource {
 		@SseEventSource("/examples/{exampleId}")
-		public HandshakeResult example(@NonNull Request request,
+		public SseHandshakeResult example(@NonNull Request request,
 																	 @NonNull @PathParameter String exampleId) {
-			return HandshakeResult.Accepted.builder()
+			return SseHandshakeResult.Accepted.builder()
 					.headers(Map.of(
 							"X-Soklet-Example", Set.of(exampleId)
 					))
@@ -253,10 +253,10 @@ public class SseTests {
 		}
 
 		@SseEventSource("/examples/{exampleId}")
-		public HandshakeResult exampleSseSource(@NonNull Request request,
+		public SseHandshakeResult exampleSseSource(@NonNull Request request,
 																												@NonNull @PathParameter String exampleId) {
 			System.out.printf("Server-Sent Event Source connection initiated for %s with exampleId value %s\n", request.getId(), exampleId);
-			return HandshakeResult.accept();
+			return SseHandshakeResult.accept();
 		}
 
 		@POST("/fire-server-sent-event")
@@ -1486,17 +1486,17 @@ public class SseTests {
 
 	public static class AcceptingSseCorsResource {
 		@SseEventSource("/sse/cors-ok")
-		public HandshakeResult ok(@NonNull Request request) {
+		public SseHandshakeResult ok(@NonNull Request request) {
 			// Standard SSE accepted handshake
-			return HandshakeResult.accept();
+			return SseHandshakeResult.accept();
 		}
 	}
 
 	public static class RejectingSseCorsResource {
 		@SseEventSource("/sse/cors-reject")
-		public HandshakeResult reject(@NonNull Request request) {
+		public SseHandshakeResult reject(@NonNull Request request) {
 			// Reject with a simple body; CORS should still be applied
-			return HandshakeResult.rejectWithResponse(
+			return SseHandshakeResult.rejectWithResponse(
 					Response.withStatusCode(403)
 							.headers(Map.of("Content-Type", Set.of("text/plain; charset=utf-8")))
 							.body("denied")
@@ -1507,7 +1507,7 @@ public class SseTests {
 
 	public static class RejectingSseResource {
 		@SseEventSource("/sse/reject")
-		public HandshakeResult handshake(@NonNull Request request) {
+		public SseHandshakeResult handshake(@NonNull Request request) {
 			// Rejected SSE handshake with a body, header, and a cookie
 			ResponseCookie cookie = ResponseCookie.with("session", "sse-reject").path("/").build();
 			Response response = Response.withStatusCode(403)
@@ -1516,34 +1516,34 @@ public class SseTests {
 					.cookies(Set.of(cookie))
 					.body("denied")
 					.build();
-			return HandshakeResult.rejectWithResponse(response);
+			return SseHandshakeResult.rejectWithResponse(response);
 		}
 	}
 
 	public static class AcceptingSseResource {
 		@SseEventSource("/sse/{id}")
-		public HandshakeResult ok(@NonNull Request request, @NonNull @PathParameter String id) {
-			return HandshakeResult.accept();
+		public SseHandshakeResult ok(@NonNull Request request, @NonNull @PathParameter String id) {
+			return SseHandshakeResult.accept();
 		}
 	}
 
 	public static class RejectWithExplicitContentLength {
 		@SseEventSource("/sse/reject-explicit-cl")
-		public HandshakeResult reject(@NonNull Request request) {
+		public SseHandshakeResult reject(@NonNull Request request) {
 			Response response = Response.withStatusCode(418)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8"),
 							"Content-Length", Set.of("3")))
 					.body("abc")
 					.build();
-			return HandshakeResult.rejectWithResponse(response);
+			return SseHandshakeResult.rejectWithResponse(response);
 		}
 	}
 
 	@ThreadSafe
 	public static class SseNetworkResource {
 		@SseEventSource("/tests/{id}")
-		public HandshakeResult sseEventSource(@NonNull Request request, @NonNull @PathParameter String id) {
-			return HandshakeResult.accept();
+		public SseHandshakeResult sseEventSource(@NonNull Request request, @NonNull @PathParameter String id) {
+			return SseHandshakeResult.accept();
 		}
 	}
 
@@ -1567,14 +1567,14 @@ public class SseTests {
 		}
 
 		@SseEventSource("/sse/limit")
-		public HandshakeResult sseLimit(@NonNull Request request) {
+		public SseHandshakeResult sseLimit(@NonNull Request request) {
 			ready.countDown();
 			try {
 				release.await(5, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
-			return HandshakeResult.accept();
+			return SseHandshakeResult.accept();
 		}
 	}
 
@@ -1598,23 +1598,23 @@ public class SseTests {
 		}
 
 		@SseEventSource("/sse/queue-limit")
-		public HandshakeResult sseQueueLimit(@NonNull Request request) {
+		public SseHandshakeResult sseQueueLimit(@NonNull Request request) {
 			ready.countDown();
 			try {
 				release.await(5, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
-			return HandshakeResult.rejectWithResponse(Response.withStatusCode(403).build());
+			return SseHandshakeResult.rejectWithResponse(Response.withStatusCode(403).build());
 		}
 	}
 
 	@ThreadSafe
 	public static class SseBasicHandshakeResource {
 		@SseEventSource("/sse")
-		public HandshakeResult sse() {
+		public SseHandshakeResult sse() {
 			// accept and later broadcast from the test thread
-			return HandshakeResult.accept();
+			return SseHandshakeResult.accept();
 		}
 	}
 

@@ -303,10 +303,10 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 					ResourcePathDeclaration resourcePathDeclaration = httpMethodResourcePathDeclaration.getResourcePathDeclaration();
 					Boolean sseEventSource = httpMethodResourcePathDeclaration.isSseEventSource();
 
-					// Enforce that @SseEventSource methods have a return type of HandshakeResult
-					if (sseEventSource && !HandshakeResult.class.isAssignableFrom(method.getReturnType()))
+					// Enforce that @SseEventSource methods have a return type of SseHandshakeResult
+					if (sseEventSource && !SseHandshakeResult.class.isAssignableFrom(method.getReturnType()))
 						throw new IllegalStateException(format("Resource Methods annotated with @%s must be declared to return an instance of %s (e.g. %s.accept()). Incorrect Resource Method was %s",
-								SseEventSource.class.getSimpleName(), HandshakeResult.class.getSimpleName(), HandshakeResult.class.getSimpleName(), method));
+								SseEventSource.class.getSimpleName(), SseHandshakeResult.class.getSimpleName(), SseHandshakeResult.class.getSimpleName(), method));
 
 					ResourceMethod resourceMethod = ResourceMethod.fromComponents(httpMethod, resourcePathDeclaration, method, sseEventSource);
 					resourceMethods.add(resourceMethod);

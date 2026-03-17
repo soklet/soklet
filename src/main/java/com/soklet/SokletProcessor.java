@@ -84,7 +84,7 @@ import java.util.stream.Collectors;
 /**
  * Soklet's standard Annotation Processor which is used to generate lookup tables of <em>Resource Method</em> definitions at compile time as well as prevent usage errors that are detectable by static analysis.
  * <p>
- * This Annotation Processor ensures <em>Resource Methods</em> annotated with {@link SseEventSource} are declared as returning an instance of {@link HandshakeResult}.
+ * This Annotation Processor ensures <em>Resource Methods</em> annotated with {@link SseEventSource} are declared as returning an instance of {@link SseHandshakeResult}.
  * <p>
  * Your build system should ensure this Annotation Processor is available at compile time. Follow the instructions below to make your application conformant:
  * <p>
@@ -174,7 +174,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	private CacheMode cacheMode;
 
 	// Cached mirrors resolved in init()
-	private TypeMirror handshakeResultType;      // com.soklet.HandshakeResult
+	private TypeMirror sseHandshakeResultType;   // com.soklet.SseHandshakeResult
 	private TypeElement pathParameterElement;    // com.soklet.annotation.PathParameter
 	private TypeElement mcpEndpointElement;      // com.soklet.McpEndpoint
 
@@ -213,8 +213,8 @@ public final class SokletProcessor extends AbstractProcessor {
 		this.pruneDeletedEnabled = parseBooleanishOption(processingEnv.getOptions().get(PROCESSOR_OPTION_PRUNE_DELETED));
 		this.cacheMode = parseCacheMode(processingEnv.getOptions().get(PROCESSOR_OPTION_CACHE_MODE));
 
-		TypeElement hr = elements.getTypeElement("com.soklet.HandshakeResult");
-		this.handshakeResultType = (hr == null ? null : hr.asType());
+		TypeElement hr = elements.getTypeElement("com.soklet.SseHandshakeResult");
+		this.sseHandshakeResultType = (hr == null ? null : hr.asType());
 		this.pathParameterElement = elements.getTypeElement("com.soklet.annotation.PathParameter");
 		this.mcpEndpointElement = elements.getTypeElement("com.soklet.McpEndpoint");
 
@@ -801,7 +801,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	// ---- SSE return-type validation ------------------------------------------
 
 	private void enforceSseReturnTypes(RoundEnvironment roundEnv) {
-		if (handshakeResultType == null) return;
+		if (sseHandshakeResultType == null) return;
 
 		TypeElement sseAnn = elements.getTypeElement(SseEventSource.class.getCanonicalName());
 		if (sseAnn == null) return;
@@ -813,11 +813,11 @@ public final class SokletProcessor extends AbstractProcessor {
 			}
 			ExecutableElement method = (ExecutableElement) e;
 			TypeMirror returnType = method.getReturnType();
-			boolean assignable = types.isAssignable(returnType, handshakeResultType);
+			boolean assignable = types.isAssignable(returnType, sseHandshakeResultType);
 			if (!assignable) {
 				error(e,
 						"Soklet: Resource Methods annotated with @%s must specify a return type of %s (found: %s).",
-						SseEventSource.class.getSimpleName(), "HandshakeResult", prettyType(returnType));
+						SseEventSource.class.getSimpleName(), "SseHandshakeResult", prettyType(returnType));
 			}
 		}
 	}

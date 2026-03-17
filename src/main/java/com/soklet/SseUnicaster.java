@@ -23,7 +23,7 @@ import org.jspecify.annotations.NonNull;
  * <p>
  * For example:
  * <pre>{@code @SseEventSource("/chats/{chatId}/event-source")
- * public HandshakeResult chatEventSource(
+ * public SseHandshakeResult chatEventSource(
  *   @PathParameter Long chatId,
  *   // Browsers will send this header automatically on reconnects
  *   @RequestHeader(name="Last-Event-ID", optional=true) String lastEventId
@@ -42,7 +42,7 @@ import org.jspecify.annotations.NonNull;
  *     catchupMessages.addAll(myChatService.findCatchups(chatId, lastEventId));
  *
  *   // Customize "accept" handshake with a client initializer
- *   return HandshakeResult.Accepted.builder()
+ *   return SseHandshakeResult.Accepted.builder()
  *     .clientInitializer((unicaster) -> {
  *       // Unicast "catchup" initialization events to this specific client.
  *       // The unicaster is guaranteed to write these events before any

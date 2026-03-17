@@ -17,7 +17,13 @@
 package com.soklet;
 
 /**
- * Reasons a connection attempt was rejected before a request or SSE connection could be established.
+ * Reasons a connection attempt was rejected by a transport server before request handling could begin.
+ * <p>
+ * This type is currently used by both Soklet's regular {@link HttpServer} transport and its {@link SseServer}
+ * transport via lifecycle and metrics callbacks such as
+ * {@link LifecycleObserver#didFailToAcceptConnection(ServerType, java.net.InetSocketAddress, ConnectionRejectionReason, Throwable)}
+ * and
+ * {@link MetricsCollector#didFailToAcceptConnection(ServerType, java.net.InetSocketAddress, ConnectionRejectionReason, Throwable)}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

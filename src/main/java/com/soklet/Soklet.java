@@ -683,8 +683,8 @@ public final class Soklet implements AutoCloseable {
 
 							// 2. Apply other standard response customizations (CORS, Content-Length)
 							// Note that we don't want to write Content-Length for SSE "accepted" handshakes
-							HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
-							boolean suppressContentLength = handshakeResult != null && handshakeResult instanceof HandshakeResult.Accepted;
+							SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
+							boolean suppressContentLength = sseHandshakeResult != null && sseHandshakeResult instanceof SseHandshakeResult.Accepted;
 
 							updatedMarshaledResponse = applyCommonPropertiesToMarshaledResponse(requestHolder.get(), updatedMarshaledResponse, suppressContentLength);
 
@@ -1147,7 +1147,7 @@ public final class Soklet implements AutoCloseable {
 			responseObject = ((Optional<?>) responseObject).orElse(null);
 
 		Response response;
-		HandshakeResult handshakeResult = null;
+		SseHandshakeResult sseHandshakeResult = null;
 
 		// If null/void return, it's a 204
 		// If it's a MarshaledResponse object, no marshaling + return it immediately - caller knows exactly what it wants to write.
@@ -1164,14 +1164,14 @@ public final class Soklet implements AutoCloseable {
 					.build();
 		} else if (responseObject instanceof Response) {
 			response = (Response) responseObject;
-		} else if (responseObject instanceof HandshakeResult.Accepted accepted) { // SSE "accepted" handshake
+		} else if (responseObject instanceof SseHandshakeResult.Accepted accepted) { // SSE "accepted" handshake
 			return RequestResult.withMarshaledResponse(toMarshaledResponse(accepted))
 					.resourceMethod(resourceMethod)
-					.handshakeResult(accepted)
+					.sseHandshakeResult(accepted)
 					.build();
-		} else if (responseObject instanceof HandshakeResult.Rejected rejected) { // SSE "rejected" handshake
+		} else if (responseObject instanceof SseHandshakeResult.Rejected rejected) { // SSE "rejected" handshake
 			response = rejected.getResponse();
-			handshakeResult = rejected;
+			sseHandshakeResult = rejected;
 		} else {
 			response = Response.withStatusCode(200).body(responseObject).build();
 		}
@@ -1185,12 +1185,12 @@ public final class Soklet implements AutoCloseable {
 		return RequestResult.withMarshaledResponse(marshaledResponse)
 				.response(response)
 				.resourceMethod(resourceMethod)
-				.handshakeResult(handshakeResult)
+				.sseHandshakeResult(sseHandshakeResult)
 				.build();
 	}
 
 	@NonNull
-	private MarshaledResponse toMarshaledResponse(HandshakeResult.@NonNull Accepted accepted) {
+	private MarshaledResponse toMarshaledResponse(SseHandshakeResult.@NonNull Accepted accepted) {
 		requireNonNull(accepted);
 
 		Map<String, Set<String>> headers = accepted.getHeaders();
@@ -1577,12 +1577,12 @@ public final class Soklet implements AutoCloseable {
 			}));
 
 			RequestResult requestResult = requestResultHolder.get();
-			HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
+			SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
 
-			if (handshakeResult == null)
+			if (sseHandshakeResult == null)
 				return new SseRequestResult.RequestFailed(requestResult);
 
-			if (handshakeResult instanceof HandshakeResult.Accepted acceptedHandshake) {
+			if (sseHandshakeResult instanceof SseHandshakeResult.Accepted acceptedHandshake) {
 				Consumer<SseUnicaster> clientInitializer = acceptedHandshake.getClientInitializer().orElse(null);
 
 				// Create a synthetic logical response using values from the accepted handshake
@@ -1598,10 +1598,10 @@ public final class Soklet implements AutoCloseable {
 				return handshakeAccepted;
 			}
 
-			if (handshakeResult instanceof HandshakeResult.Rejected rejectedHandshake)
+			if (sseHandshakeResult instanceof SseHandshakeResult.Rejected rejectedHandshake)
 				return new HandshakeRejected(rejectedHandshake, requestResult);
 
-			throw new IllegalStateException(format("Encountered unexpected %s: %s", HandshakeResult.class.getSimpleName(), handshakeResult));
+			throw new IllegalStateException(format("Encountered unexpected %s: %s", SseHandshakeResult.class.getSimpleName(), sseHandshakeResult));
 		}
 
 		@NonNull

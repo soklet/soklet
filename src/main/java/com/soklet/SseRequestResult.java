@@ -46,11 +46,11 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 	 * <p>
 	 * The {@link #registerEventConsumer(Consumer)} and {@link #registerCommentConsumer(Consumer)} methods can be used to "listen" for Server-Sent Events and Comments, respectively.
 	 * <p>
-	 * The data provided when the handshake was accepted is available via {@link #getHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
+	 * The data provided when the handshake was accepted is available via {@link #getSseHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
 	 */
 	@ThreadSafe
 	final class HandshakeAccepted implements SseRequestResult {
-		private final HandshakeResult.@NonNull Accepted handshakeResult;
+		private final SseHandshakeResult.@NonNull Accepted sseHandshakeResult;
 		@NonNull
 		private final ResourcePath resourcePath;
 		@NonNull
@@ -70,17 +70,17 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		@Nullable
 		private Consumer<SseComment> commentConsumer;
 
-		HandshakeAccepted(HandshakeResult.@NonNull Accepted handshakeResult,
+		HandshakeAccepted(SseHandshakeResult.@NonNull Accepted sseHandshakeResult,
 											@NonNull ResourcePath resourcePath,
 											@NonNull RequestResult requestResult,
 											@NonNull DefaultSimulator simulator,
 											@Nullable Consumer<SseUnicaster> clientInitializer) {
-			requireNonNull(handshakeResult);
+			requireNonNull(sseHandshakeResult);
 			requireNonNull(resourcePath);
 			requireNonNull(requestResult);
 			requireNonNull(simulator);
 
-			this.handshakeResult = handshakeResult;
+			this.sseHandshakeResult = sseHandshakeResult;
 			this.resourcePath = resourcePath;
 			this.requestResult = requestResult;
 			this.simulator = simulator;
@@ -167,7 +167,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 				}
 
 				// Register with the mock SSE server broadcaster, preserving client context
-				Object clientContext = getHandshakeResult().getClientContext().orElse(null);
+				Object clientContext = getSseHandshakeResult().getClientContext().orElse(null);
 				getSimulator().getSseServer().get().registerEventConsumer(getResourcePath(), eventConsumer, clientContext);
 			} finally {
 				getLock().unlock();
@@ -205,7 +205,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 				}
 
 				// Register with the mock SSE server broadcaster, preserving client context
-				Object clientContext = getHandshakeResult().getClientContext().orElse(null);
+				Object clientContext = getSseHandshakeResult().getClientContext().orElse(null);
 				getSimulator().getSseServer().get().registerCommentConsumer(getResourcePath(), commentConsumer, clientContext);
 			} finally {
 				getLock().unlock();
@@ -231,13 +231,13 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		 *
 		 * @return the data provided when the handshake was accepted
 		 */
-		public HandshakeResult.@NonNull Accepted getHandshakeResult() {
-			return this.handshakeResult;
+		public SseHandshakeResult.@NonNull Accepted getSseHandshakeResult() {
+			return this.sseHandshakeResult;
 		}
 
 		@Override
 		public String toString() {
-			return format("%s{handshakeResult=%s}", HandshakeAccepted.class.getSimpleName(), getHandshakeResult());
+			return format("%s{sseHandshakeResult=%s}", HandshakeAccepted.class.getSimpleName(), getSseHandshakeResult());
 		}
 
 		/**
@@ -312,20 +312,20 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 	/**
 	 * Represents the result of an SSE rejected handshake (explicit rejection; connection closed) when simulated by {@link Simulator#performSseRequest(Request)}.
 	 * <p>
-	 * The data provided when the handshake was rejected is available via {@link #getHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
+	 * The data provided when the handshake was rejected is available via {@link #getSseHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
 	 */
 	@ThreadSafe
 	final class HandshakeRejected implements SseRequestResult {
-		private final HandshakeResult.@NonNull Rejected handshakeResult;
+		private final SseHandshakeResult.@NonNull Rejected sseHandshakeResult;
 		@NonNull
 		private final RequestResult requestResult;
 
-		HandshakeRejected(HandshakeResult.@NonNull Rejected handshakeResult,
+		HandshakeRejected(SseHandshakeResult.@NonNull Rejected sseHandshakeResult,
 											@NonNull RequestResult requestResult) {
-			requireNonNull(handshakeResult);
+			requireNonNull(sseHandshakeResult);
 			requireNonNull(requestResult);
 
-			this.handshakeResult = handshakeResult;
+			this.sseHandshakeResult = sseHandshakeResult;
 			this.requestResult = requestResult;
 		}
 
@@ -334,8 +334,8 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		 *
 		 * @return the data provided when the handshake was rejected
 		 */
-		public HandshakeResult.@NonNull Rejected getHandshakeResult() {
-			return this.handshakeResult;
+		public SseHandshakeResult.@NonNull Rejected getSseHandshakeResult() {
+			return this.sseHandshakeResult;
 		}
 
 		/**
@@ -350,7 +350,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 
 		@Override
 		public String toString() {
-			return format("%s{handshakeResult=%s, requestResult=%s}", HandshakeRejected.class.getSimpleName(), getHandshakeResult(), getRequestResult());
+			return format("%s{sseHandshakeResult=%s, requestResult=%s}", HandshakeRejected.class.getSimpleName(), getSseHandshakeResult(), getRequestResult());
 		}
 
 		@Override
@@ -361,13 +361,13 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			if (!(object instanceof HandshakeRejected handshakeRejected))
 				return false;
 
-			return Objects.equals(getHandshakeResult(), handshakeRejected.getHandshakeResult())
+			return Objects.equals(getSseHandshakeResult(), handshakeRejected.getSseHandshakeResult())
 					&& Objects.equals(getRequestResult(), handshakeRejected.getRequestResult());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getHandshakeResult(), getRequestResult());
+			return Objects.hash(getSseHandshakeResult(), getRequestResult());
 		}
 	}
 

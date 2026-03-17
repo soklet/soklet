@@ -41,12 +41,12 @@ public class SokletProcessorTests {
 						import org.jspecify.annotations.NonNull;
 						import com.soklet.annotation.SseEventSource;
 						import com.soklet.annotation.PathParameter;
-						import com.soklet.HandshakeResult;
+						import com.soklet.SseHandshakeResult;
 						
 						public class Ok {
 							@SseEventSource("/widgets/{id}")
-							public HandshakeResult sse(@NonNull @PathParameter(name="id") Integer id) {
-								return HandshakeResult.Accepted.builder().build();
+							public SseHandshakeResult sse(@NonNull @PathParameter(name="id") Integer id) {
+								return SseHandshakeResult.Accepted.builder().build();
 							}
 						}
 						""");
@@ -97,7 +97,7 @@ public class SokletProcessorTests {
 				.compile(src);
 
 		assertThat(compilation).failed();
-		assertThat(compilation).hadErrorContaining("must specify a return type of HandshakeResult")
+		assertThat(compilation).hadErrorContaining("must specify a return type of SseHandshakeResult")
 				.inFile(src)
 				.onLine(5);
 
@@ -119,7 +119,7 @@ public class SokletProcessorTests {
 				.compile(responseSrc);
 
 		assertThat(responseCompilation).failed();
-		assertThat(responseCompilation).hadErrorContaining("must specify a return type of HandshakeResult")
+		assertThat(responseCompilation).hadErrorContaining("must specify a return type of SseHandshakeResult")
 				.inFile(responseSrc)
 				.onLine(6);
 	}
@@ -129,11 +129,11 @@ public class SokletProcessorTests {
 		JavaFileObject src = JavaFileObjects.forSourceString("example.MissingParam",
 				"""
 						import com.soklet.annotation.SseEventSource;
-						import com.soklet.HandshakeResult;
+						import com.soklet.SseHandshakeResult;
 						
 						public class MissingParam {
 							@SseEventSource("/widgets/{id}")
-							public HandshakeResult sse() { return HandshakeResult.Accepted.builder().build(); }
+							public SseHandshakeResult sse() { return SseHandshakeResult.Accepted.builder().build(); }
 						}
 						""");
 

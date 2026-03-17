@@ -699,8 +699,8 @@ public class SokletTests {
 
 	public static class SseOnlyResource {
 		@SseEventSource("/sse-only")
-		public HandshakeResult sseOnly() {
-			return HandshakeResult.accept();
+		public SseHandshakeResult sseOnly() {
+			return SseHandshakeResult.accept();
 		}
 	}
 
