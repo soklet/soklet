@@ -54,26 +54,52 @@ public final class McpToolResult {
 		this.error = error;
 	}
 
+	/**
+	 * Provides the text content blocks returned by the tool.
+	 *
+	 * @return the tool content blocks
+	 */
 	@NonNull
 	public List<@NonNull McpTextContent> getContent() {
 		return this.content;
 	}
 
+	/**
+	 * Provides optional app-owned structured content to be marshaled into the MCP response.
+	 *
+	 * @return the structured content, if present
+	 */
 	@NonNull
 	public Optional<Object> getStructuredContent() {
 		return Optional.ofNullable(this.structuredContent);
 	}
 
+	/**
+	 * Indicates whether the tool result represents an error result.
+	 *
+	 * @return {@code true} if the tool result is an error result
+	 */
 	@NonNull
 	public Boolean isError() {
 		return this.error;
 	}
 
+	/**
+	 * Creates a builder for {@link McpToolResult}.
+	 *
+	 * @return a new builder
+	 */
 	@NonNull
 	public static Builder builder() {
 		return new Builder();
 	}
 
+	/**
+	 * Creates an error result containing a single text message.
+	 *
+	 * @param message the error message
+	 * @return an error tool result
+	 */
 	@NonNull
 	public static McpToolResult fromErrorMessage(@NonNull String message) {
 		requireNonNull(message);
@@ -124,6 +150,12 @@ public final class McpToolResult {
 			this.error = false;
 		}
 
+		/**
+		 * Appends a content block to the result.
+		 *
+		 * @param content the content block to append
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder content(@NonNull McpTextContent content) {
 			requireNonNull(content);
@@ -131,6 +163,12 @@ public final class McpToolResult {
 			return this;
 		}
 
+		/**
+		 * Appends multiple content blocks to the result in order.
+		 *
+		 * @param content the content blocks to append
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder content(@NonNull List<@NonNull McpTextContent> content) {
 			requireNonNull(content);
@@ -138,12 +176,24 @@ public final class McpToolResult {
 			return this;
 		}
 
+		/**
+		 * Sets the structured content value to be marshaled into the tool result.
+		 *
+		 * @param structuredContent the structured content value, possibly {@code null}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder structuredContent(@Nullable Object structuredContent) {
 			this.structuredContent = structuredContent;
 			return this;
 		}
 
+		/**
+		 * Sets whether the result should be flagged as an error result.
+		 *
+		 * @param error the error flag
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder isError(@NonNull Boolean error) {
 			requireNonNull(error);
@@ -151,6 +201,11 @@ public final class McpToolResult {
 			return this;
 		}
 
+		/**
+		 * Builds the immutable tool result.
+		 *
+		 * @return the built tool result
+		 */
 		@NonNull
 		public McpToolResult build() {
 			return new McpToolResult(this.content, this.structuredContent, this.error);

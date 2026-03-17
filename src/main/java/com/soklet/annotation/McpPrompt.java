@@ -31,10 +31,25 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpPrompt {
-	String name();
+	/**
+	 * Declares the MCP prompt name.
+	 *
+	 * @return the prompt name exposed to MCP clients
+	 */
+    String name();
 
-	String description();
+	/**
+	 * Declares the human-readable prompt description.
+	 *
+	 * @return the prompt description
+	 */
+    String description();
 
-	@Nullable
-	String title() default "";
+	/**
+	 * Declares optional prompt title metadata for clients that display a separate title.
+	 *
+	 * @return the prompt title, or an empty string if unspecified
+	 */
+    @Nullable
+    String title() default "";
 }

@@ -30,10 +30,22 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public interface McpResponseMarshaler {
+	/**
+	 * Converts app-owned structured content into an {@link McpValue} tree that Soklet can embed into the MCP response.
+	 *
+	 * @param value the app-owned structured content value, possibly {@code null}
+	 * @param context the marshaling context for the current tool call
+	 * @return the marshaled MCP value
+	 */
 	@NonNull
 	McpValue marshalStructuredContent(@Nullable Object value,
 																		@NonNull McpStructuredContentContext context);
 
+	/**
+	 * Acquires Soklet's default structured-content marshaler.
+	 *
+	 * @return the default marshaler instance
+	 */
 	@NonNull
 	static McpResponseMarshaler defaultInstance() {
 		return DefaultMcpResponseMarshaler.INSTANCE;

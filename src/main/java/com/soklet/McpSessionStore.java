@@ -38,22 +38,56 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public interface McpSessionStore {
+	/**
+	 * Persists a newly-created session.
+	 *
+	 * @param session the session to create
+	 */
 	void create(@NonNull McpStoredSession session);
 
+	/**
+	 * Loads a session by ID.
+	 *
+	 * @param sessionId the session ID
+	 * @return the stored session, if it exists and has not expired
+	 */
 	@NonNull
 	Optional<McpStoredSession> findBySessionId(@NonNull String sessionId);
 
+	/**
+	 * Replaces a session using compare-and-set semantics.
+	 *
+	 * @param expected the currently-stored session snapshot
+	 * @param updated the replacement session snapshot
+	 * @return {@code true} if the replacement succeeded
+	 */
 	@NonNull
 	Boolean replace(@NonNull McpStoredSession expected,
 									@NonNull McpStoredSession updated);
 
+	/**
+	 * Deletes a session by ID.
+	 *
+	 * @param sessionId the session ID to delete
+	 */
 	void deleteBySessionId(@NonNull String sessionId);
 
+	/**
+	 * Acquires the default in-memory session store using Soklet's default idle timeout.
+	 *
+	 * @return a new in-memory session store
+	 */
 	@NonNull
 	static McpSessionStore fromInMemory() {
 		return new DefaultMcpSessionStore(ofHours(24));
 	}
 
+	/**
+	 * Acquires the default in-memory session store using a caller-supplied idle timeout.
+	 *
+	 * @param idleTimeout the idle timeout, or {@code Duration.ZERO} to disable idle expiry
+	 * @return a new in-memory session store
+	 */
 	@NonNull
 	static McpSessionStore fromInMemory(@NonNull Duration idleTimeout) {
 		requireNonNull(idleTimeout);

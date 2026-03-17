@@ -27,15 +27,37 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public interface McpToolHandler {
+	/**
+	 * Provides the MCP tool name.
+	 *
+	 * @return the tool name
+	 */
 	@NonNull
 	String getName();
 
+	/**
+	 * Provides the MCP tool description.
+	 *
+	 * @return the tool description
+	 */
 	@NonNull
 	String getDescription();
 
+	/**
+	 * Provides the input schema used for framework validation and client advertisement.
+	 *
+	 * @return the tool input schema
+	 */
 	@NonNull
 	McpSchema getInputSchema();
 
+	/**
+	 * Handles an MCP {@code tools/call} request.
+	 *
+	 * @param context the tool handler context
+	 * @return the tool result
+	 * @throws Exception if the tool call fails
+	 */
 	@NonNull
 	McpToolResult handle(@NonNull McpToolHandlerContext context) throws Exception;
 }

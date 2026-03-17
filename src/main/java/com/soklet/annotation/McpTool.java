@@ -29,7 +29,17 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpTool {
-	String name();
+	/**
+	 * Declares the MCP tool name.
+	 *
+	 * @return the tool name exposed to clients
+	 */
+    String name();
 
-	String description();
+	/**
+	 * Declares the human-readable tool description.
+	 *
+	 * @return the tool description
+	 */
+    String description();
 }

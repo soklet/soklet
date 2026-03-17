@@ -28,30 +28,75 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpRequestContext {
+	/**
+	 * Provides the transport request being handled.
+	 *
+	 * @return the current request
+	 */
 	@NonNull
 	Request getRequest();
 
+	/**
+	 * Provides the resolved endpoint class for the current request.
+	 *
+	 * @return the endpoint class
+	 */
 	@NonNull
 	Class<? extends McpEndpoint> getEndpointClass();
 
+	/**
+	 * Provides the JSON-RPC method name.
+	 *
+	 * @return the JSON-RPC method
+	 */
 	@NonNull
 	String getJsonRpcMethod();
 
+	/**
+	 * Provides the high-level MCP operation kind.
+	 *
+	 * @return the operation kind
+	 */
 	@NonNull
 	McpOperationKind getOperationKind();
 
+	/**
+	 * Provides the JSON-RPC request ID for request-style operations.
+	 *
+	 * @return the request ID, if available
+	 */
 	@NonNull
 	Optional<McpJsonRpcRequestId> getJsonRpcRequestId();
 
+	/**
+	 * Provides the MCP session ID associated with the request.
+	 *
+	 * @return the session ID, if available
+	 */
 	@NonNull
 	Optional<String> getSessionId();
 
+	/**
+	 * Provides the negotiated protocol version for the request's session.
+	 *
+	 * @return the negotiated protocol version, if available
+	 */
 	@NonNull
 	Optional<String> getProtocolVersion();
 
+	/**
+	 * Provides the negotiated server capabilities for the request's session.
+	 *
+	 * @return the negotiated capabilities, if available
+	 */
 	@NonNull
 	Optional<McpNegotiatedCapabilities> getNegotiatedCapabilities();
 
+	/**
+	 * Provides the current session context for the request's session.
+	 *
+	 * @return the session context, if available
+	 */
 	@NonNull
 	Optional<McpSessionContext> getSessionContext();
 }

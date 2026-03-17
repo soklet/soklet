@@ -45,11 +45,21 @@ public final class McpSchema {
 		this.value = value;
 	}
 
+	/**
+	 * Creates a builder for a root-level object schema.
+	 *
+	 * @return a new object-schema builder
+	 */
 	@NonNull
 	public static ObjectBuilder object() {
 		return new ObjectBuilder();
 	}
 
+	/**
+	 * Converts this schema into its MCP JSON-schema object representation.
+	 *
+	 * @return the schema value
+	 */
 	@NonNull
 	public McpObject toValue() {
 		return this.value;
@@ -91,6 +101,13 @@ public final class McpSchema {
 			this.required = new LinkedHashSet<>();
 		}
 
+		/**
+		 * Adds a required scalar property.
+		 *
+		 * @param name the property name
+		 * @param type the property type
+		 * @return this builder
+		 */
 		@NonNull
 		public ObjectBuilder required(@NonNull String name,
 																	@NonNull McpType type) {
@@ -101,6 +118,13 @@ public final class McpSchema {
 			return this;
 		}
 
+		/**
+		 * Adds an optional scalar property.
+		 *
+		 * @param name the property name
+		 * @param type the property type
+		 * @return this builder
+		 */
 		@NonNull
 		public ObjectBuilder optional(@NonNull String name,
 																	@NonNull McpType type) {
@@ -111,6 +135,13 @@ public final class McpSchema {
 			return this;
 		}
 
+		/**
+		 * Adds a required enum-backed string property.
+		 *
+		 * @param name the property name
+		 * @param values the allowed enum values
+		 * @return this builder
+		 */
 		@NonNull
 		public ObjectBuilder requiredEnum(@NonNull String name,
 																			@NonNull String... values) {
@@ -121,6 +152,13 @@ public final class McpSchema {
 			return this;
 		}
 
+		/**
+		 * Adds an optional enum-backed string property.
+		 *
+		 * @param name the property name
+		 * @param values the allowed enum values
+		 * @return this builder
+		 */
 		@NonNull
 		public ObjectBuilder optionalEnum(@NonNull String name,
 																			@NonNull String... values) {
@@ -131,6 +169,11 @@ public final class McpSchema {
 			return this;
 		}
 
+		/**
+		 * Builds the immutable schema value.
+		 *
+		 * @return the built schema
+		 */
 		@NonNull
 		public McpSchema build() {
 			Map<String, McpValue> value = new LinkedHashMap<>();

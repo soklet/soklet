@@ -37,15 +37,35 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public interface McpCorsAuthorizer {
+	/**
+	 * Authorizes a non-preflight browser-originated MCP request and, when allowed, supplies the CORS response metadata to apply.
+	 *
+	 * @param context the MCP CORS context
+	 * @param cors the parsed Soklet CORS request metadata
+	 * @return the CORS response metadata to apply, or {@link Optional#empty()} to withhold CORS authorization
+	 */
 	@NonNull
 	Optional<CorsResponse> authorize(@NonNull McpCorsContext context,
 																	 @NonNull Cors cors);
 
+	/**
+	 * Authorizes a browser preflight request for the MCP transport.
+	 *
+	 * @param context the MCP CORS context
+	 * @param corsPreflight the parsed preflight metadata
+	 * @param availableHttpMethods the MCP transport methods available for the current endpoint
+	 * @return the preflight response metadata to apply, or {@link Optional#empty()} to reject the preflight
+	 */
 	@NonNull
 	Optional<CorsPreflightResponse> authorizePreflight(@NonNull McpCorsContext context,
 																										 @NonNull CorsPreflight corsPreflight,
 																										 @NonNull Set<@NonNull HttpMethod> availableHttpMethods);
 
+	/**
+	 * Acquires an authorizer that rejects all browser-originated MCP CORS requests.
+	 *
+	 * @return a rejecting authorizer
+	 */
 	@NonNull
 	static McpCorsAuthorizer rejectAllInstance() {
 		return new McpCorsAuthorizer() {
@@ -71,21 +91,44 @@ public interface McpCorsAuthorizer {
 		};
 	}
 
+	/**
+	 * Acquires the conservative default authorizer that leaves non-browser MCP requests alone while rejecting browser CORS authorization.
+	 *
+	 * @return the default non-browser-only authorizer
+	 */
 	@NonNull
 	static McpCorsAuthorizer nonBrowserClientsOnlyInstance() {
 		return rejectAllInstance();
 	}
 
+	/**
+	 * Acquires an authorizer that allows all browser origins and always enables credentials.
+	 *
+	 * @return a permissive authorizer
+	 */
 	@NonNull
 	static McpCorsAuthorizer acceptAllInstance() {
 		return fromOriginAuthorizer(context -> true, origin -> true);
 	}
 
+	/**
+	 * Acquires an authorizer that allows only the provided normalized origins and disables credentials by default.
+	 *
+	 * @param whitelistedOrigins the origins to allow
+	 * @return a whitelisting authorizer
+	 */
 	@NonNull
 	static McpCorsAuthorizer fromWhitelistedOrigins(@NonNull Set<@NonNull String> whitelistedOrigins) {
 		return fromWhitelistedOrigins(whitelistedOrigins, origin -> false);
 	}
 
+	/**
+	 * Acquires an authorizer that allows only the provided normalized origins and delegates credential behavior per origin.
+	 *
+	 * @param whitelistedOrigins the origins to allow
+	 * @param allowCredentialsResolver resolves whether credentials should be allowed for an origin
+	 * @return a whitelisting authorizer
+	 */
 	@NonNull
 	static McpCorsAuthorizer fromWhitelistedOrigins(@NonNull Set<@NonNull String> whitelistedOrigins,
 																									@NonNull Function<String, Boolean> allowCredentialsResolver) {
@@ -109,14 +152,27 @@ public interface McpCorsAuthorizer {
 		}, allowCredentialsResolver);
 	}
 
+	/**
+	 * Acquires an authorizer backed by an origin-authorization predicate and with credentials disabled by default.
+	 *
+	 * @param originAuthorizer the origin predicate
+	 * @return an authorizer backed by the predicate
+	 */
 	@NonNull
 	static McpCorsAuthorizer fromOriginAuthorizer(@NonNull Predicate<@NonNull McpCorsContext> originAuthorizer) {
 		return fromOriginAuthorizer(originAuthorizer, origin -> false);
 	}
 
+	/**
+	 * Acquires an authorizer backed by an origin-authorization predicate plus a credentials resolver.
+	 *
+	 * @param originAuthorizer the origin predicate
+	 * @param allowCredentialsResolver resolves whether credentials should be allowed for an origin
+	 * @return an authorizer backed by the supplied callbacks
+	 */
 	@NonNull
 	static McpCorsAuthorizer fromOriginAuthorizer(@NonNull Predicate<@NonNull McpCorsContext> originAuthorizer,
-																									@NonNull Function<String, Boolean> allowCredentialsResolver) {
+																										@NonNull Function<String, Boolean> allowCredentialsResolver) {
 		requireNonNull(originAuthorizer);
 		requireNonNull(allowCredentialsResolver);
 

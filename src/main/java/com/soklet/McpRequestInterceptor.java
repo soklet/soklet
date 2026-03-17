@@ -28,6 +28,15 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public interface McpRequestInterceptor {
+	/**
+	 * Intercepts an MCP JSON-RPC request before Soklet dispatches it to framework or application logic.
+	 *
+	 * @param context the current request context
+	 * @param invocation the invocation callback to continue processing
+	 * @param <T> the invocation result type
+	 * @return the invocation result
+	 * @throws Exception if interception or downstream handling fails
+	 */
 	@Nullable
 	default <T> T interceptRequest(@NonNull McpRequestContext context,
 																 @NonNull McpHandlerInvocation<T> invocation) throws Exception {

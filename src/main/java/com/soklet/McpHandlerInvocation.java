@@ -28,6 +28,12 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 @FunctionalInterface
 public interface McpHandlerInvocation<T> {
+	/**
+	 * Invokes the downstream MCP handling logic.
+	 *
+	 * @return the invocation result
+	 * @throws Exception if downstream handling fails
+	 */
 	@Nullable
 	T invoke() throws Exception;
 }

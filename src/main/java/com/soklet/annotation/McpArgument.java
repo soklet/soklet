@@ -31,8 +31,18 @@ import java.lang.annotation.Target;
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpArgument {
-	@Nullable
-	String value() default "";
+	/**
+	 * Specifies the argument name in the incoming MCP {@code arguments} object.
+	 *
+	 * @return the argument name, or an empty string to infer it from the Java parameter name
+	 */
+    @Nullable
+    String value() default "";
 
-	boolean optional() default false;
+	/**
+	 * Indicates whether the argument is optional for annotated binding.
+	 *
+	 * @return {@code true} if the argument may be omitted
+	 */
+    boolean optional() default false;
 }

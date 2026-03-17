@@ -28,15 +28,39 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpResourceListHandlerContext {
+	/**
+	 * Provides the list-specific request context.
+	 *
+	 * @return the list-resources context
+	 */
 	@NonNull
 	McpListResourcesContext getListResourcesContext();
 
+	/**
+	 * Provides the current session context.
+	 *
+	 * @return the session context
+	 */
 	@NonNull
 	McpSessionContext getSessionContext();
 
+	/**
+	 * Retrieves an endpoint path parameter as a string.
+	 *
+	 * @param name the endpoint path parameter name
+	 * @return the parameter value, if present
+	 */
 	@NonNull
 	Optional<String> getEndpointPathParameter(@NonNull String name);
 
+	/**
+	 * Retrieves an endpoint path parameter using a Soklet value conversion.
+	 *
+	 * @param name the endpoint path parameter name
+	 * @param type the desired converted type
+	 * @param <T> the converted type
+	 * @return the converted parameter value, if present
+	 */
 	@NonNull
 	<T> Optional<T> getEndpointPathParameter(@NonNull String name,
 																					 @NonNull Class<T> type);

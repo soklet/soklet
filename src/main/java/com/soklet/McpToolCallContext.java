@@ -28,9 +28,19 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpToolCallContext {
+	/**
+	 * Provides the underlying request context.
+	 *
+	 * @return the request context
+	 */
 	@NonNull
 	McpRequestContext getRequestContext();
 
+	/**
+	 * Provides the request-scoped progress reporter when the call negotiated progress support.
+	 *
+	 * @return the progress reporter, if available
+	 */
 	@NonNull
 	Optional<McpProgressReporter> getProgressReporter();
 }

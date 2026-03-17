@@ -40,23 +40,45 @@ public record McpProgressToken(
 			throw new IllegalArgumentException("MCP progress tokens must be strings or numbers.");
 	}
 
+	/**
+	 * Creates a string-backed progress token.
+	 *
+	 * @param value the string progress token
+	 * @return the progress token wrapper
+	 */
 	@NonNull
 	public static McpProgressToken fromString(@NonNull String value) {
 		requireNonNull(value);
 		return new McpProgressToken(new McpString(value));
 	}
 
+	/**
+	 * Creates a number-backed progress token.
+	 *
+	 * @param value the numeric progress token
+	 * @return the progress token wrapper
+	 */
 	@NonNull
 	public static McpProgressToken fromNumber(@NonNull BigDecimal value) {
 		requireNonNull(value);
 		return new McpProgressToken(new McpNumber(value));
 	}
 
+	/**
+	 * Reads the progress token as a string when it is string-backed.
+	 *
+	 * @return the string progress token, if this wrapper holds one
+	 */
 	@NonNull
 	public Optional<String> asString() {
 		return value() instanceof McpString mcpString ? Optional.of(mcpString.value()) : Optional.empty();
 	}
 
+	/**
+	 * Reads the progress token as a number when it is number-backed.
+	 *
+	 * @return the numeric progress token, if this wrapper holds one
+	 */
 	@NonNull
 	public Optional<BigDecimal> asNumber() {
 		return value() instanceof McpNumber mcpNumber ? Optional.of(mcpNumber.value()) : Optional.empty();

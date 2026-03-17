@@ -39,12 +39,25 @@ public record McpListResourcesResult(
 		resources = List.copyOf(resources);
 	}
 
+	/**
+	 * Creates a non-paginated {@code resources/list} result.
+	 *
+	 * @param resources the listed resources
+	 * @return a result without a next cursor
+	 */
 	@NonNull
 	public static McpListResourcesResult fromResources(@NonNull List<@NonNull McpListedResource> resources) {
 		requireNonNull(resources);
 		return new McpListResourcesResult(resources, null);
 	}
 
+	/**
+	 * Creates a paginated {@code resources/list} result.
+	 *
+	 * @param resources the listed resources for the current page
+	 * @param nextCursor the cursor clients should use to request the next page
+	 * @return a paginated list result
+	 */
 	@NonNull
 	public static McpListResourcesResult fromResourcesAndNextCursor(@NonNull List<@NonNull McpListedResource> resources,
 																																	@NonNull String nextCursor) {

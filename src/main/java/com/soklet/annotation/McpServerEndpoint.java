@@ -31,21 +31,56 @@ import java.lang.annotation.Target;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpServerEndpoint {
-	String path();
+	/**
+	 * Declares the HTTP path for the MCP transport endpoint.
+	 *
+	 * @return the MCP endpoint path
+	 */
+    String path();
 
-	String name();
+	/**
+	 * Declares the MCP server name.
+	 *
+	 * @return the server name exposed during initialization
+	 */
+    String name();
 
-	String version();
+	/**
+	 * Declares the MCP server version.
+	 *
+	 * @return the server version exposed during initialization
+	 */
+    String version();
 
-	@Nullable
-	String instructions() default "";
+	/**
+	 * Declares optional server instructions metadata.
+	 *
+	 * @return the server instructions, or an empty string if unspecified
+	 */
+    @Nullable
+    String instructions() default "";
 
-	@Nullable
-	String title() default "";
+	/**
+	 * Declares optional server title metadata.
+	 *
+	 * @return the server title, or an empty string if unspecified
+	 */
+    @Nullable
+    String title() default "";
 
-	@Nullable
-	String description() default "";
+	/**
+	 * Declares optional server description metadata.
+	 *
+	 * @return the server description, or an empty string if unspecified
+	 */
+    @Nullable
+    String description() default "";
 
-	@Nullable
-	String websiteUrl() default "";
+	/**
+	 * Declares optional server website URL metadata.
+	 *
+	 * @return the server website URL, or an empty string if unspecified
+	 */
+    @Nullable
+    String websiteUrl() default "";
 }

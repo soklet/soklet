@@ -46,6 +46,14 @@ public record McpListedResource(
 			throw new IllegalArgumentException("Resource size metadata must be non-negative.");
 	}
 
+	/**
+	 * Creates a minimal resource-list entry without optional metadata.
+	 *
+	 * @param uri the resource URI
+	 * @param name the resource name
+	 * @param mimeType the resource MIME type
+	 * @return a minimal listed-resource entry
+	 */
 	@NonNull
 	public static McpListedResource fromComponents(@NonNull String uri,
 																								 @NonNull String name,
@@ -56,18 +64,36 @@ public record McpListedResource(
 		return new McpListedResource(uri, name, mimeType, null, null, null);
 	}
 
+	/**
+	 * Returns a copy of this resource entry with a title.
+	 *
+	 * @param title the title to apply
+	 * @return a new resource entry with the given title
+	 */
 	@NonNull
 	public McpListedResource withTitle(@NonNull String title) {
 		requireNonNull(title);
 		return new McpListedResource(uri(), name(), mimeType(), title, description(), sizeBytes());
 	}
 
+	/**
+	 * Returns a copy of this resource entry with a description.
+	 *
+	 * @param description the description to apply
+	 * @return a new resource entry with the given description
+	 */
 	@NonNull
 	public McpListedResource withDescription(@NonNull String description) {
 		requireNonNull(description);
 		return new McpListedResource(uri(), name(), mimeType(), title(), description, sizeBytes());
 	}
 
+	/**
+	 * Returns a copy of this resource entry with a size metadata value.
+	 *
+	 * @param sizeBytes the non-negative size in bytes
+	 * @return a new resource entry with the given size
+	 */
 	@NonNull
 	public McpListedResource withSizeBytes(@NonNull Long sizeBytes) {
 		requireNonNull(sizeBytes);

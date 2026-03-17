@@ -40,12 +40,25 @@ public record McpPromptResult(
 		messages = List.copyOf(messages);
 	}
 
+	/**
+	 * Creates a prompt result containing only messages.
+	 *
+	 * @param messages the prompt messages
+	 * @return a prompt result without a description
+	 */
 	@NonNull
 	public static McpPromptResult fromMessages(@NonNull McpPromptMessage... messages) {
 		requireNonNull(messages);
 		return new McpPromptResult(null, of(messages));
 	}
 
+	/**
+	 * Creates a prompt result containing a description and messages.
+	 *
+	 * @param description the prompt result description
+	 * @param messages the prompt messages
+	 * @return a prompt result with a description
+	 */
 	@NonNull
 	public static McpPromptResult fromDescriptionAndMessages(@NonNull String description,
 																													 @NonNull McpPromptMessage... messages) {

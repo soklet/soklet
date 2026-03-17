@@ -29,9 +29,21 @@ import java.math.BigDecimal;
  */
 @ThreadSafe
 public interface McpProgressReporter {
+	/**
+	 * Provides the progress token associated with the current request.
+	 *
+	 * @return the progress token
+	 */
 	@NonNull
 	McpProgressToken getProgressToken();
 
+	/**
+	 * Emits an MCP {@code notifications/progress} update for the current request.
+	 *
+	 * @param progress the current progress value
+	 * @param total the optional total value used to interpret {@code progress}
+	 * @param message an optional human-readable progress message
+	 */
 	void reportProgress(@NonNull BigDecimal progress,
 											@Nullable BigDecimal total,
 											@Nullable String message);

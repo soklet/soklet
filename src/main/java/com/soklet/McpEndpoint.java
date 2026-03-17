@@ -29,6 +29,14 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public interface McpEndpoint {
+	/**
+	 * Initializes a newly-created MCP session.
+	 *
+	 * @param context the initialization request context
+	 * @param session the blank or previously-composed session context
+	 * @return the session context that should be persisted for the new session
+	 * @throws Exception if initialization fails
+	 */
 	@NonNull
 	default McpSessionContext initialize(@NonNull McpInitializationContext context,
 																			 @NonNull McpSessionContext session) throws Exception {
@@ -37,6 +45,13 @@ public interface McpEndpoint {
 		return session;
 	}
 
+	/**
+	 * Maps a thrown tool exception to an MCP tool result.
+	 *
+	 * @param throwable the thrown exception
+	 * @param context the tool-call context
+	 * @return the tool result to return to the client
+	 */
 	@NonNull
 	default McpToolResult handleToolError(@NonNull Throwable throwable,
 																				@NonNull McpToolCallContext context) {
@@ -45,6 +60,13 @@ public interface McpEndpoint {
 		return McpToolResult.fromErrorMessage(throwable.getMessage() == null ? throwable.getClass().getSimpleName() : throwable.getMessage());
 	}
 
+	/**
+	 * Maps a non-tool MCP exception to a JSON-RPC error.
+	 *
+	 * @param throwable the thrown exception
+	 * @param context the request context
+	 * @return the JSON-RPC error to return to the client
+	 */
 	@NonNull
 	default McpJsonRpcError handleError(@NonNull Throwable throwable,
 																			@NonNull McpRequestContext context) {

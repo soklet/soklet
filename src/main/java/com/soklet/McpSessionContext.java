@@ -33,31 +33,81 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public interface McpSessionContext {
+	/**
+	 * Retrieves a stored session value without type conversion.
+	 *
+	 * @param key the session key
+	 * @return the stored value, if present
+	 */
 	@NonNull
 	Optional<Object> get(@NonNull String key);
 
+	/**
+	 * Retrieves a stored session value with an assignability check.
+	 *
+	 * @param key the session key
+	 * @param type the desired type
+	 * @param <T> the desired type
+	 * @return the stored value cast to {@code type}, if present
+	 * @throws IllegalArgumentException if the stored value exists but is not assignable to {@code type}
+	 */
 	@NonNull
 	<T> Optional<T> get(@NonNull String key,
 											@NonNull Class<T> type);
 
+	/**
+	 * Checks whether a session value is present for the given key.
+	 *
+	 * @param key the session key
+	 * @return {@code true} if the key is present
+	 */
 	@NonNull
 	Boolean contains(@NonNull String key);
 
+	/**
+	 * Returns a new session context containing the given key/value pair.
+	 *
+	 * @param key the session key
+	 * @param value the session value
+	 * @return a new session context including the provided value
+	 */
 	@NonNull
 	McpSessionContext with(@NonNull String key,
 												 @NonNull Object value);
 
+	/**
+	 * Returns a new session context without the given key.
+	 *
+	 * @param key the session key to remove
+	 * @return a new session context without the key, or this instance if the key was absent
+	 */
 	@NonNull
 	McpSessionContext without(@NonNull String key);
 
+	/**
+	 * Provides an immutable snapshot of all stored session values.
+	 *
+	 * @return an immutable map view of the stored session values
+	 */
 	@NonNull
 	Map<@NonNull String, @NonNull Object> asMap();
 
+	/**
+	 * Creates an empty session context.
+	 *
+	 * @return a blank session context
+	 */
 	@NonNull
 	static McpSessionContext fromBlankSlate() {
 		return new DefaultMcpSessionContext(Map.of());
 	}
 
+	/**
+	 * Creates a session context from the provided values.
+	 *
+	 * @param values the values to seed into the new session context
+	 * @return a new immutable session context containing {@code values}
+	 */
 	@NonNull
 	static McpSessionContext fromValues(@NonNull Map<@NonNull String, @NonNull Object> values) {
 		requireNonNull(values);

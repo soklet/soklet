@@ -28,22 +28,56 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpInitializationContext {
+	/**
+	 * Provides the transport request that carried the {@code initialize} call.
+	 *
+	 * @return the current request
+	 */
 	@NonNull
 	Request getRequest();
 
+	/**
+	 * Provides the negotiated MCP protocol version for this initialization flow.
+	 *
+	 * @return the protocol version to persist
+	 */
 	@NonNull
 	String getProtocolVersion();
 
+	/**
+	 * Provides the client capabilities sent during initialization.
+	 *
+	 * @return the client capability object
+	 */
 	@NonNull
 	McpClientCapabilities getClientCapabilities();
 
+	/**
+	 * Provides optional client metadata sent during initialization.
+	 *
+	 * @return client information, if the client supplied it
+	 */
 	@NonNull
 	Optional<McpClientInfo> getClientInfo();
 
+	/**
+	 * Retrieves an endpoint path parameter as a string.
+	 *
+	 * @param name the endpoint path parameter name
+	 * @return the parameter value, if present
+	 */
 	@NonNull
 	Optional<String> getEndpointPathParameter(@NonNull String name);
 
+	/**
+	 * Retrieves an endpoint path parameter using a Soklet value conversion.
+	 *
+	 * @param name the endpoint path parameter name
+	 * @param type the desired converted type
+	 * @param <T> the converted type
+	 * @return the converted parameter value, if present
+	 */
 	@NonNull
 	<T> Optional<T> getEndpointPathParameter(@NonNull String name,
-																					 @NonNull Class<T> type);
+																				 @NonNull Class<T> type);
 }

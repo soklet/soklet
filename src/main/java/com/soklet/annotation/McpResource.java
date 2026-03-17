@@ -31,12 +31,32 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpResource {
-	String uri();
+	/**
+	 * Declares the resource URI or URI template.
+	 *
+	 * @return the resource URI or URI template
+	 */
+    String uri();
 
-	String name();
+	/**
+	 * Declares the MCP resource name.
+	 *
+	 * @return the resource name exposed to clients
+	 */
+    String name();
 
-	String mimeType();
+	/**
+	 * Declares the MIME type returned by the resource-read handler.
+	 *
+	 * @return the resource MIME type
+	 */
+    String mimeType();
 
-	@Nullable
-	String description() default "";
+	/**
+	 * Declares optional resource description metadata.
+	 *
+	 * @return the resource description, or an empty string if unspecified
+	 */
+    @Nullable
+    String description() default "";
 }

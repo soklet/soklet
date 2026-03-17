@@ -28,25 +28,68 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpResourceHandlerContext {
+	/**
+	 * Provides the underlying request context.
+	 *
+	 * @return the request context
+	 */
 	@NonNull
 	McpRequestContext getRequestContext();
 
+	/**
+	 * Provides the current session context.
+	 *
+	 * @return the session context
+	 */
 	@NonNull
 	McpSessionContext getSessionContext();
 
+	/**
+	 * Provides the concrete resource URI requested by the client.
+	 *
+	 * @return the requested resource URI
+	 */
 	@NonNull
 	String getRequestedUri();
 
+	/**
+	 * Retrieves a URI-template parameter as a string.
+	 *
+	 * @param name the URI parameter name
+	 * @return the parameter value, if present
+	 */
 	@NonNull
 	Optional<String> getUriParameter(@NonNull String name);
 
+	/**
+	 * Retrieves a URI-template parameter using a Soklet value conversion.
+	 *
+	 * @param name the URI parameter name
+	 * @param type the desired converted type
+	 * @param <T> the converted type
+	 * @return the converted parameter value, if present
+	 */
 	@NonNull
 	<T> Optional<T> getUriParameter(@NonNull String name,
 																	@NonNull Class<T> type);
 
+	/**
+	 * Retrieves an endpoint path parameter as a string.
+	 *
+	 * @param name the endpoint path parameter name
+	 * @return the parameter value, if present
+	 */
 	@NonNull
 	Optional<String> getEndpointPathParameter(@NonNull String name);
 
+	/**
+	 * Retrieves an endpoint path parameter using a Soklet value conversion.
+	 *
+	 * @param name the endpoint path parameter name
+	 * @param type the desired converted type
+	 * @param <T> the converted type
+	 * @return the converted parameter value, if present
+	 */
 	@NonNull
 	<T> Optional<T> getEndpointPathParameter(@NonNull String name,
 																					 @NonNull Class<T> type);

@@ -40,6 +40,12 @@ public record McpObject(
 		values = unmodifiableMap(new LinkedHashMap<>(values));
 	}
 
+	/**
+	 * Retrieves a named member from the object.
+	 *
+	 * @param name the member name
+	 * @return the member value, if present
+	 */
 	@NonNull
 	public Optional<McpValue> get(@NonNull String name) {
 		requireNonNull(name);

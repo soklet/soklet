@@ -37,6 +37,13 @@ public record McpJsonRpcError(
 		requireNonNull(message);
 	}
 
+	/**
+	 * Creates a JSON-RPC error descriptor from a code and message.
+	 *
+	 * @param code the JSON-RPC error code
+	 * @param message the JSON-RPC error message
+	 * @return a new JSON-RPC error descriptor
+	 */
 	@NonNull
 	public static McpJsonRpcError fromCodeAndMessage(@NonNull Integer code,
 																									 @NonNull String message) {

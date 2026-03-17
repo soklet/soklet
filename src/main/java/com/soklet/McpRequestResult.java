@@ -37,6 +37,11 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public sealed interface McpRequestResult permits McpRequestResult.ResponseCompleted, McpRequestResult.StreamOpened {
+	/**
+	 * Provides the low-level Soklet request result associated with the simulated MCP request.
+	 *
+	 * @return the low-level request result
+	 */
 	@NonNull
 	RequestResult getRequestResult();
 
@@ -98,6 +103,11 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 			this.messageConsumer = null;
 		}
 
+		/**
+		 * Registers the consumer that should receive MCP messages from the open simulated stream.
+		 *
+		 * @param messageConsumer the message consumer
+		 */
 		public void registerMessageConsumer(@NonNull Consumer<McpObject> messageConsumer) {
 			requireNonNull(messageConsumer);
 
@@ -126,6 +136,9 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 			}
 		}
 
+		/**
+		 * Simulates client-side closure of the open MCP stream.
+		 */
 		public void close() {
 			if (!this.closed.compareAndSet(false, true))
 				return;
@@ -136,6 +149,11 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 				onClose.run();
 		}
 
+		/**
+		 * Indicates whether the simulated stream has been closed.
+		 *
+		 * @return {@code true} if the stream is closed
+		 */
 		@NonNull
 		public Boolean isClosed() {
 			return this.closed.get();

@@ -24,6 +24,11 @@ import java.util.List;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * Internal utility for encoding MCP event-stream messages into SSE payload bytes.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 @ThreadSafe
 final class McpEventStreamPayloads {
 	@NonNull

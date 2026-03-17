@@ -28,24 +28,59 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpAdmissionContext {
+	/**
+	 * Provides the transport request being evaluated for admission.
+	 *
+	 * @return the current request
+	 */
 	@NonNull
 	Request getRequest();
 
+	/**
+	 * Provides the HTTP method for the MCP transport request.
+	 *
+	 * @return the transport HTTP method
+	 */
 	@NonNull
 	HttpMethod getHttpMethod();
 
+	/**
+	 * Provides the resolved MCP endpoint class.
+	 *
+	 * @return the target endpoint class
+	 */
 	@NonNull
 	Class<? extends McpEndpoint> getEndpointClass();
 
+	/**
+	 * Provides the JSON-RPC method name when the request is a parsed MCP {@code POST}.
+	 *
+	 * @return the JSON-RPC method, if available
+	 */
 	@NonNull
 	Optional<String> getJsonRpcMethod();
 
+	/**
+	 * Provides the high-level operation kind when the request maps to a known MCP operation.
+	 *
+	 * @return the MCP operation kind, if available
+	 */
 	@NonNull
 	Optional<McpOperationKind> getOperationKind();
 
+	/**
+	 * Provides the parsed JSON-RPC request ID for request-style MCP operations.
+	 *
+	 * @return the request ID, if available
+	 */
 	@NonNull
 	Optional<McpJsonRpcRequestId> getJsonRpcRequestId();
 
+	/**
+	 * Provides the requested MCP session ID when one is present on the transport request.
+	 *
+	 * @return the session ID, if available
+	 */
 	@NonNull
 	Optional<String> getSessionId();
 }

@@ -35,6 +35,12 @@ public record McpTextContent(
 		requireNonNull(text);
 	}
 
+	/**
+	 * Creates a text content block.
+	 *
+	 * @param text the text content
+	 * @return a text content block
+	 */
 	@NonNull
 	public static McpTextContent fromText(@NonNull String text) {
 		requireNonNull(text);

@@ -31,6 +31,11 @@ import java.lang.annotation.Target;
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpEndpointPathParameter {
-	@Nullable
-	String value() default "";
+	/**
+	 * Specifies the endpoint path parameter name to bind.
+	 *
+	 * @return the endpoint path parameter name, or an empty string to infer it from the Java parameter name
+	 */
+    @Nullable
+    String value() default "";
 }

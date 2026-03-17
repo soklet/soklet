@@ -28,9 +28,19 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpListResourcesContext {
+	/**
+	 * Provides the underlying request context for the current {@code resources/list} call.
+	 *
+	 * @return the request context
+	 */
 	@NonNull
 	McpRequestContext getRequestContext();
 
+	/**
+	 * Provides the pagination cursor supplied by the client.
+	 *
+	 * @return the cursor, if present
+	 */
 	@NonNull
 	Optional<String> getCursor();
 }

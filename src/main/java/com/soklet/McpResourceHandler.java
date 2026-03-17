@@ -28,20 +28,47 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpResourceHandler {
+	/**
+	 * Provides the resource URI or URI template handled by this resource.
+	 *
+	 * @return the resource URI or URI template
+	 */
 	@NonNull
 	String getUri();
 
+	/**
+	 * Provides the MCP resource name.
+	 *
+	 * @return the resource name
+	 */
 	@NonNull
 	String getName();
 
+	/**
+	 * Provides the MIME type returned by this resource handler.
+	 *
+	 * @return the MIME type
+	 */
 	@NonNull
 	String getMimeType();
 
+	/**
+	 * Provides optional description metadata for the resource.
+	 *
+	 * @return the resource description, if available
+	 */
 	@NonNull
 	default Optional<String> getDescription() {
 		return Optional.empty();
 	}
 
+	/**
+	 * Handles an MCP {@code resources/read} request.
+	 *
+	 * @param context the resource handler context
+	 * @return the resource contents
+	 * @throws Exception if the resource read fails
+	 */
 	@NonNull
 	McpResourceContents handle(@NonNull McpResourceHandlerContext context) throws Exception;
 }

@@ -31,6 +31,11 @@ import java.lang.annotation.Target;
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpUriParameter {
-	@Nullable
-	String value() default "";
+	/**
+	 * Specifies the resource URI-template parameter name to bind.
+	 *
+	 * @return the URI parameter name, or an empty string to infer it from the Java parameter name
+	 */
+    @Nullable
+    String value() default "";
 }

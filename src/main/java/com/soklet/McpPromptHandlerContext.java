@@ -28,21 +28,55 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpPromptHandlerContext {
+	/**
+	 * Provides the underlying request context.
+	 *
+	 * @return the request context
+	 */
 	@NonNull
 	McpRequestContext getRequestContext();
 
+	/**
+	 * Provides the current session context.
+	 *
+	 * @return the session context
+	 */
 	@NonNull
 	McpSessionContext getSessionContext();
 
+	/**
+	 * Provides the negotiated client capabilities for the session.
+	 *
+	 * @return the client capabilities
+	 */
 	@NonNull
 	McpClientCapabilities getClientCapabilities();
 
+	/**
+	 * Provides the prompt arguments object for the current request.
+	 *
+	 * @return the arguments object
+	 */
 	@NonNull
 	McpObject getArguments();
 
+	/**
+	 * Retrieves an endpoint path parameter as a string.
+	 *
+	 * @param name the endpoint path parameter name
+	 * @return the parameter value, if present
+	 */
 	@NonNull
 	Optional<String> getEndpointPathParameter(@NonNull String name);
 
+	/**
+	 * Retrieves an endpoint path parameter using a Soklet value conversion.
+	 *
+	 * @param name the endpoint path parameter name
+	 * @param type the desired converted type
+	 * @param <T> the converted type
+	 * @return the converted parameter value, if present
+	 */
 	@NonNull
 	<T> Optional<T> getEndpointPathParameter(@NonNull String name,
 																					 @NonNull Class<T> type);

@@ -37,12 +37,24 @@ public record McpPromptMessage(
 		requireNonNull(content);
 	}
 
+	/**
+	 * Creates a user-role prompt message from plain text.
+	 *
+	 * @param text the text content
+	 * @return a user-role prompt message
+	 */
 	@NonNull
 	public static McpPromptMessage fromUserText(@NonNull String text) {
 		requireNonNull(text);
 		return new McpPromptMessage(McpPromptMessageRole.USER, McpTextContent.fromText(text));
 	}
 
+	/**
+	 * Creates an assistant-role prompt message from plain text.
+	 *
+	 * @param text the text content
+	 * @return an assistant-role prompt message
+	 */
 	@NonNull
 	public static McpPromptMessage fromAssistantText(@NonNull String text) {
 		requireNonNull(text);

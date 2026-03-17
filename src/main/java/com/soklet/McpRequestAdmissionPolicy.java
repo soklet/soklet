@@ -28,11 +28,23 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpRequestAdmissionPolicy {
+	/**
+	 * Decides whether an MCP transport request should proceed.
+	 *
+	 * @param context the admission context
+	 * @return an optional rejection response, or {@link Optional#empty()} to allow the request
+	 * @throws Exception if admission logic fails
+	 */
 	@NonNull
 	default Optional<Response> checkRequest(@NonNull McpAdmissionContext context) throws Exception {
 		return Optional.empty();
 	}
 
+	/**
+	 * Acquires the default no-op admission policy.
+	 *
+	 * @return the default admission policy instance
+	 */
 	@NonNull
 	static McpRequestAdmissionPolicy defaultInstance() {
 		return DefaultMcpRequestAdmissionPolicy.INSTANCE;

@@ -43,6 +43,14 @@ public record McpResourceContents(
 			throw new IllegalArgumentException("Exactly one of text or blobBase64 must be present.");
 	}
 
+	/**
+	 * Creates a text-backed resource-contents payload.
+	 *
+	 * @param uri the resource URI
+	 * @param text the text payload
+	 * @param mimeType the MIME type
+	 * @return a text-backed resource contents value
+	 */
 	@NonNull
 	public static McpResourceContents fromText(@NonNull String uri,
 																						 @NonNull String text,
@@ -53,6 +61,14 @@ public record McpResourceContents(
 		return new McpResourceContents(uri, mimeType, text, null);
 	}
 
+	/**
+	 * Creates a blob-backed resource-contents payload.
+	 *
+	 * @param uri the resource URI
+	 * @param blobBase64 the base64-encoded blob payload
+	 * @param mimeType the MIME type
+	 * @return a blob-backed resource contents value
+	 */
 	@NonNull
 	public static McpResourceContents fromBlob(@NonNull String uri,
 																						 @NonNull String blobBase64,

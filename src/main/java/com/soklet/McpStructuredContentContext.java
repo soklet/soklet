@@ -27,15 +27,35 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public interface McpStructuredContentContext {
+	/**
+	 * Provides the endpoint class that produced the structured content.
+	 *
+	 * @return the endpoint class
+	 */
 	@NonNull
 	Class<? extends McpEndpoint> getEndpointClass();
 
+	/**
+	 * Provides the tool name whose structured content is being marshaled.
+	 *
+	 * @return the tool name
+	 */
 	@NonNull
 	String getToolName();
 
+	/**
+	 * Provides the tool-call context for the current structured content marshaling operation.
+	 *
+	 * @return the tool-call context
+	 */
 	@NonNull
 	McpToolCallContext getToolCallContext();
 
+	/**
+	 * Provides the session context active for the tool call.
+	 *
+	 * @return the session context
+	 */
 	@NonNull
 	McpSessionContext getSessionContext();
 }
