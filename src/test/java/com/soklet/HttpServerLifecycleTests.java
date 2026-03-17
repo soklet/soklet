@@ -86,12 +86,12 @@ public class HttpServerLifecycleTests {
 
 	@Test
 	public void start_without_initialize_fails_fast() {
-		HttpServer server = HttpServer.withPort(0).build();
+		HttpServer httpServer = HttpServer.withPort(0).build();
 
 		IllegalStateException exception =
-				Assertions.assertThrows(IllegalStateException.class, server::start);
+				Assertions.assertThrows(IllegalStateException.class, httpServer::start);
 		Assertions.assertTrue(exception.getMessage().contains("RequestHandler"));
-		Assertions.assertFalse(server.isStarted());
+		Assertions.assertFalse(httpServer.isStarted());
 	}
 
 	@Test
@@ -101,13 +101,13 @@ public class HttpServerLifecycleTests {
 		try (ServerSocket ss = new ServerSocket(port)) {
 			ss.setReuseAddress(true);
 
-			HttpServer server = HttpServer.withPort(port).build();
+			HttpServer httpServer = HttpServer.withPort(port).build();
 
-			SokletConfig cfg = SokletConfig.withHttpServer(server)
+			SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
 					.lifecycleObserver(new QuietLifecycle())
 					.build();
 
-			server.initialize(cfg, (request, consumer) -> {
+			httpServer.initialize(cfg, (request, consumer) -> {
 				MarshaledResponse response = MarshaledResponse.withStatusCode(200)
 						.headers(Map.of("Content-Type", Set.of("text/plain")))
 						.body("ok".getBytes(StandardCharsets.UTF_8))
@@ -115,10 +115,10 @@ public class HttpServerLifecycleTests {
 				consumer.accept(RequestResult.withMarshaledResponse(response).build());
 			});
 
-			Assertions.assertThrows(UncheckedIOException.class, server::start);
-			Assertions.assertFalse(server.isStarted());
+			Assertions.assertThrows(UncheckedIOException.class, httpServer::start);
+			Assertions.assertFalse(httpServer.isStarted());
 
-			DefaultHttpServer internal = (DefaultHttpServer) server;
+			DefaultHttpServer internal = (DefaultHttpServer) httpServer;
 			Assertions.assertTrue(internal.getEventLoop().isEmpty());
 			Assertions.assertTrue(internal.getRequestHandlerExecutorService().isEmpty());
 		}
@@ -130,16 +130,16 @@ public class HttpServerLifecycleTests {
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 		executor.shutdown();
 
-		HttpServer server = HttpServer.withPort(port)
+		HttpServer httpServer = HttpServer.withPort(port)
 				.requestTimeout(Duration.ofSeconds(5))
 				.requestHandlerExecutorServiceSupplier(() -> executor)
 				.build();
 
-		SokletConfig cfg = SokletConfig.withHttpServer(server)
+		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		server.initialize(cfg, (request, consumer) -> {
+		httpServer.initialize(cfg, (request, consumer) -> {
 			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain")))
 					.body("ok".getBytes(StandardCharsets.UTF_8))
@@ -147,7 +147,7 @@ public class HttpServerLifecycleTests {
 			consumer.accept(RequestResult.withMarshaledResponse(response).build());
 		});
 
-		server.start();
+		httpServer.start();
 
 		try {
 			URL url = new URL("http://127.0.0.1:" + port + "/health");
@@ -160,18 +160,18 @@ public class HttpServerLifecycleTests {
 			String body = new String(readAll(in), StandardCharsets.UTF_8);
 			Assertions.assertTrue(body.contains("HTTP 503"));
 		} finally {
-			server.stop();
+			httpServer.stop();
 		}
 	}
 
 	@Test
 	public void requestHandlerDefaults_useExpectedConcurrencyAndQueueCapacity() {
 		int concurrency = 3;
-		HttpServer server = HttpServer.withPort(0)
+		HttpServer httpServer = HttpServer.withPort(0)
 				.concurrency(concurrency)
 				.build();
 
-		DefaultHttpServer internal = (DefaultHttpServer) server;
+		DefaultHttpServer internal = (DefaultHttpServer) httpServer;
 
 		boolean virtualThreadsAvailable = Boolean.TRUE.equals(Utilities.virtualThreadsAvailable());
 		int expectedConcurrency = virtualThreadsAvailable ? concurrency * 16 : concurrency;
@@ -183,11 +183,11 @@ public class HttpServerLifecycleTests {
 
 	@Test
 	public void requestHandlerQueueCapacity_defaultsFromExplicitConcurrency() {
-		HttpServer server = HttpServer.withPort(0)
+		HttpServer httpServer = HttpServer.withPort(0)
 				.requestHandlerConcurrency(4)
 				.build();
 
-		DefaultHttpServer internal = (DefaultHttpServer) server;
+		DefaultHttpServer internal = (DefaultHttpServer) httpServer;
 		Assertions.assertEquals(Integer.valueOf(4), internal.getRequestHandlerConcurrency());
 		Assertions.assertEquals(Integer.valueOf(4 * 64), internal.getRequestHandlerQueueCapacity());
 	}

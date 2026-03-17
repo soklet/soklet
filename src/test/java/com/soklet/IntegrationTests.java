@@ -741,14 +741,14 @@ public class IntegrationTests {
 		int port = findFreePort();
 		QueueBlockingResource.reset();
 
-		HttpServer server = HttpServer.withPort(port)
+		HttpServer httpServer = HttpServer.withPort(port)
 						.concurrency(1)
 						.requestHandlerConcurrency(1)
 						.requestHandlerQueueCapacity(1)
 						.requestHandlerTimeout(Duration.ofSeconds(5))
 						.build();
 
-		SokletConfig cfg = SokletConfig.withHttpServer(server)
+		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(QueueBlockingResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
@@ -756,7 +756,7 @@ public class IntegrationTests {
 		try (Soklet app = Soklet.fromConfig(cfg)) {
 			app.start();
 
-			ExecutorService requestExecutor = ((DefaultHttpServer) server).getRequestHandlerExecutorService().orElse(null);
+			ExecutorService requestExecutor = ((DefaultHttpServer) httpServer).getRequestHandlerExecutorService().orElse(null);
 			if (requestExecutor instanceof ThreadPoolExecutor threadPoolExecutor) {
 				threadPoolExecutor.prestartAllCoreThreads();
 			}

@@ -273,16 +273,16 @@ public final class Soklet implements AutoCloseable {
 			lifecycleObserver.willStartSoklet(this);
 
 			try {
-					HttpServer server = sokletConfig.getHttpServer().orElse(null);
+					HttpServer httpServer = sokletConfig.getHttpServer().orElse(null);
 
 					// 2. Attempt to start Main HttpServer
-					if (server != null) {
-						lifecycleObserver.willStartHttpServer(server);
+					if (httpServer != null) {
+						lifecycleObserver.willStartHttpServer(httpServer);
 						try {
-							server.start();
-							lifecycleObserver.didStartHttpServer(server);
+							httpServer.start();
+							lifecycleObserver.didStartHttpServer(httpServer);
 						} catch (Throwable t) {
-							lifecycleObserver.didFailToStartHttpServer(server, t);
+							lifecycleObserver.didFailToStartHttpServer(httpServer, t);
 							throw t; // Rethrow to trigger outer catch block
 						}
 					}
@@ -348,17 +348,17 @@ public final class Soklet implements AutoCloseable {
 				lifecycleObserver.willStopSoklet(this);
 
 				Throwable firstEncounteredException = null;
-					HttpServer server = sokletConfig.getHttpServer().orElse(null);
+					HttpServer httpServer = sokletConfig.getHttpServer().orElse(null);
 
 					// 2. Attempt to stop Main HttpServer
-					if (server != null && server.isStarted()) {
-						lifecycleObserver.willStopHttpServer(server);
+					if (httpServer != null && httpServer.isStarted()) {
+						lifecycleObserver.willStopHttpServer(httpServer);
 						try {
-							server.stop();
-						lifecycleObserver.didStopHttpServer(server);
+							httpServer.stop();
+						lifecycleObserver.didStopHttpServer(httpServer);
 					} catch (Throwable t) {
 						firstEncounteredException = t;
-						lifecycleObserver.didFailToStopHttpServer(server, t);
+						lifecycleObserver.didFailToStopHttpServer(httpServer, t);
 					}
 				}
 
@@ -1409,9 +1409,9 @@ public final class Soklet implements AutoCloseable {
 		getLock().lock();
 
 		try {
-			HttpServer server = getSokletConfig().getHttpServer().orElse(null);
+			HttpServer httpServer = getSokletConfig().getHttpServer().orElse(null);
 
-			if (server != null && server.isStarted())
+			if (httpServer != null && httpServer.isStarted())
 				return true;
 
 			ServerSentEventServer serverSentEventServer = getSokletConfig().getServerSentEventServer().orElse(null);
