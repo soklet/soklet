@@ -188,15 +188,15 @@ public final class ValueConverters {
 
 			String trimmedFrom = trimAggressivelyToNull(from);
 
-			// Special handling for all-whitespace.
-			// If there is at least one space, return ' '
-			if (from.length() > 0 && trimmedFrom == null)
-				return Optional.of(' ');
+				// Special handling for all-whitespace.
+				// If there is at least one space, return ' '
+				if (from.length() > 0 && trimmedFrom == null)
+					return Optional.of(' ');
 
-			if (trimmedFrom.length() != 1)
-				throw new ValueConversionException(format(
-						"Unable to convert %s value '%s' to %s. Reason: '%s' is not a single-character String.", getFromType(), trimmedFrom,
-						getToType(), from), getFromType(), from, getToType());
+				if (trimmedFrom == null || trimmedFrom.length() != 1)
+					throw new ValueConversionException(format(
+							"Unable to convert %s value '%s' to %s. Reason: '%s' is not a single-character String.", getFromType(), trimmedFrom,
+							getToType(), from), getFromType(), from, getToType());
 
 			return Optional.of(trimmedFrom.charAt(0));
 		}

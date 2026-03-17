@@ -534,18 +534,32 @@ public final class Utilities {
 
 		for (int i = 0; i < cookieValue.length(); ) {
 			char c = cookieValue.charAt(i);
-			if (c == '%' && i + 2 < cookieValue.length()) {
+			if (c == '%') {
+				if (i + 2 >= cookieValue.length())
+					throw new IllegalRequestException("Invalid percent-encoding in Cookie header");
+
 				int hi = Character.digit(cookieValue.charAt(i + 1), 16);
 				int lo = Character.digit(cookieValue.charAt(i + 2), 16);
-				if (hi >= 0 && lo >= 0) {
-					out.write((hi << 4) + lo);
-					i += 3;
-					continue;
-				}
+				if (hi < 0 || lo < 0)
+					throw new IllegalRequestException("Invalid percent-encoding in Cookie header");
+
+				out.write((hi << 4) + lo);
+				i += 3;
+				continue;
 			}
 
-			out.write((byte) c);
-			i++;
+			String rawCharacter;
+
+			if (Character.isHighSurrogate(c) && i + 1 < cookieValue.length() && Character.isLowSurrogate(cookieValue.charAt(i + 1))) {
+				rawCharacter = cookieValue.substring(i, i + 2);
+				i += 2;
+			} else {
+				rawCharacter = Character.toString(c);
+				i++;
+			}
+
+			byte[] encoded = rawCharacter.getBytes(StandardCharsets.UTF_8);
+			out.write(encoded, 0, encoded.length);
 		}
 
 		return out.toString(StandardCharsets.UTF_8);

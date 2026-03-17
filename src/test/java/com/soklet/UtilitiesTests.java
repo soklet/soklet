@@ -720,6 +720,23 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	void malformedCookiePercentEncodingIsRejected() {
+		var headers = new LinkedHashMap<String, Set<String>>();
+		headers.put("Cookie", Set.of("session=%ZZ"));
+
+		assertThrows(IllegalRequestException.class, () -> Utilities.extractCookiesFromHeaders(headers));
+	}
+
+	@Test
+	void rawUnicodeCookieValuesArePreserved() {
+		var headers = new LinkedHashMap<String, Set<String>>();
+		headers.put("Cookie", Set.of("emoji=🍪"));
+
+		var cookies = Utilities.extractCookiesFromHeaders(headers);
+		assertEquals(Set.of("🍪"), cookies.get("emoji"));
+	}
+
+	@Test
 	void responseCookie_toSetCookieHeaderRepresentation_isWellFormed() {
 		var cookie = ResponseCookie.with("session", "abc")
 				.path("/")

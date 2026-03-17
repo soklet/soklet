@@ -1028,6 +1028,15 @@ public class AdvancedTests {
 	}
 
 	@Test
+	public void emptyStringToCharacterThrowsConversionExceptionNotNullPointerException() {
+		ValueConverterRegistry registry = ValueConverterRegistry.fromDefaults();
+		@SuppressWarnings("unchecked")
+		ValueConverter<String, Character> converter = (ValueConverter<String, Character>) (ValueConverter<?, ?>) registry.get(String.class, Character.class).orElseThrow();
+
+		Assertions.assertThrows(ValueConversionException.class, () -> converter.convert(""));
+	}
+
+	@Test
 	public void testBlankSlateValueConverterRegistry() {
 		ValueConverterRegistry registry = ValueConverterRegistry.fromBlankSlate();
 

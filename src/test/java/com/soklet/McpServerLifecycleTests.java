@@ -559,10 +559,77 @@ public class McpServerLifecycleTests {
 		Assertions.assertEquals("boom", streamErrorHolder.get().getMessage());
 	}
 
+	@Test
+	public void mockHttpServerInitializeStoresSokletConfig() {
+		Soklet.MockHttpServer mockHttpServer = new Soklet.MockHttpServer();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(new FakeMcpServer())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		mockHttpServer.initialize(sokletConfig, (request, requestResultConsumer) -> {
+			throw new UnsupportedOperationException("unused");
+		});
+
+		Assertions.assertEquals(sokletConfig, mockHttpServer.getSokletConfig().orElseThrow());
+	}
+
+	@Test
+	public void sokletRollsBackAlreadyStartedServersWhenLaterServerFailsToStart() {
+		FakeHttpServer fakeHttpServer = new FakeHttpServer();
+		FakeSseServer fakeSseServer = new FakeSseServer();
+		FailingStartMcpServer failingMcpServer = new FailingStartMcpServer();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(failingMcpServer)
+				.httpServer(fakeHttpServer)
+				.sseServer(fakeSseServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			Assertions.assertThrows(IllegalStateException.class, soklet::start);
+		}
+
+		Assertions.assertFalse(fakeHttpServer.isStarted());
+		Assertions.assertTrue(fakeHttpServer.getStopped().get());
+		Assertions.assertFalse(fakeSseServer.isStarted());
+		Assertions.assertTrue(fakeSseServer.getStopped().get());
+		Assertions.assertFalse(failingMcpServer.isStarted());
+	}
+
+	@Test
+	public void mcpAcceptLoopContinuesAfterUnexpectedRuntimeException() throws Exception {
+		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		Field stopPoisonPillField = DefaultMcpServer.class.getDeclaredField("stopPoisonPill");
+		Field serverSocketField = DefaultMcpServer.class.getDeclaredField("serverSocket");
+		Method acceptLoopMethod = DefaultMcpServer.class.getDeclaredMethod("acceptLoop");
+		stopPoisonPillField.setAccessible(true);
+		serverSocketField.setAccessible(true);
+		acceptLoopMethod.setAccessible(true);
+
+		AtomicBoolean stopPoisonPill = (AtomicBoolean) stopPoisonPillField.get(server);
+		serverSocketField.set(server, new RuntimeThenStopServerSocket(stopPoisonPill));
+
+		Assertions.assertDoesNotThrow(() -> {
+			try {
+				acceptLoopMethod.invoke(server);
+			} catch (InvocationTargetException e) {
+				Throwable cause = e.getCause();
+				if (cause instanceof RuntimeException runtimeException)
+					throw runtimeException;
+				if (cause instanceof Error error)
+					throw error;
+				throw new RuntimeException(cause);
+			}
+		});
+	}
+
 	@McpServerEndpoint(path = "/mcp", name = "example", version = "1.0.0")
 	public static class ExampleMcpEndpoint implements McpEndpoint {}
 
-	private static final class FakeMcpServer implements McpServer {
+	private static class FakeMcpServer implements McpServer {
 		private final AtomicBoolean initialized;
 		private final AtomicBoolean started;
 		private final AtomicBoolean stopped;
@@ -669,6 +736,101 @@ public class McpServerLifecycleTests {
 		@NonNull
 		protected Optional<RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
+		}
+	}
+
+	private static final class FakeHttpServer implements HttpServer {
+		private final AtomicBoolean started;
+		private final AtomicBoolean stopped;
+		private SokletConfig sokletConfig;
+		private RequestHandler requestHandler;
+
+		private FakeHttpServer() {
+			this.started = new AtomicBoolean(false);
+			this.stopped = new AtomicBoolean(false);
+		}
+
+		@Override
+		public void start() {
+			this.started.set(true);
+		}
+
+		@Override
+		public void stop() {
+			this.stopped.set(true);
+			this.started.set(false);
+		}
+
+		@NonNull
+		@Override
+		public Boolean isStarted() {
+			return this.started.get();
+		}
+
+		@Override
+		public void initialize(@NonNull SokletConfig sokletConfig,
+													 @NonNull RequestHandler requestHandler) {
+			this.sokletConfig = sokletConfig;
+			this.requestHandler = requestHandler;
+		}
+
+		@NonNull
+		protected AtomicBoolean getStopped() {
+			return this.stopped;
+		}
+	}
+
+	private static final class FakeSseServer implements SseServer {
+		private final AtomicBoolean started;
+		private final AtomicBoolean stopped;
+		private SokletConfig sokletConfig;
+		private RequestHandler requestHandler;
+
+		private FakeSseServer() {
+			this.started = new AtomicBoolean(false);
+			this.stopped = new AtomicBoolean(false);
+		}
+
+		@Override
+		public void start() {
+			this.started.set(true);
+		}
+
+		@Override
+		public void stop() {
+			this.stopped.set(true);
+			this.started.set(false);
+		}
+
+		@NonNull
+		@Override
+		public Boolean isStarted() {
+			return this.started.get();
+		}
+
+		@NonNull
+		@Override
+		public Optional<? extends SseBroadcaster> acquireBroadcaster(ResourcePath resourcePath) {
+			return Optional.empty();
+		}
+
+		@Override
+		public void initialize(@NonNull SokletConfig sokletConfig,
+													 @NonNull RequestHandler requestHandler) {
+			this.sokletConfig = sokletConfig;
+			this.requestHandler = requestHandler;
+		}
+
+		@NonNull
+		protected AtomicBoolean getStopped() {
+			return this.stopped;
+		}
+	}
+
+	private static final class FailingStartMcpServer extends FakeMcpServer {
+		@Override
+		public void start() {
+			throw new IllegalStateException("boom");
 		}
 	}
 
@@ -800,6 +962,32 @@ public class McpServerLifecycleTests {
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
 		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
+	}
+
+	private static final class RuntimeThenStopServerSocket extends java.net.ServerSocket {
+		private final AtomicBoolean stopPoisonPill;
+		private int acceptCount;
+
+		private RuntimeThenStopServerSocket(@NonNull AtomicBoolean stopPoisonPill) throws IOException {
+			super();
+			this.stopPoisonPill = stopPoisonPill;
+		}
+
+		@Override
+		public Socket accept() throws IOException {
+			if (this.acceptCount++ == 0)
+				return new RuntimeKeepAliveSocket();
+
+			this.stopPoisonPill.set(true);
+			throw new SocketException("stop");
+		}
+	}
+
+	private static final class RuntimeKeepAliveSocket extends Socket {
+		@Override
+		public void setKeepAlive(boolean on) {
+			throw new IllegalStateException("boom");
+		}
 	}
 
 	private static final class BlockingSocket extends Socket {

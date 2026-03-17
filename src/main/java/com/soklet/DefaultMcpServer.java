@@ -482,16 +482,23 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an IO error")
 						.throwable(e)
 						.build());
-			} catch (IOException e) {
-				if (this.stopPoisonPill.get())
-					break;
+				} catch (IOException e) {
+					if (this.stopPoisonPill.get())
+						break;
 
-				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an IO error")
-						.throwable(e)
-						.build());
+					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an IO error")
+							.throwable(e)
+							.build());
+				} catch (RuntimeException e) {
+					if (this.stopPoisonPill.get())
+						break;
+
+					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an unexpected error")
+							.throwable(e)
+							.build());
+				}
 			}
 		}
-	}
 
 	private void submitRequest(@NonNull Socket socket) throws IOException {
 		requireNonNull(socket);
