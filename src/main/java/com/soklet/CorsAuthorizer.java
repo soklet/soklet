@@ -95,12 +95,12 @@ public interface CorsAuthorizer {
 	/**
 	 * Acquires a threadsafe {@link CorsAuthorizer} configured to accept only those cross-domain requests whose {@code Origin} matches a value in the provided set of {@code whitelistedOrigins}.
 	 * <p>
-	 * The returned {@link CorsAuthorizer} will set {@code Access-Control-Allow-Credentials} header to {@code true}. This behavior can be customized via {@link #fromWhitelistedOrigins(Set, Function)}.
+	 * The returned {@link CorsAuthorizer} will omit the {@code Access-Control-Allow-Credentials} response header to reduce CSRF attack surface area. This behavior can be customized via {@link #fromWhitelistedOrigins(Set, Function)}.
 	 * <p>
 	 * Callers should not rely on reference identity; this method may return a new or cached instance.
 	 *
 	 * @param whitelistedOrigins the set of whitelisted origins
-	 * @return a credentials-allowed {@code CorsAuthorizer} configured to accept only the specified {@code whitelistedOrigins}
+	 * @return a {@code CorsAuthorizer} configured to accept only the specified {@code whitelistedOrigins}, omitting {@code Access-Control-Allow-Credentials} by default
 	 */
 	@NonNull
 	static CorsAuthorizer fromWhitelistedOrigins(@NonNull Set<@NonNull String> whitelistedOrigins) {
@@ -140,7 +140,7 @@ public interface CorsAuthorizer {
 	 * Callers should not rely on reference identity; this method may return a new or cached instance.
 	 *
 	 * @param whitelistAuthorizer a function that returns {@code true} if the input is a whitelisted origin and {@code false} otherwise
-	 * @return a credentials-allowed {@code CorsAuthorizer} configured to accept only the origins permitted by {@code whitelistAuthorizer}
+	 * @return a {@code CorsAuthorizer} configured to accept only the origins permitted by {@code whitelistAuthorizer}, omitting {@code Access-Control-Allow-Credentials} by default
 	 */
 	@NonNull
 	static CorsAuthorizer fromWhitelistAuthorizer(@NonNull Function<String, Boolean> whitelistAuthorizer) {

@@ -1615,9 +1615,11 @@ final class DefaultSseServer implements SseServer {
 			connectionExecutorService.submit(() -> processEstablishedConnection(registration, channelLock));
 			return true;
 		} catch (RejectedExecutionException e) {
-			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Connection executor rejected task")
-					.throwable(e)
-					.build());
+			if (!connectionExecutorService.isShutdown()) {
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Connection executor rejected task")
+						.throwable(e)
+						.build());
+			}
 			return false;
 		}
 	}

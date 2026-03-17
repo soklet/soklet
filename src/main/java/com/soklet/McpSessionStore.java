@@ -29,6 +29,7 @@ import java.util.function.Predicate;
 import static java.time.Duration.ZERO;
 import static java.time.Duration.between;
 import static java.time.Duration.ofHours;
+import static java.time.Duration.ofMinutes;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -74,6 +75,8 @@ public interface McpSessionStore {
 
 	/**
 	 * Acquires the default in-memory session store using Soklet's default idle timeout.
+	 * <p>
+	 * Expired sessions are reclaimed opportunistically during subsequent write activity; exact deletion timing is therefore best-effort rather than timer-driven.
 	 *
 	 * @return a new in-memory session store
 	 */
@@ -84,6 +87,8 @@ public interface McpSessionStore {
 
 	/**
 	 * Acquires the default in-memory session store using a caller-supplied idle timeout.
+	 * <p>
+	 * Expired sessions are reclaimed opportunistically during subsequent write activity; exact deletion timing is therefore best-effort rather than timer-driven.
 	 *
 	 * @param idleTimeout the idle timeout, or {@code Duration.ZERO} to disable idle expiry
 	 * @return a new in-memory session store
@@ -101,22 +106,32 @@ public interface McpSessionStore {
 
 final class DefaultMcpSessionStore implements McpSessionStore {
 	@NonNull
+	private static final Duration DEFAULT_SWEEP_INTERVAL;
+	@NonNull
 	private final Duration idleTimeout;
 	@NonNull
 	private final ConcurrentMap<String, McpStoredSession> sessions;
 	@NonNull
 	private volatile Predicate<String> pinnedSessionPredicate;
+	@NonNull
+	private volatile Instant lastSweepAt;
+
+	static {
+		DEFAULT_SWEEP_INTERVAL = ofMinutes(1);
+	}
 
 	DefaultMcpSessionStore(@NonNull Duration idleTimeout) {
 		requireNonNull(idleTimeout);
 		this.idleTimeout = idleTimeout;
 		this.sessions = new ConcurrentHashMap<>();
 		this.pinnedSessionPredicate = sessionId -> false;
+		this.lastSweepAt = Instant.EPOCH;
 	}
 
 	@Override
 	public void create(@NonNull McpStoredSession session) {
 		requireNonNull(session);
+		maybeSweepExpiredSessions();
 
 		McpStoredSession previous = this.sessions.putIfAbsent(session.sessionId(), session);
 
@@ -146,6 +161,7 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 												 @NonNull McpStoredSession updated) {
 		requireNonNull(expected);
 		requireNonNull(updated);
+		maybeSweepExpiredSessions();
 
 		if (!expected.sessionId().equals(updated.sessionId()))
 			throw new IllegalArgumentException("Expected and updated sessions must have the same session ID.");
@@ -170,6 +186,11 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 	void pinnedSessionPredicate(@NonNull Predicate<String> pinnedSessionPredicate) {
 		requireNonNull(pinnedSessionPredicate);
 		this.pinnedSessionPredicate = pinnedSessionPredicate;
+	}
+
+	boolean containsSessionId(@NonNull String sessionId) {
+		requireNonNull(sessionId);
+		return this.sessions.containsKey(sessionId);
 	}
 
 	@NonNull
@@ -200,5 +221,30 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 
 		Duration idleDuration = between(storedSession.lastActivityAt(), Instant.now());
 		return idleDuration.compareTo(this.idleTimeout) > 0;
+	}
+
+	private void maybeSweepExpiredSessions() {
+		if (ZERO.equals(this.idleTimeout))
+			return;
+
+		Instant now = Instant.now();
+		Duration sweepInterval = sweepInterval();
+
+		if (between(this.lastSweepAt, now).compareTo(sweepInterval) < 0)
+			return;
+
+		this.lastSweepAt = now;
+
+		for (var entry : this.sessions.entrySet()) {
+			McpStoredSession storedSession = entry.getValue();
+
+			if (isExpired(storedSession))
+				this.sessions.remove(entry.getKey(), storedSession);
+		}
+	}
+
+	@NonNull
+	private Duration sweepInterval() {
+		return this.idleTimeout.compareTo(DEFAULT_SWEEP_INTERVAL) < 0 ? this.idleTimeout : DEFAULT_SWEEP_INTERVAL;
 	}
 }

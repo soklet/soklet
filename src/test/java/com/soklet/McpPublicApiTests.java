@@ -236,6 +236,49 @@ public class McpPublicApiTests {
 	}
 
 	@Test
+	public void defaultInMemorySessionStoreSweepsExpiredSessionsDuringSubsequentWrites() {
+		DefaultMcpSessionStore sessionStore = (DefaultMcpSessionStore) McpSessionStore.fromInMemory(Duration.ofMillis(50));
+		McpStoredSession staleSession = new McpStoredSession(
+				"stale",
+				TestEndpoint.class,
+				Instant.now().minus(Duration.ofHours(2)),
+				Instant.now().minus(Duration.ofHours(2)),
+				true,
+				true,
+				null,
+				null,
+				null,
+				McpSessionContext.fromBlankSlate(),
+				null,
+				0L
+		);
+		McpStoredSession freshSession = new McpStoredSession(
+				"fresh",
+				TestEndpoint.class,
+				Instant.now(),
+				Instant.now(),
+				false,
+				false,
+				null,
+				null,
+				null,
+				McpSessionContext.fromBlankSlate(),
+				null,
+				0L
+		);
+
+		sessionStore.create(staleSession);
+		assertTrue(sessionStore.containsSessionId("stale"));
+
+		sleepUnchecked(80L);
+
+		sessionStore.create(freshSession);
+
+		assertFalse(sessionStore.containsSessionId("stale"));
+		assertTrue(sessionStore.containsSessionId("fresh"));
+	}
+
+	@Test
 	public void handlerResolverDiscoversAnnotatedEndpointMetadataAndNames() {
 		McpHandlerResolver handlerResolver = McpHandlerResolver.fromClasses(Set.of(AnnotatedResolverEndpoint.class));
 		McpEndpointRegistration endpointRegistration = handlerResolver.endpointRegistrationForClass(AnnotatedResolverEndpoint.class).orElseThrow();
@@ -392,6 +435,15 @@ public class McpPublicApiTests {
 			return McpToolResult.builder()
 					.content(McpTextContent.fromText("ok"))
 					.build();
+		}
+	}
+
+	private static void sleepUnchecked(long durationInMillis) {
+		try {
+			Thread.sleep(durationInMillis);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new RuntimeException(e);
 		}
 	}
 }
