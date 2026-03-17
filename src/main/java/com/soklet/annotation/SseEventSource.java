@@ -33,8 +33,8 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-@Repeatable(value = ServerSentEventSources.class)
-public @interface ServerSentEventSource {
+@Repeatable(value = SseEventSources.class)
+public @interface SseEventSource {
 	/**
 	 * The Server-Sent Event Source {@code GET} URL that should be handled by this Resource Method.
 	 * <p>

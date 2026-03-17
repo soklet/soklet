@@ -40,7 +40,7 @@ record ResourceMethodDeclaration(
 		@NonNull
 		String[] parameterTypes,
 		@NonNull
-		Boolean serverSentEventSource
+		Boolean sseEventSource
 ) {
 	ResourceMethodDeclaration {
 		requireNonNull(httpMethod);
@@ -48,6 +48,6 @@ record ResourceMethodDeclaration(
 		requireNonNull(className);
 		requireNonNull(methodName);
 		requireNonNull(parameterTypes);
-		requireNonNull(serverSentEventSource);
+		requireNonNull(sseEventSource);
 	}
 }

@@ -30,8 +30,8 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.POSTs;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.PUTs;
-import com.soklet.annotation.ServerSentEventSource;
-import com.soklet.annotation.ServerSentEventSources;
+import com.soklet.annotation.SseEventSource;
+import com.soklet.annotation.SseEventSources;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -130,7 +130,7 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 			// Declarations for this method
 			var decls = byMethod.computeIfAbsent(method, __ -> new HashSet<>());
 			var rpd = ResourcePathDeclaration.fromPath(resourceMethodDeclaration.path());
-			boolean sse = resourceMethodDeclaration.serverSentEventSource();
+			boolean sse = resourceMethodDeclaration.sseEventSource();
 			decls.add(new HttpMethodResourcePathDeclaration(resourceMethodDeclaration.httpMethod(), rpd, sse));
 
 			// Index by http method
@@ -220,7 +220,7 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 			for (ResourceMethodDeclaration r : in) {
 				String key = r.httpMethod().name() + "|" + r.path() + "|" + r.className() + "|" +
 						r.methodName() + "|" + String.join(";", r.parameterTypes()) + "|" +
-						r.serverSentEventSource();
+						r.sseEventSource();
 				byKey.putIfAbsent(key, r);
 			}
 
@@ -301,14 +301,14 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 
 				for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations) {
 					ResourcePathDeclaration resourcePathDeclaration = httpMethodResourcePathDeclaration.getResourcePathDeclaration();
-					Boolean serverSentEventSource = httpMethodResourcePathDeclaration.isServerSentEventSource();
+					Boolean sseEventSource = httpMethodResourcePathDeclaration.isSseEventSource();
 
-					// Enforce that @ServerSentEventSource methods have a return type of HandshakeResult
-					if (serverSentEventSource && !HandshakeResult.class.isAssignableFrom(method.getReturnType()))
+					// Enforce that @SseEventSource methods have a return type of HandshakeResult
+					if (sseEventSource && !HandshakeResult.class.isAssignableFrom(method.getReturnType()))
 						throw new IllegalStateException(format("Resource Methods annotated with @%s must be declared to return an instance of %s (e.g. %s.accept()). Incorrect Resource Method was %s",
-								ServerSentEventSource.class.getSimpleName(), HandshakeResult.class.getSimpleName(), HandshakeResult.class.getSimpleName(), method));
+								SseEventSource.class.getSimpleName(), HandshakeResult.class.getSimpleName(), HandshakeResult.class.getSimpleName(), method));
 
-					ResourceMethod resourceMethod = ResourceMethod.fromComponents(httpMethod, resourcePathDeclaration, method, serverSentEventSource);
+					ResourceMethod resourceMethod = ResourceMethod.fromComponents(httpMethod, resourcePathDeclaration, method, sseEventSource);
 					resourceMethods.add(resourceMethod);
 				}
 			}
@@ -339,19 +339,19 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 			for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations)
 				if (httpMethodResourcePathDeclaration.getHttpMethod().equals(request.getHttpMethod())
 						&& resourcePath.matches(httpMethodResourcePathDeclaration.getResourcePathDeclaration())) {
-					// Special handling based on ServerType: if the Resource Method is marked as @ServerSentEventSource then it can only be used by an SSE server.
+					// Special handling based on ServerType: if the Resource Method is marked as @SseEventSource then it can only be used by an SSE server.
 					// Similarly, any Resource Method marked with @GET, @POST etc. is only usable by the Standard HTTP server.
-					boolean isServerSentEventSource = httpMethodResourcePathDeclaration.isServerSentEventSource();
-					boolean isServerSentEventServer = serverType == ServerType.SERVER_SENT_EVENT;
+					boolean isSseEventSource = httpMethodResourcePathDeclaration.isSseEventSource();
+					boolean isSseServer = serverType == ServerType.SSE;
 
-					if (isServerSentEventSource != isServerSentEventServer)
+					if (isSseEventSource != isSseServer)
 						continue;
 
 					matchingResourceMethods.add(ResourceMethod.fromComponents(
 							request.getHttpMethod(),
 							httpMethodResourcePathDeclaration.getResourcePathDeclaration(),
 							method,
-							httpMethodResourcePathDeclaration.isServerSentEventSource()));
+							httpMethodResourcePathDeclaration.isSseEventSource()));
 				}
 		}
 
@@ -408,9 +408,9 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 				} else if (annotation instanceof HEAD) {
 					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.fromPath
 							(((HEAD) annotation).value())));
-				} else if (annotation instanceof ServerSentEventSource) {
+				} else if (annotation instanceof SseEventSource) {
 					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
-							(((ServerSentEventSource) annotation).value()), true));
+							(((SseEventSource) annotation).value()), true));
 				} else if (annotation instanceof GETs) {
 					for (GET get : ((GETs) annotation).value())
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
@@ -439,10 +439,10 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 					for (HEAD head : ((HEADs) annotation).value())
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.fromPath
 								(head.value())));
-				} else if (annotation instanceof ServerSentEventSources) {
-					for (ServerSentEventSource serverSentEventSource : ((ServerSentEventSources) annotation).value())
+				} else if (annotation instanceof SseEventSources) {
+					for (SseEventSource sseEventSource : ((SseEventSources) annotation).value())
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
-								(serverSentEventSource.value()), true));
+								(sseEventSource.value()), true));
 				}
 
 				Set<HttpMethodResourcePathDeclaration> httpMethodResourcePathDeclarations =
@@ -508,7 +508,7 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 
 			SpecificityKey key = new SpecificityKey(
 					resourceMethod.getHttpMethod(),
-					resourceMethod.isServerSentEventSource(),
+					resourceMethod.isSseEventSource(),
 					hasVarargs,
 					placeholderCount(resourceMethod),
 					literalCount(resourceMethod));
@@ -546,7 +546,7 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 	private static String describeResourceMethod(@NonNull ResourceMethod resourceMethod) {
 		requireNonNull(resourceMethod);
 
-		String serverType = resourceMethod.isServerSentEventSource() ? "SSE" : "HTTP";
+		String serverType = resourceMethod.isSseEventSource() ? "SSE" : "HTTP";
 		return format("%s %s %s -> %s",
 				serverType,
 				resourceMethod.getHttpMethod().name(),
@@ -623,13 +623,13 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 	}
 
 	private record SpecificityKey(@NonNull HttpMethod httpMethod,
-															 @NonNull Boolean serverSentEventSource,
+															 @NonNull Boolean sseEventSource,
 															 @NonNull Boolean hasVarargs,
 															 @NonNull Long placeholderCount,
 															 @NonNull Long literalCount) {
 		private SpecificityKey {
 			requireNonNull(httpMethod);
-			requireNonNull(serverSentEventSource);
+			requireNonNull(sseEventSource);
 			requireNonNull(hasVarargs);
 			requireNonNull(placeholderCount);
 			requireNonNull(literalCount);
@@ -660,7 +660,7 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 					httpMethod = HttpMethod.OPTIONS;
 				else if (annotation instanceof HEAD || annotation instanceof HEADs)
 					httpMethod = HttpMethod.HEAD;
-				else if (annotation instanceof ServerSentEventSource || annotation instanceof ServerSentEventSources)
+				else if (annotation instanceof SseEventSource || annotation instanceof SseEventSources)
 					httpMethod = HttpMethod.GET;
 
 				if (httpMethod == null)
@@ -690,7 +690,7 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 							|| annotation instanceof DELETE
 							|| annotation instanceof OPTIONS
 							|| annotation instanceof HEAD
-							|| annotation instanceof ServerSentEventSource
+							|| annotation instanceof SseEventSource
 							|| annotation instanceof GETs
 							|| annotation instanceof POSTs
 							|| annotation instanceof PUTs
@@ -698,7 +698,7 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 							|| annotation instanceof DELETEs
 							|| annotation instanceof OPTIONSes
 							|| annotation instanceof HEADs
-							|| annotation instanceof ServerSentEventSources)
+							|| annotation instanceof SseEventSources)
 						methods.add(method);
 
 		return methods;
@@ -732,7 +732,7 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 		@NonNull
 		private final ResourcePathDeclaration resourcePathDeclaration;
 		@NonNull
-		private final Boolean serverSentEventSource;
+		private final Boolean sseEventSource;
 
 		public HttpMethodResourcePathDeclaration(@NonNull HttpMethod httpMethod,
 																						 @NonNull ResourcePathDeclaration resourcePathDeclaration) {
@@ -741,20 +741,20 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 
 		public HttpMethodResourcePathDeclaration(@NonNull HttpMethod httpMethod,
 																						 @NonNull ResourcePathDeclaration resourcePathDeclaration,
-																						 @NonNull Boolean serverSentEventSource) {
+																						 @NonNull Boolean sseEventSource) {
 			requireNonNull(httpMethod);
 			requireNonNull(resourcePathDeclaration);
-			requireNonNull(serverSentEventSource);
+			requireNonNull(sseEventSource);
 
 			this.httpMethod = httpMethod;
 			this.resourcePathDeclaration = resourcePathDeclaration;
-			this.serverSentEventSource = serverSentEventSource;
+			this.sseEventSource = sseEventSource;
 		}
 
 		@Override
 		public String toString() {
-			return format("%s{httpMethod=%s, resourcePathDeclaration=%s, serverSentEventSource=%s}", getClass().getSimpleName(),
-					getHttpMethod(), getResourcePathDeclaration(), isServerSentEventSource());
+			return format("%s{httpMethod=%s, resourcePathDeclaration=%s, sseEventSource=%s}", getClass().getSimpleName(),
+					getHttpMethod(), getResourcePathDeclaration(), isSseEventSource());
 		}
 
 		@Override
@@ -767,12 +767,12 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 
 			return Objects.equals(getHttpMethod(), httpMethodResourcePathDeclaration.getHttpMethod())
 					&& Objects.equals(getResourcePathDeclaration(), httpMethodResourcePathDeclaration.getResourcePathDeclaration())
-					&& Objects.equals(isServerSentEventSource(), httpMethodResourcePathDeclaration.isServerSentEventSource());
+					&& Objects.equals(isSseEventSource(), httpMethodResourcePathDeclaration.isSseEventSource());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getHttpMethod(), getResourcePathDeclaration(), isServerSentEventSource());
+			return Objects.hash(getHttpMethod(), getResourcePathDeclaration(), isSseEventSource());
 		}
 
 		@NonNull
@@ -786,8 +786,8 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 		}
 
 		@NonNull
-		public Boolean isServerSentEventSource() {
-			return this.serverSentEventSource;
+		public Boolean isSseEventSource() {
+			return this.sseEventSource;
 		}
 	}
 }

@@ -22,7 +22,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Represents characteristics of a long-running connection that has been established with a {@link ServerSentEventServer}.
+ * Represents characteristics of a long-running connection that has been established with a {@link SseServer}.
  * <p>
  * Instances are exposed via {@link LifecycleObserver}, which enables you to monitor events that occur on the connection over time (established, SSE payload written, terminated, etc.)
  * <p>
@@ -30,7 +30,7 @@ import java.util.Optional;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface ServerSentEventConnection {
+public interface SseConnection {
 	/**
 	 * The request made by the client to the <em>Event Source Method</em> which accepted the SSE handshake and established the connection.
 	 *

@@ -39,12 +39,12 @@ public class SokletProcessorTests {
 		JavaFileObject src = JavaFileObjects.forSourceString("example.Ok",
 				"""
 						import org.jspecify.annotations.NonNull;
-						import com.soklet.annotation.ServerSentEventSource;
+						import com.soklet.annotation.SseEventSource;
 						import com.soklet.annotation.PathParameter;
 						import com.soklet.HandshakeResult;
 						
 						public class Ok {
-							@ServerSentEventSource("/widgets/{id}")
+							@SseEventSource("/widgets/{id}")
 							public HandshakeResult sse(@NonNull @PathParameter(name="id") Integer id) {
 								return HandshakeResult.Accepted.builder().build();
 							}
@@ -84,10 +84,10 @@ public class SokletProcessorTests {
 	void rejectsWrongReturnType() {
 		JavaFileObject src = JavaFileObjects.forSourceString("example.BadReturn",
 				"""
-						import com.soklet.annotation.ServerSentEventSource;
+						import com.soklet.annotation.SseEventSource;
 						
 						public class BadReturn {
-							@ServerSentEventSource("/a/{id}")
+							@SseEventSource("/a/{id}")
 							public void sse(int id) {}
 						}
 						""");
@@ -103,11 +103,11 @@ public class SokletProcessorTests {
 
 		JavaFileObject responseSrc = JavaFileObjects.forSourceString("example.ResponseBadReturn",
 				"""
-						import com.soklet.annotation.ServerSentEventSource;
+						import com.soklet.annotation.SseEventSource;
 						import com.soklet.Response;
 						
 						public class ResponseBadReturn {
-							@ServerSentEventSource("/a/{id}")
+							@SseEventSource("/a/{id}")
 							public Response sse(int id) {
 							  return Response.withStatusCode(200).build();
 							}
@@ -128,11 +128,11 @@ public class SokletProcessorTests {
 	void rejectsMissingPathParameter() {
 		JavaFileObject src = JavaFileObjects.forSourceString("example.MissingParam",
 				"""
-						import com.soklet.annotation.ServerSentEventSource;
+						import com.soklet.annotation.SseEventSource;
 						import com.soklet.HandshakeResult;
 						
 						public class MissingParam {
-							@ServerSentEventSource("/widgets/{id}")
+							@SseEventSource("/widgets/{id}")
 							public HandshakeResult sse() { return HandshakeResult.Accepted.builder().build(); }
 						}
 						""");

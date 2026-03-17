@@ -24,7 +24,7 @@ import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
 import com.soklet.annotation.RequestHeader;
-import com.soklet.annotation.ServerSentEventSource;
+import com.soklet.annotation.SseEventSource;
 import com.soklet.exception.IllegalRequestBodyException;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -431,7 +431,7 @@ public class SokletTests {
 
 	@Test
 	public void httpResourceMethodsRequireHttpServer() {
-		SokletConfig config = SokletConfig.withServerSentEventServer(ServerSentEventServer.withPort(0).build())
+		SokletConfig config = SokletConfig.withSseServer(SseServer.withPort(0).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RequestHandlingBasicsResource.class)))
 				.build();
 
@@ -440,7 +440,7 @@ public class SokletTests {
 
 	@Test
 	public void simulatorPerformRequestFailsFastWhenNoHttpServerConfigured() {
-		SokletConfig config = SokletConfig.withServerSentEventServer(ServerSentEventServer.withPort(0).build())
+		SokletConfig config = SokletConfig.withSseServer(SseServer.withPort(0).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseOnlyResource.class)))
 				.build();
 
@@ -698,7 +698,7 @@ public class SokletTests {
 	}
 
 	public static class SseOnlyResource {
-		@ServerSentEventSource("/sse-only")
+		@SseEventSource("/sse-only")
 		public HandshakeResult sseOnly() {
 			return HandshakeResult.accept();
 		}

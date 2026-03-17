@@ -31,7 +31,7 @@ import static java.util.Objects.requireNonNull;
  * Defines how a Soklet system is configured.
  * <p>
  * Threadsafe instances can be acquired via one of the builder factory methods such as {@link #withHttpServer(HttpServer)},
- * {@link #withServerSentEventServer(ServerSentEventServer)}, or {@link #withMcpServer(McpServer)}.
+ * {@link #withSseServer(SseServer)}, or {@link #withMcpServer(McpServer)}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -60,7 +60,7 @@ public final class SokletConfig {
 	@Nullable
 	private final HttpServer httpServer;
 	@Nullable
-	private final ServerSentEventServer serverSentEventServer;
+	private final SseServer sseServer;
 	@Nullable
 	private final McpServer mcpServer;
 
@@ -77,15 +77,15 @@ public final class SokletConfig {
 	}
 
 	/**
-	 * Vends a configuration builder, primed with the given {@link ServerSentEventServer}.
+	 * Vends a configuration builder, primed with the given {@link SseServer}.
 	 *
-	 * @param serverSentEventServer the SSE server necessary for construction
+	 * @param sseServer the SSE server necessary for construction
 	 * @return a builder for {@link SokletConfig} instances
 	 */
 	@NonNull
-	public static Builder withServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
-		requireNonNull(serverSentEventServer);
-		return new Builder().serverSentEventServer(serverSentEventServer);
+	public static Builder withSseServer(@NonNull SseServer sseServer) {
+		requireNonNull(sseServer);
+		return new Builder().sseServer(sseServer);
 	}
 
 	/**
@@ -105,7 +105,7 @@ public final class SokletConfig {
 	 */
 	@NonNull
 	static Builder forSimulatorTesting() {
-		return SokletConfig.withHttpServer(HttpServer.withPort(0).build()).serverSentEventServer(ServerSentEventServer.withPort(0).build());
+		return SokletConfig.withHttpServer(HttpServer.withPort(0).build()).sseServer(SseServer.withPort(0).build());
 	}
 
 	protected SokletConfig(@NonNull Builder builder) {
@@ -113,11 +113,11 @@ public final class SokletConfig {
 
 		// Wrap servers in proxies transparently
 		HttpServerProxy httpServerProxy = builder.httpServer == null ? null : new HttpServerProxy(builder.httpServer);
-		ServerSentEventServerProxy serverSentEventServerProxy = builder.serverSentEventServer == null ? null : new ServerSentEventServerProxy(builder.serverSentEventServer);
+		SseServerProxy sseServerProxy = builder.sseServer == null ? null : new SseServerProxy(builder.sseServer);
 		McpServerProxy mcpServerProxy = builder.mcpServer == null ? null : new McpServerProxy(builder.mcpServer);
 
 		this.httpServer = httpServerProxy;
-		this.serverSentEventServer = serverSentEventServerProxy;
+		this.sseServer = sseServerProxy;
 		this.mcpServer = mcpServerProxy;
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.defaultInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.fromDefaults();
@@ -257,8 +257,8 @@ public final class SokletConfig {
 	 * @return the SSE server instance, or {@link Optional#empty()} if none was configured
 	 */
 	@NonNull
-	public Optional<ServerSentEventServer> getServerSentEventServer() {
-		return Optional.ofNullable(this.serverSentEventServer);
+	public Optional<SseServer> getSseServer() {
+		return Optional.ofNullable(this.sseServer);
 	}
 
 	/**
@@ -285,7 +285,7 @@ public final class SokletConfig {
 		@Nullable
 		private HttpServer httpServer;
 		@Nullable
-		private ServerSentEventServer serverSentEventServer;
+		private SseServer sseServer;
 		@Nullable
 		private McpServer mcpServer;
 		@Nullable
@@ -320,8 +320,8 @@ public final class SokletConfig {
 		}
 
 		@NonNull
-		public Builder serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
-			this.serverSentEventServer = serverSentEventServer;
+		public Builder sseServer(@Nullable SseServer sseServer) {
+			this.sseServer = sseServer;
 			return this;
 		}
 
@@ -393,9 +393,9 @@ public final class SokletConfig {
 
 		@NonNull
 		public SokletConfig build() {
-			if (this.httpServer == null && this.serverSentEventServer == null && this.mcpServer == null)
+			if (this.httpServer == null && this.sseServer == null && this.mcpServer == null)
 				throw new IllegalStateException(format("At least one of %s, %s, or %s must be configured",
-						HttpServer.class.getSimpleName(), ServerSentEventServer.class.getSimpleName(), McpServer.class.getSimpleName()));
+						HttpServer.class.getSimpleName(), SseServer.class.getSimpleName(), McpServer.class.getSimpleName()));
 
 			return new SokletConfig(this);
 		}
@@ -429,16 +429,16 @@ public final class SokletConfig {
 		}
 
 		/**
-		 * Unwraps a ServerSentEventServer proxy to get the underlying real implementation.
+		 * Unwraps a SseServer proxy to get the underlying real implementation.
 		 */
 		@NonNull
-		private static ServerSentEventServer unwrapServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
-			requireNonNull(serverSentEventServer);
+		private static SseServer unwrapSseServer(@NonNull SseServer sseServer) {
+			requireNonNull(sseServer);
 
-			if (serverSentEventServer instanceof ServerSentEventServerProxy)
-				return ((ServerSentEventServerProxy) serverSentEventServer).getRealImplementation();
+			if (sseServer instanceof SseServerProxy)
+				return ((SseServerProxy) sseServer).getRealImplementation();
 
-			return serverSentEventServer;
+			return sseServer;
 		}
 
 		/**
@@ -461,8 +461,8 @@ public final class SokletConfig {
 			HttpServer realHttpServer = sokletConfig.getHttpServer()
 					.map(Copier::unwrapHttpServer)
 					.orElse(null);
-			ServerSentEventServer realServerSentEventServer = sokletConfig.getServerSentEventServer()
-					.map(Copier::unwrapServerSentEventServer)
+			SseServer realSseServer = sokletConfig.getSseServer()
+					.map(Copier::unwrapSseServer)
 					.orElse(null);
 			McpServer realMcpServer = sokletConfig.getMcpServer()
 					.map(Copier::unwrapMcpServer)
@@ -470,7 +470,7 @@ public final class SokletConfig {
 
 			this.builder = new Builder()
 					.httpServer(realHttpServer)
-					.serverSentEventServer(realServerSentEventServer)
+					.sseServer(realSseServer)
 					.mcpServer(realMcpServer)
 					.instanceProvider(sokletConfig.getInstanceProvider())
 					.valueConverterRegistry(sokletConfig.valueConverterRegistry)
@@ -491,8 +491,8 @@ public final class SokletConfig {
 		}
 
 		@NonNull
-		public Copier serverSentEventServer(@Nullable ServerSentEventServer serverSentEventServer) {
-			this.builder.serverSentEventServer(serverSentEventServer);
+		public Copier sseServer(@Nullable SseServer sseServer) {
+			this.builder.sseServer(sseServer);
 			return this;
 		}
 

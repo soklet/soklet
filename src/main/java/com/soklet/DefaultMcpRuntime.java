@@ -2078,14 +2078,14 @@ final class DefaultMcpRuntime {
 				.add(new McpStreamState(request, endpointClass, sessionId, Instant.now()));
 
 		safelyCollectMetrics(
-				format("An exception occurred while invoking %s::didEstablishMcpServerSentEventStream", MetricsCollector.class.getSimpleName()),
+				format("An exception occurred while invoking %s::didEstablishMcpSseStream", MetricsCollector.class.getSimpleName()),
 				request,
-				metricsCollector -> metricsCollector.didEstablishMcpServerSentEventStream(request, endpointClass, sessionId));
-		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
-				format("An exception occurred while invoking %s::didEstablishMcpServerSentEventStream", LifecycleObserver.class.getSimpleName()),
+				metricsCollector -> metricsCollector.didEstablishMcpSseStream(request, endpointClass, sessionId));
+		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SSE_STREAM_FAILED,
+				format("An exception occurred while invoking %s::didEstablishMcpSseStream", LifecycleObserver.class.getSimpleName()),
 				request,
 				null,
-				lifecycleObserver -> lifecycleObserver.didEstablishMcpServerSentEventStream(request, endpointClass, sessionId));
+				lifecycleObserver -> lifecycleObserver.didEstablishMcpSseStream(request, endpointClass, sessionId));
 	}
 
 	void handleClientDisconnectedStream(@NonNull Request request,
@@ -2157,31 +2157,31 @@ final class DefaultMcpRuntime {
 		requireNonNull(terminationReason);
 
 		Duration streamDuration = Duration.between(streamState.establishedAt(), Instant.now());
-		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
-				format("An exception occurred while invoking %s::willTerminateMcpServerSentEventStream", LifecycleObserver.class.getSimpleName()),
+		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SSE_STREAM_FAILED,
+				format("An exception occurred while invoking %s::willTerminateMcpSseStream", LifecycleObserver.class.getSimpleName()),
 				streamState.request(),
 				null,
-				lifecycleObserver -> lifecycleObserver.willTerminateMcpServerSentEventStream(
+				lifecycleObserver -> lifecycleObserver.willTerminateMcpSseStream(
 						streamState.request(),
 						streamState.endpointClass(),
 						streamState.sessionId(),
 						terminationReason,
 						throwable));
 		safelyCollectMetrics(
-				format("An exception occurred while invoking %s::didTerminateMcpServerSentEventStream", MetricsCollector.class.getSimpleName()),
+				format("An exception occurred while invoking %s::didTerminateMcpSseStream", MetricsCollector.class.getSimpleName()),
 				streamState.request(),
-				metricsCollector -> metricsCollector.didTerminateMcpServerSentEventStream(
+				metricsCollector -> metricsCollector.didTerminateMcpSseStream(
 						streamState.request(),
 						streamState.endpointClass(),
 						streamState.sessionId(),
 						streamDuration,
 						terminationReason,
 						throwable));
-		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
-				format("An exception occurred while invoking %s::didTerminateMcpServerSentEventStream", LifecycleObserver.class.getSimpleName()),
+		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SSE_STREAM_FAILED,
+				format("An exception occurred while invoking %s::didTerminateMcpSseStream", LifecycleObserver.class.getSimpleName()),
 				streamState.request(),
 				null,
-				lifecycleObserver -> lifecycleObserver.didTerminateMcpServerSentEventStream(
+				lifecycleObserver -> lifecycleObserver.didTerminateMcpSseStream(
 						streamState.request(),
 						streamState.endpointClass(),
 						streamState.sessionId(),

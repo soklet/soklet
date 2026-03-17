@@ -58,8 +58,8 @@ import static java.lang.String.format;
  *         .build();
  *
  *     // ...and perform it and get a handle to the result.
- *     ServerSentEventRequestResult eventSourceResult =
- *       simulator.performServerSentEventRequest(eventSourceRequest);
+ *     SseRequestResult eventSourceResult =
+ *       simulator.performSseRequest(eventSourceRequest);
  *
  *     // Single-shot latch; we'll wait until a Server-Sent Event comes through
  *     CountDownLatch eventReceivedLatch = new CountDownLatch(1);
@@ -108,7 +108,7 @@ public interface Simulator {
 	/**
 	 * Given a request that would normally be handled by your standard {@link HttpServer}, process it and return response data (both logical {@link Response}, if present, and the {@link MarshaledResponse} bytes to be sent over the wire) as well as the matching <em>Resource Method</em>, if available.
 	 * <p>
-	 * To make requests that would normally be handled by your {@link ServerSentEventServer}, use {@link #performServerSentEventRequest(Request)}.
+	 * To make requests that would normally be handled by your {@link SseServer}, use {@link #performSseRequest(Request)}.
 	 *
 	 * @param request the standard HTTP request to process
 	 * @return the result (logical response, marshaled response, etc.) that corresponds to the request
@@ -117,7 +117,7 @@ public interface Simulator {
 	RequestResult performRequest(@NonNull Request request);
 
 	/**
-	 * Given a request that would normally be handled by your {@link ServerSentEventServer} (that is, for a <em>Resource Method</em> decorated with the {@link com.soklet.annotation.ServerSentEventSource} annotation), process it and return response data ({@link com.soklet.ServerSentEventRequestResult.HandshakeAccepted}, {@link com.soklet.ServerSentEventRequestResult.HandshakeRejected}, or {@link com.soklet.ServerSentEventRequestResult.RequestFailed});
+	 * Given a request that would normally be handled by your {@link SseServer} (that is, for a <em>Resource Method</em> decorated with the {@link com.soklet.annotation.SseEventSource} annotation), process it and return response data ({@link com.soklet.SseRequestResult.HandshakeAccepted}, {@link com.soklet.SseRequestResult.HandshakeRejected}, or {@link com.soklet.SseRequestResult.RequestFailed});
 	 * <p>
 	 * To make requests that would normally be handled by your {@link HttpServer}, use {@link #performRequest(Request)}.
 	 *
@@ -125,7 +125,7 @@ public interface Simulator {
 	 * @return the result (handshake outcode, etc.) that corresponds to the request
 	 */
 	@NonNull
-	ServerSentEventRequestResult performServerSentEventRequest(@NonNull Request request);
+	SseRequestResult performSseRequest(@NonNull Request request);
 
 	/**
 	 * Given a request that would normally be handled by your MCP server, process it and return the corresponding MCP-oriented simulator result.

@@ -172,14 +172,14 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			return sokletConfig.getHttpServer().orElseThrow(() -> new IllegalStateException(format("You cannot inject a parameter of type %s because your %s instance is not configured with one. Offending resource method: %s",
 					HttpServer.class.getSimpleName(), Soklet.class.getSimpleName(), resourceMethod)));
 
-		if (basicParameterType.isAssignableFrom(ServerSentEventServer.class)) {
-			ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
+		if (basicParameterType.isAssignableFrom(SseServer.class)) {
+			SseServer sseServer = sokletConfig.getSseServer().orElse(null);
 
-			if (serverSentEventServer == null)
+			if (sseServer == null)
 				throw new IllegalStateException(format("You cannot inject a parameter of type %s because your %s instance is not configured with one. Offending resource method: %s",
-						ServerSentEventServer.class.getSimpleName(), Soklet.class.getSimpleName(), resourceMethod));
+						SseServer.class.getSimpleName(), Soklet.class.getSimpleName(), resourceMethod));
 
-			return serverSentEventServer;
+			return sseServer;
 		}
 
 		// Ok, we're done with the basic by-type injections.

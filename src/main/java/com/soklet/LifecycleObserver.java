@@ -398,7 +398,7 @@ public interface LifecycleObserver {
 	/**
 	 * Called after an MCP GET stream is established.
 	 */
-	default void didEstablishMcpServerSentEventStream(@NonNull Request request,
+	default void didEstablishMcpSseStream(@NonNull Request request,
 																										@NonNull Class<? extends McpEndpoint> endpointClass,
 																										@NonNull String sessionId) {
 		// No-op by default
@@ -407,7 +407,7 @@ public interface LifecycleObserver {
 	/**
 	 * Called before an MCP GET stream is terminated.
 	 */
-	default void willTerminateMcpServerSentEventStream(@NonNull Request request,
+	default void willTerminateMcpSseStream(@NonNull Request request,
 																										 @NonNull Class<? extends McpEndpoint> endpointClass,
 																										 @NonNull String sessionId,
 																										 @NonNull McpStreamTerminationReason terminationReason,
@@ -418,7 +418,7 @@ public interface LifecycleObserver {
 	/**
 	 * Called after an MCP GET stream is terminated.
 	 */
-	default void didTerminateMcpServerSentEventStream(@NonNull Request request,
+	default void didTerminateMcpSseStream(@NonNull Request request,
 																										@NonNull Class<? extends McpEndpoint> endpointClass,
 																										@NonNull String sessionId,
 																										@NonNull Duration connectionDuration,
@@ -430,21 +430,21 @@ public interface LifecycleObserver {
 	/**
 	 * Called before the SSE server starts.
 	 */
-	default void willStartServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
+	default void willStartSseServer(@NonNull SseServer sseServer) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after the SSE server starts.
 	 */
-	default void didStartServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
+	default void didStartSseServer(@NonNull SseServer sseServer) {
 		// No-op by default
 	}
 
 	/**
-	 * Called after a {@link ServerSentEventServer} instance was asked to start, but failed due to an exception.
+	 * Called after a {@link SseServer} instance was asked to start, but failed due to an exception.
 	 */
-	default void didFailToStartServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer,
+	default void didFailToStartSseServer(@NonNull SseServer sseServer,
 																									 @NonNull Throwable throwable) {
 		// No-op by default
 	}
@@ -452,21 +452,21 @@ public interface LifecycleObserver {
 	/**
 	 * Called before the SSE server stops.
 	 */
-	default void willStopServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
+	default void willStopSseServer(@NonNull SseServer sseServer) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after the SSE server stops.
 	 */
-	default void didStopServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer) {
+	default void didStopSseServer(@NonNull SseServer sseServer) {
 		// No-op by default
 	}
 
 	/**
-	 * Called after a {@link ServerSentEventServer} instance was asked to stop, but failed due to an exception.
+	 * Called after a {@link SseServer} instance was asked to stop, but failed due to an exception.
 	 */
-	default void didFailToStopServerSentEventServer(@NonNull ServerSentEventServer serverSentEventServer,
+	default void didFailToStopSseServer(@NonNull SseServer sseServer,
 																									@NonNull Throwable throwable) {
 		// No-op by default
 	}
@@ -474,7 +474,7 @@ public interface LifecycleObserver {
 	/**
 	 * Called before an SSE connection is established.
 	 */
-	default void willEstablishServerSentEventConnection(@NonNull Request request,
+	default void willEstablishSseConnection(@NonNull Request request,
 																											@Nullable ResourceMethod resourceMethod) {
 		// No-op by default
 	}
@@ -482,7 +482,7 @@ public interface LifecycleObserver {
 	/**
 	 * Called after an SSE connection is established.
 	 */
-	default void didEstablishServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection) {
+	default void didEstablishSseConnection(@NonNull SseConnection sseConnection) {
 		// No-op by default
 	}
 
@@ -492,9 +492,9 @@ public interface LifecycleObserver {
 	 * @param reason    the handshake failure reason
 	 * @param throwable an optional underlying cause, or {@code null} if not applicable
 	 */
-	default void didFailToEstablishServerSentEventConnection(@NonNull Request request,
+	default void didFailToEstablishSseConnection(@NonNull Request request,
 																													 @Nullable ResourceMethod resourceMethod,
-																													 ServerSentEventConnection.@NonNull HandshakeFailureReason reason,
+																													 SseConnection.@NonNull HandshakeFailureReason reason,
 																													 @Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -502,8 +502,8 @@ public interface LifecycleObserver {
 	/**
 	 * Called before an SSE connection is terminated.
 	 */
-	default void willTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
-																											ServerSentEventConnection.@NonNull TerminationReason terminationReason,
+	default void willTerminateSseConnection(@NonNull SseConnection sseConnection,
+																											SseConnection.@NonNull TerminationReason terminationReason,
 																											@Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -511,9 +511,9 @@ public interface LifecycleObserver {
 	/**
 	 * Called after an SSE connection is terminated.
 	 */
-	default void didTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
+	default void didTerminateSseConnection(@NonNull SseConnection sseConnection,
 																										 @NonNull Duration connectionDuration,
-																										 ServerSentEventConnection.@NonNull TerminationReason terminationReason,
+																										 SseConnection.@NonNull TerminationReason terminationReason,
 																										 @Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -521,16 +521,16 @@ public interface LifecycleObserver {
 	/**
 	 * Called before an SSE event is written.
 	 */
-	default void willWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
-																				@NonNull ServerSentEvent serverSentEvent) {
+	default void willWriteSseEvent(@NonNull SseConnection sseConnection,
+																				@NonNull SseEvent sseEvent) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an SSE event is written.
 	 */
-	default void didWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
-																			 @NonNull ServerSentEvent serverSentEvent,
+	default void didWriteSseEvent(@NonNull SseConnection sseConnection,
+																			 @NonNull SseEvent sseEvent,
 																			 @NonNull Duration writeDuration) {
 		// No-op by default
 	}
@@ -538,8 +538,8 @@ public interface LifecycleObserver {
 	/**
 	 * Called after an SSE event fails to write.
 	 */
-	default void didFailToWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
-																						 @NonNull ServerSentEvent serverSentEvent,
+	default void didFailToWriteSseEvent(@NonNull SseConnection sseConnection,
+																						 @NonNull SseEvent sseEvent,
 																						 @NonNull Duration writeDuration,
 																						 @NonNull Throwable throwable) {
 		// No-op by default
@@ -548,16 +548,16 @@ public interface LifecycleObserver {
 	/**
 	 * Called before an SSE comment is written.
 	 */
-	default void willWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																							 @NonNull ServerSentEventComment serverSentEventComment) {
+	default void willWriteSseComment(@NonNull SseConnection sseConnection,
+																							 @NonNull SseComment sseComment) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an SSE comment is written.
 	 */
-	default void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																							@NonNull ServerSentEventComment serverSentEventComment,
+	default void didWriteSseComment(@NonNull SseConnection sseConnection,
+																							@NonNull SseComment sseComment,
 																							@NonNull Duration writeDuration) {
 		// No-op by default
 	}
@@ -565,8 +565,8 @@ public interface LifecycleObserver {
 	/**
 	 * Called after an SSE comment fails to write.
 	 */
-	default void didFailToWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																										@NonNull ServerSentEventComment serverSentEventComment,
+	default void didFailToWriteSseComment(@NonNull SseConnection sseConnection,
+																										@NonNull SseComment sseComment,
 																										@NonNull Duration writeDuration,
 																										@NonNull Throwable throwable) {
 		// No-op by default

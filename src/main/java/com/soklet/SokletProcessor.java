@@ -28,7 +28,7 @@ import com.soklet.annotation.OPTIONS;
 import com.soklet.annotation.PATCH;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PUT;
-import com.soklet.annotation.ServerSentEventSource;
+import com.soklet.annotation.SseEventSource;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.processing.AbstractProcessor;
@@ -84,7 +84,7 @@ import java.util.stream.Collectors;
 /**
  * Soklet's standard Annotation Processor which is used to generate lookup tables of <em>Resource Method</em> definitions at compile time as well as prevent usage errors that are detectable by static analysis.
  * <p>
- * This Annotation Processor ensures <em>Resource Methods</em> annotated with {@link ServerSentEventSource} are declared as returning an instance of {@link HandshakeResult}.
+ * This Annotation Processor ensures <em>Resource Methods</em> annotated with {@link SseEventSource} are declared as returning an instance of {@link HandshakeResult}.
  * <p>
  * Your build system should ensure this Annotation Processor is available at compile time. Follow the instructions below to make your application conformant:
  * <p>
@@ -187,7 +187,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private static final List<Class<? extends Annotation>> HTTP_AND_SSE_ANNOTATIONS = List.of(
 			GET.class, POST.class, PUT.class, PATCH.class, DELETE.class, HEAD.class, OPTIONS.class,
-			ServerSentEventSource.class
+			SseEventSource.class
 	);
 	private static final List<Class<? extends Annotation>> MCP_ANNOTATIONS = List.of(
 			McpServerEndpoint.class, McpTool.class, McpPrompt.class, McpResource.class, McpListResources.class
@@ -275,7 +275,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		collect(roundEnv, HttpMethod.DELETE, DELETE.class, false);
 		collect(roundEnv, HttpMethod.HEAD, HEAD.class, false);
 		collect(roundEnv, HttpMethod.OPTIONS, OPTIONS.class, false);
-		collect(roundEnv, HttpMethod.GET, ServerSentEventSource.class, true); // SSE as GET + flag
+		collect(roundEnv, HttpMethod.GET, SseEventSource.class, true); // SSE as GET + flag
 		collectMcpEndpoints(roundEnv);
 
 		if (roundEnv.processingOver()) {
@@ -297,7 +297,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	private void collect(RoundEnvironment roundEnv,
 											 HttpMethod httpMethod,
 											 Class<? extends Annotation> baseAnnotation,
-											 boolean serverSentEventSource) {
+											 boolean sseEventSource) {
 
 		TypeElement base = elements.getTypeElement(baseAnnotation.getCanonicalName());
 		Class<? extends Annotation> containerClass = findRepeatableContainer(baseAnnotation);
@@ -363,7 +363,7 @@ public final class SokletProcessor extends AbstractProcessor {
 							.toArray(String[]::new);
 
 					collected.add(new ResourceMethodDeclaration(
-							httpMethod, path, className, methodName, paramTypes, serverSentEventSource
+							httpMethod, path, className, methodName, paramTypes, sseEventSource
 					));
 				}
 			}
@@ -803,12 +803,12 @@ public final class SokletProcessor extends AbstractProcessor {
 	private void enforceSseReturnTypes(RoundEnvironment roundEnv) {
 		if (handshakeResultType == null) return;
 
-		TypeElement sseAnn = elements.getTypeElement(ServerSentEventSource.class.getCanonicalName());
+		TypeElement sseAnn = elements.getTypeElement(SseEventSource.class.getCanonicalName());
 		if (sseAnn == null) return;
 
 		for (Element e : roundEnv.getElementsAnnotatedWith(sseAnn)) {
 			if (e.getKind() != ElementKind.METHOD) {
-				error(e, "@%s can only be applied to methods.", ServerSentEventSource.class.getSimpleName());
+				error(e, "@%s can only be applied to methods.", SseEventSource.class.getSimpleName());
 				continue;
 			}
 			ExecutableElement method = (ExecutableElement) e;
@@ -817,7 +817,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (!assignable) {
 				error(e,
 						"Soklet: Resource Methods annotated with @%s must specify a return type of %s (found: %s).",
-						ServerSentEventSource.class.getSimpleName(), "HandshakeResult", prettyType(returnType));
+						SseEventSource.class.getSimpleName(), "HandshakeResult", prettyType(returnType));
 			}
 		}
 	}
@@ -1288,7 +1288,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					b64encode(b64, r.className()),
 					b64encode(b64, r.methodName()),
 					b64encode(b64, params),
-					Boolean.toString(r.serverSentEventSource())
+					Boolean.toString(r.sseEventSource())
 			);
 			w.write(line);
 			w.write('\n');
@@ -1434,7 +1434,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	private static String generateKey(ResourceMethodDeclaration r) {
 		return r.httpMethod().name() + "|" + r.path() + "|" + r.className() + "|" +
 				r.methodName() + "|" + String.join(";", r.parameterTypes()) + "|" +
-				r.serverSentEventSource();
+				r.sseEventSource();
 	}
 
 	private static String generateMcpEndpointKey(McpEndpointDeclaration endpointDeclaration) {

@@ -1509,7 +1509,7 @@ public class McpRuntimeTests {
 		}
 
 		@Override
-		public void didEstablishMcpServerSentEventStream(Request request,
+		public void didEstablishMcpSseStream(Request request,
 																									 Class<? extends McpEndpoint> endpointClass,
 																									 String sessionId) {
 			this.establishedStreamSessionIds.add(sessionId);
@@ -1525,7 +1525,7 @@ public class McpRuntimeTests {
 		}
 
 		@Override
-		public void didTerminateMcpServerSentEventStream(Request request,
+		public void didTerminateMcpSseStream(Request request,
 																										 Class<? extends McpEndpoint> endpointClass,
 																										 String sessionId,
 																										 Duration connectionDuration,

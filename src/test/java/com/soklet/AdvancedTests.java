@@ -21,7 +21,7 @@ import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.RequestBody;
-import com.soklet.annotation.ServerSentEventSource;
+import com.soklet.annotation.SseEventSource;
 import com.soklet.converter.ValueConversionException;
 import com.soklet.converter.ValueConverter;
 import com.soklet.converter.ValueConverterRegistry;
@@ -87,13 +87,13 @@ public class AdvancedTests {
 		// by rapidly connecting and disconnecting multiple clients concurrently
 
 		HttpServer httpServer = HttpServer.withPort(findFreePort()).build();
-		ServerSentEventServer sseServer = ServerSentEventServer.withPort(findFreePort())
+		SseServer sseServer = SseServer.withPort(findFreePort())
 				.concurrentConnectionLimit(100)
 				.heartbeatInterval(Duration.ofMillis(100))
 				.build();
 
 		SokletConfig config = SokletConfig.withHttpServer(httpServer)
-				.serverSentEventServer(sseServer)
+				.sseServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
 
@@ -571,12 +571,12 @@ public class AdvancedTests {
 	public void testSSEBroadcasterMemoryLeak() throws Exception {
 		// Test that SSE broadcasters don't leak memory when connections are closed
 		HttpServer httpServer = HttpServer.withPort(findFreePort()).build();
-		ServerSentEventServer sseServer = ServerSentEventServer.withPort(findFreePort())
+		SseServer sseServer = SseServer.withPort(findFreePort())
 				.broadcasterCacheCapacity(10) // Small cache to test eviction
 				.build();
 
 		SokletConfig config = SokletConfig.withHttpServer(httpServer)
-				.serverSentEventServer(sseServer)
+				.sseServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSEMemoryTestResource.class)))
 				.build();
 
@@ -588,7 +588,7 @@ public class AdvancedTests {
 			// Create many SSE connections and close them
 			for (int i = 0; i < 100; i++) {
 				ResourcePath path = ResourcePath.fromPath("/events/" + i);
-				Optional<? extends ServerSentEventBroadcaster> broadcaster =
+				Optional<? extends SseBroadcaster> broadcaster =
 						sseServer.acquireBroadcaster(path);
 
 				if (broadcaster.isPresent()) {
@@ -597,7 +597,7 @@ public class AdvancedTests {
 
 					// Simulate some events
 					broadcaster.get().broadcastEvent(
-							ServerSentEvent.withData("test" + i).build()
+							SseEvent.withData("test" + i).build()
 					);
 				}
 			}
@@ -621,7 +621,7 @@ public class AdvancedTests {
 							"Collected: " + collected + " out of " + references.size()
 			);
 
-			int broadcastersByResourcePathSize = ((DefaultServerSentEventServer) sseServer).getBroadcastersByResourcePath().size();
+			int broadcastersByResourcePathSize = ((DefaultSseServer) sseServer).getBroadcastersByResourcePath().size();
 
 			Assertions.assertTrue(broadcastersByResourcePathSize <= 10, "Expected broadcastersByResourcePathSize of <= 10 but was " + broadcastersByResourcePathSize);
 		}
@@ -666,14 +666,14 @@ public class AdvancedTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(httpPort).build();
-		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
+		SseServer sseServer = SseServer.withPort(ssePort)
 				.broadcasterCacheCapacity(4)
 				.resourcePathCacheCapacity(4)
 				.build();
-		DefaultServerSentEventServer defaultSseServer = (DefaultServerSentEventServer) sseServer;
+		DefaultSseServer defaultSseServer = (DefaultSseServer) sseServer;
 
 		SokletConfig config = SokletConfig.withHttpServer(httpServer)
-				.serverSentEventServer(sseServer)
+				.sseServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
 
@@ -757,14 +757,14 @@ public class AdvancedTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(httpPort).build();
-		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
+		SseServer sseServer = SseServer.withPort(ssePort)
 				.broadcasterCacheCapacity(32)
 				.resourcePathCacheCapacity(64)
 				.build();
-		DefaultServerSentEventServer defaultSseServer = (DefaultServerSentEventServer) sseServer;
+		DefaultSseServer defaultSseServer = (DefaultSseServer) sseServer;
 
 		SokletConfig config = SokletConfig.withHttpServer(httpServer)
-				.serverSentEventServer(sseServer)
+				.sseServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
 
@@ -886,12 +886,12 @@ public class AdvancedTests {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(httpPort).build();
-		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
+		SseServer sseServer = SseServer.withPort(ssePort)
 				.concurrentConnectionLimit(Math.max(0, concurrentConnections * 2))
 				.build();
 
 		SokletConfig config = SokletConfig.withHttpServer(httpServer)
-				.serverSentEventServer(sseServer)
+				.sseServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
 
@@ -1238,7 +1238,7 @@ public class AdvancedTests {
 	}
 
 	public static class SSEMemoryTestResource {
-		@ServerSentEventSource("/events/{id}")
+		@SseEventSource("/events/{id}")
 		public HandshakeResult handleSSE(@PathParameter String id) {
 			return HandshakeResult.accept();
 		}
@@ -1263,7 +1263,7 @@ public class AdvancedTests {
 	}
 
 	public static class SSETestResource {
-		@ServerSentEventSource("/events")
+		@SseEventSource("/events")
 		public HandshakeResult handleSSE(Request request) {
 			return HandshakeResult.accept();
 		}
@@ -1477,7 +1477,7 @@ public class AdvancedTests {
 		// 1. Setup an SSE server with a STRICT limit of 1 connection
 		// We assume findFreePort() is available in your test suite
 		int ssePort = findFreePort();
-		ServerSentEventServer sseServer = ServerSentEventServer.withPort(ssePort)
+		SseServer sseServer = SseServer.withPort(ssePort)
 				.concurrentConnectionLimit(1)
 				.build();
 
@@ -1493,13 +1493,13 @@ public class AdvancedTests {
 
 		// 3. Configure Soklet
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(findFreePort()).build())
-				.serverSentEventServer(sseServer)
+				.sseServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LimitTestResource.class)))
 				.responseMarshaler(customMarshaler)
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
-						// Ignore the SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED log event
+						// Ignore the SSE_SERVER_CONNECTION_REJECTED log event
 					}
 				})
 				.build();
@@ -1558,11 +1558,11 @@ public class AdvancedTests {
 
 	// Helper Resource for the test
 	public static class LimitTestResource {
-		@ServerSentEventSource("/limit-test")
+		@SseEventSource("/limit-test")
 		public HandshakeResult stream() {
 			// Return an accepted handshake that sends an initial comment so the test knows we're live.
 			return HandshakeResult.Accepted.builder()
-					.clientInitializer(unicaster -> unicaster.unicastComment(ServerSentEventComment.fromComment("connected")))
+					.clientInitializer(unicaster -> unicaster.unicastComment(SseComment.fromComment("connected")))
 					.build();
 		}
 	}

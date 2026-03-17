@@ -25,20 +25,20 @@ import java.util.function.Function;
  * <p>
  * For example:
  * <pre>{@code // Acquire our SSE broadcaster (sends to anyone listening to "/examples/123")
- * ServerSentEventServer server = ...;
- * ServerSentEventBroadcaster broadcaster = server.acquireBroadcaster(ResourcePath.fromPath("/examples/123")).orElseThrow();
+ * SseServer server = ...;
+ * SseBroadcaster broadcaster = server.acquireBroadcaster(ResourcePath.fromPath("/examples/123")).orElseThrow();
  *
  * // Create our SSE payload
- * ServerSentEvent event = ServerSentEvent.withEvent("test")
+ * SseEvent event = SseEvent.withEvent("test")
  *   .data("example")
  *   .build();
  *
  * // Publish SSE payload to all listening clients
  * broadcaster.broadcastEvent(event);}</pre>
  * <p>
- * Soklet's default {@link ServerSentEventServer} implementation guarantees at most one broadcaster is registered per {@link ResourcePath} at a time; instances may be recreated after becoming idle. That implementation is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
+ * Soklet's default {@link SseServer} implementation guarantees at most one broadcaster is registered per {@link ResourcePath} at a time; instances may be recreated after becoming idle. That implementation is responsible for the creation and management of {@link SseBroadcaster} instances.
  * <p>
- * You may acquire a broadcaster via {@link ServerSentEventServer#acquireBroadcaster(ResourcePath)}.
+ * You may acquire a broadcaster via {@link SseServer#acquireBroadcaster(ResourcePath)}.
  * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  * <p>
@@ -46,15 +46,15 @@ import java.util.function.Function;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface ServerSentEventBroadcaster {
+public interface SseBroadcaster {
 	/**
 	 * The runtime Resource Path with which this broadcaster is associated.
 	 * <p>
-	 * Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath}.
+	 * Soklet guarantees exactly one {@link SseBroadcaster} instance exists per {@link ResourcePath}.
 	 * <p>
-	 * For example, a client may register for SSE broadcasts for <em>Resource Method</em> {@code @ServerSentEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}.
+	 * For example, a client may register for SSE broadcasts for <em>Resource Method</em> {@code @SseEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}.
 	 * <p>
-	 * A broadcaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to all clients via {@link #broadcastEvent(ServerSentEvent)}.
+	 * A broadcaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to all clients via {@link #broadcastEvent(SseEvent)}.
 	 *
 	 * @return the runtime Resource Path instance with which this broadcaster is associated
 	 */
@@ -79,9 +79,9 @@ public interface ServerSentEventBroadcaster {
 	 * <p>
 	 * However, mock implementations may wish to block until broadcasts have completed - for example, to simplify automated testing.
 	 *
-	 * @param serverSentEvent the Server-Sent Event payload to broadcast
+	 * @param sseEvent the Server-Sent Event payload to broadcast
 	 */
-	void broadcastEvent(@NonNull ServerSentEvent serverSentEvent);
+	void broadcastEvent(@NonNull SseEvent sseEvent);
 
 	/**
 	 * Broadcasts a Server-Sent Event where the payload is dynamically generated and memoized based on a specific trait of the client (e.g. {@link java.util.Locale} or User Role).
@@ -97,23 +97,23 @@ public interface ServerSentEventBroadcaster {
 	 * @param <T>           the type of the grouping key (e.g. {@link java.util.Locale} or {@link String})
 	 * @param keySelector   a function that derives a grouping key from the client's associated context object.
 	 *                      (If the client has no context, the implementation passes {@code null})
-	 * @param eventProvider a function that provides the {@link ServerSentEvent} for a given key
+	 * @param eventProvider a function that provides the {@link SseEvent} for a given key
 	 */
 	<T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
-													@NonNull Function<T, ServerSentEvent> eventProvider);
+													@NonNull Function<T, SseEvent> eventProvider);
 
 	/**
 	 * Broadcasts a single Server-Sent Event comment to all clients listening to this broadcaster's {@link ResourcePath}.
 	 * <p>
-	 * Use {@link ServerSentEventComment#heartbeatInstance()} to emit a heartbeat comment.
+	 * Use {@link SseComment#heartbeatInstance()} to emit a heartbeat comment.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
 	 * <p>
 	 * However, mock implementations may wish to block until broadcasts have completed - for example, to simplify automated testing.
 	 *
-	 * @param serverSentEventComment the comment payload to broadcast
+	 * @param sseComment the comment payload to broadcast
 	 */
-	void broadcastComment(@NonNull ServerSentEventComment serverSentEventComment);
+	void broadcastComment(@NonNull SseComment sseComment);
 
 	/**
 	 * Broadcasts a Server-Sent Event comment where the payload is dynamically generated and memoized based on a specific trait of the client (e.g. {@link java.util.Locale} or User Role).
@@ -131,5 +131,5 @@ public interface ServerSentEventBroadcaster {
 	 * @param commentProvider a function that provides the comment payload for a given key
 	 */
 	<T> void broadcastComment(@NonNull Function<Object, T> keySelector,
-														@NonNull Function<T, ServerSentEventComment> commentProvider);
+														@NonNull Function<T, SseComment> commentProvider);
 }

@@ -35,9 +35,9 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Represents the result of a {@link com.soklet.annotation.ServerSentEventSource} "handshake".
+ * Represents the result of a {@link com.soklet.annotation.SseEventSource} "handshake".
  * <p>
- * Once a handshake has been accepted, you may acquire a broadcaster via {@link ServerSentEventServer#acquireBroadcaster(ResourcePath)} - the client whose handshake was accepted will then receive Server-Sent Events broadcast via {@link ServerSentEventBroadcaster#broadcastEvent(ServerSentEvent)}.
+ * Once a handshake has been accepted, you may acquire a broadcaster via {@link SseServer#acquireBroadcaster(ResourcePath)} - the client whose handshake was accepted will then receive Server-Sent Events broadcast via {@link SseBroadcaster#broadcastEvent(SseEvent)}.
  * <p>
  * You might have a JavaScript Server-Sent Event client that looks like this:
  * <pre>{@code // Register an event source
@@ -53,7 +53,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * And then a Soklet Server-Sent Event Source that looks like this, which performs the handshake:
  * <pre>{@code // Resource Method that acts as a Server-Sent Event Source
- * @ServerSentEventSource("/chats/{chatId}/event-source")
+ * @SseEventSource("/chats/{chatId}/event-source")
  * public HandshakeResult chatEventSource(
  *   @PathParameter Long chatId,
  *   @QueryParameter String signingToken
@@ -77,10 +77,10 @@ import static java.util.Objects.requireNonNull;
  * Finally, broadcast to all clients who had their handshakes accepted:
  * <pre>{@code // Sometime later, acquire a broadcaster...
  * ResourcePath resourcePath = ResourcePath.fromPath("/chats/123/event-source");
- * ServerSentEventBroadcaster broadcaster = sseServer.acquireBroadcaster(resourcePath).orElseThrow();
+ * SseBroadcaster broadcaster = sseServer.acquireBroadcaster(resourcePath).orElseThrow();
  *
  * // ...construct the payload...
- * ServerSentEvent event = ServerSentEvent.withEvent("chat-message")
+ * SseEvent event = SseEvent.withEvent("chat-message")
  *   .data("Hello, world") // often JSON
  *   .retry(Duration.ofSeconds(5))
  *   .build();
@@ -179,7 +179,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			@Nullable
 			private Object clientContext;
 			@Nullable
-			private Consumer<ServerSentEventUnicaster> clientInitializer;
+			private Consumer<SseUnicaster> clientInitializer;
 
 			private Builder() {
 				// Only permit construction through Handshake builder methods
@@ -214,7 +214,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			 * <p>
 			 * For example, an application might want to broadcast differently-formatted payloads based on the client's locale - a {@link java.util.Locale} object could be specified as client context.
 			 * <p>
-			 * Server-Sent Events can then be broadcast per-locale via {@link ServerSentEventBroadcaster#broadcastEvent(Function, Function)}.
+			 * Server-Sent Events can then be broadcast per-locale via {@link SseBroadcaster#broadcastEvent(Function, Function)}.
 			 *
 			 * @param clientContext custom context
 			 * @return this builder, for chaining
@@ -228,7 +228,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			/**
 			 * Specifies custom "client initializer" function to run immediately after the handshake succeeds - useful for performing "catch-up" logic if the client had provided a {@code Last-Event-ID} request header.
 			 * <p>
-			 * The function is provided with a {@link ServerSentEventUnicaster}, which permits sending Server-Sent Events and comments directly to the client that accepted the handshake (as opposed to a {@link ServerSentEventBroadcaster}, which would send to all clients listening on the same {@link ResourcePath}).
+			 * The function is provided with a {@link SseUnicaster}, which permits sending Server-Sent Events and comments directly to the client that accepted the handshake (as opposed to a {@link SseBroadcaster}, which would send to all clients listening on the same {@link ResourcePath}).
 			 * <p>
 			 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a>.
 			 *
@@ -236,7 +236,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 			 * @return this builder, for chaining
 			 */
 			@NonNull
-			public Builder clientInitializer(@Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
+			public Builder clientInitializer(@Nullable Consumer<SseUnicaster> clientInitializer) {
 				this.clientInitializer = clientInitializer;
 				return this;
 			}
@@ -254,7 +254,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		@Nullable
 		private final Object clientContext;
 		@Nullable
-		private final Consumer<ServerSentEventUnicaster> clientInitializer;
+		private final Consumer<SseUnicaster> clientInitializer;
 
 		private Accepted(@NonNull Builder builder) {
 			requireNonNull(builder);
@@ -292,7 +292,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		/**
 		 * Returns the client context, if specified, for this accepted Server-Sent Event handshake.
 		 * <p>
-		 * Useful for "targeted" broadcasts via {@link ServerSentEventBroadcaster#broadcastEvent(Function, Function)}.
+		 * Useful for "targeted" broadcasts via {@link SseBroadcaster#broadcastEvent(Function, Function)}.
 		 *
 		 * @return the client context, or {@link Optional#empty()} if none was specified
 		 */
@@ -307,7 +307,7 @@ public sealed interface HandshakeResult permits HandshakeResult.Accepted, Handsh
 		 * @return the client initialization function, or {@link Optional#empty()} if none was specified
 		 */
 		@NonNull
-		public Optional<Consumer<ServerSentEventUnicaster>> getClientInitializer() {
+		public Optional<Consumer<SseUnicaster>> getClientInitializer() {
 			return Optional.ofNullable(this.clientInitializer);
 		}
 

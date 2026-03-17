@@ -27,7 +27,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Contract for matching incoming HTTP requests with appropriate <em>Resource Methods</em> (Java methods to invoke to handle requests).
  * <p>
- * A <em>Resource Method</em> is a Java {@link Method} with an HTTP method annotation applied, e.g. {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, {@link com.soklet.annotation.ServerSentEventSource}, ...
+ * A <em>Resource Method</em> is a Java {@link Method} with an HTTP method annotation applied, e.g. {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, {@link com.soklet.annotation.SseEventSource}, ...
  * <p>
  * Standard threadsafe implementations can be acquired via these factory methods:
  * <ul>
@@ -65,7 +65,7 @@ public interface ResourceMethodResolver {
 	Set<@NonNull ResourceMethod> getResourceMethods();
 
 	/**
-	 * Acquires a threadsafe {@link ResourceMethodResolver} implementation which locates <em>Resource Methods</em> by examining a lookup table of Java {@link Method} declarations that are annotated with {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, {@link com.soklet.annotation.ServerSentEventSource}, etc.
+	 * Acquires a threadsafe {@link ResourceMethodResolver} implementation which locates <em>Resource Methods</em> by examining a lookup table of Java {@link Method} declarations that are annotated with {@link com.soklet.annotation.GET}, {@link com.soklet.annotation.POST}, {@link com.soklet.annotation.SseEventSource}, etc.
 	 * <p>
 	 * This implementation requires that your application be compiled with the {@link SokletProcessor} annotation processor, as shown below:
 	 * <p>

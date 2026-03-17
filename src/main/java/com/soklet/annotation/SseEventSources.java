@@ -24,7 +24,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Allows multiple {@link ServerSentEventSource} annotations to be applied to the same <em>Resource Method</em>.
+ * Allows multiple {@link SseEventSource} annotations to be applied to the same <em>Resource Method</em>.
  * <p>
  * Soklet applications should not need to use this annotation directly.
  *
@@ -32,10 +32,10 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface ServerSentEventSources {
+public @interface SseEventSources {
 	/**
-	 * @return the {@link ServerSentEventSource} annotations on this <em>Resource Method</em>
+	 * @return the {@link SseEventSource} annotations on this <em>Resource Method</em>
 	 */
 	@NonNull
-	ServerSentEventSource[] value() default {};
+	SseEventSource[] value() default {};
 }

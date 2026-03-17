@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import com.soklet.annotation.ServerSentEventSource;
+import com.soklet.annotation.SseEventSource;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -44,11 +44,11 @@ public class SseLastEventIdTests {
 	public void lastEventIdHeaderIsVisibleToResource() throws Exception {
 		int ssePort = findFreePort();
 
-		ServerSentEventServer serverSentEventServer = ServerSentEventServer.withPort(ssePort)
+		SseServer sseServer = SseServer.withPort(ssePort)
 				.verifyConnectionOnceEstablished(false)
 				.build();
 
-		SokletConfig config = SokletConfig.withServerSentEventServer(serverSentEventServer)
+		SokletConfig config = SokletConfig.withSseServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseResource.class)))
 				.build();
 
@@ -84,9 +84,9 @@ public class SseLastEventIdTests {
 	}
 
 	public static class SseResource {
-		@ServerSentEventSource("/sse/{id}")
+		@SseEventSource("/sse/{id}")
 		public HandshakeResult sse(@NonNull Request request,
-															 @NonNull ServerSentEventServer serverSentEventServer) {
+															 @NonNull SseServer sseServer) {
 			String last = request.getHeaders().getOrDefault("Last-Event-ID", Set.of()).stream().findFirst().orElse("none");
 
 			// Wait a bit and then broadcast
@@ -97,8 +97,8 @@ public class SseLastEventIdTests {
 					throw new RuntimeException(e);
 				}
 
-				ServerSentEventBroadcaster broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.fromPath("/sse/abc")).get();
-				broadcaster.broadcastEvent(ServerSentEvent.withData("lastEventId=" + last).build());
+				SseBroadcaster broadcaster = sseServer.acquireBroadcaster(ResourcePath.fromPath("/sse/abc")).get();
+				broadcaster.broadcastEvent(SseEvent.withData("lastEventId=" + last).build());
 			}).start();
 
 			return HandshakeResult.accept();

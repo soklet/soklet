@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
  * Instances can be acquired via the {@link #withMarshaledResponse(MarshaledResponse)} builder factory method.
  * A convenience instance factory is also available via {@link #fromMarshaledResponse(MarshaledResponse)}.
  * <p>
- * The Server-Sent Event equivalent of this type is {@link ServerSentEventRequestResult}, which is used for integration testing via {@link Simulator#performServerSentEventRequest(Request)}.
+ * The Server-Sent Event equivalent of this type is {@link SseRequestResult}, which is used for integration testing via {@link Simulator#performSseRequest(Request)}.
  * <p>
  * See <a href="https://www.soklet.com/docs/testing#integration-testing">https://www.soklet.com/docs/testing#integration-testing</a> for detailed documentation.
  *

@@ -16,11 +16,11 @@
 
 package com.soklet;
 
-import com.soklet.annotation.ServerSentEventSource;
+import com.soklet.annotation.SseEventSource;
 import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.util.ConcurrentLruMap;
 import com.soklet.internal.util.HostHeaderValidator;
-import com.soklet.MetricsCollector.ServerSentEventDropReason;
+import com.soklet.MetricsCollector.SseEventDropReason;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -91,7 +91,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class DefaultServerSentEventServer implements ServerSentEventServer {
+final class DefaultSseServer implements SseServer {
 	@NonNull
 	private static final String DEFAULT_HOST;
 	@NonNull
@@ -139,7 +139,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	private static final byte[] HEARTBEAT_COMMENT_PAYLOAD_BYTES;
 	@NonNull
-	private static final ServerSentEventComment HEARTBEAT_COMMENT;
+	private static final SseComment HEARTBEAT_COMMENT;
 	@NonNull
 	private static final Integer DEFAULT_SSE_BUILDER_CAPACITY;
 
@@ -173,7 +173,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		HEARTBEAT_COMMENT_PAYLOAD = ":\n\n";
 		HEARTBEAT_COMMENT_PAYLOAD_BYTES = HEARTBEAT_COMMENT_PAYLOAD.getBytes(StandardCharsets.UTF_8);
-		HEARTBEAT_COMMENT = ServerSentEventComment.heartbeatInstance();
+		HEARTBEAT_COMMENT = SseComment.heartbeatInstance();
 		DEFAULT_SSE_BUILDER_CAPACITY = 256;
 	}
 
@@ -183,8 +183,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	 */
 	@FunctionalInterface
 	private interface BackpressureHandler {
-		void onBackpressure(@NonNull DefaultServerSentEventBroadcaster owner,
-												@NonNull DefaultServerSentEventConnection connection,
+		void onBackpressure(@NonNull DefaultSseBroadcaster owner,
+												@NonNull DefaultSseConnection connection,
 												@NonNull String cause);
 	}
 
@@ -247,15 +247,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	@NonNull
 	private final Boolean verifyConnectionOnceEstablished;
 	@NonNull
-	private final ConcurrentHashMap<@NonNull ResourcePath, @NonNull DefaultServerSentEventBroadcaster> broadcastersByResourcePath;
+	private final ConcurrentHashMap<@NonNull ResourcePath, @NonNull DefaultSseBroadcaster> broadcastersByResourcePath;
 	@NonNull
 	private final ConcurrentLruMap<@NonNull ResourcePath, @NonNull ResourcePathDeclaration> resourcePathDeclarationsByResourcePathCache;
 	@NonNull
-	private final ConcurrentHashMap<@NonNull DefaultServerSentEventConnection, @NonNull DefaultServerSentEventBroadcaster> globalConnections;
+	private final ConcurrentHashMap<@NonNull DefaultSseConnection, @NonNull DefaultSseBroadcaster> globalConnections;
 	@NonNull
 	private final AtomicInteger activeConnectionCount;
 	@NonNull
-	private final ConcurrentLruMap<@NonNull ResourcePath, @NonNull DefaultServerSentEventBroadcaster> idleBroadcastersByResourcePath;
+	private final ConcurrentLruMap<@NonNull ResourcePath, @NonNull DefaultSseBroadcaster> idleBroadcastersByResourcePath;
 	@NonNull
 	private final ReentrantLock lock;
 	@NonNull
@@ -301,7 +301,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private IdGenerator<?> idGenerator;
 
 	@ThreadSafe
-	private static class DefaultServerSentEventBroadcaster implements ServerSentEventBroadcaster {
+	private static class DefaultSseBroadcaster implements SseBroadcaster {
 		@NonNull
 		private final ResourceMethod resourceMethod;
 		@NonNull
@@ -311,18 +311,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@NonNull
 		private final BackpressureHandler backpressureHandler;
 		@NonNull
-		private final Consumer<DefaultServerSentEventConnection> connectionUnregisteredListener;
+		private final Consumer<DefaultSseConnection> connectionUnregisteredListener;
 		@NonNull
 		private final Consumer<LogEvent> logEventConsumer;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@NonNull
-		private final Set<@NonNull DefaultServerSentEventConnection> serverSentEventConnections;
+		private final Set<@NonNull DefaultSseConnection> sseConnections;
 
-		public DefaultServerSentEventBroadcaster(@NonNull ResourceMethod resourceMethod,
+		public DefaultSseBroadcaster(@NonNull ResourceMethod resourceMethod,
 																						 @NonNull ResourcePath resourcePath,
 																						 @Nullable MetricsCollector metricsCollector,
 																						 @NonNull BackpressureHandler backpressureHandler,
-																						 @NonNull Consumer<DefaultServerSentEventConnection> connectionUnregisteredListener,
+																						 @NonNull Consumer<DefaultSseConnection> connectionUnregisteredListener,
 																						 @NonNull Consumer<LogEvent> logEventConsumer,
 																						 int connectionSetInitialCapacity) {
 			requireNonNull(resourceMethod);
@@ -337,7 +337,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			this.backpressureHandler = backpressureHandler;
 			this.connectionUnregisteredListener = connectionUnregisteredListener;
 			this.logEventConsumer = logEventConsumer;
-			this.serverSentEventConnections = ConcurrentHashMap.newKeySet(Math.max(1, connectionSetInitialCapacity));
+			this.sseConnections = ConcurrentHashMap.newKeySet(Math.max(1, connectionSetInitialCapacity));
 		}
 
 		@NonNull
@@ -354,7 +354,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@NonNull
 		@Override
 		public Long getClientCount() {
-			return (long) getServerSentEventConnections().size();
+			return (long) getSseConnections().size();
 		}
 
 		private void safelyCollectMetrics(@NonNull String message,
@@ -378,10 +378,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void broadcastEvent(@NonNull ServerSentEvent serverSentEvent) {
-			requireNonNull(serverSentEvent);
+		public void broadcastEvent(@NonNull SseEvent sseEvent) {
+			requireNonNull(sseEvent);
 
-			DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent = preSerializeServerSentEvent(serverSentEvent);
+			DefaultSseConnection.PreSerializedEvent preSerializedEvent = preSerializeSseEvent(sseEvent);
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
@@ -389,9 +389,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			int enqueued = 0;
 			int dropped = 0;
 
-			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections()) {
+			for (DefaultSseConnection sseConnection : getSseConnections()) {
 				attempted++;
-				if (enqueuePreSerializedEvent(this, serverSentEventConnection, preSerializedEvent, getBackpressureHandler()))
+				if (enqueuePreSerializedEvent(this, sseConnection, preSerializedEvent, getBackpressureHandler()))
 					enqueued++;
 				else
 					dropped++;
@@ -401,8 +401,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void broadcastComment(@NonNull ServerSentEventComment serverSentEventComment) {
-			requireNonNull(serverSentEventComment);
+		public void broadcastComment(@NonNull SseComment sseComment) {
+			requireNonNull(sseComment);
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
@@ -410,29 +410,29 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			int enqueued = 0;
 			int dropped = 0;
 
-			for (DefaultServerSentEventConnection serverSentEventConnection : getServerSentEventConnections()) {
+			for (DefaultSseConnection sseConnection : getSseConnections()) {
 				attempted++;
-				if (enqueueComment(this, serverSentEventConnection, serverSentEventComment, getBackpressureHandler()))
+				if (enqueueComment(this, sseConnection, sseComment, getBackpressureHandler()))
 					enqueued++;
 				else
 					dropped++;
 			}
 
-			recordBroadcastOutcome(attempted, enqueued, dropped, serverSentEventComment.getCommentType());
+			recordBroadcastOutcome(attempted, enqueued, dropped, sseComment.getCommentType());
 		}
 
 		@Override
 		public <T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
-																	 @NonNull Function<T, ServerSentEvent> eventProvider) {
+																	 @NonNull Function<T, SseEvent> eventProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
 
-			Map<T, DefaultServerSentEventConnection.PreSerializedEvent> payloadCache = new HashMap<>();
+			Map<T, DefaultSseConnection.PreSerializedEvent> payloadCache = new HashMap<>();
 			int attempted = 0;
 			int enqueued = 0;
 			int dropped = 0;
 
-			for (DefaultServerSentEventConnection connection : getServerSentEventConnections()) {
+			for (DefaultSseConnection connection : getSseConnections()) {
 				Object clientContext = connection.getClientContext().orElse(null);
 
 				try {
@@ -440,15 +440,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					T key = keySelector.apply(clientContext);
 
 					// Ask client code to generate payload (if not present in our local cache)
-					DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent =
-							payloadCache.computeIfAbsent(key, (cacheKey) -> preSerializeServerSentEvent(eventProvider.apply(cacheKey)));
+					DefaultSseConnection.PreSerializedEvent preSerializedEvent =
+							payloadCache.computeIfAbsent(key, (cacheKey) -> preSerializeSseEvent(eventProvider.apply(cacheKey)));
 					attempted++;
 					if (enqueuePreSerializedEvent(this, connection, preSerializedEvent, getBackpressureHandler()))
 						enqueued++;
 					else
 						dropped++;
 				} catch (Throwable t) {
-					this.getLogEventConsumer().accept(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
+					this.getLogEventConsumer().accept(LogEvent.with(LogEventType.SSE_SERVER_BROADCAST_GENERATION_FAILED,
 									format("Failed to generate Server-Sent-Event for connection on %s with client context %s",
 											getResourcePath(), (clientContext == null ? "[none specified]" : clientContext)))
 							.throwable(t)
@@ -461,15 +461,15 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		@Override
 		public <T> void broadcastComment(@NonNull Function<Object, T> keySelector,
-																		 @NonNull Function<T, ServerSentEventComment> commentProvider) {
+																		 @NonNull Function<T, SseComment> commentProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 
-			Map<T, ServerSentEventComment> payloadCache = new HashMap<>();
-			EnumMap<ServerSentEventComment.CommentType, int[]> countsByType =
-					new EnumMap<>(ServerSentEventComment.CommentType.class);
+			Map<T, SseComment> payloadCache = new HashMap<>();
+			EnumMap<SseComment.CommentType, int[]> countsByType =
+					new EnumMap<>(SseComment.CommentType.class);
 
-			for (DefaultServerSentEventConnection connection : getServerSentEventConnections()) {
+			for (DefaultSseConnection connection : getSseConnections()) {
 				Object clientContext = connection.getClientContext().orElse(null);
 
 				try {
@@ -477,9 +477,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					T key = keySelector.apply(clientContext);
 
 					// Ask client code to generate payload (if not present in our local cache)
-					ServerSentEventComment comment = payloadCache.computeIfAbsent(key, commentProvider);
+					SseComment comment = payloadCache.computeIfAbsent(key, commentProvider);
 
-					ServerSentEventComment.CommentType commentType = comment.getCommentType();
+					SseComment.CommentType commentType = comment.getCommentType();
 					int[] counts = countsByType.computeIfAbsent(commentType, ignored -> new int[3]);
 					counts[0]++;
 					if (enqueueComment(this, connection, comment, getBackpressureHandler()))
@@ -487,7 +487,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					else
 						counts[2]++;
 				} catch (Throwable t) {
-					this.getLogEventConsumer().accept(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
+					this.getLogEventConsumer().accept(LogEvent.with(LogEventType.SSE_SERVER_BROADCAST_GENERATION_FAILED,
 									format("Failed to generate Server-Sent Event comment for connection on %s with client context %s",
 											getResourcePath(), (clientContext == null ? "[none specified]" : clientContext)))
 							.throwable(t)
@@ -500,113 +500,113 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@NonNull
-		public Boolean registerServerSentEventConnection(@Nullable DefaultServerSentEventConnection serverSentEventConnection) {
-			if (serverSentEventConnection == null)
+		public Boolean registerSseConnection(@Nullable DefaultSseConnection sseConnection) {
+			if (sseConnection == null)
 				return false;
 
 			// Underlying set is threadsafe so this is OK
-			return getServerSentEventConnections().add(serverSentEventConnection);
+			return getSseConnections().add(sseConnection);
 		}
 
 		@NonNull
-		public Boolean unregisterServerSentEventConnection(@Nullable DefaultServerSentEventConnection serverSentEventConnection,
+		public Boolean unregisterSseConnection(@Nullable DefaultSseConnection sseConnection,
 																											 @NonNull Boolean sendPoisonPill) {
 			requireNonNull(sendPoisonPill);
 
-			if (serverSentEventConnection == null)
+			if (sseConnection == null)
 				return false;
 
 			// Underlying set is threadsafe so this is OK
-			boolean unregistered = getServerSentEventConnections().remove(serverSentEventConnection);
+			boolean unregistered = getSseConnections().remove(sseConnection);
 
 			if (unregistered)
-				getConnectionUnregisteredListener().accept(serverSentEventConnection);
+				getConnectionUnregisteredListener().accept(sseConnection);
 
 			// Send poison pill regardless of whether we were registered, if requested.
 			// This handles the edge case where eviction happens before registration completes.
 			if (sendPoisonPill)
-				enqueuePoisonPill(this, serverSentEventConnection, getBackpressureHandler());
+				enqueuePoisonPill(this, sseConnection, getBackpressureHandler());
 
 			return unregistered;
 		}
 
-		public void unregisterAllServerSentEventConnections(@NonNull Boolean sendPoisonPill) {
+		public void unregisterAllSseConnections(@NonNull Boolean sendPoisonPill) {
 			requireNonNull(sendPoisonPill);
 
 			// Snapshot list for consistency during unregister process
-			for (DefaultServerSentEventConnection serverSentEventConnection : new ArrayList<>(getServerSentEventConnections()))
-				unregisterServerSentEventConnection(serverSentEventConnection, sendPoisonPill);
+			for (DefaultSseConnection sseConnection : new ArrayList<>(getSseConnections()))
+				unregisterSseConnection(sseConnection, sendPoisonPill);
 		}
 
 		private void recordBroadcastOutcome(int attempted,
 																		 int enqueued,
 																		 int dropped,
-																		 ServerSentEventComment.@Nullable CommentType commentType) {
+																		 SseComment.@Nullable CommentType commentType) {
 			if (attempted == 0 && enqueued == 0 && dropped == 0)
 				return;
 
 			ResourcePathDeclaration route = getResourceMethod().getResourcePathDeclaration();
-			ServerSentEventComment.CommentType commentTypeSnapshot = commentType;
+			SseComment.CommentType commentTypeSnapshot = commentType;
 
 			if (commentTypeSnapshot == null) {
 				safelyCollectMetrics(
-						format("An exception occurred while invoking %s::didBroadcastServerSentEvent", MetricsCollector.class.getSimpleName()),
-						(metricsCollector) -> metricsCollector.didBroadcastServerSentEvent(route, attempted, enqueued, dropped));
+						format("An exception occurred while invoking %s::didBroadcastSseEvent", MetricsCollector.class.getSimpleName()),
+						(metricsCollector) -> metricsCollector.didBroadcastSseEvent(route, attempted, enqueued, dropped));
 			} else {
 				safelyCollectMetrics(
-						format("An exception occurred while invoking %s::didBroadcastServerSentEventComment", MetricsCollector.class.getSimpleName()),
-						(metricsCollector) -> metricsCollector.didBroadcastServerSentEventComment(route, commentTypeSnapshot, attempted, enqueued, dropped));
+						format("An exception occurred while invoking %s::didBroadcastSseComment", MetricsCollector.class.getSimpleName()),
+						(metricsCollector) -> metricsCollector.didBroadcastSseComment(route, commentTypeSnapshot, attempted, enqueued, dropped));
 			}
 		}
 
-		private void recordDroppedEvent(@NonNull DefaultServerSentEventConnection connection,
-																		DefaultServerSentEventConnection.@NonNull PreSerializedEvent preSerializedEvent,
+		private void recordDroppedEvent(@NonNull DefaultSseConnection connection,
+																		DefaultSseConnection.@NonNull PreSerializedEvent preSerializedEvent,
 																		@Nullable Integer queueDepth) {
 			requireNonNull(connection);
 			requireNonNull(preSerializedEvent);
 
-			ServerSentEventConnection connectionSnapshot = connection.getSnapshot();
+			SseConnection connectionSnapshot = connection.getSnapshot();
 			Integer payloadBytes = preSerializedEvent.getPayloadBytes().length;
 			Integer queueDepthSnapshot = queueDepth;
 
 			safelyCollectMetrics(
-					format("An exception occurred while invoking %s::didDropServerSentEvent", MetricsCollector.class.getSimpleName()),
-					(metricsCollector) -> metricsCollector.didDropServerSentEvent(
+					format("An exception occurred while invoking %s::didDropSseEvent", MetricsCollector.class.getSimpleName()),
+					(metricsCollector) -> metricsCollector.didDropSseEvent(
 							connectionSnapshot,
-							preSerializedEvent.getServerSentEvent(),
-							ServerSentEventDropReason.QUEUE_FULL,
+							preSerializedEvent.getSseEvent(),
+							SseEventDropReason.QUEUE_FULL,
 							payloadBytes,
 							queueDepthSnapshot));
 		}
 
-		private void recordDroppedComment(@NonNull DefaultServerSentEventConnection connection,
-																			@NonNull ServerSentEventComment serverSentEventComment,
+		private void recordDroppedComment(@NonNull DefaultSseConnection connection,
+																			@NonNull SseComment sseComment,
 																			@Nullable Integer queueDepth) {
 			requireNonNull(connection);
-			requireNonNull(serverSentEventComment);
+			requireNonNull(sseComment);
 
-			ServerSentEventConnection connectionSnapshot = connection.getSnapshot();
-			Integer payloadBytes = payloadBytesForComment(serverSentEventComment);
+			SseConnection connectionSnapshot = connection.getSnapshot();
+			Integer payloadBytes = payloadBytesForComment(sseComment);
 			Integer queueDepthSnapshot = queueDepth;
 
 			safelyCollectMetrics(
-					format("An exception occurred while invoking %s::didDropServerSentEventComment", MetricsCollector.class.getSimpleName()),
-					(metricsCollector) -> metricsCollector.didDropServerSentEventComment(
+					format("An exception occurred while invoking %s::didDropSseComment", MetricsCollector.class.getSimpleName()),
+					(metricsCollector) -> metricsCollector.didDropSseComment(
 							connectionSnapshot,
-							serverSentEventComment,
-							ServerSentEventDropReason.QUEUE_FULL,
+							sseComment,
+							SseEventDropReason.QUEUE_FULL,
 							payloadBytes,
 							queueDepthSnapshot));
 		}
 
 		@NonNull
-		private Integer payloadBytesForComment(@NonNull ServerSentEventComment serverSentEventComment) {
-			requireNonNull(serverSentEventComment);
+		private Integer payloadBytesForComment(@NonNull SseComment sseComment) {
+			requireNonNull(sseComment);
 
-			if (serverSentEventComment.getCommentType() == ServerSentEventComment.CommentType.HEARTBEAT)
+			if (sseComment.getCommentType() == SseComment.CommentType.HEARTBEAT)
 				return HEARTBEAT_COMMENT_PAYLOAD_BYTES.length;
 
-			String commentValue = serverSentEventComment.getComment()
+			String commentValue = sseComment.getComment()
 					.orElseThrow(() -> new IllegalStateException("Server-Sent Event comment payload missing"));
 			String payload = formatCommentForResponse(commentValue);
 			return payload.getBytes(StandardCharsets.UTF_8).length;
@@ -618,12 +618,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@NonNull
-		private Set<@NonNull DefaultServerSentEventConnection> getServerSentEventConnections() {
-			return this.serverSentEventConnections;
+		private Set<@NonNull DefaultSseConnection> getSseConnections() {
+			return this.sseConnections;
 		}
 
 		@NonNull
-		private Consumer<DefaultServerSentEventConnection> getConnectionUnregisteredListener() {
+		private Consumer<DefaultSseConnection> getConnectionUnregisteredListener() {
 			return this.connectionUnregisteredListener;
 		}
 
@@ -634,7 +634,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	/**
-	 * Instead of returning an actual DefaultServerSentEventBroadcaster instance to client code, we return this lightweight object that:
+	 * Instead of returning an actual DefaultSseBroadcaster instance to client code, we return this lightweight object that:
 	 * <ul>
 	 * <li>stores only ResourcePath (and optionally ResourceMethod)</li>
 	 * <li>looks up the current broadcaster in broadcastersByResourcePath on every call</li>
@@ -644,7 +644,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	 * This makes cached broadcaster handles safe forever, while keeping idle eviction working as expected.
 	 */
 	@ThreadSafe
-	private final class StableBroadcasterHandle implements ServerSentEventBroadcaster {
+	private final class StableBroadcasterHandle implements SseBroadcaster {
 		@NonNull
 		private final ResourcePath resourcePath;
 
@@ -661,44 +661,44 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@Override
 		@NonNull
 		public Long getClientCount() {
-			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
+			DefaultSseBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
 			return b != null ? b.getClientCount() : 0L;
 		}
 
 		@Override
-		public void broadcastEvent(@NonNull ServerSentEvent serverSentEvent) {
-			requireNonNull(serverSentEvent);
-			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
-			if (b != null) b.broadcastEvent(serverSentEvent);
+		public void broadcastEvent(@NonNull SseEvent sseEvent) {
+			requireNonNull(sseEvent);
+			DefaultSseBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
+			if (b != null) b.broadcastEvent(sseEvent);
 		}
 
 		@Override
-		public void broadcastComment(@NonNull ServerSentEventComment serverSentEventComment) {
-			requireNonNull(serverSentEventComment);
-			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
-			if (b != null) b.broadcastComment(serverSentEventComment);
+		public void broadcastComment(@NonNull SseComment sseComment) {
+			requireNonNull(sseComment);
+			DefaultSseBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
+			if (b != null) b.broadcastComment(sseComment);
 		}
 
 		@Override
 		public <T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
-																	 @NonNull Function<T, ServerSentEvent> eventProvider) {
+																	 @NonNull Function<T, SseEvent> eventProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
-			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
+			DefaultSseBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
 			if (b != null) b.broadcastEvent(keySelector, eventProvider);
 		}
 
 		@Override
 		public <T> void broadcastComment(@NonNull Function<Object, T> keySelector,
-																		 @NonNull Function<T, ServerSentEventComment> commentProvider) {
+																		 @NonNull Function<T, SseComment> commentProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
-			DefaultServerSentEventBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
+			DefaultSseBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
 			if (b != null) b.broadcastComment(keySelector, commentProvider);
 		}
 	}
 
-	DefaultServerSentEventServer(@NonNull Builder builder) {
+	DefaultSseServer(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.stopPoisonPill = new AtomicBoolean(false);
@@ -770,12 +770,12 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.idleBroadcastersByResourcePath = new ConcurrentLruMap<>(idleBroadcasterCacheCapacity, (resourcePath, broadcaster) -> {
 			try {
 				this.broadcastersByResourcePath.computeIfPresent(resourcePath, (rp, existing) -> {
-					if (existing == broadcaster && existing.getServerSentEventConnections().isEmpty())
+					if (existing == broadcaster && existing.getSseConnections().isEmpty())
 						return null; // remove from main registry -> eligible for GC
 					return existing;
 				});
 			} catch (Throwable t) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
 								"Failed to evict idle SSE broadcaster")
 						.throwable(t)
 						.build());
@@ -793,7 +793,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 				try {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event processing")
+					safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event processing")
 							.throwable(throwable)
 							.build());
 				} catch (Throwable loggingThrowable) {
@@ -820,7 +820,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 				try {
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event request reading")
+					safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server Server-Sent Event request reading")
 							.throwable(throwable)
 							.build());
 				} catch (Throwable loggingThrowable) {
@@ -843,7 +843,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.connectionExecutorServiceSupplier = () ->
 				Utilities.createVirtualThreadsNewThreadPerTaskExecutor("sse-connection-", (Thread thread, Throwable throwable) -> {
 					try {
-						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+						safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
 										"Unexpected exception occurred during Server-Sent Event connection processing")
 								.throwable(throwable)
 								.build());
@@ -880,18 +880,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		this.responseMarshaler = sokletConfig.getResponseMarshaler();
 		this.requestHandler = requestHandler;
 
-		// Pick out all the @ServerSentEventSource resource methods and store off keyed on resource path for ease of lookup.
+		// Pick out all the @SseEventSource resource methods and store off keyed on resource path for ease of lookup.
 		// This is computed just once here and will never change.
 		// Fail fast if there are duplicates for the same declaration.
 		this.resourceMethodsByResourcePathDeclaration =
 				sokletConfig.getResourceMethodResolver().getResourceMethods().stream()
-						.filter(ResourceMethod::isServerSentEventSource)
+						.filter(ResourceMethod::isSseEventSource)
 						.collect(Collectors.toMap(
 								ResourceMethod::getResourcePathDeclaration,
 								Function.identity(),
 								(resourceMethod1, resourceMethod2) -> {
 									throw new IllegalStateException(format("Multiple @%s methods mapped to the same resource path: %s",
-											ServerSentEventSource.class.getSimpleName(), resourceMethod1.getResourcePathDeclaration()));
+											SseEventSource.class.getSimpleName(), resourceMethod1.getResourcePathDeclaration()));
 								}
 						));
 	}
@@ -928,16 +928,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	private static DefaultServerSentEventConnection.@NonNull PreSerializedEvent preSerializeServerSentEvent(@NonNull ServerSentEvent serverSentEvent) {
-		requireNonNull(serverSentEvent);
+	private static DefaultSseConnection.@NonNull PreSerializedEvent preSerializeSseEvent(@NonNull SseEvent sseEvent) {
+		requireNonNull(sseEvent);
 
 		StringBuilder stringBuilder = new StringBuilder(DEFAULT_SSE_BUILDER_CAPACITY);
-		String formatted = formatServerSentEventForResponse(serverSentEvent, stringBuilder);
+		String formatted = formatSseEventForResponse(sseEvent, stringBuilder);
 		byte[] payloadBytes = formatted == HEARTBEAT_COMMENT_PAYLOAD
 				? HEARTBEAT_COMMENT_PAYLOAD_BYTES
 				: formatted.getBytes(StandardCharsets.UTF_8);
 
-		return new DefaultServerSentEventConnection.PreSerializedEvent(serverSentEvent, payloadBytes);
+		return new DefaultSseConnection.PreSerializedEvent(sseEvent, payloadBytes);
 	}
 
 	private static boolean isRemoteClose(@Nullable Throwable throwable) {
@@ -971,18 +971,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	private static Boolean enqueuePreSerializedEvent(@NonNull DefaultServerSentEventBroadcaster owner,
-																									 @NonNull DefaultServerSentEventConnection connection,
-																									 DefaultServerSentEventConnection.@NonNull PreSerializedEvent preSerializedEvent,
+	private static Boolean enqueuePreSerializedEvent(@NonNull DefaultSseBroadcaster owner,
+																									 @NonNull DefaultSseConnection connection,
+																									 DefaultSseConnection.@NonNull PreSerializedEvent preSerializedEvent,
 																									 @NonNull BackpressureHandler handler) {
 		requireNonNull(owner);
 		requireNonNull(connection);
 		requireNonNull(preSerializedEvent);
 		requireNonNull(handler);
 
-		BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
-		DefaultServerSentEventConnection.WriteQueueElement e =
-				DefaultServerSentEventConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent, System.nanoTime());
+		BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
+		DefaultSseConnection.WriteQueueElement e =
+				DefaultSseConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent, System.nanoTime());
 
 		if (writeQueue.offer(e))
 			return true;
@@ -996,16 +996,16 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	private static Boolean enqueuePoisonPill(@NonNull DefaultServerSentEventBroadcaster owner,
-																					 @NonNull DefaultServerSentEventConnection connection,
+	private static Boolean enqueuePoisonPill(@NonNull DefaultSseBroadcaster owner,
+																					 @NonNull DefaultSseConnection connection,
 																					 @NonNull BackpressureHandler handler) {
 		requireNonNull(owner);
 		requireNonNull(connection);
 		requireNonNull(handler);
 
-		BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
+		BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
 
-		if (writeQueue.offer(DefaultServerSentEventConnection.WriteQueueElement.poisonPill()))
+		if (writeQueue.offer(DefaultSseConnection.WriteQueueElement.poisonPill()))
 			return true;
 
 		handler.onBackpressure(owner, connection, "poison-pill");
@@ -1013,24 +1013,24 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	private static Boolean enqueueComment(@NonNull DefaultServerSentEventBroadcaster owner,
-																				@NonNull DefaultServerSentEventConnection connection,
-																				@NonNull ServerSentEventComment serverSentEventComment,
+	private static Boolean enqueueComment(@NonNull DefaultSseBroadcaster owner,
+																				@NonNull DefaultSseConnection connection,
+																				@NonNull SseComment sseComment,
 																				@NonNull BackpressureHandler handler) {
 		requireNonNull(owner);
 		requireNonNull(connection);
-		requireNonNull(serverSentEventComment);
+		requireNonNull(sseComment);
 		requireNonNull(handler);
 
-		BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
-		DefaultServerSentEventConnection.WriteQueueElement writeQueueElement =
-				DefaultServerSentEventConnection.WriteQueueElement.withComment(serverSentEventComment, System.nanoTime());
+		BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
+		DefaultSseConnection.WriteQueueElement writeQueueElement =
+				DefaultSseConnection.WriteQueueElement.withComment(sseComment, System.nanoTime());
 
 		if (writeQueue.offer(writeQueueElement))
 			return true;
 
 		Integer queueDepth = writeQueue.size();
-		owner.recordDroppedComment(connection, serverSentEventComment, queueDepth);
+		owner.recordDroppedComment(connection, sseComment, queueDepth);
 
 		handler.onBackpressure(owner, connection, "comment");
 		return false;
@@ -1097,7 +1097,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					handshakeContext.acceptanceFinalized.compareAndSet(false, true);
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
 
-					safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
+					safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
 							.throwable(e)
 							.build());
 
@@ -1119,7 +1119,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		} catch (ClosedChannelException ignored) {
 			// expected during shutdown
 		} catch (IOException e) {
-			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
 					"SSE event loop encountered an IO error").throwable(e).build());
 		} finally {
 			// Close the server socket if we opened it
@@ -1159,9 +1159,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					new TimeoutException("SSE handshake timed out"));
 		} else if (handshakeContext.establishmentFailureNotified.compareAndSet(false, true)) {
 			TimeoutException timeoutException = new TimeoutException("SSE handshake timed out");
-			notifyDidFailToEstablishServerSentEventConnection(request,
+			notifyDidFailToEstablishSseConnection(request,
 					resourceMethod,
-					ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT,
+					SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT,
 					timeoutException);
 		}
 
@@ -1174,7 +1174,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				responseBytes = createHandshakeHttpResponse(RequestResult.withMarshaledResponse(response).build());
 			}
 		} catch (Throwable t) {
-			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to prepare SSE handshake timeout response")
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to prepare SSE handshake timeout response")
 					.throwable(t)
 					.build());
 		}
@@ -1184,7 +1184,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				writeFully(clientSocketChannel, responseBytes);
 			}
 		} catch (Throwable t) {
-			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to write SSE handshake timeout response")
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to write SSE handshake timeout response")
 					.throwable(t)
 					.build());
 		} finally {
@@ -1268,7 +1268,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
 
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR,
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
 								"Request reader executor rejected task")
 						.throwable(e)
 						.build());
@@ -1297,7 +1297,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.UNPARSEABLE_REQUEST, e);
 
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
 						.throwable(e)
 						.build());
 
@@ -1350,7 +1350,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
 
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
 						.throwable(e)
 						.build());
 				throw e;
@@ -1370,8 +1370,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			} catch (IllegalRequestException e) {
 				acceptanceFinalized.compareAndSet(false, true);
 				if (establishmentFailureNotified.compareAndSet(false, true))
-					notifyDidFailToEstablishServerSentEventConnection(request, resourceMethod,
-							ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, e);
+					notifyDidFailToEstablishSseConnection(request, resourceMethod,
+							SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, e);
 
 				if (handshakeResponseWritten.compareAndSet(false, true)) {
 					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
@@ -1402,7 +1402,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.MAX_CONNECTIONS, null);
 
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
 						format("Rejecting request to %s: Concurrent connection limit (%d) reached", request.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
 
 				if (handshakeResponseWritten.compareAndSet(false, true)) {
@@ -1425,7 +1425,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// We're now ready to write the handshake response - and then we keep the socket open for subsequent writes if handshake was accepted (otherwise we write the body and close).
 			// To write the handshake response, we delegate to the Soklet instance, handing it the request we just parsed
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
-			// Subsequent writes to the open socket (those following successful transmission of the "accepted" handshake response) are done via a ServerSentEventBroadcaster and sidestep the Soklet request processing flow.
+			// Subsequent writes to the open socket (those following successful transmission of the "accepted" handshake response) are done via a SseBroadcaster and sidestep the Soklet request processing flow.
 			final Request requestForHandler = request;
 
 			try {
@@ -1450,7 +1450,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 							if (acceptanceFinalized.compareAndSet(false, true))
 								notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.MAX_CONNECTIONS, null);
 
-							safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
+							safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
 									format("Rejecting request to %s: Concurrent connection limit (%d) reached", requestForHandler.getRawPathAndQuery(), getConcurrentConnectionLimit())).build());
 
 							MarshaledResponse response = getResponseMarshaler().get().forServiceUnavailable(requestForHandler, requestResult.getResourceMethod().orElse(null));
@@ -1468,7 +1468,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 						handshakeHttpResponse = createHandshakeHttpResponse(effectiveRequestResult);
 					} catch (Throwable t) {
 						// Should not happen, but if it does, we fall back to "rejected" handshake mode and write a failsafe 500 response
-						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to generate SSE handshake response")
+						safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to generate SSE handshake response")
 								.throwable(t)
 								.build());
 
@@ -1490,7 +1490,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					} catch (Throwable t) {
 						// We couldn't write a response to the client (maybe they disconnected).
 						// Go through the rejected flow and close out the connection
-						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED, "Unable to write SSE handshake response")
+						safelyLog(LogEvent.with(LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED, "Unable to write SSE handshake response")
 								.throwable(t)
 								.build());
 
@@ -1519,17 +1519,17 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				throw t;
 			}
 
-			// Happy path: register the channel for future ServerSentEvent writes and keep it open.
+			// Happy path: register the channel for future SseEvent writes and keep it open.
 			// Otherwise, we're done immediately now that initial data has been written - shut it all down.
 			HandshakeResult.Accepted handshakeAccepted = handshakeAcceptedReference.get();
 
 			if (handshakeAccepted != null) {
 				try {
-					getLifecycleObserver().get().willEstablishServerSentEventConnection(request, resourceMethod);
+					getLifecycleObserver().get().willEstablishSseConnection(request, resourceMethod);
 				} catch (Throwable t) {
 					safelyLog(LogEvent.with(
-									LogEventType.LIFECYCLE_OBSERVER_WILL_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
-									format("An exception occurred while invoking %s::willEstablishServerSentEventConnection",
+									LogEventType.LIFECYCLE_OBSERVER_WILL_ESTABLISH_SSE_CONNECTION_FAILED,
+									format("An exception occurred while invoking %s::willEstablishSseConnection",
 											LifecycleObserver.class.getSimpleName()))
 							.throwable(t)
 							.build());
@@ -1539,10 +1539,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				ResourceMethod willEstablishResourceMethod = resourceMethod;
 
 				safelyCollectMetrics(
-						format("An exception occurred while invoking %s::willEstablishServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+						format("An exception occurred while invoking %s::willEstablishSseConnection", MetricsCollector.class.getSimpleName()),
 						willEstablishRequest,
 						willEstablishResourceMethod,
-						(metricsCollector) -> metricsCollector.willEstablishServerSentEventConnection(willEstablishRequest, willEstablishResourceMethod));
+						(metricsCollector) -> metricsCollector.willEstablishSseConnection(willEstablishRequest, willEstablishResourceMethod));
 
 				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, handshakeAccepted)
 						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
@@ -1554,13 +1554,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				}
 
 				if (establishmentFailureNotified.compareAndSet(false, true))
-					notifyDidFailToEstablishServerSentEventConnection(request, resourceMethod,
-							ServerSentEventConnection.HandshakeFailureReason.INTERNAL_ERROR, null);
+					notifyDidFailToEstablishSseConnection(request, resourceMethod,
+							SseConnection.HandshakeFailureReason.INTERNAL_ERROR, null);
 			} else {
 				acceptanceFinalized.compareAndSet(false, true);
 				if (establishmentFailureNotified.compareAndSet(false, true))
-					notifyDidFailToEstablishServerSentEventConnection(request, resourceMethod,
-							ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, null);
+					notifyDidFailToEstablishSseConnection(request, resourceMethod,
+							SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, null);
 			}
 		} catch (Throwable t) {
 			if (acceptanceFinalized.compareAndSet(false, true))
@@ -1569,8 +1569,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// If we attempted to establish (willEstablish fired), but registration is null, it means we failed before didEstablish could fire.
 			if (handshakeAcceptedReference.get() != null && clientSocketChannelRegistration == null) {
 				if (establishmentFailureNotified.compareAndSet(false, true))
-					notifyDidFailToEstablishServerSentEventConnection(request, resourceMethod,
-							ServerSentEventConnection.HandshakeFailureReason.INTERNAL_ERROR, t);
+					notifyDidFailToEstablishSseConnection(request, resourceMethod,
+							SseConnection.HandshakeFailureReason.INTERNAL_ERROR, t);
 			}
 
 			if (t instanceof InterruptedException)
@@ -1582,11 +1582,11 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				// If a connection was registered but not handed off, unregister and release it.
 				if (clientSocketChannelRegistration != null) {
 					try {
-						clientSocketChannelRegistration.broadcaster().unregisterServerSentEventConnection(
-								clientSocketChannelRegistration.serverSentEventConnection(),
+						clientSocketChannelRegistration.broadcaster().unregisterSseConnection(
+								clientSocketChannelRegistration.sseConnection(),
 								false);
 					} catch (Throwable t) {
-						safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
+						safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
 								.throwable(t)
 								.build());
 					}
@@ -1615,7 +1615,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			connectionExecutorService.submit(() -> processEstablishedConnection(registration, channelLock));
 			return true;
 		} catch (RejectedExecutionException e) {
-			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Connection executor rejected task")
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Connection executor rejected task")
 					.throwable(e)
 					.build());
 			return false;
@@ -1627,38 +1627,38 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(registration);
 		requireNonNull(channelLock);
 
-		DefaultServerSentEventConnection serverSentEventConnection = registration.serverSentEventConnection();
-		SocketChannel clientSocketChannel = serverSentEventConnection.getSocketChannel();
-		ServerSentEventConnection connectionSnapshot = serverSentEventConnection.getSnapshot();
+		DefaultSseConnection sseConnection = registration.sseConnection();
+		SocketChannel clientSocketChannel = sseConnection.getSocketChannel();
+		SseConnection connectionSnapshot = sseConnection.getSnapshot();
 		Request connectionRequest = connectionSnapshot.getRequest();
 		ResourceMethod connectionResourceMethod = connectionSnapshot.getResourceMethod();
 		ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
 
 		try {
-			getLifecycleObserver().get().didEstablishServerSentEventConnection(connectionSnapshot);
+			getLifecycleObserver().get().didEstablishSseConnection(connectionSnapshot);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(
-							LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
-							format("An exception occurred while invoking %s::didEstablishServerSentEventConnection",
+							LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::didEstablishSseConnection",
 									LifecycleObserver.class.getSimpleName()))
 					.throwable(t)
 					.build());
 		}
 
 		safelyCollectMetrics(
-				format("An exception occurred while invoking %s::didEstablishServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+				format("An exception occurred while invoking %s::didEstablishSseConnection", MetricsCollector.class.getSimpleName()),
 				connectionRequest,
 				connectionResourceMethod,
-				(metricsCollector) -> metricsCollector.didEstablishServerSentEventConnection(connectionSnapshot));
+				(metricsCollector) -> metricsCollector.didEstablishSseConnection(connectionSnapshot));
 
 		Throwable throwable = null;
 
 		try {
-			BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue =
-					serverSentEventConnection.getWriteQueue();
+			BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue =
+					sseConnection.getWriteQueue();
 
 			while (true) {
-				DefaultServerSentEventConnection.WriteQueueElement writeQueueElement;
+				DefaultSseConnection.WriteQueueElement writeQueueElement;
 
 				try {
 					// Wait for an event/comment; if idle for heartbeatInterval, emit a heartbeat comment.
@@ -1671,21 +1671,21 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				// Idle heartbeat
 				if (writeQueueElement == null)
-					writeQueueElement = DefaultServerSentEventConnection.WriteQueueElement.withComment(HEARTBEAT_COMMENT, System.nanoTime());
+					writeQueueElement = DefaultSseConnection.WriteQueueElement.withComment(HEARTBEAT_COMMENT, System.nanoTime());
 
 				if (writeQueueElement.isPoisonPill()) {
 					// Encountered poison pill, exit...
 					break;
 				}
 
-				DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent =
+				DefaultSseConnection.PreSerializedEvent preSerializedEvent =
 						writeQueueElement.getPreSerializedEvent().orElse(null);
-				ServerSentEventComment serverSentEventComment = writeQueueElement.getComment().orElse(null);
-				Optional<String> comment = serverSentEventComment == null
+				SseComment sseComment = writeQueueElement.getComment().orElse(null);
+				Optional<String> comment = sseComment == null
 						? Optional.empty()
-						: serverSentEventComment.getComment();
-				ServerSentEvent serverSentEvent = preSerializedEvent != null
-						? preSerializedEvent.getServerSentEvent()
+						: sseComment.getComment();
+				SseEvent sseEvent = preSerializedEvent != null
+						? preSerializedEvent.getSseEvent()
 						: null;
 
 				byte[] payloadBytes;
@@ -1693,10 +1693,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				if (preSerializedEvent != null) {
 					// It's a normal server-sent event
 					payloadBytes = preSerializedEvent.getPayloadBytes();
-				} else if (serverSentEventComment != null) {
+				} else if (sseComment != null) {
 					// It's a comment (includes heartbeats)
 					String payload;
-					if (serverSentEventComment.getCommentType() == ServerSentEventComment.CommentType.HEARTBEAT) {
+					if (sseComment.getCommentType() == SseComment.CommentType.HEARTBEAT) {
 						payload = HEARTBEAT_COMMENT_PAYLOAD;
 					} else {
 						String commentValue = comment.orElseThrow(() ->
@@ -1712,36 +1712,36 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 				ByteBuffer byteBuffer = ByteBuffer.wrap(payloadBytes);
 
-				if (serverSentEventComment != null) {
+				if (sseComment != null) {
 					try {
-						getLifecycleObserver().get().willWriteServerSentEventComment(connectionSnapshot, serverSentEventComment);
+						getLifecycleObserver().get().willWriteSseComment(connectionSnapshot, sseComment);
 					} catch (Throwable t) {
-						safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
+						safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SSE_COMMENT_FAILED, format("An exception occurred while invoking %s::willWriteSseComment", LifecycleObserver.class.getSimpleName()))
 								.throwable(t)
 								.build());
 					}
 
 					safelyCollectMetrics(
-							format("An exception occurred while invoking %s::willWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
+							format("An exception occurred while invoking %s::willWriteSseComment", MetricsCollector.class.getSimpleName()),
 							connectionRequest,
 							connectionResourceMethod,
-							(metricsCollector) -> metricsCollector.willWriteServerSentEventComment(connectionSnapshot, serverSentEventComment));
+							(metricsCollector) -> metricsCollector.willWriteSseComment(connectionSnapshot, sseComment));
 				}
 
-				if (serverSentEvent != null) {
+				if (sseEvent != null) {
 					try {
-						getLifecycleObserver().get().willWriteServerSentEvent(connectionSnapshot, serverSentEvent);
+						getLifecycleObserver().get().willWriteSseEvent(connectionSnapshot, sseEvent);
 					} catch (Throwable t) {
-						safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::willWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
+						safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SSE_FAILED, format("An exception occurred while invoking %s::willWriteSseEvent", LifecycleObserver.class.getSimpleName()))
 								.throwable(t)
 								.build());
 					}
 
 					safelyCollectMetrics(
-							format("An exception occurred while invoking %s::willWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
+							format("An exception occurred while invoking %s::willWriteSseEvent", MetricsCollector.class.getSimpleName()),
 							connectionRequest,
 							connectionResourceMethod,
-							(metricsCollector) -> metricsCollector.willWriteServerSentEvent(connectionSnapshot, serverSentEvent));
+							(metricsCollector) -> metricsCollector.willWriteSseEvent(connectionSnapshot, sseEvent));
 				}
 
 				Duration deliveryLag = null;
@@ -1798,23 +1798,23 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 					Integer payloadByteCountSnapshot = payloadByteCount;
 					Integer queueDepthSnapshot = queueDepth;
 
-					if (serverSentEvent != null) {
+					if (sseEvent != null) {
 						if (writeThrowableSnapshot != null) {
 							try {
-								getLifecycleObserver().get().didFailToWriteServerSentEvent(connectionSnapshot, serverSentEvent, writeDuration, writeThrowableSnapshot);
+								getLifecycleObserver().get().didFailToWriteSseEvent(connectionSnapshot, sseEvent, writeDuration, writeThrowableSnapshot);
 							} catch (Throwable t) {
-								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
+								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SSE_FAILED, format("An exception occurred while invoking %s::didFailToWriteSseEvent", LifecycleObserver.class.getSimpleName()))
 										.throwable(t)
 										.build());
 							}
 
 							safelyCollectMetrics(
-									format("An exception occurred while invoking %s::didFailToWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
+									format("An exception occurred while invoking %s::didFailToWriteSseEvent", MetricsCollector.class.getSimpleName()),
 									connectionRequest,
 									connectionResourceMethod,
-									(metricsCollector) -> metricsCollector.didFailToWriteServerSentEvent(
+									(metricsCollector) -> metricsCollector.didFailToWriteSseEvent(
 											connectionSnapshot,
-											serverSentEvent,
+											sseEvent,
 											writeDuration,
 											writeThrowableSnapshot,
 											deliveryLagSnapshot,
@@ -1822,42 +1822,42 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 											queueDepthSnapshot));
 						} else {
 							try {
-								getLifecycleObserver().get().didWriteServerSentEvent(connectionSnapshot, serverSentEvent, writeDuration);
+								getLifecycleObserver().get().didWriteSseEvent(connectionSnapshot, sseEvent, writeDuration);
 							} catch (Throwable t) {
-								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEvent", LifecycleObserver.class.getSimpleName()))
+								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SSE_FAILED, format("An exception occurred while invoking %s::didWriteSseEvent", LifecycleObserver.class.getSimpleName()))
 										.throwable(t)
 										.build());
 							}
 
 							safelyCollectMetrics(
-									format("An exception occurred while invoking %s::didWriteServerSentEvent", MetricsCollector.class.getSimpleName()),
+									format("An exception occurred while invoking %s::didWriteSseEvent", MetricsCollector.class.getSimpleName()),
 									connectionRequest,
 									connectionResourceMethod,
-									(metricsCollector) -> metricsCollector.didWriteServerSentEvent(
+									(metricsCollector) -> metricsCollector.didWriteSseEvent(
 											connectionSnapshot,
-											serverSentEvent,
+											sseEvent,
 											writeDuration,
 											deliveryLagSnapshot,
 											payloadByteCountSnapshot,
 											queueDepthSnapshot));
 						}
-					} else if (serverSentEventComment != null) {
+					} else if (sseComment != null) {
 						if (writeThrowableSnapshot != null) {
 							try {
-								getLifecycleObserver().get().didFailToWriteServerSentEventComment(connectionSnapshot, serverSentEventComment, writeDuration, writeThrowableSnapshot);
+								getLifecycleObserver().get().didFailToWriteSseComment(connectionSnapshot, sseComment, writeDuration, writeThrowableSnapshot);
 							} catch (Throwable t) {
-								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
+								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SSE_COMMENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteSseComment", LifecycleObserver.class.getSimpleName()))
 										.throwable(t)
 										.build());
 							}
 
 							safelyCollectMetrics(
-									format("An exception occurred while invoking %s::didFailToWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
+									format("An exception occurred while invoking %s::didFailToWriteSseComment", MetricsCollector.class.getSimpleName()),
 									connectionRequest,
 									connectionResourceMethod,
-									(metricsCollector) -> metricsCollector.didFailToWriteServerSentEventComment(
+									(metricsCollector) -> metricsCollector.didFailToWriteSseComment(
 											connectionSnapshot,
-											serverSentEventComment,
+											sseComment,
 											writeDuration,
 											writeThrowableSnapshot,
 											deliveryLagSnapshot,
@@ -1865,20 +1865,20 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 											queueDepthSnapshot));
 						} else {
 							try {
-								getLifecycleObserver().get().didWriteServerSentEventComment(connectionSnapshot, serverSentEventComment, writeDuration);
+								getLifecycleObserver().get().didWriteSseComment(connectionSnapshot, sseComment, writeDuration);
 							} catch (Throwable t) {
-								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED, format("An exception occurred while invoking %s::didWriteServerSentEventComment", LifecycleObserver.class.getSimpleName()))
+								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SSE_COMMENT_FAILED, format("An exception occurred while invoking %s::didWriteSseComment", LifecycleObserver.class.getSimpleName()))
 										.throwable(t)
 										.build());
 							}
 
 							safelyCollectMetrics(
-									format("An exception occurred while invoking %s::didWriteServerSentEventComment", MetricsCollector.class.getSimpleName()),
+									format("An exception occurred while invoking %s::didWriteSseComment", MetricsCollector.class.getSimpleName()),
 									connectionRequest,
 									connectionResourceMethod,
-									(metricsCollector) -> metricsCollector.didWriteServerSentEventComment(
+									(metricsCollector) -> metricsCollector.didWriteSseComment(
 											connectionSnapshot,
-											serverSentEventComment,
+											sseComment,
 											writeDuration,
 											deliveryLagSnapshot,
 											payloadByteCountSnapshot,
@@ -1905,65 +1905,65 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		requireNonNull(registration);
 		requireNonNull(channelLock);
 
-		DefaultServerSentEventConnection serverSentEventConnection = registration.serverSentEventConnection();
-		ServerSentEventConnection connectionSnapshot = serverSentEventConnection.getSnapshot();
+		DefaultSseConnection sseConnection = registration.sseConnection();
+		SseConnection connectionSnapshot = sseConnection.getSnapshot();
 		Request connectionRequest = connectionSnapshot.getRequest();
 		ResourceMethod connectionResourceMethod = connectionSnapshot.getResourceMethod();
-		SocketChannel clientSocketChannel = serverSentEventConnection.getSocketChannel();
+		SocketChannel clientSocketChannel = sseConnection.getSocketChannel();
 
 		try {
 			synchronized (channelLock) {
 				clientSocketChannel.close();
 			}
 		} catch (Exception exception) {
-			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event connection socket channel")
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event connection socket channel")
 					.throwable(exception)
 					.build());
 		}
 
-		ServerSentEventConnection.TerminationReason terminationReason =
-				serverSentEventConnection.getTerminationReason().orElse(null);
+		SseConnection.TerminationReason terminationReason =
+				sseConnection.getTerminationReason().orElse(null);
 
 		if (terminationReason == null) {
 			if (isStopping())
-				terminationReason = ServerSentEventConnection.TerminationReason.SERVER_STOP;
+				terminationReason = SseConnection.TerminationReason.SERVER_STOP;
 			else if (isRemoteClose(throwable))
-				terminationReason = ServerSentEventConnection.TerminationReason.REMOTE_CLOSE;
+				terminationReason = SseConnection.TerminationReason.REMOTE_CLOSE;
 			else if (throwable != null)
-				terminationReason = ServerSentEventConnection.TerminationReason.ERROR;
+				terminationReason = SseConnection.TerminationReason.ERROR;
 			else
-				terminationReason = ServerSentEventConnection.TerminationReason.UNKNOWN;
+				terminationReason = SseConnection.TerminationReason.UNKNOWN;
 
-			serverSentEventConnection.setTerminationReason(terminationReason);
+			sseConnection.setTerminationReason(terminationReason);
 		}
 
-		ServerSentEventConnection.TerminationReason effectiveTerminationReason = terminationReason;
+		SseConnection.TerminationReason effectiveTerminationReason = terminationReason;
 		Throwable terminationThrowable = throwable;
 
 		try {
-			getLifecycleObserver().get().willTerminateServerSentEventConnection(
+			getLifecycleObserver().get().willTerminateSseConnection(
 					connectionSnapshot,
 					effectiveTerminationReason,
 					terminationThrowable);
 		} catch (Throwable t) {
-			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::willTerminateServerSentEventConnection", LifecycleObserver.class.getSimpleName()))
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_SSE_CONNECTION_FAILED, format("An exception occurred while invoking %s::willTerminateSseConnection", LifecycleObserver.class.getSimpleName()))
 					.throwable(t)
 					.build());
 		}
 
 		safelyCollectMetrics(
-				format("An exception occurred while invoking %s::willTerminateServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+				format("An exception occurred while invoking %s::willTerminateSseConnection", MetricsCollector.class.getSimpleName()),
 				connectionRequest,
 				connectionResourceMethod,
-				(metricsCollector) -> metricsCollector.willTerminateServerSentEventConnection(
+				(metricsCollector) -> metricsCollector.willTerminateSseConnection(
 						connectionSnapshot,
 						effectiveTerminationReason,
 						terminationThrowable));
 
 		try {
-			registration.broadcaster().unregisterServerSentEventConnection(serverSentEventConnection, false);
+			registration.broadcaster().unregisterSseConnection(sseConnection, false);
 		} catch (Throwable t) {
-			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to de-register Server-Sent Event connection")
 					.throwable(t)
 					.build());
 		}
@@ -1973,26 +1973,26 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		Instant connectionFinished = Instant.now();
 		Duration connectionDuration = Duration.between(
-				serverSentEventConnection.getEstablishedAt(),
+				sseConnection.getEstablishedAt(),
 				connectionFinished);
 
 		try {
-			getLifecycleObserver().get().didTerminateServerSentEventConnection(
+			getLifecycleObserver().get().didTerminateSseConnection(
 					connectionSnapshot,
 					connectionDuration,
 					effectiveTerminationReason,
 					terminationThrowable);
 		} catch (Throwable t) {
-			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED, format("An exception occurred while invoking %s::didTerminateServerSentEventConnection", LifecycleObserver.class.getSimpleName()))
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_SSE_CONNECTION_FAILED, format("An exception occurred while invoking %s::didTerminateSseConnection", LifecycleObserver.class.getSimpleName()))
 					.throwable(t)
 					.build());
 		}
 
 		safelyCollectMetrics(
-				format("An exception occurred while invoking %s::didTerminateServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+				format("An exception occurred while invoking %s::didTerminateSseConnection", MetricsCollector.class.getSimpleName()),
 				connectionRequest,
 				connectionResourceMethod,
-				(metricsCollector) -> metricsCollector.didTerminateServerSentEventConnection(
+				(metricsCollector) -> metricsCollector.didTerminateSseConnection(
 						connectionSnapshot,
 						connectionDuration,
 						effectiveTerminationReason,
@@ -2283,30 +2283,30 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	private static String formatServerSentEventForResponse(@NonNull ServerSentEvent serverSentEvent,
+	private static String formatSseEventForResponse(@NonNull SseEvent sseEvent,
 																												 @NonNull StringBuilder sb) {
-		requireNonNull(serverSentEvent);
+		requireNonNull(sseEvent);
 		requireNonNull(sb);
 
 		sb.setLength(0);
 		boolean hasField = false;
 
 		// 1. Event Name
-		String event = serverSentEvent.getEvent().orElse(null);
+		String event = sseEvent.getEvent().orElse(null);
 		if (event != null) {
 			sb.append("event: ").append(event).append('\n');
 			hasField = true;
 		}
 
 		// 2. ID
-		String id = serverSentEvent.getId().orElse(null);
+		String id = sseEvent.getId().orElse(null);
 		if (id != null) {
 			sb.append("id: ").append(id).append('\n');
 			hasField = true;
 		}
 
 		// 3. Retry
-		Duration retry = serverSentEvent.getRetry().orElse(null);
+		Duration retry = sseEvent.getRetry().orElse(null);
 
 		if (retry != null) {
 			sb.append("retry: ").append(retry.toMillis()).append('\n');
@@ -2315,7 +2315,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		// 4. Data
 		// We perform a manual scan to avoid Regex compilation and array allocation.
-		String data = serverSentEvent.getData().orElse(null);
+		String data = sseEvent.getData().orElse(null);
 
 		if (data != null) {
 			hasField = true;
@@ -2362,13 +2362,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	// Internal snapshot - the only implementation users ever see
-	private record ServerSentEventConnectionSnapshot(
+	private record SseConnectionSnapshot(
 			@NonNull Request request,
 			@NonNull ResourceMethod resourceMethod,
 			@NonNull Instant establishedAt,
 			@Nullable Object clientContext
-	) implements ServerSentEventConnection {
-		public ServerSentEventConnectionSnapshot {
+	) implements SseConnection {
+		public SseConnectionSnapshot {
 			requireNonNull(request);
 			requireNonNull(resourceMethod);
 			requireNonNull(establishedAt);
@@ -2399,9 +2399,9 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 	}
 
-	// We deliberately don't explicitly implement the ServerSentEventConnection interface - we never want a direct ref to this to leak out to clients.
+	// We deliberately don't explicitly implement the SseConnection interface - we never want a direct ref to this to leak out to clients.
 	@ThreadSafe
-	private static final class DefaultServerSentEventConnection /* implements ServerSentEventConnection */ {
+	private static final class DefaultSseConnection /* implements SseConnection */ {
 		@NonNull
 		private final Request request;
 		@NonNull
@@ -2417,26 +2417,26 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		@NonNull
 		private final AtomicBoolean closing;
 		@NonNull
-		private final AtomicReference<ServerSentEventConnection.TerminationReason> terminationReason;
+		private final AtomicReference<SseConnection.TerminationReason> terminationReason;
 		@NonNull
-		private final ServerSentEventConnectionSnapshot snapshot;
+		private final SseConnectionSnapshot snapshot;
 
 		@ThreadSafe
 		static final class PreSerializedEvent {
 			@NonNull
-			private final ServerSentEvent serverSentEvent;
+			private final SseEvent sseEvent;
 			@NonNull
 			private final byte[] payloadBytes;
 
-			PreSerializedEvent(@NonNull ServerSentEvent serverSentEvent,
+			PreSerializedEvent(@NonNull SseEvent sseEvent,
 												 @NonNull byte[] payloadBytes) {
-				this.serverSentEvent = requireNonNull(serverSentEvent);
+				this.sseEvent = requireNonNull(sseEvent);
 				this.payloadBytes = requireNonNull(payloadBytes);
 			}
 
 			@NonNull
-			public ServerSentEvent getServerSentEvent() {
-				return this.serverSentEvent;
+			public SseEvent getSseEvent() {
+				return this.sseEvent;
 			}
 
 			@NonNull
@@ -2450,7 +2450,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			@Nullable
 			private final PreSerializedEvent preSerializedEvent;
 			@Nullable
-			private final ServerSentEventComment comment;
+			private final SseComment comment;
 			private final boolean poisonPill;
 			private final long enqueuedAtNanos;
 
@@ -2464,10 +2464,10 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			@NonNull
-			public static WriteQueueElement withComment(@NonNull ServerSentEventComment serverSentEventComment,
+			public static WriteQueueElement withComment(@NonNull SseComment sseComment,
 																									long enqueuedAtNanos) {
-				requireNonNull(serverSentEventComment);
-				return new WriteQueueElement(null, serverSentEventComment, false, enqueuedAtNanos);
+				requireNonNull(sseComment);
+				return new WriteQueueElement(null, sseComment, false, enqueuedAtNanos);
 			}
 
 			@NonNull
@@ -2476,7 +2476,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			private WriteQueueElement(@Nullable PreSerializedEvent preSerializedEvent,
-																@Nullable ServerSentEventComment comment,
+																@Nullable SseComment comment,
 																boolean poisonPill,
 																long enqueuedAtNanos) {
 				if (poisonPill) {
@@ -2502,7 +2502,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 
 			@NonNull
-			public Optional<ServerSentEventComment> getComment() {
+			public Optional<SseComment> getComment() {
 				return Optional.ofNullable(this.comment);
 			}
 
@@ -2515,7 +2515,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			}
 		}
 
-		public DefaultServerSentEventConnection(@NonNull Request request,
+		public DefaultSseConnection(@NonNull Request request,
 																						@NonNull ResourceMethod resourceMethod,
 																						@Nullable Object clientContext,
 																						@NonNull Integer connectionQueueCapacity,
@@ -2536,7 +2536,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 			// Cache off an immutable data-only snapshot.
 			// This can be safely exposed to client code without worrying about holding onto internal state (e.g. write queue)
-			this.snapshot = new ServerSentEventConnectionSnapshot(request, resourceMethod, establishedAt, clientContext);
+			this.snapshot = new SseConnectionSnapshot(request, resourceMethod, establishedAt, clientContext);
 		}
 
 		@NonNull
@@ -2574,26 +2574,26 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			return this.closing;
 		}
 
-		public void setTerminationReason(ServerSentEventConnection.@NonNull TerminationReason reason) {
+		public void setTerminationReason(SseConnection.@NonNull TerminationReason reason) {
 			requireNonNull(reason);
 			this.terminationReason.compareAndSet(null, reason);
 		}
 
 		@NonNull
-		public Optional<ServerSentEventConnection.TerminationReason> getTerminationReason() {
+		public Optional<SseConnection.TerminationReason> getTerminationReason() {
 			return Optional.ofNullable(this.terminationReason.get());
 		}
 
 		@NonNull
-		public ServerSentEventConnectionSnapshot getSnapshot() {
+		public SseConnectionSnapshot getSnapshot() {
 			return this.snapshot;
 		}
 	}
 
-	private record ClientSocketChannelRegistration(@NonNull DefaultServerSentEventConnection serverSentEventConnection,
-																								 @NonNull DefaultServerSentEventBroadcaster broadcaster) {
+	private record ClientSocketChannelRegistration(@NonNull DefaultSseConnection sseConnection,
+																								 @NonNull DefaultSseBroadcaster broadcaster) {
 		public ClientSocketChannelRegistration {
-			requireNonNull(serverSentEventConnection);
+			requireNonNull(sseConnection);
 			requireNonNull(broadcaster);
 		}
 	}
@@ -2620,7 +2620,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			return Optional.empty();
 
 		// Create the connection (write queue owned per connection)
-		DefaultServerSentEventConnection serverSentEventConnection = new DefaultServerSentEventConnection(
+		DefaultSseConnection sseConnection = new DefaultSseConnection(
 				request,
 				resourceMethod,
 				handshakeAccepted.getClientContext().orElse(null),
@@ -2629,20 +2629,20 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		);
 
 		// If a client initializer exists, hand it the unicaster to support Last-Event-ID "catch up" scenarios
-		ServerSentEventUnicaster serverSentEventUnicaster =
-				new DefaultServerSentEventUnicaster(resourcePath, serverSentEventConnection.getWriteQueue());
+		SseUnicaster sseUnicaster =
+				new DefaultSseUnicaster(resourcePath, sseConnection.getWriteQueue());
 
 		handshakeAccepted.getClientInitializer().ifPresent((clientInitializer) -> {
-			clientInitializer.accept(serverSentEventUnicaster);
+			clientInitializer.accept(sseUnicaster);
 		});
 
 		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection if configured to do so
 		if (getVerifyConnectionOnceEstablished())
-			serverSentEventConnection.getWriteQueue()
-					.offer(DefaultServerSentEventConnection.WriteQueueElement.withComment(HEARTBEAT_COMMENT, System.nanoTime()));
+			sseConnection.getWriteQueue()
+					.offer(DefaultSseConnection.WriteQueueElement.withComment(HEARTBEAT_COMMENT, System.nanoTime()));
 
-		DefaultServerSentEventBroadcaster broadcaster =
-				registerConnectionWithBroadcaster(resourcePath, resourceMethod, serverSentEventConnection);
+		DefaultSseBroadcaster broadcaster =
+				registerConnectionWithBroadcaster(resourcePath, resourceMethod, sseConnection);
 
 		// Remove from idle LRU *outside* of any broadcastersByResourcePath compute() to avoid deadlocks.
 		try {
@@ -2651,18 +2651,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			// best-effort; never fail connection establishment due to cache bookkeeping
 		}
 
-		return Optional.of(new ClientSocketChannelRegistration(serverSentEventConnection, broadcaster));
+		return Optional.of(new ClientSocketChannelRegistration(sseConnection, broadcaster));
 	}
 
 	@ThreadSafe
-	protected static class DefaultServerSentEventUnicaster implements ServerSentEventUnicaster {
+	protected static class DefaultSseUnicaster implements SseUnicaster {
 		@NonNull
 		private final ResourcePath resourcePath;
 		@NonNull
-		private final BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue;
+		private final BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue;
 
-		public DefaultServerSentEventUnicaster(@NonNull ResourcePath resourcePath,
-																					 @NonNull BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue) {
+		public DefaultSseUnicaster(@NonNull ResourcePath resourcePath,
+																					 @NonNull BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue) {
 			requireNonNull(resourcePath);
 			requireNonNull(writeQueue);
 
@@ -2671,20 +2671,20 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@Override
-		public void unicastEvent(@NonNull ServerSentEvent serverSentEvent) {
-			requireNonNull(serverSentEvent);
+		public void unicastEvent(@NonNull SseEvent sseEvent) {
+			requireNonNull(sseEvent);
 
-			DefaultServerSentEventConnection.PreSerializedEvent preSerializedEvent = preSerializeServerSentEvent(serverSentEvent);
+			DefaultSseConnection.PreSerializedEvent preSerializedEvent = preSerializeSseEvent(sseEvent);
 
-			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent, System.nanoTime())))
+			if (!getWriteQueue().offer(DefaultSseConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent, System.nanoTime())))
 				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 
 		@Override
-		public void unicastComment(@NonNull ServerSentEventComment serverSentEventComment) {
-			requireNonNull(serverSentEventComment);
+		public void unicastComment(@NonNull SseComment sseComment) {
+			requireNonNull(sseComment);
 
-			if (!getWriteQueue().offer(DefaultServerSentEventConnection.WriteQueueElement.withComment(serverSentEventComment, System.nanoTime())))
+			if (!getWriteQueue().offer(DefaultSseConnection.WriteQueueElement.withComment(sseComment, System.nanoTime())))
 				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 
@@ -2695,25 +2695,25 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		}
 
 		@NonNull
-		protected BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> getWriteQueue() {
+		protected BlockingQueue<DefaultSseConnection.WriteQueueElement> getWriteQueue() {
 			return this.writeQueue;
 		}
 	}
 
-	protected void maybeCleanupBroadcaster(@NonNull DefaultServerSentEventBroadcaster broadcaster) {
+	protected void maybeCleanupBroadcaster(@NonNull DefaultSseBroadcaster broadcaster) {
 		requireNonNull(broadcaster);
 
 		try {
 			getBroadcastersByResourcePath().computeIfPresent(broadcaster.getResourcePath(), (path, existingBroadcaster) -> {
 						// Only remove if it's the same instance AND empty
-						if (existingBroadcaster == broadcaster && existingBroadcaster.getServerSentEventConnections().isEmpty())
+						if (existingBroadcaster == broadcaster && existingBroadcaster.getSseConnections().isEmpty())
 							return null;  // Remove the mapping
 
 						return existingBroadcaster; // Keep the mapping
 					}
 			);
 		} catch (Exception e) {
-			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Failed to clean up empty broadcaster")
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Failed to clean up empty broadcaster")
 					.throwable(e)
 					.build());
 		} finally {
@@ -3260,32 +3260,32 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			try {
 				serverSocketChannelSnapshot.close();
 			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event SocketChannel").throwable(e).build());
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event SocketChannel").throwable(e).build());
 			}
 		}
 
-		List<DefaultServerSentEventConnection> connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
-		for (DefaultServerSentEventConnection connection : connectionsSnapshot)
-			connection.setTerminationReason(ServerSentEventConnection.TerminationReason.SERVER_STOP);
+		List<DefaultSseConnection> connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
+		for (DefaultSseConnection connection : connectionsSnapshot)
+			connection.setTerminationReason(SseConnection.TerminationReason.SERVER_STOP);
 
 		// Close client connections - sends poison pills to all registered connections
-		for (DefaultServerSentEventBroadcaster broadcaster : new ArrayList<>(getBroadcastersByResourcePath().values())) {
+		for (DefaultSseBroadcaster broadcaster : new ArrayList<>(getBroadcastersByResourcePath().values())) {
 			try {
-				broadcaster.unregisterAllServerSentEventConnections(true);
+				broadcaster.unregisterAllSseConnections(true);
 			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Unable to shut down open Server-Sent Event connections")
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down open Server-Sent Event connections")
 						.throwable(e)
 						.build());
 			}
 		}
 
 		// Ensure nothing slipped through the cracks
-		for (DefaultServerSentEventConnection connection : connectionsSnapshot) {
+		for (DefaultSseConnection connection : connectionsSnapshot) {
 			try {
 				connection.getClosing().compareAndSet(false, true);
 
-				DefaultServerSentEventBroadcaster b = getGlobalConnections().get(connection);
-				if (b != null) b.unregisterServerSentEventConnection(connection, true);
+				DefaultSseBroadcaster b = getGlobalConnections().get(connection);
+				if (b != null) b.unregisterSseConnection(connection, true);
 
 				connection.getSocketChannel().close();
 			} catch (Throwable ignored) {
@@ -3341,7 +3341,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 			interrupted = true;
 			Thread.currentThread().interrupt();
 		} catch (ExecutionException e) {
-			safelyLog(LogEvent.with(LogEventType.SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR, "Exception while awaiting SSE shutdown").throwable(e).build());
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Exception while awaiting SSE shutdown").throwable(e).build());
 		}
 
 		// Escalate for any stragglers using remaining time
@@ -3487,7 +3487,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	@NonNull
 	@Override
-	public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
+	public Optional<? extends SseBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
 		if (resourcePath == null)
 			return Optional.empty();
 
@@ -3521,7 +3521,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	private DefaultServerSentEventBroadcaster newBroadcaster(@NonNull ResourceMethod resourceMethod,
+	private DefaultSseBroadcaster newBroadcaster(@NonNull ResourceMethod resourceMethod,
 																													 @NonNull ResourcePath resourcePath) {
 		requireNonNull(resourceMethod);
 		requireNonNull(resourcePath);
@@ -3533,14 +3533,14 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		int connectionSetInitialCapacity = Math.max(1,
 				Math.min(getConcurrentConnectionLimit(), DEFAULT_BROADCASTER_CONNECTION_SET_CAPACITY));
 
-		return new DefaultServerSentEventBroadcaster(
+		return new DefaultSseBroadcaster(
 				resourceMethod,
 				resourcePath,
 				this.metricsCollector,
 				handler,
-				(serverSentEventConnection) -> {
+				(sseConnection) -> {
 					// When the broadcaster unregisters a connection it manages, remove it from the global set as well
-					DefaultServerSentEventBroadcaster removed = getGlobalConnections().remove(serverSentEventConnection);
+					DefaultSseBroadcaster removed = getGlobalConnections().remove(sseConnection);
 					if (removed != null)
 						releaseConnectionSlot();
 				},
@@ -3550,23 +3550,23 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	private DefaultServerSentEventBroadcaster registerConnectionWithBroadcaster(
+	private DefaultSseBroadcaster registerConnectionWithBroadcaster(
 			@NonNull ResourcePath resourcePath,
 			@NonNull ResourceMethod resourceMethod,
-			@NonNull DefaultServerSentEventConnection connection) {
+			@NonNull DefaultSseConnection connection) {
 		requireNonNull(resourcePath);
 		requireNonNull(resourceMethod);
 		requireNonNull(connection);
 
 		return getBroadcastersByResourcePath().compute(resourcePath, (rp, existing) -> {
-			DefaultServerSentEventBroadcaster broadcaster =
+			DefaultSseBroadcaster broadcaster =
 					(existing != null) ? existing : newBroadcaster(resourceMethod, rp);
 
 			// 1) Claim global slot FIRST (prevents "unregister before put" ghost entries)
 			getGlobalConnections().put(connection, broadcaster);
 
 			// 2) Only then make it visible to broadcasts
-			boolean registered = broadcaster.registerServerSentEventConnection(connection);
+			boolean registered = broadcaster.registerSseConnection(connection);
 
 			if (!registered) {
 				// rollback global bookkeeping
@@ -3602,18 +3602,18 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	protected Optional<DefaultServerSentEventBroadcaster> acquireBroadcasterInternal(@NonNull ResourcePath resourcePath,
+	protected Optional<DefaultSseBroadcaster> acquireBroadcasterInternal(@NonNull ResourcePath resourcePath,
 																																									 @NonNull ResourceMethod resourceMethod) {
 		requireNonNull(resourcePath);
 		requireNonNull(resourceMethod);
 
-		DefaultServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
+		DefaultSseBroadcaster broadcaster = getBroadcastersByResourcePath()
 				.computeIfAbsent(resourcePath, (rp) -> newBroadcaster(resourceMethod, rp));
 
 		// If no active connections, treat it as idle and put it in the idle LRU.
 		// If it later becomes active, registration removes it from idle LRU.
 		try {
-			if (broadcaster.getServerSentEventConnections().isEmpty())
+			if (broadcaster.getSseConnections().isEmpty())
 				getIdleBroadcastersByResourcePath().put(resourcePath, broadcaster);
 			else
 				getIdleBroadcastersByResourcePath().remove(resourcePath, broadcaster);
@@ -3624,8 +3624,8 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return Optional.of(broadcaster);
 	}
 
-	protected void closeConnectionDueToBackpressure(@NonNull DefaultServerSentEventBroadcaster owner,
-																									@NonNull DefaultServerSentEventConnection connection,
+	protected void closeConnectionDueToBackpressure(@NonNull DefaultSseBroadcaster owner,
+																									@NonNull DefaultSseConnection connection,
 																									@NonNull String cause) {
 		requireNonNull(owner);
 		requireNonNull(connection);
@@ -3635,21 +3635,21 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		if (!connection.getClosing().compareAndSet(false, true))
 			return;
 
-		connection.setTerminationReason(ServerSentEventConnection.TerminationReason.BACKPRESSURE);
+		connection.setTerminationReason(SseConnection.TerminationReason.BACKPRESSURE);
 
 		// String message = format("Closing Server-Sent Event connection due to backpressure (write queue at capacity) while enqueuing %s. {resourcePath=%s, queueSize=%d, remainingCapacity=%d}",
 		//					cause, owner.getResourcePath(), writeQueue.size(), writeQueue.remainingCapacity());
 
 		// Unregister from broadcaster (avoid enqueueing further)
 		try {
-			owner.unregisterServerSentEventConnection(connection, false);
+			owner.unregisterSseConnection(connection, false);
 		} catch (Throwable ignored) { /* best-effort */ }
 
 		// Best effort to wake the consumer loop
 		try {
-			BlockingQueue<DefaultServerSentEventConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
+			BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
 			writeQueue.clear();
-			writeQueue.offer(DefaultServerSentEventConnection.WriteQueueElement.poisonPill());
+			writeQueue.offer(DefaultSseConnection.WriteQueueElement.poisonPill());
 		} catch (Throwable ignored) { /* best-effort */ }
 
 		// Force-close the channel to break any pending I/O
@@ -3699,7 +3699,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	private void notifyWillAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.willAcceptConnection(ServerType.SERVER_SENT_EVENT, remoteAddress));
+					lifecycleObserver.willAcceptConnection(ServerType.SSE, remoteAddress));
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::willAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -3712,13 +3712,13 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				format("An exception occurred while invoking %s::willAcceptConnection", MetricsCollector.class.getSimpleName()),
 				null,
 				null,
-				(metricsCollector) -> metricsCollector.willAcceptConnection(ServerType.SERVER_SENT_EVENT, remoteAddressSnapshot));
+				(metricsCollector) -> metricsCollector.willAcceptConnection(ServerType.SSE, remoteAddressSnapshot));
 	}
 
 	private void notifyDidAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didAcceptConnection(ServerType.SERVER_SENT_EVENT, remoteAddress));
+					lifecycleObserver.didAcceptConnection(ServerType.SSE, remoteAddress));
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::didAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -3732,7 +3732,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				format("An exception occurred while invoking %s::didAcceptConnection", MetricsCollector.class.getSimpleName()),
 				null,
 				null,
-				(metricsCollector) -> metricsCollector.didAcceptConnection(ServerType.SERVER_SENT_EVENT, remoteAddressSnapshot));
+				(metricsCollector) -> metricsCollector.didAcceptConnection(ServerType.SSE, remoteAddressSnapshot));
 	}
 
 	private void notifyDidFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress,
@@ -3742,7 +3742,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didFailToAcceptConnection(ServerType.SERVER_SENT_EVENT, remoteAddress, reason, throwable));
+					lifecycleObserver.didFailToAcceptConnection(ServerType.SSE, remoteAddress, reason, throwable));
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::didFailToAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -3758,7 +3758,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				format("An exception occurred while invoking %s::didFailToAcceptConnection", MetricsCollector.class.getSimpleName()),
 				null,
 				null,
-				(metricsCollector) -> metricsCollector.didFailToAcceptConnection(ServerType.SERVER_SENT_EVENT,
+				(metricsCollector) -> metricsCollector.didFailToAcceptConnection(ServerType.SSE,
 						remoteAddressSnapshot,
 						reasonSnapshot,
 						throwableSnapshot));
@@ -3768,7 +3768,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 																			 @Nullable String requestTarget) {
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.willAcceptRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget));
+					lifecycleObserver.willAcceptRequest(ServerType.SSE, remoteAddress, requestTarget));
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::willAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -3783,7 +3783,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				format("An exception occurred while invoking %s::willAcceptRequest", MetricsCollector.class.getSimpleName()),
 				null,
 				null,
-				(metricsCollector) -> metricsCollector.willAcceptRequest(ServerType.SERVER_SENT_EVENT,
+				(metricsCollector) -> metricsCollector.willAcceptRequest(ServerType.SSE,
 						remoteAddressSnapshot,
 						requestTargetSnapshot));
 	}
@@ -3792,7 +3792,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 																			@Nullable String requestTarget) {
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didAcceptRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget));
+					lifecycleObserver.didAcceptRequest(ServerType.SSE, remoteAddress, requestTarget));
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -3807,7 +3807,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				format("An exception occurred while invoking %s::didAcceptRequest", MetricsCollector.class.getSimpleName()),
 				null,
 				null,
-				(metricsCollector) -> metricsCollector.didAcceptRequest(ServerType.SERVER_SENT_EVENT,
+				(metricsCollector) -> metricsCollector.didAcceptRequest(ServerType.SSE,
 						remoteAddressSnapshot,
 						requestTargetSnapshot));
 	}
@@ -3820,7 +3820,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didFailToAcceptRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget, reason, throwable));
+					lifecycleObserver.didFailToAcceptRequest(ServerType.SSE, remoteAddress, requestTarget, reason, throwable));
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didFailToAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -3837,7 +3837,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				format("An exception occurred while invoking %s::didFailToAcceptRequest", MetricsCollector.class.getSimpleName()),
 				null,
 				null,
-				(metricsCollector) -> metricsCollector.didFailToAcceptRequest(ServerType.SERVER_SENT_EVENT,
+				(metricsCollector) -> metricsCollector.didFailToAcceptRequest(ServerType.SSE,
 						remoteAddressSnapshot,
 						requestTargetSnapshot,
 						reasonSnapshot,
@@ -3848,7 +3848,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 																		 @Nullable String requestTarget) {
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.willReadRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget));
+					lifecycleObserver.willReadRequest(ServerType.SSE, remoteAddress, requestTarget));
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::willReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -3863,7 +3863,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				format("An exception occurred while invoking %s::willReadRequest", MetricsCollector.class.getSimpleName()),
 				null,
 				null,
-				(metricsCollector) -> metricsCollector.willReadRequest(ServerType.SERVER_SENT_EVENT,
+				(metricsCollector) -> metricsCollector.willReadRequest(ServerType.SSE,
 						remoteAddressSnapshot,
 						requestTargetSnapshot));
 	}
@@ -3872,7 +3872,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 																		@Nullable String requestTarget) {
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didReadRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget));
+					lifecycleObserver.didReadRequest(ServerType.SSE, remoteAddress, requestTarget));
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -3887,7 +3887,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				format("An exception occurred while invoking %s::didReadRequest", MetricsCollector.class.getSimpleName()),
 				null,
 				null,
-				(metricsCollector) -> metricsCollector.didReadRequest(ServerType.SERVER_SENT_EVENT,
+				(metricsCollector) -> metricsCollector.didReadRequest(ServerType.SSE,
 						remoteAddressSnapshot,
 						requestTargetSnapshot));
 	}
@@ -3900,7 +3900,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didFailToReadRequest(ServerType.SERVER_SENT_EVENT, remoteAddress, requestTarget, reason, throwable));
+					lifecycleObserver.didFailToReadRequest(ServerType.SSE, remoteAddress, requestTarget, reason, throwable));
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didFailToReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -3917,7 +3917,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 				format("An exception occurred while invoking %s::didFailToReadRequest", MetricsCollector.class.getSimpleName()),
 				null,
 				null,
-				(metricsCollector) -> metricsCollector.didFailToReadRequest(ServerType.SERVER_SENT_EVENT,
+				(metricsCollector) -> metricsCollector.didFailToReadRequest(ServerType.SSE,
 						remoteAddressSnapshot,
 						requestTargetSnapshot,
 						reasonSnapshot,
@@ -3934,33 +3934,33 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 		return RequestRejectionReason.REQUEST_HANDLER_QUEUE_FULL;
 	}
 
-	private void notifyDidFailToEstablishServerSentEventConnection(@NonNull Request request,
+	private void notifyDidFailToEstablishSseConnection(@NonNull Request request,
 																																 @Nullable ResourceMethod resourceMethod,
-																																 ServerSentEventConnection.@NonNull HandshakeFailureReason reason,
+																																 SseConnection.@NonNull HandshakeFailureReason reason,
 																																 @Nullable Throwable throwable) {
 		requireNonNull(request);
 		requireNonNull(reason);
 
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didFailToEstablishServerSentEventConnection(request, resourceMethod, reason, throwable));
+					lifecycleObserver.didFailToEstablishSseConnection(request, resourceMethod, reason, throwable));
 		} catch (Throwable t) {
-			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
-							format("An exception occurred while invoking %s::didFailToEstablishServerSentEventConnection", LifecycleObserver.class.getSimpleName()))
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::didFailToEstablishSseConnection", LifecycleObserver.class.getSimpleName()))
 					.throwable(t)
 					.build());
 		}
 
 		Request failedRequest = request;
 		ResourceMethod failedResourceMethod = resourceMethod;
-		ServerSentEventConnection.HandshakeFailureReason reasonSnapshot = reason;
+		SseConnection.HandshakeFailureReason reasonSnapshot = reason;
 		Throwable throwableSnapshot = throwable;
 
 		safelyCollectMetrics(
-				format("An exception occurred while invoking %s::didFailToEstablishServerSentEventConnection", MetricsCollector.class.getSimpleName()),
+				format("An exception occurred while invoking %s::didFailToEstablishSseConnection", MetricsCollector.class.getSimpleName()),
 				failedRequest,
 				failedResourceMethod,
-				(metricsCollector) -> metricsCollector.didFailToEstablishServerSentEventConnection(
+				(metricsCollector) -> metricsCollector.didFailToEstablishSseConnection(
 						failedRequest,
 						failedResourceMethod,
 						reasonSnapshot,
@@ -4052,7 +4052,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 
 	// Package-private for test hook
 	@NonNull
-	ConcurrentHashMap<@NonNull ResourcePath, @NonNull DefaultServerSentEventBroadcaster> getBroadcastersByResourcePath() {
+	ConcurrentHashMap<@NonNull ResourcePath, @NonNull DefaultSseBroadcaster> getBroadcastersByResourcePath() {
 		return this.broadcastersByResourcePath;
 	}
 
@@ -4117,7 +4117,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	protected ConcurrentHashMap<@NonNull DefaultServerSentEventConnection, @NonNull DefaultServerSentEventBroadcaster> getGlobalConnections() {
+	protected ConcurrentHashMap<@NonNull DefaultSseConnection, @NonNull DefaultSseBroadcaster> getGlobalConnections() {
 		return this.globalConnections;
 	}
 
@@ -4127,7 +4127,7 @@ final class DefaultServerSentEventServer implements ServerSentEventServer {
 	}
 
 	@NonNull
-	protected ConcurrentLruMap<@NonNull ResourcePath, @NonNull DefaultServerSentEventBroadcaster> getIdleBroadcastersByResourcePath() {
+	protected ConcurrentLruMap<@NonNull ResourcePath, @NonNull DefaultSseBroadcaster> getIdleBroadcastersByResourcePath() {
 		return this.idleBroadcastersByResourcePath;
 	}
 

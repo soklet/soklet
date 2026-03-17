@@ -31,12 +31,12 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class ServerSentEventComment {
+public final class SseComment {
 	@NonNull
-	private static final ServerSentEventComment HEARTBEAT_INSTANCE;
+	private static final SseComment HEARTBEAT_INSTANCE;
 
 	static {
-		HEARTBEAT_INSTANCE = new ServerSentEventComment(null, CommentType.HEARTBEAT);
+		HEARTBEAT_INSTANCE = new SseComment(null, CommentType.HEARTBEAT);
 	}
 
 	@Nullable
@@ -61,14 +61,14 @@ public final class ServerSentEventComment {
 	}
 
 	/**
-	 * Acquires a {@link ServerSentEventComment} instance with a {@code comment} payload.
+	 * Acquires a {@link SseComment} instance with a {@code comment} payload.
 	 *
 	 * @param comment the comment payload for the instance
 	 * @return the comment instance
 	 */
 	@NonNull
-public static ServerSentEventComment fromComment(@NonNull String comment) {
-		return new ServerSentEventComment(requireNonNull(comment), CommentType.COMMENT);
+public static SseComment fromComment(@NonNull String comment) {
+		return new SseComment(requireNonNull(comment), CommentType.COMMENT);
 	}
 
 	/**
@@ -79,22 +79,22 @@ public static ServerSentEventComment fromComment(@NonNull String comment) {
 	 * @return a shared heartbeat comment instance
 	 */
 	@NonNull
-	public static ServerSentEventComment heartbeatInstance() {
+	public static SseComment heartbeatInstance() {
 		return HEARTBEAT_INSTANCE;
 	}
 
-	private ServerSentEventComment(@Nullable String comment,
+	private SseComment(@Nullable String comment,
 																 @NonNull CommentType commentType) {
 		this.comment = comment;
 		this.commentType = requireNonNull(commentType);
 
 		if (this.commentType == CommentType.COMMENT && this.comment == null)
 			throw new IllegalArgumentException(format("%s 'comment' values must not be null for %s comments",
-					ServerSentEventComment.class.getSimpleName(), CommentType.COMMENT));
+					SseComment.class.getSimpleName(), CommentType.COMMENT));
 
 		if (this.commentType == CommentType.HEARTBEAT && this.comment != null)
 			throw new IllegalArgumentException(format("%s 'comment' values must be null for %s comments",
-					ServerSentEventComment.class.getSimpleName(), CommentType.HEARTBEAT));
+					SseComment.class.getSimpleName(), CommentType.HEARTBEAT));
 	}
 
 	/**

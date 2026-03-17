@@ -16,9 +16,9 @@
 
 package com.soklet;
 
-import com.soklet.ServerSentEventRequestResult.HandshakeAccepted;
-import com.soklet.ServerSentEventRequestResult.HandshakeRejected;
-import com.soklet.annotation.ServerSentEventSource;
+import com.soklet.SseRequestResult.HandshakeAccepted;
+import com.soklet.SseRequestResult.HandshakeRejected;
+import com.soklet.annotation.SseEventSource;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -64,7 +64,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Soklet's main class - manages one or more configured transport servers ({@link HttpServer}, {@link ServerSentEventServer}, and/or {@link McpServer})
+ * Soklet's main class - manages one or more configured transport servers ({@link HttpServer}, {@link SseServer}, and/or {@link McpServer})
  * using the provided system configuration.
  * <p>
  * <pre>{@code // Use out-of-the-box defaults
@@ -200,19 +200,19 @@ public final class Soklet implements AutoCloseable {
 					+ "See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.", ResourceMethodResolver.class.getSimpleName()));
 
 		boolean hasStandardHttpResourceMethods = resourceMethods.stream()
-				.anyMatch(resourceMethod -> !resourceMethod.isServerSentEventSource());
+				.anyMatch(resourceMethod -> !resourceMethod.isSseEventSource());
 
 		if (hasStandardHttpResourceMethods && sokletConfig.getHttpServer().isEmpty())
 			throw new IllegalStateException(format("Resource Methods were found, but no %s is configured. See https://www.soklet.com/docs/server-configuration for details.",
 					HttpServer.class.getSimpleName()));
 
-		// SSE misconfiguration check: @ServerSentEventSource resource methods are declared, but not ServerSentEventServer exists
+		// SSE misconfiguration check: @SseEventSource resource methods are declared, but not SseServer exists
 		boolean hasSseResourceMethods = resourceMethods.stream()
-				.anyMatch(resourceMethod -> resourceMethod.isServerSentEventSource());
+				.anyMatch(resourceMethod -> resourceMethod.isSseEventSource());
 
-		if (hasSseResourceMethods && sokletConfig.getServerSentEventServer().isEmpty())
+		if (hasSseResourceMethods && sokletConfig.getSseServer().isEmpty())
 			throw new IllegalStateException(format("Resource Methods annotated with @%s were found, but no %s is configured. See https://www.soklet.com/docs/server-sent-events for details.",
-					ServerSentEventSource.class.getSimpleName(), ServerSentEventServer.class.getSimpleName()));
+					SseEventSource.class.getSimpleName(), SseServer.class.getSimpleName()));
 
 		MetricsCollector metricsCollector = sokletConfig.getMetricsCollector();
 
@@ -238,12 +238,12 @@ public final class Soklet implements AutoCloseable {
 			soklet.handleRequest(request, ServerType.STANDARD_HTTP, marshaledResponseConsumer);
 		}));
 
-		ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
+		SseServer sseServer = sokletConfig.getSseServer().orElse(null);
 
-		if (serverSentEventServer != null)
-			serverSentEventServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
+		if (sseServer != null)
+			sseServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
 				// Delegate to Soklet's internal request handling method
-				soklet.handleRequest(request, ServerType.SERVER_SENT_EVENT, marshaledResponseConsumer);
+				soklet.handleRequest(request, ServerType.SSE, marshaledResponseConsumer);
 			});
 
 		McpServer mcpServer = sokletConfig.getMcpServer().orElse(null);
@@ -288,15 +288,15 @@ public final class Soklet implements AutoCloseable {
 					}
 
 					// 3. Attempt to start SSE HttpServer (if present)
-				ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
+				SseServer sseServer = sokletConfig.getSseServer().orElse(null);
 
-				if (serverSentEventServer != null) {
-					lifecycleObserver.willStartServerSentEventServer(serverSentEventServer);
+				if (sseServer != null) {
+					lifecycleObserver.willStartSseServer(sseServer);
 					try {
-						serverSentEventServer.start();
-						lifecycleObserver.didStartServerSentEventServer(serverSentEventServer);
+						sseServer.start();
+						lifecycleObserver.didStartSseServer(sseServer);
 					} catch (Throwable t) {
-						lifecycleObserver.didFailToStartServerSentEventServer(serverSentEventServer, t);
+						lifecycleObserver.didFailToStartSseServer(sseServer, t);
 						throw t; // Rethrow to trigger outer catch block
 					}
 				}
@@ -363,18 +363,18 @@ public final class Soklet implements AutoCloseable {
 				}
 
 				// 3. Attempt to stop SSE HttpServer
-				ServerSentEventServer serverSentEventServer = sokletConfig.getServerSentEventServer().orElse(null);
+				SseServer sseServer = sokletConfig.getSseServer().orElse(null);
 
-				if (serverSentEventServer != null && serverSentEventServer.isStarted()) {
-					lifecycleObserver.willStopServerSentEventServer(serverSentEventServer);
+				if (sseServer != null && sseServer.isStarted()) {
+					lifecycleObserver.willStopSseServer(sseServer);
 					try {
-						serverSentEventServer.stop();
-						lifecycleObserver.didStopServerSentEventServer(serverSentEventServer);
+						sseServer.stop();
+						lifecycleObserver.didStopSseServer(sseServer);
 					} catch (Throwable t) {
 						if (firstEncounteredException == null)
 							firstEncounteredException = t;
 
-						lifecycleObserver.didFailToStopServerSentEventServer(serverSentEventServer, t);
+						lifecycleObserver.didFailToStopSseServer(sseServer, t);
 					}
 				}
 
@@ -559,7 +559,7 @@ public final class Soklet implements AutoCloseable {
 	/**
 	 * Nonpublic "informal" implementation of {@link com.soklet.HttpServer.RequestHandler} so Soklet does not need to expose {@code handleRequest} publicly.
 	 * Reasoning: users of this library should never call {@code handleRequest} directly - it should only be invoked in response to events
-	 * provided by a {@link HttpServer} or {@link ServerSentEventServer} implementation.
+	 * provided by a {@link HttpServer} or {@link SseServer} implementation.
 	 */
 	protected void handleRequest(@NonNull Request request,
 															 @NonNull ServerType serverType,
@@ -1414,8 +1414,8 @@ public final class Soklet implements AutoCloseable {
 			if (httpServer != null && httpServer.isStarted())
 				return true;
 
-			ServerSentEventServer serverSentEventServer = getSokletConfig().getServerSentEventServer().orElse(null);
-			if (serverSentEventServer != null && serverSentEventServer.isStarted())
+			SseServer sseServer = getSokletConfig().getSseServer().orElse(null);
+			if (sseServer != null && sseServer.isStarted())
 				return true;
 
 			McpServer mcpServer = getSokletConfig().getMcpServer().orElse(null);
@@ -1445,8 +1445,8 @@ public final class Soklet implements AutoCloseable {
 		HttpServerProxy serverProxy = sokletConfig.getHttpServer()
 				.map(server -> (HttpServerProxy) server)
 				.orElse(null);
-		ServerSentEventServerProxy serverSentEventServerProxy = sokletConfig.getServerSentEventServer()
-				.map(s -> (ServerSentEventServerProxy) s)
+		SseServerProxy sseServerProxy = sokletConfig.getSseServer()
+				.map(s -> (SseServerProxy) s)
 				.orElse(null);
 		McpServerProxy mcpServerProxy = sokletConfig.getMcpServer()
 				.map(mcpServer -> (McpServerProxy) mcpServer)
@@ -1454,15 +1454,15 @@ public final class Soklet implements AutoCloseable {
 
 		// Create mock implementations
 		MockHttpServer mockServer = serverProxy == null ? null : new MockHttpServer();
-		MockServerSentEventServer mockServerSentEventServer = new MockServerSentEventServer();
+		MockSseServer mockSseServer = new MockSseServer();
 		MockMcpServer mockMcpServer = mcpServerProxy == null ? null : new MockMcpServer(mcpServerProxy.getRealImplementation());
 
 		// Switch proxies to simulator mode
 		if (serverProxy != null)
 			serverProxy.enableSimulatorMode(mockServer);
 
-		if (serverSentEventServerProxy != null)
-			serverSentEventServerProxy.enableSimulatorMode(mockServerSentEventServer);
+		if (sseServerProxy != null)
+			sseServerProxy.enableSimulatorMode(mockSseServer);
 
 		if (mcpServerProxy != null)
 			mcpServerProxy.enableSimulatorMode(mockMcpServer);
@@ -1475,10 +1475,10 @@ public final class Soklet implements AutoCloseable {
 						soklet.handleRequest(request, ServerType.STANDARD_HTTP, marshaledResponseConsumer);
 					});
 
-			if (mockServerSentEventServer != null)
-				mockServerSentEventServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
+			if (mockSseServer != null)
+				mockSseServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
 					// Delegate to Soklet's internal request handling for SSE
-					soklet.handleRequest(request, ServerType.SERVER_SENT_EVENT, marshaledResponseConsumer);
+					soklet.handleRequest(request, ServerType.SSE, marshaledResponseConsumer);
 				});
 
 			if (mockMcpServer != null)
@@ -1488,15 +1488,15 @@ public final class Soklet implements AutoCloseable {
 				mockMcpServer.onClientDisconnectedMcpStream(soklet::handleSimulatedMcpStreamDisconnect);
 
 			// Create and provide simulator
-			Simulator simulator = new DefaultSimulator(mockServer, mockServerSentEventServer, mockMcpServer);
+			Simulator simulator = new DefaultSimulator(mockServer, mockSseServer, mockMcpServer);
 			simulatorConsumer.accept(simulator);
 		} finally {
 			// Always restore to real implementations
 				if (serverProxy != null)
 					serverProxy.disableSimulatorMode();
 
-			if (serverSentEventServerProxy != null)
-				serverSentEventServerProxy.disableSimulatorMode();
+			if (sseServerProxy != null)
+				sseServerProxy.disableSimulatorMode();
 
 			if (mcpServerProxy != null)
 				mcpServerProxy.disableSimulatorMode();
@@ -1523,15 +1523,15 @@ public final class Soklet implements AutoCloseable {
 			@Nullable
 			private MockHttpServer server;
 		@Nullable
-		private MockServerSentEventServer serverSentEventServer;
+		private MockSseServer sseServer;
 		@Nullable
 		private MockMcpServer mcpServer;
 
 			public DefaultSimulator(@Nullable MockHttpServer server,
-															@Nullable MockServerSentEventServer serverSentEventServer,
+															@Nullable MockSseServer sseServer,
 															@Nullable MockMcpServer mcpServer) {
 				this.server = server;
-				this.serverSentEventServer = serverSentEventServer;
+				this.sseServer = sseServer;
 				this.mcpServer = mcpServer;
 		}
 
@@ -1559,15 +1559,15 @@ public final class Soklet implements AutoCloseable {
 
 		@NonNull
 		@Override
-		public ServerSentEventRequestResult performServerSentEventRequest(@NonNull Request request) {
-			MockServerSentEventServer serverSentEventServer = getServerSentEventServer().orElse(null);
+		public SseRequestResult performSseRequest(@NonNull Request request) {
+			MockSseServer sseServer = getSseServer().orElse(null);
 
-			if (serverSentEventServer == null)
+			if (sseServer == null)
 				throw new IllegalStateException(format("You must specify a %s in your %s to simulate Server-Sent Event requests",
-						ServerSentEventServer.class.getSimpleName(), SokletConfig.class.getSimpleName()));
+						SseServer.class.getSimpleName(), SokletConfig.class.getSimpleName()));
 
 			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
-			ServerSentEventServer.RequestHandler requestHandler = serverSentEventServer.getRequestHandler().orElse(null);
+			SseServer.RequestHandler requestHandler = sseServer.getRequestHandler().orElse(null);
 
 			if (requestHandler == null)
 				throw new IllegalStateException("You must register a request handler prior to simulating SSE Event Source requests");
@@ -1580,10 +1580,10 @@ public final class Soklet implements AutoCloseable {
 			HandshakeResult handshakeResult = requestResult.getHandshakeResult().orElse(null);
 
 			if (handshakeResult == null)
-				return new ServerSentEventRequestResult.RequestFailed(requestResult);
+				return new SseRequestResult.RequestFailed(requestResult);
 
 			if (handshakeResult instanceof HandshakeResult.Accepted acceptedHandshake) {
-				Consumer<ServerSentEventUnicaster> clientInitializer = acceptedHandshake.getClientInitializer().orElse(null);
+				Consumer<SseUnicaster> clientInitializer = acceptedHandshake.getClientInitializer().orElse(null);
 
 				// Create a synthetic logical response using values from the accepted handshake
 				if (requestResult.getResponse().isEmpty())
@@ -1655,10 +1655,10 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		@Override
 		public Simulator onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
-			MockServerSentEventServer serverSentEventServer = getServerSentEventServer().orElse(null);
+			MockSseServer sseServer = getSseServer().orElse(null);
 
-			if (serverSentEventServer != null)
-				serverSentEventServer.onBroadcastError(onBroadcastError);
+			if (sseServer != null)
+				sseServer.onBroadcastError(onBroadcastError);
 
 			return this;
 		}
@@ -1666,10 +1666,10 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		@Override
 		public Simulator onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
-			MockServerSentEventServer serverSentEventServer = getServerSentEventServer().orElse(null);
+			MockSseServer sseServer = getSseServer().orElse(null);
 
-			if (serverSentEventServer != null)
-				serverSentEventServer.onUnicastError(onUnicastError);
+			if (sseServer != null)
+				sseServer.onUnicastError(onUnicastError);
 
 			return this;
 		}
@@ -1691,8 +1691,8 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		Optional<MockServerSentEventServer> getServerSentEventServer() {
-			return Optional.ofNullable(this.serverSentEventServer);
+		Optional<MockSseServer> getSseServer() {
+			return Optional.ofNullable(this.sseServer);
 		}
 
 		@NonNull
@@ -1953,19 +1953,19 @@ public final class Soklet implements AutoCloseable {
 	 * Mock Server-Sent Event unicaster that doesn't touch the network at all, useful for testing.
 	 */
 	@ThreadSafe
-	static class MockServerSentEventUnicaster implements ServerSentEventUnicaster {
+	static class MockSseUnicaster implements SseUnicaster {
 		@NonNull
 		private final ResourcePath resourcePath;
 		@NonNull
-		private final Consumer<ServerSentEvent> eventConsumer;
+		private final Consumer<SseEvent> eventConsumer;
 		@NonNull
-		private final Consumer<ServerSentEventComment> commentConsumer;
+		private final Consumer<SseComment> commentConsumer;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
 
-		public MockServerSentEventUnicaster(@NonNull ResourcePath resourcePath,
-																				@NonNull Consumer<ServerSentEvent> eventConsumer,
-																				@NonNull Consumer<ServerSentEventComment> commentConsumer,
+		public MockSseUnicaster(@NonNull ResourcePath resourcePath,
+																				@NonNull Consumer<SseEvent> eventConsumer,
+																				@NonNull Consumer<SseComment> commentConsumer,
 																				@NonNull AtomicReference<Consumer<Throwable>> unicastErrorHandler) {
 			requireNonNull(resourcePath);
 			requireNonNull(eventConsumer);
@@ -1979,20 +1979,20 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		public void unicastEvent(@NonNull ServerSentEvent serverSentEvent) {
-			requireNonNull(serverSentEvent);
+		public void unicastEvent(@NonNull SseEvent sseEvent) {
+			requireNonNull(sseEvent);
 			try {
-				getEventConsumer().accept(serverSentEvent);
+				getEventConsumer().accept(sseEvent);
 			} catch (Throwable throwable) {
 				handleUnicastError(throwable);
 			}
 		}
 
 		@Override
-		public void unicastComment(@NonNull ServerSentEventComment serverSentEventComment) {
-			requireNonNull(serverSentEventComment);
+		public void unicastComment(@NonNull SseComment sseComment) {
+			requireNonNull(sseComment);
 			try {
-				getCommentConsumer().accept(serverSentEventComment);
+				getCommentConsumer().accept(sseComment);
 			} catch (Throwable throwable) {
 				handleUnicastError(throwable);
 			}
@@ -2005,12 +2005,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		protected Consumer<ServerSentEvent> getEventConsumer() {
+		protected Consumer<SseEvent> getEventConsumer() {
 			return this.eventConsumer;
 		}
 
 		@NonNull
-		protected Consumer<ServerSentEventComment> getCommentConsumer() {
+		protected Consumer<SseComment> getCommentConsumer() {
 			return this.commentConsumer;
 		}
 
@@ -2035,7 +2035,7 @@ public final class Soklet implements AutoCloseable {
 	 * Mock Server-Sent Event broadcaster that doesn't touch the network at all, useful for testing.
 	 */
 	@ThreadSafe
-	static class MockServerSentEventBroadcaster implements ServerSentEventBroadcaster {
+	static class MockSseBroadcaster implements SseBroadcaster {
 		// ConcurrentHashMap doesn't allow null values, so we use a sentinel if context is null
 		private static final Object NULL_CONTEXT_SENTINEL;
 
@@ -2047,14 +2047,14 @@ public final class Soklet implements AutoCloseable {
 		private final ResourcePath resourcePath;
 		// Maps the Consumer (Listener) to its Context object (e.g. Locale)
 		@NonNull
-		private final Map<@NonNull Consumer<ServerSentEvent>, @NonNull Object> eventConsumers;
+		private final Map<@NonNull Consumer<SseEvent>, @NonNull Object> eventConsumers;
 		// Same goes for comments
 		@NonNull
-		private final Map<@NonNull Consumer<ServerSentEventComment>, @NonNull Object> commentConsumers;
+		private final Map<@NonNull Consumer<SseComment>, @NonNull Object> commentConsumers;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
 
-		public MockServerSentEventBroadcaster(@NonNull ResourcePath resourcePath,
+		public MockSseBroadcaster(@NonNull ResourcePath resourcePath,
 																					@NonNull AtomicReference<Consumer<Throwable>> broadcastErrorHandler) {
 			requireNonNull(resourcePath);
 			requireNonNull(broadcastErrorHandler);
@@ -2078,12 +2078,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		public void broadcastEvent(@NonNull ServerSentEvent serverSentEvent) {
-			requireNonNull(serverSentEvent);
+		public void broadcastEvent(@NonNull SseEvent sseEvent) {
+			requireNonNull(sseEvent);
 
-			for (Consumer<ServerSentEvent> eventConsumer : getEventConsumers().keySet()) {
+			for (Consumer<SseEvent> eventConsumer : getEventConsumers().keySet()) {
 				try {
-					eventConsumer.accept(serverSentEvent);
+					eventConsumer.accept(sseEvent);
 				} catch (Throwable throwable) {
 					handleBroadcastError(throwable);
 				}
@@ -2091,12 +2091,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		public void broadcastComment(@NonNull ServerSentEventComment serverSentEventComment) {
-			requireNonNull(serverSentEventComment);
+		public void broadcastComment(@NonNull SseComment sseComment) {
+			requireNonNull(sseComment);
 
-			for (Consumer<ServerSentEventComment> commentConsumer : getCommentConsumers().keySet()) {
+			for (Consumer<SseComment> commentConsumer : getCommentConsumers().keySet()) {
 				try {
-					commentConsumer.accept(serverSentEventComment);
+					commentConsumer.accept(sseComment);
 				} catch (Throwable throwable) {
 					handleBroadcastError(throwable);
 				}
@@ -2106,14 +2106,14 @@ public final class Soklet implements AutoCloseable {
 		@Override
 		public <T> void broadcastEvent(
 				@NonNull Function<Object, T> keySelector,
-				@NonNull Function<T, ServerSentEvent> eventProvider
+				@NonNull Function<T, SseEvent> eventProvider
 		) {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
 
 			// 1. Create a temporary cache for this specific broadcast operation.
 			// This ensures we only run the expensive 'eventProvider' once per unique key.
-			Map<T, ServerSentEvent> payloadCache = new HashMap<>();
+			Map<T, SseEvent> payloadCache = new HashMap<>();
 
 			this.getEventConsumers().forEach((consumer, context) -> {
 				try {
@@ -2121,7 +2121,7 @@ public final class Soklet implements AutoCloseable {
 					T key = keySelector.apply(context);
 
 					// 3. Memoize: Generate the payload if we haven't seen this key yet, otherwise reuse it
-					ServerSentEvent event = payloadCache.computeIfAbsent(key, eventProvider);
+					SseEvent event = payloadCache.computeIfAbsent(key, eventProvider);
 
 					// 4. Dispatch
 					consumer.accept(event);
@@ -2134,13 +2134,13 @@ public final class Soklet implements AutoCloseable {
 		@Override
 		public <T> void broadcastComment(
 				@NonNull Function<Object, T> keySelector,
-				@NonNull Function<T, ServerSentEventComment> commentProvider
+				@NonNull Function<T, SseComment> commentProvider
 		) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 
 			// 1. Create temporary cache
-			Map<T, ServerSentEventComment> commentCache = new HashMap<>();
+			Map<T, SseComment> commentCache = new HashMap<>();
 
 			this.getCommentConsumers().forEach((consumer, context) -> {
 				try {
@@ -2148,7 +2148,7 @@ public final class Soklet implements AutoCloseable {
 					T key = keySelector.apply(context);
 
 					// 3. Memoize
-					ServerSentEventComment comment = commentCache.computeIfAbsent(key, commentProvider);
+					SseComment comment = commentCache.computeIfAbsent(key, commentProvider);
 
 					// 4. Dispatch
 					consumer.accept(comment);
@@ -2159,7 +2159,7 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		public Boolean registerEventConsumer(@NonNull Consumer<ServerSentEvent> eventConsumer) {
+		public Boolean registerEventConsumer(@NonNull Consumer<SseEvent> eventConsumer) {
 			return registerEventConsumer(eventConsumer, null);
 		}
 
@@ -2167,20 +2167,20 @@ public final class Soklet implements AutoCloseable {
 		 * Registers a consumer with an associated context, simulating a client with specific traits.
 		 */
 		@NonNull
-		public Boolean registerEventConsumer(@NonNull Consumer<ServerSentEvent> eventConsumer, @Nullable Object context) {
+		public Boolean registerEventConsumer(@NonNull Consumer<SseEvent> eventConsumer, @Nullable Object context) {
 			requireNonNull(eventConsumer);
 			// map.put returns null if the key was new, which conceptually matches "add" returning true
 			return this.getEventConsumers().put(eventConsumer, context == null ? NULL_CONTEXT_SENTINEL : context) == null;
 		}
 
 		@NonNull
-		public Boolean unregisterEventConsumer(@NonNull Consumer<ServerSentEvent> eventConsumer) {
+		public Boolean unregisterEventConsumer(@NonNull Consumer<SseEvent> eventConsumer) {
 			requireNonNull(eventConsumer);
 			return this.getEventConsumers().remove(eventConsumer) != null;
 		}
 
 		@NonNull
-		public Boolean registerCommentConsumer(@NonNull Consumer<ServerSentEventComment> commentConsumer) {
+		public Boolean registerCommentConsumer(@NonNull Consumer<SseComment> commentConsumer) {
 			return registerCommentConsumer(commentConsumer, null);
 		}
 
@@ -2188,24 +2188,24 @@ public final class Soklet implements AutoCloseable {
 		 * Registers a consumer with an associated context, simulating a client with specific traits.
 		 */
 		@NonNull
-		public Boolean registerCommentConsumer(@NonNull Consumer<ServerSentEventComment> commentConsumer, @Nullable Object context) {
+		public Boolean registerCommentConsumer(@NonNull Consumer<SseComment> commentConsumer, @Nullable Object context) {
 			requireNonNull(commentConsumer);
 			return this.getCommentConsumers().put(commentConsumer, context == null ? NULL_CONTEXT_SENTINEL : context) == null;
 		}
 
 		@NonNull
-		public Boolean unregisterCommentConsumer(@NonNull Consumer<ServerSentEventComment> commentConsumer) {
+		public Boolean unregisterCommentConsumer(@NonNull Consumer<SseComment> commentConsumer) {
 			requireNonNull(commentConsumer);
 			return this.getCommentConsumers().remove(commentConsumer) != null;
 		}
 
 		@NonNull
-		protected Map<@NonNull Consumer<ServerSentEvent>, @NonNull Object> getEventConsumers() {
+		protected Map<@NonNull Consumer<SseEvent>, @NonNull Object> getEventConsumers() {
 			return this.eventConsumers;
 		}
 
 		@NonNull
-		protected Map<@NonNull Consumer<ServerSentEventComment>, @NonNull Object> getCommentConsumers() {
+		protected Map<@NonNull Consumer<SseComment>, @NonNull Object> getCommentConsumers() {
 			return this.commentConsumers;
 		}
 
@@ -2232,18 +2232,18 @@ public final class Soklet implements AutoCloseable {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	static class MockServerSentEventServer implements ServerSentEventServer {
+	static class MockSseServer implements SseServer {
 		@Nullable
 		private SokletConfig sokletConfig;
-		private ServerSentEventServer.@Nullable RequestHandler requestHandler;
+		private SseServer.@Nullable RequestHandler requestHandler;
 		@NonNull
-		private final ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockServerSentEventBroadcaster> broadcastersByResourcePath;
+		private final ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockSseBroadcaster> broadcastersByResourcePath;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
 
-		public MockServerSentEventServer() {
+		public MockSseServer() {
 			this.broadcastersByResourcePath = new ConcurrentHashMap<>();
 			this.broadcastErrorHandler = new AtomicReference<>();
 			this.unicastErrorHandler = new AtomicReference<>();
@@ -2267,40 +2267,40 @@ public final class Soklet implements AutoCloseable {
 
 		@NonNull
 		@Override
-		public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
+		public Optional<? extends SseBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
 			if (resourcePath == null)
 				return Optional.empty();
 
-			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
-					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp, broadcastErrorHandler));
+			MockSseBroadcaster broadcaster = getBroadcastersByResourcePath()
+					.computeIfAbsent(resourcePath, rp -> new MockSseBroadcaster(rp, broadcastErrorHandler));
 
 			return Optional.of(broadcaster);
 		}
 
 		public void registerEventConsumer(@NonNull ResourcePath resourcePath,
-																			@NonNull Consumer<ServerSentEvent> eventConsumer) {
+																			@NonNull Consumer<SseEvent> eventConsumer) {
 			registerEventConsumer(resourcePath, eventConsumer, null);
 		}
 
 		public void registerEventConsumer(@NonNull ResourcePath resourcePath,
-																			@NonNull Consumer<ServerSentEvent> eventConsumer,
+																			@NonNull Consumer<SseEvent> eventConsumer,
 																			@Nullable Object context) {
 			requireNonNull(resourcePath);
 			requireNonNull(eventConsumer);
 
-			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
-					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp, broadcastErrorHandler));
+			MockSseBroadcaster broadcaster = getBroadcastersByResourcePath()
+					.computeIfAbsent(resourcePath, rp -> new MockSseBroadcaster(rp, broadcastErrorHandler));
 
 			broadcaster.registerEventConsumer(eventConsumer, context);
 		}
 
 		@NonNull
 		public Boolean unregisterEventConsumer(@NonNull ResourcePath resourcePath,
-																					 @NonNull Consumer<ServerSentEvent> eventConsumer) {
+																					 @NonNull Consumer<SseEvent> eventConsumer) {
 			requireNonNull(resourcePath);
 			requireNonNull(eventConsumer);
 
-			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath().get(resourcePath);
+			MockSseBroadcaster broadcaster = getBroadcastersByResourcePath().get(resourcePath);
 
 			if (broadcaster == null)
 				return false;
@@ -2309,29 +2309,29 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		public void registerCommentConsumer(@NonNull ResourcePath resourcePath,
-																				@NonNull Consumer<ServerSentEventComment> commentConsumer) {
+																				@NonNull Consumer<SseComment> commentConsumer) {
 			registerCommentConsumer(resourcePath, commentConsumer, null);
 		}
 
 		public void registerCommentConsumer(@NonNull ResourcePath resourcePath,
-																				@NonNull Consumer<ServerSentEventComment> commentConsumer,
+																				@NonNull Consumer<SseComment> commentConsumer,
 																				@Nullable Object context) {
 			requireNonNull(resourcePath);
 			requireNonNull(commentConsumer);
 
-			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath()
-					.computeIfAbsent(resourcePath, rp -> new MockServerSentEventBroadcaster(rp, broadcastErrorHandler));
+			MockSseBroadcaster broadcaster = getBroadcastersByResourcePath()
+					.computeIfAbsent(resourcePath, rp -> new MockSseBroadcaster(rp, broadcastErrorHandler));
 
 			broadcaster.registerCommentConsumer(commentConsumer, context);
 		}
 
 		@NonNull
 		public Boolean unregisterCommentConsumer(@NonNull ResourcePath resourcePath,
-																						 @NonNull Consumer<ServerSentEventComment> commentConsumer) {
+																						 @NonNull Consumer<SseComment> commentConsumer) {
 			requireNonNull(resourcePath);
 			requireNonNull(commentConsumer);
 
-			MockServerSentEventBroadcaster broadcaster = getBroadcastersByResourcePath().get(resourcePath);
+			MockSseBroadcaster broadcaster = getBroadcastersByResourcePath().get(resourcePath);
 
 			if (broadcaster == null)
 				return false;
@@ -2341,7 +2341,7 @@ public final class Soklet implements AutoCloseable {
 
 		@Override
 		public void initialize(@NonNull SokletConfig sokletConfig,
-													 ServerSentEventServer.@NonNull RequestHandler requestHandler) {
+													 SseServer.@NonNull RequestHandler requestHandler) {
 			requireNonNull(sokletConfig);
 			requireNonNull(requestHandler);
 
@@ -2363,12 +2363,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		protected Optional<ServerSentEventServer.RequestHandler> getRequestHandler() {
+		protected Optional<SseServer.RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
 		}
 
 		@NonNull
-		protected ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockServerSentEventBroadcaster> getBroadcastersByResourcePath() {
+		protected ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockSseBroadcaster> getBroadcastersByResourcePath() {
 			return this.broadcastersByResourcePath;
 		}
 

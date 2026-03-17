@@ -22,7 +22,7 @@ import org.jspecify.annotations.NonNull;
  * Unicasts a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> or comment payload to a specific client listening on a {@link ResourcePath}.
  * <p>
  * For example:
- * <pre>{@code @ServerSentEventSource("/chats/{chatId}/event-source")
+ * <pre>{@code @SseEventSource("/chats/{chatId}/event-source")
  * public HandshakeResult chatEventSource(
  *   @PathParameter Long chatId,
  *   // Browsers will send this header automatically on reconnects
@@ -49,7 +49,7 @@ import org.jspecify.annotations.NonNull;
  *       // other broadcaster does, allowing clients to safely catch up
  *       // without the risk of event interleaving
  *       catchupMessages.stream()
- *         .map(catchupMessage -> ServerSentEvent.withEvent("chat-message")
+ *         .map(catchupMessage -> SseEvent.withEvent("chat-message")
  *           .id(catchupMessage.id())
  *           .data(catchupMessage.toJson())
  *           .retry(Duration.ofSeconds(5))
@@ -65,7 +65,7 @@ import org.jspecify.annotations.NonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface ServerSentEventUnicaster {
+public interface SseUnicaster {
 	/**
 	 * Unicasts a single Server-Sent Event payload to a specific client listening to this unicaster's {@link ResourcePath}.
 	 * <p>
@@ -73,29 +73,29 @@ public interface ServerSentEventUnicaster {
 	 * <p>
 	 * However, mock implementations may wish to block until the unicast has completed - for example, to simplify automated testing.
 	 *
-	 * @param serverSentEvent the Server-Sent Event payload to unicast
+	 * @param sseEvent the Server-Sent Event payload to unicast
 	 */
-	void unicastEvent(@NonNull ServerSentEvent serverSentEvent);
+	void unicastEvent(@NonNull SseEvent sseEvent);
 
 	/**
 	 * Unicasts a single Server-Sent Event comment to a specific client listening to this unicaster's {@link ResourcePath}.
 	 * <p>
-	 * Use {@link ServerSentEventComment#heartbeatInstance()} to emit a heartbeat comment.
+	 * Use {@link SseComment#heartbeatInstance()} to emit a heartbeat comment.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and unicast operation[s] will occur on separate threads of execution.
 	 * <p>
 	 * However, mock implementations may wish to block until the unicast has completed - for example, to simplify automated testing.
 	 *
-	 * @param serverSentEventComment the comment payload to unicast
+	 * @param sseComment the comment payload to unicast
 	 */
-	void unicastComment(@NonNull ServerSentEventComment serverSentEventComment);
+	void unicastComment(@NonNull SseComment sseComment);
 
 	/**
 	 * The runtime Resource Path with which this unicaster is associated.
 	 * <p>
-	 * For example, a client may successfully complete a Server-Sent Event handshake for <em>Resource Method</em> {@code @ServerSentEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}. The server, immediately after accepting the handshake, might then acquire a unicaster to "catch up" the client according to the {@code Last-Event-ID} header value (for example).
+	 * For example, a client may successfully complete a Server-Sent Event handshake for <em>Resource Method</em> {@code @SseEventSource("/examples/{exampleId}")} by making a request to {@code GET /examples/123}. The server, immediately after accepting the handshake, might then acquire a unicaster to "catch up" the client according to the {@code Last-Event-ID} header value (for example).
 	 * <p>
-	 * A unicaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to that specific client via {@link #unicastEvent(ServerSentEvent)}.
+	 * A unicaster specific to {@code /examples/123} is then created (if necessary) and managed by Soklet, and can be used to send SSE payloads to that specific client via {@link #unicastEvent(SseEvent)}.
 	 *
 	 * @return the runtime Resource Path instance with which this unicaster is associated
 	 */

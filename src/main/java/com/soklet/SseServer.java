@@ -31,15 +31,15 @@ import static java.util.Objects.requireNonNull;
 /**
  * A special HTTP server whose only purpose is to provide <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> functionality.
  * <p>
- * A Soklet application which supports Server-Sent Events will be configured with a {@link ServerSentEventServer}.
+ * A Soklet application which supports Server-Sent Events will be configured with a {@link SseServer}.
  * A regular {@link HttpServer} is only required if the same application also serves ordinary HTTP <em>Resource Methods</em>.
  * <p>
  * For example:
  * <pre>{@code // Set up our SSE server
- * ServerSentEventServer sseServer = ServerSentEventServer.fromPort(8081);
+ * SseServer sseServer = SseServer.fromPort(8081);
  *
  * // Wire the SSE server into our config
- * SokletConfig config = SokletConfig.withServerSentEventServer(sseServer)
+ * SokletConfig config = SokletConfig.withSseServer(sseServer)
  *   .build();
  *
  * // Add .httpServer(HttpServer.fromPort(8080)) if you also serve ordinary HTTP resources
@@ -55,7 +55,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface ServerSentEventServer extends AutoCloseable {
+public interface SseServer extends AutoCloseable {
 	/**
 	 * Starts the SSE server, which makes it able to accept requests from clients.
 	 * <p>
@@ -95,64 +95,64 @@ public interface ServerSentEventServer extends AutoCloseable {
 	}
 
 	/**
-	 * Given a {@link ResourcePath} that corresponds to a <em>Resource Method</em> annotated with {@link com.soklet.annotation.ServerSentEventSource}, acquire a {@link ServerSentEventBroadcaster} which is capable of "pushing" messages to all connected Server-Sent Event clients.
+	 * Given a {@link ResourcePath} that corresponds to a <em>Resource Method</em> annotated with {@link com.soklet.annotation.SseEventSource}, acquire a {@link SseBroadcaster} which is capable of "pushing" messages to all connected Server-Sent Event clients.
 	 * <p>
-	 * When using the default {@link ServerSentEventServer}, Soklet guarantees exactly one {@link ServerSentEventBroadcaster} instance exists per {@link ResourcePath} (within the same JVM process).  Soklet is responsible for the creation and management of {@link ServerSentEventBroadcaster} instances.
+	 * When using the default {@link SseServer}, Soklet guarantees exactly one {@link SseBroadcaster} instance exists per {@link ResourcePath} (within the same JVM process).  Soklet is responsible for the creation and management of {@link SseBroadcaster} instances.
 	 * <p>
-	 * Your code should not hold long-lived references to {@link ServerSentEventBroadcaster} instances (e.g. in a cache or instance variables) - the recommended usage pattern is to invoke {@link #acquireBroadcaster(ResourcePath)} every time you need a broadcaster reference.
+	 * Your code should not hold long-lived references to {@link SseBroadcaster} instances (e.g. in a cache or instance variables) - the recommended usage pattern is to invoke {@link #acquireBroadcaster(ResourcePath)} every time you need a broadcaster reference.
 	 * <p>
 	 * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
 	 *
-	 * @param resourcePath the {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em> for which to acquire a broadcaster
+	 * @param resourcePath the {@link com.soklet.annotation.SseEventSource}-annotated <em>Resource Method</em> for which to acquire a broadcaster
 	 * @return a broadcaster for the given {@link ResourcePath}, or {@link Optional#empty()} if there is no broadcaster available
 	 */
 	@NonNull
-	Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath);
+	Optional<? extends SseBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath);
 
 	/**
-	 * The {@link com.soklet.Soklet} instance which manages this {@link ServerSentEventServer} will invoke this method exactly once at initialization time - this allows {@link com.soklet.Soklet} to "talk" to your {@link ServerSentEventServer}.
+	 * The {@link com.soklet.Soklet} instance which manages this {@link SseServer} will invoke this method exactly once at initialization time - this allows {@link com.soklet.Soklet} to "talk" to your {@link SseServer}.
 	 * <p>
 	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
 	 *
 	 * @param sokletConfig   configuration for the Soklet instance that controls this server
-	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link ServerSentEventServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link ServerSentEventServer} to write back to the client
+	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link SseServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link SseServer} to write back to the client
 	 */
 	void initialize(@NonNull SokletConfig sokletConfig,
 									@NonNull RequestHandler requestHandler);
 
 	/**
-	 * Request/response processing contract for {@link ServerSentEventServer} implementations.
+	 * Request/response processing contract for {@link SseServer} implementations.
 	 * <p>
-	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link ServerSentEventServer} via {@link ServerSentEventServer#initialize(SokletConfig, RequestHandler)}.
-	 * It's the responsibility of the {@link ServerSentEventServer} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link SseServer} via {@link SseServer#initialize(SokletConfig, RequestHandler)}.
+	 * It's the responsibility of the {@link SseServer} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
-	 * <strong>Most Soklet applications will use Soklet's default {@link ServerSentEventServer} implementation and therefore do not need to implement this interface directly.</strong>
+	 * <strong>Most Soklet applications will use Soklet's default {@link SseServer} implementation and therefore do not need to implement this interface directly.</strong>
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@FunctionalInterface
 	interface RequestHandler {
 		/**
-		 * Callback to be invoked by a {@link ServerSentEventServer} implementation after it has received a Server-Sent Event Source HTTP request but prior to writing initial data to the HTTP response.
+		 * Callback to be invoked by a {@link SseServer} implementation after it has received a Server-Sent Event Source HTTP request but prior to writing initial data to the HTTP response.
 		 * <p>
-		 * <strong>Note: this method is only invoked during the initial request "handshake" - it is not called for subsequent Server-Sent Event stream writes performed via {@link ServerSentEventBroadcaster#broadcastEvent(ServerSentEvent)} invocations.</strong>
+		 * <strong>Note: this method is only invoked during the initial request "handshake" - it is not called for subsequent Server-Sent Event stream writes performed via {@link SseBroadcaster#broadcastEvent(SseEvent)} invocations.</strong>
 		 * <p>
 		 * For example, when a Server-Sent Event Source HTTP request is received, you might immediately write an HTTP 200 OK response if all looks good, or reject with a 401 due to invalid credentials.
-		 * That is the extent of the request-handling logic performed here.  The Server-Sent Event stream then remains open and can be written to via {@link ServerSentEventBroadcaster#broadcastEvent(ServerSentEvent)}.
+		 * That is the extent of the request-handling logic performed here.  The Server-Sent Event stream then remains open and can be written to via {@link SseBroadcaster#broadcastEvent(SseEvent)}.
 		 * <p>
-		 * The {@link ServerSentEventServer} is responsible for converting its internal request representation into a {@link Request}, which a {@link com.soklet.Soklet} instance consumes and performs Soklet application request processing logic.
+		 * The {@link SseServer} is responsible for converting its internal request representation into a {@link Request}, which a {@link com.soklet.Soklet} instance consumes and performs Soklet application request processing logic.
 		 * <p>
-		 * The {@link com.soklet.Soklet} instance will generate a {@link MarshaledResponse} for the request, which it "hands back" to the {@link ServerSentEventServer} to be sent over the wire to the client.
+		 * The {@link com.soklet.Soklet} instance will generate a {@link MarshaledResponse} for the request, which it "hands back" to the {@link SseServer} to be sent over the wire to the client.
 		 *
-		 * @param request               a Soklet {@link Request} representation of the {@link ServerSentEventServer}'s internal HTTP request data
-		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link ServerSentEventServer} to write HTTP response data to the client
+		 * @param request               a Soklet {@link Request} representation of the {@link SseServer}'s internal HTTP request data
+		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link SseServer} to write HTTP response data to the client
 		 */
 		void handleRequest(@NonNull Request request,
 											 @NonNull Consumer<RequestResult> requestResultConsumer);
 	}
 
 	/**
-	 * Acquires a builder for {@link ServerSentEventServer} instances.
+	 * Acquires a builder for {@link SseServer} instances.
 	 *
 	 * @param port the port number on which the server should listen
 	 * @return the builder
@@ -164,18 +164,18 @@ public interface ServerSentEventServer extends AutoCloseable {
 	}
 
 	/**
-	 * Creates a {@link ServerSentEventServer} configured with the given port and default settings.
+	 * Creates a {@link SseServer} configured with the given port and default settings.
 	 *
 	 * @param port the port number on which the server should listen
-	 * @return a {@link ServerSentEventServer} instance
+	 * @return a {@link SseServer} instance
 	 */
 	@NonNull
-	static ServerSentEventServer fromPort(@NonNull Integer port) {
+	static SseServer fromPort(@NonNull Integer port) {
 		return withPort(port).build();
 	}
 
 	/**
-	 * Builder used to construct a standard implementation of {@link ServerSentEventServer}.
+	 * Builder used to construct a standard implementation of {@link SseServer}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -336,8 +336,8 @@ public interface ServerSentEventServer extends AutoCloseable {
 		}
 
 		@NonNull
-		public ServerSentEventServer build() {
-			return new DefaultServerSentEventServer(this);
+		public SseServer build() {
+			return new DefaultSseServer(this);
 		}
 	}
 }

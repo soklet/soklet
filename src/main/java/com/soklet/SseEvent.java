@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * Encapsulates a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event</a> payload that can be sent across the wire to a client.
  * <p>
  * For example:
- * <pre>{@code  ServerSentEvent event = ServerSentEvent.withEvent("example")
+ * <pre>{@code  SseEvent event = SseEvent.withEvent("example")
  *   .data("""
  *     {
  *       "testing": 123,
@@ -59,7 +59,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class ServerSentEvent {
+public final class SseEvent {
 	@Nullable
 	private final String id;
 	@Nullable
@@ -70,7 +70,7 @@ public final class ServerSentEvent {
 	private final Duration retry;
 
 	/**
-	 * Acquires a builder for {@link ServerSentEvent} instances, seeded with an {@code event} value.
+	 * Acquires a builder for {@link SseEvent} instances, seeded with an {@code event} value.
 	 *
 	 * @param event the {@code event} value for the instance
 	 * @return the builder
@@ -81,7 +81,7 @@ public final class ServerSentEvent {
 	}
 
 	/**
-	 * Acquires a builder for {@link ServerSentEvent} instances, seeded with a {@code data} value.
+	 * Acquires a builder for {@link SseEvent} instances, seeded with a {@code data} value.
 	 *
 	 * @param data the {@code data} value for the instance
 	 * @return the builder
@@ -92,7 +92,7 @@ public final class ServerSentEvent {
 	}
 
 	/**
-	 * Acquires an "empty" builder for {@link ServerSentEvent} instances, useful for creating special cases like {@code retry}-only or {@code id}-only events.
+	 * Acquires an "empty" builder for {@link SseEvent} instances, useful for creating special cases like {@code retry}-only or {@code id}-only events.
 	 *
 	 * @return the builder
 	 */
@@ -101,7 +101,7 @@ public final class ServerSentEvent {
 		return new Builder();
 	}
 
-	protected ServerSentEvent(@NonNull Builder builder) {
+	protected SseEvent(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.id = builder.id;
@@ -113,15 +113,15 @@ public final class ServerSentEvent {
 
 		if (this.retry != null && this.retry.isNegative())
 			throw new IllegalArgumentException(format("%s 'retry' values must be non-negative. You supplied '%s'",
-					ServerSentEvent.class.getSimpleName(), this.retry));
+					SseEvent.class.getSimpleName(), this.retry));
 
 		if (this.event != null && containsLineBreaks(this.event))
 			throw new IllegalArgumentException(format("%s 'event' values must not contain CR or LF characters. You supplied '%s'",
-					ServerSentEvent.class.getSimpleName(), Utilities.printableString(this.event)));
+					SseEvent.class.getSimpleName(), Utilities.printableString(this.event)));
 
 		if (this.id != null && (containsLineBreaks(this.id) || this.id.contains("\u0000")))
 			throw new IllegalArgumentException(format("%s 'id' values must not contain NUL (\\u0000), CR, or LF characters. You supplied '%s'",
-					ServerSentEvent.class.getSimpleName(), Utilities.printableString(this.id)));
+					SseEvent.class.getSimpleName(), Utilities.printableString(this.id)));
 	}
 
 	@NonNull
@@ -131,7 +131,7 @@ public final class ServerSentEvent {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link ServerSentEvent} via {@link ServerSentEvent#withEvent(String)}, {@link ServerSentEvent#withData(String)}, or {@link ServerSentEvent#builder()}.
+	 * Builder used to construct instances of {@link SseEvent} via {@link SseEvent#withEvent(String)}, {@link SseEvent#withData(String)}, or {@link SseEvent#builder()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -177,8 +177,8 @@ public final class ServerSentEvent {
 		}
 
 		@NonNull
-		public ServerSentEvent build() {
-			return new ServerSentEvent(this);
+		public SseEvent build() {
+			return new SseEvent(this);
 		}
 	}
 

@@ -250,7 +250,7 @@ Annotate them with [`@GET`](https://javadoc.soklet.com/com/soklet/annotation/GET
 [`@DELETE`](https://javadoc.soklet.com/com/soklet/annotation/DELETE.html),
 [`@HEAD`](https://javadoc.soklet.com/com/soklet/annotation/HEAD.html),
 [`@OPTIONS`](https://javadoc.soklet.com/com/soklet/annotation/OPTIONS.html), or
-[`@ServerSentEventSource`](https://javadoc.soklet.com/com/soklet/annotation/ServerSentEventSource.html) for SSE.
+[`@SseEventSource`](https://javadoc.soklet.com/com/soklet/annotation/SseEventSource.html) for SSE.
 MCP endpoints are declared separately with [`@McpServerEndpoint`](https://javadoc.soklet.com/com/soklet/annotation/McpServerEndpoint.html)
 and handler annotations like [`@McpTool`](https://javadoc.soklet.com/com/soklet/annotation/McpTool.html),
 [`@McpPrompt`](https://javadoc.soklet.com/com/soklet/annotation/McpPrompt.html), and
@@ -510,7 +510,7 @@ public Response exampleRedirect() {
 #### HTTP Server Configuration
 
 Soklet ships with an embedded HTTP/1.1 [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html), a dedicated
-[`ServerSentEventServer`](https://javadoc.soklet.com/com/soklet/ServerSentEventServer.html), and a dedicated
+[`SseServer`](https://javadoc.soklet.com/com/soklet/SseServer.html), and a dedicated
 [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
 These builders let you configure host, timeouts, handler concurrency/queueing, request size limits, and connection caps; you
 can also plug in custom [`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html),
@@ -521,19 +521,19 @@ Provide the configured servers via [`SokletConfig`](https://javadoc.soklet.com/c
 
 #### Server-Sent Events (SSE)
 
-SSE endpoints are declared with [`@ServerSentEventSource`](https://javadoc.soklet.com/com/soklet/annotation/ServerSentEventSource.html) and return a
+SSE endpoints are declared with [`@SseEventSource`](https://javadoc.soklet.com/com/soklet/annotation/SseEventSource.html) and return a
 [`HandshakeResult`](https://javadoc.soklet.com/com/soklet/HandshakeResult.html), served from a dedicated
-[`ServerSentEventServer`](https://javadoc.soklet.com/com/soklet/ServerSentEventServer.html) port (separate from your standard HTTP server port).
+[`SseServer`](https://javadoc.soklet.com/com/soklet/SseServer.html) port (separate from your standard HTTP server port).
 
 ```java
 public record ChatMessage(String message) {}
 
 public class ChatResource {
-  @ServerSentEventSource("/chat")
+  @SseEventSource("/chat")
   public HandshakeResult chat() {
     return HandshakeResult.Accepted.builder()
       .clientInitializer(unicaster -> {
-        unicaster.unicastEvent(ServerSentEvent.withEvent("hello")
+        unicaster.unicastEvent(SseEvent.withEvent("hello")
           .data("welcome")
           .build());
       })
@@ -542,12 +542,12 @@ public class ChatResource {
 
   @POST("/chat")
   public void postMessage(@RequestBody ChatMessage message,
-                          @NonNull ServerSentEventServer sseServer) {
-   @NonNull ServerSentEventBroadcaster broadcaster = sseServer
+                          @NonNull SseServer sseServer) {
+   @NonNull SseBroadcaster broadcaster = sseServer
       .acquireBroadcaster(ResourcePath.fromPath("/chat"))
       .orElseThrow();
 
-    broadcaster.broadcastEvent(ServerSentEvent.withEvent("message")
+    broadcaster.broadcastEvent(SseEvent.withEvent("message")
       .data(message.message())
       .build());
   }
@@ -560,18 +560,18 @@ resource method, it needs both servers:
 ```java
 SokletConfig config = SokletConfig.withHttpServer(
   HttpServer.fromPort(8080)
-).serverSentEventServer(
-  ServerSentEventServer.fromPort(8081)
+).sseServer(
+  SseServer.fromPort(8081)
 ).resourceMethodResolver(
   ResourceMethodResolver.fromClasses(Set.of(ChatResource.class))
 ).build();
 ```
 
 If your application only exposes SSE event source methods, you can omit the regular
-HTTP server and start with `SokletConfig.withServerSentEventServer(...)` instead.
+HTTP server and start with `SokletConfig.withSseServer(...)` instead.
 
 SSE test via the [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html)
-(see [`ServerSentEventRequestResult`](https://javadoc.soklet.com/com/soklet/ServerSentEventRequestResult.html)):
+(see [`SseRequestResult`](https://javadoc.soklet.com/com/soklet/SseRequestResult.html)):
 
 ```java
 import org.junit.Assert;
@@ -580,22 +580,22 @@ import org.junit.Test;
 @Test
 public void sseTest() {
   SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0).build())
-    .serverSentEventServer(ServerSentEventServer.fromPort(0))
+    .sseServer(SseServer.fromPort(0))
     .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ChatResource.class)))
     .build();
 
-  List<ServerSentEvent> events = new ArrayList<>();
+  List<SseEvent> events = new ArrayList<>();
 
   Soklet.runSimulator(config, simulator -> {
     Request request = Request.fromPath(HttpMethod.GET, "/chat");
-   @NonNull ServerSentEventRequestResult result = simulator.performServerSentEventRequest(request);
+   @NonNull SseRequestResult result = simulator.performSseRequest(request);
 
-    if (result instanceof ServerSentEventRequestResult.HandshakeAccepted accepted) {
+    if (result instanceof SseRequestResult.HandshakeAccepted accepted) {
       accepted.registerEventConsumer(events::add);
 
-     @NonNull ServerSentEventBroadcaster broadcaster = config.getServerSentEventServer().orElseThrow()
+     @NonNull SseBroadcaster broadcaster = config.getSseServer().orElseThrow()
         .acquireBroadcaster(ResourcePath.fromPath("/chat")).orElseThrow();
-      broadcaster.broadcastEvent(ServerSentEvent.withEvent("message")
+      broadcaster.broadcastEvent(SseEvent.withEvent("message")
         .data("hello")
         .build());
     } else {

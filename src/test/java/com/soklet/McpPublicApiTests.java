@@ -161,7 +161,7 @@ public class McpPublicApiTests {
 			}
 
 			@Override
-			public ServerSentEventRequestResult performServerSentEventRequest(Request request) {
+			public SseRequestResult performSseRequest(Request request) {
 				throw new UnsupportedOperationException("unused");
 			}
 		};

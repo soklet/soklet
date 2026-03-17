@@ -322,7 +322,7 @@ public interface MetricsCollector {
 	/**
 	 * Called after an MCP GET stream is established.
 	 */
-	default void didEstablishMcpServerSentEventStream(@NonNull Request request,
+	default void didEstablishMcpSseStream(@NonNull Request request,
 																										@NonNull Class<? extends McpEndpoint> endpointClass,
 																										@NonNull String sessionId) {
 		// No-op by default
@@ -331,7 +331,7 @@ public interface MetricsCollector {
 	/**
 	 * Called after an MCP GET stream is terminated.
 	 */
-	default void didTerminateMcpServerSentEventStream(@NonNull Request request,
+	default void didTerminateMcpSseStream(@NonNull Request request,
 																										@NonNull Class<? extends McpEndpoint> endpointClass,
 																										@NonNull String sessionId,
 																										@NonNull Duration connectionDuration,
@@ -343,7 +343,7 @@ public interface MetricsCollector {
 	/**
 	 * Called before an SSE connection is established.
 	 */
-	default void willEstablishServerSentEventConnection(@NonNull Request request,
+	default void willEstablishSseConnection(@NonNull Request request,
 																											@Nullable ResourceMethod resourceMethod) {
 		// No-op by default
 	}
@@ -351,7 +351,7 @@ public interface MetricsCollector {
 	/**
 	 * Called after an SSE connection is established.
 	 */
-	default void didEstablishServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection) {
+	default void didEstablishSseConnection(@NonNull SseConnection sseConnection) {
 		// No-op by default
 	}
 
@@ -361,9 +361,9 @@ public interface MetricsCollector {
 	 * @param reason    the handshake failure reason
 	 * @param throwable an optional underlying cause, or {@code null} if not applicable
 	 */
-	default void didFailToEstablishServerSentEventConnection(@NonNull Request request,
+	default void didFailToEstablishSseConnection(@NonNull Request request,
 																													 @Nullable ResourceMethod resourceMethod,
-																													 ServerSentEventConnection.@NonNull HandshakeFailureReason reason,
+																													 SseConnection.@NonNull HandshakeFailureReason reason,
 																													 @Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -371,8 +371,8 @@ public interface MetricsCollector {
 	/**
 	 * Called before an SSE connection is terminated.
 	 */
-	default void willTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
-																											ServerSentEventConnection.@NonNull TerminationReason terminationReason,
+	default void willTerminateSseConnection(@NonNull SseConnection sseConnection,
+																											SseConnection.@NonNull TerminationReason terminationReason,
 																											@Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -380,9 +380,9 @@ public interface MetricsCollector {
 	/**
 	 * Called after an SSE connection is terminated.
 	 */
-	default void didTerminateServerSentEventConnection(@NonNull ServerSentEventConnection serverSentEventConnection,
+	default void didTerminateSseConnection(@NonNull SseConnection sseConnection,
 																										 @NonNull Duration connectionDuration,
-																										 ServerSentEventConnection.@NonNull TerminationReason terminationReason,
+																										 SseConnection.@NonNull TerminationReason terminationReason,
 																										 @Nullable Throwable throwable) {
 		// No-op by default
 	}
@@ -390,23 +390,23 @@ public interface MetricsCollector {
 	/**
 	 * Called before an SSE event is written.
 	 */
-	default void willWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
-																				@NonNull ServerSentEvent serverSentEvent) {
+	default void willWriteSseEvent(@NonNull SseConnection sseConnection,
+																				@NonNull SseEvent sseEvent) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an SSE event is written.
 	 *
-	 * @param serverSentEventConnection the connection the event was written to
-	 * @param serverSentEvent           the event that was written
+	 * @param sseConnection the connection the event was written to
+	 * @param sseEvent           the event that was written
 	 * @param writeDuration             how long it took to write the event
 	 * @param deliveryLag               elapsed time between enqueue and write start, or {@code null} if unknown
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
 	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
-	default void didWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
-																			 @NonNull ServerSentEvent serverSentEvent,
+	default void didWriteSseEvent(@NonNull SseConnection sseConnection,
+																			 @NonNull SseEvent sseEvent,
 																			 @NonNull Duration writeDuration,
 																			 @Nullable Duration deliveryLag,
 																			 @Nullable Integer payloadBytes,
@@ -417,16 +417,16 @@ public interface MetricsCollector {
 	/**
 	 * Called after an SSE event fails to write.
 	 *
-	 * @param serverSentEventConnection the connection the event was written to
-	 * @param serverSentEvent           the event that was written
+	 * @param sseConnection the connection the event was written to
+	 * @param sseEvent           the event that was written
 	 * @param writeDuration             how long it took to attempt the write
 	 * @param throwable                 the failure cause
 	 * @param deliveryLag               elapsed time between enqueue and write start, or {@code null} if unknown
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
 	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
-	default void didFailToWriteServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
-																						 @NonNull ServerSentEvent serverSentEvent,
+	default void didFailToWriteSseEvent(@NonNull SseConnection sseConnection,
+																						 @NonNull SseEvent sseEvent,
 																						 @NonNull Duration writeDuration,
 																						 @NonNull Throwable throwable,
 																						 @Nullable Duration deliveryLag,
@@ -438,23 +438,23 @@ public interface MetricsCollector {
 	/**
 	 * Called before an SSE comment is written.
 	 */
-	default void willWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																							 @NonNull ServerSentEventComment serverSentEventComment) {
+	default void willWriteSseComment(@NonNull SseConnection sseConnection,
+																							 @NonNull SseComment sseComment) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an SSE comment is written.
 	 *
-	 * @param serverSentEventConnection the connection the comment was written to
-	 * @param serverSentEventComment    the comment that was written
+	 * @param sseConnection the connection the comment was written to
+	 * @param sseComment    the comment that was written
 	 * @param writeDuration             how long it took to write the comment
 	 * @param deliveryLag               elapsed time between enqueue and write start, or {@code null} if unknown
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
 	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
-	default void didWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																							@NonNull ServerSentEventComment serverSentEventComment,
+	default void didWriteSseComment(@NonNull SseConnection sseConnection,
+																							@NonNull SseComment sseComment,
 																							@NonNull Duration writeDuration,
 																							@Nullable Duration deliveryLag,
 																							@Nullable Integer payloadBytes,
@@ -465,16 +465,16 @@ public interface MetricsCollector {
 	/**
 	 * Called after an SSE comment fails to write.
 	 *
-	 * @param serverSentEventConnection the connection the comment was written to
-	 * @param serverSentEventComment    the comment that was written
+	 * @param sseConnection the connection the comment was written to
+	 * @param sseComment    the comment that was written
 	 * @param writeDuration             how long it took to attempt the write
 	 * @param throwable                 the failure cause
 	 * @param deliveryLag               elapsed time between enqueue and write start, or {@code null} if unknown
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
 	 * @param queueDepth                number of queued elements remaining at write time, or {@code null} if unknown
 	 */
-	default void didFailToWriteServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																										@NonNull ServerSentEventComment serverSentEventComment,
+	default void didFailToWriteSseComment(@NonNull SseConnection sseConnection,
+																										@NonNull SseComment sseComment,
 																										@NonNull Duration writeDuration,
 																										@NonNull Throwable throwable,
 																										@Nullable Duration deliveryLag,
@@ -486,15 +486,15 @@ public interface MetricsCollector {
 	/**
 	 * Called after an SSE event is dropped before it can be enqueued for delivery.
 	 *
-	 * @param serverSentEventConnection the connection the event was targeting
-	 * @param serverSentEvent           the event that was dropped
+	 * @param sseConnection the connection the event was targeting
+	 * @param sseEvent           the event that was dropped
 	 * @param reason                    the drop reason
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
 	 * @param queueDepth                number of queued elements at drop time, or {@code null} if unknown
 	 */
-	default void didDropServerSentEvent(@NonNull ServerSentEventConnection serverSentEventConnection,
-																			@NonNull ServerSentEvent serverSentEvent,
-																			@NonNull ServerSentEventDropReason reason,
+	default void didDropSseEvent(@NonNull SseConnection sseConnection,
+																			@NonNull SseEvent sseEvent,
+																			@NonNull SseEventDropReason reason,
 																			@Nullable Integer payloadBytes,
 																			@Nullable Integer queueDepth) {
 		// No-op by default
@@ -503,15 +503,15 @@ public interface MetricsCollector {
 	/**
 	 * Called after an SSE comment is dropped before it can be enqueued for delivery.
 	 *
-	 * @param serverSentEventConnection the connection the comment was targeting
-	 * @param serverSentEventComment    the comment that was dropped
+	 * @param sseConnection the connection the comment was targeting
+	 * @param sseComment    the comment that was dropped
 	 * @param reason                    the drop reason
 	 * @param payloadBytes              size of the serialized payload in bytes, or {@code null} if unknown
 	 * @param queueDepth                number of queued elements at drop time, or {@code null} if unknown
 	 */
-	default void didDropServerSentEventComment(@NonNull ServerSentEventConnection serverSentEventConnection,
-																						 @NonNull ServerSentEventComment serverSentEventComment,
-																						 @NonNull ServerSentEventDropReason reason,
+	default void didDropSseComment(@NonNull SseConnection sseConnection,
+																						 @NonNull SseComment sseComment,
+																						 @NonNull SseEventDropReason reason,
 																						 @Nullable Integer payloadBytes,
 																						 @Nullable Integer queueDepth) {
 		// No-op by default
@@ -525,7 +525,7 @@ public interface MetricsCollector {
 	 * @param enqueued  number of connections for which enqueue succeeded
 	 * @param dropped   number of connections for which enqueue failed
 	 */
-	default void didBroadcastServerSentEvent(@NonNull ResourcePathDeclaration route,
+	default void didBroadcastSseEvent(@NonNull ResourcePathDeclaration route,
 																					 int attempted,
 																					 int enqueued,
 																					 int dropped) {
@@ -541,8 +541,8 @@ public interface MetricsCollector {
 	 * @param enqueued    number of connections for which enqueue succeeded
 	 * @param dropped     number of connections for which enqueue failed
 	 */
-	default void didBroadcastServerSentEventComment(@NonNull ResourcePathDeclaration route,
-																									ServerSentEventComment.@NonNull CommentType commentType,
+	default void didBroadcastSseComment(@NonNull ResourcePathDeclaration route,
+																									SseComment.@NonNull CommentType commentType,
 																									int attempted,
 																									int enqueued,
 																									int dropped) {
@@ -881,35 +881,35 @@ public interface MetricsCollector {
 		@NonNull
 		private final Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteKey, @NonNull Long> sseHandshakesAccepted;
+		private final Map<@NonNull SseEventRouteKey, @NonNull Long> sseHandshakesAccepted;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
+		private final Map<@NonNull SseEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteEnqueueOutcomeKey, @NonNull Long> sseEventEnqueueOutcomes;
+		private final Map<@NonNull SseEventRouteEnqueueOutcomeKey, @NonNull Long> sseEventEnqueueOutcomes;
 		@NonNull
-		private final Map<@NonNull ServerSentEventCommentRouteEnqueueOutcomeKey, @NonNull Long> sseCommentEnqueueOutcomes;
+		private final Map<@NonNull SseCommentRouteEnqueueOutcomeKey, @NonNull Long> sseCommentEnqueueOutcomes;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteDropKey, @NonNull Long> sseEventDrops;
+		private final Map<@NonNull SseEventRouteDropKey, @NonNull Long> sseEventDrops;
 		@NonNull
-		private final Map<@NonNull ServerSentEventCommentRouteDropKey, @NonNull Long> sseCommentDrops;
+		private final Map<@NonNull SseCommentRouteDropKey, @NonNull Long> sseCommentDrops;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
+		private final Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations;
+		private final Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag;
+		private final Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes;
+		private final Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth;
+		private final Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth;
 		@NonNull
-		private final Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag;
+		private final Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag;
 		@NonNull
-		private final Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes;
+		private final Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes;
 		@NonNull
-		private final Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth;
+		private final Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth;
 		@NonNull
-		private final Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations;
+		private final Map<@NonNull SseEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations;
 		@NonNull
 		private final Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull Long> mcpRequests;
 		@NonNull
@@ -1190,7 +1190,7 @@ public interface MetricsCollector {
 		 * @return SSE handshake acceptance counters
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteKey, @NonNull Long> getSseHandshakesAccepted() {
+		public Map<@NonNull SseEventRouteKey, @NonNull Long> getSseHandshakesAccepted() {
 			return this.sseHandshakesAccepted;
 		}
 
@@ -1200,7 +1200,7 @@ public interface MetricsCollector {
 		 * @return SSE handshake rejection counters
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> getSseHandshakesRejected() {
+		public Map<@NonNull SseEventRouteHandshakeFailureKey, @NonNull Long> getSseHandshakesRejected() {
 			return this.sseHandshakesRejected;
 		}
 
@@ -1210,7 +1210,7 @@ public interface MetricsCollector {
 		 * @return SSE event enqueue outcome counters
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteEnqueueOutcomeKey, @NonNull Long> getSseEventEnqueueOutcomes() {
+		public Map<@NonNull SseEventRouteEnqueueOutcomeKey, @NonNull Long> getSseEventEnqueueOutcomes() {
 			return this.sseEventEnqueueOutcomes;
 		}
 
@@ -1220,7 +1220,7 @@ public interface MetricsCollector {
 		 * @return SSE comment enqueue outcome counters
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventCommentRouteEnqueueOutcomeKey, @NonNull Long> getSseCommentEnqueueOutcomes() {
+		public Map<@NonNull SseCommentRouteEnqueueOutcomeKey, @NonNull Long> getSseCommentEnqueueOutcomes() {
 			return this.sseCommentEnqueueOutcomes;
 		}
 
@@ -1230,7 +1230,7 @@ public interface MetricsCollector {
 		 * @return SSE event drop counters
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteDropKey, @NonNull Long> getSseEventDrops() {
+		public Map<@NonNull SseEventRouteDropKey, @NonNull Long> getSseEventDrops() {
 			return this.sseEventDrops;
 		}
 
@@ -1240,7 +1240,7 @@ public interface MetricsCollector {
 		 * @return SSE comment drop counters
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventCommentRouteDropKey, @NonNull Long> getSseCommentDrops() {
+		public Map<@NonNull SseCommentRouteDropKey, @NonNull Long> getSseCommentDrops() {
 			return this.sseCommentDrops;
 		}
 
@@ -1250,7 +1250,7 @@ public interface MetricsCollector {
 		 * @return SSE time-to-first-event histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseTimeToFirstEvent() {
+		public Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> getSseTimeToFirstEvent() {
 			return this.sseTimeToFirstEvent;
 		}
 
@@ -1260,7 +1260,7 @@ public interface MetricsCollector {
 		 * @return SSE event write duration histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseEventWriteDurations() {
+		public Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> getSseEventWriteDurations() {
 			return this.sseEventWriteDurations;
 		}
 
@@ -1270,7 +1270,7 @@ public interface MetricsCollector {
 		 * @return SSE event delivery lag histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseEventDeliveryLag() {
+		public Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> getSseEventDeliveryLag() {
 			return this.sseEventDeliveryLag;
 		}
 
@@ -1280,7 +1280,7 @@ public interface MetricsCollector {
 		 * @return SSE event size histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseEventSizes() {
+		public Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> getSseEventSizes() {
 			return this.sseEventSizes;
 		}
 
@@ -1290,7 +1290,7 @@ public interface MetricsCollector {
 		 * @return SSE queue depth histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> getSseQueueDepth() {
+		public Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> getSseQueueDepth() {
 			return this.sseQueueDepth;
 		}
 
@@ -1300,7 +1300,7 @@ public interface MetricsCollector {
 		 * @return SSE comment delivery lag histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentDeliveryLag() {
+		public Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentDeliveryLag() {
 			return this.sseCommentDeliveryLag;
 		}
 
@@ -1310,7 +1310,7 @@ public interface MetricsCollector {
 		 * @return SSE comment size histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentSizes() {
+		public Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentSizes() {
 			return this.sseCommentSizes;
 		}
 
@@ -1320,7 +1320,7 @@ public interface MetricsCollector {
 		 * @return SSE comment queue depth histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentQueueDepth() {
+		public Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> getSseCommentQueueDepth() {
 			return this.sseCommentQueueDepth;
 		}
 
@@ -1330,7 +1330,7 @@ public interface MetricsCollector {
 		 * @return SSE connection duration histograms
 		 */
 		@NonNull
-		public Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> getSseConnectionDurations() {
+		public Map<@NonNull SseEventRouteTerminationKey, @NonNull HistogramSnapshot> getSseConnectionDurations() {
 			return this.sseConnectionDurations;
 		}
 
@@ -1431,35 +1431,35 @@ public interface MetricsCollector {
 			@Nullable
 			private Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteKey, @NonNull Long> sseHandshakesAccepted;
+			private Map<@NonNull SseEventRouteKey, @NonNull Long> sseHandshakesAccepted;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
+			private Map<@NonNull SseEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteEnqueueOutcomeKey, @NonNull Long> sseEventEnqueueOutcomes;
+			private Map<@NonNull SseEventRouteEnqueueOutcomeKey, @NonNull Long> sseEventEnqueueOutcomes;
 			@Nullable
-			private Map<@NonNull ServerSentEventCommentRouteEnqueueOutcomeKey, @NonNull Long> sseCommentEnqueueOutcomes;
+			private Map<@NonNull SseCommentRouteEnqueueOutcomeKey, @NonNull Long> sseCommentEnqueueOutcomes;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteDropKey, @NonNull Long> sseEventDrops;
+			private Map<@NonNull SseEventRouteDropKey, @NonNull Long> sseEventDrops;
 			@Nullable
-			private Map<@NonNull ServerSentEventCommentRouteDropKey, @NonNull Long> sseCommentDrops;
+			private Map<@NonNull SseCommentRouteDropKey, @NonNull Long> sseCommentDrops;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
+			private Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations;
+			private Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag;
+			private Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes;
+			private Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth;
+			private Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth;
 			@Nullable
-			private Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag;
+			private Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag;
 			@Nullable
-			private Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes;
+			private Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes;
 			@Nullable
-			private Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth;
+			private Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth;
 			@Nullable
-			private Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations;
+			private Map<@NonNull SseEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations;
 			@Nullable
 			private Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull Long> mcpRequests;
 			@Nullable
@@ -1753,7 +1753,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseHandshakesAccepted(
-					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull Long> sseHandshakesAccepted) {
+					@Nullable Map<@NonNull SseEventRouteKey, @NonNull Long> sseHandshakesAccepted) {
 				this.sseHandshakesAccepted = sseHandshakesAccepted;
 				return this;
 			}
@@ -1766,7 +1766,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseHandshakesRejected(
-					@Nullable Map<@NonNull ServerSentEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected) {
+					@Nullable Map<@NonNull SseEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected) {
 				this.sseHandshakesRejected = sseHandshakesRejected;
 				return this;
 			}
@@ -1779,7 +1779,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseEventEnqueueOutcomes(
-					@Nullable Map<@NonNull ServerSentEventRouteEnqueueOutcomeKey, @NonNull Long> sseEventEnqueueOutcomes) {
+					@Nullable Map<@NonNull SseEventRouteEnqueueOutcomeKey, @NonNull Long> sseEventEnqueueOutcomes) {
 				this.sseEventEnqueueOutcomes = sseEventEnqueueOutcomes;
 				return this;
 			}
@@ -1792,7 +1792,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseCommentEnqueueOutcomes(
-					@Nullable Map<@NonNull ServerSentEventCommentRouteEnqueueOutcomeKey, @NonNull Long> sseCommentEnqueueOutcomes) {
+					@Nullable Map<@NonNull SseCommentRouteEnqueueOutcomeKey, @NonNull Long> sseCommentEnqueueOutcomes) {
 				this.sseCommentEnqueueOutcomes = sseCommentEnqueueOutcomes;
 				return this;
 			}
@@ -1805,7 +1805,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseEventDrops(
-					@Nullable Map<@NonNull ServerSentEventRouteDropKey, @NonNull Long> sseEventDrops) {
+					@Nullable Map<@NonNull SseEventRouteDropKey, @NonNull Long> sseEventDrops) {
 				this.sseEventDrops = sseEventDrops;
 				return this;
 			}
@@ -1818,7 +1818,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseCommentDrops(
-					@Nullable Map<@NonNull ServerSentEventCommentRouteDropKey, @NonNull Long> sseCommentDrops) {
+					@Nullable Map<@NonNull SseCommentRouteDropKey, @NonNull Long> sseCommentDrops) {
 				this.sseCommentDrops = sseCommentDrops;
 				return this;
 			}
@@ -1831,7 +1831,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseTimeToFirstEvent(
-					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent) {
+					@Nullable Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseTimeToFirstEvent) {
 				this.sseTimeToFirstEvent = sseTimeToFirstEvent;
 				return this;
 			}
@@ -1844,7 +1844,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseEventWriteDurations(
-					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations) {
+					@Nullable Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseEventWriteDurations) {
 				this.sseEventWriteDurations = sseEventWriteDurations;
 				return this;
 			}
@@ -1857,7 +1857,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseEventDeliveryLag(
-					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag) {
+					@Nullable Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseEventDeliveryLag) {
 				this.sseEventDeliveryLag = sseEventDeliveryLag;
 				return this;
 			}
@@ -1870,7 +1870,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseEventSizes(
-					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes) {
+					@Nullable Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseEventSizes) {
 				this.sseEventSizes = sseEventSizes;
 				return this;
 			}
@@ -1883,7 +1883,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseQueueDepth(
-					@Nullable Map<@NonNull ServerSentEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth) {
+					@Nullable Map<@NonNull SseEventRouteKey, @NonNull HistogramSnapshot> sseQueueDepth) {
 				this.sseQueueDepth = sseQueueDepth;
 				return this;
 			}
@@ -1896,7 +1896,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseCommentDeliveryLag(
-					@Nullable Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag) {
+					@Nullable Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentDeliveryLag) {
 				this.sseCommentDeliveryLag = sseCommentDeliveryLag;
 				return this;
 			}
@@ -1909,7 +1909,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseCommentSizes(
-					@Nullable Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes) {
+					@Nullable Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentSizes) {
 				this.sseCommentSizes = sseCommentSizes;
 				return this;
 			}
@@ -1922,7 +1922,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseCommentQueueDepth(
-					@Nullable Map<@NonNull ServerSentEventCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth) {
+					@Nullable Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth) {
 				this.sseCommentQueueDepth = sseCommentQueueDepth;
 				return this;
 			}
@@ -1935,7 +1935,7 @@ public interface MetricsCollector {
 			 */
 			@NonNull
 			public Builder sseConnectionDurations(
-					@Nullable Map<@NonNull ServerSentEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations) {
+					@Nullable Map<@NonNull SseEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations) {
 				this.sseConnectionDurations = sseConnectionDurations;
 				return this;
 			}
@@ -2298,7 +2298,7 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	enum ServerSentEventEnqueueOutcome {
+	enum SseEventEnqueueOutcome {
 		/**
 		 * An enqueue attempt to a connection was made.
 		 */
@@ -2318,7 +2318,7 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	enum ServerSentEventDropReason {
+	enum SseEventDropReason {
 		/**
 		 * The per-connection write queue was full.
 		 */
@@ -2390,10 +2390,10 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventCommentRouteKey(@NonNull RouteType routeType,
+	record SseCommentRouteKey(@NonNull RouteType routeType,
 																				@Nullable ResourcePathDeclaration route,
-																				ServerSentEventComment.@NonNull CommentType commentType) {
-		public ServerSentEventCommentRouteKey {
+																				SseComment.@NonNull CommentType commentType) {
+		public SseCommentRouteKey {
 			requireNonNull(routeType);
 			requireNonNull(commentType);
 			if (routeType == RouteType.MATCHED && route == null)
@@ -2408,9 +2408,9 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventRouteKey(@NonNull RouteType routeType,
+	record SseEventRouteKey(@NonNull RouteType routeType,
 																 @Nullable ResourcePathDeclaration route) {
-		public ServerSentEventRouteKey {
+		public SseEventRouteKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
 				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
@@ -2424,10 +2424,10 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventRouteHandshakeFailureKey(@NonNull RouteType routeType,
+	record SseEventRouteHandshakeFailureKey(@NonNull RouteType routeType,
 																								 @Nullable ResourcePathDeclaration route,
-																								 ServerSentEventConnection.@NonNull HandshakeFailureReason handshakeFailureReason) {
-		public ServerSentEventRouteHandshakeFailureKey {
+																								 SseConnection.@NonNull HandshakeFailureReason handshakeFailureReason) {
+		public SseEventRouteHandshakeFailureKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
 				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
@@ -2442,10 +2442,10 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
+	record SseEventRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
 																							 @Nullable ResourcePathDeclaration route,
-																							 @NonNull ServerSentEventEnqueueOutcome outcome) {
-		public ServerSentEventRouteEnqueueOutcomeKey {
+																							 @NonNull SseEventEnqueueOutcome outcome) {
+		public SseEventRouteEnqueueOutcomeKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
 				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
@@ -2460,11 +2460,11 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventCommentRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
+	record SseCommentRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
 																											@Nullable ResourcePathDeclaration route,
-																											ServerSentEventComment.@NonNull CommentType commentType,
-																											@NonNull ServerSentEventEnqueueOutcome outcome) {
-		public ServerSentEventCommentRouteEnqueueOutcomeKey {
+																											SseComment.@NonNull CommentType commentType,
+																											@NonNull SseEventEnqueueOutcome outcome) {
+		public SseCommentRouteEnqueueOutcomeKey {
 			requireNonNull(routeType);
 			requireNonNull(commentType);
 			if (routeType == RouteType.MATCHED && route == null)
@@ -2480,10 +2480,10 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventRouteDropKey(@NonNull RouteType routeType,
+	record SseEventRouteDropKey(@NonNull RouteType routeType,
 																		 @Nullable ResourcePathDeclaration route,
-																		 @NonNull ServerSentEventDropReason dropReason) {
-		public ServerSentEventRouteDropKey {
+																		 @NonNull SseEventDropReason dropReason) {
+		public SseEventRouteDropKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
 				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
@@ -2498,11 +2498,11 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventCommentRouteDropKey(@NonNull RouteType routeType,
+	record SseCommentRouteDropKey(@NonNull RouteType routeType,
 																						@Nullable ResourcePathDeclaration route,
-																						ServerSentEventComment.@NonNull CommentType commentType,
-																						@NonNull ServerSentEventDropReason dropReason) {
-		public ServerSentEventCommentRouteDropKey {
+																						SseComment.@NonNull CommentType commentType,
+																						@NonNull SseEventDropReason dropReason) {
+		public SseCommentRouteDropKey {
 			requireNonNull(routeType);
 			requireNonNull(commentType);
 			if (routeType == RouteType.MATCHED && route == null)
@@ -2518,10 +2518,10 @@ public interface MetricsCollector {
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record ServerSentEventRouteTerminationKey(@NonNull RouteType routeType,
+	record SseEventRouteTerminationKey(@NonNull RouteType routeType,
 																						@Nullable ResourcePathDeclaration route,
-																						ServerSentEventConnection.@NonNull TerminationReason terminationReason) {
-		public ServerSentEventRouteTerminationKey {
+																						SseConnection.@NonNull TerminationReason terminationReason) {
+		public SseEventRouteTerminationKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
 				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");

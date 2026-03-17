@@ -17,7 +17,7 @@
 package com.soklet;
 
 import com.soklet.Soklet.DefaultSimulator;
-import com.soklet.Soklet.MockServerSentEventUnicaster;
+import com.soklet.Soklet.MockSseUnicaster;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -34,22 +34,22 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Sealed interface used by {@link Simulator#performServerSentEventRequest(Request)} during integration tests, which encapsulates the 3 logical outcomes for SSE connections: accepted handshake, rejected handshake, and general request failure.
+ * Sealed interface used by {@link Simulator#performSseRequest(Request)} during integration tests, which encapsulates the 3 logical outcomes for SSE connections: accepted handshake, rejected handshake, and general request failure.
  * <p>
  * See <a href="https://www.soklet.com/docs/testing#integration-testing">https://www.soklet.com/docs/testing#integration-testing</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public sealed interface ServerSentEventRequestResult permits ServerSentEventRequestResult.HandshakeAccepted, ServerSentEventRequestResult.HandshakeRejected, ServerSentEventRequestResult.RequestFailed {
+public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccepted, SseRequestResult.HandshakeRejected, SseRequestResult.RequestFailed {
 	/**
-	 * Represents the result of an SSE accepted handshake (connection stays open) when simulated by {@link Simulator#performServerSentEventRequest(Request)}.
+	 * Represents the result of an SSE accepted handshake (connection stays open) when simulated by {@link Simulator#performSseRequest(Request)}.
 	 * <p>
 	 * The {@link #registerEventConsumer(Consumer)} and {@link #registerCommentConsumer(Consumer)} methods can be used to "listen" for Server-Sent Events and Comments, respectively.
 	 * <p>
 	 * The data provided when the handshake was accepted is available via {@link #getHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
 	 */
 	@ThreadSafe
-	final class HandshakeAccepted implements ServerSentEventRequestResult {
+	final class HandshakeAccepted implements SseRequestResult {
 		private final HandshakeResult.@NonNull Accepted handshakeResult;
 		@NonNull
 		private final ResourcePath resourcePath;
@@ -60,21 +60,21 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		@NonNull
 		private final AtomicReference<@Nullable Consumer<Throwable>> unicastErrorHandler;
 		@NonNull
-		private List<@NonNull ServerSentEvent> clientInitializerEvents;
+		private List<@NonNull SseEvent> clientInitializerEvents;
 		@NonNull
-		private List<@NonNull ServerSentEventComment> clientInitializerComments;
+		private List<@NonNull SseComment> clientInitializerComments;
 		@NonNull
 		private final ReentrantLock lock;
 		@Nullable
-		private Consumer<ServerSentEvent> eventConsumer;
+		private Consumer<SseEvent> eventConsumer;
 		@Nullable
-		private Consumer<ServerSentEventComment> commentConsumer;
+		private Consumer<SseComment> commentConsumer;
 
 		HandshakeAccepted(HandshakeResult.@NonNull Accepted handshakeResult,
 											@NonNull ResourcePath resourcePath,
 											@NonNull RequestResult requestResult,
 											@NonNull DefaultSimulator simulator,
-											@Nullable Consumer<ServerSentEventUnicaster> clientInitializer) {
+											@Nullable Consumer<SseUnicaster> clientInitializer) {
 			requireNonNull(handshakeResult);
 			requireNonNull(resourcePath);
 			requireNonNull(requestResult);
@@ -84,8 +84,8 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			this.resourcePath = resourcePath;
 			this.requestResult = requestResult;
 			this.simulator = simulator;
-			this.unicastErrorHandler = simulator.getServerSentEventServer()
-					.map(serverSentEventServer -> serverSentEventServer.getUnicastErrorHandler())
+			this.unicastErrorHandler = simulator.getSseServer()
+					.map(sseServer -> sseServer.getUnicastErrorHandler())
 					.orElseGet(AtomicReference::new);
 			this.eventConsumer = null;
 			this.commentConsumer = null;
@@ -95,37 +95,37 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 			this.clientInitializerComments = new CopyOnWriteArrayList<>();
 
 			if (clientInitializer != null) {
-				clientInitializer.accept(new MockServerSentEventUnicaster(
+				clientInitializer.accept(new MockSseUnicaster(
 						getResourcePath(),
-						(serverSentEvent) -> {
-							requireNonNull(serverSentEvent);
+						(sseEvent) -> {
+							requireNonNull(sseEvent);
 
 							// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
 							// If we do have the event consumer registered, send immediately
-							Consumer<ServerSentEvent> eventConsumer = getEventConsumer().orElse(null);
+							Consumer<SseEvent> eventConsumer = getEventConsumer().orElse(null);
 
 							if (eventConsumer == null)
-								clientInitializerEvents.add(serverSentEvent);
+								clientInitializerEvents.add(sseEvent);
 							else {
 								try {
-									eventConsumer.accept(serverSentEvent);
+									eventConsumer.accept(sseEvent);
 								} catch (Throwable throwable) {
 									handleUnicastError(throwable);
 								}
 							}
 						},
-						(serverSentEventComment) -> {
-							requireNonNull(serverSentEventComment);
+						(sseComment) -> {
+							requireNonNull(sseComment);
 
 							// If we don't have an event consumer registered, collect the events in a list to be fired off once the consumer is registered.
 							// If we do have the event consumer registered, send immediately
-							Consumer<ServerSentEventComment> commentConsumer = getCommentConsumer().orElse(null);
+							Consumer<SseComment> commentConsumer = getCommentConsumer().orElse(null);
 
 							if (commentConsumer == null)
-								clientInitializerComments.add(serverSentEventComment);
+								clientInitializerComments.add(sseComment);
 							else {
 								try {
-									commentConsumer.accept(serverSentEventComment);
+									commentConsumer.accept(sseComment);
 								} catch (Throwable throwable) {
 									handleUnicastError(throwable);
 								}
@@ -137,7 +137,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 
 		/**
-		 * Registers a {@link ServerSentEvent} "consumer" for this connection - similar to how a real client would listen for Server-Sent Events.
+		 * Registers a {@link SseEvent} "consumer" for this connection - similar to how a real client would listen for Server-Sent Events.
 		 * <p>
 		 * Each connection may have at most 1 event consumer.
 		 * <p>
@@ -146,7 +146,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 * @param eventConsumer function to be invoked when a Server-Sent Event has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 event consumer
 		 */
-		public void registerEventConsumer(@NonNull Consumer<ServerSentEvent> eventConsumer) {
+		public void registerEventConsumer(@NonNull Consumer<SseEvent> eventConsumer) {
 			requireNonNull(eventConsumer);
 
 			getLock().lock();
@@ -158,7 +158,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 				this.eventConsumer = eventConsumer;
 
 				// Send client initializer unicast events immediately, before any broadcasts can make it through
-				for (ServerSentEvent event : getClientInitializerEvents()) {
+				for (SseEvent event : getClientInitializerEvents()) {
 					try {
 						eventConsumer.accept(event);
 					} catch (Throwable throwable) {
@@ -168,7 +168,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 
 				// Register with the mock SSE server broadcaster, preserving client context
 				Object clientContext = getHandshakeResult().getClientContext().orElse(null);
-				getSimulator().getServerSentEventServer().get().registerEventConsumer(getResourcePath(), eventConsumer, clientContext);
+				getSimulator().getSseServer().get().registerEventConsumer(getResourcePath(), eventConsumer, clientContext);
 			} finally {
 				getLock().unlock();
 			}
@@ -184,7 +184,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		 * @param commentConsumer function to be invoked when a Server-Sent comment has been unicast/broadcast on the Resource Path
 		 * @throws IllegalStateException if you attempt to register more than 1 comment consumer
 		 */
-		public void registerCommentConsumer(@NonNull Consumer<ServerSentEventComment> commentConsumer) {
+		public void registerCommentConsumer(@NonNull Consumer<SseComment> commentConsumer) {
 			requireNonNull(commentConsumer);
 
 			getLock().lock();
@@ -196,7 +196,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 				this.commentConsumer = commentConsumer;
 
 				// Send client initializer unicast comments immediately, before any broadcasts can make it through
-				for (ServerSentEventComment comment : getClientInitializerComments()) {
+				for (SseComment comment : getClientInitializerComments()) {
 					try {
 						commentConsumer.accept(comment);
 					} catch (Throwable throwable) {
@@ -206,7 +206,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 
 				// Register with the mock SSE server broadcaster, preserving client context
 				Object clientContext = getHandshakeResult().getClientContext().orElse(null);
-				getSimulator().getServerSentEventServer().get().registerCommentConsumer(getResourcePath(), commentConsumer, clientContext);
+				getSimulator().getSseServer().get().registerCommentConsumer(getResourcePath(), commentConsumer, clientContext);
 			} finally {
 				getLock().unlock();
 			}
@@ -217,17 +217,17 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 
 			try {
 				getEventConsumer().ifPresent((eventConsumer ->
-						getSimulator().getServerSentEventServer().get().unregisterEventConsumer(getResourcePath(), eventConsumer)));
+						getSimulator().getSseServer().get().unregisterEventConsumer(getResourcePath(), eventConsumer)));
 
 				getCommentConsumer().ifPresent((commentConsumer ->
-						getSimulator().getServerSentEventServer().get().unregisterCommentConsumer(getResourcePath(), commentConsumer)));
+						getSimulator().getSseServer().get().unregisterCommentConsumer(getResourcePath(), commentConsumer)));
 			} finally {
 				getLock().unlock();
 			}
 		}
 
 		/**
-		 * Gets the data provided when the handshake was accepted by the {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em>.
+		 * Gets the data provided when the handshake was accepted by the {@link com.soklet.annotation.SseEventSource}-annotated <em>Resource Method</em>.
 		 *
 		 * @return the data provided when the handshake was accepted
 		 */
@@ -284,22 +284,22 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 
 		@NonNull
-		private List<@NonNull ServerSentEvent> getClientInitializerEvents() {
+		private List<@NonNull SseEvent> getClientInitializerEvents() {
 			return this.clientInitializerEvents;
 		}
 
 		@NonNull
-		private List<@NonNull ServerSentEventComment> getClientInitializerComments() {
+		private List<@NonNull SseComment> getClientInitializerComments() {
 			return this.clientInitializerComments;
 		}
 
 		@NonNull
-		private Optional<Consumer<ServerSentEvent>> getEventConsumer() {
+		private Optional<Consumer<SseEvent>> getEventConsumer() {
 			return Optional.ofNullable(this.eventConsumer);
 		}
 
 		@NonNull
-		private Optional<Consumer<ServerSentEventComment>> getCommentConsumer() {
+		private Optional<Consumer<SseComment>> getCommentConsumer() {
 			return Optional.ofNullable(this.commentConsumer);
 		}
 
@@ -310,12 +310,12 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 	}
 
 	/**
-	 * Represents the result of an SSE rejected handshake (explicit rejection; connection closed) when simulated by {@link Simulator#performServerSentEventRequest(Request)}.
+	 * Represents the result of an SSE rejected handshake (explicit rejection; connection closed) when simulated by {@link Simulator#performSseRequest(Request)}.
 	 * <p>
 	 * The data provided when the handshake was rejected is available via {@link #getHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
 	 */
 	@ThreadSafe
-	final class HandshakeRejected implements ServerSentEventRequestResult {
+	final class HandshakeRejected implements SseRequestResult {
 		private final HandshakeResult.@NonNull Rejected handshakeResult;
 		@NonNull
 		private final RequestResult requestResult;
@@ -330,7 +330,7 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 		}
 
 		/**
-		 * Gets the data provided when the handshake was explicitly rejected by the {@link com.soklet.annotation.ServerSentEventSource}-annotated <em>Resource Method</em>.
+		 * Gets the data provided when the handshake was explicitly rejected by the {@link com.soklet.annotation.SseEventSource}-annotated <em>Resource Method</em>.
 		 *
 		 * @return the data provided when the handshake was rejected
 		 */
@@ -372,12 +372,12 @@ public sealed interface ServerSentEventRequestResult permits ServerSentEventRequ
 	}
 
 	/**
-	 * Represents the result of an SSE request failure (implicit rejection, e.g. an exception occurred; connection closed) when simulated by {@link Simulator#performServerSentEventRequest(Request)}.
+	 * Represents the result of an SSE request failure (implicit rejection, e.g. an exception occurred; connection closed) when simulated by {@link Simulator#performSseRequest(Request)}.
 	 * <p>
 	 * The final data sent to the client is available via {@link #getRequestResult()}.
 	 */
 	@ThreadSafe
-	final class RequestFailed implements ServerSentEventRequestResult {
+	final class RequestFailed implements SseRequestResult {
 		@NonNull
 		private final RequestResult requestResult;
 

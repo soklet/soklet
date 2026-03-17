@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import com.soklet.Soklet.MockServerSentEventServer;
+import com.soklet.Soklet.MockSseServer;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -27,27 +27,27 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Package-private internal proxy for {@link ServerSentEventServer} which enables transparent mock usage in {@link Simulator}.
+ * Package-private internal proxy for {@link SseServer} which enables transparent mock usage in {@link Simulator}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class ServerSentEventServerProxy implements ServerSentEventServer {
+final class SseServerProxy implements SseServer {
 	@NonNull
-	private final ServerSentEventServer realImplementation;
+	private final SseServer realImplementation;
 	@NonNull
-	private final AtomicReference<ServerSentEventServer> activeImplementation;
+	private final AtomicReference<SseServer> activeImplementation;
 
-	ServerSentEventServerProxy(@NonNull ServerSentEventServer realImplementation) {
+	SseServerProxy(@NonNull SseServer realImplementation) {
 		requireNonNull(realImplementation);
 
 		this.realImplementation = realImplementation;
 		this.activeImplementation = new AtomicReference<>(realImplementation);
 	}
 
-	void enableSimulatorMode(@NonNull MockServerSentEventServer mockServerSentEventServer) {
-		requireNonNull(mockServerSentEventServer);
-		this.activeImplementation.set(mockServerSentEventServer);
+	void enableSimulatorMode(@NonNull MockSseServer mockSseServer) {
+		requireNonNull(mockSseServer);
+		this.activeImplementation.set(mockSseServer);
 	}
 
 	void disableSimulatorMode() {
@@ -56,7 +56,7 @@ final class ServerSentEventServerProxy implements ServerSentEventServer {
 
 	@NonNull
 	@Override
-	public Optional<? extends ServerSentEventBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
+	public Optional<? extends SseBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
 		return getActiveImplementation().acquireBroadcaster(resourcePath);
 	}
 
@@ -88,12 +88,12 @@ final class ServerSentEventServerProxy implements ServerSentEventServer {
 	}
 
 	@NonNull
-	ServerSentEventServer getRealImplementation() {
+	SseServer getRealImplementation() {
 		return this.realImplementation;
 	}
 
 	@NonNull
-	ServerSentEventServer getActiveImplementation() {
+	SseServer getActiveImplementation() {
 		return this.activeImplementation.get();
 	}
 }

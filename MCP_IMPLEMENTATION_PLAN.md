@@ -32,7 +32,7 @@ This should be:
 
 ### 1. Add `McpServer` alongside existing servers
 
-Keep `Server` and `ServerSentEventServer` unchanged. Add an optional `McpServer`.
+Keep `Server` and `SseServer` unchanged. Add an optional `McpServer`.
 
 Do not:
 
@@ -354,7 +354,7 @@ All new methods have no-op defaults, so existing implementations are unaffected.
 ```java
 public enum ServerType {
     STANDARD_HTTP,
-    SERVER_SENT_EVENT,
+    SSE,
     MCP
 }
 ```
@@ -422,13 +422,13 @@ default void didFinishMcpRequestHandling(@NonNull Request request,
     // No-op by default
 }
 
-default void didEstablishMcpServerSentEventStream(@NonNull Request request,
+default void didEstablishMcpSseStream(@NonNull Request request,
                                                   @NonNull Class<? extends McpEndpoint> endpointClass,
                                                   @NonNull String sessionId) {
     // No-op by default
 }
 
-default void willTerminateMcpServerSentEventStream(@NonNull Request request,
+default void willTerminateMcpSseStream(@NonNull Request request,
                                                    @NonNull Class<? extends McpEndpoint> endpointClass,
                                                    @NonNull String sessionId,
                                                    @NonNull McpStreamTerminationReason terminationReason,
@@ -436,7 +436,7 @@ default void willTerminateMcpServerSentEventStream(@NonNull Request request,
     // No-op by default
 }
 
-default void didTerminateMcpServerSentEventStream(@NonNull Request request,
+default void didTerminateMcpSseStream(@NonNull Request request,
                                                   @NonNull Class<? extends McpEndpoint> endpointClass,
                                                   @NonNull String sessionId,
                                                   @NonNull Duration connectionDuration,
@@ -453,7 +453,7 @@ Semantics:
 - `didCreateMcpSession(...)` fires only after the session record is durably created in `McpSessionStore`.
 - `didTerminateMcpSession(...)` fires after the session is marked terminated. Physical store deletion may occur later and does not trigger a second callback.
 - if `initialize()` throws after session creation, Soklet routes the exception through `handleError()`, marks the session terminated with `McpSessionTerminationReason.INITIALIZATION_FAILED`, fires `didTerminateMcpSession(...)`, and may then delete the record. No usable session is established for the client even though create/terminate callbacks both fire.
-- `didEstablishMcpServerSentEventStream(...)` and `didTerminateMcpServerSentEventStream(...)` apply to successful `GET /mcp` stream establishment and later closure. Failed `GET /mcp` attempts are surfaced via the existing low-level request callbacks with `ServerType.MCP`.
+- `didEstablishMcpSseStream(...)` and `didTerminateMcpSseStream(...)` apply to successful `GET /mcp` stream establishment and later closure. Failed `GET /mcp` attempts are surfaced via the existing low-level request callbacks with `ServerType.MCP`.
 
 Concrete `MetricsCollector` additions:
 
@@ -492,13 +492,13 @@ default void didFinishMcpRequestHandling(@NonNull Request request,
     // No-op by default
 }
 
-default void didEstablishMcpServerSentEventStream(@NonNull Request request,
+default void didEstablishMcpSseStream(@NonNull Request request,
                                                   @NonNull Class<? extends McpEndpoint> endpointClass,
                                                   @NonNull String sessionId) {
     // No-op by default
 }
 
-default void didTerminateMcpServerSentEventStream(@NonNull Request request,
+default void didTerminateMcpSseStream(@NonNull Request request,
                                                   @NonNull Class<? extends McpEndpoint> endpointClass,
                                                   @NonNull String sessionId,
                                                   @NonNull Duration connectionDuration,
@@ -608,7 +608,7 @@ Default metrics semantics:
 - `getMcpConnectionsAccepted()`, `getMcpConnectionsRejected()`, `getMcpRequestReadFailures()`, and `getMcpRequestRejections()` are the MCP-specific analogues of the existing HTTP/SSE low-level transport counters and are driven by the generic callbacks using `ServerType.MCP`.
 - `getMcpRequests()` and `getMcpRequestDurations()` are keyed by resolved endpoint class, JSON-RPC method name, and final request outcome. No metric key includes path-parameter values, session context contents, JSON-RPC request IDs, or progress tokens.
 - `getActiveMcpSessions()` increments when `didCreateMcpSession(...)` fires and decrements when `didTerminateMcpSession(...)` fires.
-- `getActiveMcpStreams()` increments when `didEstablishMcpServerSentEventStream(...)` fires and decrements when `didTerminateMcpServerSentEventStream(...)` fires.
+- `getActiveMcpStreams()` increments when `didEstablishMcpSseStream(...)` fires and decrements when `didTerminateMcpSseStream(...)` fires.
 - `getMcpSessionDurations()` and `getMcpStreamDurations()` are termination-reason histograms, not simple counters; applications can derive counts from histogram sample totals.
 
 `LogEventType` gains the following MCP-specific lifecycle observer failure entries:
@@ -621,9 +621,9 @@ Default metrics semantics:
 - `LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SESSION_FAILED`
 - `LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED`
 - `LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED`
-- `LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SERVER_SENT_EVENT_STREAM_FAILED`
-- `LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED`
-- `LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED`
+- `LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SSE_STREAM_FAILED`
+- `LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SSE_STREAM_FAILED`
+- `LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SSE_STREAM_FAILED`
 
 `MetricsCollector` callback failures continue to use the existing `METRICS_COLLECTOR_FAILED` event.
 
@@ -696,7 +696,7 @@ These deferments are intentional, not accidental omissions. The goal is to make 
 
 ```java
 SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(8080).build())
-    .serverSentEventServer(ServerSentEventServer.withPort(8081).build())
+    .sseServer(SseServer.withPort(8081).build())
     .instanceProvider(myInstanceProvider)
     .mcpServer(McpServer.withPort(8082)
         .handlerResolver(McpHandlerResolver.fromClasspathIntrospection())
@@ -1314,7 +1314,7 @@ public interface Simulator {
     RequestResult performRequest(@NonNull Request request);
 
     @NonNull
-    ServerSentEventRequestResult performServerSentEventRequest(@NonNull Request request);
+    SseRequestResult performSseRequest(@NonNull Request request);
 
     @NonNull
     McpRequestResult performMcpRequest(@NonNull Request request);
@@ -1867,7 +1867,7 @@ The configured `McpSessionStore` is server-wide, not endpoint-specific. Endpoint
 
 ## SSE model
 
-`McpServer` manages its own SSE streams (session-bound, not path-bound). Internal SSE helpers (framing, heartbeats, write queues, backpressure) are extracted and shared rather than copied from `DefaultServerSentEventServer`.
+`McpServer` manages its own SSE streams (session-bound, not path-bound). Internal SSE helpers (framing, heartbeats, write queues, backpressure) are extracted and shared rather than copied from `DefaultSseServer`.
 
 ## Security
 

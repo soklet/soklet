@@ -18,14 +18,14 @@ package com.soklet;
 
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
-import com.soklet.annotation.ServerSentEventSource;
+import com.soklet.annotation.SseEventSource;
 import com.soklet.MetricsCollector.HttpServerRouteKey;
 import com.soklet.MetricsCollector.HttpServerRouteStatusKey;
 import com.soklet.MetricsCollector.RouteType;
-import com.soklet.MetricsCollector.ServerSentEventCommentRouteKey;
-import com.soklet.MetricsCollector.ServerSentEventRouteHandshakeFailureKey;
-import com.soklet.MetricsCollector.ServerSentEventRouteKey;
-import com.soklet.MetricsCollector.ServerSentEventRouteTerminationKey;
+import com.soklet.MetricsCollector.SseCommentRouteKey;
+import com.soklet.MetricsCollector.SseEventRouteHandshakeFailureKey;
+import com.soklet.MetricsCollector.SseEventRouteKey;
+import com.soklet.MetricsCollector.SseEventRouteTerminationKey;
 import com.soklet.MetricsCollector.HistogramSnapshot;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -141,7 +141,7 @@ public class MetricsCollectorTests {
 		assertFalse(noSseSnapshot.contains("soklet_sse_connections_accepted_total"));
 
 		SokletConfig withSseConfig = SokletConfig.withHttpServer(HttpServer.withPort(0).build())
-				.serverSentEventServer(ServerSentEventServer.withPort(0).build())
+				.sseServer(SseServer.withPort(0).build())
 				.metricsCollector(collector)
 				.build();
 		collector.initialize(withSseConfig);
@@ -217,35 +217,35 @@ public class MetricsCollectorTests {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		ResourceMethod resourceMethod = resourceMethodFor("/events/{id}", HttpMethod.GET, "events", true);
 		Request request = Request.withPath(HttpMethod.GET, "/events/42").build();
-		ServerSentEventConnection connection = new TestServerSentEventConnection(request, resourceMethod, Instant.now(), null);
-		ServerSentEvent event = ServerSentEvent.withData("payload").build();
-		ServerSentEventComment comment = ServerSentEventComment.fromComment("ping");
-		ServerSentEventComment heartbeat = ServerSentEventComment.heartbeatInstance();
+		SseConnection connection = new TestSseConnection(request, resourceMethod, Instant.now(), null);
+		SseEvent event = SseEvent.withData("payload").build();
+		SseComment comment = SseComment.fromComment("ping");
+		SseComment heartbeat = SseComment.heartbeatInstance();
 
-		collector.didFailToEstablishServerSentEventConnection(request, resourceMethod,
-				ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, null);
-		collector.didEstablishServerSentEventConnection(connection);
-		collector.willWriteServerSentEvent(connection, event);
-		collector.didWriteServerSentEvent(connection, event, Duration.ofMillis(2), Duration.ofNanos(500), 12, 3);
-		collector.didWriteServerSentEventComment(connection, comment,
+		collector.didFailToEstablishSseConnection(request, resourceMethod,
+				SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, null);
+		collector.didEstablishSseConnection(connection);
+		collector.willWriteSseEvent(connection, event);
+		collector.didWriteSseEvent(connection, event, Duration.ofMillis(2), Duration.ofNanos(500), 12, 3);
+		collector.didWriteSseComment(connection, comment,
 				Duration.ofMillis(1), Duration.ofNanos(250), 4, 1);
-		collector.didWriteServerSentEventComment(connection, heartbeat,
+		collector.didWriteSseComment(connection, heartbeat,
 				Duration.ofMillis(1), Duration.ofNanos(100), 3, 2);
-		collector.didTerminateServerSentEventConnection(connection, Duration.ofSeconds(1),
-				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE, null);
+		collector.didTerminateSseConnection(connection, Duration.ofSeconds(1),
+				SseConnection.TerminationReason.REMOTE_CLOSE, null);
 
 		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 
 		ResourcePathDeclaration eventsRoute = ResourcePathDeclaration.fromPath("/events/{id}");
-		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteType.MATCHED, eventsRoute);
-		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteType.MATCHED, eventsRoute,
-				ServerSentEventComment.CommentType.COMMENT);
-		ServerSentEventCommentRouteKey heartbeatKey = new ServerSentEventCommentRouteKey(RouteType.MATCHED, eventsRoute,
-				ServerSentEventComment.CommentType.HEARTBEAT);
-		ServerSentEventRouteHandshakeFailureKey handshakeFailureKey = new ServerSentEventRouteHandshakeFailureKey(
-				RouteType.MATCHED, eventsRoute, ServerSentEventConnection.HandshakeFailureReason.HANDSHAKE_REJECTED);
-		ServerSentEventRouteTerminationKey terminationKey = new ServerSentEventRouteTerminationKey(RouteType.MATCHED, eventsRoute,
-				ServerSentEventConnection.TerminationReason.REMOTE_CLOSE);
+		SseEventRouteKey routeKey = new SseEventRouteKey(RouteType.MATCHED, eventsRoute);
+		SseCommentRouteKey commentKey = new SseCommentRouteKey(RouteType.MATCHED, eventsRoute,
+				SseComment.CommentType.COMMENT);
+		SseCommentRouteKey heartbeatKey = new SseCommentRouteKey(RouteType.MATCHED, eventsRoute,
+				SseComment.CommentType.HEARTBEAT);
+		SseEventRouteHandshakeFailureKey handshakeFailureKey = new SseEventRouteHandshakeFailureKey(
+				RouteType.MATCHED, eventsRoute, SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED);
+		SseEventRouteTerminationKey terminationKey = new SseEventRouteTerminationKey(RouteType.MATCHED, eventsRoute,
+				SseConnection.TerminationReason.REMOTE_CLOSE);
 
 		HistogramSnapshot timeToFirstEvent = snapshot.getSseTimeToFirstEvent().get(routeKey);
 		assertNotNull(timeToFirstEvent);
@@ -369,7 +369,7 @@ public class MetricsCollectorTests {
 		int ssePort = findFreePort();
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 
-		ServerSentEventServer serverSentEventServer = ServerSentEventServer.withPort(ssePort)
+		SseServer sseServer = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.verifyConnectionOnceEstablished(false)
 				.heartbeatInterval(Duration.ofMinutes(5))
@@ -377,15 +377,15 @@ public class MetricsCollectorTests {
 				.build();
 
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
-				.serverSentEventServer(serverSentEventServer)
+				.sseServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseMetricsResource.class)))
 				.metricsCollector(collector)
 				.build();
 
 		ResourcePathDeclaration sseMetricsRoute = ResourcePathDeclaration.fromPath("/metrics/sse/{id}");
-		ServerSentEventRouteKey routeKey = new ServerSentEventRouteKey(RouteType.MATCHED, sseMetricsRoute);
-		ServerSentEventCommentRouteKey commentKey = new ServerSentEventCommentRouteKey(RouteType.MATCHED, sseMetricsRoute,
-				ServerSentEventComment.CommentType.COMMENT);
+		SseEventRouteKey routeKey = new SseEventRouteKey(RouteType.MATCHED, sseMetricsRoute);
+		SseCommentRouteKey commentKey = new SseCommentRouteKey(RouteType.MATCHED, sseMetricsRoute,
+				SseComment.CommentType.COMMENT);
 
 		try (Soklet app = Soklet.fromConfig(config)) {
 			app.start();
@@ -399,10 +399,10 @@ public class MetricsCollectorTests {
 				assertTrue(statusLine.startsWith("HTTP/1.1 200"));
 				readHeadersCRLF(in);
 
-				ServerSentEventBroadcaster broadcaster = awaitBroadcasterWithClient(serverSentEventServer,
+				SseBroadcaster broadcaster = awaitBroadcasterWithClient(sseServer,
 						"/metrics/sse/abc", Duration.ofSeconds(2));
-				broadcaster.broadcastEvent(ServerSentEvent.withData("payload").build());
-				broadcaster.broadcastComment(ServerSentEventComment.fromComment("note"));
+				broadcaster.broadcastEvent(SseEvent.withData("payload").build());
+				broadcaster.broadcastComment(SseComment.fromComment("note"));
 
 				boolean sawData = false;
 				boolean sawComment = false;
@@ -461,10 +461,10 @@ public class MetricsCollectorTests {
 	private static ResourceMethod resourceMethodFor(@NonNull String path,
 																									@NonNull HttpMethod method,
 																									@NonNull String methodName,
-																									boolean serverSentEventSource) {
+																									boolean sseEventSource) {
 		ResourcePathDeclaration resourcePathDeclaration = ResourcePathDeclaration.fromPath(path);
 		Method reflectedMethod = reflectedMethodFor(methodName);
-		return ResourceMethod.fromComponents(method, resourcePathDeclaration, reflectedMethod, serverSentEventSource);
+		return ResourceMethod.fromComponents(method, resourcePathDeclaration, reflectedMethod, sseEventSource);
 	}
 
 	private static Method reflectedMethodFor(@NonNull String methodName) {
@@ -495,13 +495,13 @@ public class MetricsCollectorTests {
 
 	@ThreadSafe
 	public static class SseMetricsResource {
-		@ServerSentEventSource("/metrics/sse/{id}")
+		@SseEventSource("/metrics/sse/{id}")
 		public HandshakeResult handleSse(@NonNull @PathParameter String id) {
 			return HandshakeResult.accept();
 		}
 	}
 
-	private static final class TestServerSentEventConnection implements ServerSentEventConnection {
+	private static final class TestSseConnection implements SseConnection {
 		@NonNull
 		private final Request request;
 		@NonNull
@@ -511,7 +511,7 @@ public class MetricsCollectorTests {
 		@Nullable
 		private final Object clientContext;
 
-		private TestServerSentEventConnection(@NonNull Request request,
+		private TestSseConnection(@NonNull Request request,
 																					@NonNull ResourceMethod resourceMethod,
 																					@NonNull Instant establishedAt,
 																					@Nullable Object clientContext) {
@@ -595,17 +595,17 @@ public class MetricsCollectorTests {
 		}
 	}
 
-	private static ServerSentEventBroadcaster awaitBroadcasterWithClient(@NonNull ServerSentEventServer serverSentEventServer,
+	private static SseBroadcaster awaitBroadcasterWithClient(@NonNull SseServer sseServer,
 																																			 @NonNull String path,
 																																			 @NonNull Duration timeout) throws InterruptedException {
-		requireNonNull(serverSentEventServer);
+		requireNonNull(sseServer);
 		requireNonNull(path);
 		requireNonNull(timeout);
 
 		long deadline = System.nanoTime() + timeout.toNanos();
 
 		while (true) {
-			ServerSentEventBroadcaster broadcaster = serverSentEventServer.acquireBroadcaster(ResourcePath.fromPath(path)).orElseThrow();
+			SseBroadcaster broadcaster = sseServer.acquireBroadcaster(ResourcePath.fromPath(path)).orElseThrow();
 			if (broadcaster.getClientCount() > 0) return broadcaster;
 			if (System.nanoTime() > deadline)
 				throw new AssertionError("SSE connection not registered in time");

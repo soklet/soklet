@@ -112,49 +112,49 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didEstablishMcpServerSentEventStream(Request, Class, String)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didEstablishMcpSseStream(Request, Class, String)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
+	LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SSE_STREAM_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#willTerminateMcpServerSentEventStream(Request, Class, String, McpStreamTerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willTerminateMcpSseStream(Request, Class, String, McpStreamTerminationReason, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
+	LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SSE_STREAM_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didTerminateMcpServerSentEventStream(Request, Class, String, Duration, McpStreamTerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didTerminateMcpSseStream(Request, Class, String, Duration, McpStreamTerminationReason, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SERVER_SENT_EVENT_STREAM_FAILED,
+	LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SSE_STREAM_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#willEstablishServerSentEventConnection(Request, ResourceMethod)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willEstablishSseConnection(Request, ResourceMethod)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_WILL_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	LIFECYCLE_OBSERVER_WILL_ESTABLISH_SSE_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didEstablishServerSentEventConnection(ServerSentEventConnection)} or {@link LifecycleObserver#didFailToEstablishServerSentEventConnection(Request, ResourceMethod, ServerSentEventConnection.HandshakeFailureReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didEstablishSseConnection(SseConnection)} or {@link LifecycleObserver#didFailToEstablishSseConnection(Request, ResourceMethod, SseConnection.HandshakeFailureReason, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_DID_ESTABLISH_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#willTerminateServerSentEventConnection(ServerSentEventConnection, ServerSentEventConnection.TerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willTerminateSseConnection(SseConnection, SseConnection.TerminationReason, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_WILL_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	LIFECYCLE_OBSERVER_WILL_TERMINATE_SSE_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didTerminateServerSentEventConnection(ServerSentEventConnection, Duration, ServerSentEventConnection.TerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didTerminateSseConnection(SseConnection, Duration, SseConnection.TerminationReason, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_DID_TERMINATE_SERVER_SENT_EVENT_CONNECTION_FAILED,
+	LIFECYCLE_OBSERVER_DID_TERMINATE_SSE_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#willWriteServerSentEvent(ServerSentEventConnection, ServerSentEvent)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willWriteSseEvent(SseConnection, SseEvent)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_FAILED,
+	LIFECYCLE_OBSERVER_WILL_WRITE_SSE_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didWriteServerSentEvent(ServerSentEventConnection, ServerSentEvent, Duration)} or {@link LifecycleObserver#didFailToWriteServerSentEvent(ServerSentEventConnection, ServerSentEvent, Duration, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didWriteSseEvent(SseConnection, SseEvent, Duration)} or {@link LifecycleObserver#didFailToWriteSseEvent(SseConnection, SseEvent, Duration, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_FAILED,
+	LIFECYCLE_OBSERVER_DID_WRITE_SSE_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#willWriteServerSentEventComment(ServerSentEventConnection, ServerSentEventComment)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willWriteSseComment(SseConnection, SseComment)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_WILL_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED,
+	LIFECYCLE_OBSERVER_WILL_WRITE_SSE_COMMENT_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didWriteServerSentEventComment(ServerSentEventConnection, ServerSentEventComment, Duration)} or {@link LifecycleObserver#didFailToWriteServerSentEventComment(ServerSentEventConnection, ServerSentEventComment, Duration, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didWriteSseComment(SseConnection, SseComment, Duration)} or {@link LifecycleObserver#didFailToWriteSseComment(SseConnection, SseComment, Duration, Throwable)} threw an exception.
 	 */
-	LIFECYCLE_OBSERVER_DID_WRITE_SERVER_SENT_EVENT_COMMENT_FAILED,
+	LIFECYCLE_OBSERVER_DID_WRITE_SSE_COMMENT_FAILED,
 	/**
 	 * Indicates a {@link MetricsCollector} invocation threw an exception.
 	 */
@@ -176,23 +176,23 @@ public enum LogEventType {
 	 */
 	SERVER_INTERNAL_ERROR,
 	/**
-	 * Indicates that the {@link ServerSentEventServer} received a request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
+	 * Indicates that the {@link SseServer} received a request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
 	 */
-	SERVER_SENT_EVENT_SERVER_UNPARSEABLE_REQUEST,
+	SSE_SERVER_UNPARSEABLE_REQUEST,
 	/**
-	 * Indicates that the {@link ServerSentEventServer} was unable to successfully write a handshake response.
+	 * Indicates that the {@link SseServer} was unable to successfully write a handshake response.
 	 */
-	SERVER_SENT_EVENT_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED,
+	SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED,
 	/**
-	 * Indicates that the {@link ServerSentEventServer} encountered an error when executing application-provided code while performing a memoized broadcast via {@link ServerSentEventBroadcaster#broadcastEvent(Function, Function)} or {@link ServerSentEventBroadcaster#broadcastComment(Function, Function)}.
+	 * Indicates that the {@link SseServer} encountered an error when executing application-provided code while performing a memoized broadcast via {@link SseBroadcaster#broadcastEvent(Function, Function)} or {@link SseBroadcaster#broadcastComment(Function, Function)}.
 	 */
-	SERVER_SENT_EVENT_SERVER_BROADCAST_GENERATION_FAILED,
+	SSE_SERVER_BROADCAST_GENERATION_FAILED,
 	/**
-	 * Indicates that the {@link ServerSentEventServer} rejected a connection, e.g. due to capacity limits.
+	 * Indicates that the {@link SseServer} rejected a connection, e.g. due to capacity limits.
 	 */
-	SERVER_SENT_EVENT_SERVER_CONNECTION_REJECTED,
+	SSE_SERVER_CONNECTION_REJECTED,
 	/**
-	 * Indicates an internal {@link ServerSentEventServer} error occurred.
+	 * Indicates an internal {@link SseServer} error occurred.
 	 */
-	SERVER_SENT_EVENT_SERVER_INTERNAL_ERROR
+	SSE_SERVER_INTERNAL_ERROR
 }
