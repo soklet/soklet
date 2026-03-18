@@ -98,9 +98,9 @@ public final class Utilities {
 		VIRTUAL_THREADS_AVAILABLE = virtualThreadsAvailable;
 
 		// See https://www.regular-expressions.info/unicode.html
-		// \p{Z} or \p{Separator}: any kind of whitespace or invisible separator.
+		// \p{Z} or \p{Separator}: Unicode space-separator characters.
 		//
-		// First pattern matches all whitespace at the head of a string, second matches the same for tail.
+		// First pattern matches those separator characters at the head of a string, second matches the same for tail.
 		// Useful for a "stronger" trim() function, which is almost always what we want in a web context
 		// with user-supplied input.
 		HEAD_WHITESPACE_PATTERN = Pattern.compile("^(\\p{Z})+");
@@ -1547,11 +1547,13 @@ public final class Utilities {
 	}
 
 	/**
-	 * A "stronger" version of {@link String#trim()} which discards any kind of whitespace or invisible separator.
+	 * A "stronger" version of {@link String#trim()} which discards leading and trailing Unicode space-separator characters ({@code \p{Z}}).
 	 * <p>
 	 * In a web environment with user-supplied inputs, this is the behavior we want the vast majority of the time.
 	 * For example, users copy-paste URLs from Microsoft Word or Outlook and it's easy to accidentally include a {@code U+202F
 	 * "Narrow No-Break Space (NNBSP)"} character at the end, which might break parsing.
+	 * <p>
+	 * Note that this does not remove other whitespace characters such as tabs, carriage returns, or line feeds.
 	 * <p>
 	 * See <a href="https://www.compart.com/en/unicode/U+202F">https://www.compart.com/en/unicode/U+202F</a> for details.
 	 *
@@ -1574,7 +1576,7 @@ public final class Utilities {
 	}
 
 	/**
-	 * Aggressively trims Unicode whitespace from the given string and returns {@code null} if the result is empty.
+	 * Aggressively trims leading and trailing Unicode space-separator characters from the given string and returns {@code null} if the result is empty.
 	 * <p>
 	 * See {@link #trimAggressively(String)} for details on which code points are removed.
 	 *
@@ -1591,7 +1593,7 @@ public final class Utilities {
 	}
 
 	/**
-	 * Aggressively trims Unicode whitespace from the given string and returns {@code ""} if the input is {@code null}.
+	 * Aggressively trims leading and trailing Unicode space-separator characters from the given string and returns {@code ""} if the input is {@code null}.
 	 * <p>
 	 * See {@link #trimAggressively(String)} for details on which code points are removed.
 	 *

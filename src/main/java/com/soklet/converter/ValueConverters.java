@@ -295,6 +295,9 @@ public final class ValueConverters {
 
 	@ThreadSafe
 	private static final class StringToDateValueConverter extends FromStringValueConverter<Date> {
+		/**
+		 * Converts ISO-8601 timestamps first and falls back to epoch-millisecond strings if ISO parsing fails.
+		 */
 		@Override
 		@NonNull
 		public Optional<Date> performConversion(@Nullable String from) throws Exception {
@@ -311,6 +314,9 @@ public final class ValueConverters {
 
 	@ThreadSafe
 	private static final class StringToInstantValueConverter extends FromStringValueConverter<Instant> {
+		/**
+		 * Converts ISO-8601 timestamps first and falls back to epoch-millisecond strings if ISO parsing fails.
+		 */
 		@Override
 		@NonNull
 		public Optional<Instant> performConversion(@Nullable String from) throws Exception {
