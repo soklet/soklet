@@ -53,7 +53,7 @@ public class ValueConversionTests {
 			// LocalDate
 			RequestResult r1 = simulator.performRequest(Request.withRawUrl(HttpMethod.GET, "/conv/date?d=2024-09-30").build());
 			Assertions.assertEquals(200, r1.getMarshaledResponse().getStatusCode());
-			// Enum (case-insensitive support is implementation-defined; assume upper-case)
+			// Enum conversion uses exact enum constant names; use upper-case here.
 			RequestResult r2 = simulator.performRequest(Request.withRawUrl(HttpMethod.GET, "/conv/flavor?f=VANILLA").build());
 			Assertions.assertEquals(200, r2.getMarshaledResponse().getStatusCode());
 			// UUID
