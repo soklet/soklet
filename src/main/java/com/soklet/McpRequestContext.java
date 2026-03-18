@@ -53,12 +53,12 @@ public interface McpRequestContext {
 	String getJsonRpcMethod();
 
 	/**
-	 * Provides the high-level MCP operation kind.
+	 * Provides the high-level MCP operation type.
 	 *
-	 * @return the operation kind
+	 * @return the operation type
 	 */
 	@NonNull
-	McpOperationKind getOperationKind();
+	McpOperationType getOperationType();
 
 	/**
 	 * Provides the JSON-RPC request ID for request-style operations.

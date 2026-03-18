@@ -61,12 +61,12 @@ public interface McpAdmissionContext {
 	Optional<String> getJsonRpcMethod();
 
 	/**
-	 * Provides the high-level operation kind when the request maps to a known MCP operation.
+	 * Provides the high-level operation type when the request maps to a known MCP operation.
 	 *
-	 * @return the MCP operation kind, if available
+	 * @return the MCP operation type, if available
 	 */
 	@NonNull
-	Optional<McpOperationKind> getOperationKind();
+	Optional<McpOperationType> getOperationType();
 
 	/**
 	 * Provides the parsed JSON-RPC request ID for request-style MCP operations.

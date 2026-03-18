@@ -180,14 +180,14 @@ final class DefaultMcpRuntime {
 			return jsonRpcErrorResponse(request, transport.requestId(), transport.error());
 		}
 
-		if (parsedRequest.operationKind() == null)
+		if (parsedRequest.operationType() == null)
 			return jsonRpcErrorResponse(request, parsedRequest.requestId(), McpJsonRpcError.fromCodeAndMessage(-32601, "Method not found"));
 
 		Optional<McpStoredSession> storedSession = Optional.empty();
 		String sessionId = request.getHeader("MCP-Session-Id").orElse(null);
 		String protocolVersionHeader = request.getHeader("MCP-Protocol-Version").orElse(null);
 
-		if (parsedRequest.operationKind() != McpOperationKind.INITIALIZE) {
+		if (parsedRequest.operationType() != McpOperationType.INITIALIZE) {
 			if (sessionId == null)
 				return plainTextResponse(request, 400, "Missing MCP-Session-Id header.");
 
@@ -214,7 +214,7 @@ final class DefaultMcpRuntime {
 				request,
 				resolvedEndpoint.endpointClass(),
 				parsedRequest.method(),
-				parsedRequest.operationKind(),
+				parsedRequest.operationType(),
 				Optional.ofNullable(parsedRequest.requestId()),
 				Optional.ofNullable(sessionId),
 				Optional.ofNullable(protocolVersionHeader),
@@ -324,7 +324,7 @@ final class DefaultMcpRuntime {
 						request.getHttpMethod(),
 						resolvedEndpoint.endpointClass(),
 						Optional.of(parsedRequest.method()),
-						Optional.ofNullable(parsedRequest.operationKind()),
+						Optional.ofNullable(parsedRequest.operationType()),
 						Optional.ofNullable(parsedRequest.requestId()),
 						Optional.ofNullable(request.getHeader("MCP-Session-Id").orElse(null))
 				));
@@ -413,7 +413,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(storedSession);
 		requireNonNull(requestContext);
 
-		return switch (parsedRequest.operationKind()) {
+		return switch (parsedRequest.operationType()) {
 			case INITIALIZE -> handleInitialize(request, mcpServer, resolvedEndpoint, endpointPathParameters, parsedRequest);
 			case NOTIFICATIONS_INITIALIZED ->
 					handleInitializedNotification(request, mcpServer, parsedRequest, storedSession.orElseThrow(), requestContext);
@@ -525,7 +525,7 @@ final class DefaultMcpRuntime {
 								request,
 								resolvedEndpoint.endpointClass(),
 								parsedRequest.method(),
-								parsedRequest.operationKind(),
+								parsedRequest.operationType(),
 								Optional.ofNullable(parsedRequest.requestId()),
 								Optional.of(sessionId),
 								Optional.of(protocolVersion),
@@ -1809,7 +1809,7 @@ final class DefaultMcpRuntime {
 
 		McpJsonRpcRequestId requestId = requestIdFromValue(requestObject.get("id").orElse(null));
 		McpObject params = optionalObject(requestObject, "params").orElse(EMPTY_OBJECT);
-		return new ParsedJsonRpcRequest(method, operationKindForMethod(method).orElse(null), params, requestId);
+		return new ParsedJsonRpcRequest(method, operationTypeForMethod(method).orElse(null), params, requestId);
 	}
 
 	@Nullable
@@ -1825,20 +1825,20 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private Optional<McpOperationKind> operationKindForMethod(@NonNull String method) {
+	private Optional<McpOperationType> operationTypeForMethod(@NonNull String method) {
 		requireNonNull(method);
 
 		return switch (method) {
-			case "initialize" -> Optional.of(McpOperationKind.INITIALIZE);
-			case "notifications/initialized" -> Optional.of(McpOperationKind.NOTIFICATIONS_INITIALIZED);
-			case "ping" -> Optional.of(McpOperationKind.PING);
-			case "tools/list" -> Optional.of(McpOperationKind.TOOLS_LIST);
-			case "tools/call" -> Optional.of(McpOperationKind.TOOLS_CALL);
-			case "prompts/list" -> Optional.of(McpOperationKind.PROMPTS_LIST);
-			case "prompts/get" -> Optional.of(McpOperationKind.PROMPTS_GET);
-			case "resources/list" -> Optional.of(McpOperationKind.RESOURCES_LIST);
-			case "resources/templates/list" -> Optional.of(McpOperationKind.RESOURCES_TEMPLATES_LIST);
-			case "resources/read" -> Optional.of(McpOperationKind.RESOURCES_READ);
+			case "initialize" -> Optional.of(McpOperationType.INITIALIZE);
+			case "notifications/initialized" -> Optional.of(McpOperationType.NOTIFICATIONS_INITIALIZED);
+			case "ping" -> Optional.of(McpOperationType.PING);
+			case "tools/list" -> Optional.of(McpOperationType.TOOLS_LIST);
+			case "tools/call" -> Optional.of(McpOperationType.TOOLS_CALL);
+			case "prompts/list" -> Optional.of(McpOperationType.PROMPTS_LIST);
+			case "prompts/get" -> Optional.of(McpOperationType.PROMPTS_GET);
+			case "resources/list" -> Optional.of(McpOperationType.RESOURCES_LIST);
+			case "resources/templates/list" -> Optional.of(McpOperationType.RESOURCES_TEMPLATES_LIST);
+			case "resources/read" -> Optional.of(McpOperationType.RESOURCES_READ);
 			default -> Optional.empty();
 		};
 	}
@@ -2011,7 +2011,7 @@ final class DefaultMcpRuntime {
 				return new ObservedMcpResult(McpRequestOutcome.JSON_RPC_ERROR, null);
 			}
 
-			if (parsedJsonRpcRequest.operationKind() == McpOperationKind.TOOLS_CALL) {
+			if (parsedJsonRpcRequest.operationType() == McpOperationType.TOOLS_CALL) {
 				McpObject result = optionalObject(object, "result").orElse(null);
 
 				if (result != null) {
@@ -2921,7 +2921,7 @@ final class DefaultMcpRuntime {
 
 	private record ParsedJsonRpcRequest(
 			@NonNull String method,
-			@Nullable McpOperationKind operationKind,
+			@Nullable McpOperationType operationType,
 			@NonNull McpObject params,
 			@Nullable McpJsonRpcRequestId requestId
 	) {
@@ -3051,7 +3051,7 @@ final class DefaultMcpRuntime {
 			@NonNull HttpMethod httpMethod,
 			@NonNull Class<? extends McpEndpoint> endpointClass,
 			@NonNull Optional<String> jsonRpcMethod,
-			@NonNull Optional<McpOperationKind> operationKind,
+			@NonNull Optional<McpOperationType> operationType,
 			@NonNull Optional<McpJsonRpcRequestId> jsonRpcRequestId,
 			@NonNull Optional<String> sessionId
 	) implements McpAdmissionContext {
@@ -3060,7 +3060,7 @@ final class DefaultMcpRuntime {
 			requireNonNull(httpMethod);
 			requireNonNull(endpointClass);
 			requireNonNull(jsonRpcMethod);
-			requireNonNull(operationKind);
+			requireNonNull(operationType);
 			requireNonNull(jsonRpcRequestId);
 			requireNonNull(sessionId);
 		}
@@ -3091,8 +3091,8 @@ final class DefaultMcpRuntime {
 
 		@NonNull
 		@Override
-		public Optional<McpOperationKind> getOperationKind() {
-			return this.operationKind;
+		public Optional<McpOperationType> getOperationType() {
+			return this.operationType;
 		}
 
 		@NonNull
@@ -3112,7 +3112,7 @@ final class DefaultMcpRuntime {
 			@NonNull Request request,
 			@NonNull Class<? extends McpEndpoint> endpointClass,
 			@NonNull String jsonRpcMethod,
-			@NonNull McpOperationKind operationKind,
+			@NonNull McpOperationType operationType,
 			@NonNull Optional<McpJsonRpcRequestId> jsonRpcRequestId,
 			@NonNull Optional<String> sessionId,
 			@NonNull Optional<String> protocolVersion,
@@ -3123,7 +3123,7 @@ final class DefaultMcpRuntime {
 			requireNonNull(request);
 			requireNonNull(endpointClass);
 			requireNonNull(jsonRpcMethod);
-			requireNonNull(operationKind);
+			requireNonNull(operationType);
 			requireNonNull(jsonRpcRequestId);
 			requireNonNull(sessionId);
 			requireNonNull(protocolVersion);
@@ -3151,8 +3151,8 @@ final class DefaultMcpRuntime {
 
 		@NonNull
 		@Override
-		public McpOperationKind getOperationKind() {
-			return this.operationKind;
+		public McpOperationType getOperationType() {
+			return this.operationType;
 		}
 
 		@NonNull

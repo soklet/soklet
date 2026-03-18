@@ -17,11 +17,11 @@
 package com.soklet;
 
 /**
- * High-level MCP operation kinds.
+ * High-level MCP operation types.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public enum McpOperationKind {
+public enum McpOperationType {
 	INITIALIZE,
 	NOTIFICATIONS_INITIALIZED,
 	PING,
