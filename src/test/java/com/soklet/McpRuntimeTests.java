@@ -584,6 +584,94 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void typedProgrammaticContextHelpersConvertEndpointAndUriParameters() {
+		Soklet.runSimulator(typedContextConfiguration(), simulator -> {
+			String path = "/tenants/acme/catalogs/42/mcp";
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator, path);
+
+			McpRequestResult.ResponseCompleted toolCall = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post(path, """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-23",
+							  "method":"tools/call",
+							  "params":{
+							    "name":"zz_typed_programmatic_tool",
+							    "arguments":{
+							      "delta":5
+							    }
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject toolBody = jsonBody(toolCall);
+			McpObject toolResult = (McpObject) toolBody.get("result").orElseThrow();
+			McpArray toolContent = (McpArray) toolResult.get("content").orElseThrow();
+			Assertions.assertEquals("tenant=acme catalog=42 delta=5 storedCatalog=42",
+					((McpString) ((McpObject) toolContent.values().get(0)).get("text").orElseThrow()).value());
+
+			McpRequestResult.ResponseCompleted promptGet = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post(path, """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-24",
+							  "method":"prompts/get",
+							  "params":{
+							    "name":"zz_typed_programmatic_prompt",
+							    "arguments":{
+							      "subject":"inventory"
+							    }
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject promptBody = jsonBody(promptGet);
+			McpObject promptResult = (McpObject) promptBody.get("result").orElseThrow();
+			Assertions.assertEquals("Typed prompt response", ((McpString) promptResult.get("description").orElseThrow()).value());
+			McpArray promptMessages = (McpArray) promptResult.get("messages").orElseThrow();
+			McpObject promptMessageContent = (McpObject) ((McpObject) promptMessages.values().get(0)).get("content").orElseThrow();
+			Assertions.assertEquals("tenant=acme catalog=42 subject=inventory storedCatalog=42",
+					((McpString) promptMessageContent.get("text").orElseThrow()).value());
+
+			McpRequestResult.ResponseCompleted resourcesList = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post(path, """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-25",
+							  "method":"resources/list",
+							  "params":{
+							    "cursor":"page-2"
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject resourcesListBody = jsonBody(resourcesList);
+			McpArray listedResources = (McpArray) ((McpObject) resourcesListBody.get("result").orElseThrow()).get("resources").orElseThrow();
+			McpObject listedResource = (McpObject) listedResources.values().get(0);
+			Assertions.assertEquals("typed://notes/42", ((McpString) listedResource.get("uri").orElseThrow()).value());
+			Assertions.assertEquals("catalog=42 cursor=page-2", ((McpString) listedResource.get("description").orElseThrow()).value());
+
+			McpRequestResult.ResponseCompleted resourceRead = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post(path, """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-26",
+							  "method":"resources/read",
+							  "params":{
+							    "uri":"typed://notes/7"
+							  }
+							}
+							""", sessionHeaders));
+
+			McpObject resourceBody = jsonBody(resourceRead);
+			McpArray contents = (McpArray) ((McpObject) resourceBody.get("result").orElseThrow()).get("contents").orElseThrow();
+			McpObject firstContent = (McpObject) contents.values().get(0);
+			Assertions.assertEquals("note=7 catalog=42 tenant=acme storedCatalog=42",
+					((McpString) firstContent.get("text").orElseThrow()).value());
+		});
+	}
+
+	@Test
 	public void programmaticHandlersRejectMissingRequiredArgumentsFromSchema() {
 		Soklet.runSimulator(configuration(), simulator -> {
 			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
@@ -1191,15 +1279,36 @@ public class McpRuntimeTests {
 	}
 
 	private static Map<String, Set<String>> initializedSessionHeaders(Simulator simulator) {
+		return initializedSessionHeaders(simulator, "/tenants/acme/mcp");
+	}
+
+	private static SokletConfig typedContextConfiguration() {
+		McpHandlerResolver handlerResolver = McpHandlerResolver.fromClasses(Set.of(TypedContextEndpoint.class))
+				.withTool(new ProgrammaticTypedToolHandler(), TypedContextEndpoint.class)
+				.withPrompt(new ProgrammaticTypedPromptHandler(), TypedContextEndpoint.class)
+				.withResource(new ProgrammaticTypedResourceHandler(), TypedContextEndpoint.class)
+				.withResourceList(new ProgrammaticTypedResourceListHandler(), TypedContextEndpoint.class);
+
+		return SokletConfig.withMcpServer(McpServer.withPort(0)
+						.handlerResolver(handlerResolver)
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(LifecycleObserver.defaultInstance())
+				.metricsCollector(MetricsCollector.defaultInstance())
+				.build();
+	}
+
+	private static Map<String, Set<String>> initializedSessionHeaders(Simulator simulator,
+																																		 String path) {
 		McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
-				post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
+				post(path, initializeJson("req-1"), Map.of()));
 		String sessionId = headerValue(initializeResult, "MCP-Session-Id");
 		Map<String, Set<String>> sessionHeaders = Map.of(
 				"MCP-Session-Id", Set.of(sessionId),
 				"MCP-Protocol-Version", Set.of("2025-11-25")
 		);
 
-		simulator.performMcpRequest(post("/tenants/acme/mcp", """
+		simulator.performMcpRequest(post(path, """
 				{
 				  "jsonrpc":"2.0",
 				  "method":"notifications/initialized",
@@ -1424,6 +1533,125 @@ public class McpRuntimeTests {
 			String noteId = context.getUriParameter("noteId").orElseThrow();
 			String tenantId = context.getSessionContext().get("tenantId", String.class).orElseThrow();
 			return McpResourceContents.fromText(context.getRequestedUri(), "note=%s tenant=%s".formatted(noteId, tenantId), "text/plain");
+		}
+	}
+
+	@McpServerEndpoint(path = "/tenants/{tenantId}/catalogs/{catalogId}/mcp", name = "typed-context", version = "1.0.0")
+	public static class TypedContextEndpoint implements McpEndpoint {
+		@Override
+		public McpSessionContext initialize(McpInitializationContext context,
+																				McpSessionContext session) {
+			return session
+					.with("tenantId", context.getEndpointPathParameter("tenantId").orElseThrow())
+					.with("catalogId", context.getEndpointPathParameter("catalogId", Integer.class).orElseThrow());
+		}
+	}
+
+	private static final class ProgrammaticTypedToolHandler implements McpToolHandler {
+		@Override
+		public String getName() {
+			return "zz_typed_programmatic_tool";
+		}
+
+		@Override
+		public String getDescription() {
+			return "Programmatic tool using typed MCP context helpers.";
+		}
+
+		@Override
+		public McpSchema getInputSchema() {
+			return McpSchema.object()
+					.required("delta", McpType.NUMBER)
+					.build();
+		}
+
+		@Override
+		public McpToolResult handle(McpToolHandlerContext context) {
+			String tenantId = context.getEndpointPathParameter("tenantId").orElseThrow();
+			Integer catalogId = context.getEndpointPathParameter("catalogId", Integer.class).orElseThrow();
+			Integer storedCatalogId = context.getSessionContext().get("catalogId", Integer.class).orElseThrow();
+			Integer delta = ((McpNumber) context.getArguments().get("delta").orElseThrow()).value().intValueExact();
+			return McpToolResult.builder()
+					.content(McpTextContent.fromText("tenant=%s catalog=%s delta=%s storedCatalog=%s".formatted(
+							tenantId,
+							catalogId,
+							delta,
+							storedCatalogId)))
+					.build();
+		}
+	}
+
+	private static final class ProgrammaticTypedPromptHandler implements McpPromptHandler {
+		@Override
+		public String getName() {
+			return "zz_typed_programmatic_prompt";
+		}
+
+		@Override
+		public String getDescription() {
+			return "Programmatic prompt using typed MCP context helpers.";
+		}
+
+		@Override
+		public McpSchema getArgumentsSchema() {
+			return McpSchema.object()
+					.required("subject", McpType.STRING)
+					.build();
+		}
+
+		@Override
+		public McpPromptResult handle(McpPromptHandlerContext context) {
+			String tenantId = context.getEndpointPathParameter("tenantId").orElseThrow();
+			Integer catalogId = context.getEndpointPathParameter("catalogId", Integer.class).orElseThrow();
+			Integer storedCatalogId = context.getSessionContext().get("catalogId", Integer.class).orElseThrow();
+			String subject = ((McpString) context.getArguments().get("subject").orElseThrow()).value();
+			return new McpPromptResult("Typed prompt response",
+					java.util.List.of(McpPromptMessage.fromAssistantText("tenant=%s catalog=%s subject=%s storedCatalog=%s".formatted(
+							tenantId,
+							catalogId,
+							subject,
+							storedCatalogId))));
+		}
+	}
+
+	private static final class ProgrammaticTypedResourceHandler implements McpResourceHandler {
+		@Override
+		public String getUri() {
+			return "typed://notes/{noteId}";
+		}
+
+		@Override
+		public String getName() {
+			return "typed-note";
+		}
+
+		@Override
+		public String getMimeType() {
+			return "text/plain";
+		}
+
+		@Override
+		public McpResourceContents handle(McpResourceHandlerContext context) {
+			Integer noteId = context.getUriParameter("noteId", Integer.class).orElseThrow();
+			Integer catalogId = context.getEndpointPathParameter("catalogId", Integer.class).orElseThrow();
+			String tenantId = context.getSessionContext().get("tenantId", String.class).orElseThrow();
+			Integer storedCatalogId = context.getSessionContext().get("catalogId", Integer.class).orElseThrow();
+			return McpResourceContents.fromText(
+					context.getRequestedUri(),
+					"note=%s catalog=%s tenant=%s storedCatalog=%s".formatted(noteId, catalogId, tenantId, storedCatalogId),
+					"text/plain");
+		}
+	}
+
+	private static final class ProgrammaticTypedResourceListHandler implements McpResourceListHandler {
+		@Override
+		public McpListResourcesResult handle(McpResourceListHandlerContext context) {
+			Integer catalogId = context.getEndpointPathParameter("catalogId", Integer.class).orElseThrow();
+			String cursor = context.getListResourcesContext().getCursor().orElse("none");
+			return McpListResourcesResult.fromResources(java.util.List.of(
+					McpListedResource.fromComponents("typed://notes/%s".formatted(catalogId), "typed-note", "text/plain")
+							.withDescription("catalog=%s cursor=%s".formatted(catalogId, cursor))
+			));
 		}
 	}
 
