@@ -527,7 +527,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 		try {
 			request = readRequest(socket);
-			RequestResult requestResult = invokeRequestHandler(request, socket);
+			HttpRequestResult requestResult = invokeRequestHandler(request, socket);
 
 			if (requestResult == null) {
 				writePlainTextResponse(socket, 500, "Internal server error");
@@ -618,7 +618,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	}
 
 	@Nullable
-	private RequestResult invokeRequestHandler(@NonNull Request request,
+	private HttpRequestResult invokeRequestHandler(@NonNull Request request,
 																						 @NonNull Socket socket) throws Exception {
 		requireNonNull(request);
 		requireNonNull(socket);
@@ -629,7 +629,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			throw new IllegalStateException("MCP request handler is unavailable");
 
 		CountDownLatch latch = new CountDownLatch(1);
-		AtomicReference<RequestResult> requestResultReference = new AtomicReference<>();
+		AtomicReference<HttpRequestResult> requestResultReference = new AtomicReference<>();
 		AtomicReference<Throwable> callbackThrowableReference = new AtomicReference<>();
 		AtomicReference<Thread> handlerThreadReference = new AtomicReference<>(Thread.currentThread());
 		AtomicBoolean timedOut = new AtomicBoolean(false);
@@ -884,7 +884,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	}
 
 	private boolean isLiveEventStreamResponse(@NonNull Request request,
-																						@NonNull RequestResult requestResult) {
+																						@NonNull HttpRequestResult requestResult) {
 		requireNonNull(request);
 		requireNonNull(requestResult);
 

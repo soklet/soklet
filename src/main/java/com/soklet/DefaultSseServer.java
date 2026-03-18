@@ -1171,7 +1171,7 @@ final class DefaultSseServer implements SseServer {
 			ResponseMarshaler responseMarshaler = getResponseMarshaler().orElse(null);
 			if (request != null && responseMarshaler != null) {
 				MarshaledResponse response = responseMarshaler.forServiceUnavailable(request, resourceMethod);
-				responseBytes = createHandshakeHttpResponse(RequestResult.withMarshaledResponse(response).build());
+				responseBytes = createHandshakeHttpResponse(HttpRequestResult.withMarshaledResponse(response).build());
 			}
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to prepare SSE handshake timeout response")
@@ -1430,7 +1430,7 @@ final class DefaultSseServer implements SseServer {
 
 			try {
 				InetSocketAddress remoteAddressSnapshotForHandler = remoteAddress;
-				getRequestHandler().get().handleRequest(requestForHandler, (@NonNull RequestResult requestResult) -> {
+				getRequestHandler().get().handleRequest(requestForHandler, (@NonNull HttpRequestResult requestResult) -> {
 					if (!handshakeResponseWritten.compareAndSet(false, true))
 						return;
 
@@ -1439,7 +1439,7 @@ final class DefaultSseServer implements SseServer {
 					// Set to the value Soklet processing gives us. Will be the empty Optional if no resource method was matched
 					SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
 
-					RequestResult effectiveRequestResult = requestResult;
+					HttpRequestResult effectiveRequestResult = requestResult;
 
 					// Store a reference to the accepted handshake if we have it and there is capacity
 					if (sseHandshakeResult != null && sseHandshakeResult instanceof SseHandshakeResult.Accepted accepted) {
@@ -2016,7 +2016,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	private byte[] createHandshakeHttpResponse(@NonNull RequestResult requestResult) throws IOException {
+	private byte[] createHandshakeHttpResponse(@NonNull HttpRequestResult requestResult) throws IOException {
 		requireNonNull(requestResult);
 
 		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
@@ -2201,7 +2201,7 @@ final class DefaultSseServer implements SseServer {
 		requireNonNull(socketChannel);
 		requireNonNull(marshaledResponse);
 
-		byte[] responseBytes = createHandshakeHttpResponse(RequestResult.withMarshaledResponse(marshaledResponse).build());
+		byte[] responseBytes = createHandshakeHttpResponse(HttpRequestResult.withMarshaledResponse(marshaledResponse).build());
 		writeFully(socketChannel, responseBytes);
 	}
 

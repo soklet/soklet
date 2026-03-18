@@ -43,7 +43,7 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 	 * @return the low-level request result
 	 */
 	@NonNull
-	RequestResult getRequestResult();
+	HttpRequestResult getHttpRequestResult();
 
 	/**
 	 * MCP request completed without leaving an open stream.
@@ -51,16 +51,16 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 	@ThreadSafe
 	final class ResponseCompleted implements McpRequestResult {
 		@NonNull
-		private final RequestResult requestResult;
+		private final HttpRequestResult requestResult;
 
-		ResponseCompleted(@NonNull RequestResult requestResult) {
+		ResponseCompleted(@NonNull HttpRequestResult requestResult) {
 			requireNonNull(requestResult);
 			this.requestResult = requestResult;
 		}
 
 		@NonNull
 		@Override
-		public RequestResult getRequestResult() {
+		public HttpRequestResult getHttpRequestResult() {
 			return this.requestResult;
 		}
 	}
@@ -71,7 +71,7 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 	@ThreadSafe
 	final class StreamOpened implements McpRequestResult {
 		@NonNull
-		private final RequestResult requestResult;
+		private final HttpRequestResult requestResult;
 		@NonNull
 		private final AtomicReference<@Nullable Consumer<Throwable>> streamErrorHandler;
 		@NonNull
@@ -87,7 +87,7 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 		@Nullable
 		private volatile Consumer<McpObject> messageConsumer;
 
-		StreamOpened(@NonNull RequestResult requestResult,
+		StreamOpened(@NonNull HttpRequestResult requestResult,
 								 @Nullable AtomicReference<@Nullable Consumer<Throwable>> streamErrorHandler,
 								 @NonNull Boolean closeAfterBufferedReplay) {
 			requireNonNull(requestResult);
@@ -161,7 +161,7 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 
 		@NonNull
 		@Override
-		public RequestResult getRequestResult() {
+		public HttpRequestResult getHttpRequestResult() {
 			return this.requestResult;
 		}
 
@@ -212,13 +212,13 @@ public sealed interface McpRequestResult permits McpRequestResult.ResponseComple
 			if (!(other instanceof StreamOpened streamOpened))
 				return false;
 
-			return getRequestResult().equals(streamOpened.getRequestResult())
+			return getHttpRequestResult().equals(streamOpened.getHttpRequestResult())
 					&& isClosed().equals(streamOpened.isClosed());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getRequestResult(), isClosed());
+			return Objects.hash(getHttpRequestResult(), isClosed());
 		}
 	}
 }

@@ -148,7 +148,7 @@ public interface SseServer extends AutoCloseable {
 		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link SseServer} to write HTTP response data to the client
 		 */
 		void handleRequest(@NonNull Request request,
-											 @NonNull Consumer<RequestResult> requestResultConsumer);
+											 @NonNull Consumer<HttpRequestResult> requestResultConsumer);
 	}
 
 	/**

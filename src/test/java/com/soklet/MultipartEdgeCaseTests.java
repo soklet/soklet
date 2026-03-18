@@ -60,7 +60,7 @@ public class MultipartEdgeCaseTests {
 
 		Soklet.runSimulator(cfg, simulator -> {
 			byte[] body = simpleMultipartBody();
-			RequestResult r = simulator.performRequest(
+			HttpRequestResult r = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/upload")
 							.headers(Map.of(
 									"Content-Type", Set.of("multipart/form-data; boundary=----AaB03x"),
@@ -84,7 +84,7 @@ public class MultipartEdgeCaseTests {
 
 		Soklet.runSimulator(cfg, simulator -> {
 			byte[] body = simpleMultipartBody();
-			RequestResult r = simulator.performRequest(
+			HttpRequestResult r = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/upload-optional")
 							.headers(Map.of(
 									"Content-Type", Set.of("multipart/form-data; boundary=----AaB03x"),
@@ -109,7 +109,7 @@ public class MultipartEdgeCaseTests {
 		Soklet.runSimulator(cfg, simulator -> {
 			String boundary = "----AaB03x,XYZ";
 			byte[] body = multipartBody(boundary);
-			RequestResult r = simulator.performRequest(
+			HttpRequestResult r = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/upload-commas")
 							.headers(Map.of(
 									"Content-Type", Set.of("multipart/form-data; boundary=" + boundary),

@@ -31,7 +31,7 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Encapsulates the results of a request that would normally be handled by your {@link HttpServer} (both logical response and bytes to be sent over the wire), used for integration testing via {@link Simulator#performRequest(Request)}.
+ * Encapsulates the results of a request that would normally be handled by your {@link HttpServer} (both logical response and bytes to be sent over the wire), used for integration testing via {@link Simulator#performHttpRequest(Request)}.
  * <p>
  * Instances can be acquired via the {@link #withMarshaledResponse(MarshaledResponse)} builder factory method.
  * A convenience instance factory is also available via {@link #fromMarshaledResponse(MarshaledResponse)}.
@@ -43,7 +43,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class RequestResult {
+public final class HttpRequestResult {
 	@NonNull
 	private final MarshaledResponse marshaledResponse;
 	@Nullable
@@ -60,7 +60,7 @@ public final class RequestResult {
 	private final Boolean mcpStreamClosedAfterReplay;
 
 	/**
-	 * Acquires a builder for {@link RequestResult} instances.
+	 * Acquires a builder for {@link HttpRequestResult} instances.
 	 *
 	 * @param marshaledResponse the bytes that will ultimately be written over the wire
 	 * @return the builder
@@ -72,13 +72,13 @@ public final class RequestResult {
 	}
 
 	/**
-	 * Creates a {@link RequestResult} from a marshaled response without additional customization.
+	 * Creates a {@link HttpRequestResult} from a marshaled response without additional customization.
 	 *
 	 * @param marshaledResponse the bytes that will ultimately be written over the wire
-	 * @return a {@link RequestResult} instance
+	 * @return a {@link HttpRequestResult} instance
 	 */
 	@NonNull
-	public static RequestResult fromMarshaledResponse(@NonNull MarshaledResponse marshaledResponse) {
+	public static HttpRequestResult fromMarshaledResponse(@NonNull MarshaledResponse marshaledResponse) {
 		return withMarshaledResponse(marshaledResponse).build();
 	}
 
@@ -92,7 +92,7 @@ public final class RequestResult {
 		return new Copier(this);
 	}
 
-	protected RequestResult(@NonNull Builder builder) {
+	protected HttpRequestResult(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.marshaledResponse = builder.marshaledResponse;
@@ -140,7 +140,7 @@ public final class RequestResult {
 		if (this == object)
 			return true;
 
-		if (!(object instanceof RequestResult requestResult))
+		if (!(object instanceof HttpRequestResult requestResult))
 			return false;
 
 		return Objects.equals(getMarshaledResponse(), requestResult.getMarshaledResponse())
@@ -220,7 +220,7 @@ public final class RequestResult {
 	}
 
 	/**
-	 * Builder used to construct instances of {@link RequestResult} via {@link RequestResult#withMarshaledResponse(MarshaledResponse)}.
+	 * Builder used to construct instances of {@link HttpRequestResult} via {@link HttpRequestResult#withMarshaledResponse(MarshaledResponse)}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -295,13 +295,13 @@ public final class RequestResult {
 		}
 
 		@NonNull
-		public RequestResult build() {
-			return new RequestResult(this);
+		public HttpRequestResult build() {
+			return new HttpRequestResult(this);
 		}
 	}
 
 	/**
-	 * Builder used to copy instances of {@link RequestResult} via {@link RequestResult#copy()}.
+	 * Builder used to copy instances of {@link HttpRequestResult} via {@link HttpRequestResult#copy()}.
 	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
@@ -312,7 +312,7 @@ public final class RequestResult {
 		@NonNull
 		private final Builder builder;
 
-		Copier(@NonNull RequestResult requestResult) {
+		Copier(@NonNull HttpRequestResult requestResult) {
 			requireNonNull(requestResult);
 
 			this.builder = new Builder(requestResult.getMarshaledResponse())
@@ -368,7 +368,7 @@ public final class RequestResult {
 		}
 
 		@NonNull
-		public RequestResult finish() {
+		public HttpRequestResult finish() {
 			return this.builder.build();
 		}
 	}

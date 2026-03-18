@@ -103,7 +103,7 @@ import static java.util.Objects.requireNonNull;
  *       .build();
  *
  *     // Perform the request and get a handle to the response
- *     RequestResult result = simulator.performRequest(request);
+ *     HttpRequestResult result = simulator.performHttpRequest(request);
  *     MarshaledResponse marshaledResponse = result.getMarshaledResponse();
  *
  *     // Verify status code
@@ -692,7 +692,7 @@ public final class Soklet implements AutoCloseable {
 	 */
 	protected void handleRequest(@NonNull Request request,
 															 @NonNull ServerType serverType,
-															 @NonNull Consumer<RequestResult> requestResultConsumer) {
+															 @NonNull Consumer<HttpRequestResult> requestResultConsumer) {
 		requireNonNull(request);
 		requireNonNull(serverType);
 		requireNonNull(requestResultConsumer);
@@ -711,7 +711,7 @@ public final class Soklet implements AutoCloseable {
 		AtomicReference<Throwable> resourceMethodResolutionExceptionHolder = new AtomicReference<>();
 		AtomicReference<Request> requestHolder = new AtomicReference<>(request);
 		AtomicReference<ResourceMethod> resourceMethodHolder = new AtomicReference<>();
-		AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
+		AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
 
 		// Holders to permit mutable effectively-final state tracking
 		AtomicBoolean willStartResponseWritingCompleted = new AtomicBoolean(false);
@@ -798,7 +798,7 @@ public final class Soklet implements AutoCloseable {
 							if (resourceMethodResolutionExceptionHolder.get() != null)
 								throw resourceMethodResolutionExceptionHolder.get();
 
-							RequestResult requestResult = toRequestResult(requestHolder.get(), resourceMethodHolder.get(), serverType);
+							HttpRequestResult requestResult = toHttpRequestResult(requestHolder.get(), resourceMethodHolder.get(), serverType);
 							requestResultHolder.set(requestResult);
 
 							MarshaledResponse originalMarshaledResponse = requestResult.getMarshaledResponse();
@@ -911,12 +911,12 @@ public final class Soklet implements AutoCloseable {
 						Instant responseWriteStarted = Instant.now();
 
 						try {
-							RequestResult requestResult = requestResultHolder.get();
+							HttpRequestResult requestResult = requestResultHolder.get();
 
 							if (requestResult != null)
 								requestResultConsumer.accept(requestResult);
 							else
-								requestResultConsumer.accept(RequestResult.withMarshaledResponse(marshaledResponseHolder.get())
+								requestResultConsumer.accept(HttpRequestResult.withMarshaledResponse(marshaledResponseHolder.get())
 										.resourceMethod(resourceMethodHolder.get())
 										.build());
 
@@ -1056,12 +1056,12 @@ public final class Soklet implements AutoCloseable {
 
 				if (!didFinishResponseWritingCompleted.get()) {
 					try {
-						RequestResult requestResult = requestResultHolder.get();
+						HttpRequestResult requestResult = requestResultHolder.get();
 
 						if (requestResult != null)
 							requestResultConsumer.accept(requestResult);
 						else
-							requestResultConsumer.accept(RequestResult.withMarshaledResponse(marshaledResponseHolder.get())
+							requestResultConsumer.accept(HttpRequestResult.withMarshaledResponse(marshaledResponseHolder.get())
 									.resourceMethod(resourceMethodHolder.get())
 									.build());
 
@@ -1140,7 +1140,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected RequestResult toRequestResult(@NonNull Request request,
+	protected HttpRequestResult toHttpRequestResult(@NonNull Request request,
 																					@Nullable ResourceMethod resourceMethod,
 																					@NonNull ServerType serverType) throws Throwable {
 		requireNonNull(request);
@@ -1155,13 +1155,13 @@ public final class Soklet implements AutoCloseable {
 
 		// Special short-circuit for big requests
 		if (request.isContentTooLarge())
-			return RequestResult.withMarshaledResponse(responseMarshaler.forContentTooLarge(request, resourceMethodResolver.resourceMethodForRequest(request, serverType).orElse(null)))
+			return HttpRequestResult.withMarshaledResponse(responseMarshaler.forContentTooLarge(request, resourceMethodResolver.resourceMethodForRequest(request, serverType).orElse(null)))
 					.resourceMethod(resourceMethod)
 					.build();
 
 		// Special short-circuit for OPTIONS *
 		if (request.getResourcePath() == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH)
-			return RequestResult.withMarshaledResponse(responseMarshaler.forOptionsSplat(request)).build();
+			return HttpRequestResult.withMarshaledResponse(responseMarshaler.forOptionsSplat(request)).build();
 
 		// No resource method was found for this HTTP method and path.
 		if (resourceMethod == null) {
@@ -1186,14 +1186,14 @@ public final class Soklet implements AutoCloseable {
 						// Allow
 						MarshaledResponse marshaledResponse = responseMarshaler.forCorsPreflightAllowed(request, corsPreflight, corsPreflightResponse);
 
-						return RequestResult.withMarshaledResponse(marshaledResponse)
+						return HttpRequestResult.withMarshaledResponse(marshaledResponse)
 								.corsPreflightResponse(corsPreflightResponse)
 								.resourceMethod(resourceMethod)
 								.build();
 					}
 
 					// Reject
-					return RequestResult.withMarshaledResponse(responseMarshaler.forCorsPreflightRejected(request, corsPreflight))
+					return HttpRequestResult.withMarshaledResponse(responseMarshaler.forCorsPreflightRejected(request, corsPreflight))
 							.resourceMethod(resourceMethod)
 							.build();
 				} else {
@@ -1206,7 +1206,7 @@ public final class Soklet implements AutoCloseable {
 					} else {
 						Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(matchingResourceMethodsByHttpMethod, true);
 
-						return RequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, allowedHttpMethods))
+						return HttpRequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, allowedHttpMethods))
 								.resourceMethod(resourceMethod)
 								.build();
 					}
@@ -1219,7 +1219,7 @@ public final class Soklet implements AutoCloseable {
 				if (headGetResourceMethod != null)
 					resourceMethod = headGetResourceMethod;
 				else
-					return RequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
+					return HttpRequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
 							.resourceMethod(resourceMethod)
 							.build();
 			} else {
@@ -1233,12 +1233,12 @@ public final class Soklet implements AutoCloseable {
 				if (matchingNonOptionsHttpMethods.size() > 0) {
 					// ...if some do, it's a 405
 					Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(otherMatchingResourceMethodsByHttpMethod, true);
-					return RequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, allowedHttpMethods))
+					return HttpRequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, allowedHttpMethods))
 							.resourceMethod(resourceMethod)
 							.build();
 				} else {
 					// no matching resource method found, it's a 404
-					return RequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
+					return HttpRequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
 							.resourceMethod(resourceMethod)
 							.build();
 				}
@@ -1288,13 +1288,13 @@ public final class Soklet implements AutoCloseable {
 			MarshaledResponse marshaledResponse = (MarshaledResponse) responseObject;
 			enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent());
 
-			return RequestResult.withMarshaledResponse(marshaledResponse)
+			return HttpRequestResult.withMarshaledResponse(marshaledResponse)
 					.resourceMethod(resourceMethod)
 					.build();
 		} else if (responseObject instanceof Response) {
 			response = (Response) responseObject;
 		} else if (responseObject instanceof SseHandshakeResult.Accepted accepted) { // SSE "accepted" handshake
-			return RequestResult.withMarshaledResponse(toMarshaledResponse(accepted))
+			return HttpRequestResult.withMarshaledResponse(toMarshaledResponse(accepted))
 					.resourceMethod(resourceMethod)
 					.sseHandshakeResult(accepted)
 					.build();
@@ -1311,7 +1311,7 @@ public final class Soklet implements AutoCloseable {
 
 		enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent());
 
-		return RequestResult.withMarshaledResponse(marshaledResponse)
+		return HttpRequestResult.withMarshaledResponse(marshaledResponse)
 				.response(response)
 				.resourceMethod(resourceMethod)
 				.sseHandshakeResult(sseHandshakeResult)
@@ -1376,7 +1376,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	protected void handleMcpRequest(@NonNull Request request,
-																	@NonNull Consumer<RequestResult> requestResultConsumer) {
+																	@NonNull Consumer<HttpRequestResult> requestResultConsumer) {
 		requireNonNull(request);
 		requireNonNull(requestResultConsumer);
 
@@ -1666,14 +1666,14 @@ public final class Soklet implements AutoCloseable {
 
 		@NonNull
 			@Override
-			public RequestResult performRequest(@NonNull Request request) {
+			public HttpRequestResult performHttpRequest(@NonNull Request request) {
 				MockHttpServer server = getHttpServer().orElse(null);
 
 				if (server == null)
 					throw new IllegalStateException(format("You must specify a %s in your %s to simulate requests",
 							HttpServer.class.getSimpleName(), SokletConfig.class.getSimpleName()));
 
-				AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
+				AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
 				HttpServer.RequestHandler requestHandler = server.getRequestHandler().orElse(null);
 
 			if (requestHandler == null)
@@ -1695,7 +1695,7 @@ public final class Soklet implements AutoCloseable {
 				throw new IllegalStateException(format("You must specify a %s in your %s to simulate Server-Sent Event requests",
 						SseServer.class.getSimpleName(), SokletConfig.class.getSimpleName()));
 
-			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
+			AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
 			SseServer.RequestHandler requestHandler = sseServer.getRequestHandler().orElse(null);
 
 			if (requestHandler == null)
@@ -1705,7 +1705,7 @@ public final class Soklet implements AutoCloseable {
 				requestResultHolder.set(requestResult);
 			}));
 
-			RequestResult requestResult = requestResultHolder.get();
+			HttpRequestResult requestResult = requestResultHolder.get();
 			SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
 
 			if (sseHandshakeResult == null)
@@ -1744,7 +1744,7 @@ public final class Soklet implements AutoCloseable {
 				throw new IllegalStateException(format("You must specify an MCP server in your %s to simulate MCP requests",
 						SokletConfig.class.getSimpleName()));
 
-			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
+			AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
 			McpServer.RequestHandler requestHandler = mcpServer.getRequestHandler().orElse(null);
 
 			if (requestHandler == null)
@@ -1752,7 +1752,7 @@ public final class Soklet implements AutoCloseable {
 
 			requestHandler.handleRequest(request, requestResultHolder::set);
 
-			RequestResult requestResult = requestResultHolder.get();
+			HttpRequestResult requestResult = requestResultHolder.get();
 
 			if (requestResult == null)
 				throw new IllegalStateException("No MCP request result was produced by the simulator");

@@ -133,7 +133,7 @@ public interface McpServer extends AutoCloseable {
 		 * @param requestResultConsumer the consumer that should receive the completed request result
 		 */
 		void handleRequest(@NonNull Request request,
-											 @NonNull Consumer<RequestResult> requestResultConsumer);
+											 @NonNull Consumer<HttpRequestResult> requestResultConsumer);
 	}
 
 	/**

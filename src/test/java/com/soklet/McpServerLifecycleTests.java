@@ -85,7 +85,7 @@ public class McpServerLifecycleTests {
 				.build();
 
 		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
-			AtomicReference<RequestResult> requestResultHolder = new AtomicReference<>();
+			AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
 			Request initializeRequest = Request.withPath(HttpMethod.POST, "/mcp")
 					.headers(Map.of("Content-Type", Set.of("application/json")))
 					.body("""
@@ -102,7 +102,7 @@ public class McpServerLifecycleTests {
 							""".getBytes(StandardCharsets.UTF_8))
 					.build();
 			fakeMcpServer.getRequestHandler().orElseThrow().handleRequest(initializeRequest, requestResultHolder::set);
-			RequestResult initializeResult = requestResultHolder.get();
+			HttpRequestResult initializeResult = requestResultHolder.get();
 			String sessionId = initializeResult.getMarshaledResponse().getHeaders().get("MCP-Session-Id").iterator().next();
 
 			requestResultHolder.set(null);
@@ -131,7 +131,7 @@ public class McpServerLifecycleTests {
 							))
 							.build(), requestResultHolder::set);
 
-			RequestResult requestResult = requestResultHolder.get();
+			HttpRequestResult requestResult = requestResultHolder.get();
 			Assertions.assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals("text/event-stream; charset=UTF-8",
 					requestResult.getMarshaledResponse().getHeaders().get("Content-Type").iterator().next());
@@ -486,7 +486,7 @@ public class McpServerLifecycleTests {
 									}
 									""".getBytes(StandardCharsets.UTF_8))
 							.build());
-			String sessionId = initializeResult.getRequestResult().getMarshaledResponse().getHeaders().get("MCP-Session-Id").iterator().next();
+			String sessionId = initializeResult.getHttpRequestResult().getMarshaledResponse().getHeaders().get("MCP-Session-Id").iterator().next();
 
 			simulator.performMcpRequest(Request.withPath(HttpMethod.POST, "/mcp")
 					.headers(Map.of(
@@ -524,7 +524,7 @@ public class McpServerLifecycleTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build(), (request, requestResultConsumer) -> requestResultConsumer.accept(
-				RequestResult.fromMarshaledResponse(MarshaledResponse.withStatusCode(200)
+				HttpRequestResult.fromMarshaledResponse(MarshaledResponse.withStatusCode(200)
 						.headers(Map.of("Content-Type", Set.of("text/event-stream; charset=UTF-8")))
 						.build())));
 
@@ -543,7 +543,7 @@ public class McpServerLifecycleTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build(), (request, requestResultConsumer) -> requestResultConsumer.accept(
-				RequestResult.fromMarshaledResponse(MarshaledResponse.withStatusCode(200)
+				HttpRequestResult.fromMarshaledResponse(MarshaledResponse.withStatusCode(200)
 						.headers(Map.of("Content-Type", Set.of("text/event-stream; charset=UTF-8")))
 						.build())));
 

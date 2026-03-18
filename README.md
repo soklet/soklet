@@ -717,7 +717,7 @@ public void mcpTest() {
     if (!(initializeResult instanceof McpRequestResult.ResponseCompleted initializeResponse))
       throw new IllegalStateException("Expected initialize to complete without opening a stream");
 
-    String sessionId = initializeResponse.getRequestResult().getMarshaledResponse()
+    String sessionId = initializeResponse.getHttpRequestResult().getMarshaledResponse()
       .getHeaders().get("MCP-Session-Id").iterator().next();
 
     Assert.assertNotNull(sessionId);
@@ -1321,7 +1321,8 @@ public void basicIntegrationTest() {
       .build();
 
     // Perform the request and get a handle to the response
-    MarshaledResponse marshaledResponse = simulator.performRequest(request);
+    HttpRequestResult httpRequestResult = simulator.performHttpRequest(request);
+    MarshaledResponse marshaledResponse = httpRequestResult.getMarshaledResponse();
 
     // Verify status code
     Integer expectedCode = 200;

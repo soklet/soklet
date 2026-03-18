@@ -41,7 +41,7 @@ public class ResponseErrorMappingTests {
 				.build();
 
 		Soklet.runSimulator(cfg, simulator -> {
-			RequestResult result = simulator.performRequest(Request.withPath(HttpMethod.GET, "/explode").build());
+			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/explode").build());
 			Assertions.assertEquals(500, result.getMarshaledResponse().getStatusCode());
 		});
 	}
@@ -57,7 +57,7 @@ public class ResponseErrorMappingTests {
 				.build();
 
 		Soklet.runSimulator(cfg, simulator -> {
-			RequestResult result = simulator.performRequest(Request.withPath(HttpMethod.GET, "/bad-request").build());
+			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/bad-request").build());
 			Assertions.assertEquals(400, result.getMarshaledResponse().getStatusCode());
 		});
 	}
@@ -73,7 +73,7 @@ public class ResponseErrorMappingTests {
 				.build();
 
 		Soklet.runSimulator(cfg, simulator -> {
-			RequestResult result = simulator.performRequest(Request.withPath(HttpMethod.GET, "/bodyless").build());
+			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/bodyless").build());
 			Assertions.assertEquals(500, result.getMarshaledResponse().getStatusCode());
 		});
 	}

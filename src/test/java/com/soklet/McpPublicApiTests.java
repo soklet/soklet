@@ -135,7 +135,7 @@ public class McpPublicApiTests {
 
 	@Test
 	public void mcpRequestResultStreamOpenedBuffersMessagesAndCanBeClosed() {
-		RequestResult requestResult = RequestResult.fromMarshaledResponse(MarshaledResponse.fromStatusCode(200));
+		HttpRequestResult requestResult = HttpRequestResult.fromMarshaledResponse(MarshaledResponse.fromStatusCode(200));
 		McpRequestResult.StreamOpened streamOpened = new McpRequestResult.StreamOpened(requestResult, null, false);
 		AtomicInteger consumedCount = new AtomicInteger();
 
@@ -156,7 +156,7 @@ public class McpPublicApiTests {
 	public void simulatorPerformMcpRequestFailsFastByDefault() {
 		Simulator simulator = new Simulator() {
 			@Override
-			public RequestResult performRequest(Request request) {
+			public HttpRequestResult performHttpRequest(Request request) {
 				throw new UnsupportedOperationException("unused");
 			}
 

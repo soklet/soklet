@@ -46,7 +46,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 	 * <p>
 	 * The {@link #registerEventConsumer(Consumer)} and {@link #registerCommentConsumer(Consumer)} methods can be used to "listen" for Server-Sent Events and Comments, respectively.
 	 * <p>
-	 * The data provided when the handshake was accepted is available via {@link #getSseHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
+	 * The data provided when the handshake was accepted is available via {@link #getSseHandshakeResult()}, and the final data sent to the client is available via {@link #getHttpRequestResult()}.
 	 */
 	@ThreadSafe
 	final class HandshakeAccepted implements SseRequestResult {
@@ -54,7 +54,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		@NonNull
 		private final ResourcePath resourcePath;
 		@NonNull
-		private final RequestResult requestResult;
+		private final HttpRequestResult requestResult;
 		@NonNull
 		private final DefaultSimulator simulator;
 		@NonNull
@@ -72,7 +72,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 
 		HandshakeAccepted(SseHandshakeResult.@NonNull Accepted sseHandshakeResult,
 											@NonNull ResourcePath resourcePath,
-											@NonNull RequestResult requestResult,
+											@NonNull HttpRequestResult requestResult,
 											@NonNull DefaultSimulator simulator,
 											@Nullable Consumer<SseUnicaster> clientInitializer) {
 			requireNonNull(sseHandshakeResult);
@@ -243,12 +243,12 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		/**
 		 * The initial result of the handshake, as written back to the client (note that the connection remains open).
 		 * <p>
-		 * Useful for examining headers/cookies written via {@link RequestResult#getMarshaledResponse()}.
+		 * Useful for examining headers/cookies written via {@link HttpRequestResult#getMarshaledResponse()}.
 		 *
 		 * @return the result of this request
 		 */
 		@NonNull
-		public RequestResult getRequestResult() {
+		public HttpRequestResult getHttpRequestResult() {
 			return this.requestResult;
 		}
 
@@ -312,16 +312,16 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 	/**
 	 * Represents the result of an SSE rejected handshake (explicit rejection; connection closed) when simulated by {@link Simulator#performSseRequest(Request)}.
 	 * <p>
-	 * The data provided when the handshake was rejected is available via {@link #getSseHandshakeResult()}, and the final data sent to the client is available via {@link #getRequestResult()}.
+	 * The data provided when the handshake was rejected is available via {@link #getSseHandshakeResult()}, and the final data sent to the client is available via {@link #getHttpRequestResult()}.
 	 */
 	@ThreadSafe
 	final class HandshakeRejected implements SseRequestResult {
 		private final SseHandshakeResult.@NonNull Rejected sseHandshakeResult;
 		@NonNull
-		private final RequestResult requestResult;
+		private final HttpRequestResult requestResult;
 
 		HandshakeRejected(SseHandshakeResult.@NonNull Rejected sseHandshakeResult,
-											@NonNull RequestResult requestResult) {
+											@NonNull HttpRequestResult requestResult) {
 			requireNonNull(sseHandshakeResult);
 			requireNonNull(requestResult);
 
@@ -344,13 +344,13 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		 * @return the result of this request
 		 */
 		@NonNull
-		public RequestResult getRequestResult() {
+		public HttpRequestResult getHttpRequestResult() {
 			return this.requestResult;
 		}
 
 		@Override
 		public String toString() {
-			return format("%s{sseHandshakeResult=%s, requestResult=%s}", HandshakeRejected.class.getSimpleName(), getSseHandshakeResult(), getRequestResult());
+			return format("%s{sseHandshakeResult=%s, requestResult=%s}", HandshakeRejected.class.getSimpleName(), getSseHandshakeResult(), getHttpRequestResult());
 		}
 
 		@Override
@@ -362,26 +362,26 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 				return false;
 
 			return Objects.equals(getSseHandshakeResult(), handshakeRejected.getSseHandshakeResult())
-					&& Objects.equals(getRequestResult(), handshakeRejected.getRequestResult());
+					&& Objects.equals(getHttpRequestResult(), handshakeRejected.getHttpRequestResult());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getSseHandshakeResult(), getRequestResult());
+			return Objects.hash(getSseHandshakeResult(), getHttpRequestResult());
 		}
 	}
 
 	/**
 	 * Represents the result of an SSE request failure (implicit rejection, e.g. an exception occurred; connection closed) when simulated by {@link Simulator#performSseRequest(Request)}.
 	 * <p>
-	 * The final data sent to the client is available via {@link #getRequestResult()}.
+	 * The final data sent to the client is available via {@link #getHttpRequestResult()}.
 	 */
 	@ThreadSafe
 	final class RequestFailed implements SseRequestResult {
 		@NonNull
-		private final RequestResult requestResult;
+		private final HttpRequestResult requestResult;
 
-		RequestFailed(@NonNull RequestResult requestResult) {
+		RequestFailed(@NonNull HttpRequestResult requestResult) {
 			requireNonNull(requestResult);
 			this.requestResult = requestResult;
 		}
@@ -392,13 +392,13 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		 * @return the result of this request
 		 */
 		@NonNull
-		public RequestResult getRequestResult() {
+		public HttpRequestResult getHttpRequestResult() {
 			return this.requestResult;
 		}
 
 		@Override
 		public String toString() {
-			return format("%s{requestResult=%s}", RequestFailed.class.getSimpleName(), getRequestResult());
+			return format("%s{requestResult=%s}", RequestFailed.class.getSimpleName(), getHttpRequestResult());
 		}
 
 		@Override
@@ -409,12 +409,12 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			if (!(object instanceof RequestFailed requestFailed))
 				return false;
 
-			return Objects.equals(getRequestResult(), requestFailed.getRequestResult());
+			return Objects.equals(getHttpRequestResult(), requestFailed.getHttpRequestResult());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getRequestResult());
+			return Objects.hash(getHttpRequestResult());
 		}
 	}
 }

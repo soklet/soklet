@@ -45,7 +45,7 @@ import static java.lang.String.format;
  *       .build();
  *
  *     // Perform the request and get a handle to the result
- *     RequestResult result = simulator.performRequest(request);
+ *     HttpRequestResult result = simulator.performHttpRequest(request);
  *
  *     // Verify status code
  *     Integer expectedCode = 200;
@@ -114,12 +114,12 @@ public interface Simulator {
 	 * @return the result (logical response, marshaled response, etc.) that corresponds to the request
 	 */
 	@NonNull
-	RequestResult performRequest(@NonNull Request request);
+	HttpRequestResult performHttpRequest(@NonNull Request request);
 
 	/**
 	 * Given a request that would normally be handled by your {@link SseServer} (that is, for a <em>Resource Method</em> decorated with the {@link com.soklet.annotation.SseEventSource} annotation), process it and return response data ({@link com.soklet.SseRequestResult.HandshakeAccepted}, {@link com.soklet.SseRequestResult.HandshakeRejected}, or {@link com.soklet.SseRequestResult.RequestFailed});
 	 * <p>
-	 * To make requests that would normally be handled by your {@link HttpServer}, use {@link #performRequest(Request)}.
+	 * To make requests that would normally be handled by your {@link HttpServer}, use {@link #performHttpRequest(Request)}.
 	 *
 	 * @param request the Server-Sent Event HTTP request to process
 	 * @return the result (handshake outcode, etc.) that corresponds to the request

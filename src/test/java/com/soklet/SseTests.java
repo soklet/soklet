@@ -118,7 +118,7 @@ public class SseTests {
 			SseRequestResult requestResult = simulator.performSseRequest(request);
 
 			if (requestResult instanceof HandshakeAccepted handshakeAccepted) {
-				MarshaledResponse marshaledResponse = handshakeAccepted.getRequestResult().getMarshaledResponse();
+				MarshaledResponse marshaledResponse = handshakeAccepted.getHttpRequestResult().getMarshaledResponse();
 
 				Assertions.assertEquals(200, marshaledResponse.getStatusCode(), "Unexpected HTTP status code for accepted handshake");
 

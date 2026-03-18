@@ -55,7 +55,7 @@ public class McpRuntimeTests {
 							}
 							""", Map.of()));
 
-			Assertions.assertEquals(Integer.valueOf(200), requestResult.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 			String sessionId = headerValue(requestResult, "MCP-Session-Id");
 			Assertions.assertFalse(sessionId.isBlank());
 
@@ -98,7 +98,7 @@ public class McpRuntimeTests {
 							"MCP-Protocol-Version", Set.of("2025-11-25")
 					)));
 
-			Assertions.assertEquals(Integer.valueOf(202), initializedNotification.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(202), initializedNotification.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 		});
 	}
 
@@ -122,7 +122,7 @@ public class McpRuntimeTests {
 							"MCP-Protocol-Version", Set.of("2025-11-25")
 					)));
 
-			Assertions.assertEquals(Integer.valueOf(200), pingResult.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(200), pingResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 			McpObject body = jsonBody(pingResult);
 			McpObject result = (McpObject) body.get("result").orElseThrow();
 			Assertions.assertTrue(result.values().isEmpty());
@@ -185,7 +185,7 @@ public class McpRuntimeTests {
 							))
 							.build());
 
-			MarshaledResponse marshaledResponse = preflightResult.getRequestResult().getMarshaledResponse();
+			MarshaledResponse marshaledResponse = preflightResult.getHttpRequestResult().getMarshaledResponse();
 			Assertions.assertEquals(Integer.valueOf(204), marshaledResponse.getStatusCode());
 			Assertions.assertEquals(Set.of("https://chat.openai.com"), marshaledResponse.getHeaders().get("Access-Control-Allow-Origin"));
 			Assertions.assertEquals(Set.of("true"), marshaledResponse.getHeaders().get("Access-Control-Allow-Credentials"));
@@ -207,7 +207,7 @@ public class McpRuntimeTests {
 							"Origin", Set.of("https://chat.openai.com")
 					)));
 			String sessionId = headerValue(initializeResult, "MCP-Session-Id");
-			MarshaledResponse initializeMarshaledResponse = initializeResult.getRequestResult().getMarshaledResponse();
+			MarshaledResponse initializeMarshaledResponse = initializeResult.getHttpRequestResult().getMarshaledResponse();
 
 			Assertions.assertEquals(Set.of("https://chat.openai.com"), initializeMarshaledResponse.getHeaders().get("Access-Control-Allow-Origin"));
 			Assertions.assertEquals(Set.of("true"), initializeMarshaledResponse.getHeaders().get("Access-Control-Allow-Credentials"));
@@ -237,7 +237,7 @@ public class McpRuntimeTests {
 							))
 							.build());
 
-			MarshaledResponse streamMarshaledResponse = streamOpened.getRequestResult().getMarshaledResponse();
+			MarshaledResponse streamMarshaledResponse = streamOpened.getHttpRequestResult().getMarshaledResponse();
 			Assertions.assertEquals(Set.of("https://chat.openai.com"), streamMarshaledResponse.getHeaders().get("Access-Control-Allow-Origin"));
 			Assertions.assertEquals(Set.of("true"), streamMarshaledResponse.getHeaders().get("Access-Control-Allow-Credentials"));
 			Assertions.assertTrue(streamMarshaledResponse.getHeaders().get("Access-Control-Expose-Headers").contains("MCP-Session-Id"));
@@ -277,7 +277,7 @@ public class McpRuntimeTests {
 							  "params":{}
 							}
 							""", sessionHeaders));
-			Assertions.assertEquals(Integer.valueOf(202), initializedNotification.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(202), initializedNotification.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 
 			McpRequestResult.ResponseCompleted toolsList = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
 					post("/tenants/acme/mcp", """
@@ -798,9 +798,9 @@ public class McpRuntimeTests {
 			List<McpObject> messages = new ArrayList<>();
 			streamOpened.registerMessageConsumer(messages::add);
 
-			Assertions.assertEquals(Integer.valueOf(200), streamOpened.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(200), streamOpened.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals("text/event-stream; charset=UTF-8",
-					streamOpened.getRequestResult().getMarshaledResponse().getHeaders().get("Content-Type").iterator().next());
+					streamOpened.getHttpRequestResult().getMarshaledResponse().getHeaders().get("Content-Type").iterator().next());
 			Assertions.assertEquals(3, messages.size());
 
 			McpObject firstMessage = messages.get(0);
@@ -861,7 +861,7 @@ public class McpRuntimeTests {
 							"Accept", Set.of("application/json")
 					)));
 
-			Assertions.assertEquals(Integer.valueOf(406), rejectedPost.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(406), rejectedPost.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 
 			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
 			McpRequestResult.ResponseCompleted rejectedGet = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
@@ -873,7 +873,7 @@ public class McpRuntimeTests {
 							))
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(406), rejectedGet.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(406), rejectedGet.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 		});
 	}
 
@@ -886,7 +886,7 @@ public class McpRuntimeTests {
 					.build();
 
 			McpRequestResult.ResponseCompleted responseCompleted = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(oversizedRequest);
-			Assertions.assertEquals(Integer.valueOf(413), responseCompleted.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(413), responseCompleted.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 		});
 	}
 
@@ -905,7 +905,7 @@ public class McpRuntimeTests {
 
 			Assertions.assertInstanceOf(McpRequestResult.StreamOpened.class, requestResult);
 			McpRequestResult.StreamOpened streamOpened = (McpRequestResult.StreamOpened) requestResult;
-			Assertions.assertEquals(Integer.valueOf(200), streamOpened.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(200), streamOpened.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 			Assertions.assertFalse(streamOpened.isClosed());
 
 			McpRequestResult.ResponseCompleted deleteResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
@@ -913,7 +913,7 @@ public class McpRuntimeTests {
 							.headers(sessionHeaders)
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(204), deleteResult.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(204), deleteResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 			Assertions.assertTrue(streamOpened.isClosed());
 		});
 	}
@@ -993,7 +993,7 @@ public class McpRuntimeTests {
 							.headers(sessionHeaders)
 							.build());
 
-			Assertions.assertEquals(Integer.valueOf(204), deleteResult.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(204), deleteResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED, lifecycleObserver.streamTerminationReason);
 		});
 	}
@@ -1029,7 +1029,7 @@ public class McpRuntimeTests {
 							}
 							""", sessionHeaders));
 
-			Assertions.assertEquals(Integer.valueOf(200), stillAlive.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(200), stillAlive.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 
 			streamOpened.close();
 			sleepUnchecked(120L);
@@ -1044,7 +1044,7 @@ public class McpRuntimeTests {
 							}
 							""", sessionHeaders));
 
-			Assertions.assertEquals(Integer.valueOf(404), expired.getRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(404), expired.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals(McpSessionTerminationReason.IDLE_TIMEOUT, lifecycleObserver.sessionTerminationReason);
 			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
 		});
@@ -1142,7 +1142,7 @@ public class McpRuntimeTests {
 			McpObject error = (McpObject) responseBody.get("error").orElseThrow();
 			Assertions.assertEquals("-32603", ((McpNumber) error.get("code").orElseThrow()).value().toPlainString());
 			Assertions.assertEquals("Internal error", ((McpString) error.get("message").orElseThrow()).value());
-			Assertions.assertFalse(initializeResult.getRequestResult().getMarshaledResponse().getHeaders().containsKey("MCP-Session-Id"));
+			Assertions.assertFalse(initializeResult.getHttpRequestResult().getMarshaledResponse().getHeaders().containsKey("MCP-Session-Id"));
 		});
 
 		Assertions.assertEquals(1, lifecycleObserver.createdSessionIds.size());
@@ -1362,11 +1362,11 @@ public class McpRuntimeTests {
 
 	private static String headerValue(McpRequestResult.ResponseCompleted responseCompleted,
 																		String headerName) {
-		return responseCompleted.getRequestResult().getMarshaledResponse().getHeaders().get(headerName).stream().findFirst().orElseThrow();
+		return responseCompleted.getHttpRequestResult().getMarshaledResponse().getHeaders().get(headerName).stream().findFirst().orElseThrow();
 	}
 
 	private static McpObject jsonBody(McpRequestResult.ResponseCompleted responseCompleted) {
-		return (McpObject) McpJsonCodec.parse(responseCompleted.getRequestResult().getMarshaledResponse().getBody().orElseThrow());
+		return (McpObject) McpJsonCodec.parse(responseCompleted.getHttpRequestResult().getMarshaledResponse().getBody().orElseThrow());
 	}
 
 	private static McpObject internalSessionNotification(String value) {

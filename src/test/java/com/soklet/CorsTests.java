@@ -48,7 +48,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult requestResult = simulator.performRequest(
+			HttpRequestResult requestResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://example.com"),
@@ -80,7 +80,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult requestResult = simulator.performRequest(
+			HttpRequestResult requestResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://malicious.net"),
@@ -105,7 +105,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult result = simulator.performRequest(
+			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://app.example")
@@ -157,7 +157,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult allowed = simulator.performRequest(
+			HttpRequestResult allowed = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://good.example"),
@@ -166,7 +166,7 @@ public class CorsTests {
 							.build());
 			Assertions.assertEquals(204, allowed.getMarshaledResponse().getStatusCode());
 
-			RequestResult denied = simulator.performRequest(
+			HttpRequestResult denied = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://evil.example"),
@@ -185,7 +185,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult preflight = simulator.performRequest(
+			HttpRequestResult preflight = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://good.example"),
@@ -213,7 +213,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult result = simulator.performRequest(
+			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/api/hello")
 							.headers(Map.of("Origin", Set.of("https://good.example")))
 							.build());
@@ -236,7 +236,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult preflight = simulator.performRequest(
+			HttpRequestResult preflight = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("https://any.example"),
@@ -288,7 +288,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(config, simulator -> {
-			var result = simulator.performRequest(
+			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of(GOOD),
@@ -313,7 +313,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(config, simulator -> {
-			var result = simulator.performRequest(
+			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of(GOOD),
@@ -342,7 +342,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(config, simulator -> {
-			var result = simulator.performRequest(
+			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of(GOOD),
@@ -375,7 +375,7 @@ public class CorsTests {
 			headers.put("Origin", Set.of("  HTTPS://GOOD.EXAMPLE  "));
 			headers.put("Access-Control-Request-Method", Set.of("GET"));
 
-			var result = simulator.performRequest(
+			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello").headers(headers).build()
 			);
 
@@ -396,7 +396,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(config, simulator -> {
-			var ok = simulator.performRequest(
+			var ok = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of(GOOD),
@@ -409,7 +409,7 @@ public class CorsTests {
 				Assertions.assertEquals(Set.of("false"), headers.get("Access-Control-Allow-Credentials"));
 			}
 
-			var denied = simulator.performRequest(
+			var denied = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of(EVIL),
@@ -428,7 +428,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(config, simulator -> {
-			var result = simulator.performRequest(
+			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/api/hello")
 							.headers(Map.of("Origin", Set.of(GOOD)))
 							.build()
@@ -452,7 +452,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(config, simulator -> {
-			var result = simulator.performRequest(
+			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/api/hello")
 							.headers(Map.of("Origin", Set.of(GOOD)))
 							.build()
@@ -476,7 +476,7 @@ public class CorsTests {
 				.build();
 
 		Soklet.runSimulator(config, simulator -> {
-			var result = simulator.performRequest(
+			var result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.OPTIONS, "/api/hello")
 							.headers(Map.of(
 									"Origin", Set.of("null"),

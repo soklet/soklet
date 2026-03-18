@@ -89,7 +89,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	RequestResult handleRequest(@NonNull Request request) {
+	HttpRequestResult handleRequest(@NonNull Request request) {
 		requireNonNull(request);
 
 		try {
@@ -104,7 +104,7 @@ final class DefaultMcpRuntime {
 			ResolvedEndpoint resolvedEndpoint = resolveEndpoint(request, mcpServer).orElse(null);
 
 			if (resolvedEndpoint == null)
-				return requestResultFromMarshaledResponse(request, getSoklet().getSokletConfig().getResponseMarshaler().forNotFound(request));
+				return httpRequestResultFromMarshaledResponse(request, getSoklet().getSokletConfig().getResponseMarshaler().forNotFound(request));
 
 			return switch (request.getHttpMethod()) {
 				case OPTIONS -> handleOptionsRequest(request, mcpServer, resolvedEndpoint);
@@ -114,16 +114,16 @@ final class DefaultMcpRuntime {
 						handleGetRequest(request, mcpServer, resolvedEndpoint));
 				case DELETE -> applyCorsIfApplicable(request, mcpServer, resolvedEndpoint,
 						handleDeleteRequest(request, mcpServer, resolvedEndpoint));
-				default -> requestResultFromMarshaledResponse(request,
+				default -> httpRequestResultFromMarshaledResponse(request,
 						getSoklet().getSokletConfig().getResponseMarshaler().forMethodNotAllowed(request, Set.of(HttpMethod.POST, HttpMethod.GET, HttpMethod.DELETE, HttpMethod.OPTIONS)));
 			};
 		} catch (Throwable throwable) {
-			return RequestResult.fromMarshaledResponse(getSoklet().provideFailsafeMarshaledResponse(request, throwable));
+			return HttpRequestResult.fromMarshaledResponse(getSoklet().provideFailsafeMarshaledResponse(request, throwable));
 		}
 	}
 
 	@NonNull
-	private RequestResult handleOptionsRequest(@NonNull Request request,
+	private HttpRequestResult handleOptionsRequest(@NonNull Request request,
 																						 @NonNull McpServer mcpServer,
 																						 @NonNull ResolvedEndpoint resolvedEndpoint) {
 		requireNonNull(request);
@@ -139,23 +139,23 @@ final class DefaultMcpRuntime {
 					MCP_TRANSPORT_HTTP_METHODS).orElse(null);
 
 			if (corsPreflightResponse != null)
-				return RequestResult.withMarshaledResponse(getSoklet().getSokletConfig().getResponseMarshaler()
+				return HttpRequestResult.withMarshaledResponse(getSoklet().getSokletConfig().getResponseMarshaler()
 								.forCorsPreflightAllowed(request, corsPreflight, corsPreflightResponse))
 						.corsPreflightResponse(corsPreflightResponse)
 						.build();
 
-			return RequestResult.withMarshaledResponse(getSoklet().getSokletConfig().getResponseMarshaler()
+			return HttpRequestResult.withMarshaledResponse(getSoklet().getSokletConfig().getResponseMarshaler()
 							.forCorsPreflightRejected(request, corsPreflight))
 					.build();
 		}
 
-		return requestResultFromMarshaledResponse(request,
+		return httpRequestResultFromMarshaledResponse(request,
 				getSoklet().getSokletConfig().getResponseMarshaler().forOptions(request,
 						Set.of(HttpMethod.POST, HttpMethod.GET, HttpMethod.DELETE, HttpMethod.OPTIONS)));
 	}
 
 	@NonNull
-	private RequestResult handlePostRequest(@NonNull Request request,
+	private HttpRequestResult handlePostRequest(@NonNull Request request,
 																					@NonNull McpServer mcpServer,
 																					@NonNull ResolvedEndpoint resolvedEndpoint) {
 		requireNonNull(request);
@@ -224,7 +224,7 @@ final class DefaultMcpRuntime {
 		Optional<McpStoredSession> finalStoredSession = storedSession;
 
 		try {
-			RequestResult requestResult = mcpServer.getRequestInterceptor().interceptRequest(requestContext, () ->
+			HttpRequestResult requestResult = mcpServer.getRequestInterceptor().interceptRequest(requestContext, () ->
 					dispatchObservedPostRequest(request, mcpServer, resolvedEndpoint, endpointPathParameters, parsedRequest, finalStoredSession, requestContext));
 
 			if (requestResult == null)
@@ -242,7 +242,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handleGetRequest(@NonNull Request request,
+	private HttpRequestResult handleGetRequest(@NonNull Request request,
 																				 @NonNull McpServer mcpServer,
 																				 @NonNull ResolvedEndpoint resolvedEndpoint) throws Exception {
 		requireNonNull(request);
@@ -299,11 +299,11 @@ final class DefaultMcpRuntime {
 
 		touchSession(mcpServer, storedSession);
 		registerMcpStream(request, resolvedEndpoint.endpointClass(), sessionId);
-		return requestResultFromMarshaledResponse(request, eventStreamResponse());
+		return httpRequestResultFromMarshaledResponse(request, eventStreamResponse());
 	}
 
 	@NonNull
-	private RequestResult dispatchObservedPostRequest(@NonNull Request request,
+	private HttpRequestResult dispatchObservedPostRequest(@NonNull Request request,
 																										@NonNull McpServer mcpServer,
 																										@NonNull ResolvedEndpoint resolvedEndpoint,
 																										@NonNull Map<String, String> endpointPathParameters,
@@ -352,7 +352,7 @@ final class DefaultMcpRuntime {
 						parsedRequest.method(),
 						parsedRequest.requestId()));
 
-		RequestResult requestResult;
+		HttpRequestResult requestResult;
 
 		try {
 			requestResult = dispatchPostRequestAfterAdmission(request, mcpServer, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession, requestContext);
@@ -398,7 +398,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult dispatchPostRequestAfterAdmission(@NonNull Request request,
+	private HttpRequestResult dispatchPostRequestAfterAdmission(@NonNull Request request,
 																													@NonNull McpServer mcpServer,
 																													@NonNull ResolvedEndpoint resolvedEndpoint,
 																													@NonNull Map<String, String> endpointPathParameters,
@@ -438,7 +438,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handleInitialize(@NonNull Request request,
+	private HttpRequestResult handleInitialize(@NonNull Request request,
 																				 @NonNull McpServer mcpServer,
 																				 @NonNull ResolvedEndpoint resolvedEndpoint,
 																				 @NonNull Map<String, String> endpointPathParameters,
@@ -565,7 +565,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handleInitializedNotification(@NonNull Request request,
+	private HttpRequestResult handleInitializedNotification(@NonNull Request request,
 																												@NonNull McpServer mcpServer,
 																												@NonNull ParsedJsonRpcRequest parsedRequest,
 																												@NonNull McpStoredSession storedSession,
@@ -604,7 +604,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handlePing(@NonNull Request request,
+	private HttpRequestResult handlePing(@NonNull Request request,
 																	 @NonNull McpServer mcpServer,
 																	 @NonNull ParsedJsonRpcRequest parsedRequest,
 																	 @Nullable McpStoredSession storedSession) {
@@ -621,7 +621,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handleToolsList(@NonNull Request request,
+	private HttpRequestResult handleToolsList(@NonNull Request request,
 																				@NonNull ResolvedEndpoint resolvedEndpoint,
 																				@NonNull ParsedJsonRpcRequest parsedRequest,
 																				@NonNull McpStoredSession storedSession,
@@ -632,7 +632,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(storedSession);
 		requireNonNull(requestContext);
 
-		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+		HttpRequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
 
 		if (gateResult != null)
 			return gateResult;
@@ -658,7 +658,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handlePromptsList(@NonNull Request request,
+	private HttpRequestResult handlePromptsList(@NonNull Request request,
 																					@NonNull ResolvedEndpoint resolvedEndpoint,
 																					@NonNull ParsedJsonRpcRequest parsedRequest,
 																					@NonNull McpStoredSession storedSession,
@@ -669,7 +669,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(storedSession);
 		requireNonNull(requestContext);
 
-		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+		HttpRequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
 
 		if (gateResult != null)
 			return gateResult;
@@ -709,7 +709,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handleToolCall(@NonNull Request request,
+	private HttpRequestResult handleToolCall(@NonNull Request request,
 																			 @NonNull ResolvedEndpoint resolvedEndpoint,
 																			 @NonNull Map<String, String> endpointPathParameters,
 																			 @NonNull ParsedJsonRpcRequest parsedRequest,
@@ -722,7 +722,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(storedSession);
 		requireNonNull(requestContext);
 
-		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+		HttpRequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
 
 		if (gateResult != null)
 			return gateResult;
@@ -785,7 +785,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handlePromptGet(@NonNull Request request,
+	private HttpRequestResult handlePromptGet(@NonNull Request request,
 																				@NonNull ResolvedEndpoint resolvedEndpoint,
 																				@NonNull Map<String, String> endpointPathParameters,
 																				@NonNull ParsedJsonRpcRequest parsedRequest,
@@ -798,7 +798,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(storedSession);
 		requireNonNull(requestContext);
 
-		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+		HttpRequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
 
 		if (gateResult != null)
 			return gateResult;
@@ -830,7 +830,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handleResourcesList(@NonNull Request request,
+	private HttpRequestResult handleResourcesList(@NonNull Request request,
 																						@NonNull ResolvedEndpoint resolvedEndpoint,
 																						@NonNull Map<String, String> endpointPathParameters,
 																						@NonNull ParsedJsonRpcRequest parsedRequest,
@@ -843,7 +843,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(storedSession);
 		requireNonNull(requestContext);
 
-		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+		HttpRequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
 
 		if (gateResult != null)
 			return gateResult;
@@ -886,7 +886,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handleResourceTemplatesList(@NonNull Request request,
+	private HttpRequestResult handleResourceTemplatesList(@NonNull Request request,
 																								 @NonNull ResolvedEndpoint resolvedEndpoint,
 																								 @NonNull ParsedJsonRpcRequest parsedRequest,
 																								 @NonNull McpStoredSession storedSession,
@@ -897,7 +897,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(storedSession);
 		requireNonNull(requestContext);
 
-		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+		HttpRequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
 
 		if (gateResult != null)
 			return gateResult;
@@ -927,7 +927,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handleResourceRead(@NonNull Request request,
+	private HttpRequestResult handleResourceRead(@NonNull Request request,
 																					 @NonNull ResolvedEndpoint resolvedEndpoint,
 																					 @NonNull Map<String, String> endpointPathParameters,
 																					 @NonNull ParsedJsonRpcRequest parsedRequest,
@@ -940,7 +940,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(storedSession);
 		requireNonNull(requestContext);
 
-		RequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+		HttpRequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
 
 		if (gateResult != null)
 			return gateResult;
@@ -971,7 +971,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult handleDeleteRequest(@NonNull Request request,
+	private HttpRequestResult handleDeleteRequest(@NonNull Request request,
 																						@NonNull McpServer mcpServer,
 																						@NonNull ResolvedEndpoint resolvedEndpoint) throws Exception {
 		requireNonNull(request);
@@ -1038,14 +1038,14 @@ final class DefaultMcpRuntime {
 				McpSessionTerminationReason.CLIENT_REQUESTED, null);
 		terminateStreamsForSession(request, resolvedEndpoint.endpointClass(), sessionId, McpStreamTerminationReason.SESSION_TERMINATED, null);
 		mcpServer.getSessionStore().deleteBySessionId(sessionId);
-		return requestResultFromMarshaledResponse(request, MarshaledResponse.withStatusCode(204).build());
+		return httpRequestResultFromMarshaledResponse(request, MarshaledResponse.withStatusCode(204).build());
 	}
 
 	@NonNull
-	private RequestResult applyCorsIfApplicable(@NonNull Request request,
+	private HttpRequestResult applyCorsIfApplicable(@NonNull Request request,
 																							@NonNull McpServer mcpServer,
 																							@NonNull ResolvedEndpoint resolvedEndpoint,
-																							@NonNull RequestResult requestResult) {
+																							@NonNull HttpRequestResult requestResult) {
 		requireNonNull(request);
 		requireNonNull(mcpServer);
 		requireNonNull(resolvedEndpoint);
@@ -1075,7 +1075,7 @@ final class DefaultMcpRuntime {
 	}
 
 	@Nullable
-	private RequestResult ensureSessionReady(@NonNull Request request,
+	private HttpRequestResult ensureSessionReady(@NonNull Request request,
 																					 @NonNull McpStoredSession storedSession,
 																					 @Nullable McpJsonRpcRequestId requestId) {
 		requireNonNull(request);
@@ -1844,51 +1844,51 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult httpResponse(@NonNull Request request,
+	private HttpRequestResult httpResponse(@NonNull Request request,
 																		 @NonNull Response response) {
 		requireNonNull(request);
 		requireNonNull(response);
-		return requestResultFromMarshaledResponse(request, marshaledResponseForResponse(response));
+		return httpRequestResultFromMarshaledResponse(request, marshaledResponseForResponse(response));
 	}
 
 	@NonNull
-	private RequestResult emptyAcceptedResponse(@NonNull Request request) {
+	private HttpRequestResult emptyAcceptedResponse(@NonNull Request request) {
 		requireNonNull(request);
-		return requestResultFromMarshaledResponse(request, MarshaledResponse.withStatusCode(202).build());
+		return httpRequestResultFromMarshaledResponse(request, MarshaledResponse.withStatusCode(202).build());
 	}
 
 	@NonNull
-	private RequestResult plainTextResponse(@NonNull Request request,
+	private HttpRequestResult plainTextResponse(@NonNull Request request,
 																					@NonNull Integer statusCode,
 																					@NonNull String message) {
 		requireNonNull(request);
 		requireNonNull(statusCode);
 		requireNonNull(message);
 
-		return requestResultFromMarshaledResponse(request, MarshaledResponse.withStatusCode(statusCode)
+		return httpRequestResultFromMarshaledResponse(request, MarshaledResponse.withStatusCode(statusCode)
 				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
 				.body(message.getBytes(StandardCharsets.UTF_8))
 				.build());
 	}
 
 	@NonNull
-	private RequestResult jsonRpcSuccessResponse(@NonNull Request request,
+	private HttpRequestResult jsonRpcSuccessResponse(@NonNull Request request,
 																							 @Nullable McpJsonRpcRequestId requestId,
 																							 @NonNull McpValue result,
 																							 @NonNull Map<String, Set<String>> headers) {
 		requireNonNull(request);
 		requireNonNull(result);
 		requireNonNull(headers);
-		return requestResultFromMarshaledResponse(request, jsonResponse(jsonRpcSuccessEnvelope(requestId, result), headers));
+		return httpRequestResultFromMarshaledResponse(request, jsonResponse(jsonRpcSuccessEnvelope(requestId, result), headers));
 	}
 
 	@NonNull
-	private RequestResult jsonRpcErrorResponse(@NonNull Request request,
+	private HttpRequestResult jsonRpcErrorResponse(@NonNull Request request,
 																						 @Nullable McpJsonRpcRequestId requestId,
 																						 @NonNull McpJsonRpcError error) {
 		requireNonNull(request);
 		requireNonNull(error);
-		return requestResultFromMarshaledResponse(request, jsonResponse(jsonRpcErrorEnvelope(requestId, error), Map.of()));
+		return httpRequestResultFromMarshaledResponse(request, jsonResponse(jsonRpcErrorEnvelope(requestId, error), Map.of()));
 	}
 
 	@NonNull
@@ -1906,14 +1906,14 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult jsonRpcEventStreamResponse(@NonNull Request request,
+	private HttpRequestResult jsonRpcEventStreamResponse(@NonNull Request request,
 																									 @NonNull List<@NonNull McpObject> messages,
 																									 @NonNull Boolean closeAfterReplay) {
 		requireNonNull(request);
 		requireNonNull(messages);
 		requireNonNull(closeAfterReplay);
 
-		return requestResultFromMarshaledResponse(request, eventStreamResponse(messages))
+		return httpRequestResultFromMarshaledResponse(request, eventStreamResponse(messages))
 				.copy()
 				.mcpStreamMessages(messages)
 				.mcpStreamClosedAfterReplay(closeAfterReplay)
@@ -1963,15 +1963,15 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private RequestResult requestResultFromMarshaledResponse(@NonNull Request request,
+	private HttpRequestResult httpRequestResultFromMarshaledResponse(@NonNull Request request,
 																													 @NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
-		return RequestResult.fromMarshaledResponse(getSoklet().applyCommonPropertiesToMarshaledResponse(request, marshaledResponse));
+		return HttpRequestResult.fromMarshaledResponse(getSoklet().applyCommonPropertiesToMarshaledResponse(request, marshaledResponse));
 	}
 
 	@NonNull
-	private ObservedMcpResult observeMcpResult(@NonNull RequestResult requestResult,
+	private ObservedMcpResult observeMcpResult(@NonNull HttpRequestResult requestResult,
 																						 @NonNull ParsedJsonRpcRequest parsedJsonRpcRequest) {
 		requireNonNull(requestResult);
 		requireNonNull(parsedJsonRpcRequest);

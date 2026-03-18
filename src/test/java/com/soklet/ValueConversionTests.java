@@ -51,20 +51,20 @@ public class ValueConversionTests {
 
 		Soklet.runSimulator(cfg, simulator -> {
 			// LocalDate
-			RequestResult r1 = simulator.performRequest(Request.withRawUrl(HttpMethod.GET, "/conv/date?d=2024-09-30").build());
+			HttpRequestResult r1 = simulator.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/conv/date?d=2024-09-30").build());
 			Assertions.assertEquals(200, r1.getMarshaledResponse().getStatusCode());
 			// Enum conversion uses exact enum constant names; use upper-case here.
-			RequestResult r2 = simulator.performRequest(Request.withRawUrl(HttpMethod.GET, "/conv/flavor?f=VANILLA").build());
+			HttpRequestResult r2 = simulator.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/conv/flavor?f=VANILLA").build());
 			Assertions.assertEquals(200, r2.getMarshaledResponse().getStatusCode());
 			// UUID
 			String id = UUID.randomUUID().toString();
-			RequestResult r3 = simulator.performRequest(Request.withRawUrl(HttpMethod.GET, "/conv/uuid?id=" + id).build());
+			HttpRequestResult r3 = simulator.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/conv/uuid?id=" + id).build());
 			Assertions.assertEquals(200, r3.getMarshaledResponse().getStatusCode());
 			// List of ints
-			RequestResult r4 = simulator.performRequest(Request.withRawUrl(HttpMethod.GET, "/conv/list?x=1&x=2&x=3").build());
+			HttpRequestResult r4 = simulator.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/conv/list?x=1&x=2&x=3").build());
 			Assertions.assertEquals(200, r4.getMarshaledResponse().getStatusCode());
 			// Locale (BCP 47)
-			RequestResult r5 = simulator.performRequest(Request.withRawUrl(HttpMethod.GET, "/conv/locale?l=pt-BR").build());
+			HttpRequestResult r5 = simulator.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/conv/locale?l=pt-BR").build());
 			Assertions.assertEquals(200, r5.getMarshaledResponse().getStatusCode());
 		});
 	}

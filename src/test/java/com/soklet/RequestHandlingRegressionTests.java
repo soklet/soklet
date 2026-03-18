@@ -78,7 +78,7 @@ public class RequestHandlingRegressionTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult result = simulator.performRequest(
+			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/greet").build());
 
 			MarshaledResponse response = result.getMarshaledResponse();
@@ -100,7 +100,7 @@ public class RequestHandlingRegressionTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult result = simulator.performRequest(
+			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/content-type").build());
 
 			assertEquals(Integer.valueOf(200), result.getMarshaledResponse().getStatusCode());
@@ -132,7 +132,7 @@ public class RequestHandlingRegressionTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult result = simulator.performRequest(
+			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/greet").build());
 
 			assertEquals(Integer.valueOf(500), result.getMarshaledResponse().getStatusCode());
@@ -167,7 +167,7 @@ public class RequestHandlingRegressionTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult result = simulator.performRequest(
+			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/greet").build());
 
 			assertEquals(Integer.valueOf(500), result.getMarshaledResponse().getStatusCode());
@@ -201,7 +201,7 @@ public class RequestHandlingRegressionTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult result = simulator.performRequest(
+			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/rewrite-source").build());
 
 			assertEquals(Integer.valueOf(200), result.getMarshaledResponse().getStatusCode());
@@ -220,13 +220,13 @@ public class RequestHandlingRegressionTests {
 				.build();
 
 		Soklet.runSimulator(configuration, simulator -> {
-			RequestResult specialResult = simulator.performRequest(
+			HttpRequestResult specialResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/items/special").build());
 
 			assertEquals(Integer.valueOf(200), specialResult.getMarshaledResponse().getStatusCode());
 			assertEquals("special", specialResult.getResponse().get().getBody().get());
 
-			RequestResult itemResult = simulator.performRequest(
+			HttpRequestResult itemResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/items/123").build());
 
 			assertEquals(Integer.valueOf(200), itemResult.getMarshaledResponse().getStatusCode());

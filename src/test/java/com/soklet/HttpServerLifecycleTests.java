@@ -112,7 +112,7 @@ public class HttpServerLifecycleTests {
 						.headers(Map.of("Content-Type", Set.of("text/plain")))
 						.body("ok".getBytes(StandardCharsets.UTF_8))
 						.build();
-				consumer.accept(RequestResult.withMarshaledResponse(response).build());
+				consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
 			});
 
 			Assertions.assertThrows(UncheckedIOException.class, httpServer::start);
@@ -144,7 +144,7 @@ public class HttpServerLifecycleTests {
 					.headers(Map.of("Content-Type", Set.of("text/plain")))
 					.body("ok".getBytes(StandardCharsets.UTF_8))
 					.build();
-			consumer.accept(RequestResult.withMarshaledResponse(response).build());
+			consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
 		});
 
 		httpServer.start();

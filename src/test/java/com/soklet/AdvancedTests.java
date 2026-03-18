@@ -455,7 +455,7 @@ public class AdvancedTests {
 									.build();
 
 							Soklet.runSimulator(config, simulator -> {
-								MarshaledResponse response = simulator.performRequest(request).getMarshaledResponse();
+								MarshaledResponse response = simulator.performHttpRequest(request).getMarshaledResponse();
 								if (response.getStatusCode() == 200) {
 									String responseBody = new String(
 											response.getBody().orElse(new byte[0]),
@@ -969,7 +969,7 @@ public class AdvancedTests {
 						.build();
 
 				Soklet.runSimulator(config, simulator -> {
-					MarshaledResponse response = simulator.performRequest(request).getMarshaledResponse();
+					MarshaledResponse response = simulator.performHttpRequest(request).getMarshaledResponse();
 					Assertions.assertEquals(200, response.getStatusCode().intValue());
 				});
 			}
