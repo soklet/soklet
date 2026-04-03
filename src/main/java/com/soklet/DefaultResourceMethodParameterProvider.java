@@ -127,60 +127,13 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
 
-		SokletConfig sokletConfig = getSokletConfig();
-
 		// First, support a few special injections based on type.
 		Class<?> basicParameterType = parameter.getType();
 
-		if (basicParameterType.isAssignableFrom(Request.class))
-			return request;
+		Object basicTypeInjection = extractBasicTypeInjection(request, resourceMethod, basicParameterType);
 
-		if (basicParameterType.isAssignableFrom(ResourceMethod.class))
-			return resourceMethod;
-
-		if (basicParameterType.isAssignableFrom(InstanceProvider.class))
-			return sokletConfig.getInstanceProvider();
-
-		if (basicParameterType.isAssignableFrom(RequestBodyMarshaler.class))
-			return sokletConfig.getRequestBodyMarshaler();
-
-		if (basicParameterType.isAssignableFrom(ResponseMarshaler.class))
-			return sokletConfig.getResponseMarshaler();
-
-		if (basicParameterType.isAssignableFrom(ValueConverterRegistry.class))
-			return sokletConfig.getValueConverterRegistry();
-
-		if (basicParameterType.isAssignableFrom(ResourceMethodResolver.class))
-			return sokletConfig.getResourceMethodResolver();
-
-		if (basicParameterType.isAssignableFrom(ResourceMethodParameterProvider.class))
-			return sokletConfig.getResourceMethodParameterProvider();
-
-		if (basicParameterType.isAssignableFrom(LifecycleObserver.class))
-			return sokletConfig.getLifecycleObserver();
-
-		if (basicParameterType.isAssignableFrom(MetricsCollector.class))
-			return sokletConfig.getMetricsCollector();
-
-		if (basicParameterType.isAssignableFrom(RequestInterceptor.class))
-			return sokletConfig.getRequestInterceptor();
-
-		if (basicParameterType.isAssignableFrom(CorsAuthorizer.class))
-			return sokletConfig.getCorsAuthorizer();
-
-		if (basicParameterType.isAssignableFrom(HttpServer.class))
-			return sokletConfig.getHttpServer().orElseThrow(() -> new IllegalStateException(format("You cannot inject a parameter of type %s because your %s instance is not configured with one. Offending resource method: %s",
-					HttpServer.class.getSimpleName(), Soklet.class.getSimpleName(), resourceMethod)));
-
-		if (basicParameterType.isAssignableFrom(SseServer.class)) {
-			SseServer sseServer = sokletConfig.getSseServer().orElse(null);
-
-			if (sseServer == null)
-				throw new IllegalStateException(format("You cannot inject a parameter of type %s because your %s instance is not configured with one. Offending resource method: %s",
-						SseServer.class.getSimpleName(), Soklet.class.getSimpleName(), resourceMethod));
-
-			return sseServer;
-		}
+		if (basicTypeInjection != null)
+			return basicTypeInjection;
 
 		// Ok, we're done with the basic by-type injections.
 		// Now, examine annotation data to determine special injections (e.g. query parameter value, request body, ...)
@@ -333,6 +286,115 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			return Optional.ofNullable(getSokletConfig().getInstanceProvider().provide(parameter));
 		else
 			return getSokletConfig().getInstanceProvider().provide(parameter);
+	}
+
+	@Nullable
+	protected Object extractBasicTypeInjection(@NonNull Request request,
+																						 @NonNull ResourceMethod resourceMethod,
+																						 @NonNull Class<?> basicParameterType) {
+		requireNonNull(request);
+		requireNonNull(resourceMethod);
+		requireNonNull(basicParameterType);
+
+		SokletConfig sokletConfig = getSokletConfig();
+
+		if (basicParameterType == Request.class)
+			return request;
+
+		if (basicParameterType == ResourceMethod.class)
+			return resourceMethod;
+
+		Object configuredInjection = extractConfiguredComponentInjection(basicParameterType, InstanceProvider.class,
+				sokletConfig.getInstanceProvider(), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		configuredInjection = extractConfiguredComponentInjection(basicParameterType, RequestBodyMarshaler.class,
+				sokletConfig.getRequestBodyMarshaler(), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		configuredInjection = extractConfiguredComponentInjection(basicParameterType, ResponseMarshaler.class,
+				sokletConfig.getResponseMarshaler(), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		configuredInjection = extractConfiguredComponentInjection(basicParameterType, ValueConverterRegistry.class,
+				sokletConfig.getValueConverterRegistry(), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		configuredInjection = extractConfiguredComponentInjection(basicParameterType, ResourceMethodResolver.class,
+				sokletConfig.getResourceMethodResolver(), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		configuredInjection = extractConfiguredComponentInjection(basicParameterType, ResourceMethodParameterProvider.class,
+				sokletConfig.getResourceMethodParameterProvider(), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		configuredInjection = extractConfiguredComponentInjection(basicParameterType, LifecycleObserver.class,
+				sokletConfig.getLifecycleObserver(), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		configuredInjection = extractConfiguredComponentInjection(basicParameterType, MetricsCollector.class,
+				sokletConfig.getMetricsCollector(), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		configuredInjection = extractConfiguredComponentInjection(basicParameterType, RequestInterceptor.class,
+				sokletConfig.getRequestInterceptor(), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		configuredInjection = extractConfiguredComponentInjection(basicParameterType, CorsAuthorizer.class,
+				sokletConfig.getCorsAuthorizer(), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		configuredInjection = extractConfiguredComponentInjection(basicParameterType, HttpServer.class,
+				sokletConfig.getHttpServer().orElse(null), resourceMethod);
+
+		if (configuredInjection != null)
+			return configuredInjection;
+
+		return extractConfiguredComponentInjection(basicParameterType, SseServer.class,
+				sokletConfig.getSseServer().orElse(null), resourceMethod);
+	}
+
+	@Nullable
+	protected <T> T extractConfiguredComponentInjection(@NonNull Class<?> basicParameterType,
+																								 @NonNull Class<T> configurableComponentType,
+																								 @Nullable T configuredComponent,
+																								 @NonNull ResourceMethod resourceMethod) {
+		requireNonNull(basicParameterType);
+		requireNonNull(configurableComponentType);
+		requireNonNull(resourceMethod);
+
+		if (!configurableComponentType.isAssignableFrom(basicParameterType))
+			return null;
+
+		if (configuredComponent == null)
+			throw new IllegalStateException(format("You cannot inject a parameter of type %s because your %s instance is not configured with one. Offending resource method: %s",
+					basicParameterType.getTypeName(), Soklet.class.getSimpleName(), resourceMethod));
+
+		if (!basicParameterType.isInstance(configuredComponent))
+			throw new IllegalStateException(format("You cannot inject a parameter of type %s because the configured %s instance is of type %s, which is not assignable to it. Offending resource method: %s",
+					basicParameterType.getTypeName(), configurableComponentType.getSimpleName(), configuredComponent.getClass().getTypeName(), resourceMethod));
+
+		return configuredComponent;
 	}
 
 	/**

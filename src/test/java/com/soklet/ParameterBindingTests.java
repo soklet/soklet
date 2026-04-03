@@ -23,15 +23,21 @@ import com.soklet.annotation.QueryParameter;
 import com.soklet.annotation.RequestBody;
 import com.soklet.annotation.RequestCookie;
 import com.soklet.annotation.RequestHeader;
+import com.soklet.converter.ValueConversionException;
+import com.soklet.converter.ValueConverter;
+import com.soklet.converter.ValueConverterRegistry;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /*
@@ -102,23 +108,87 @@ public class ParameterBindingTests {
 			Assertions.assertEquals(200, p.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals("123", new String(p.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
 
-			// Request body conversion to LocalDate
-			HttpRequestResult b = simulator.performHttpRequest(
+				// Request body conversion to LocalDate
+				HttpRequestResult b = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/param/body-date")
 							.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
 							.body("2025-09-21".getBytes(StandardCharsets.UTF_8))
 							.build());
-			Assertions.assertEquals(200, b.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals("2025-09-21", new String(b.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
+				Assertions.assertEquals(200, b.getMarshaledResponse().getStatusCode());
+				Assertions.assertEquals("2025-09-21", new String(b.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
 
-			// Bad body conversion -> 400
-			HttpRequestResult b2 = simulator.performHttpRequest(
+				// Bad body conversion -> 400
+				HttpRequestResult b2 = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/param/body-int")
 							.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
 							.body("not-an-int".getBytes(StandardCharsets.UTF_8))
 							.build());
-			Assertions.assertEquals(400, b2.getMarshaledResponse().getStatusCode());
+				Assertions.assertEquals(400, b2.getMarshaledResponse().getStatusCode());
+			});
+	}
+
+	@Test
+	public void object_parameters_are_not_hijacked_by_request_injection() {
+		SokletConfig cfg = specialInjectionConfiguration(new SpecialLifecycleObserver("configured-observer"));
+
+		Soklet.runSimulator(cfg, simulator -> {
+			HttpRequestResult objectResult = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/param/object-instance").build());
+			Assertions.assertEquals(200, objectResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Object.class.getName(), responseBody(objectResult));
+
+			HttpRequestResult queryObjectResult = simulator.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/param/query-object?q=abc").build());
+			Assertions.assertEquals(200, queryObjectResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals("converted:abc", responseBody(queryObjectResult));
+
+			HttpRequestResult bodyObjectResult = simulator.performHttpRequest(
+					Request.withPath(HttpMethod.POST, "/param/body-object")
+							.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+							.body("payload".getBytes(StandardCharsets.UTF_8))
+							.build());
+			Assertions.assertEquals(200, bodyObjectResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals("converted:payload", responseBody(bodyObjectResult));
 		});
+	}
+
+	@Test
+	public void configured_component_concrete_subtypes_are_injected_when_assignable() {
+		SpecialLifecycleObserver lifecycleObserver = new SpecialLifecycleObserver("configured-observer");
+		SokletConfig cfg = specialInjectionConfiguration(lifecycleObserver);
+
+		Soklet.runSimulator(cfg, simulator -> {
+			HttpRequestResult lifecycleResult = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/param/lifecycle-special").build());
+			Assertions.assertEquals(200, lifecycleResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals("configured-observer", responseBody(lifecycleResult));
+		});
+	}
+
+	@Test
+	public void configured_component_subtype_mismatches_fail_clearly() {
+		SpecialLifecycleObserver lifecycleObserver = new SpecialLifecycleObserver("configured-observer");
+		SokletConfig cfg = specialInjectionConfiguration(lifecycleObserver);
+		Request request = Request.withPath(HttpMethod.GET, "/param/lifecycle-mismatch").build();
+		ResourceMethod resourceMethod = cfg.getResourceMethodResolver().resourceMethodForRequest(request, ServerType.STANDARD_HTTP).orElseThrow();
+
+		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> cfg.getResourceMethodParameterProvider().parameterValuesForResourceMethod(request, resourceMethod));
+
+		Assertions.assertInstanceOf(IllegalStateException.class, exception.getCause());
+		Assertions.assertTrue(exception.getCause().getMessage().contains(IncompatibleLifecycleObserver.class.getName()));
+		Assertions.assertTrue(exception.getCause().getMessage().contains(SpecialLifecycleObserver.class.getName()));
+		Assertions.assertTrue(exception.getCause().getMessage().contains("not assignable"));
+	}
+
+	private static SokletConfig specialInjectionConfiguration(@NonNull LifecycleObserver lifecycleObserver) {
+		return SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ParamResource.class, SpecialInjectionResource.class)))
+				.valueConverterRegistry(ValueConverterRegistry.fromDefaultsSupplementedBy(Set.of(new StringToObjectValueConverter())))
+				.lifecycleObserver(lifecycleObserver)
+				.build();
+	}
+
+	@NonNull
+	private static String responseBody(@NonNull HttpRequestResult httpRequestResult) {
+		return new String(httpRequestResult.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8);
 	}
 
 	public static class ParamResource {
@@ -156,5 +226,105 @@ public class ParameterBindingTests {
 
 		@POST("/param/body-int")
 		public void bodyInt(@RequestBody Integer value) { /* should fail before reaching here if invalid */ }
+	}
+
+	public static final class SpecialInjectionResource {
+		@GET("/param/object-instance")
+		public String objectInstance(Object value) {
+			return value.getClass().getName();
+		}
+
+		@GET("/param/query-object")
+		public String queryObject(@QueryParameter(name = "q") Object value) {
+			return value.toString();
+		}
+
+		@POST("/param/body-object")
+		public String bodyObject(@RequestBody Object value) {
+			return value.toString();
+		}
+
+		@GET("/param/lifecycle-special")
+		public String lifecycleSpecial(SpecialLifecycleObserver lifecycleObserver) {
+			return lifecycleObserver.getName();
+		}
+
+		@GET("/param/lifecycle-mismatch")
+		public String lifecycleMismatch(IncompatibleLifecycleObserver lifecycleObserver) {
+			return lifecycleObserver.getName();
+		}
+	}
+
+	private static final class StringToObjectValueConverter implements ValueConverter<String, Object> {
+		@NonNull
+		@Override
+		public Optional<Object> convert(@Nullable String from) throws ValueConversionException {
+			return from == null ? Optional.empty() : Optional.of(new ConvertedObject(from));
+		}
+
+		@NonNull
+		@Override
+		public Type getFromType() {
+			return String.class;
+		}
+
+		@NonNull
+		@Override
+		public Type getToType() {
+			return Object.class;
+		}
+	}
+
+	private static final class ConvertedObject {
+		@NonNull
+		private final String value;
+
+		private ConvertedObject(@NonNull String value) {
+			this.value = Objects.requireNonNull(value);
+		}
+
+		@NonNull
+		@Override
+		public String toString() {
+			return "converted:" + getValue();
+		}
+
+		@NonNull
+		private String getValue() {
+			return this.value;
+		}
+	}
+
+	private static final class SpecialLifecycleObserver implements LifecycleObserver {
+		@NonNull
+		private final String name;
+
+		private SpecialLifecycleObserver(@NonNull String name) {
+			this.name = Objects.requireNonNull(name);
+		}
+
+		@NonNull
+		private String getName() {
+			return this.name;
+		}
+
+		@Override
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+			// Quiet test double
+		}
+	}
+
+	private static final class IncompatibleLifecycleObserver implements LifecycleObserver {
+		@NonNull
+		private final String name;
+
+		private IncompatibleLifecycleObserver(@NonNull String name) {
+			this.name = Objects.requireNonNull(name);
+		}
+
+		@NonNull
+		private String getName() {
+			return this.name;
+		}
 	}
 }
