@@ -149,8 +149,10 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 		if (storedSession == null)
 			return Optional.empty();
 
-		if (isExpired(storedSession))
+		if (isExpired(storedSession)) {
+			this.sessions.remove(sessionId, storedSession);
 			return Optional.empty();
+		}
 
 		return Optional.of(storedSession);
 	}

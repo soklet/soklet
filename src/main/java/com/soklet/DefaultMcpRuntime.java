@@ -71,6 +71,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultMcpRuntime {
+	private static final int MAX_MCP_SESSION_ID_LENGTH = 128;
 	@NonNull
 	private static final String SUPPORTED_PROTOCOL_VERSION = "2025-11-25";
 	@NonNull
@@ -86,6 +87,35 @@ final class DefaultMcpRuntime {
 		requireNonNull(soklet);
 		this.soklet = soklet;
 		this.mcpStreamsBySessionId = new ConcurrentHashMap<>();
+	}
+
+	private static boolean isValidMcpSessionId(@Nullable String sessionId) {
+		if (sessionId == null || sessionId.isEmpty() || sessionId.length() > MAX_MCP_SESSION_ID_LENGTH)
+			return false;
+
+		for (int i = 0; i < sessionId.length(); i++)
+			if (!isAllowedMcpSessionIdCharacter(sessionId.charAt(i)))
+				return false;
+
+		return true;
+	}
+
+	private static boolean isAllowedMcpSessionIdCharacter(char c) {
+		return (c >= 'A' && c <= 'Z')
+				|| (c >= 'a' && c <= 'z')
+				|| (c >= '0' && c <= '9')
+				|| c == '-'
+				|| c == '.'
+				|| c == '_'
+				|| c == '~'
+				|| c == ':'
+				|| c == '%';
+	}
+
+	@NonNull
+	private HttpRequestResult invalidMcpSessionIdResponse(@NonNull Request request) {
+		requireNonNull(request);
+		return plainTextResponse(request, 400, "Invalid MCP-Session-Id header.");
 	}
 
 	@NonNull
@@ -191,9 +221,13 @@ final class DefaultMcpRuntime {
 			if (sessionId == null)
 				return plainTextResponse(request, 400, "Missing MCP-Session-Id header.");
 
+			if (!isValidMcpSessionId(sessionId))
+				return invalidMcpSessionIdResponse(request);
+
 			if (protocolVersionHeader == null)
 				return plainTextResponse(request, 400, "Missing MCP-Protocol-Version header.");
 
+			observeIdleExpiredSessionIfPresent(mcpServer, sessionId);
 			storedSession = mcpServer.getSessionStore().findBySessionId(sessionId);
 
 			if (storedSession.isEmpty()) {
@@ -261,9 +295,13 @@ final class DefaultMcpRuntime {
 		if (sessionId == null)
 			return plainTextResponse(request, 400, "Missing MCP-Session-Id header.");
 
+		if (!isValidMcpSessionId(sessionId))
+			return invalidMcpSessionIdResponse(request);
+
 		if (protocolVersionHeader == null)
 			return plainTextResponse(request, 400, "Missing MCP-Protocol-Version header.");
 
+		observeIdleExpiredSessionIfPresent(mcpServer, sessionId);
 		McpStoredSession storedSession = mcpServer.getSessionStore().findBySessionId(sessionId).orElse(null);
 
 		if (storedSession == null) {
@@ -464,6 +502,10 @@ final class DefaultMcpRuntime {
 		McpClientInfo clientInfo = clientInfoValue == null ? null : new McpClientInfo(requiredString(clientInfoValue, "name"),
 				optionalString(clientInfoValue, "version").orElse(null));
 		String sessionId = mcpServer.getIdGenerator().generateId(request);
+
+		if (!isValidMcpSessionId(sessionId))
+			throw new IllegalStateException("MCP session ID generator produced an invalid session ID.");
+
 		Instant now = Instant.now();
 		McpStoredSession initialSession = new McpStoredSession(
 				sessionId,
@@ -984,9 +1026,13 @@ final class DefaultMcpRuntime {
 		if (sessionId == null)
 			return plainTextResponse(request, 400, "Missing MCP-Session-Id header.");
 
+		if (!isValidMcpSessionId(sessionId))
+			return invalidMcpSessionIdResponse(request);
+
 		if (protocolVersionHeader == null)
 			return plainTextResponse(request, 400, "Missing MCP-Protocol-Version header.");
 
+		observeIdleExpiredSessionIfPresent(mcpServer, sessionId);
 		McpStoredSession storedSession = mcpServer.getSessionStore().findBySessionId(sessionId).orElse(null);
 
 		if (storedSession == null) {
