@@ -12,6 +12,10 @@ $ mvn install
 
 This will build artifacts and install to your local system's Maven repository.
 
+#### Benchmarks
+
+Soklet's formal microbenchmarks live in `benchmarks/` and use JMH. If a pull request may affect request parsing, response writing, routing, allocation behavior, or other hot paths, run the relevant benchmarks and include enough before/after results to show that it does not introduce a performance regression. See `BENCHMARKS.md` for build, run, and reporting guidance.
+
 #### Pushing to Maven Central
 
 Contact Mark Allen at mark@revetware.com to request Sonatype deployment access.

@@ -1,4 +1,5 @@
 /.apt_generated/
 /target/
+/benchmarks/target/
 .idea
 soklet.iml
