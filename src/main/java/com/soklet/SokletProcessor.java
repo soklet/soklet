@@ -29,6 +29,7 @@ import com.soklet.annotation.PATCH;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.SseEventSource;
+import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.processing.AbstractProcessor;
@@ -106,7 +107,7 @@ import java.util.stream.Collectors;
  *     </configuration>
  * </plugin>}</pre>
  * Using <a href="https://gradle.org" target="_blank">Gradle</a>:
- * <pre>{@code def sokletVersion = "2.1.3" // (use your actual version)
+ * <pre>{@code def sokletVersion = "2.1.4-SNAPSHOT" // (use your actual version)
  *
  * dependencies {
  *   // Soklet used by your code at compile/run time
@@ -182,6 +183,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	private final List<ResourceMethodDeclaration> collected = new ArrayList<>();
 	private final List<McpEndpointDeclaration> collectedMcpEndpoints = new ArrayList<>();
 	private final Set<String> touchedTopLevelBinaries = new LinkedHashSet<>();
+	private boolean resourceMethodAmbiguityDetected;
 
 	// ---- Supported annotations ----------------------------------------------
 
@@ -280,7 +282,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 		if (roundEnv.processingOver()) {
 			// Critical: don't overwrite a good index with a partial/failed compile.
-			if (roundEnv.errorRaised()) {
+			if (roundEnv.errorRaised() || resourceMethodAmbiguityDetected) {
 				debug("SokletProcessor: compilation has errors; skipping index write to avoid clobbering.");
 				return false;
 			}
@@ -362,9 +364,11 @@ public final class SokletProcessor extends AbstractProcessor {
 							.map(p -> jvmTypeName(p.asType()))
 							.toArray(String[]::new);
 
-					collected.add(new ResourceMethodDeclaration(
+					ResourceMethodDeclaration declaration = new ResourceMethodDeclaration(
 							httpMethod, path, className, methodName, paramTypes, sseEventSource
-					));
+					);
+					detectResourceMethodAmbiguity(method, declaration);
+					collected.add(declaration);
 				}
 			}
 		}
@@ -827,6 +831,126 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	// ---- Index read/merge/write ----------------------------------------------
+
+	private void detectResourceMethodAmbiguity(@NonNull Element element,
+																						 @NonNull ResourceMethodDeclaration declaration) {
+		for (ResourceMethodDeclaration existing : dedupeAndOrder(collected)) {
+			if (resourceMethodDeclarationsAmbiguous(existing, declaration)) {
+				resourceMethodAmbiguityDetected = true;
+				error(element, "Soklet: Ambiguous resource method declarations detected. %s overlaps %s",
+						describeResourceMethodDeclaration(declaration), describeResourceMethodDeclaration(existing));
+			}
+		}
+	}
+
+	private static boolean resourceMethodDeclarationsAmbiguous(@NonNull ResourceMethodDeclaration first,
+																															@NonNull ResourceMethodDeclaration second) {
+		if (generateKey(first).equals(generateKey(second)))
+			return false;
+
+		ResourcePathDeclaration firstPath = ResourcePathDeclaration.fromPath(first.path());
+		ResourcePathDeclaration secondPath = ResourcePathDeclaration.fromPath(second.path());
+		ResourceMethodSpecificityKey firstKey = specificityKey(first, firstPath);
+		ResourceMethodSpecificityKey secondKey = specificityKey(second, secondPath);
+
+		return firstKey.equals(secondKey) && resourcePathDeclarationsOverlap(firstPath, secondPath);
+	}
+
+	@NonNull
+	private static ResourceMethodSpecificityKey specificityKey(@NonNull ResourceMethodDeclaration declaration,
+																														 @NonNull ResourcePathDeclaration resourcePathDeclaration) {
+		return new ResourceMethodSpecificityKey(
+				declaration.httpMethod(),
+				declaration.sseEventSource(),
+				resourcePathDeclaration.getVarargsComponent().isPresent(),
+				placeholderCount(resourcePathDeclaration),
+				literalCount(resourcePathDeclaration));
+	}
+
+	@NonNull
+	private static String describeResourceMethodDeclaration(@NonNull ResourceMethodDeclaration declaration) {
+		return String.format("%s %s %s -> %s#%s(%s)",
+				declaration.sseEventSource() ? "SSE" : "HTTP",
+				declaration.httpMethod().name(),
+				declaration.path(),
+				declaration.className(),
+				declaration.methodName(),
+				String.join(", ", declaration.parameterTypes()));
+	}
+
+	private static long placeholderCount(@NonNull ResourcePathDeclaration declaration) {
+		return declaration.getComponents().stream()
+				.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.PLACEHOLDER)
+				.count();
+	}
+
+	private static long literalCount(@NonNull ResourcePathDeclaration declaration) {
+		return declaration.getComponents().stream()
+				.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.LITERAL)
+				.count();
+	}
+
+	private static boolean resourcePathDeclarationsOverlap(@NonNull ResourcePathDeclaration first,
+																												 @NonNull ResourcePathDeclaration second) {
+		List<ResourcePathDeclaration.Component> firstComponents = first.getComponents();
+		List<ResourcePathDeclaration.Component> secondComponents = second.getComponents();
+
+		boolean firstHasVarargs = first.getVarargsComponent().isPresent();
+		boolean secondHasVarargs = second.getVarargsComponent().isPresent();
+
+		int firstPrefixLength = firstComponents.size() - (firstHasVarargs ? 1 : 0);
+		int secondPrefixLength = secondComponents.size() - (secondHasVarargs ? 1 : 0);
+
+		if (!firstHasVarargs && !secondHasVarargs) {
+			if (firstComponents.size() != secondComponents.size())
+				return false;
+
+			for (int i = 0; i < firstComponents.size(); i++)
+				if (!componentsCompatible(firstComponents.get(i), secondComponents.get(i)))
+					return false;
+
+			return true;
+		}
+
+		if (firstHasVarargs && !secondHasVarargs) {
+			if (secondComponents.size() < firstPrefixLength)
+				return false;
+
+			for (int i = 0; i < firstPrefixLength; i++)
+				if (!componentsCompatible(firstComponents.get(i), secondComponents.get(i)))
+					return false;
+
+			return true;
+		}
+
+		if (!firstHasVarargs) {
+			if (firstComponents.size() < secondPrefixLength)
+				return false;
+
+			for (int i = 0; i < secondPrefixLength; i++)
+				if (!componentsCompatible(firstComponents.get(i), secondComponents.get(i)))
+					return false;
+
+			return true;
+		}
+
+		int minPrefixLength = Math.min(firstPrefixLength, secondPrefixLength);
+
+		for (int i = 0; i < minPrefixLength; i++)
+			if (!componentsCompatible(firstComponents.get(i), secondComponents.get(i)))
+				return false;
+
+		return true;
+	}
+
+	private static boolean componentsCompatible(ResourcePathDeclaration.@NonNull Component first,
+																							ResourcePathDeclaration.@NonNull Component second) {
+		if (first.getType() == ResourcePathDeclaration.ComponentType.LITERAL
+				&& second.getType() == ResourcePathDeclaration.ComponentType.LITERAL)
+			return first.getValue().equals(second.getValue());
+
+		return true;
+	}
 
 	private void mergeAndWriteIndex(List<ResourceMethodDeclaration> newlyCollected,
 																	Set<String> touchedTopLevelBinaries) {
@@ -1463,6 +1587,12 @@ public final class SokletProcessor extends AbstractProcessor {
 		out.sort(Comparator.comparing(McpEndpointDeclaration::className));
 		return out;
 	}
+
+	private record ResourceMethodSpecificityKey(HttpMethod httpMethod,
+																							Boolean sseEventSource,
+																							Boolean hasVarargs,
+																							Long placeholderCount,
+																							Long literalCount) {}
 
 	private record McpEndpointDeclaration(String className) {}
 }
