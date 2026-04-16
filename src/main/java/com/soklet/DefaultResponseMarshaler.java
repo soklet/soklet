@@ -48,7 +48,6 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import static com.soklet.Utilities.emptyByteArray;
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -364,11 +363,10 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			// A HEAD can never write a response body, but we explicitly set its Content-Length header
 			// so the client knows how long the response would have been.
 			marshaledResponse = getMethodMarshaledResponse.copy()
-					.body(null)
+					.withoutBody()
 					.cookies(getMethodMarshaledResponse.getCookies())
 					.headers((mutableHeaders) -> {
-						byte[] responseBytes = getMethodMarshaledResponse.getBody().orElse(emptyByteArray());
-						mutableHeaders.put("Content-Length", Set.of(String.valueOf(responseBytes.length)));
+						mutableHeaders.put("Content-Length", Set.of(String.valueOf(getMethodMarshaledResponse.getBodyLength())));
 					}).finish();
 		}
 

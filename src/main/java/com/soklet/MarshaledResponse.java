@@ -36,10 +36,10 @@ import static java.util.Objects.requireNonNull;
  * A finalized representation of a {@link Response}, suitable for sending to clients over the wire.
  * <p>
  * Your application's {@link ResponseMarshaler} is responsible for taking the {@link Response} returned by a <em>Resource Method</em> as input
- * and converting its {@link Response#getBody()} to a {@code byte[]}.
+ * and converting its {@link Response#getBody()} to a {@link MarshaledResponseBody}.
  * <p>
  * For example, if a {@link Response} were to specify a body of {@code List.of("one", "two")}, a {@link ResponseMarshaler} might
- * convert it to the JSON string {@code ["one", "two"]} and provide as output a corresponding {@link MarshaledResponse} with a body of UTF-8 bytes that represent {@code ["one", "two"]}.
+ * convert it to the JSON string {@code ["one", "two"]} and provide as output a corresponding {@link MarshaledResponse} with a byte-array-backed body containing UTF-8 bytes that represent {@code ["one", "two"]}.
  * <p>
  * Alternatively, your <em>Resource Method</em> might want to directly serve bytes to clients (e.g. an image or PDF) and skip the {@link ResponseMarshaler} entirely.
  * To accomplish this, just have your <em>Resource Method</em> return a {@link MarshaledResponse} instance: this tells Soklet "I already know exactly what bytes I want to send; don't go through the normal marshaling process".
@@ -60,7 +60,7 @@ public final class MarshaledResponse {
 	@NonNull
 	private final Set<@NonNull ResponseCookie> cookies;
 	@Nullable
-	private final byte[] body;
+	private final MarshaledResponseBody body;
 
 	/**
 	 * Acquires a builder for {@link MarshaledResponse} instances.
@@ -73,15 +73,19 @@ public final class MarshaledResponse {
 		requireNonNull(response);
 
 		Object rawBody = response.getBody().orElse(null);
-		byte[] body = null;
+		MarshaledResponseBody body = null;
 
 		if (rawBody != null && rawBody instanceof byte[] byteArrayBody)
-			body = byteArrayBody;
+			body = new MarshaledResponseBody.Bytes(byteArrayBody);
 
-		return new Builder(response.getStatusCode())
+		Builder builder = new Builder(response.getStatusCode())
 				.headers(response.getHeaders())
-				.cookies(response.getCookies())
-				.body(body);
+				.cookies(response.getCookies());
+
+		if (body != null)
+			builder.body(body);
+
+		return builder;
 	}
 
 	/**
@@ -150,7 +154,7 @@ public final class MarshaledResponse {
 	public String toString() {
 		return format("%s{statusCode=%s, headers=%s, cookies=%s, body=%s}", getClass().getSimpleName(),
 				getStatusCode(), getHeaders(), getCookies(),
-				format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
+				format("%d bytes", getBodyLength()));
 	}
 
 	/**
@@ -187,13 +191,43 @@ public final class MarshaledResponse {
 	}
 
 	/**
-	 * The HTTP response body to write, if available.
+	 * The finalized HTTP response body to write, if available.
 	 *
 	 * @return the response body to write, or {@link Optional#empty()}) if no body should be written
 	 */
 	@NonNull
-	public Optional<byte[]> getBody() {
+	public Optional<MarshaledResponseBody> getBody() {
 		return Optional.ofNullable(this.body);
+	}
+
+	/**
+	 * The number of bytes this response body will write.
+	 *
+	 * @return the body length, or {@code 0} if no body is present
+	 */
+	@NonNull
+	public Long getBodyLength() {
+		MarshaledResponseBody body = getBody().orElse(null);
+		return body == null ? 0L : body.getLength();
+	}
+
+	@Nullable
+	byte[] bodyBytesOrNull() {
+		MarshaledResponseBody body = getBody().orElse(null);
+
+		if (body == null)
+			return null;
+
+		if (body instanceof MarshaledResponseBody.Bytes bytes)
+			return bytes.getBytes();
+
+		throw new IllegalStateException(format("Unsupported marshaled response body type: %s", body.getClass().getName()));
+	}
+
+	@NonNull
+	byte[] bodyBytesOrEmpty() {
+		byte[] bytes = bodyBytesOrNull();
+		return bytes == null ? Utilities.emptyByteArray() : bytes;
 	}
 
 	/**
@@ -212,7 +246,7 @@ public final class MarshaledResponse {
 		@Nullable
 		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
 		@Nullable
-		private byte[] body;
+		private MarshaledResponseBody body;
 
 		protected Builder(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
@@ -240,7 +274,20 @@ public final class MarshaledResponse {
 
 		@NonNull
 		public Builder body(@Nullable byte[] body) {
+			this.body = body == null ? null : new MarshaledResponseBody.Bytes(body);
+			return this;
+		}
+
+		@NonNull
+		public Builder body(@NonNull MarshaledResponseBody body) {
+			requireNonNull(body);
 			this.body = body;
+			return this;
+		}
+
+		@NonNull
+		public Builder withoutBody() {
+			this.body = null;
 			return this;
 		}
 
@@ -267,8 +314,9 @@ public final class MarshaledResponse {
 
 			this.builder = new Builder(marshaledResponse.getStatusCode())
 					.headers(new LinkedCaseInsensitiveMap<>(marshaledResponse.getHeaders()))
-					.cookies(new LinkedHashSet<>(marshaledResponse.getCookies()))
-					.body(marshaledResponse.getBody().orElse(null));
+					.cookies(new LinkedHashSet<>(marshaledResponse.getCookies()));
+
+			marshaledResponse.getBody().ifPresent(this.builder::body);
 		}
 
 		@NonNull
@@ -317,6 +365,18 @@ public final class MarshaledResponse {
 		@NonNull
 		public Copier body(@Nullable byte[] body) {
 			this.builder.body(body);
+			return this;
+		}
+
+		@NonNull
+		public Copier body(@NonNull MarshaledResponseBody body) {
+			this.builder.body(body);
+			return this;
+		}
+
+		@NonNull
+		public Copier withoutBody() {
+			this.builder.withoutBody();
 			return this;
 		}
 

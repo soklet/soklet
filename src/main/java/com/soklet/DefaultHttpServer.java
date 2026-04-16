@@ -729,7 +729,7 @@ final class DefaultHttpServer implements HttpServer {
 		headers.sort(Comparator.comparing(Header::name));
 
 		String reasonPhrase = reasonPhraseForStatusCode(marshaledResponse.getStatusCode());
-		byte[] body = marshaledResponse.getBody().orElse(emptyByteArray());
+		byte[] body = marshaledResponse.bodyBytesOrEmpty();
 
 		return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, body);
 	}

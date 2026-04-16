@@ -2110,7 +2110,7 @@ final class DefaultSseServer implements SseServer {
 				for (ResponseCookie cookie : marshaledResponse.getCookies())
 					printWriter.printf("Set-Cookie: %s\r\n", cookie.toSetCookieHeaderRepresentation());
 
-				byte[] body = marshaledResponse.getBody().orElse(null);
+				byte[] body = marshaledResponse.bodyBytesOrNull();
 				int bodyLength = (body == null ? 0 : body.length);
 
 				// Add Content-Length if body is present and user didn’t set it
@@ -2238,8 +2238,10 @@ final class DefaultSseServer implements SseServer {
 		writeFully(socketChannel, new byte[]{'\r', '\n'});
 
 		// Write Body
-		if (marshaledResponse.getBody().isPresent())
-			writeFully(socketChannel, marshaledResponse.getBody().get());
+		byte[] body = marshaledResponse.bodyBytesOrNull();
+
+		if (body != null)
+			writeFully(socketChannel, body);
 	}
 
 	@NonNull

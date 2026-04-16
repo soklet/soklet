@@ -114,7 +114,7 @@ public class CorsTests {
 			);
 
 			Assertions.assertEquals(200, result.getMarshaledResponse().getStatusCode());
-			String body = new String(result.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8);
+			String body = new String(result.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8);
 			Assertions.assertEquals("ok", body);
 			Map<String, Set<String>> headers = result.getMarshaledResponse().getHeaders();
 			Assertions.assertTrue(headers.containsKey("Access-Control-Allow-Origin"), "CORS header not present");
@@ -436,7 +436,7 @@ public class CorsTests {
 
 			var resp = result.getMarshaledResponse();
 			Assertions.assertEquals(200, resp.getStatusCode());
-			Assertions.assertEquals("ok", new String(resp.getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
+			Assertions.assertEquals("ok", new String(resp.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 
 			Map<String, Set<String>> headers = resp.getHeaders();
 			Assertions.assertEquals(Set.of(GOOD), headers.get("Access-Control-Allow-Origin"));

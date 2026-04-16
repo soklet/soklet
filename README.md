@@ -1081,9 +1081,9 @@ SokletConfig config = SokletConfig.withHttpServer(
   ) {
     // Access to marshaledResponse here lets us see exactly
     // what will be going over the wire
-    byte[] body = marshaledResponse.getBody().orElse(new byte[] {});
+    Long bodyLength = marshaledResponse.getBodyLength();
     System.out.printf("About to start writing response with " +
-      "a %d-byte body...\n", body.length);
+      "a %d-byte body...\n", bodyLength);
   }
 
   @Override
@@ -1330,13 +1330,14 @@ public void basicIntegrationTest() {
     Assert.assertEquals("Bad status code", expectedCode, actualCode);
 
     // Verify response body
-    marshaledResponse.getBody().ifPresentOrElse(body -> {
+    MarshaledResponseBody body = marshaledResponse.getBody().orElse(null);
+    if (body instanceof MarshaledResponseBody.Bytes bytesBody) {
       String expectedBody = "Hello, Mark";
-      String actualBody = new String(body, StandardCharsets.UTF_8);
+      String actualBody = new String(bytesBody.getBytes(), StandardCharsets.UTF_8);
       Assert.assertEquals("Bad response body", expectedBody, actualBody);
-    }, () -> {
-      Assert.fail("No response body");
-    });
+    } else {
+      Assert.fail("No byte-array-backed response body");
+    }
   }));
 }
 ```

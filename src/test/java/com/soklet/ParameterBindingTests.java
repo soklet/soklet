@@ -63,12 +63,12 @@ public class ParameterBindingTests {
 			// Present required param -> 200
 			HttpRequestResult r2 = simulator.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/param/required?id=42").build());
 			Assertions.assertEquals(200, r2.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals("ok", new String(r2.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
+			Assertions.assertEquals("ok", new String(r2.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 
 			// Optional param present -> 200 with body
 			HttpRequestResult r3 = simulator.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/param/optional?q=5").build());
 			Assertions.assertEquals(200, r3.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals("5", new String(r3.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
+			Assertions.assertEquals("5", new String(r3.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 
 			// Optional param absent -> 204
 			HttpRequestResult r4 = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/param/optional").build());
@@ -93,7 +93,7 @@ public class ParameterBindingTests {
 							.headers(Map.of("X-NUM", Set.of("21")))
 							.build());
 			Assertions.assertEquals(200, h.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals("42", new String(h.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
+			Assertions.assertEquals("42", new String(h.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 
 			// Cookie binding
 			HttpRequestResult c = simulator.performHttpRequest(
@@ -101,12 +101,12 @@ public class ParameterBindingTests {
 							.headers(Map.of("Cookie", Set.of("session=abc123")))
 							.build());
 			Assertions.assertEquals(200, c.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals("abc123", new String(c.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
+			Assertions.assertEquals("abc123", new String(c.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 
 			// Path parameter conversion
 			HttpRequestResult p = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/param/id/123").build());
 			Assertions.assertEquals(200, p.getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals("123", new String(p.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
+			Assertions.assertEquals("123", new String(p.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 
 				// Request body conversion to LocalDate
 				HttpRequestResult b = simulator.performHttpRequest(
@@ -115,7 +115,7 @@ public class ParameterBindingTests {
 							.body("2025-09-21".getBytes(StandardCharsets.UTF_8))
 							.build());
 				Assertions.assertEquals(200, b.getMarshaledResponse().getStatusCode());
-				Assertions.assertEquals("2025-09-21", new String(b.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8));
+				Assertions.assertEquals("2025-09-21", new String(b.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 
 				// Bad body conversion -> 400
 				HttpRequestResult b2 = simulator.performHttpRequest(
@@ -188,7 +188,7 @@ public class ParameterBindingTests {
 
 	@NonNull
 	private static String responseBody(@NonNull HttpRequestResult httpRequestResult) {
-		return new String(httpRequestResult.getMarshaledResponse().getBody().orElse(new byte[0]), StandardCharsets.UTF_8);
+		return new String(httpRequestResult.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8);
 	}
 
 	public static class ParamResource {

@@ -114,7 +114,8 @@ import static java.util.Objects.requireNonNull;
  *     // Verify response body
  *     marshaledResponse.getBody().ifPresentOrElse(body -> {
  *       String expectedBody = "Hello, Mark";
- *       String actualBody = new String(body, StandardCharsets.UTF_8);
+ *       byte[] bytes = ((MarshaledResponseBody.Bytes) body).getBytes();
+ *       String actualBody = new String(bytes, StandardCharsets.UTF_8);
  *       assertEquals(expectedBody, actualBody, "Bad response body");
  *     }, () -> {
  *       Assertions.fail("No response body");
@@ -1431,7 +1432,7 @@ public final class Soklet implements AutoCloseable {
 		// If Content-Length is not specified, specify as the number of bytes in the body
 		return marshaledResponse.copy()
 				.headers((mutableHeaders) -> {
-					String contentLengthHeaderValue = String.valueOf(marshaledResponse.getBody().orElse(emptyByteArray()).length);
+					String contentLengthHeaderValue = String.valueOf(marshaledResponse.getBodyLength());
 					mutableHeaders.put("Content-Length", Set.of(contentLengthHeaderValue));
 				}).finish();
 	}

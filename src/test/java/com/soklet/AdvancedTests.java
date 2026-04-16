@@ -458,7 +458,7 @@ public class AdvancedTests {
 								MarshaledResponse response = simulator.performHttpRequest(request).getMarshaledResponse();
 								if (response.getStatusCode() == 200) {
 									String responseBody = new String(
-											response.getBody().orElse(new byte[0]),
+											response.bodyBytesOrEmpty(),
 											StandardCharsets.UTF_8
 									);
 

@@ -2032,7 +2032,7 @@ final class DefaultMcpRuntime {
 		if (!requestResult.getMcpStreamMessages().isEmpty())
 			terminalMessage = requestResult.getMcpStreamMessages().get(requestResult.getMcpStreamMessages().size() - 1);
 
-		byte[] body = marshaledResponse.getBody().orElse(null);
+		byte[] body = marshaledResponse.bodyBytesOrNull();
 
 		if (terminalMessage == null && (body == null || body.length == 0))
 			return new ObservedMcpResult(McpRequestOutcome.SUCCESS_RESPONSE, null);

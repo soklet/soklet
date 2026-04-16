@@ -1388,7 +1388,9 @@ public class McpRuntimeTests {
 	}
 
 	private static McpObject jsonBody(McpRequestResult.ResponseCompleted responseCompleted) {
-		return (McpObject) McpJsonCodec.parse(responseCompleted.getHttpRequestResult().getMarshaledResponse().getBody().orElseThrow());
+		byte[] body = responseCompleted.getHttpRequestResult().getMarshaledResponse().bodyBytesOrNull();
+		Assertions.assertNotNull(body, "Expected response body");
+		return (McpObject) McpJsonCodec.parse(body);
 	}
 
 	private static McpObject internalSessionNotification(String value) {

@@ -370,9 +370,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		histogramFor(this.httpRequestDurationByRouteStatus, key, HTTP_LATENCY_BUCKETS_NANOS)
 				.record(duration.toNanos());
 
-		long responseBodyBytes = marshaledResponse.getBody()
-				.map(body -> (long) body.length)
-				.orElse(0L);
+		long responseBodyBytes = marshaledResponse.getBodyLength();
 
 		histogramFor(this.httpResponseBodyBytesByRouteStatus, key, HTTP_BODY_BYTES_BUCKETS)
 				.record(responseBodyBytes);

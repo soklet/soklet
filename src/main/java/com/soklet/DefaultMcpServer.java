@@ -1155,7 +1155,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			if (printWriter.checkError())
 				throw new IOException("Unable to write MCP event stream response headers");
 
-			byte[] body = marshaledResponse.getBody().orElse(null);
+			byte[] body = marshaledResponse.bodyBytesOrNull();
 
 			if (body != null && body.length > 0) {
 				OutputStream outputStream = socket.getOutputStream();
@@ -1173,7 +1173,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		requireNonNull(closeConnection);
 
 		performWriteWithTimeout(socket, () -> {
-			byte[] body = marshaledResponse.getBody().orElse(emptyByteArray());
+			byte[] body = marshaledResponse.bodyBytesOrEmpty();
 			OutputStream outputStream = socket.getOutputStream();
 			PrintWriter printWriter = new PrintWriter(outputStream, false, StandardCharsets.ISO_8859_1);
 			Integer statusCode = marshaledResponse.getStatusCode();
