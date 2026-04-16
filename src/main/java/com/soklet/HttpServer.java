@@ -258,6 +258,16 @@ public interface HttpServer extends AutoCloseable {
 			return this;
 		}
 
+		/**
+		 * Sets the maximum accepted HTTP request size in bytes.
+		 * <p>
+		 * This limit applies to the whole received HTTP request, including request line,
+		 * headers, transfer framing, and body bytes. Applications that think in terms of
+		 * payload size should leave room for request metadata and protocol framing.
+		 *
+		 * @param maximumRequestSizeInBytes the maximum request size, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
 			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;

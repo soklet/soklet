@@ -281,6 +281,16 @@ public interface SseServer extends AutoCloseable {
 			return this;
 		}
 
+		/**
+		 * Sets the maximum accepted SSE handshake request size in bytes.
+		 * <p>
+		 * This limit applies to the whole received handshake request, including request line
+		 * and headers. Established SSE stream writes are governed by the write timeout and
+		 * connection queue capacity settings instead.
+		 *
+		 * @param maximumRequestSizeInBytes the maximum handshake request size, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
 			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;

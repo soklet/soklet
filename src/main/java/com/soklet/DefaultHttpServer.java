@@ -201,6 +201,9 @@ final class DefaultHttpServer implements HttpServer {
 		if (this.requestHandlerQueueCapacity < 1)
 			throw new IllegalArgumentException("Request handler queue capacity must be > 0");
 
+		if (this.maximumRequestSizeInBytes < 1)
+			throw new IllegalArgumentException("Maximum request size must be > 0");
+
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "request-handler-";
 			int threadPoolSize = getRequestHandlerConcurrency();

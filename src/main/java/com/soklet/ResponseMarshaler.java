@@ -176,6 +176,9 @@ public interface ResponseMarshaler {
 	/**
 	 * Prepares a response for a request that triggers an <a href="https://httpwg.org/specs/rfc9110.html#status.413">HTTP 413 Content Too Large</a>.
 	 * <p>
+	 * This method is only invoked when the transport can parse enough request data to construct a {@link Request}.
+	 * If the size limit is exceeded before a request target can be identified, the transport may close the connection instead.
+	 * <p>
 	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#413-content-too-large">https://www.soklet.com/docs/response-writing#413-content-too-large</a>.
 	 *
 	 * @param request        the HTTP request

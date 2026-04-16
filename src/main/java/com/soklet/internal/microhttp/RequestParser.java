@@ -47,10 +47,12 @@ class RequestParser {
 
     private final ByteTokenizer tokenizer;
     private final InetSocketAddress remoteAddress;
+    private final int maxRequestSize;
 
     private State state = State.METHOD;
     private int contentLength;
     private int chunkSize;
+    private long chunkBodySize;
     private ByteMerger chunks = new ByteMerger();
 
     private String method;
@@ -60,12 +62,20 @@ class RequestParser {
     private byte[] body;
 
     RequestParser(ByteTokenizer tokenizer) {
-        this(tokenizer, null);
+        this(tokenizer, null, Integer.MAX_VALUE);
     }
 
     RequestParser(ByteTokenizer tokenizer, InetSocketAddress remoteAddress) {
+        this(tokenizer, remoteAddress, Integer.MAX_VALUE);
+    }
+
+    RequestParser(ByteTokenizer tokenizer, InetSocketAddress remoteAddress, int maxRequestSize) {
+        if (maxRequestSize < 1) {
+            throw new IllegalArgumentException("Maximum request size must be > 0");
+        }
         this.tokenizer = tokenizer;
         this.remoteAddress = remoteAddress;
+        this.maxRequestSize = maxRequestSize;
     }
 
     boolean parse() {
@@ -108,7 +118,7 @@ class RequestParser {
         if (token.length == 0) { // CR-LF on own line, end of headers
             validateHostHeaderIfRequired();
             rejectExpectHeaderIfPresent();
-            Integer contentLength = findContentLength();
+            Long contentLength = findContentLength();
             boolean hasTransferEncodingHeader = hasTransferEncodingHeader();
             List<String> transferEncodings = findTransferEncodings();
 
@@ -131,7 +141,10 @@ class RequestParser {
                     state = State.DONE;
                 }
             } else {
-                this.contentLength = contentLength;
+                if (contentLength > maxRequestSize) {
+                    throw new RequestTooLargeException();
+                }
+                this.contentLength = Math.toIntExact(contentLength);
                 state = State.BODY;
             }
         } else {
@@ -245,7 +258,11 @@ class RequestParser {
             throw new MalformedRequestException("invalid chunk size");
         }
         try {
-            chunkSize = Integer.parseInt(sizeToken, RADIX_HEX);
+            long parsedChunkSize = Long.parseLong(sizeToken, RADIX_HEX);
+            if (parsedChunkSize > maxRequestSize) {
+                throw new RequestTooLargeException();
+            }
+            chunkSize = Math.toIntExact(parsedChunkSize);
         } catch (NumberFormatException e) {
             throw new MalformedRequestException("invalid chunk size");
         }
@@ -258,6 +275,11 @@ class RequestParser {
     }
 
     private void parseChunkData(byte[] token) {
+        long newChunkBodySize = chunkBodySize + token.length;
+        if (newChunkBodySize > maxRequestSize) {
+            throw new RequestTooLargeException();
+        }
+        chunkBodySize = newChunkBodySize;
         chunks.add(token);
         state = State.CHUNK_DATA_END;
     }
@@ -268,7 +290,7 @@ class RequestParser {
 
     private void parseChunkTrailer(byte[] token) {
         if (token.length == 0) { // blank line indicates end of trailers
-            body = chunks.merge();
+            body = chunks.merge(maxRequestSize);
             state = State.DONE;
         } else {
             state = State.CHUNK_TRAILER;
@@ -280,16 +302,16 @@ class RequestParser {
         state = State.DONE;
     }
 
-    private Integer findContentLength() {
+    private Long findContentLength() {
         try {
-            Integer contentLength = null;
+            Long contentLength = null;
             for (Header header : headers) {
                 if (header.name().equalsIgnoreCase(HEADER_CONTENT_LENGTH)) {
                     if (contentLength != null) {
                         throw new MalformedRequestException("multiple content-length headers");
                     }
                     String value = header.value() == null ? "" : header.value().trim();
-                    int parsed = Integer.parseInt(value);
+                    long parsed = Long.parseLong(value);
                     if (parsed < 0) {
                         throw new MalformedRequestException("invalid content-length header value");
                     }

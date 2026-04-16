@@ -685,6 +685,8 @@ public final class Request {
 	 * Soklet is designed to power systems that exchange small "transactional" payloads that live entirely in memory. It is not appropriate for handling multipart files at scale, buffering uploads to disk, streaming, etc.
 	 * <p>
 	 * When using Soklet's default {@link HttpServer}, maximum request size is configured by {@link HttpServer.Builder#maximumRequestSizeInBytes(Integer)}.
+	 * That limit applies to the whole received HTTP request, including request line, headers, transfer framing, and body bytes.
+	 * Applications that think in terms of payload size should leave room for request metadata and protocol framing.
 	 *
 	 * @return {@code true} if this request is larger than the server is able to handle, {@code false} otherwise
 	 */

@@ -12,6 +12,8 @@ import java.util.TreeSet;
  * Scheduler is a simple data structure for efficiently scheduling deferred tasks and draining
  * expired tasks. A {@link Cancellable} handle is returned to clients when a new task is scheduled.
  * That handle can be used to cancel a task.
+ * <p>
+ * Instances are owned by a single {@link ConnectionEventLoop} thread and are not thread-safe.
  */
 class Scheduler {
 

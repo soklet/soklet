@@ -372,8 +372,11 @@ public interface McpServer extends AutoCloseable {
 
 		/**
 		 * Sets the maximum accepted MCP request size in bytes.
+		 * <p>
+		 * The MCP transport rejects a header section larger than this limit and rejects
+		 * requests whose declared body size is larger than this limit.
 		 *
-		 * @param maximumRequestSizeInBytes the maximum request size
+		 * @param maximumRequestSizeInBytes the maximum request size, or {@code null} for the default
 		 * @return this builder
 		 */
 		@NonNull

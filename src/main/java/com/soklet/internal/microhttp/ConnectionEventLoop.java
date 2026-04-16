@@ -118,7 +118,7 @@ class ConnectionEventLoop {
             byteTokenizer = new ByteTokenizer();
             id = Long.toString(connectionCounter.getAndIncrement());
             this.remoteAddress = remoteAddress;
-            requestParser = new RequestParser(byteTokenizer, remoteAddress);
+            requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestSize());
             requestTimeoutTask = timeoutQueue.schedule(this::onRequestTimeout, options.requestTimeout());
             closed = new AtomicBoolean(false);
         }
@@ -135,6 +135,14 @@ class ConnectionEventLoop {
         private void onReadable() {
             try {
                 doOnReadable();
+            } catch (RequestTooLargeException e) {
+                if (logger.enabled()) {
+                    logger.log(
+                            new LogEntry("event", "exceed_request_max_close"),
+                            new LogEntry("id", id),
+                            new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
+                }
+                respondToRequestTooLarge();
             } catch (MalformedRequestException e) {
                 if (logger.enabled()) {
                     logger.log(e,
@@ -174,6 +182,16 @@ class ConnectionEventLoop {
                         new LogEntry("request_bytes", Integer.toString(byteTokenizer.remaining())));
             }
             if (requestParser.parse()) {
+                if (byteTokenizer.position() > options.maxRequestSize()) {
+                    if (logger.enabled()) {
+                        logger.log(
+                                new LogEntry("event", "exceed_request_max_close"),
+                                new LogEntry("id", id),
+                                new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
+                    }
+                    respondToRequestTooLarge();
+                    return;
+                }
                 if (logger.enabled()) {
                     logger.log(
                             new LogEntry("event", "read_request"),
@@ -190,54 +208,36 @@ class ConnectionEventLoop {
                                 new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
                     }
 
-                    // *** START SOKLET CHANGE ***
-
-                    // Previous behavior was to immediately discard the request and close the connection.
-                    //
-                    // However, this is not semantically aligned with Soklet's error handling: we want client application
-                    // code to be able to detect "request too large" and write whatever response it likes.
-                    //
-                    // Updated behavior is to truncate the request body and permit response processing.
-
-                    // Previously:
-                    // failSafeClose();
-
-                    // Updated:
-                    // Perform the actions of onParseRequest() but mark the request as too large.
-                    // This lets Soklet code know the request was stopped for being too large.
-
-                    if (selectionKey.interestOps() != 0) {
-                        selectionKey.interestOps(0);
-                    }
-
-                    if (requestTimeoutTask != null) {
-                        requestTimeoutTask.cancel();
-                        requestTimeoutTask = null;
-                    }
-
-                    MicrohttpRequest request = requestParser.request();
-
-                    if(request.method() == null || request.uri() == null || request.version() == null) {
-                        // We don't even have enough data to construct a meaningful Request; nothing we can do.
-                        // Fall back to stock Microhttp behavior.
-                        failSafeClose();
-                    } else {
-                        // OK, we at least have a method, URI, and HTTP version.
-                        // We make our own request with its own copy of headers - including our poison pill - and an empty body.
-                        List<Header> headers = request.headers() == null ? new ArrayList<>(0) : new ArrayList<>(request.headers());
-
-                        MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0], true, remoteAddress);
-
-                        applyConnectionPolicy(tooLargeRequest);
-                        closeAfterResponse = true;
-                        byteTokenizer.compact();
-                        requestParser = new RequestParser(byteTokenizer, remoteAddress);
-                        handler.handle(tooLargeRequest, this::onResponse);
-                    }
-
-                    // *** END SOKLET CHANGE ***
+                    respondToRequestTooLarge();
                 }
             }
+        }
+
+        private void respondToRequestTooLarge() {
+            if (selectionKey.interestOps() != 0) {
+                selectionKey.interestOps(0);
+            }
+
+            if (requestTimeoutTask != null) {
+                requestTimeoutTask.cancel();
+                requestTimeoutTask = null;
+            }
+
+            MicrohttpRequest request = requestParser.request();
+
+            if (request.method() == null || request.uri() == null || request.version() == null) {
+                failSafeClose();
+                return;
+            }
+
+            List<Header> headers = request.headers() == null ? new ArrayList<>(0) : new ArrayList<>(request.headers());
+            MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0], true, remoteAddress);
+
+            applyConnectionPolicy(tooLargeRequest);
+            closeAfterResponse = true;
+            byteTokenizer.compact();
+            requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestSize());
+            handler.handle(tooLargeRequest, this::onResponse);
         }
 
         private void respondToMalformedRequest() {
@@ -268,7 +268,7 @@ class ConnectionEventLoop {
             MicrohttpRequest request = requestParser.request();
             applyConnectionPolicy(request);
             byteTokenizer.compact();
-            requestParser = new RequestParser(byteTokenizer, remoteAddress);
+            requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestSize());
             handler.handle(request, this::onResponse);
         }
 
@@ -359,6 +359,16 @@ class ConnectionEventLoop {
                     failSafeClose();
                 } else { // persistent connection
                     if (requestParser.parse()) { // subsequent request in buffer
+                        if (byteTokenizer.position() > options.maxRequestSize()) {
+                            if (logger.enabled()) {
+                                logger.log(
+                                        new LogEntry("event", "exceed_request_max_close"),
+                                        new LogEntry("id", id),
+                                        new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
+                            }
+                            respondToRequestTooLarge();
+                            return;
+                        }
                         if (logger.enabled()) {
                             logger.log(
                                     new LogEntry("event", "pipeline_request"),

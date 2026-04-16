@@ -24,6 +24,10 @@ class ByteTokenizer {
         return size - position;
     }
 
+    int position() {
+        return position;
+    }
+
     void compact() {
         array = Arrays.copyOfRange(array, position, size);
         size = size - position;
