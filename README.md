@@ -516,8 +516,6 @@ These builders let you configure host, timeouts, handler concurrency/queueing, r
 can also plug in custom [`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html),
 [`McpSessionStore`](https://javadoc.soklet.com/com/soklet/McpSessionStore.html), and
 [`MultipartParser`](https://javadoc.soklet.com/com/soklet/MultipartParser.html) instances.
-For the embedded HTTP server, request size means the whole received HTTP request, including request line, headers,
-transfer framing, and body bytes.
 Provide the configured servers via [`SokletConfig`](https://javadoc.soklet.com/com/soklet/SokletConfig.html) and see the
 [Server Configuration](https://www.soklet.com/docs/server-configuration) docs for the full option matrix.
 
