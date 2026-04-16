@@ -236,7 +236,7 @@ class ConnectionEventLoop {
             applyConnectionPolicy(tooLargeRequest);
             closeAfterResponse = true;
             byteTokenizer.compact();
-            requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestSize());
+            requestParser.reset();
             handler.handle(tooLargeRequest, this::onResponse);
         }
 
@@ -268,7 +268,7 @@ class ConnectionEventLoop {
             MicrohttpRequest request = requestParser.request();
             applyConnectionPolicy(request);
             byteTokenizer.compact();
-            requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestSize());
+            requestParser.reset();
             handler.handle(request, this::onResponse);
         }
 

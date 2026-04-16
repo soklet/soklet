@@ -9,11 +9,12 @@ import java.util.Arrays;
  */
 class ByteTokenizer {
     private byte[] array = new byte[0];
+    private int base;
     private int position;
     private int size;
 
     int size() {
-        return size;
+        return size - base;
     }
 
     int capacity() {
@@ -25,17 +26,29 @@ class ByteTokenizer {
     }
 
     int position() {
-        return position;
+        return position - base;
     }
 
     void compact() {
-        array = Arrays.copyOfRange(array, position, size);
-        size = size - position;
-        position = 0;
+        if (position == size) {
+            base = 0;
+            position = 0;
+            size = 0;
+            return;
+        }
+
+        base = position;
+
+        if (base > array.length / 2) {
+            compactInPlace();
+        }
     }
 
     void add(ByteBuffer buffer) {
         int bufferLen = buffer.remaining();
+        if (array.length - size < bufferLen) {
+            compactInPlace();
+        }
         if (array.length - size < bufferLen) {
             array = Arrays.copyOf(array, Math.max(size + bufferLen, array.length * 2));
         }
@@ -69,6 +82,19 @@ class ByteTokenizer {
             }
         }
         return -1;
+    }
+
+    private void compactInPlace() {
+        if (base == 0) {
+            return;
+        }
+
+        int newSize = size - base;
+        int newPosition = position - base;
+        System.arraycopy(array, base, array, 0, newSize);
+        base = 0;
+        position = newPosition;
+        size = newSize;
     }
 
 }

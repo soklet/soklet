@@ -51,14 +51,21 @@ class RequestParser {
 
     private State state = State.METHOD;
     private int contentLength;
+    private boolean contentLengthHeaderPresent;
+    private long contentLengthHeader;
+    private boolean transferEncodingHeaderPresent;
+    private List<String> transferEncodings;
+    private int hostHeaderCount;
+    private String hostHeaderValue;
+    private boolean expectHeaderPresent;
     private int chunkSize;
     private long chunkBodySize;
-    private ByteMerger chunks = new ByteMerger();
+    private ByteMerger chunks;
 
     private String method;
     private String uri;
     private String version;
-    private List<Header> headers = new ArrayList<>();
+    private List<Header> headers;
     private byte[] body;
 
     RequestParser(ByteTokenizer tokenizer) {
@@ -76,6 +83,7 @@ class RequestParser {
         this.tokenizer = tokenizer;
         this.remoteAddress = remoteAddress;
         this.maxRequestSize = maxRequestSize;
+        reset();
     }
 
     boolean parse() {
@@ -91,6 +99,26 @@ class RequestParser {
 
     MicrohttpRequest request() {
         return new MicrohttpRequest(method, uri, version, headers, body, false, remoteAddress);
+    }
+
+    void reset() {
+        state = State.METHOD;
+        contentLength = 0;
+        contentLengthHeaderPresent = false;
+        contentLengthHeader = 0L;
+        transferEncodingHeaderPresent = false;
+        transferEncodings = null;
+        hostHeaderCount = 0;
+        hostHeaderValue = null;
+        expectHeaderPresent = false;
+        chunkSize = 0;
+        chunkBodySize = 0L;
+        chunks = null;
+        method = null;
+        uri = null;
+        version = null;
+        headers = new ArrayList<>();
+        body = null;
     }
 
     private void parseMethod(byte[] token) {
@@ -118,20 +146,17 @@ class RequestParser {
         if (token.length == 0) { // CR-LF on own line, end of headers
             validateHostHeaderIfRequired();
             rejectExpectHeaderIfPresent();
-            Long contentLength = findContentLength();
-            boolean hasTransferEncodingHeader = hasTransferEncodingHeader();
-            List<String> transferEncodings = findTransferEncodings();
 
-            if (hasTransferEncodingHeader && transferEncodings.isEmpty()) {
+            if (transferEncodingHeaderPresent && (transferEncodings == null || transferEncodings.isEmpty())) {
                 throw new MalformedRequestException("invalid transfer-encoding header value");
             }
 
-            if (contentLength != null && hasTransferEncodingHeader) {
+            if (contentLengthHeaderPresent && transferEncodingHeaderPresent) {
                 throw new MalformedRequestException("multiple message lengths");
             }
 
-            if (contentLength == null) {
-                if (hasTransferEncodingHeader) {
+            if (!contentLengthHeaderPresent) {
+                if (transferEncodingHeaderPresent) {
                     if (!hasOnlyChunkedEncoding(transferEncodings)) {
                         throw new MalformedRequestException("unsupported transfer-encoding");
                     }
@@ -141,14 +166,16 @@ class RequestParser {
                     state = State.DONE;
                 }
             } else {
-                if (contentLength > maxRequestSize) {
+                if (contentLengthHeader > maxRequestSize) {
                     throw new RequestTooLargeException();
                 }
-                this.contentLength = Math.toIntExact(contentLength);
+                this.contentLength = Math.toIntExact(contentLengthHeader);
                 state = State.BODY;
             }
         } else {
-            headers.add(parseHeaderLine(token));
+            Header header = parseHeaderLine(token);
+            headers.add(header);
+            observeHeader(header);
         }
     }
 
@@ -203,36 +230,22 @@ class RequestParser {
             return;
         }
 
-        int hostCount = 0;
-        String hostValue = null;
-
-        for (Header header : headers) {
-            if (header.name().equalsIgnoreCase(HEADER_HOST)) {
-                hostCount++;
-                if (hostCount == 1) {
-                    hostValue = header.value();
-                }
-            }
-        }
-
-        if (hostCount == 0) {
+        if (hostHeaderCount == 0) {
             throw new MalformedRequestException("missing host header");
         }
 
-        if (hostCount > 1) {
+        if (hostHeaderCount > 1) {
             throw new MalformedRequestException("multiple host headers");
         }
 
-        if (!HostHeaderValidator.isValidHostHeaderValue(hostValue)) {
+        if (!HostHeaderValidator.isValidHostHeaderValue(hostHeaderValue)) {
             throw new MalformedRequestException("invalid host header value");
         }
     }
 
     private void rejectExpectHeaderIfPresent() {
-        for (Header header : headers) {
-            if (header.name().equalsIgnoreCase(HEADER_EXPECT)) {
-                throw new MalformedRequestException("unsupported expect header");
-            }
+        if (expectHeaderPresent) {
+            throw new MalformedRequestException("unsupported expect header");
         }
     }
 
@@ -280,6 +293,9 @@ class RequestParser {
             throw new RequestTooLargeException();
         }
         chunkBodySize = newChunkBodySize;
+        if (chunks == null) {
+            chunks = new ByteMerger();
+        }
         chunks.add(token);
         state = State.CHUNK_DATA_END;
     }
@@ -290,7 +306,7 @@ class RequestParser {
 
     private void parseChunkTrailer(byte[] token) {
         if (token.length == 0) { // blank line indicates end of trailers
-            body = chunks.merge(maxRequestSize);
+            body = chunks == null ? EMPTY_BODY : chunks.merge(maxRequestSize);
             state = State.DONE;
         } else {
             state = State.CHUNK_TRAILER;
@@ -302,58 +318,59 @@ class RequestParser {
         state = State.DONE;
     }
 
-    private Long findContentLength() {
-        try {
-            Long contentLength = null;
-            for (Header header : headers) {
-                if (header.name().equalsIgnoreCase(HEADER_CONTENT_LENGTH)) {
-                    if (contentLength != null) {
-                        throw new MalformedRequestException("multiple content-length headers");
-                    }
-                    String value = header.value() == null ? "" : header.value().trim();
-                    long parsed = Long.parseLong(value);
-                    if (parsed < 0) {
-                        throw new MalformedRequestException("invalid content-length header value");
-                    }
-                    contentLength = parsed;
-                }
+    private void observeHeader(Header header) {
+        if (header.name().equalsIgnoreCase(HEADER_CONTENT_LENGTH)) {
+            observeContentLengthHeader(header);
+        } else if (header.name().equalsIgnoreCase(HEADER_TRANSFER_ENCODING)) {
+            observeTransferEncodingHeader(header);
+        } else if (header.name().equalsIgnoreCase(HEADER_HOST)) {
+            hostHeaderCount++;
+            if (hostHeaderCount == 1) {
+                hostHeaderValue = header.value();
             }
-            return contentLength;
+        } else if (header.name().equalsIgnoreCase(HEADER_EXPECT)) {
+            expectHeaderPresent = true;
+        }
+    }
+
+    private void observeContentLengthHeader(Header header) {
+        try {
+            if (contentLengthHeaderPresent) {
+                throw new MalformedRequestException("multiple content-length headers");
+            }
+
+            String value = header.value() == null ? "" : header.value().trim();
+            long parsed = Long.parseLong(value);
+            if (parsed < 0) {
+                throw new MalformedRequestException("invalid content-length header value");
+            }
+            contentLengthHeader = parsed;
+            contentLengthHeaderPresent = true;
         } catch (NumberFormatException e) {
             throw new MalformedRequestException("invalid content-length header value");
         }
     }
 
-    private boolean hasTransferEncodingHeader() {
-        for (Header header : headers) {
-            if (header.name().equalsIgnoreCase(HEADER_TRANSFER_ENCODING)) {
-                return true;
-            }
-        }
-        return false;
-    }
+    private void observeTransferEncodingHeader(Header header) {
+        transferEncodingHeaderPresent = true;
 
-    private List<String> findTransferEncodings() {
-        List<String> transferEncodings = new ArrayList<>();
-        for (Header header : headers) {
-            if (!header.name().equalsIgnoreCase(HEADER_TRANSFER_ENCODING)) {
-                continue;
-            }
-            String value = header.value();
-            if (value == null) {
-                continue;
-            }
-            for (String part : value.split(",")) {
-                String normalized = normalizeTransferEncoding(part);
-                if (normalized != null) {
-                    transferEncodings.add(normalized);
+        String value = header.value();
+        if (value == null) {
+            return;
+        }
+
+        for (String part : value.split(",")) {
+            String normalized = normalizeTransferEncoding(part);
+            if (normalized != null) {
+                if (transferEncodings == null) {
+                    transferEncodings = new ArrayList<>(2);
                 }
+                transferEncodings.add(normalized);
             }
         }
-        return transferEncodings;
     }
 
-    private String normalizeTransferEncoding(String value) {
+    private static String normalizeTransferEncoding(String value) {
         if (value == null) {
             return null;
         }
@@ -371,7 +388,7 @@ class RequestParser {
     }
 
     private boolean hasOnlyChunkedEncoding(List<String> transferEncodings) {
-        return transferEncodings.size() == 1 && CHUNKED.equals(transferEncodings.get(0));
+        return transferEncodings != null && transferEncodings.size() == 1 && CHUNKED.equals(transferEncodings.get(0));
     }
 
 }

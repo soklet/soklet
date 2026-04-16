@@ -27,6 +27,7 @@ import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.Options;
 import com.soklet.internal.microhttp.OptionsBuilder;
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -64,7 +65,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.emptyByteArray;
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
@@ -685,12 +685,11 @@ final class DefaultHttpServer implements HttpServer {
 	protected Map<@NonNull String, @NonNull Set<@NonNull String>> headersFromMicrohttpRequest(@NonNull MicrohttpRequest microhttpRequest) {
 		requireNonNull(microhttpRequest);
 
-		// Turn Microhttp headers back into "name: value" lines for consumption by the Soklet parser/normalizer
-		List<String> rawHeaderLines = microhttpRequest.headers().stream()
-				.map(header -> format("%s: %s", header.name(), header.value() == null ? "" : header.value()))
-				.collect(Collectors.toList());
+		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>();
+		for (Header header : microhttpRequest.headers())
+			Utilities.addParsedHeader(headers, header.name(), header.value());
 
-		return Utilities.extractHeadersFromRawHeaderLines(rawHeaderLines);
+		return headers;
 	}
 
 	@NonNull

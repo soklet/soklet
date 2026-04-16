@@ -1748,27 +1748,35 @@ public final class Utilities {
 			if (idx <= 0)
 				continue; // skip malformed
 
-			String key = trimAggressivelyToEmpty(line.substring(0, idx)); // keep original case for display
-			String keyLowercase = key.toLowerCase(Locale.ROOT);
-			String value = trimAggressivelyToNull(line.substring(idx + 1));
-
-			if (value == null)
-				continue;
-
-			Set<String> bucket = headers.computeIfAbsent(key, k -> new LinkedHashSet<>());
-
-			if (COMMA_JOINABLE_HEADER_NAMES.contains(keyLowercase)) {
-				for (String part : splitCommaAware(value)) {
-					String v = trimAggressivelyToNull(part);
-					if (v != null)
-						bucket.add(v);
-				}
-			} else {
-				bucket.add(value.trim());
-			}
+			addParsedHeader(headers, line.substring(0, idx), line.substring(idx + 1));
 		}
 
 		return headers;
+	}
+
+	static void addParsedHeader(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
+															@Nullable String name,
+															@Nullable String value) {
+		requireNonNull(headers);
+
+		String key = trimAggressivelyToEmpty(name); // keep original case for display
+		String keyLowercase = key.toLowerCase(Locale.ROOT);
+		value = trimAggressivelyToNull(value);
+
+		if (value == null)
+			return;
+
+		Set<String> bucket = headers.computeIfAbsent(key, k -> new LinkedHashSet<>());
+
+		if (COMMA_JOINABLE_HEADER_NAMES.contains(keyLowercase)) {
+			for (String part : splitCommaAware(value)) {
+				String v = trimAggressivelyToNull(part);
+				if (v != null)
+					bucket.add(v);
+			}
+		} else {
+			bucket.add(value.trim());
+		}
 	}
 
 	/**
