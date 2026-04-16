@@ -186,6 +186,56 @@ public class SokletProcessorTests {
 	}
 
 	@Test
+	void rejectsAmbiguousResourceMethodsAtCompileTime() {
+		JavaFileObject src = JavaFileObjects.forSourceString("example.Ambiguous",
+				"""
+						import com.soklet.annotation.GET;
+						import com.soklet.annotation.PathParameter;
+						public class Ambiguous {
+							@GET("/items/{id}")
+							public String getById(@PathParameter String id) {
+								return id;
+							}
+							@GET("/items/{name}")
+							public String getByName(@PathParameter String name) {
+								return name;
+							}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(src);
+
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining("Ambiguous resource method declarations detected")
+				.inFile(src)
+				.onLine(9);
+	}
+
+	@Test
+	void duplicateResourceMethodDeclarationCompiles() {
+		JavaFileObject src = JavaFileObjects.forSourceString("example.DuplicateDeclaration",
+				"""
+						import com.soklet.annotation.GET;
+						import com.soklet.annotation.PathParameter;
+						public class DuplicateDeclaration {
+							@GET("/items/{id}")
+							@GET("/items/{id}")
+							public String getById(@PathParameter String id) {
+								return id;
+							}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(src);
+
+		assertThat(compilation).succeeded();
+	}
+
+	@Test
 	void rejectsDuplicatePlaceholders() {
 		JavaFileObject src = JavaFileObjects.forSourceString("example.DupPlaceholders",
 				"""

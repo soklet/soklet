@@ -130,6 +130,28 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void rejectsInvalidSessionIdsBeforeLookup() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			for (String sessionId : List.of("bad session", "a".repeat(129))) {
+				McpRequestResult.ResponseCompleted pingResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+						post("/tenants/acme/mcp", """
+								{
+								  "jsonrpc":"2.0",
+								  "id":"req-invalid-session",
+								  "method":"ping",
+								  "params":{}
+								}
+								""", Map.of(
+								"MCP-Session-Id", Set.of(sessionId),
+								"MCP-Protocol-Version", Set.of("2025-11-25")
+						)));
+
+				Assertions.assertEquals(Integer.valueOf(400), pingResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			}
+		});
+	}
+
+	@Test
 	public void initializedNotificationRejectsSessionsThatHaveNotCompletedInitialization() {
 		McpSessionStore sessionStore = McpSessionStore.fromInMemory();
 		Instant now = Instant.now();

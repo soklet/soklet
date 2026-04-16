@@ -226,9 +226,10 @@ public class McpPublicApiTests {
 				0L
 		);
 
-		McpSessionStore expiringStore = McpSessionStore.fromInMemory(Duration.ofMinutes(1));
+		DefaultMcpSessionStore expiringStore = (DefaultMcpSessionStore) McpSessionStore.fromInMemory(Duration.ofMinutes(1));
 		expiringStore.create(staleSession);
 		assertTrue(expiringStore.findBySessionId("stale").isEmpty());
+		assertFalse(expiringStore.containsSessionId("stale"));
 
 		McpSessionStore nonExpiringStore = McpSessionStore.fromInMemory(Duration.ZERO);
 		nonExpiringStore.create(staleSession);

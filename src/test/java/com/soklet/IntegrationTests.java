@@ -694,6 +694,78 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void declaredContentLengthOverLimit_returns413WithoutReadingBody() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.maximumRequestSizeInBytes(256)
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Echo2Resource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(4000);
+				out.write((
+						"POST /len HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Content-Length: 512\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"));
+			}
+		}
+	}
+
+	@Test
+	public void chunkedBodyOverLimit_returns413() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.maximumRequestSizeInBytes(256)
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Echo2Resource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		String firstChunkBody = "x".repeat(256);
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(4000);
+				out.write((
+						"POST /len HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Transfer-Encoding: chunked\r\n" +
+								"\r\n" +
+								"100\r\n" +
+								firstChunkBody +
+								"\r\n" +
+								"1\r\n" +
+								"z\r\n" +
+								"0\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"));
+			}
+		}
+	}
+
+	@Test
 	public void requestHandlerTimeout_closesConnection() throws Exception {
 		int port = findFreePort();
 
