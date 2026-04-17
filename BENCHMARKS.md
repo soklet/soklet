@@ -88,6 +88,7 @@ Current benchmarks cover:
 
 - microhttp request parsing and tokenizer compaction for keep-alive and pipelined requests
 - HTTP request header conversion from microhttp's parsed representation into Soklet's public header map
+- Server-Sent Event event/comment formatting, UTF-8 payload serialization, and comment fan-out serialization strategy
 - end-to-end embedded HTTP handling over loopback for small plaintext, JSON, and POST JSON requests
 
 The JMH benchmarks can support claims about internal hot-path timing and allocation behavior. The end-to-end loopback benchmark can support claims about whole-process embedded HTTP behavior on one machine: request parsing, Soklet routing, handler invocation, response marshaling, event-loop scheduling, and socket I/O.
