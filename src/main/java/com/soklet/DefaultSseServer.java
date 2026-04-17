@@ -142,6 +142,7 @@ final class DefaultSseServer implements SseServer {
 	private static final SseComment HEARTBEAT_COMMENT;
 	@NonNull
 	private static final Integer DEFAULT_SSE_BUILDER_CAPACITY;
+	private static final DefaultSseConnection.@NonNull PreSerializedPayload HEARTBEAT_PRE_SERIALIZED_COMMENT;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -174,6 +175,7 @@ final class DefaultSseServer implements SseServer {
 		HEARTBEAT_COMMENT_PAYLOAD = ":\n\n";
 		HEARTBEAT_COMMENT_PAYLOAD_BYTES = HEARTBEAT_COMMENT_PAYLOAD.getBytes(StandardCharsets.UTF_8);
 		HEARTBEAT_COMMENT = SseComment.heartbeatInstance();
+		HEARTBEAT_PRE_SERIALIZED_COMMENT = new DefaultSseConnection.PreSerializedPayload(null, HEARTBEAT_COMMENT, HEARTBEAT_COMMENT_PAYLOAD_BYTES);
 		DEFAULT_SSE_BUILDER_CAPACITY = 256;
 	}
 
@@ -381,7 +383,7 @@ final class DefaultSseServer implements SseServer {
 		public void broadcastEvent(@NonNull SseEvent sseEvent) {
 			requireNonNull(sseEvent);
 
-			DefaultSseConnection.PreSerializedEvent preSerializedEvent = preSerializeSseEvent(sseEvent);
+			DefaultSseConnection.PreSerializedPayload preSerializedPayload = preSerializeSseEvent(sseEvent);
 
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
@@ -391,7 +393,7 @@ final class DefaultSseServer implements SseServer {
 
 			for (DefaultSseConnection sseConnection : getSseConnections()) {
 				attempted++;
-				if (enqueuePreSerializedEvent(this, sseConnection, preSerializedEvent, getBackpressureHandler()))
+				if (enqueuePreSerializedPayload(this, sseConnection, preSerializedPayload, getBackpressureHandler()))
 					enqueued++;
 				else
 					dropped++;
@@ -404,6 +406,8 @@ final class DefaultSseServer implements SseServer {
 		public void broadcastComment(@NonNull SseComment sseComment) {
 			requireNonNull(sseComment);
 
+			DefaultSseConnection.PreSerializedPayload preSerializedPayload = preSerializeSseComment(sseComment);
+
 			// We can broadcast from the current thread because putting elements onto blocking queues is reasonably fast.
 			// The blocking queues are consumed by separate per-socket-channel threads
 			int attempted = 0;
@@ -412,7 +416,7 @@ final class DefaultSseServer implements SseServer {
 
 			for (DefaultSseConnection sseConnection : getSseConnections()) {
 				attempted++;
-				if (enqueueComment(this, sseConnection, sseComment, getBackpressureHandler()))
+				if (enqueuePreSerializedPayload(this, sseConnection, preSerializedPayload, getBackpressureHandler()))
 					enqueued++;
 				else
 					dropped++;
@@ -427,7 +431,7 @@ final class DefaultSseServer implements SseServer {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
 
-			Map<T, DefaultSseConnection.PreSerializedEvent> payloadCache = new HashMap<>();
+			Map<T, DefaultSseConnection.PreSerializedPayload> payloadCache = new HashMap<>();
 			int attempted = 0;
 			int enqueued = 0;
 			int dropped = 0;
@@ -440,10 +444,10 @@ final class DefaultSseServer implements SseServer {
 					T key = keySelector.apply(clientContext);
 
 					// Ask client code to generate payload (if not present in our local cache)
-					DefaultSseConnection.PreSerializedEvent preSerializedEvent =
+					DefaultSseConnection.PreSerializedPayload preSerializedPayload =
 							payloadCache.computeIfAbsent(key, (cacheKey) -> preSerializeSseEvent(eventProvider.apply(cacheKey)));
 					attempted++;
-					if (enqueuePreSerializedEvent(this, connection, preSerializedEvent, getBackpressureHandler()))
+					if (enqueuePreSerializedPayload(this, connection, preSerializedPayload, getBackpressureHandler()))
 						enqueued++;
 					else
 						dropped++;
@@ -465,7 +469,7 @@ final class DefaultSseServer implements SseServer {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 
-			Map<T, SseComment> payloadCache = new HashMap<>();
+			Map<T, DefaultSseConnection.PreSerializedPayload> payloadCache = new HashMap<>();
 			EnumMap<SseComment.CommentType, int[]> countsByType =
 					new EnumMap<>(SseComment.CommentType.class);
 
@@ -477,12 +481,16 @@ final class DefaultSseServer implements SseServer {
 					T key = keySelector.apply(clientContext);
 
 					// Ask client code to generate payload (if not present in our local cache)
-					SseComment comment = payloadCache.computeIfAbsent(key, commentProvider);
+					DefaultSseConnection.PreSerializedPayload preSerializedPayload =
+							payloadCache.computeIfAbsent(key, (cacheKey) -> preSerializeSseComment(commentProvider.apply(cacheKey)));
+					SseComment comment = preSerializedPayload.getSseComment();
+					if (comment == null)
+						throw new IllegalStateException("Server-Sent Event comment payload missing");
 
 					SseComment.CommentType commentType = comment.getCommentType();
 					int[] counts = countsByType.computeIfAbsent(commentType, ignored -> new int[3]);
 					counts[0]++;
-					if (enqueueComment(this, connection, comment, getBackpressureHandler()))
+					if (enqueuePreSerializedPayload(this, connection, preSerializedPayload, getBackpressureHandler()))
 						counts[1]++;
 					else
 						counts[2]++;
@@ -560,33 +568,41 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		private void recordDroppedEvent(@NonNull DefaultSseConnection connection,
-																		DefaultSseConnection.@NonNull PreSerializedEvent preSerializedEvent,
+																		DefaultSseConnection.@NonNull PreSerializedPayload preSerializedPayload,
 																		@Nullable Integer queueDepth) {
 			requireNonNull(connection);
-			requireNonNull(preSerializedEvent);
+			requireNonNull(preSerializedPayload);
 
 			SseConnection connectionSnapshot = connection.getSnapshot();
-			Integer payloadBytes = preSerializedEvent.getPayloadBytes().length;
+			SseEvent sseEvent = preSerializedPayload.getSseEvent();
+			if (sseEvent == null)
+				throw new IllegalStateException("Server-Sent Event payload missing");
+
+			Integer payloadBytes = preSerializedPayload.getPayloadBytes().length;
 			Integer queueDepthSnapshot = queueDepth;
 
 			safelyCollectMetrics(
 					format("An exception occurred while invoking %s::didDropSseEvent", MetricsCollector.class.getSimpleName()),
 					(metricsCollector) -> metricsCollector.didDropSseEvent(
 							connectionSnapshot,
-							preSerializedEvent.getSseEvent(),
+							sseEvent,
 							SseEventDropReason.QUEUE_FULL,
 							payloadBytes,
 							queueDepthSnapshot));
 		}
 
 		private void recordDroppedComment(@NonNull DefaultSseConnection connection,
-																			@NonNull SseComment sseComment,
+																			DefaultSseConnection.@NonNull PreSerializedPayload preSerializedPayload,
 																			@Nullable Integer queueDepth) {
 			requireNonNull(connection);
-			requireNonNull(sseComment);
+			requireNonNull(preSerializedPayload);
 
 			SseConnection connectionSnapshot = connection.getSnapshot();
-			Integer payloadBytes = payloadBytesForComment(sseComment);
+			SseComment sseComment = preSerializedPayload.getSseComment();
+			if (sseComment == null)
+				throw new IllegalStateException("Server-Sent Event comment payload missing");
+
+			Integer payloadBytes = preSerializedPayload.getPayloadBytes().length;
 			Integer queueDepthSnapshot = queueDepth;
 
 			safelyCollectMetrics(
@@ -597,19 +613,6 @@ final class DefaultSseServer implements SseServer {
 							SseEventDropReason.QUEUE_FULL,
 							payloadBytes,
 							queueDepthSnapshot));
-		}
-
-		@NonNull
-		private Integer payloadBytesForComment(@NonNull SseComment sseComment) {
-			requireNonNull(sseComment);
-
-			if (sseComment.getCommentType() == SseComment.CommentType.HEARTBEAT)
-				return HEARTBEAT_COMMENT_PAYLOAD_BYTES.length;
-
-			String commentValue = sseComment.getComment()
-					.orElseThrow(() -> new IllegalStateException("Server-Sent Event comment payload missing"));
-			String payload = formatCommentForResponse(commentValue);
-			return payload.getBytes(StandardCharsets.UTF_8).length;
 		}
 
 		@NonNull
@@ -928,7 +931,7 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
-	private static DefaultSseConnection.@NonNull PreSerializedEvent preSerializeSseEvent(@NonNull SseEvent sseEvent) {
+	private static DefaultSseConnection.@NonNull PreSerializedPayload preSerializeSseEvent(@NonNull SseEvent sseEvent) {
 		requireNonNull(sseEvent);
 
 		StringBuilder stringBuilder = new StringBuilder(DEFAULT_SSE_BUILDER_CAPACITY);
@@ -937,7 +940,20 @@ final class DefaultSseServer implements SseServer {
 				? HEARTBEAT_COMMENT_PAYLOAD_BYTES
 				: formatted.getBytes(StandardCharsets.UTF_8);
 
-		return new DefaultSseConnection.PreSerializedEvent(sseEvent, payloadBytes);
+		return new DefaultSseConnection.PreSerializedPayload(sseEvent, null, payloadBytes);
+	}
+
+	private static DefaultSseConnection.@NonNull PreSerializedPayload preSerializeSseComment(@NonNull SseComment sseComment) {
+		requireNonNull(sseComment);
+
+		if (sseComment.getCommentType() == SseComment.CommentType.HEARTBEAT)
+			return HEARTBEAT_PRE_SERIALIZED_COMMENT;
+
+		String commentValue = sseComment.getComment()
+				.orElseThrow(() -> new IllegalStateException("Server-Sent Event comment payload missing"));
+		byte[] payloadBytes = formatCommentForResponse(commentValue).getBytes(StandardCharsets.UTF_8);
+
+		return new DefaultSseConnection.PreSerializedPayload(null, sseComment, payloadBytes);
 	}
 
 	private static boolean isRemoteClose(@Nullable Throwable throwable) {
@@ -971,27 +987,34 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	private static Boolean enqueuePreSerializedEvent(@NonNull DefaultSseBroadcaster owner,
-																									 @NonNull DefaultSseConnection connection,
-																									 DefaultSseConnection.@NonNull PreSerializedEvent preSerializedEvent,
-																									 @NonNull BackpressureHandler handler) {
+	private static Boolean enqueuePreSerializedPayload(@NonNull DefaultSseBroadcaster owner,
+																										 @NonNull DefaultSseConnection connection,
+																										 DefaultSseConnection.@NonNull PreSerializedPayload preSerializedPayload,
+																										 @NonNull BackpressureHandler handler) {
 		requireNonNull(owner);
 		requireNonNull(connection);
-		requireNonNull(preSerializedEvent);
+		requireNonNull(preSerializedPayload);
 		requireNonNull(handler);
 
 		BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
 		DefaultSseConnection.WriteQueueElement e =
-				DefaultSseConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent, System.nanoTime());
+				DefaultSseConnection.WriteQueueElement.withPreSerializedPayload(preSerializedPayload, System.nanoTime());
 
 		if (writeQueue.offer(e))
 			return true;
 
 		Integer queueDepth = writeQueue.size();
-		owner.recordDroppedEvent(connection, preSerializedEvent, queueDepth);
+		String cause;
+		if (preSerializedPayload.getSseEvent() != null) {
+			owner.recordDroppedEvent(connection, preSerializedPayload, queueDepth);
+			cause = "event";
+		} else {
+			owner.recordDroppedComment(connection, preSerializedPayload, queueDepth);
+			cause = "comment";
+		}
 
 		// Queue full — delegate to handler: log + close + unregister.
-		handler.onBackpressure(owner, connection, "event");
+		handler.onBackpressure(owner, connection, cause);
 		return false;
 	}
 
@@ -1009,30 +1032,6 @@ final class DefaultSseServer implements SseServer {
 			return true;
 
 		handler.onBackpressure(owner, connection, "poison-pill");
-		return false;
-	}
-
-	@NonNull
-	private static Boolean enqueueComment(@NonNull DefaultSseBroadcaster owner,
-																				@NonNull DefaultSseConnection connection,
-																				@NonNull SseComment sseComment,
-																				@NonNull BackpressureHandler handler) {
-		requireNonNull(owner);
-		requireNonNull(connection);
-		requireNonNull(sseComment);
-		requireNonNull(handler);
-
-		BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue = connection.getWriteQueue();
-		DefaultSseConnection.WriteQueueElement writeQueueElement =
-				DefaultSseConnection.WriteQueueElement.withComment(sseComment, System.nanoTime());
-
-		if (writeQueue.offer(writeQueueElement))
-			return true;
-
-		Integer queueDepth = writeQueue.size();
-		owner.recordDroppedComment(connection, sseComment, queueDepth);
-
-		handler.onBackpressure(owner, connection, "comment");
 		return false;
 	}
 
@@ -1673,45 +1672,21 @@ final class DefaultSseServer implements SseServer {
 
 				// Idle heartbeat
 				if (writeQueueElement == null)
-					writeQueueElement = DefaultSseConnection.WriteQueueElement.withComment(HEARTBEAT_COMMENT, System.nanoTime());
+					writeQueueElement = DefaultSseConnection.WriteQueueElement.withPreSerializedPayload(HEARTBEAT_PRE_SERIALIZED_COMMENT, System.nanoTime());
 
 				if (writeQueueElement.isPoisonPill()) {
 					// Encountered poison pill, exit...
 					break;
 				}
 
-				DefaultSseConnection.PreSerializedEvent preSerializedEvent =
-						writeQueueElement.getPreSerializedEvent().orElse(null);
-				SseComment sseComment = writeQueueElement.getComment().orElse(null);
-				Optional<String> comment = sseComment == null
-						? Optional.empty()
-						: sseComment.getComment();
-				SseEvent sseEvent = preSerializedEvent != null
-						? preSerializedEvent.getSseEvent()
-						: null;
-
-				byte[] payloadBytes;
-
-				if (preSerializedEvent != null) {
-					// It's a normal server-sent event
-					payloadBytes = preSerializedEvent.getPayloadBytes();
-				} else if (sseComment != null) {
-					// It's a comment (includes heartbeats)
-					String payload;
-					if (sseComment.getCommentType() == SseComment.CommentType.HEARTBEAT) {
-						payload = HEARTBEAT_COMMENT_PAYLOAD;
-					} else {
-						String commentValue = comment.orElseThrow(() ->
-								new IllegalStateException("Server-Sent Event comment payload missing"));
-						payload = formatCommentForResponse(commentValue);
-					}
-					payloadBytes = payload == HEARTBEAT_COMMENT_PAYLOAD
-							? HEARTBEAT_COMMENT_PAYLOAD_BYTES
-							: payload.getBytes(StandardCharsets.UTF_8);
-				} else {
+				DefaultSseConnection.PreSerializedPayload preSerializedPayload =
+						writeQueueElement.getPreSerializedPayload();
+				if (preSerializedPayload == null)
 					throw new IllegalStateException("Not sure what to do; no Server-Sent Event or comment available");
-				}
 
+				SseComment sseComment = preSerializedPayload.getSseComment();
+				SseEvent sseEvent = preSerializedPayload.getSseEvent();
+				byte[] payloadBytes = preSerializedPayload.getPayloadBytes();
 				ByteBuffer byteBuffer = ByteBuffer.wrap(payloadBytes);
 
 				if (sseComment != null) {
@@ -2426,21 +2401,36 @@ final class DefaultSseServer implements SseServer {
 		private final SseConnectionSnapshot snapshot;
 
 		@ThreadSafe
-		static final class PreSerializedEvent {
-			@NonNull
+		static final class PreSerializedPayload {
+			@Nullable
 			private final SseEvent sseEvent;
+			@Nullable
+			private final SseComment sseComment;
 			@NonNull
 			private final byte[] payloadBytes;
 
-			PreSerializedEvent(@NonNull SseEvent sseEvent,
-												 @NonNull byte[] payloadBytes) {
-				this.sseEvent = requireNonNull(sseEvent);
+			PreSerializedPayload(@Nullable SseEvent sseEvent,
+													 @Nullable SseComment sseComment,
+													 @NonNull byte[] payloadBytes) {
+				if (sseEvent == null && sseComment == null)
+					throw new IllegalStateException("Must provide either a server-sent event or a comment");
+
+				if (sseEvent != null && sseComment != null)
+					throw new IllegalStateException("Must provide either a server-sent event or a comment; not both");
+
+				this.sseEvent = sseEvent;
+				this.sseComment = sseComment;
 				this.payloadBytes = requireNonNull(payloadBytes);
 			}
 
-			@NonNull
+			@Nullable
 			public SseEvent getSseEvent() {
 				return this.sseEvent;
+			}
+
+			@Nullable
+			public SseComment getSseComment() {
+				return this.sseComment;
 			}
 
 			@NonNull
@@ -2452,26 +2442,17 @@ final class DefaultSseServer implements SseServer {
 		@ThreadSafe
 		static final class WriteQueueElement {
 			@Nullable
-			private final PreSerializedEvent preSerializedEvent;
-			@Nullable
-			private final SseComment comment;
+			private final PreSerializedPayload preSerializedPayload;
 			private final boolean poisonPill;
 			private final long enqueuedAtNanos;
 
-			private static final WriteQueueElement POISON_PILL = new WriteQueueElement(null, null, true, -1L);
+			private static final WriteQueueElement POISON_PILL = new WriteQueueElement(null, true, -1L);
 
 			@NonNull
-			public static WriteQueueElement withPreSerializedEvent(@NonNull PreSerializedEvent preSerializedEvent,
-																														 long enqueuedAtNanos) {
-				requireNonNull(preSerializedEvent);
-				return new WriteQueueElement(preSerializedEvent, null, false, enqueuedAtNanos);
-			}
-
-			@NonNull
-			public static WriteQueueElement withComment(@NonNull SseComment sseComment,
-																									long enqueuedAtNanos) {
-				requireNonNull(sseComment);
-				return new WriteQueueElement(null, sseComment, false, enqueuedAtNanos);
+			public static WriteQueueElement withPreSerializedPayload(@NonNull PreSerializedPayload preSerializedPayload,
+																															 long enqueuedAtNanos) {
+				requireNonNull(preSerializedPayload);
+				return new WriteQueueElement(preSerializedPayload, false, enqueuedAtNanos);
 			}
 
 			@NonNull
@@ -2479,35 +2460,25 @@ final class DefaultSseServer implements SseServer {
 				return POISON_PILL;
 			}
 
-			private WriteQueueElement(@Nullable PreSerializedEvent preSerializedEvent,
-																@Nullable SseComment comment,
+			private WriteQueueElement(@Nullable PreSerializedPayload preSerializedPayload,
 																boolean poisonPill,
 																long enqueuedAtNanos) {
 				if (poisonPill) {
-					if (preSerializedEvent != null || comment != null)
+					if (preSerializedPayload != null)
 						throw new IllegalStateException("Poison pill cannot include a payload");
 				} else {
-					if (preSerializedEvent == null && comment == null)
-						throw new IllegalStateException("Must provide either a server-sent event or a comment");
-
-					if (preSerializedEvent != null && comment != null)
-						throw new IllegalStateException("Must provide either a server-sent event or a comment; not both");
+					if (preSerializedPayload == null)
+						throw new IllegalStateException("Must provide a server-sent event or comment payload");
 				}
 
-				this.preSerializedEvent = preSerializedEvent;
-				this.comment = comment;
+				this.preSerializedPayload = preSerializedPayload;
 				this.poisonPill = poisonPill;
 				this.enqueuedAtNanos = enqueuedAtNanos;
 			}
 
-			@NonNull
-			public Optional<PreSerializedEvent> getPreSerializedEvent() {
-				return Optional.ofNullable(this.preSerializedEvent);
-			}
-
-			@NonNull
-			public Optional<SseComment> getComment() {
-				return Optional.ofNullable(this.comment);
+			@Nullable
+			public PreSerializedPayload getPreSerializedPayload() {
+				return this.preSerializedPayload;
 			}
 
 			public long getEnqueuedAtNanos() {
@@ -2643,7 +2614,7 @@ final class DefaultSseServer implements SseServer {
 		// Now that the client initializer has run (if present), enqueue a single "heartbeat" comment to immediately "flush"/verify the connection if configured to do so
 		if (getVerifyConnectionOnceEstablished())
 			sseConnection.getWriteQueue()
-					.offer(DefaultSseConnection.WriteQueueElement.withComment(HEARTBEAT_COMMENT, System.nanoTime()));
+					.offer(DefaultSseConnection.WriteQueueElement.withPreSerializedPayload(HEARTBEAT_PRE_SERIALIZED_COMMENT, System.nanoTime()));
 
 		DefaultSseBroadcaster broadcaster =
 				registerConnectionWithBroadcaster(resourcePath, resourceMethod, sseConnection);
@@ -2678,9 +2649,9 @@ final class DefaultSseServer implements SseServer {
 		public void unicastEvent(@NonNull SseEvent sseEvent) {
 			requireNonNull(sseEvent);
 
-			DefaultSseConnection.PreSerializedEvent preSerializedEvent = preSerializeSseEvent(sseEvent);
+			DefaultSseConnection.PreSerializedPayload preSerializedPayload = preSerializeSseEvent(sseEvent);
 
-			if (!getWriteQueue().offer(DefaultSseConnection.WriteQueueElement.withPreSerializedEvent(preSerializedEvent, System.nanoTime())))
+			if (!getWriteQueue().offer(DefaultSseConnection.WriteQueueElement.withPreSerializedPayload(preSerializedPayload, System.nanoTime())))
 				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 
@@ -2688,7 +2659,7 @@ final class DefaultSseServer implements SseServer {
 		public void unicastComment(@NonNull SseComment sseComment) {
 			requireNonNull(sseComment);
 
-			if (!getWriteQueue().offer(DefaultSseConnection.WriteQueueElement.withComment(sseComment, System.nanoTime())))
+			if (!getWriteQueue().offer(DefaultSseConnection.WriteQueueElement.withPreSerializedPayload(preSerializeSseComment(sseComment), System.nanoTime())))
 				throw new IllegalStateException("SSE client initializer exceeded connection write-queue capacity");
 		}
 
