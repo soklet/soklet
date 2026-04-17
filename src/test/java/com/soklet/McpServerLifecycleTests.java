@@ -31,6 +31,7 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.Socket;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -458,6 +459,50 @@ public class McpServerLifecycleTests {
 			timeoutExecutor.shutdownNow();
 			timeoutExecutor.awaitTermination(1, TimeUnit.SECONDS);
 		}
+	}
+
+	@Test
+	public void defaultMcpServerWritesByteBackedMarshaledResponses() throws Exception {
+		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		Method writeMethod = DefaultMcpServer.class.getDeclaredMethod("writeMarshaledResponse", Socket.class, MarshaledResponse.class, Boolean.class);
+		writeMethod.setAccessible(true);
+		CapturingSocket capturingSocket = new CapturingSocket();
+
+		writeMethod.invoke(defaultMcpServer,
+				capturingSocket,
+				MarshaledResponse.withStatusCode(200)
+						.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+						.body("hello".getBytes(StandardCharsets.UTF_8))
+						.build(),
+				Boolean.TRUE);
+
+		String response = new String(capturingSocket.getBytes(), StandardCharsets.ISO_8859_1);
+		Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK\r\n"));
+		Assertions.assertTrue(response.contains("Content-Length: 5\r\n"));
+		Assertions.assertTrue(response.contains("Connection: close\r\n"));
+		Assertions.assertTrue(response.endsWith("\r\n\r\nhello"));
+	}
+
+	@Test
+	public void defaultMcpServerRejectsNonByteBackedMarshaledResponseBodies() throws Exception {
+		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		Method writeMethod = DefaultMcpServer.class.getDeclaredMethod("writeMarshaledResponse", Socket.class, MarshaledResponse.class, Boolean.class);
+		writeMethod.setAccessible(true);
+
+		InvocationTargetException invocationTargetException = Assertions.assertThrows(InvocationTargetException.class,
+				() -> writeMethod.invoke(defaultMcpServer,
+						new CapturingSocket(),
+						MarshaledResponse.withStatusCode(200)
+								.body(ByteBuffer.wrap("hello".getBytes(StandardCharsets.UTF_8)))
+								.build(),
+						Boolean.TRUE));
+
+		Assertions.assertInstanceOf(IllegalArgumentException.class, invocationTargetException.getCause());
+		Assertions.assertTrue(invocationTargetException.getCause().getMessage().contains("byte arrays"));
 	}
 
 	@Test
@@ -987,6 +1032,24 @@ public class McpServerLifecycleTests {
 		@Override
 		public void setKeepAlive(boolean on) {
 			throw new IllegalStateException("boom");
+		}
+	}
+
+	private static final class CapturingSocket extends Socket {
+		private final ByteArrayOutputStream outputStream;
+
+		private CapturingSocket() {
+			this.outputStream = new ByteArrayOutputStream();
+		}
+
+		@Override
+		public OutputStream getOutputStream() {
+			return this.outputStream;
+		}
+
+		@NonNull
+		private byte[] getBytes() {
+			return this.outputStream.toByteArray();
 		}
 	}
 

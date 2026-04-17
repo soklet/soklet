@@ -1127,6 +1127,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		requireNonNull(socket);
 		requireNonNull(marshaledResponse);
 
+		byte[] body = byteBackedBodyBytesOrNull(marshaledResponse);
+
 		performWriteWithTimeout(socket, () -> {
 			PrintWriter printWriter = new PrintWriter(socket.getOutputStream(), false, StandardCharsets.ISO_8859_1);
 			printWriter.print("HTTP/1.1 200 OK\r\n");
@@ -1155,8 +1157,6 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			if (printWriter.checkError())
 				throw new IOException("Unable to write MCP event stream response headers");
 
-			byte[] body = marshaledResponse.bodyBytesOrNull();
-
 			if (body != null && body.length > 0) {
 				OutputStream outputStream = socket.getOutputStream();
 				outputStream.write(body);
@@ -1172,8 +1172,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		requireNonNull(marshaledResponse);
 		requireNonNull(closeConnection);
 
+		byte[] body = byteBackedBodyBytesOrNull(marshaledResponse);
+
 		performWriteWithTimeout(socket, () -> {
-			byte[] body = marshaledResponse.bodyBytesOrEmpty();
 			OutputStream outputStream = socket.getOutputStream();
 			PrintWriter printWriter = new PrintWriter(outputStream, false, StandardCharsets.ISO_8859_1);
 			Integer statusCode = marshaledResponse.getStatusCode();
@@ -1206,7 +1207,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				printWriter.printf("Set-Cookie: %s\r\n", responseCookie.toSetCookieHeaderRepresentation());
 
 			if (!hasContentLength)
-				printWriter.printf("Content-Length: %d\r\n", body.length);
+				printWriter.printf("Content-Length: %d\r\n", marshaledResponse.getBodyLength());
 
 			if (closeConnection && !hasConnectionHeader)
 				printWriter.print("Connection: close\r\n");
@@ -1217,11 +1218,27 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			if (printWriter.checkError())
 				throw new IOException("Unable to write MCP response headers");
 
-			if (body.length > 0) {
+			if (body != null && body.length > 0) {
 				outputStream.write(body);
 				outputStream.flush();
 			}
 		});
+	}
+
+	private static @Nullable byte[] byteBackedBodyBytesOrNull(@NonNull MarshaledResponse marshaledResponse) {
+		requireNonNull(marshaledResponse);
+
+		MarshaledResponseBody body = marshaledResponse.getBody().orElse(null);
+
+		if (body == null)
+			return null;
+
+		if (body instanceof MarshaledResponseBody.Bytes bytes)
+			return bytes.getBytes();
+
+		throw new IllegalArgumentException(format(
+				"MCP responses must be backed by byte arrays; received %s",
+				body.getClass().getName()));
 	}
 
 	private void writePlainTextResponse(@NonNull Socket socket,
