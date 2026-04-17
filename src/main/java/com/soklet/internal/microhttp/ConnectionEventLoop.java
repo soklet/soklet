@@ -51,6 +51,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * </pre>
  */
 class ConnectionEventLoop {
+    private static final long MAX_RESPONSE_BYTES_PER_WRITE_TURN = 1024L * 1024L;
 
     private final Options options;
     private final Logger logger;
@@ -105,7 +106,7 @@ class ConnectionEventLoop {
         final String id;
         final InetSocketAddress remoteAddress;
         RequestParser requestParser;
-        ByteBuffer writeBuffer;
+        WritableSource writableSource;
         Cancellable requestTimeoutTask;
         boolean httpOneDotZero;
         boolean keepAlive;
@@ -249,7 +250,7 @@ class ConnectionEventLoop {
                 requestTimeoutTask = null;
             }
             closeAfterResponse = true;
-            writeBuffer = ByteBuffer.wrap(BAD_REQUEST_RESPONSE);
+            writableSource = new ByteBufferWritableSource(ByteBuffer.wrap(BAD_REQUEST_RESPONSE));
             try {
                 doOnWritable();
             } catch (IOException e) {
@@ -305,14 +306,15 @@ class ConnectionEventLoop {
                 headers.add(new Header(HEADER_CONNECTION, KEEP_ALIVE));
             }
             if (!microhttpResponse.hasHeader(HEADER_CONTENT_LENGTH)) {
-                headers.add(new Header(HEADER_CONTENT_LENGTH, Integer.toString(microhttpResponse.body().length)));
+                headers.add(new Header(HEADER_CONTENT_LENGTH, Long.toString(microhttpResponse.bodyLength())));
             }
-            writeBuffer = ByteBuffer.wrap(microhttpResponse.serialize(version, headers));
+            byte[] serializedHead = microhttpResponse.serializeHead(version, headers);
+            writableSource = microhttpResponse.writableSource(serializedHead);
             if (logger.enabled()) {
                 logger.log(
                         new LogEntry("event", "response_ready"),
                         new LogEntry("id", id),
-                        new LogEntry("num_bytes", Integer.toString(writeBuffer.remaining())));
+                        new LogEntry("num_bytes", Long.toString((long) serializedHead.length + microhttpResponse.bodyLength())));
             }
             doOnWritable();
         }
@@ -330,25 +332,16 @@ class ConnectionEventLoop {
             }
         }
 
-        private int doWrite() throws IOException {
-            buffer.clear(); // pos = 0, limit = capacity
-            int amount = Math.min(buffer.remaining(), writeBuffer.remaining()); // determine transfer quantity
-            buffer.put(writeBuffer.array(), writeBuffer.position(), amount); // do transfer
-            buffer.flip();
-            int written = socketChannel.write(buffer);
-            writeBuffer.position(writeBuffer.position() + written); // advance write buffer
-            return written;
-        }
-
         private void doOnWritable() throws IOException {
-            int numBytes = doWrite();
-            if (!writeBuffer.hasRemaining()) { // response fully written
-                writeBuffer = null; // done with current write buffer, remove reference
+            long numBytes = writableSource.writeTo(socketChannel, MAX_RESPONSE_BYTES_PER_WRITE_TURN);
+            if (!writableSource.hasRemaining()) { // response fully written
+                writableSource.close();
+                writableSource = null; // done with current write source, remove reference
                 if (logger.enabled()) {
                     logger.log(
                             new LogEntry("event", "write_response"),
                             new LogEntry("id", id),
-                            new LogEntry("num_bytes", Integer.toString(numBytes)));
+                            new LogEntry("num_bytes", Long.toString(numBytes)));
                 }
                 if (closeAfterResponse) { // non-persistent connection, close now
                     if (logger.enabled()) {
@@ -387,9 +380,9 @@ class ConnectionEventLoop {
                 }
                 if (logger.enabled()) {
                     logger.log(
-                            new LogEntry("event", "write"),
-                            new LogEntry("id", id),
-                            new LogEntry("num_bytes", Integer.toString(numBytes)));
+                        new LogEntry("event", "write"),
+                        new LogEntry("id", id),
+                        new LogEntry("num_bytes", Long.toString(numBytes)));
                 }
             }
         }
@@ -399,6 +392,10 @@ class ConnectionEventLoop {
                 return;
             if (requestTimeoutTask != null) {
                 requestTimeoutTask.cancel();
+            }
+            if (writableSource != null) {
+                CloseUtils.closeQuietly(writableSource);
+                writableSource = null;
             }
             selectionKey.cancel();
             CloseUtils.closeQuietly(socketChannel);

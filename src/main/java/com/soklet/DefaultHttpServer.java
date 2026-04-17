@@ -631,7 +631,7 @@ final class DefaultHttpServer implements HttpServer {
 			headers.addAll(response.headers());
 
 		headers.add(new Header("Connection", "close"));
-		return new MicrohttpResponse(response.status(), response.reason(), headers, response.body());
+		return response.withHeaders(headers);
 	}
 
 	private boolean hasConnectionCloseHeader(@NonNull MicrohttpResponse response) {
@@ -729,9 +729,41 @@ final class DefaultHttpServer implements HttpServer {
 		headers.sort(Comparator.comparing(Header::name));
 
 		String reasonPhrase = reasonPhraseForStatusCode(marshaledResponse.getStatusCode());
-		byte[] body = marshaledResponse.bodyBytesOrEmpty();
+		MarshaledResponseBody body = marshaledResponse.getBody().orElse(null);
 
-		return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, body);
+		if (body == null)
+			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, emptyByteArray());
+
+		if (body instanceof MarshaledResponseBody.Bytes bytes)
+			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, bytes.getBytes());
+
+		if (body instanceof MarshaledResponseBody.File file)
+			return MicrohttpResponse.withFileBody(
+					marshaledResponse.getStatusCode(),
+					reasonPhrase,
+					headers,
+					file.getPath(),
+					file.getOffset(),
+					file.getCount());
+
+		if (body instanceof MarshaledResponseBody.FileChannel fileChannel)
+			return MicrohttpResponse.withFileChannelBody(
+					marshaledResponse.getStatusCode(),
+					reasonPhrase,
+					headers,
+					fileChannel.getChannel(),
+					fileChannel.getOffset(),
+					fileChannel.getCount(),
+					fileChannel.getCloseOnComplete());
+
+		if (body instanceof MarshaledResponseBody.ByteBuffer byteBuffer)
+			return MicrohttpResponse.withByteBufferBody(
+					marshaledResponse.getStatusCode(),
+					reasonPhrase,
+					headers,
+					byteBuffer.getBuffer());
+
+		throw new IllegalStateException(format("Unsupported marshaled response body type: %s", body.getClass().getName()));
 	}
 
 	@NonNull

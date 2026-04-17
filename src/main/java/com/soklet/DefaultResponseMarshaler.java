@@ -155,11 +155,13 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			if (!headers.containsKey("Content-Type"))
 				headers.put("Content-Type", Set.of(binaryResponse ? "application/octet-stream" : format("text/plain; charset=%s", getCharset().name())));
 
-			marshaledResponse = MarshaledResponse.withStatusCode(response.getStatusCode())
+			MarshaledResponse.Builder builder = MarshaledResponse.withStatusCode(response.getStatusCode())
 					.headers(headers)
-					.cookies(response.getCookies())
-					.body(body)
-					.build();
+					.cookies(response.getCookies());
+
+			marshaledResponse = body == null
+					? builder.build()
+					: builder.body(body).build();
 		}
 
 		if (postProcessor != null)

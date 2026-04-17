@@ -60,10 +60,12 @@ import static java.util.Objects.requireNonNull;
  *   headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
  *
  *   // Tell Soklet: "OK - here is the final response data to send"
- *   return MarshaledResponse.withResponse(response)
- *     .headers(headers)
- *     .body(body)
- *     .build();
+ *   MarshaledResponse.Builder builder = MarshaledResponse.withResponse(response)
+ *     .headers(headers);
+ *
+ *   return body == null
+ *     ? builder.build()
+ *     : builder.body(body).build();
  * };
  *
  * // Function to create responses for exceptions that bubble out
@@ -252,7 +254,7 @@ public interface ResponseMarshaler {
 	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#http-head">https://www.soklet.com/docs/response-writing#http-head</a>.
 	 *
 	 * @param request                    the HTTP request
-	 * @param getMethodMarshaledResponse the binary data that would have been sent over the wire for an equivalent {@code GET} request (necessary in order to write the {@code Content-Length} header for a {@code HEAD} response)
+	 * @param getMethodMarshaledResponse the marshaled response that would have been sent over the wire for an equivalent {@code GET} request (necessary in order to write the {@code Content-Length} header for a {@code HEAD} response)
 	 * @return the response to be sent over the wire
 	 */
 	@NonNull
@@ -525,7 +527,7 @@ public interface ResponseMarshaler {
 			 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#http-head">https://www.soklet.com/docs/response-writing#http-head</a>.
 			 *
 			 * @param request                    the HTTP request
-			 * @param getMethodMarshaledResponse the binary data that would have been sent over the wire for an equivalent {@code GET} request (necessary in order to write the {@code Content-Length} header for a {@code HEAD} response)
+			 * @param getMethodMarshaledResponse the marshaled response that would have been sent over the wire for an equivalent {@code GET} request (necessary in order to write the {@code Content-Length} header for a {@code HEAD} response)
 			 * @return the response to be sent over the wire
 			 */
 			@NonNull

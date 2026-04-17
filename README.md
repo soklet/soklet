@@ -407,10 +407,12 @@ ResourceMethodHandler resourceMethodHandler = (
   headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
 
   // Tell Soklet: "OK - here is the final response data to send"
-  return MarshaledResponse.withResponse(response)
-    .headers(headers)
-    .body(body)
-    .build();
+  MarshaledResponse.Builder builder = MarshaledResponse.withResponse(response)
+    .headers(headers);
+
+  return body == null
+    ? builder.build()
+    : builder.body(body).build();
 };
 
 // Function to create responses for exceptions that bubble out
@@ -474,24 +476,25 @@ SokletConfig config = SokletConfig.withHttpServer(
 ).build();
 ```
 
-Already know exactly what bytes you want to send over the wire? Use [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) to skip additional processing.
+Already know exactly what you want to send over the wire? Use [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) to skip additional processing.
 
 ```java
 @GET("/example-image.png")
-public MarshaledResponse exampleImage() throws IOException {
+public MarshaledResponse exampleImage() {
   Path imageFile = Path.of("/home/user/test.png");
-  byte[] image = Files.readAllBytes(imageFile);
 
-  // Serve "final" bytes over the wire
+  // Serve a known-length file response over the wire.
+  // Soklet sets Content-Length from the file size; Content-Type remains explicit.
   return MarshaledResponse.withStatusCode(200)
+    .body(imageFile)
     .headers(Map.of(
-      "Content-Type", Set.of("image/png"),
-      "Content-Length", Set.of(String.valueOf(image.length))
+      "Content-Type", Set.of("image/png")
     ))
-    .body(image)
     .build();
 }
 ```
+
+`MarshaledResponse` supports known-length byte-array, file, file-channel, and `ByteBuffer` bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory.
 
 Redirects (via [`Response`](https://javadoc.soklet.com/com/soklet/Response.html)):
 

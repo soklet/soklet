@@ -22,6 +22,13 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -30,6 +37,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 import static java.lang.String.format;
+import static java.nio.file.StandardOpenOption.READ;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -221,6 +229,15 @@ public final class MarshaledResponse {
 		if (body instanceof MarshaledResponseBody.Bytes bytes)
 			return bytes.getBytes();
 
+		if (body instanceof MarshaledResponseBody.File file)
+			return materializeFile(file.getPath(), file.getOffset(), file.getCount());
+
+		if (body instanceof MarshaledResponseBody.FileChannel fileChannel)
+			return materializeFileChannel(fileChannel.getChannel(), fileChannel.getOffset(), fileChannel.getCount(), fileChannel.getCloseOnComplete());
+
+		if (body instanceof MarshaledResponseBody.ByteBuffer byteBuffer)
+			return materializeByteBuffer(byteBuffer.getBuffer());
+
 		throw new IllegalStateException(format("Unsupported marshaled response body type: %s", body.getClass().getName()));
 	}
 
@@ -273,8 +290,8 @@ public final class MarshaledResponse {
 		}
 
 		@NonNull
-		public Builder body(@Nullable byte[] body) {
-			this.body = body == null ? null : new MarshaledResponseBody.Bytes(body);
+		public Builder body(@NonNull byte[] bytes) {
+			this.body = new MarshaledResponseBody.Bytes(bytes);
 			return this;
 		}
 
@@ -282,6 +299,33 @@ public final class MarshaledResponse {
 		public Builder body(@NonNull MarshaledResponseBody body) {
 			requireNonNull(body);
 			this.body = body;
+			return this;
+		}
+
+		@NonNull
+		public Builder body(@NonNull Path path) {
+			this.body = fileBody(path);
+			return this;
+		}
+
+		@NonNull
+		public Builder body(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
+			this.body = fileBody(path, offset, count);
+			return this;
+		}
+
+		@NonNull
+		public Builder body(@NonNull FileChannel fileChannel,
+												@NonNull Long offset,
+												@NonNull Long count,
+												@NonNull Boolean closeOnComplete) {
+			this.body = fileChannelBody(fileChannel, offset, count, closeOnComplete);
+			return this;
+		}
+
+		@NonNull
+		public Builder body(@NonNull ByteBuffer byteBuffer) {
+			this.body = new MarshaledResponseBody.ByteBuffer(byteBuffer);
 			return this;
 		}
 
@@ -363,14 +407,41 @@ public final class MarshaledResponse {
 		}
 
 		@NonNull
-		public Copier body(@Nullable byte[] body) {
-			this.builder.body(body);
+		public Copier body(@NonNull byte[] bytes) {
+			this.builder.body(bytes);
 			return this;
 		}
 
 		@NonNull
 		public Copier body(@NonNull MarshaledResponseBody body) {
 			this.builder.body(body);
+			return this;
+		}
+
+		@NonNull
+		public Copier body(@NonNull Path path) {
+			this.builder.body(path);
+			return this;
+		}
+
+		@NonNull
+		public Copier body(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
+			this.builder.body(path, offset, count);
+			return this;
+		}
+
+		@NonNull
+		public Copier body(@NonNull FileChannel fileChannel,
+											 @NonNull Long offset,
+											 @NonNull Long count,
+											 @NonNull Boolean closeOnComplete) {
+			this.builder.body(fileChannel, offset, count, closeOnComplete);
+			return this;
+		}
+
+		@NonNull
+		public Copier body(@NonNull ByteBuffer byteBuffer) {
+			this.builder.body(byteBuffer);
 			return this;
 		}
 
@@ -384,5 +455,134 @@ public final class MarshaledResponse {
 		public MarshaledResponse finish() {
 			return this.builder.build();
 		}
+	}
+
+	private static MarshaledResponseBody.File fileBody(@NonNull Path path) {
+		Long size = fileSize(path);
+		return new MarshaledResponseBody.File(path, 0L, size);
+	}
+
+	private static MarshaledResponseBody.File fileBody(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
+		Long size = fileSize(path);
+		validateRangeWithinLength(offset, count, size);
+		return new MarshaledResponseBody.File(path, offset, count);
+	}
+
+	private static MarshaledResponseBody.FileChannel fileChannelBody(@NonNull FileChannel fileChannel,
+																																	 @NonNull Long offset,
+																																	 @NonNull Long count,
+																																	 @NonNull Boolean closeOnComplete) {
+		requireNonNull(fileChannel);
+		requireNonNull(closeOnComplete);
+		validateRangeWithinLength(offset, count, fileChannelSize(fileChannel));
+		return new MarshaledResponseBody.FileChannel(fileChannel, offset, count, closeOnComplete);
+	}
+
+	@NonNull
+	private static Long fileSize(@NonNull Path path) {
+		requireNonNull(path);
+
+		if (!Files.isRegularFile(path))
+			throw new IllegalArgumentException(format("File body path must reference a regular file: %s", path));
+
+		if (!Files.isReadable(path))
+			throw new IllegalArgumentException(format("File body path must be readable: %s", path));
+
+		try {
+			return Files.size(path);
+		} catch (IOException e) {
+			throw new UncheckedIOException(format("Unable to determine file body length for path: %s", path), e);
+		}
+	}
+
+	@NonNull
+	private static Long fileChannelSize(@NonNull FileChannel fileChannel) {
+		requireNonNull(fileChannel);
+
+		try {
+			return fileChannel.size();
+		} catch (IOException e) {
+			throw new UncheckedIOException("Unable to determine file-channel body length.", e);
+		}
+	}
+
+	private static void validateRangeWithinLength(@NonNull Long offset, @NonNull Long count, @NonNull Long length) {
+		requireNonNull(offset);
+		requireNonNull(count);
+		requireNonNull(length);
+
+		if (offset < 0)
+			throw new IllegalArgumentException("Offset must be >= 0.");
+
+		if (count < 0)
+			throw new IllegalArgumentException("Count must be >= 0.");
+
+		if (Long.MAX_VALUE - offset < count)
+			throw new IllegalArgumentException("Offset plus count exceeds maximum supported file position.");
+
+		if (offset + count > length)
+			throw new IllegalArgumentException(format("Offset plus count must be <= body length %d.", length));
+	}
+
+	@NonNull
+	private static byte[] materializeFile(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
+		try (FileChannel fileChannel = FileChannel.open(path, READ)) {
+			return materializeFileChannel(fileChannel, offset, count, false);
+		} catch (IOException e) {
+			throw new UncheckedIOException(format("Unable to read file response body: %s", path), e);
+		}
+	}
+
+	@NonNull
+	private static byte[] materializeFileChannel(@NonNull FileChannel fileChannel,
+																							 @NonNull Long offset,
+																							 @NonNull Long count,
+																							 @NonNull Boolean closeOnComplete) {
+		requireNonNull(fileChannel);
+		requireNonNull(offset);
+		requireNonNull(count);
+		requireNonNull(closeOnComplete);
+
+		if (count > Integer.MAX_VALUE)
+			throw new IllegalStateException("Response body is too large to materialize as a byte array.");
+
+		byte[] bytes = new byte[Math.toIntExact(count)];
+		ByteBuffer buffer = ByteBuffer.wrap(bytes);
+		long position = offset;
+
+		try {
+			while (buffer.hasRemaining()) {
+				int read = fileChannel.read(buffer, position);
+				if (read < 0)
+					throw new EOFException("File ended before the expected response body length was read.");
+				if (read == 0)
+					throw new EOFException("File did not provide the expected response body length.");
+				position += read;
+			}
+			return bytes;
+		} catch (IOException e) {
+			throw new UncheckedIOException("Unable to materialize file-channel response body.", e);
+		} finally {
+			if (closeOnComplete) {
+				try {
+					fileChannel.close();
+				} catch (IOException e) {
+					throw new UncheckedIOException("Unable to close file-channel response body.", e);
+				}
+			}
+		}
+	}
+
+	@NonNull
+	private static byte[] materializeByteBuffer(@NonNull ByteBuffer byteBuffer) {
+		requireNonNull(byteBuffer);
+
+		if (byteBuffer.remaining() > Integer.MAX_VALUE)
+			throw new IllegalStateException("Response body is too large to materialize as a byte array.");
+
+		ByteBuffer duplicate = byteBuffer.asReadOnlyBuffer();
+		byte[] bytes = new byte[duplicate.remaining()];
+		duplicate.get(bytes);
+		return bytes;
 	}
 }

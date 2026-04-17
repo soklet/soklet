@@ -1975,13 +1975,15 @@ final class DefaultMcpRuntime {
 	private MarshaledResponse eventStreamResponse(@NonNull List<@NonNull McpObject> messages) {
 		requireNonNull(messages);
 
-		return MarshaledResponse.withStatusCode(200)
+		MarshaledResponse.Builder builder = MarshaledResponse.withStatusCode(200)
 				.headers(Map.of(
 						"Content-Type", Set.of("text/event-stream; charset=UTF-8"),
 						"Cache-Control", Set.of("no-cache")
-				))
-				.body(messages.isEmpty() ? null : encodeEventStreamMessages(messages))
-				.build();
+				));
+
+		return messages.isEmpty()
+				? builder.build()
+				: builder.body(encodeEventStreamMessages(messages)).build();
 	}
 
 	@NonNull
@@ -2001,11 +2003,13 @@ final class DefaultMcpRuntime {
 		if (!headers.containsKey("Content-Type") && bodyBytes != null)
 			headers.put("Content-Type", Set.of("text/plain; charset=UTF-8"));
 
-		return MarshaledResponse.withStatusCode(response.getStatusCode())
+		MarshaledResponse.Builder builder = MarshaledResponse.withStatusCode(response.getStatusCode())
 				.headers(headers)
-				.cookies(response.getCookies())
-				.body(bodyBytes)
-				.build();
+				.cookies(response.getCookies());
+
+		return bodyBytes == null
+				? builder.build()
+				: builder.body(bodyBytes).build();
 	}
 
 	@NonNull

@@ -23,6 +23,7 @@ import com.soklet.annotation.QueryParameter;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
@@ -34,7 +35,10 @@ import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
@@ -59,6 +63,9 @@ import static com.soklet.TestSupport.readAll;
  */
 @ThreadSafe
 public class IntegrationTests {
+	private static final byte[] LARGE_RESPONSE_BODY = largeResponseBody();
+	private static volatile Path fileResponsePath;
+
 	@ThreadSafe
 	public static class EchoResource {
 		@GET("/hello")
@@ -549,6 +556,14 @@ public class IntegrationTests {
 		@GET("/hello")
 		public String hello() {return "hello";}
 
+		@GET("/large")
+		public MarshaledResponse large() {
+			return MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.body(LARGE_RESPONSE_BODY)
+					.build();
+		}
+
 		@GET("/q")
 		public String echoQuery(@NonNull @QueryParameter String q) {return q;}
 
@@ -566,6 +581,32 @@ public class IntegrationTests {
 			Map<String, Set<String>> cookies = request.getCookies();
 			Set<String> values = cookies.getOrDefault(name, Collections.emptySet());
 			return values.stream().sorted().collect(Collectors.joining("|"));
+		}
+	}
+
+	@ThreadSafe
+	public static class FileResource {
+		@GET("/file")
+		public MarshaledResponse file() {
+			return MarshaledResponse.withStatusCode(200)
+					.body(fileResponsePath)
+					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.build();
+		}
+	}
+
+	@ThreadSafe
+	public static class ByteBufferResource {
+		@GET("/byte-buffer")
+		public MarshaledResponse byteBuffer() {
+			ByteBuffer buffer = ByteBuffer.allocateDirect(LARGE_RESPONSE_BODY.length);
+			buffer.put(LARGE_RESPONSE_BODY);
+			buffer.flip();
+
+			return MarshaledResponse.withStatusCode(200)
+					.body(buffer)
+					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.build();
 		}
 	}
 
@@ -685,6 +726,117 @@ public class IntegrationTests {
 				RawResponse first = readResponse(in);
 				Assertions.assertTrue(first.statusLine().startsWith("HTTP/1.1 200"));
 				Assertions.assertEquals("4", new String(first.body(), StandardCharsets.UTF_8));
+
+				RawResponse second = readResponse(in);
+				Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals("hello", new String(second.body(), StandardCharsets.UTF_8));
+			}
+		}
+	}
+
+	@Test
+	public void largeResponse_keepsPersistentConnectionUsableForPipelinedRequest() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(5000);
+
+				out.write((
+						"GET /large HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Connection: keep-alive\r\n" +
+								"\r\n" +
+								"GET /hello HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse first = readResponse(in);
+				Assertions.assertTrue(first.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals(Integer.toString(LARGE_RESPONSE_BODY.length), first.headers().get("content-length"));
+				Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, first.body());
+
+				RawResponse second = readResponse(in);
+				Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals("hello", new String(second.body(), StandardCharsets.UTF_8));
+			}
+		}
+	}
+
+	@Test
+	public void fileResponse_keepsPersistentConnectionUsableForPipelinedRequest(@TempDir Path tempDir) throws Exception {
+		byte[] fileBytes = largeResponseBody();
+		fileResponsePath = tempDir.resolve("payload.bin");
+		Files.write(fileResponsePath, fileBytes);
+
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(FileResource.class, Echo2Resource.class))) {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(5000);
+
+				out.write((
+						"GET /file HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Connection: keep-alive\r\n" +
+								"\r\n" +
+								"GET /hello HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse first = readResponse(in);
+				Assertions.assertTrue(first.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals(Integer.toString(fileBytes.length), first.headers().get("content-length"));
+				Assertions.assertArrayEquals(fileBytes, first.body());
+
+				RawResponse second = readResponse(in);
+				Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals("hello", new String(second.body(), StandardCharsets.UTF_8));
+			}
+
+			URL url = new URL("http://127.0.0.1:" + port + "/file");
+			HttpURLConnection connection = open("HEAD", url, Map.of("Accept", "application/octet-stream"));
+			Assertions.assertEquals(200, connection.getResponseCode());
+			Assertions.assertEquals(Integer.toString(fileBytes.length), connection.getHeaderField("Content-Length"));
+			Assertions.assertEquals(0, readAll(connection.getInputStream()).length);
+		} finally {
+			fileResponsePath = null;
+		}
+	}
+
+	@Test
+	public void byteBufferResponse_keepsPersistentConnectionUsableForPipelinedRequest() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(ByteBufferResource.class, Echo2Resource.class))) {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(5000);
+
+				out.write((
+						"GET /byte-buffer HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Connection: keep-alive\r\n" +
+								"\r\n" +
+								"GET /hello HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse first = readResponse(in);
+				Assertions.assertTrue(first.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals(Integer.toString(LARGE_RESPONSE_BODY.length), first.headers().get("content-length"));
+				Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, first.body());
 
 				RawResponse second = readResponse(in);
 				Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
@@ -956,5 +1108,12 @@ public class IntegrationTests {
 			Assertions.assertEquals(200, cq.getResponseCode());
 			Assertions.assertEquals("a+b", new String(readAll(cq.getInputStream()), StandardCharsets.UTF_8));
 		}
+	}
+
+	private static byte[] largeResponseBody() {
+		byte[] bytes = new byte[(1024 * 1024) + 257];
+		for (int i = 0; i < bytes.length; i++)
+			bytes[i] = (byte) ('a' + (i % 26));
+		return bytes;
 	}
 }
