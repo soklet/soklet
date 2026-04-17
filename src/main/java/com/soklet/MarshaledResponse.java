@@ -329,8 +329,17 @@ public final class MarshaledResponse {
 			return this;
 		}
 
+		/**
+		 * Removes the response body from this builder.
+		 * <p>
+		 * If the current body owns a caller-supplied {@link FileChannel}, the channel is closed before it is
+		 * removed. Path-backed file bodies are lazy and do not hold open resources at this point.
+		 *
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder withoutBody() {
+			releaseBodyResources(this.body);
 			this.body = null;
 			return this;
 		}
@@ -445,6 +454,14 @@ public final class MarshaledResponse {
 			return this;
 		}
 
+		/**
+		 * Removes the response body from this copier.
+		 * <p>
+		 * If the current body owns a caller-supplied {@link FileChannel}, the channel is closed before it is
+		 * removed. Path-backed file bodies are lazy and do not hold open resources at this point.
+		 *
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier withoutBody() {
 			this.builder.withoutBody();
@@ -476,6 +493,17 @@ public final class MarshaledResponse {
 		requireNonNull(closeOnComplete);
 		validateRangeWithinLength(offset, count, fileChannelSize(fileChannel));
 		return new MarshaledResponseBody.FileChannel(fileChannel, offset, count, closeOnComplete);
+	}
+
+	private static void releaseBodyResources(@Nullable MarshaledResponseBody body) {
+		if (!(body instanceof MarshaledResponseBody.FileChannel fileChannelBody) || !fileChannelBody.getCloseOnComplete())
+			return;
+
+		try {
+			fileChannelBody.getChannel().close();
+		} catch (IOException e) {
+			throw new UncheckedIOException("Unable to close file-channel response body.", e);
+		}
 	}
 
 	@NonNull

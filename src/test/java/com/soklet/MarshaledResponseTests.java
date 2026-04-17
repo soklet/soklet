@@ -27,6 +27,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 
 import static java.nio.file.StandardOpenOption.READ;
 
@@ -139,6 +140,69 @@ public class MarshaledResponseTests {
 		Assertions.assertEquals(Long.valueOf(4), response.getBodyLength());
 		Assertions.assertEquals("bcde", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 		Assertions.assertFalse(fileChannel.isOpen());
+	}
+
+	@Test
+	public void without_body_closes_owned_file_channel_body(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("example.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+		FileChannel fileChannel = FileChannel.open(file, READ);
+
+		try {
+			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+					.body(fileChannel, 1L, 4L, true)
+					.withoutBody()
+					.build();
+
+			Assertions.assertTrue(response.getBody().isEmpty());
+			Assertions.assertEquals(Long.valueOf(0), response.getBodyLength());
+			Assertions.assertFalse(fileChannel.isOpen());
+		} finally {
+			if (fileChannel.isOpen())
+				fileChannel.close();
+		}
+	}
+
+	@Test
+	public void without_body_does_not_close_borrowed_file_channel_body(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("example.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+		FileChannel fileChannel = FileChannel.open(file, READ);
+
+		try {
+			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+					.body(fileChannel, 1L, 4L, false)
+					.withoutBody()
+					.build();
+
+			Assertions.assertTrue(response.getBody().isEmpty());
+			Assertions.assertEquals(Long.valueOf(0), response.getBodyLength());
+			Assertions.assertTrue(fileChannel.isOpen());
+		} finally {
+			fileChannel.close();
+		}
+	}
+
+	@Test
+	public void default_head_response_closes_owned_file_channel_body(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("example.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+		FileChannel fileChannel = FileChannel.open(file, READ);
+
+		try {
+			MarshaledResponse getResponse = MarshaledResponse.withStatusCode(200)
+					.body(fileChannel, 0L, 6L, true)
+					.build();
+			MarshaledResponse headResponse = DefaultResponseMarshaler.defaultInstance().forHead(
+					Request.withPath(HttpMethod.HEAD, "/example.txt").build(), getResponse);
+
+			Assertions.assertTrue(headResponse.getBody().isEmpty());
+			Assertions.assertEquals(Set.of("6"), headResponse.getHeaders().get("Content-Length"));
+			Assertions.assertFalse(fileChannel.isOpen());
+		} finally {
+			if (fileChannel.isOpen())
+				fileChannel.close();
+		}
 	}
 
 	@Test
