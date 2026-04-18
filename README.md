@@ -71,7 +71,7 @@ JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>2.1.4-SNAPSHOT</version>
+  <version>3.0.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -83,17 +83,17 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.soklet:soklet:2.1.4-SNAPSHOT'
+  implementation 'com.soklet:soklet:3.0.0-SNAPSHOT'
 }
 ```
 
 #### Direct Download
 
-If you don't use Maven or Gradle, you can drop [soklet-2.1.4-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.1.4-SNAPSHOT/soklet-2.1.4-SNAPSHOT.jar) directly into your project. No other dependencies are required.
+If you don't use Maven or Gradle, you can drop [soklet-3.0.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.0.0-SNAPSHOT/soklet-3.0.0-SNAPSHOT.jar) directly into your project. No other dependencies are required.
 
 ### Code Sample
 
-Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-2.1.4-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/2.1.4-SNAPSHOT/soklet-2.1.4-SNAPSHOT.jar) and the JDK. There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
+Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-3.0.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.0.0-SNAPSHOT/soklet-3.0.0-SNAPSHOT.jar) and the JDK. There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
 
 Soklet systems can be structurally as simple as a "hello world" app.
 
@@ -160,13 +160,13 @@ This example requires JDK 17+ to be installed on your machine ([or see this exam
 #### Build
 
 ```shell
-javac -parameters -cp soklet-2.1.4-SNAPSHOT.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
+javac -parameters -cp soklet-3.0.0-SNAPSHOT.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
 ```
 
 #### Run
 
 ```shell
-java -cp soklet-2.1.4-SNAPSHOT.jar:build com/soklet/example/App
+java -cp soklet-3.0.0-SNAPSHOT.jar:build com/soklet/example/App
 ```
 
 #### Test
