@@ -289,42 +289,94 @@ public final class MarshaledResponse {
 			return this;
 		}
 
+		/**
+		 * Sets a byte-array-backed response body, or removes any current body if {@code bytes} is {@code null}.
+		 *
+		 * @param bytes the response bytes to write, or {@code null} for no body
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder body(@NonNull byte[] bytes) {
-			this.body = new MarshaledResponseBody.Bytes(bytes);
-			return this;
+		public Builder body(@Nullable byte[] bytes) {
+			return bytes == null
+					? withoutBody()
+					: body(new MarshaledResponseBody.Bytes(bytes));
 		}
 
+		/**
+		 * Sets a response body descriptor, or removes any current body if {@code body} is {@code null}.
+		 *
+		 * @param body the response body descriptor to write, or {@code null} for no body
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder body(@NonNull MarshaledResponseBody body) {
-			requireNonNull(body);
+		public Builder body(@Nullable MarshaledResponseBody body) {
+			if (body == null)
+				return withoutBody();
+
 			this.body = body;
 			return this;
 		}
 
+		/**
+		 * Sets a path-backed response body, or removes any current body if {@code path} is {@code null}.
+		 *
+		 * @param path the file path to write, or {@code null} for no body
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder body(@NonNull Path path) {
+		public Builder body(@Nullable Path path) {
+			if (path == null)
+				return withoutBody();
+
 			this.body = fileBody(path);
 			return this;
 		}
 
+		/**
+		 * Sets a ranged path-backed response body.
+		 *
+		 * @param path   the file path to write
+		 * @param offset the zero-based file offset from which response bytes should be written
+		 * @param count  the number of file bytes to write
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder body(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
+			requireNonNull(path);
 			this.body = fileBody(path, offset, count);
 			return this;
 		}
 
+		/**
+		 * Sets a file-channel-backed response body.
+		 *
+		 * @param fileChannel     the file channel to write
+		 * @param offset          the zero-based channel offset from which response bytes should be written
+		 * @param count           the number of channel bytes to write
+		 * @param closeOnComplete whether Soklet should close the channel after response completion
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder body(@NonNull FileChannel fileChannel,
 												@NonNull Long offset,
 												@NonNull Long count,
 												@NonNull Boolean closeOnComplete) {
+			requireNonNull(fileChannel);
 			this.body = fileChannelBody(fileChannel, offset, count, closeOnComplete);
 			return this;
 		}
 
+		/**
+		 * Sets a byte-buffer-backed response body, or removes any current body if {@code byteBuffer} is {@code null}.
+		 *
+		 * @param byteBuffer the byte buffer to write, or {@code null} for no body
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder body(@NonNull ByteBuffer byteBuffer) {
+		public Builder body(@Nullable ByteBuffer byteBuffer) {
+			if (byteBuffer == null)
+				return withoutBody();
+
 			this.body = new MarshaledResponseBody.ByteBuffer(byteBuffer);
 			return this;
 		}
@@ -416,19 +468,19 @@ public final class MarshaledResponse {
 		}
 
 		@NonNull
-		public Copier body(@NonNull byte[] bytes) {
+		public Copier body(@Nullable byte[] bytes) {
 			this.builder.body(bytes);
 			return this;
 		}
 
 		@NonNull
-		public Copier body(@NonNull MarshaledResponseBody body) {
+		public Copier body(@Nullable MarshaledResponseBody body) {
 			this.builder.body(body);
 			return this;
 		}
 
 		@NonNull
-		public Copier body(@NonNull Path path) {
+		public Copier body(@Nullable Path path) {
 			this.builder.body(path);
 			return this;
 		}
@@ -449,7 +501,7 @@ public final class MarshaledResponse {
 		}
 
 		@NonNull
-		public Copier body(@NonNull ByteBuffer byteBuffer) {
+		public Copier body(@Nullable ByteBuffer byteBuffer) {
 			this.builder.body(byteBuffer);
 			return this;
 		}

@@ -27,6 +27,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Set;
 
 import static java.nio.file.StandardOpenOption.READ;
@@ -50,8 +51,14 @@ public class MarshaledResponseTests {
 	}
 
 	@Test
-	public void byte_array_body_rejects_null() {
-		Assertions.assertThrows(NullPointerException.class, () -> MarshaledResponse.withStatusCode(200).body((byte[]) null));
+	public void byte_array_body_null_removes_body() {
+		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+				.body(new byte[]{1, 2, 3})
+				.body((byte[]) null)
+				.build();
+
+		Assertions.assertTrue(response.getBody().isEmpty());
+		Assertions.assertEquals(Long.valueOf(0), response.getBodyLength());
 	}
 
 	@Test
@@ -65,6 +72,63 @@ public class MarshaledResponseTests {
 
 		Assertions.assertEquals(Long.valueOf(2), response.getBodyLength());
 		Assertions.assertSame(body, response.getBody().orElseThrow());
+	}
+
+	@Test
+	public void body_descriptor_null_removes_body() {
+		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+				.body(new MarshaledResponseBody.Bytes(new byte[]{1, 2, 3}))
+				.body((MarshaledResponseBody) null)
+				.build();
+
+		Assertions.assertTrue(response.getBody().isEmpty());
+		Assertions.assertEquals(Long.valueOf(0), response.getBodyLength());
+	}
+
+	@Test
+	public void nullable_body_sources_remove_body(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("example.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+
+		MarshaledResponse pathResponse = MarshaledResponse.withStatusCode(200)
+				.body(file)
+				.body((Path) null)
+				.build();
+
+		Assertions.assertTrue(pathResponse.getBody().isEmpty());
+		Assertions.assertEquals(Long.valueOf(0), pathResponse.getBodyLength());
+
+		MarshaledResponse byteBufferResponse = MarshaledResponse.withStatusCode(200)
+				.body(ByteBuffer.wrap(new byte[]{1, 2, 3}))
+				.body((ByteBuffer) null)
+				.build();
+
+		Assertions.assertTrue(byteBufferResponse.getBody().isEmpty());
+		Assertions.assertEquals(Long.valueOf(0), byteBufferResponse.getBodyLength());
+	}
+
+	@Test
+	public void multi_argument_body_sources_reject_null_source() {
+		Assertions.assertThrows(NullPointerException.class,
+				() -> MarshaledResponse.withStatusCode(200).body((Path) null, 0L, 3L));
+
+		Assertions.assertThrows(NullPointerException.class,
+				() -> MarshaledResponse.withStatusCode(200).body((FileChannel) null, 0L, 3L, true));
+	}
+
+	@Test
+	public void nullable_byte_array_body_can_flow_through_with_response_builder() {
+		byte[] body = null;
+
+		MarshaledResponse response = MarshaledResponse.withResponse(Response.fromStatusCode(204))
+				.headers(Map.of("Content-Type", Set.of("application/json;charset=UTF-8")))
+				.body(body)
+				.build();
+
+		Assertions.assertEquals(Integer.valueOf(204), response.getStatusCode());
+		Assertions.assertEquals(Set.of("application/json;charset=UTF-8"), response.getHeaders().get("Content-Type"));
+		Assertions.assertTrue(response.getBody().isEmpty());
+		Assertions.assertEquals(Long.valueOf(0), response.getBodyLength());
 	}
 
 	@Test

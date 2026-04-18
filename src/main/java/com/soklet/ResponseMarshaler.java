@@ -60,12 +60,10 @@ import static java.util.Objects.requireNonNull;
  *   headers.put("Content-Type", Set.of("application/json;charset=UTF-8"));
  *
  *   // Tell Soklet: "OK - here is the final response data to send"
- *   MarshaledResponse.Builder builder = MarshaledResponse.withResponse(response)
- *     .headers(headers);
- *
- *   return body == null
- *     ? builder.build()
- *     : builder.body(body).build();
+ *   return MarshaledResponse.withResponse(response)
+ *     .headers(headers)
+ *     .body(body)
+ *     .build();
  * };
  *
  * // Function to create responses for exceptions that bubble out
