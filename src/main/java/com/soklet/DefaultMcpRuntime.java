@@ -2840,7 +2840,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(request);
 		requireNonNull(mediaType);
 
-		Set<String> acceptHeaderValues = request.getHeaders().get("Accept");
+		Set<String> acceptHeaderValues = request.getHeaderValues("Accept").orElse(null);
 
 		if (acceptHeaderValues == null || acceptHeaderValues.isEmpty())
 			return true;

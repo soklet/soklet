@@ -7,8 +7,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.function.BiConsumer;
-import java.util.function.Function;
 
 class RequestParser {
 
@@ -19,30 +17,31 @@ class RequestParser {
     private static final String HEADER_TRANSFER_ENCODING = "Transfer-Encoding";
     private static final String HEADER_HOST = "Host";
     private static final String HEADER_EXPECT = "Expect";
+    private static final String HEADER_ACCEPT = "Accept";
+    private static final String HEADER_ACCEPT_ENCODING = "Accept-Encoding";
+    private static final String HEADER_ACCEPT_LANGUAGE = "Accept-Language";
+    private static final String HEADER_CACHE_CONTROL = "Cache-Control";
+    private static final String HEADER_CONNECTION = "Connection";
+    private static final String HEADER_CONTENT_TYPE = "Content-Type";
+    private static final String HEADER_COOKIE = "Cookie";
+    private static final String HEADER_ORIGIN = "Origin";
+    private static final String HEADER_USER_AGENT = "User-Agent";
     private static final String CHUNKED = "chunked";
     private static final byte[] EMPTY_BODY = new byte[]{};
 
     private static final int RADIX_HEX = 16;
 
     enum State {
-        METHOD(p -> p.tokenizer.next(SPACE), RequestParser::parseMethod),
-        URI(p -> p.tokenizer.next(SPACE), RequestParser::parseUri),
-        VERSION(p -> p.tokenizer.next(CRLF), RequestParser::parseVersion),
-        HEADER(p -> p.tokenizer.next(CRLF), RequestParser::parseHeader),
-        BODY(p -> p.tokenizer.next(p.contentLength), RequestParser::parseBody),
-        CHUNK_SIZE(p -> p.tokenizer.next(CRLF), RequestParser::parseChunkSize),
-        CHUNK_DATA(p -> p.tokenizer.next(p.chunkSize), RequestParser::parseChunkData),
-        CHUNK_DATA_END(p -> p.tokenizer.next(CRLF), (rp, token) -> rp.parseChunkDateEnd()),
-        CHUNK_TRAILER(p -> p.tokenizer.next(CRLF), RequestParser::parseChunkTrailer),
-        DONE(null, null);
-
-        final Function<RequestParser, byte[]> tokenSupplier;
-        final BiConsumer<RequestParser, byte[]> tokenConsumer;
-
-        State(Function<RequestParser, byte[]> tokenSupplier, BiConsumer<RequestParser, byte[]> tokenConsumer) {
-            this.tokenSupplier = tokenSupplier;
-            this.tokenConsumer = tokenConsumer;
-        }
+        METHOD,
+        URI,
+        VERSION,
+        HEADER,
+        BODY,
+        CHUNK_SIZE,
+        CHUNK_DATA,
+        CHUNK_DATA_END,
+        CHUNK_TRAILER,
+        DONE
     }
 
     private final ByteTokenizer tokenizer;
@@ -88,11 +87,9 @@ class RequestParser {
 
     boolean parse() {
         while (state != State.DONE) {
-            byte[] token = state.tokenSupplier.apply(this);
-            if (token == null) {
+            if (!parseCurrentState()) {
                 return false;
             }
-            state.tokenConsumer.accept(this, token);
         }
         return true;
     }
@@ -121,29 +118,75 @@ class RequestParser {
         body = null;
     }
 
-    private void parseMethod(byte[] token) {
-        requireAscii(token, "method");
-        method = new String(token, StandardCharsets.US_ASCII);
+    private boolean parseCurrentState() {
+        switch (state) {
+            case METHOD:
+                return parseMethod();
+            case URI:
+                return parseUri();
+            case VERSION:
+                return parseVersion();
+            case HEADER:
+                return parseHeader();
+            case BODY:
+                return parseBody();
+            case CHUNK_SIZE:
+                return parseChunkSize();
+            case CHUNK_DATA:
+                return parseChunkData();
+            case CHUNK_DATA_END:
+                return parseChunkDataEnd();
+            case CHUNK_TRAILER:
+                return parseChunkTrailer();
+            case DONE:
+                return true;
+            default:
+                throw new IllegalStateException("Unsupported parser state: " + state);
+        }
+    }
+
+    private boolean parseMethod() {
+        String token = tokenizer.nextAsciiString(SPACE, "method");
+        if (token == null) {
+            return false;
+        }
+        method = token;
         state = State.URI;
+        return true;
     }
 
-    private void parseUri(byte[] token) {
-        requireAscii(token, "uri");
-        uri = new String(token, StandardCharsets.US_ASCII);
+    private boolean parseUri() {
+        String token = tokenizer.nextAsciiString(SPACE, "uri");
+        if (token == null) {
+            return false;
+        }
+        uri = token;
         state = State.VERSION;
+        return true;
     }
 
-    private void parseVersion(byte[] token) {
-        requireAscii(token, "version");
-        version = new String(token, StandardCharsets.US_ASCII);
+    private boolean parseVersion() {
+        String token = tokenizer.nextAsciiString(CRLF, "version");
+        if (token == null) {
+            return false;
+        }
+        version = token;
         if (!version.equalsIgnoreCase("HTTP/1.0") && !version.equalsIgnoreCase("HTTP/1.1")) {
             throw new MalformedRequestException("unsupported http version");
         }
         state = State.HEADER;
+        return true;
     }
 
-    private void parseHeader(byte[] token) {
-        if (token.length == 0) { // CR-LF on own line, end of headers
+    private boolean parseHeader() {
+        int start = tokenizer.rawPosition();
+        int end = tokenizer.indexOf(CRLF);
+        if (end < 0) {
+            return false;
+        }
+
+        if (end == start) { // CR-LF on own line, end of headers
+            tokenizer.advanceTo(end + CRLF.length);
             validateHostHeaderIfRequired();
             rejectExpectHeaderIfPresent();
 
@@ -173,19 +216,22 @@ class RequestParser {
                 state = State.BODY;
             }
         } else {
-            Header header = parseHeaderLine(token);
+            Header header = parseHeaderLine(start, end);
+            tokenizer.advanceTo(end + CRLF.length);
             headers.add(header);
             observeHeader(header);
         }
+
+        return true;
     }
 
-    private static Header parseHeaderLine(byte[] line) {
-        int colonIndex = indexOfColon(line);
-        if (colonIndex <= 0) {
+    private Header parseHeaderLine(int start, int end) {
+        int colonIndex = indexOfColon(start, end);
+        if (colonIndex <= start) {
             throw new MalformedRequestException("malformed header line");
         }
-        for (int i = 0; i < colonIndex; i++) {
-            int b = line[i] & 0xFF;
+        for (int i = start; i < colonIndex; i++) {
+            int b = tokenizer.rawByte(i) & 0xFF;
             if (b > 0x7F) {
                 throw new MalformedRequestException("non-ascii header name");
             }
@@ -194,35 +240,65 @@ class RequestParser {
             }
         }
         int spaceIndex = colonIndex + 1;
-        while (spaceIndex < line.length && (line[spaceIndex] == ' ' || line[spaceIndex] == '\t')) { // advance beyond variable-length space prefix
+        while (spaceIndex < end && (tokenizer.rawByte(spaceIndex) == ' ' || tokenizer.rawByte(spaceIndex) == '\t')) { // advance beyond variable-length space prefix
             spaceIndex++;
         }
-        for (int i = spaceIndex; i < line.length; i++) {
-            int b = line[i] & 0xFF;
+        for (int i = spaceIndex; i < end; i++) {
+            int b = tokenizer.rawByte(i) & 0xFF;
             if ((b < 0x20 && b != '\t') || b == 0x7F) {
                 throw new MalformedRequestException("invalid header value");
             }
         }
         return new Header(
-                new String(line, 0, colonIndex, StandardCharsets.US_ASCII),
-                new String(line, spaceIndex, line.length - spaceIndex, StandardCharsets.ISO_8859_1));
+                parseHeaderName(start, colonIndex),
+                tokenizer.string(spaceIndex, end, StandardCharsets.ISO_8859_1));
     }
 
-    private static int indexOfColon(byte[] line) {
-        for (int i = 0; i < line.length; i++) {
-            if (line[i] == ':') {
+    private String parseHeaderName(int start, int end) {
+        switch (end - start) {
+            case 4:
+                if (tokenizer.asciiEquals(start, end, HEADER_HOST)) return HEADER_HOST;
+                break;
+            case 6:
+                if (tokenizer.asciiEquals(start, end, HEADER_ACCEPT)) return HEADER_ACCEPT;
+                if (tokenizer.asciiEquals(start, end, HEADER_COOKIE)) return HEADER_COOKIE;
+                if (tokenizer.asciiEquals(start, end, HEADER_EXPECT)) return HEADER_EXPECT;
+                if (tokenizer.asciiEquals(start, end, HEADER_ORIGIN)) return HEADER_ORIGIN;
+                break;
+            case 10:
+                if (tokenizer.asciiEquals(start, end, HEADER_CONNECTION)) return HEADER_CONNECTION;
+                if (tokenizer.asciiEquals(start, end, HEADER_USER_AGENT)) return HEADER_USER_AGENT;
+                break;
+            case 12:
+                if (tokenizer.asciiEquals(start, end, HEADER_CONTENT_TYPE)) return HEADER_CONTENT_TYPE;
+                break;
+            case 13:
+                if (tokenizer.asciiEquals(start, end, HEADER_CACHE_CONTROL)) return HEADER_CACHE_CONTROL;
+                break;
+            case 14:
+                if (tokenizer.asciiEquals(start, end, HEADER_CONTENT_LENGTH)) return HEADER_CONTENT_LENGTH;
+                break;
+            case 15:
+                if (tokenizer.asciiEquals(start, end, HEADER_ACCEPT_ENCODING)) return HEADER_ACCEPT_ENCODING;
+                if (tokenizer.asciiEquals(start, end, HEADER_ACCEPT_LANGUAGE)) return HEADER_ACCEPT_LANGUAGE;
+                break;
+            case 17:
+                if (tokenizer.asciiEquals(start, end, HEADER_TRANSFER_ENCODING)) return HEADER_TRANSFER_ENCODING;
+                break;
+            default:
+                break;
+        }
+
+        return tokenizer.string(start, end, StandardCharsets.US_ASCII);
+    }
+
+    private int indexOfColon(int start, int end) {
+        for (int i = start; i < end; i++) {
+            if (tokenizer.rawByte(i) == ':') {
                 return i;
             }
         }
         return -1;
-    }
-
-    private static void requireAscii(byte[] token, String field) {
-        for (byte b : token) {
-            if ((b & 0x80) != 0) {
-                throw new MalformedRequestException("non-ascii " + field);
-            }
-        }
     }
 
     private void validateHostHeaderIfRequired() {
@@ -258,15 +334,21 @@ class RequestParser {
                 (c >= 'a' && c <= 'z');
     }
 
-    private void parseChunkSize(byte[] token) {
-        int end = token.length;
-        for (int i = 0; i < token.length; i++) {
-            if (token[i] == ';') {
-                end = i;
+    private boolean parseChunkSize() {
+        int start = tokenizer.rawPosition();
+        int end = tokenizer.indexOf(CRLF);
+        if (end < 0) {
+            return false;
+        }
+
+        int sizeEnd = end;
+        for (int i = start; i < end; i++) {
+            if (tokenizer.rawByte(i) == ';') {
+                sizeEnd = i;
                 break;
             }
         }
-        String sizeToken = new String(token, 0, end).trim();
+        String sizeToken = tokenizer.string(start, sizeEnd, StandardCharsets.US_ASCII).trim();
         if (sizeToken.isEmpty()) {
             throw new MalformedRequestException("invalid chunk size");
         }
@@ -285,9 +367,15 @@ class RequestParser {
         state = chunkSize == 0
                 ? State.CHUNK_TRAILER
                 : State.CHUNK_DATA;
+        tokenizer.advanceTo(end + CRLF.length);
+        return true;
     }
 
-    private void parseChunkData(byte[] token) {
+    private boolean parseChunkData() {
+        byte[] token = tokenizer.next(chunkSize);
+        if (token == null) {
+            return false;
+        }
         long newChunkBodySize = chunkBodySize + token.length;
         if (newChunkBodySize > maxRequestSize) {
             throw new RequestTooLargeException();
@@ -298,24 +386,40 @@ class RequestParser {
         }
         chunks.add(token);
         state = State.CHUNK_DATA_END;
+        return true;
     }
 
-    private void parseChunkDateEnd() {
+    private boolean parseChunkDataEnd() {
+        int length = tokenizer.nextLength(CRLF);
+        if (length < 0) {
+            return false;
+        }
         state = State.CHUNK_SIZE;
+        return true;
     }
 
-    private void parseChunkTrailer(byte[] token) {
-        if (token.length == 0) { // blank line indicates end of trailers
+    private boolean parseChunkTrailer() {
+        int length = tokenizer.nextLength(CRLF);
+        if (length < 0) {
+            return false;
+        }
+        if (length == 0) { // blank line indicates end of trailers
             body = chunks == null ? EMPTY_BODY : chunks.merge(maxRequestSize);
             state = State.DONE;
         } else {
             state = State.CHUNK_TRAILER;
         }
+        return true;
     }
 
-    private void parseBody(byte[] token) {
+    private boolean parseBody() {
+        byte[] token = tokenizer.next(contentLength);
+        if (token == null) {
+            return false;
+        }
         body = token;
         state = State.DONE;
+        return true;
     }
 
     private void observeHeader(Header header) {

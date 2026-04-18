@@ -37,5 +37,7 @@ public class DefaultHttpServerTests {
 				new ArrayList<>(headers.get("Set-Cookie")));
 		Assertions.assertEquals(Set.of("abc123"), headers.get("x-trace-id"));
 		Assertions.assertFalse(headers.containsKey("X-Empty"));
+		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.put("X-Test", Set.of("value")));
+		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.get("X-Trace-Id").add("def456"));
 	}
 }

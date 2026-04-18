@@ -98,6 +98,22 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void parserPreservesNonCanonicalHeaderNameCasing() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("GET / HTTP/1.1\r\nhost: localhost\r\nx-request-id: abc123\r\n\r\n");
+
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
+		Assertions.assertTrue(parser.parse());
+
+		MicrohttpRequest microhttpRequest = parser.request();
+		Assertions.assertEquals("host", microhttpRequest.headers().get(0).name());
+		Assertions.assertEquals("x-request-id", microhttpRequest.headers().get(1).name());
+		Assertions.assertEquals("localhost", microhttpRequest.header("Host"));
+		Assertions.assertEquals("abc123", microhttpRequest.header("X-Request-Id"));
+	}
+
+	@Test
 	public void byteBufferWritableSourceHonorsWriteBudget() throws IOException {
 		ByteBufferWritableSource source = new ByteBufferWritableSource(ByteBuffer.wrap(ascii("abcdef")));
 		PartialWriteSocketChannel channel = new PartialWriteSocketChannel(10);

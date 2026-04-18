@@ -295,6 +295,79 @@ public final class Utilities {
 		return extractQueryParametersFromUrl(syntheticUrl, queryFormat, charset);
 	}
 
+	@NonNull
+	static Optional<Set<@NonNull String>> extractQueryParameterValuesFromQuery(@NonNull String query,
+																																						 @NonNull String name,
+																																						 @NonNull QueryFormat queryFormat,
+																																						 @NonNull Charset charset) {
+		requireNonNull(query);
+		requireNonNull(name);
+		requireNonNull(queryFormat);
+		requireNonNull(charset);
+
+		query = trimAggressivelyToEmpty(query);
+
+		if (query.isEmpty())
+			return Optional.empty();
+
+		String singleValue = null;
+		Set<String> values = null;
+		boolean matched = false;
+		int pairStart = 0;
+
+		while (pairStart <= query.length()) {
+			int pairEnd = query.indexOf('&', pairStart);
+			if (pairEnd == -1)
+				pairEnd = query.length();
+
+			if (pairEnd > pairStart) {
+				int separator = query.indexOf('=', pairStart);
+				if (separator == -1 || separator > pairEnd)
+					separator = pairEnd;
+
+				String rawName = trimAggressivelyToNull(query.substring(pairStart, separator));
+
+				if (rawName != null) {
+					String decodedName = decodeQueryComponent(rawName, queryFormat, charset);
+
+					if (decodedName.equals(name)) {
+						String rawValue = separator < pairEnd ? trimAggressivelyToNull(query.substring(separator + 1, pairEnd)) : null;
+
+						if (rawValue == null)
+							rawValue = "";
+
+						String value = decodeQueryComponent(rawValue, queryFormat, charset);
+
+						if (!matched) {
+							singleValue = value;
+							matched = true;
+						} else {
+							if (values == null) {
+								values = new LinkedHashSet<>();
+								values.add(singleValue);
+							}
+
+							values.add(value);
+						}
+					}
+				}
+			}
+
+			if (pairEnd == query.length())
+				break;
+
+			pairStart = pairEnd + 1;
+		}
+
+		if (!matched)
+			return Optional.empty();
+
+		if (values == null)
+			return Optional.of(Set.of(singleValue));
+
+		return Optional.of(Collections.unmodifiableSet(values));
+	}
+
 	/**
 	 * Parses query strings from relative or absolute URLs such as {@code "/example?a=a=1&b=2&c=%20"} or {@code "https://www.soklet.com/example?a=1&b=2&c=%20"} into a multimap of names to values.
 	 * <p>
@@ -373,9 +446,10 @@ public final class Utilities {
 			String name = decodeQueryComponent(rawName, queryFormat, charset);
 			String value = decodeQueryComponent(rawValue, queryFormat, charset);
 
-			queryParameters.computeIfAbsent(name, k -> new LinkedHashSet<>()).add(value);
+			addStringValue(queryParameters, name, value);
 		}
 
+		freezeStringValueSets(queryParameters);
 		return queryParameters;
 	}
 
@@ -449,6 +523,25 @@ public final class Utilities {
 		return sb.toString();
 	}
 
+	static void validatePercentEncodingInUrlComponent(@NonNull String urlComponent) {
+		requireNonNull(urlComponent);
+
+		for (int i = 0; i < urlComponent.length(); i++) {
+			if (urlComponent.charAt(i) != '%')
+				continue;
+
+			if (i + 2 >= urlComponent.length())
+				throw new IllegalRequestException("Invalid percent-encoding in URL component");
+
+			int hi = hex(urlComponent.charAt(i + 1));
+			int lo = hex(urlComponent.charAt(i + 2));
+			if (hi < 0 || lo < 0)
+				throw new IllegalRequestException("Invalid percent-encoding in URL component");
+
+			i += 2;
+		}
+	}
+
 	private static int hex(char c) {
 		if (c >= '0' && c <= '9') return c - '0';
 		if (c >= 'A' && c <= 'F') return c - 'A' + 10;
@@ -513,13 +606,14 @@ public final class Utilities {
 						cookieValue = percentDecodeCookieValue(unquoted);
 					}
 
-					cookies.computeIfAbsent(cookieName, key -> new LinkedHashSet<>());
+					cookies.putIfAbsent(cookieName, Set.of());
 					if (cookieValue != null)
-						cookies.get(cookieName).add(cookieValue);
+						addStringValue(cookies, cookieName, cookieValue);
 				}
 			}
 		}
 
+		freezeStringValueSets(cookies);
 		return cookies;
 	}
 
@@ -774,6 +868,23 @@ public final class Utilities {
 
 			String query = trimAggressivelyToNull(url.substring(q + 1));
 			return Optional.ofNullable(query);
+		}
+	}
+
+	@NonNull
+	static Optional<String> extractRawQueryFromUrlStrict(@NonNull String url) {
+		requireNonNull(url);
+
+		url = trimAggressivelyToEmpty(url);
+
+		if ("*".equals(url))
+			return Optional.empty();
+
+		try {
+			URI uri = new URI(url);
+			return Optional.ofNullable(trimAggressivelyToNull(uri.getRawQuery()));
+		} catch (URISyntaxException e) {
+			throw new IllegalRequestException(format("Invalid URL '%s'", url), e);
 		}
 	}
 
@@ -1751,6 +1862,7 @@ public final class Utilities {
 			addParsedHeader(headers, line.substring(0, idx), line.substring(idx + 1));
 		}
 
+		freezeStringValueSets(headers);
 		return headers;
 	}
 
@@ -1760,23 +1872,82 @@ public final class Utilities {
 		requireNonNull(headers);
 
 		String key = trimAggressivelyToEmpty(name); // keep original case for display
+		if (trimAggressivelyToNull(value) == null)
+			return;
+
+		if (COMMA_JOINABLE_HEADER_NAMES.contains(key.toLowerCase(Locale.ROOT))) {
+			for (String part : splitCommaAware(value)) {
+				String v = trimAggressivelyToNull(part);
+				if (v != null)
+					addStringValue(headers, key, v);
+			}
+		} else {
+			addStringValue(headers, key, value.trim());
+		}
+	}
+
+	static void addParsedHeaderValues(@NonNull Set<@NonNull String> values,
+																		@Nullable String name,
+																		@Nullable String value) {
+		requireNonNull(values);
+
+		String key = trimAggressivelyToEmpty(name);
 		String keyLowercase = key.toLowerCase(Locale.ROOT);
 		value = trimAggressivelyToNull(value);
 
 		if (value == null)
 			return;
 
-		Set<String> bucket = headers.computeIfAbsent(key, k -> new LinkedHashSet<>());
-
 		if (COMMA_JOINABLE_HEADER_NAMES.contains(keyLowercase)) {
 			for (String part : splitCommaAware(value)) {
 				String v = trimAggressivelyToNull(part);
 				if (v != null)
-					bucket.add(v);
+					values.add(v);
 			}
 		} else {
-			bucket.add(value.trim());
+			values.add(value.trim());
 		}
+	}
+
+	static void freezeStringValueSets(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> valuesByName) {
+		requireNonNull(valuesByName);
+
+		for (Entry<String, Set<String>> entry : valuesByName.entrySet()) {
+			Set<String> values = entry.getValue();
+
+			if (values == null || values.isEmpty()) {
+				entry.setValue(Set.of());
+			} else if (values instanceof LinkedHashSet) {
+				entry.setValue(Collections.unmodifiableSet(values));
+			}
+		}
+	}
+
+	private static void addStringValue(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> valuesByName,
+																		 @NonNull String name,
+																		 @NonNull String value) {
+		requireNonNull(valuesByName);
+		requireNonNull(name);
+		requireNonNull(value);
+
+		Set<String> values = valuesByName.get(name);
+
+		if (values == null || values.isEmpty()) {
+			valuesByName.put(name, Set.of(value));
+			return;
+		}
+
+		if (values.contains(value))
+			return;
+
+		if (values instanceof LinkedHashSet) {
+			values.add(value);
+			return;
+		}
+
+		Set<String> promotedValues = new LinkedHashSet<>(values);
+		promotedValues.add(value);
+		valuesByName.put(name, promotedValues);
 	}
 
 	/**

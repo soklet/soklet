@@ -42,6 +42,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -376,8 +377,6 @@ final class DefaultHttpServer implements HttpServer {
 							if (body != null && body.length == 0)
 								body = null;
 
-							Map<String, Set<String>> headers = headersFromMicrohttpRequest(microhttpRequest);
-
 							boolean contentTooLarge = microhttpRequest.contentTooLarge();
 
 							HttpMethod httpMethod;
@@ -396,7 +395,7 @@ final class DefaultHttpServer implements HttpServer {
 							request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
 									.multipartParser(getMultipartParser())
 									.idGenerator(getIdGenerator())
-									.headers(headers)
+									.microhttpHeaders(microhttpRequest.headers())
 									.body(body)
 									.remoteAddress(microhttpRequest.remoteAddress())
 									.contentTooLarge(contentTooLarge)
@@ -689,7 +688,8 @@ final class DefaultHttpServer implements HttpServer {
 		for (Header header : microhttpRequest.headers())
 			Utilities.addParsedHeader(headers, header.name(), header.value());
 
-		return headers;
+		Utilities.freezeStringValueSets(headers);
+		return Collections.unmodifiableMap(headers);
 	}
 
 	@NonNull

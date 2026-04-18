@@ -1,6 +1,8 @@
 package com.soklet.internal.microhttp;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 /**
@@ -75,7 +77,66 @@ class ByteTokenizer {
         return result;
     }
 
-    private int indexOf(byte[] delimiter) {
+    String nextAsciiString(byte[] delimiter, String field) {
+        int index = indexOf(delimiter);
+        if (index < 0) {
+            return null;
+        }
+
+        for (int i = position; i < index; i++) {
+            if ((array[i] & 0x80) != 0) {
+                throw new MalformedRequestException("non-ascii " + field);
+            }
+        }
+
+        String result = string(position, index, StandardCharsets.US_ASCII);
+        position = index + delimiter.length;
+        return result;
+    }
+
+    int nextLength(byte[] delimiter) {
+        int index = indexOf(delimiter);
+        if (index < 0) {
+            return -1;
+        }
+
+        int result = index - position;
+        position = index + delimiter.length;
+        return result;
+    }
+
+    int rawPosition() {
+        return position;
+    }
+
+    byte rawByte(int index) {
+        return array[index];
+    }
+
+    String string(int startInclusive, int endExclusive, Charset charset) {
+        return new String(array, startInclusive, endExclusive - startInclusive, charset);
+    }
+
+    boolean asciiEquals(int startInclusive, int endExclusive, String value) {
+        int length = endExclusive - startInclusive;
+        if (value.length() != length) {
+            return false;
+        }
+
+        for (int i = 0; i < length; i++) {
+            if ((array[startInclusive + i] & 0xFF) != value.charAt(i)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    void advanceTo(int index) {
+        position = index;
+    }
+
+    int indexOf(byte[] delimiter) {
         for (int i = position; i <= size - delimiter.length; i++) {
             if (Arrays.equals(delimiter, 0, delimiter.length, array, i, i + delimiter.length)) {
                 return i;

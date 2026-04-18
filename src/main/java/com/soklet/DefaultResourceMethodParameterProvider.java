@@ -524,7 +524,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		String parameterDescription = "request header";
 		String parameterName = extractParameterName(resourceMethod, parameter, requestHeader, requestHeader.name());
-		Set<String> values = request.getHeaders().get(parameterName);
+		Set<String> values = request.getHeaderValues(parameterName).orElse(null);
 
 		if (values == null)
 			values = Set.of();

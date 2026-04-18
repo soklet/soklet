@@ -88,6 +88,8 @@ Current benchmarks cover:
 
 - microhttp request parsing and tokenizer compaction for keep-alive and pipelined requests
 - HTTP request header conversion from microhttp's parsed representation into Soklet's public header map
+- public `Request` construction from embedded HTTP requests, including header, query, and form-access variants
+- `MarshaledResponse` conversion to the embedded HTTP response representation for static and dynamic byte-array, cookie, file, file-channel, and byte-buffer bodies
 - Server-Sent Event event/comment formatting, UTF-8 payload serialization, and comment fan-out serialization strategy
 - end-to-end embedded HTTP handling over loopback for small plaintext, JSON, and POST JSON requests
 
