@@ -349,18 +349,7 @@ class RequestParser {
             }
         }
         String sizeToken = tokenizer.string(start, sizeEnd, StandardCharsets.US_ASCII).trim();
-        if (sizeToken.isEmpty()) {
-            throw new MalformedRequestException("invalid chunk size");
-        }
-        try {
-            long parsedChunkSize = Long.parseLong(sizeToken, RADIX_HEX);
-            if (parsedChunkSize > maxRequestSize) {
-                throw new RequestTooLargeException();
-            }
-            chunkSize = Math.toIntExact(parsedChunkSize);
-        } catch (NumberFormatException e) {
-            throw new MalformedRequestException("invalid chunk size");
-        }
+        chunkSize = parseChunkSizeToken(sizeToken, maxRequestSize);
         if (chunkSize < 0) {
             throw new MalformedRequestException("invalid chunk size");
         }
@@ -369,6 +358,22 @@ class RequestParser {
                 : State.CHUNK_DATA;
         tokenizer.advanceTo(end + CRLF.length);
         return true;
+    }
+
+    static int parseChunkSizeToken(String sizeToken, long maxRequestSize) {
+        if (sizeToken.isEmpty()) {
+            throw new MalformedRequestException("invalid chunk size");
+        }
+
+        try {
+            long parsedChunkSize = Long.parseLong(sizeToken, RADIX_HEX);
+            if (parsedChunkSize > maxRequestSize) {
+                throw new RequestTooLargeException();
+            }
+            return Math.toIntExact(parsedChunkSize);
+        } catch (NumberFormatException | ArithmeticException e) {
+            throw new MalformedRequestException("invalid chunk size", e);
+        }
     }
 
     private boolean parseChunkData() {

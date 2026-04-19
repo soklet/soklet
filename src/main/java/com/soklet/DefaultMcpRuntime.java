@@ -2506,6 +2506,7 @@ final class DefaultMcpRuntime {
 	@NonNull
 	private McpObject requiredObject(@NonNull McpObject object,
 																	 @NonNull String propertyName) throws JsonRpcErrorTransport {
+		// The transport layer catches this and serializes JSON-RPC -32602 Invalid params.
 		return optionalObject(object, propertyName)
 				.orElseThrow(() -> new JsonRpcErrorTransport(null, McpJsonRpcError.fromCodeAndMessage(-32602,
 						"Missing or invalid parameter '%s'".formatted(propertyName))));

@@ -76,7 +76,7 @@ public interface McpSessionStore {
 	/**
 	 * Acquires the default in-memory session store using Soklet's default idle timeout.
 	 * <p>
-	 * Expired sessions are reclaimed opportunistically during subsequent write activity; exact deletion timing is therefore best-effort rather than timer-driven.
+	 * Expired sessions are reclaimed opportunistically during lookup and subsequent create activity; exact deletion timing is therefore best-effort rather than timer-driven.
 	 *
 	 * @return a new in-memory session store
 	 */
@@ -88,7 +88,7 @@ public interface McpSessionStore {
 	/**
 	 * Acquires the default in-memory session store using a caller-supplied idle timeout.
 	 * <p>
-	 * Expired sessions are reclaimed opportunistically during subsequent write activity; exact deletion timing is therefore best-effort rather than timer-driven.
+	 * Expired sessions are reclaimed opportunistically during lookup and subsequent create activity; exact deletion timing is therefore best-effort rather than timer-driven.
 	 *
 	 * @param idleTimeout the idle timeout, or {@code Duration.ZERO} to disable idle expiry
 	 * @return a new in-memory session store
@@ -163,7 +163,6 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 												 @NonNull McpStoredSession updated) {
 		requireNonNull(expected);
 		requireNonNull(updated);
-		maybeSweepExpiredSessions();
 
 		if (!expected.sessionId().equals(updated.sessionId()))
 			throw new IllegalArgumentException("Expected and updated sessions must have the same session ID.");
@@ -171,10 +170,8 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 		if (updated.version().longValue() <= expected.version().longValue())
 			throw new IllegalArgumentException("Updated session version must be strictly greater than expected version.");
 
-		if (isExpired(expected)) {
-			this.sessions.remove(expected.sessionId(), expected);
+		if (isExpired(expected))
 			return false;
-		}
 
 		return this.sessions.replace(expected.sessionId(), expected, updated);
 	}

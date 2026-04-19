@@ -373,6 +373,20 @@ public final class ResponseCookie {
 			throw new IllegalArgumentException(format("Specifying %s value %s.%s requires that you also set secure=true, otherwise browsers will likely discard the cookie",
 					ResponseCookie.class.getSimpleName(), SameSite.class.getSimpleName(), SameSite.NONE.name()));
 
+		if (this.name.startsWith("__Secure-") && !this.secure)
+			throw new IllegalArgumentException("__Secure- cookies require secure=true");
+
+		if (this.name.startsWith("__Host-")) {
+			if (!this.secure)
+				throw new IllegalArgumentException("__Host- cookies require secure=true");
+
+			if (!"/".equals(this.path))
+				throw new IllegalArgumentException("__Host- cookies require path=\"/\"");
+
+			if (this.domain != null)
+				throw new IllegalArgumentException("__Host- cookies must not specify a domain");
+		}
+
 		if (this.partitioned) {
 			if (this.secure == null || !this.secure)
 				throw new IllegalArgumentException("Partitioned cookies require secure=true");

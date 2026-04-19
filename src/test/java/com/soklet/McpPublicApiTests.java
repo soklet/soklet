@@ -248,6 +248,46 @@ public class McpPublicApiTests {
 	}
 
 	@Test
+	public void defaultInMemorySessionStoreReplaceDoesNotRemoveExpiredSession() {
+		DefaultMcpSessionStore sessionStore = (DefaultMcpSessionStore) McpSessionStore.fromInMemory(Duration.ofMinutes(1));
+		McpStoredSession staleSession = new McpStoredSession(
+				"stale",
+				TestEndpoint.class,
+				Instant.now().minus(Duration.ofHours(2)),
+				Instant.now().minus(Duration.ofHours(2)),
+				true,
+				true,
+				null,
+				null,
+				null,
+				McpSessionContext.fromBlankSlate(),
+				null,
+				0L
+		);
+		McpStoredSession updatedSession = new McpStoredSession(
+				staleSession.sessionId(),
+				staleSession.endpointClass(),
+				staleSession.createdAt(),
+				Instant.now(),
+				staleSession.initialized(),
+				staleSession.initializedNotificationReceived(),
+				staleSession.protocolVersion(),
+				staleSession.clientCapabilities(),
+				staleSession.negotiatedCapabilities(),
+				staleSession.sessionContext(),
+				staleSession.terminatedAt(),
+				staleSession.version() + 1L
+		);
+
+		sessionStore.create(staleSession);
+
+		assertFalse(sessionStore.replace(staleSession, updatedSession));
+		assertTrue(sessionStore.containsSessionId("stale"));
+		assertEquals(staleSession, sessionStore.takeExpiredSession("stale").orElseThrow());
+		assertFalse(sessionStore.containsSessionId("stale"));
+	}
+
+	@Test
 	public void defaultInMemorySessionStoreSweepsExpiredSessionsDuringSubsequentWrites() {
 		DefaultMcpSessionStore sessionStore = (DefaultMcpSessionStore) McpSessionStore.fromInMemory(Duration.ofMillis(50));
 		McpStoredSession staleSession = new McpStoredSession(

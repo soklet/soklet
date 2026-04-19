@@ -137,6 +137,53 @@ public class CookieTests {
 	}
 
 	@Test
+	public void securePrefixedCookieRequiresSecure() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ResponseCookie.with("__Secure-sid", "v").build());
+
+		ResponseCookie cookie = ResponseCookie.with("__Secure-sid", "v")
+				.secure(true)
+				.build();
+
+		Assertions.assertTrue(cookie.getSecure());
+	}
+
+	@Test
+	public void hostPrefixedCookieRequiresSecurePathSlashAndNoDomain() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ResponseCookie.with("__Host-sid", "v")
+						.path("/")
+						.build());
+
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ResponseCookie.with("__Host-sid", "v")
+						.secure(true)
+						.build());
+
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ResponseCookie.with("__Host-sid", "v")
+						.secure(true)
+						.path("/app")
+						.build());
+
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ResponseCookie.with("__Host-sid", "v")
+						.secure(true)
+						.path("/")
+						.domain("www.soklet.com")
+						.build());
+
+		ResponseCookie cookie = ResponseCookie.with("__Host-sid", "v")
+				.secure(true)
+				.path("/")
+				.build();
+
+		Assertions.assertTrue(cookie.getSecure());
+		Assertions.assertEquals("/", cookie.getPath().orElse(null));
+		Assertions.assertTrue(cookie.getDomain().isEmpty());
+	}
+
+	@Test
 	public void partitionedCookieSerializes() {
 		ResponseCookie cookie = ResponseCookie.with("sid", "v")
 				.path("/")

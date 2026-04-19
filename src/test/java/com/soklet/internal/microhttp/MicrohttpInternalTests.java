@@ -114,6 +114,47 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void microhttpRequestHeaderHelpersTolerateNullHeaderRecordFields() {
+		MicrohttpRequest request = new MicrohttpRequest(
+				"GET",
+				"/",
+				"HTTP/1.1",
+				List.of(
+						new Header(null, "ignored"),
+						new Header("X-Null", null),
+						new Header("X-Test", "abc")),
+				new byte[0],
+				false,
+				remoteAddress());
+
+		Assertions.assertNull(request.header(null));
+		Assertions.assertNull(request.header("X-Null"));
+		Assertions.assertEquals("abc", request.header("x-test"));
+		Assertions.assertFalse(request.hasHeader(null, "ignored"));
+		Assertions.assertFalse(request.hasHeader("X-Null", null));
+		Assertions.assertFalse(request.hasHeader("X-Null", "abc"));
+		Assertions.assertTrue(request.hasHeader("x-test", "ABC"));
+	}
+
+	@Test
+	public void byteTokenizerCapacityExpansionRejectsIntegerOverflow() {
+		Assertions.assertThrows(RequestTooLargeException.class, () ->
+				ByteTokenizer.expandedCapacity(Integer.MAX_VALUE, Integer.MAX_VALUE - 1, 2));
+	}
+
+	@Test
+	public void byteTokenizerCapacityExpansionCapsOverflowingDouble() {
+		Assertions.assertEquals(Integer.MAX_VALUE,
+				ByteTokenizer.expandedCapacity(Integer.MAX_VALUE - 4, Integer.MAX_VALUE - 8, 8));
+	}
+
+	@Test
+	public void chunkSizeOverflowIsMalformed() {
+		Assertions.assertThrows(MalformedRequestException.class, () ->
+				RequestParser.parseChunkSizeToken("80000000", Long.MAX_VALUE));
+	}
+
+	@Test
 	public void byteBufferWritableSourceHonorsWriteBudget() throws IOException {
 		ByteBufferWritableSource source = new ByteBufferWritableSource(ByteBuffer.wrap(ascii("abcdef")));
 		PartialWriteSocketChannel channel = new PartialWriteSocketChannel(10);

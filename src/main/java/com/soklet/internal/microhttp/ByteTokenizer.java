@@ -52,7 +52,7 @@ class ByteTokenizer {
             compactInPlace();
         }
         if (array.length - size < bufferLen) {
-            array = Arrays.copyOf(array, Math.max(size + bufferLen, array.length * 2));
+            array = Arrays.copyOf(array, expandedCapacity(array.length, size, bufferLen));
         }
         buffer.get(array, size, bufferLen);
         size += bufferLen;
@@ -156,6 +156,22 @@ class ByteTokenizer {
         base = 0;
         position = newPosition;
         size = newSize;
+    }
+
+    static int expandedCapacity(int currentCapacity, int currentSize, int additionalBytes) {
+        if (currentCapacity < 0 || currentSize < 0 || additionalBytes < 0) {
+            throw new IllegalArgumentException("Capacity, size, and additional bytes must be >= 0.");
+        }
+
+        long requiredCapacity = (long) currentSize + additionalBytes;
+        if (requiredCapacity > Integer.MAX_VALUE) {
+            throw new RequestTooLargeException();
+        }
+
+        int doubledCapacity = currentCapacity <= Integer.MAX_VALUE / 2
+                ? currentCapacity * 2
+                : Integer.MAX_VALUE;
+        return Math.max((int) requiredCapacity, doubledCapacity);
     }
 
 }

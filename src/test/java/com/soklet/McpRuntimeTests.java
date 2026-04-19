@@ -96,6 +96,34 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void initializeRejectsNonObjectCapabilitiesAsInvalidParams() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			McpRequestResult.ResponseCompleted requestResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-1",
+							  "method":"initialize",
+							  "params":{
+							    "protocolVersion":"2025-11-25",
+							    "capabilities":true,
+							    "clientInfo":{"name":"test-client","version":"1.0.0"}
+							  }
+							}
+							""", Map.of()));
+
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertFalse(requestResult.getHttpRequestResult().getMarshaledResponse().getHeaders().containsKey("MCP-Session-Id"));
+
+			McpObject body = jsonBody(requestResult);
+			Assertions.assertEquals("req-1", ((McpString) body.get("id").orElseThrow()).value());
+			McpObject error = (McpObject) body.get("error").orElseThrow();
+			Assertions.assertEquals("-32602", ((McpNumber) error.get("code").orElseThrow()).value().toPlainString());
+			Assertions.assertEquals("Missing or invalid parameter 'capabilities'", ((McpString) error.get("message").orElseThrow()).value());
+		});
+	}
+
+	@Test
 	public void initializeNegotiatesSupportedProtocolVersionWhenClientRequestsUnknownVersion() {
 		Soklet.runSimulator(configuration(), simulator -> {
 			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(

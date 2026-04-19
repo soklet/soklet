@@ -18,7 +18,7 @@ public record MicrohttpRequest(
 
     public String header(String name) {
         for (Header header : headers) {
-            if (header.name().equalsIgnoreCase(name)) {
+            if (equalsIgnoreCase(header.name(), name)) {
                 return header.value();
             }
         }
@@ -27,11 +27,15 @@ public record MicrohttpRequest(
 
     public boolean hasHeader(String name, String value) {
         for (Header header : headers) {
-            if (header.name().equalsIgnoreCase(name) && header.value().equalsIgnoreCase(value)) {
+            if (equalsIgnoreCase(header.name(), name) && equalsIgnoreCase(header.value(), value)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean equalsIgnoreCase(String left, String right) {
+        return left != null && right != null && left.equalsIgnoreCase(right);
     }
 
 }
