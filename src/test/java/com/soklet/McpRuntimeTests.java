@@ -72,6 +72,26 @@ public class McpRuntimeTests {
 			Assertions.assertEquals("1.0.0", ((McpString) serverInfo.get("version").orElseThrow()).value());
 			Assertions.assertEquals("Catalog MCP", ((McpString) serverInfo.get("title").orElseThrow()).value());
 			Assertions.assertEquals("Use read-only mode.", ((McpString) result.get("instructions").orElseThrow()).value());
+			});
+	}
+
+	@Test
+	public void initializeUsesConfiguredSessionIdGenerator() {
+		McpHandlerResolver handlerResolver = McpHandlerResolver.fromClasses(Set.of(CatalogEndpoint.class));
+		SokletConfig config = SokletConfig.withMcpServer(McpServer.withPort(0)
+						.handlerResolver(handlerResolver)
+						.sessionIdGenerator(request -> "node/a+b=c")
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(LifecycleObserver.defaultInstance())
+				.metricsCollector(MetricsCollector.disabledInstance())
+				.build();
+
+		Soklet.runSimulator(config, simulator -> {
+			McpRequestResult.ResponseCompleted requestResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
+
+			Assertions.assertEquals("node/a+b=c", headerValue(requestResult, "MCP-Session-Id"));
 		});
 	}
 

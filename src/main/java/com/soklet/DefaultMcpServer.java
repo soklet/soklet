@@ -133,7 +133,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@NonNull
 	private final McpSessionStore sessionStore;
 	@NonNull
-	private final IdGenerator<String> idGenerator;
+	private final IdGenerator<String> sessionIdGenerator;
 	@NonNull
 	private final Duration requestTimeout;
 	@NonNull
@@ -201,7 +201,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : McpResponseMarshaler.defaultInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : McpCorsAuthorizer.nonBrowserClientsOnlyInstance();
 		this.sessionStore = builder.sessionStore != null ? builder.sessionStore : McpSessionStore.fromInMemory();
-		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.defaultInstance();
+		this.sessionIdGenerator = builder.sessionIdGenerator != null ? builder.sessionIdGenerator : IdGenerator.defaultSessionInstance();
 		this.port = builder.port;
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
 		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
@@ -447,8 +447,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 	@NonNull
 	@Override
-	public IdGenerator<String> getIdGenerator() {
-		return this.idGenerator;
+	public IdGenerator<String> getSessionIdGenerator() {
+		return this.sessionIdGenerator;
 	}
 
 	void terminateStreamsForSession(@NonNull String sessionId) {
@@ -1011,7 +1011,6 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		requireNonNull(contentTooLarge);
 
 		Request.RawBuilder requestBuilder = Request.withRawUrl(parsedStartLineAndHeaders.httpMethod(), parsedStartLineAndHeaders.rawUrl())
-				.idGenerator(this.idGenerator)
 				.headers(parsedStartLineAndHeaders.headers())
 				.remoteAddress(remoteAddress)
 				.contentTooLarge(contentTooLarge);

@@ -68,6 +68,17 @@ public class McpPublicApiTests {
 	}
 
 	@Test
+	public void defaultSessionIdGeneratorProducesVisibleAsciiIds() {
+		IdGenerator<String> idGenerator = IdGenerator.defaultSessionInstance();
+		String first = idGenerator.generateId(Request.fromPath(HttpMethod.GET, "/mcp"));
+		String second = idGenerator.generateId(Request.fromPath(HttpMethod.GET, "/mcp"));
+
+		assertEquals(32, first.length());
+		assertTrue(first.matches("[A-Za-z0-9_-]+"));
+		assertFalse(first.equals(second));
+	}
+
+	@Test
 	public void responseMarshalerDefaultInstancePassesThroughMcpValueAndRejectsArbitraryObjects() {
 		McpResponseMarshaler marshaler = McpResponseMarshaler.defaultInstance();
 		McpValue value = new McpObject(Map.of("enabled", new McpBoolean(true)));

@@ -1967,11 +1967,11 @@ public final class Soklet implements AutoCloseable {
 			return getRealImplementation().getSessionStore();
 		}
 
-		@NonNull
-		@Override
-		public IdGenerator<String> getIdGenerator() {
-			return getRealImplementation().getIdGenerator();
-		}
+			@NonNull
+			@Override
+			public IdGenerator<String> getSessionIdGenerator() {
+				return getRealImplementation().getSessionIdGenerator();
+			}
 
 		@NonNull
 		protected McpServer getRealImplementation() {

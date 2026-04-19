@@ -154,12 +154,12 @@ public class McpServerLifecycleTests {
 
 		Assertions.assertSame(handlerResolver, mcpServer.getHandlerResolver());
 		Assertions.assertNotNull(mcpServer.getRequestAdmissionPolicy());
-		Assertions.assertNotNull(mcpServer.getRequestInterceptor());
-		Assertions.assertNotNull(mcpServer.getResponseMarshaler());
-		Assertions.assertNotNull(mcpServer.getCorsAuthorizer());
-		Assertions.assertNotNull(mcpServer.getSessionStore());
-		Assertions.assertNotNull(mcpServer.getIdGenerator());
-	}
+			Assertions.assertNotNull(mcpServer.getRequestInterceptor());
+			Assertions.assertNotNull(mcpServer.getResponseMarshaler());
+			Assertions.assertNotNull(mcpServer.getCorsAuthorizer());
+			Assertions.assertNotNull(mcpServer.getSessionStore());
+			Assertions.assertNotNull(mcpServer.getSessionIdGenerator());
+		}
 
 	@Test
 	public void startedDefaultMcpServerServesCorsPreflightForWhitelistedOrigin() throws Exception {
@@ -772,18 +772,18 @@ public class McpServerLifecycleTests {
 	private static class FakeMcpServer implements McpServer {
 		private final AtomicBoolean initialized;
 		private final AtomicBoolean started;
-		private final AtomicBoolean stopped;
-		private final McpSessionStore sessionStore;
-		private final IdGenerator<String> idGenerator;
+			private final AtomicBoolean stopped;
+			private final McpSessionStore sessionStore;
+			private final IdGenerator<String> sessionIdGenerator;
 		private SokletConfig sokletConfig;
 		private RequestHandler requestHandler;
 
 		private FakeMcpServer() {
 			this.initialized = new AtomicBoolean();
-			this.started = new AtomicBoolean();
-			this.stopped = new AtomicBoolean();
-			this.sessionStore = McpSessionStore.fromInMemory();
-			this.idGenerator = IdGenerator.defaultInstance();
+				this.started = new AtomicBoolean();
+				this.stopped = new AtomicBoolean();
+				this.sessionStore = McpSessionStore.fromInMemory();
+				this.sessionIdGenerator = IdGenerator.defaultSessionInstance();
 		}
 
 		@Override
@@ -847,11 +847,11 @@ public class McpServerLifecycleTests {
 			return this.sessionStore;
 		}
 
-		@NonNull
-		@Override
-		public IdGenerator<String> getIdGenerator() {
-			return this.idGenerator;
-		}
+			@NonNull
+			@Override
+			public IdGenerator<String> getSessionIdGenerator() {
+				return this.sessionIdGenerator;
+			}
 
 		@NonNull
 		protected AtomicBoolean getInitialized() {

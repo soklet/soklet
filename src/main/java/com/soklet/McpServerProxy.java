@@ -112,8 +112,8 @@ final class McpServerProxy implements McpServer, InternalMcpSessionMessagePublis
 
 	@NonNull
 	@Override
-	public IdGenerator<String> getIdGenerator() {
-		return getRealImplementation().getIdGenerator();
+	public IdGenerator<String> getSessionIdGenerator() {
+		return getRealImplementation().getSessionIdGenerator();
 	}
 
 	@NonNull

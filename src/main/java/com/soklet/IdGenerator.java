@@ -30,6 +30,7 @@ import static java.util.Objects.requireNonNull;
  * Standard threadsafe implementations can be acquired via these factory methods:
  * <ul>
  *   <li>{@link #defaultInstance()}</li>
+ *   <li>{@link #defaultSessionInstance()}</li>
  *   <li>{@link #fromPrefix(String)}</li>
  * </ul>
  *
@@ -62,6 +63,22 @@ public interface IdGenerator<T> {
 	@NonNull
 	static IdGenerator<String> defaultInstance() {
 		return DefaultIdGenerator.defaultInstance();
+	}
+
+	/**
+	 * Acquires a threadsafe, cryptographically strong session identifier generator.
+	 * <p>
+	 * This implementation is intended for protocol session identifiers such as MCP
+	 * {@code MCP-Session-Id} values, where IDs must be globally unique, unguessable,
+	 * and safe to include in HTTP header values.
+	 * <p>
+	 * Generated IDs contain only URL-safe visible ASCII characters.
+	 *
+	 * @return an {@code IdGenerator} suitable for session identifiers
+	 */
+	@NonNull
+	static IdGenerator<String> defaultSessionInstance() {
+		return DefaultSessionIdGenerator.defaultInstance();
 	}
 
 

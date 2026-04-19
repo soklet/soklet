@@ -514,7 +514,7 @@ Soklet ships with an embedded HTTP/1.1 [`HttpServer`](https://javadoc.soklet.com
 [`SseServer`](https://javadoc.soklet.com/com/soklet/SseServer.html), and a dedicated
 [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
 These builders let you configure host, timeouts, handler concurrency/queueing, request size limits, and connection caps; you
-can also plug in custom [`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html),
+can also plug in custom request/session [`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html),
 [`McpSessionStore`](https://javadoc.soklet.com/com/soklet/McpSessionStore.html), and
 [`MultipartParser`](https://javadoc.soklet.com/com/soklet/MultipartParser.html) instances.
 Provide the configured servers via [`SokletConfig`](https://javadoc.soklet.com/com/soklet/SokletConfig.html) and see the

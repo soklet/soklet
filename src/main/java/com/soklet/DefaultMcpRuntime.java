@@ -101,15 +101,7 @@ final class DefaultMcpRuntime {
 	}
 
 	private static boolean isAllowedMcpSessionIdCharacter(char c) {
-		return (c >= 'A' && c <= 'Z')
-				|| (c >= 'a' && c <= 'z')
-				|| (c >= '0' && c <= '9')
-				|| c == '-'
-				|| c == '.'
-				|| c == '_'
-				|| c == '~'
-				|| c == ':'
-				|| c == '%';
+		return c >= 0x21 && c <= 0x7E;
 	}
 
 	@NonNull
@@ -501,7 +493,7 @@ final class DefaultMcpRuntime {
 		McpClientCapabilities clientCapabilities = new McpClientCapabilities(capabilitiesValue);
 		McpClientInfo clientInfo = clientInfoValue == null ? null : new McpClientInfo(requiredString(clientInfoValue, "name"),
 				optionalString(clientInfoValue, "version").orElse(null));
-		String sessionId = mcpServer.getIdGenerator().generateId(request);
+		String sessionId = mcpServer.getSessionIdGenerator().generateId(request);
 
 		if (!isValidMcpSessionId(sessionId))
 			throw new IllegalStateException("MCP session ID generator produced an invalid session ID.");
