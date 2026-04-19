@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.annotation.McpServerEndpoint;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.Socket;
@@ -39,6 +41,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -196,6 +202,76 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void startedDefaultMcpServerReportsGenericTransportLifecycleAndMetrics() throws Exception {
+		int mcpPort = findFreePort();
+		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(metricsCollector)
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+			initializedSessionId(mcpPort);
+		}
+
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("willAcceptConnection:MCP"));
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("didAcceptConnection:MCP"));
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("willReadRequest:MCP:null"));
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("didReadRequest:MCP:/mcp"));
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("willAcceptRequest:MCP:/mcp"));
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("didAcceptRequest:MCP:/mcp"));
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("willWriteResponse:MCP:200"));
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("didWriteResponse:MCP:200"));
+		Assertions.assertTrue(metricsCollector.snapshot().orElseThrow().getMcpConnectionsAccepted() >= 1L);
+	}
+
+	@Test
+	public void startedDefaultMcpServerReportsRequestHandlerExecutorRejections() throws Exception {
+		int mcpPort = findFreePort();
+		ExecutorService executorService = new RejectingExecutorService();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.requestHandlerExecutorServiceSupplier(() -> executorService)
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.metricsCollector(metricsCollector)
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeRawRequest(socket, """
+						POST /mcp HTTP/1.1\r
+						Host: 127.0.0.1:%d\r
+						Content-Type: application/json\r
+						Content-Length: 2\r
+						\r
+						{}
+						""".formatted(mcpPort));
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 503"));
+			}
+		}
+
+		Long rejectionCount = metricsCollector.snapshot().orElseThrow().getMcpRequestRejections()
+				.get(new MetricsCollector.RequestRejectionKey(RequestRejectionReason.REQUEST_HANDLER_QUEUE_FULL));
+		Assertions.assertEquals(Long.valueOf(1L), rejectionCount);
+	}
+
+	@Test
 	public void startedDefaultMcpServerKeepsGetStreamsOpenAndSendsHeartbeats() throws Exception {
 		int mcpPort = findFreePort();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
@@ -305,12 +381,15 @@ public class McpServerLifecycleTests {
 	@Test
 	public void startedDefaultMcpServerRejectsTransferEncodingRequests() throws Exception {
 		int mcpPort = findFreePort();
+		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
 						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecycleObserver(new QuietLifecycle())
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(metricsCollector)
 				.build();
 
 		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
@@ -331,6 +410,11 @@ public class McpServerLifecycleTests {
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 400"));
 			}
 		}
+
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("didFailToReadRequest:MCP:UNPARSEABLE_REQUEST"));
+		Long readFailureCount = metricsCollector.snapshot().orElseThrow().getMcpRequestReadFailures()
+				.get(new MetricsCollector.RequestReadFailureKey(RequestReadFailureReason.UNPARSEABLE_REQUEST));
+		Assertions.assertEquals(Long.valueOf(1L), readFailureCount);
 	}
 
 	@Test
@@ -647,6 +731,15 @@ public class McpServerLifecycleTests {
 		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0)
 				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 				.build();
+		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(new FakeMcpServer())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(metricsCollector)
+				.build();
+		server.initialize(sokletConfig, (request, requestResultConsumer) -> {});
+
 		Field stopPoisonPillField = DefaultMcpServer.class.getDeclaredField("stopPoisonPill");
 		Field serverSocketField = DefaultMcpServer.class.getDeclaredField("serverSocket");
 		Method acceptLoopMethod = DefaultMcpServer.class.getDeclaredMethod("acceptLoop");
@@ -669,6 +762,8 @@ public class McpServerLifecycleTests {
 				throw new RuntimeException(cause);
 			}
 		});
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("didFailToAcceptConnection:MCP:INTERNAL_ERROR"));
+		Assertions.assertEquals(Long.valueOf(1L), metricsCollector.snapshot().orElseThrow().getMcpConnectionsRejected());
 	}
 
 	@McpServerEndpoint(path = "/mcp", name = "example", version = "1.0.0")
@@ -1007,6 +1102,134 @@ public class McpServerLifecycleTests {
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
 		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
+	}
+
+	private static final class RecordingLifecycle extends QuietLifecycle {
+		private final CopyOnWriteArrayList<String> events;
+
+		private RecordingLifecycle() {
+			this.events = new CopyOnWriteArrayList<>();
+		}
+
+		@Override
+		public void willAcceptConnection(@NonNull ServerType serverType,
+																		 @Nullable InetSocketAddress remoteAddress) {
+			this.events.add("willAcceptConnection:" + serverType);
+		}
+
+		@Override
+		public void didAcceptConnection(@NonNull ServerType serverType,
+																		@Nullable InetSocketAddress remoteAddress) {
+			this.events.add("didAcceptConnection:" + serverType);
+		}
+
+		@Override
+		public void didFailToAcceptConnection(@NonNull ServerType serverType,
+																					@Nullable InetSocketAddress remoteAddress,
+																					@NonNull ConnectionRejectionReason reason,
+																					@Nullable Throwable throwable) {
+			this.events.add("didFailToAcceptConnection:" + serverType + ":" + reason);
+		}
+
+		@Override
+		public void willAcceptRequest(@NonNull ServerType serverType,
+																	@Nullable InetSocketAddress remoteAddress,
+																	@Nullable String requestTarget) {
+			this.events.add("willAcceptRequest:" + serverType + ":" + requestTarget);
+		}
+
+		@Override
+		public void didAcceptRequest(@NonNull ServerType serverType,
+																 @Nullable InetSocketAddress remoteAddress,
+																 @Nullable String requestTarget) {
+			this.events.add("didAcceptRequest:" + serverType + ":" + requestTarget);
+		}
+
+		@Override
+		public void willReadRequest(@NonNull ServerType serverType,
+																@Nullable InetSocketAddress remoteAddress,
+																@Nullable String requestTarget) {
+			this.events.add("willReadRequest:" + serverType + ":" + requestTarget);
+		}
+
+		@Override
+		public void didReadRequest(@NonNull ServerType serverType,
+															 @Nullable InetSocketAddress remoteAddress,
+															 @Nullable String requestTarget) {
+			this.events.add("didReadRequest:" + serverType + ":" + requestTarget);
+		}
+
+		@Override
+		public void didFailToReadRequest(@NonNull ServerType serverType,
+																		 @Nullable InetSocketAddress remoteAddress,
+																		 @Nullable String requestTarget,
+																		 @NonNull RequestReadFailureReason reason,
+																		 @Nullable Throwable throwable) {
+			this.events.add("didFailToReadRequest:" + serverType + ":" + reason);
+		}
+
+		@Override
+		public void willWriteResponse(@NonNull ServerType serverType,
+																	@NonNull Request request,
+																	@Nullable ResourceMethod resourceMethod,
+																	@NonNull MarshaledResponse marshaledResponse) {
+			this.events.add("willWriteResponse:" + serverType + ":" + marshaledResponse.getStatusCode());
+		}
+
+		@Override
+		public void didWriteResponse(@NonNull ServerType serverType,
+																 @NonNull Request request,
+																 @Nullable ResourceMethod resourceMethod,
+																 @NonNull MarshaledResponse marshaledResponse,
+																 @NonNull Duration responseWriteDuration) {
+			this.events.add("didWriteResponse:" + serverType + ":" + marshaledResponse.getStatusCode());
+		}
+
+		@NonNull
+		private List<String> getEvents() {
+			return this.events;
+		}
+	}
+
+	private static final class RejectingExecutorService extends AbstractExecutorService {
+		private final AtomicBoolean shutdown;
+
+		private RejectingExecutorService() {
+			this.shutdown = new AtomicBoolean(false);
+		}
+
+		@Override
+		public void shutdown() {
+			this.shutdown.set(true);
+		}
+
+		@NonNull
+		@Override
+		public List<Runnable> shutdownNow() {
+			this.shutdown.set(true);
+			return List.of();
+		}
+
+		@Override
+		public boolean isShutdown() {
+			return this.shutdown.get();
+		}
+
+		@Override
+		public boolean isTerminated() {
+			return this.shutdown.get();
+		}
+
+		@Override
+		public boolean awaitTermination(long timeout,
+																		@NonNull TimeUnit unit) {
+			return true;
+		}
+
+		@Override
+		public void execute(@NonNull Runnable command) {
+			throw new RejectedExecutionException("queue full");
+		}
 	}
 
 	private static final class RuntimeThenStopServerSocket extends java.net.ServerSocket {

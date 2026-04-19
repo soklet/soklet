@@ -63,6 +63,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import static com.soklet.Utilities.emptyByteArray;
@@ -469,52 +470,68 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			return;
 
 		while (!this.stopPoisonPill.get()) {
+			Socket socket = null;
+			InetSocketAddress remoteAddress = null;
+
 			try {
-				Socket socket = serverSocket.accept();
+				socket = serverSocket.accept();
+				remoteAddress = remoteAddress(socket);
+				notifyWillAcceptConnection(remoteAddress);
 				socket.setKeepAlive(true);
 				socket.setTcpNoDelay(true);
 				socket.setSoTimeout(Math.toIntExact(Math.max(1L, this.requestTimeout.toMillis())));
-				submitRequest(socket);
+				notifyDidAcceptConnection(remoteAddress);
+				submitRequest(socket, remoteAddress);
 			} catch (SocketException e) {
 				if (this.stopPoisonPill.get())
 					break;
 
+				notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
+				closeQuietly(socket);
 				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an IO error")
 						.throwable(e)
 						.build());
-				} catch (IOException e) {
-					if (this.stopPoisonPill.get())
-						break;
+			} catch (IOException e) {
+				if (this.stopPoisonPill.get())
+					break;
 
-					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an IO error")
-							.throwable(e)
-							.build());
-				} catch (RuntimeException e) {
-					if (this.stopPoisonPill.get())
-						break;
+				notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
+				closeQuietly(socket);
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an IO error")
+						.throwable(e)
+						.build());
+			} catch (RuntimeException e) {
+				if (this.stopPoisonPill.get())
+					break;
 
-					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an unexpected error")
-							.throwable(e)
-							.build());
-				}
+				notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
+				closeQuietly(socket);
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an unexpected error")
+						.throwable(e)
+						.build());
 			}
 		}
+	}
 
-	private void submitRequest(@NonNull Socket socket) throws IOException {
+	private void submitRequest(@NonNull Socket socket,
+														 @Nullable InetSocketAddress remoteAddress) {
 		requireNonNull(socket);
 
 		ExecutorService requestHandlerExecutorService = this.requestHandlerExecutorService;
 
 		if (requestHandlerExecutorService == null || requestHandlerExecutorService.isShutdown()) {
-			socket.close();
+			IllegalStateException exception = new IllegalStateException("MCP request handler executor service is unavailable");
+			notifyDidFailToAcceptRequest(remoteAddress, null, RequestRejectionReason.REQUEST_HANDLER_EXECUTOR_SHUTDOWN, exception);
+			closeQuietly(socket);
 			return;
 		}
 
 		try {
 			requestHandlerExecutorService.submit(() -> handleSocket(socket));
 		} catch (RejectedExecutionException e) {
+			notifyDidFailToAcceptRequest(remoteAddress, null, rejectionReasonFor(requestHandlerExecutorService), e);
 			writePlainTextResponse(socket, 503, "Service unavailable");
-			socket.close();
+			closeQuietly(socket);
 		}
 	}
 
@@ -524,13 +541,18 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		Request request = null;
 		boolean handedOffToStreamProcessor = false;
 		AtomicBoolean connectionSlotReserved = new AtomicBoolean(false);
+		InetSocketAddress remoteAddress = remoteAddress(socket);
 
 		try {
+			notifyWillReadRequest(remoteAddress, null);
 			request = readRequest(socket);
+			notifyDidReadRequest(remoteAddress, request.getRawPathAndQuery());
+			notifyWillAcceptRequest(remoteAddress, request.getRawPathAndQuery());
+			notifyDidAcceptRequest(remoteAddress, request.getRawPathAndQuery());
 			HttpRequestResult requestResult = invokeRequestHandler(request, socket);
 
 			if (requestResult == null) {
-				writePlainTextResponse(socket, 500, "Internal server error");
+				writePlainTextResponse(socket, request, 500, "Internal server error");
 				return;
 			}
 
@@ -539,12 +561,12 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 				try {
 					if (!reserveConnectionSlot(connectionSlotReserved)) {
-						writeMarshaledResponse(socket, serviceUnavailableResponse(request), true);
+						writeMarshaledResponse(socket, request, serviceUnavailableResponse(request), true);
 						return;
 					}
 
 					liveConnection = registerLiveConnection(socket, request, connectionSlotReserved);
-					writeAcceptedEventStreamResponse(socket, requestResult.getMarshaledResponse());
+					writeAcceptedEventStreamResponse(socket, request, requestResult.getMarshaledResponse());
 					markConnectionEstablished(liveConnection);
 					startConnectionProcessor(liveConnection);
 					handedOffToStreamProcessor = true;
@@ -570,25 +592,36 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				}
 			}
 
-			writeMarshaledResponse(socket, requestResult.getMarshaledResponse(), true);
+			writeMarshaledResponse(socket, request, requestResult.getMarshaledResponse(), true);
 
 			if (request.getHttpMethod() == HttpMethod.DELETE
 					&& Integer.valueOf(204).equals(requestResult.getMarshaledResponse().getStatusCode()))
 				request.getHeader("MCP-Session-Id").ifPresent(this::terminateStreamsForSession);
 		} catch (RequestTooLargeException e) {
+			notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_REJECTED, e);
 			writePlainTextResponse(socket, 413, "Request entity too large");
 		} catch (SocketTimeoutException e) {
+			if (request == null)
+				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_TIMEOUT, e);
 			writePlainTextResponse(socket, 408, "Request timed out");
 		} catch (IllegalRequestException e) {
+			if (request == null)
+				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.UNPARSEABLE_REQUEST, e);
 			writePlainTextResponse(socket, 400, "Bad request");
 		} catch (IOException e) {
 			// client disconnected or write/read failed; nothing to do
 		} catch (Throwable throwable) {
+			if (request == null)
+				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.INTERNAL_ERROR, throwable);
+
 			safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during MCP request handling")
 					.throwable(throwable)
 					.request(request)
 					.build());
-			writePlainTextResponse(socket, 500, "Internal server error");
+			if (request == null)
+				writePlainTextResponse(socket, 500, "Internal server error");
+			else
+				writePlainTextResponse(socket, request, 500, "Internal server error");
 		} finally {
 			if (!handedOffToStreamProcessor)
 				releaseReservedConnectionSlot(connectionSlotReserved);
@@ -1123,6 +1156,17 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	}
 
 	private void writeAcceptedEventStreamResponse(@NonNull Socket socket,
+																								@NonNull Request request,
+																								@NonNull MarshaledResponse marshaledResponse) throws IOException {
+		requireNonNull(socket);
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+
+		writeObservedResponse(socket, request, marshaledResponse, () ->
+				writeAcceptedEventStreamResponse(socket, marshaledResponse));
+	}
+
+	private void writeAcceptedEventStreamResponse(@NonNull Socket socket,
 																								@NonNull MarshaledResponse marshaledResponse) throws IOException {
 		requireNonNull(socket);
 		requireNonNull(marshaledResponse);
@@ -1163,6 +1207,19 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				outputStream.flush();
 			}
 		});
+	}
+
+	private void writeMarshaledResponse(@NonNull Socket socket,
+																		 @NonNull Request request,
+																		 @NonNull MarshaledResponse marshaledResponse,
+																		 @NonNull Boolean closeConnection) throws IOException {
+		requireNonNull(socket);
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+		requireNonNull(closeConnection);
+
+		writeObservedResponse(socket, request, marshaledResponse, () ->
+				writeMarshaledResponse(socket, marshaledResponse, closeConnection));
 	}
 
 	private void writeMarshaledResponse(@NonNull Socket socket,
@@ -1225,6 +1282,35 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		});
 	}
 
+	private void writeObservedResponse(@NonNull Socket socket,
+																		 @NonNull Request request,
+																		 @NonNull MarshaledResponse marshaledResponse,
+																		 @NonNull IoWriteOperation writeOperation) throws IOException {
+		requireNonNull(socket);
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+		requireNonNull(writeOperation);
+
+		notifyWillWriteResponse(request, marshaledResponse);
+
+		long startedAtNanos = System.nanoTime();
+
+		try {
+			writeOperation.write();
+		} catch (IOException e) {
+			notifyDidFailToWriteResponse(request, marshaledResponse, Duration.ofNanos(System.nanoTime() - startedAtNanos), e);
+			throw e;
+		} catch (RuntimeException e) {
+			notifyDidFailToWriteResponse(request, marshaledResponse, Duration.ofNanos(System.nanoTime() - startedAtNanos), e);
+			throw e;
+		} catch (Error e) {
+			notifyDidFailToWriteResponse(request, marshaledResponse, Duration.ofNanos(System.nanoTime() - startedAtNanos), e);
+			throw e;
+		}
+
+		notifyDidWriteResponse(request, marshaledResponse, Duration.ofNanos(System.nanoTime() - startedAtNanos));
+	}
+
 	private static @Nullable byte[] byteBackedBodyBytesOrNull(@NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(marshaledResponse);
 
@@ -1250,6 +1336,25 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 		try {
 			writeMarshaledResponse(socket, MarshaledResponse.withStatusCode(statusCode)
+					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.body(body.getBytes(StandardCharsets.UTF_8))
+					.build(), true);
+		} catch (IOException ignored) {
+			// Nothing to do
+		}
+	}
+
+	private void writePlainTextResponse(@NonNull Socket socket,
+																			@NonNull Request request,
+																			@NonNull Integer statusCode,
+																			@NonNull String body) {
+		requireNonNull(socket);
+		requireNonNull(request);
+		requireNonNull(statusCode);
+		requireNonNull(body);
+
+		try {
+			writeMarshaledResponse(socket, request, MarshaledResponse.withStatusCode(statusCode)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
 					.body(body.getBytes(StandardCharsets.UTF_8))
 					.build(), true);
@@ -1378,6 +1483,339 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		} catch (Throwable throwable) {
 			throwable.printStackTrace(System.err);
 		}
+	}
+
+	private void safelyCollectMetrics(@NonNull String message,
+																		@NonNull Consumer<MetricsCollector> metricsConsumer) {
+		requireNonNull(message);
+		requireNonNull(metricsConsumer);
+
+		SokletConfig sokletConfig = this.sokletConfig;
+
+		if (sokletConfig == null)
+			return;
+
+		try {
+			metricsConsumer.accept(sokletConfig.getMetricsCollector());
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED, message)
+					.throwable(throwable)
+					.build());
+		}
+	}
+
+	private void notifyWillAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().willAcceptConnection(ServerType.MCP, remoteAddress);
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::willAcceptConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(throwable)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willAcceptConnection", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.willAcceptConnection(ServerType.MCP, remoteAddressSnapshot));
+	}
+
+	private void notifyDidAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().didAcceptConnection(ServerType.MCP, remoteAddress);
+		} catch (Throwable throwable) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::didAcceptConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(throwable)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didAcceptConnection", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didAcceptConnection(ServerType.MCP, remoteAddressSnapshot));
+	}
+
+	private void notifyDidFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress,
+																							 @NonNull ConnectionRejectionReason reason,
+																							 @Nullable Throwable throwable) {
+		requireNonNull(reason);
+
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().didFailToAcceptConnection(ServerType.MCP, remoteAddress, reason, throwable);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
+							format("An exception occurred while invoking %s::didFailToAcceptConnection", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		ConnectionRejectionReason reasonSnapshot = reason;
+		Throwable throwableSnapshot = throwable;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToAcceptConnection", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didFailToAcceptConnection(ServerType.MCP,
+						remoteAddressSnapshot,
+						reasonSnapshot,
+						throwableSnapshot));
+	}
+
+	private void notifyWillAcceptRequest(@Nullable InetSocketAddress remoteAddress,
+																			 @Nullable String requestTarget) {
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().willAcceptRequest(ServerType.MCP, remoteAddress, requestTarget);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::willAcceptRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willAcceptRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.willAcceptRequest(ServerType.MCP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidAcceptRequest(@Nullable InetSocketAddress remoteAddress,
+																			@Nullable String requestTarget) {
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().didAcceptRequest(ServerType.MCP, remoteAddress, requestTarget);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didAcceptRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didAcceptRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didAcceptRequest(ServerType.MCP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidFailToAcceptRequest(@Nullable InetSocketAddress remoteAddress,
+																						@Nullable String requestTarget,
+																						@NonNull RequestRejectionReason reason,
+																						@Nullable Throwable throwable) {
+		requireNonNull(reason);
+
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().didFailToAcceptRequest(ServerType.MCP, remoteAddress, requestTarget, reason, throwable);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didFailToAcceptRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+		RequestRejectionReason reasonSnapshot = reason;
+		Throwable throwableSnapshot = throwable;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToAcceptRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didFailToAcceptRequest(ServerType.MCP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot,
+						reasonSnapshot,
+						throwableSnapshot));
+	}
+
+	private void notifyWillReadRequest(@Nullable InetSocketAddress remoteAddress,
+																		 @Nullable String requestTarget) {
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().willReadRequest(ServerType.MCP, remoteAddress, requestTarget);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_READ_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::willReadRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willReadRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.willReadRequest(ServerType.MCP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidReadRequest(@Nullable InetSocketAddress remoteAddress,
+																		@Nullable String requestTarget) {
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().didReadRequest(ServerType.MCP, remoteAddress, requestTarget);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_READ_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didReadRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didReadRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didReadRequest(ServerType.MCP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot));
+	}
+
+	private void notifyDidFailToReadRequest(@Nullable InetSocketAddress remoteAddress,
+																					@Nullable String requestTarget,
+																					@NonNull RequestReadFailureReason reason,
+																					@Nullable Throwable throwable) {
+		requireNonNull(reason);
+
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().didFailToReadRequest(ServerType.MCP, remoteAddress, requestTarget, reason, throwable);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,
+							format("An exception occurred while invoking %s::didFailToReadRequest", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.build());
+		}
+
+		InetSocketAddress remoteAddressSnapshot = remoteAddress;
+		String requestTargetSnapshot = requestTarget;
+		RequestReadFailureReason reasonSnapshot = reason;
+		Throwable throwableSnapshot = throwable;
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToReadRequest", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didFailToReadRequest(ServerType.MCP,
+						remoteAddressSnapshot,
+						requestTargetSnapshot,
+						reasonSnapshot,
+						throwableSnapshot));
+	}
+
+	private void notifyWillWriteResponse(@NonNull Request request,
+																			 @NonNull MarshaledResponse marshaledResponse) {
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().willWriteResponse(ServerType.MCP, request, null, marshaledResponse);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_RESPONSE_FAILED,
+							format("An exception occurred while invoking %s::willWriteResponse", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.request(request)
+					.build());
+		}
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::willWriteResponse", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.willWriteResponse(ServerType.MCP, request, null, marshaledResponse));
+	}
+
+	private void notifyDidWriteResponse(@NonNull Request request,
+																			@NonNull MarshaledResponse marshaledResponse,
+																			@NonNull Duration responseWriteDuration) {
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+		requireNonNull(responseWriteDuration);
+
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().didWriteResponse(ServerType.MCP, request, null, marshaledResponse, responseWriteDuration);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_RESPONSE_FAILED,
+							format("An exception occurred while invoking %s::didWriteResponse", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.request(request)
+					.build());
+		}
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didWriteResponse", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didWriteResponse(ServerType.MCP, request, null, marshaledResponse, responseWriteDuration));
+	}
+
+	private void notifyDidFailToWriteResponse(@NonNull Request request,
+																						@NonNull MarshaledResponse marshaledResponse,
+																						@NonNull Duration responseWriteDuration,
+																						@NonNull Throwable throwable) {
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+		requireNonNull(responseWriteDuration);
+		requireNonNull(throwable);
+
+		try {
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig != null)
+				sokletConfig.getLifecycleObserver().didFailToWriteResponse(ServerType.MCP, request, null, marshaledResponse, responseWriteDuration, throwable);
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_RESPONSE_FAILED,
+							format("An exception occurred while invoking %s::didFailToWriteResponse", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.request(request)
+					.build());
+		}
+
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didFailToWriteResponse", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didFailToWriteResponse(ServerType.MCP, request, null, marshaledResponse, responseWriteDuration, throwable));
+	}
+
+	@NonNull
+	private static RequestRejectionReason rejectionReasonFor(@NonNull ExecutorService executorService) {
+		requireNonNull(executorService);
+
+		if (executorService.isShutdown() || executorService.isTerminated())
+			return RequestRejectionReason.REQUEST_HANDLER_EXECUTOR_SHUTDOWN;
+
+		return RequestRejectionReason.REQUEST_HANDLER_QUEUE_FULL;
 	}
 
 	@NonNull

@@ -17,7 +17,7 @@
 package com.soklet;
 
 /**
- * Reasons an HTTP or SSE request was rejected before application-level handling began.
+ * Reasons an HTTP, SSE, or MCP request was rejected before application-level handling began.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
