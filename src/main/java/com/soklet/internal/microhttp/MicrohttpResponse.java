@@ -151,11 +151,17 @@ public final class MicrohttpResponse {
     }
 
     private static void appendHeaders(HeadWriter writer, List<Header> headers) {
+        boolean batchHeaders = headers.size() > 16;
+
         for (Header header : headers) {
-            writeHeaderName(writer, header.name());
-            writer.write(COLON_SPACE);
-            writer.writeLatin1(header.value());
-            writer.write(CRLF);
+            if (batchHeaders) {
+                writer.writeHeader(header.name(), header.value());
+            } else {
+                writeHeaderName(writer, header.name());
+                writer.write(COLON_SPACE);
+                writer.writeLatin1(header.value());
+                writer.write(CRLF);
+            }
         }
     }
 
@@ -176,6 +182,23 @@ public final class MicrohttpResponse {
         }
     }
 
+    private static byte[] commonHeaderNameBytes(String name) {
+        return switch (name) {
+            case "Cache-Control" -> CACHE_CONTROL_HEADER_NAME;
+            case "Connection" -> CONNECTION_HEADER_NAME;
+            case "Content-Length" -> CONTENT_LENGTH_HEADER_NAME;
+            case "Content-Type" -> CONTENT_TYPE_HEADER_NAME;
+            case "Date" -> DATE_HEADER_NAME;
+            case "ETag" -> ETAG_HEADER_NAME;
+            case "Last-Modified" -> LAST_MODIFIED_HEADER_NAME;
+            case "Location" -> LOCATION_HEADER_NAME;
+            case "Server" -> SERVER_HEADER_NAME;
+            case "Set-Cookie" -> SET_COOKIE_HEADER_NAME;
+            case "Vary" -> VARY_HEADER_NAME;
+            default -> null;
+        };
+    }
+
     private static int initialHeadCapacity(long headerCount) {
         return (int) Math.min(8192L, 128L + (Math.max(0L, headerCount) * 32L));
     }
@@ -190,6 +213,10 @@ public final class MicrohttpResponse {
 
         private void write(byte[] bytes) {
             ensureCapacity(bytes.length);
+            writeUnchecked(bytes);
+        }
+
+        private void writeUnchecked(byte[] bytes) {
             System.arraycopy(bytes, 0, this.bytes, this.size, bytes.length);
             this.size += bytes.length;
         }
@@ -203,7 +230,7 @@ public final class MicrohttpResponse {
             }
 
             ensureCapacity(value.length());
-            writeLowBytes(value);
+            writeLowBytesUnchecked(value);
         }
 
         private void writeLatin1(String value) {
@@ -215,11 +242,60 @@ public final class MicrohttpResponse {
             }
 
             ensureCapacity(value.length());
-            writeLowBytes(value);
+            writeLowBytesUnchecked(value);
+        }
+
+        private void writeHeader(String name, String value) {
+            byte[] nameBytes = commonHeaderNameBytes(name);
+            byte[] encodedName = nameBytes;
+            byte[] encodedValue = null;
+            boolean asciiName = nameBytes != null || asciiOnly(name);
+            boolean latin1Value = latin1Only(value);
+
+            if (!asciiName)
+                encodedName = name.getBytes(StandardCharsets.US_ASCII);
+
+            if (!latin1Value)
+                encodedValue = value.getBytes(StandardCharsets.ISO_8859_1);
+
+            int nameLength = encodedName == null ? name.length() : encodedName.length;
+            int valueLength = encodedValue == null ? value.length() : encodedValue.length;
+
+            ensureCapacity(nameLength + COLON_SPACE.length + valueLength + CRLF.length);
+
+            if (encodedName == null)
+                writeLowBytesUnchecked(name);
+            else
+                writeUnchecked(encodedName);
+
+            writeUnchecked(COLON_SPACE);
+
+            if (encodedValue == null)
+                writeLowBytesUnchecked(value);
+            else
+                writeUnchecked(encodedValue);
+
+            writeUnchecked(CRLF);
+        }
+
+        private boolean asciiOnly(String value) {
+            for (int i = 0; i < value.length(); i++)
+                if (value.charAt(i) > 0x7F)
+                    return false;
+
+            return true;
+        }
+
+        private boolean latin1Only(String value) {
+            for (int i = 0; i < value.length(); i++)
+                if (value.charAt(i) > 0xFF)
+                    return false;
+
+            return true;
         }
 
         @SuppressWarnings("deprecation")
-        private void writeLowBytes(String value) {
+        private void writeLowBytesUnchecked(String value) {
             value.getBytes(0, value.length(), this.bytes, this.size);
             this.size += value.length();
         }
