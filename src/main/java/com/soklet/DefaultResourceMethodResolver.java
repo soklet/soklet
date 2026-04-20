@@ -93,15 +93,21 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-public static DefaultResourceMethodResolver fromClasses(@Nullable Set<@NonNull Class<?>> resourceClasses) {
+	public static DefaultResourceMethodResolver fromClasses(@Nullable Set<@NonNull Class<?>> resourceClasses) {
 		requireNonNull(resourceClasses);
 		return new DefaultResourceMethodResolver(resourceClasses, null);
 	}
 
 	@NonNull
-public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Method> methods) {
+	public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Method> methods) {
 		requireNonNull(methods);
 		return new DefaultResourceMethodResolver(null, methods);
+	}
+
+	@NonNull
+	static DefaultResourceMethodResolver fromResourceMethods(@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
+		requireNonNull(resourceMethods);
+		return new DefaultResourceMethodResolver(resourceMethods);
 	}
 
 	@NonNull
@@ -112,6 +118,8 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 	private final Map<@NonNull Method, @NonNull Set<@NonNull HttpMethodResourcePathDeclaration>> httpMethodResourcePathDeclarationsByMethod;
 	@NonNull
 	private final Set<@NonNull ResourceMethod> resourceMethods;
+	@NonNull
+	private final RouteIndex routeIndex;
 
 	private DefaultResourceMethodResolver() {
 		// Read declarations from SokletProcessor's compile-time lookup table
@@ -143,6 +151,42 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 		this.httpMethodResourcePathDeclarationsByMethod = Collections.unmodifiableMap(byMethod);
 		this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
 		validateNoAmbiguousResourceMethods(this.resourceMethods);
+		this.routeIndex = RouteIndex.fromResourceMethods(this.resourceMethods);
+	}
+
+	private DefaultResourceMethodResolver(@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
+		requireNonNull(resourceMethods);
+
+		Set<Method> methods = new HashSet<>();
+		Map<HttpMethod, Set<Method>> methodsByHttpMethod = new HashMap<>();
+		Map<Method, Set<HttpMethodResourcePathDeclaration>> httpMethodResourcePathDeclarationsByMethod = new HashMap<>();
+		Set<ResourceMethod> resourceMethodsCopy = new HashSet<>();
+
+		for (ResourceMethod resourceMethod : resourceMethods) {
+			requireNonNull(resourceMethod);
+
+			HttpMethod httpMethod = resourceMethod.getHttpMethod();
+			Method method = resourceMethod.getMethod();
+			ResourcePathDeclaration resourcePathDeclaration = resourceMethod.getResourcePathDeclaration();
+			Boolean sseEventSource = resourceMethod.isSseEventSource();
+
+			if (sseEventSource && !SseHandshakeResult.class.isAssignableFrom(method.getReturnType()))
+				throw new IllegalStateException(format("Resource Methods annotated with @%s must be declared to return an instance of %s (e.g. %s.accept()). Incorrect Resource Method was %s",
+						SseEventSource.class.getSimpleName(), SseHandshakeResult.class.getSimpleName(), SseHandshakeResult.class.getSimpleName(), method));
+
+			methods.add(method);
+			methodsByHttpMethod.computeIfAbsent(httpMethod, ignored -> new HashSet<>()).add(method);
+			httpMethodResourcePathDeclarationsByMethod.computeIfAbsent(method, ignored -> new HashSet<>())
+					.add(new HttpMethodResourcePathDeclaration(httpMethod, resourcePathDeclaration, sseEventSource));
+			resourceMethodsCopy.add(resourceMethod);
+		}
+
+		this.methods = Collections.unmodifiableSet(methods);
+		this.methodsByHttpMethod = Collections.unmodifiableMap(methodsByHttpMethod);
+		this.httpMethodResourcePathDeclarationsByMethod = Collections.unmodifiableMap(httpMethodResourcePathDeclarationsByMethod);
+		this.resourceMethods = Collections.unmodifiableSet(resourceMethodsCopy);
+		validateNoAmbiguousResourceMethods(this.resourceMethods);
+		this.routeIndex = RouteIndex.fromResourceMethods(this.resourceMethods);
 	}
 
 	@ThreadSafe
@@ -316,6 +360,7 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 
 		this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
 		validateNoAmbiguousResourceMethods(this.resourceMethods);
+		this.routeIndex = RouteIndex.fromResourceMethods(this.resourceMethods);
 	}
 
 	@NonNull
@@ -325,39 +370,12 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 		requireNonNull(request);
 		requireNonNull(serverType);
 
-		Set<Method> methods = getMethodsByHttpMethod().get(request.getHttpMethod());
-		if (methods == null)
-			return Optional.empty();
-
 		ResourcePath resourcePath = request.getResourcePath();
-		Set<ResourceMethod> matchingResourceMethods = new HashSet<>(4);
-
-		// Collect all resource methods matching the HTTP method and whose resource path declaration matches the request.
-		for (Entry<Method, Set<HttpMethodResourcePathDeclaration>> entry : getHttpMethodResourcePathDeclarationsByMethod().entrySet()) {
-			Method method = entry.getKey();
-			Set<HttpMethodResourcePathDeclaration> httpMethodResourcePathDeclarations = entry.getValue();
-			for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations)
-				if (httpMethodResourcePathDeclaration.getHttpMethod().equals(request.getHttpMethod())
-						&& resourcePath.matches(httpMethodResourcePathDeclaration.getResourcePathDeclaration())) {
-					// Special handling based on ServerType: if the Resource Method is marked as @SseEventSource then it can only be used by an SSE server.
-					// Similarly, any Resource Method marked with @GET, @POST etc. is only usable by the Standard HTTP server.
-					boolean isSseEventSource = httpMethodResourcePathDeclaration.isSseEventSource();
-					boolean isSseServer = serverType == ServerType.SSE;
-
-					if (isSseEventSource != isSseServer)
-						continue;
-
-					matchingResourceMethods.add(ResourceMethod.fromComponents(
-							request.getHttpMethod(),
-							httpMethodResourcePathDeclaration.getResourcePathDeclaration(),
-							method,
-							httpMethodResourcePathDeclaration.isSseEventSource()));
-				}
-		}
+		Set<ResourceMethod> matchingResourceMethods = this.routeIndex.matchingResourceMethods(request.getHttpMethod(), serverType, resourcePath);
 
 		// Simple case - if exactly one resource method remains, use it.
 		if (matchingResourceMethods.size() == 1)
-			return matchingResourceMethods.stream().findFirst();
+			return Optional.of(matchingResourceMethods.iterator().next());
 
 		// Multiple matches: narrow by specificity.
 		if (matchingResourceMethods.size() > 1) {
@@ -620,6 +638,155 @@ public static DefaultResourceMethodResolver fromMethods(@NonNull Set<@NonNull Me
 			return first.getValue().equals(second.getValue());
 
 		return true;
+	}
+
+	private static final class RouteIndex {
+		@NonNull
+		private final Map<@NonNull RouteIndexKey, @NonNull RouteNode> roots;
+
+		private RouteIndex(@NonNull Map<@NonNull RouteIndexKey, @NonNull RouteNode> roots) {
+			requireNonNull(roots);
+			this.roots = roots;
+		}
+
+		@NonNull
+		private static RouteIndex fromResourceMethods(@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
+			requireNonNull(resourceMethods);
+
+			Map<RouteIndexKey, RouteNode> roots = new HashMap<>();
+
+			for (ResourceMethod resourceMethod : resourceMethods) {
+				RouteIndexKey key = new RouteIndexKey(resourceMethod.getHttpMethod(), resourceMethod.isSseEventSource());
+				RouteNode root = roots.computeIfAbsent(key, ignored -> new RouteNode());
+				root.add(resourceMethod);
+			}
+
+			return new RouteIndex(Collections.unmodifiableMap(roots));
+		}
+
+		@NonNull
+		private Set<@NonNull ResourceMethod> matchingResourceMethods(@NonNull HttpMethod httpMethod,
+																																 @NonNull ServerType serverType,
+																																 @NonNull ResourcePath resourcePath) {
+			requireNonNull(httpMethod);
+			requireNonNull(serverType);
+			requireNonNull(resourcePath);
+
+			if (resourcePath == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH)
+				return Collections.emptySet();
+
+			RouteNode root = this.roots.get(new RouteIndexKey(httpMethod, serverType == ServerType.SSE));
+
+			if (root == null)
+				return Collections.emptySet();
+
+			Set<ResourceMethod> matches = new HashSet<>(4);
+			List<RouteNode> activeNodes = List.of(root);
+			root.addVarargsMatches(matches);
+
+			for (String component : resourcePath.getComponents()) {
+				List<RouteNode> nextNodes = new ArrayList<>(activeNodes.size() * 2);
+
+				for (RouteNode activeNode : activeNodes) {
+					RouteNode literalChild = activeNode.literalChildren.get(component);
+
+					if (literalChild != null) {
+						nextNodes.add(literalChild);
+						literalChild.addVarargsMatches(matches);
+					}
+
+					RouteNode placeholderChild = activeNode.placeholderChild;
+
+					if (placeholderChild != null) {
+						nextNodes.add(placeholderChild);
+						placeholderChild.addVarargsMatches(matches);
+					}
+				}
+
+				if (nextNodes.isEmpty()) {
+					removeFalsePositives(matches, resourcePath);
+					return matches.isEmpty() ? Collections.emptySet() : matches;
+				}
+
+				activeNodes = nextNodes;
+			}
+
+			for (RouteNode activeNode : activeNodes)
+				activeNode.addTerminalMatches(matches);
+
+			removeFalsePositives(matches, resourcePath);
+			return matches.isEmpty() ? Collections.emptySet() : matches;
+		}
+
+		private void removeFalsePositives(@NonNull Set<@NonNull ResourceMethod> matches,
+																			@NonNull ResourcePath resourcePath) {
+			requireNonNull(matches);
+			requireNonNull(resourcePath);
+			matches.removeIf(resourceMethod -> !resourcePath.matches(resourceMethod.getResourcePathDeclaration()));
+		}
+	}
+
+	private static final class RouteNode {
+		@NonNull
+		private final Map<@NonNull String, @NonNull RouteNode> literalChildren;
+		@Nullable
+		private RouteNode placeholderChild;
+		@NonNull
+		private final List<@NonNull ResourceMethod> terminalResourceMethods;
+		@NonNull
+		private final List<@NonNull ResourceMethod> varargsResourceMethods;
+
+		private RouteNode() {
+			this.literalChildren = new HashMap<>();
+			this.terminalResourceMethods = new ArrayList<>(1);
+			this.varargsResourceMethods = new ArrayList<>(1);
+		}
+
+		private void add(@NonNull ResourceMethod resourceMethod) {
+			requireNonNull(resourceMethod);
+
+			List<ResourcePathDeclaration.Component> components = resourceMethod.getResourcePathDeclaration().getComponents();
+			boolean varargs = resourceMethod.getResourcePathDeclaration().getVarargsComponent().isPresent();
+			int fixedComponentCount = components.size() - (varargs ? 1 : 0);
+			RouteNode node = this;
+
+			for (int i = 0; i < fixedComponentCount; i++) {
+				ResourcePathDeclaration.Component component = components.get(i);
+
+				if (component.getType() == ResourcePathDeclaration.ComponentType.LITERAL) {
+					node = node.literalChildren.computeIfAbsent(component.getValue(), ignored -> new RouteNode());
+				} else {
+					if (node.placeholderChild == null)
+						node.placeholderChild = new RouteNode();
+
+					node = node.placeholderChild;
+				}
+			}
+
+			if (varargs) {
+				node.varargsResourceMethods.add(resourceMethod);
+			} else {
+				node.terminalResourceMethods.add(resourceMethod);
+			}
+		}
+
+		private void addTerminalMatches(@NonNull Set<@NonNull ResourceMethod> matches) {
+			requireNonNull(matches);
+			matches.addAll(this.terminalResourceMethods);
+		}
+
+		private void addVarargsMatches(@NonNull Set<@NonNull ResourceMethod> matches) {
+			requireNonNull(matches);
+			matches.addAll(this.varargsResourceMethods);
+		}
+	}
+
+	private record RouteIndexKey(@NonNull HttpMethod httpMethod,
+															 @NonNull Boolean sseEventSource) {
+		private RouteIndexKey {
+			requireNonNull(httpMethod);
+			requireNonNull(sseEventSource);
+		}
 	}
 
 	private record SpecificityKey(@NonNull HttpMethod httpMethod,

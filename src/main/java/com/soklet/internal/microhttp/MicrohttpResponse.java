@@ -5,6 +5,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 import static java.nio.file.StandardOpenOption.READ;
@@ -105,18 +106,30 @@ public final class MicrohttpResponse {
     static final byte[] COLON_SPACE = ": ".getBytes(StandardCharsets.US_ASCII);
     static final byte[] SPACE = " ".getBytes(StandardCharsets.US_ASCII);
     static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] CACHE_CONTROL_HEADER_NAME = "Cache-Control".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] CONNECTION_HEADER_NAME = "Connection".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] CONTENT_LENGTH_HEADER_NAME = "Content-Length".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] CONTENT_TYPE_HEADER_NAME = "Content-Type".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] DATE_HEADER_NAME = "Date".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] ETAG_HEADER_NAME = "ETag".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] LAST_MODIFIED_HEADER_NAME = "Last-Modified".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] LOCATION_HEADER_NAME = "Location".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] SERVER_HEADER_NAME = "Server".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] SET_COOKIE_HEADER_NAME = "Set-Cookie".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] VARY_HEADER_NAME = "Vary".getBytes(StandardCharsets.US_ASCII);
 
     byte[] serialize(String version, List<Header> headers) {
-        ByteMerger merger = new ByteMerger();
-        appendHead(version, headers, merger);
-        merger.add(body());
-        return merger.merge();
+        byte[] head = serializeHead(version, headers);
+        byte[] responseBody = body();
+        byte[] result = Arrays.copyOf(head, head.length + responseBody.length);
+        System.arraycopy(responseBody, 0, result, head.length, responseBody.length);
+        return result;
     }
 
     byte[] serializeHead(String version, List<Header> headers) {
-        ByteMerger merger = new ByteMerger();
-        appendHead(version, headers, merger);
-        return merger.merge();
+        HeadWriter writer = new HeadWriter(initialHeadCapacity((long) headers.size() + this.headers.size()));
+        appendHead(version, headers, writer);
+        return writer.toByteArray();
     }
 
     WritableSource writableSource(byte[] serializedHead) throws IOException {
@@ -125,24 +138,111 @@ public final class MicrohttpResponse {
                 bodySourceFactory.create()));
     }
 
-    private void appendHead(String version, List<Header> headers, ByteMerger merger) {
-        merger.add(version.getBytes(StandardCharsets.US_ASCII));
-        merger.add(SPACE);
-        merger.add(Integer.toString(status).getBytes(StandardCharsets.US_ASCII));
-        merger.add(SPACE);
-        merger.add(reason.getBytes(StandardCharsets.ISO_8859_1));
-        merger.add(CRLF);
-        appendHeaders(merger, headers);
-        appendHeaders(merger, this.headers);
-        merger.add(CRLF);
+    private void appendHead(String version, List<Header> headers, HeadWriter writer) {
+        writer.writeAscii(version);
+        writer.write(SPACE);
+        writer.writeAscii(Integer.toString(status));
+        writer.write(SPACE);
+        writer.writeLatin1(reason);
+        writer.write(CRLF);
+        appendHeaders(writer, headers);
+        appendHeaders(writer, this.headers);
+        writer.write(CRLF);
     }
 
-    private static void appendHeaders(ByteMerger merger, List<Header> headers) {
+    private static void appendHeaders(HeadWriter writer, List<Header> headers) {
         for (Header header : headers) {
-            merger.add(header.name().getBytes(StandardCharsets.US_ASCII));
-            merger.add(COLON_SPACE);
-            merger.add(header.value().getBytes(StandardCharsets.ISO_8859_1));
-            merger.add(CRLF);
+            writeHeaderName(writer, header.name());
+            writer.write(COLON_SPACE);
+            writer.writeLatin1(header.value());
+            writer.write(CRLF);
+        }
+    }
+
+    private static void writeHeaderName(HeadWriter writer, String name) {
+        switch (name) {
+            case "Cache-Control" -> writer.write(CACHE_CONTROL_HEADER_NAME);
+            case "Connection" -> writer.write(CONNECTION_HEADER_NAME);
+            case "Content-Length" -> writer.write(CONTENT_LENGTH_HEADER_NAME);
+            case "Content-Type" -> writer.write(CONTENT_TYPE_HEADER_NAME);
+            case "Date" -> writer.write(DATE_HEADER_NAME);
+            case "ETag" -> writer.write(ETAG_HEADER_NAME);
+            case "Last-Modified" -> writer.write(LAST_MODIFIED_HEADER_NAME);
+            case "Location" -> writer.write(LOCATION_HEADER_NAME);
+            case "Server" -> writer.write(SERVER_HEADER_NAME);
+            case "Set-Cookie" -> writer.write(SET_COOKIE_HEADER_NAME);
+            case "Vary" -> writer.write(VARY_HEADER_NAME);
+            default -> writer.writeAscii(name);
+        }
+    }
+
+    private static int initialHeadCapacity(long headerCount) {
+        return (int) Math.min(8192L, 128L + (Math.max(0L, headerCount) * 32L));
+    }
+
+    private static final class HeadWriter {
+        private byte[] bytes;
+        private int size;
+
+        private HeadWriter(int initialCapacity) {
+            this.bytes = new byte[Math.max(64, initialCapacity)];
+        }
+
+        private void write(byte[] bytes) {
+            ensureCapacity(bytes.length);
+            System.arraycopy(bytes, 0, this.bytes, this.size, bytes.length);
+            this.size += bytes.length;
+        }
+
+        private void writeAscii(String value) {
+            for (int i = 0; i < value.length(); i++) {
+                if (value.charAt(i) > 0x7F) {
+                    write(value.getBytes(StandardCharsets.US_ASCII));
+                    return;
+                }
+            }
+
+            ensureCapacity(value.length());
+            writeLowBytes(value);
+        }
+
+        private void writeLatin1(String value) {
+            for (int i = 0; i < value.length(); i++) {
+                if (value.charAt(i) > 0xFF) {
+                    write(value.getBytes(StandardCharsets.ISO_8859_1));
+                    return;
+                }
+            }
+
+            ensureCapacity(value.length());
+            writeLowBytes(value);
+        }
+
+        @SuppressWarnings("deprecation")
+        private void writeLowBytes(String value) {
+            value.getBytes(0, value.length(), this.bytes, this.size);
+            this.size += value.length();
+        }
+
+        private void ensureCapacity(int additionalBytes) {
+            long requiredCapacity = (long) this.size + additionalBytes;
+
+            if (requiredCapacity > Integer.MAX_VALUE)
+                throw new IllegalStateException("Serialized response head length exceeds maximum supported size.");
+
+            if (requiredCapacity <= this.bytes.length)
+                return;
+
+            int newCapacity = this.bytes.length;
+
+            while (newCapacity < requiredCapacity)
+                newCapacity = newCapacity <= Integer.MAX_VALUE / 2 ? newCapacity * 2 : Integer.MAX_VALUE;
+
+            this.bytes = Arrays.copyOf(this.bytes, newCapacity);
+        }
+
+        private byte[] toByteArray() {
+            return Arrays.copyOf(this.bytes, this.size);
         }
     }
 
