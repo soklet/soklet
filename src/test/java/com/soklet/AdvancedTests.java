@@ -657,8 +657,8 @@ public class AdvancedTests {
 		Assertions.assertTrue(defaultServer.getEventLoop().isEmpty(), "Event loop should be cleared after stop");
 		Assertions.assertTrue(defaultServer.getRequestHandlerExecutorService().isEmpty(),
 				"Request handler executor should be cleared after stop");
-		Assertions.assertTrue(defaultServer.getRequestHandlerTimeoutExecutorService().isEmpty(),
-				"Timeout executor should be cleared after stop");
+		Assertions.assertTrue(defaultServer.getRequestHandlerTimeoutScheduler().isEmpty(),
+				"Timeout scheduler should be cleared after stop");
 	}
 
 	@Test
@@ -707,8 +707,8 @@ public class AdvancedTests {
 				"SSE resource path cache should be cleared after stop");
 		Assertions.assertTrue(defaultSseServer.getRequestHandlerExecutorService().isEmpty(),
 				"SSE request handler executor should be cleared after stop");
-		Assertions.assertTrue(defaultSseServer.getRequestHandlerTimeoutExecutorService().isEmpty(),
-				"SSE timeout executor should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getRequestHandlerTimeoutScheduler().isEmpty(),
+				"SSE timeout scheduler should be cleared after stop");
 		Assertions.assertTrue(defaultSseServer.getRequestReaderExecutorService().isEmpty(),
 				"SSE request reader executor should be cleared after stop");
 		Assertions.assertTrue(defaultSseServer.getEventLoopThread().isEmpty(),

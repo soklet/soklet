@@ -53,9 +53,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -177,7 +174,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
-	private volatile ScheduledExecutorService requestHandlerTimeoutExecutorService;
+	private volatile TimeoutScheduler requestHandlerTimeoutScheduler;
 	@Nullable
 	private volatile ExecutorService connectionExecutorService;
 	@Nullable
@@ -298,10 +295,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 			this.serverSocket = serverSocket;
 			this.requestHandlerExecutorService = this.requestHandlerExecutorServiceSupplier.get();
-			ScheduledThreadPoolExecutor timeoutExecutor = new ScheduledThreadPoolExecutor(1,
-					new DefaultHttpServer.NonvirtualThreadFactory("mcp-request-timeout"));
-			timeoutExecutor.setRemoveOnCancelPolicy(true);
-			this.requestHandlerTimeoutExecutorService = timeoutExecutor;
+			this.requestHandlerTimeoutScheduler = new TimeoutScheduler(new DefaultHttpServer.NonvirtualThreadFactory("mcp-request-timeout"));
 			this.connectionExecutorService = this.connectionExecutorServiceSupplier.get();
 			this.stopPoisonPill.set(false);
 			this.stopping = false;
@@ -326,7 +320,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		Thread acceptThreadSnapshot;
 		ServerSocket serverSocketSnapshot;
 		ExecutorService requestHandlerExecutorServiceSnapshot;
-		ScheduledExecutorService requestHandlerTimeoutExecutorServiceSnapshot;
+		TimeoutScheduler requestHandlerTimeoutSchedulerSnapshot;
 		ExecutorService connectionExecutorServiceSnapshot;
 
 		getLock().lock();
@@ -340,7 +334,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			acceptThreadSnapshot = this.acceptThread;
 			serverSocketSnapshot = this.serverSocket;
 			requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
-			requestHandlerTimeoutExecutorServiceSnapshot = this.requestHandlerTimeoutExecutorService;
+			requestHandlerTimeoutSchedulerSnapshot = this.requestHandlerTimeoutScheduler;
 			connectionExecutorServiceSnapshot = this.connectionExecutorService;
 		} finally {
 			getLock().unlock();
@@ -364,8 +358,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		if (requestHandlerExecutorServiceSnapshot != null)
 			requestHandlerExecutorServiceSnapshot.shutdownNow();
 
-		if (requestHandlerTimeoutExecutorServiceSnapshot != null)
-			requestHandlerTimeoutExecutorServiceSnapshot.shutdownNow();
+		if (requestHandlerTimeoutSchedulerSnapshot != null)
+			requestHandlerTimeoutSchedulerSnapshot.shutdownNow();
 
 		if (connectionExecutorServiceSnapshot != null)
 			connectionExecutorServiceSnapshot.shutdownNow();
@@ -375,7 +369,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		try {
 			hardenJoin(acceptThreadSnapshot, remainingMillis(deadlineNanos));
 			awaitPoolTermination(requestHandlerExecutorServiceSnapshot, remainingMillis(deadlineNanos));
-			awaitPoolTermination(requestHandlerTimeoutExecutorServiceSnapshot, remainingMillis(deadlineNanos));
+			awaitSchedulerTermination(requestHandlerTimeoutSchedulerSnapshot, remainingMillis(deadlineNanos));
 			awaitPoolTermination(connectionExecutorServiceSnapshot, remainingMillis(deadlineNanos));
 		} finally {
 			getLock().lock();
@@ -384,7 +378,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				this.acceptThread = null;
 				this.serverSocket = null;
 				this.requestHandlerExecutorService = null;
-				this.requestHandlerTimeoutExecutorService = null;
+				this.requestHandlerTimeoutScheduler = null;
 				this.connectionExecutorService = null;
 				this.started = false;
 				this.stopping = false;
@@ -666,7 +660,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		AtomicReference<Throwable> callbackThrowableReference = new AtomicReference<>();
 		AtomicReference<Thread> handlerThreadReference = new AtomicReference<>(Thread.currentThread());
 		AtomicBoolean timedOut = new AtomicBoolean(false);
-		ScheduledFuture<?> timeoutFuture = scheduleTimeout(socket, handlerThreadReference.get(), timedOut);
+		TimeoutScheduler.ScheduledTask timeoutTask = scheduleTimeout(socket, handlerThreadReference.get(), timedOut);
 
 		try {
 			requestHandler.handleRequest(request, requestResult -> {
@@ -690,7 +684,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			Thread.currentThread().interrupt();
 			throw e;
 		} finally {
-			cancelTimeout(timeoutFuture);
+			cancelTimeout(timeoutTask);
 		}
 
 		Throwable callbackThrowable = callbackThrowableReference.get();
@@ -705,20 +699,19 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		return requestResultReference.get();
 	}
 
-	@Nullable
-	private ScheduledFuture<?> scheduleTimeout(@NonNull Socket socket,
-																						 @NonNull Thread handlerThread,
-																						 @NonNull AtomicBoolean timedOut) {
+	private TimeoutScheduler.@Nullable ScheduledTask scheduleTimeout(@NonNull Socket socket,
+																																	 @NonNull Thread handlerThread,
+																																	 @NonNull AtomicBoolean timedOut) {
 		requireNonNull(socket);
 		requireNonNull(handlerThread);
 		requireNonNull(timedOut);
 
-		ScheduledExecutorService requestHandlerTimeoutExecutorService = this.requestHandlerTimeoutExecutorService;
+		TimeoutScheduler requestHandlerTimeoutScheduler = this.requestHandlerTimeoutScheduler;
 
-		if (requestHandlerTimeoutExecutorService == null || requestHandlerTimeoutExecutorService.isShutdown())
+		if (requestHandlerTimeoutScheduler == null || requestHandlerTimeoutScheduler.isShutdown())
 			return null;
 
-		return requestHandlerTimeoutExecutorService.schedule(() -> {
+		return requestHandlerTimeoutScheduler.schedule(() -> {
 			timedOut.set(true);
 			try {
 				socket.close();
@@ -726,7 +719,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				// Nothing to do
 			}
 			handlerThread.interrupt();
-		}, Math.max(1L, this.requestHandlerTimeout.toMillis()), TimeUnit.MILLISECONDS);
+		}, this.requestHandlerTimeout);
 	}
 
 	@NonNull
@@ -1368,15 +1361,15 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		if (this.requestHandlerExecutorService != null)
 			this.requestHandlerExecutorService.shutdownNow();
 
-		if (this.requestHandlerTimeoutExecutorService != null)
-			this.requestHandlerTimeoutExecutorService.shutdownNow();
+		if (this.requestHandlerTimeoutScheduler != null)
+			this.requestHandlerTimeoutScheduler.shutdownNow();
 
 		if (this.connectionExecutorService != null)
 			this.connectionExecutorService.shutdownNow();
 
 		this.serverSocket = null;
 		this.requestHandlerExecutorService = null;
-		this.requestHandlerTimeoutExecutorService = null;
+		this.requestHandlerTimeoutScheduler = null;
 		this.connectionExecutorService = null;
 		this.acceptThread = null;
 		this.started = false;
@@ -1390,6 +1383,18 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 		try {
 			executorService.awaitTermination(Math.max(0L, timeoutMillis), TimeUnit.MILLISECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	private void awaitSchedulerTermination(@Nullable TimeoutScheduler timeoutScheduler,
+																				 long timeoutMillis) {
+		if (timeoutScheduler == null)
+			return;
+
+		try {
+			timeoutScheduler.awaitTermination(Math.max(0L, timeoutMillis), TimeUnit.MILLISECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
@@ -1411,9 +1416,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		return Math.max(0L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
 	}
 
-	private void cancelTimeout(@Nullable ScheduledFuture<?> timeoutFuture) {
-		if (timeoutFuture != null)
-			timeoutFuture.cancel(false);
+	private void cancelTimeout(TimeoutScheduler.@Nullable ScheduledTask timeoutTask) {
+		if (timeoutTask != null)
+			timeoutTask.cancel();
 	}
 
 	private void performWriteWithTimeout(@NonNull Socket socket,
@@ -1426,18 +1431,18 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			return;
 		}
 
-		ScheduledExecutorService timeoutExecutor = this.requestHandlerTimeoutExecutorService;
+		TimeoutScheduler timeoutScheduler = this.requestHandlerTimeoutScheduler;
 
-		if (timeoutExecutor == null || timeoutExecutor.isShutdown()) {
+		if (timeoutScheduler == null || timeoutScheduler.isShutdown()) {
 			ioWriteOperation.write();
 			return;
 		}
 
 		AtomicBoolean timedOut = new AtomicBoolean(false);
-		ScheduledFuture<?> timeoutFuture = timeoutExecutor.schedule(() -> {
+		TimeoutScheduler.ScheduledTask timeoutTask = timeoutScheduler.schedule(() -> {
 			timedOut.set(true);
 			closeQuietly(socket);
-		}, Math.max(1L, this.writeTimeout.toMillis()), TimeUnit.MILLISECONDS);
+		}, this.writeTimeout);
 
 		try {
 			ioWriteOperation.write();
@@ -1450,7 +1455,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 			throw e;
 		} finally {
-			cancelTimeout(timeoutFuture);
+			cancelTimeout(timeoutTask);
 		}
 
 		if (timedOut.get())

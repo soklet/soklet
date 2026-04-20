@@ -45,8 +45,6 @@ import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -518,10 +516,10 @@ public class McpServerLifecycleTests {
 				.writeTimeout(Duration.ofMillis(50))
 				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
 				.build();
-		ScheduledExecutorService timeoutExecutor = new ScheduledThreadPoolExecutor(1);
-		Field timeoutExecutorField = DefaultMcpServer.class.getDeclaredField("requestHandlerTimeoutExecutorService");
-		timeoutExecutorField.setAccessible(true);
-		timeoutExecutorField.set(defaultMcpServer, timeoutExecutor);
+		TimeoutScheduler timeoutScheduler = new TimeoutScheduler(new DefaultHttpServer.NonvirtualThreadFactory("mcp-test-timeout"));
+		Field timeoutSchedulerField = DefaultMcpServer.class.getDeclaredField("requestHandlerTimeoutScheduler");
+		timeoutSchedulerField.setAccessible(true);
+		timeoutSchedulerField.set(defaultMcpServer, timeoutScheduler);
 
 		Method writeMethod = DefaultMcpServer.class.getDeclaredMethod("writeMarshaledResponse", Socket.class, MarshaledResponse.class, Boolean.class);
 		writeMethod.setAccessible(true);
@@ -540,8 +538,8 @@ public class McpServerLifecycleTests {
 			Assertions.assertInstanceOf(SocketTimeoutException.class, invocationTargetException.getCause());
 			Assertions.assertTrue(blockingSocket.closed.get());
 		} finally {
-			timeoutExecutor.shutdownNow();
-			timeoutExecutor.awaitTermination(1, TimeUnit.SECONDS);
+			timeoutScheduler.shutdownNow();
+			timeoutScheduler.awaitTermination(1, TimeUnit.SECONDS);
 		}
 	}
 

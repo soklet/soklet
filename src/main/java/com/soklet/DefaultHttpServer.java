@@ -53,9 +53,6 @@ import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -155,7 +152,7 @@ final class DefaultHttpServer implements HttpServer {
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
-	private volatile ScheduledExecutorService requestHandlerTimeoutExecutorService;
+	private volatile TimeoutScheduler requestHandlerTimeoutScheduler;
 	@Nullable
 	private volatile RequestHandler requestHandler;
 	@Nullable
@@ -305,7 +302,7 @@ final class DefaultHttpServer implements HttpServer {
 
 			Handler handler = ((microhttpRequest, microHttpCallback) -> {
 				ExecutorService requestHandlerExecutorServiceReference = this.requestHandlerExecutorService;
-				ScheduledExecutorService requestHandlerTimeoutExecutorServiceReference = this.requestHandlerTimeoutExecutorService;
+				TimeoutScheduler requestHandlerTimeoutSchedulerReference = this.requestHandlerTimeoutScheduler;
 				InetSocketAddress remoteAddress = microhttpRequest.remoteAddress();
 				String requestTarget = microhttpRequest.uri();
 
@@ -329,11 +326,11 @@ final class DefaultHttpServer implements HttpServer {
 				}
 
 				AtomicBoolean responseWritten = new AtomicBoolean(false);
-				AtomicReference<ScheduledFuture<?>> timeoutFutureRef = new AtomicReference<>();
+				AtomicReference<TimeoutScheduler.ScheduledTask> timeoutFutureRef = new AtomicReference<>();
 				AtomicReference<Thread> handlerThreadRef = new AtomicReference<>();
 
-				if (requestHandlerTimeoutExecutorServiceReference != null && !requestHandlerTimeoutExecutorServiceReference.isShutdown()) {
-					timeoutFutureRef.set(requestHandlerTimeoutExecutorServiceReference.schedule(() -> {
+				if (requestHandlerTimeoutSchedulerReference != null && !requestHandlerTimeoutSchedulerReference.isShutdown()) {
+					timeoutFutureRef.set(requestHandlerTimeoutSchedulerReference.schedule(() -> {
 						if (!responseWritten.compareAndSet(false, true))
 							return;
 
@@ -351,7 +348,7 @@ final class DefaultHttpServer implements HttpServer {
 									.throwable(t2)
 									.build());
 						}
-					}, Math.max(1L, getRequestHandlerTimeout().toMillis()), TimeUnit.MILLISECONDS));
+					}, getRequestHandlerTimeout()));
 				}
 
 				try {
@@ -498,11 +495,7 @@ final class DefaultHttpServer implements HttpServer {
 			});
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
-			ScheduledThreadPoolExecutor timeoutExecutor = new ScheduledThreadPoolExecutor(
-					1,
-					new NonvirtualThreadFactory("request-handler-timeout"));
-			timeoutExecutor.setRemoveOnCancelPolicy(true);
-			this.requestHandlerTimeoutExecutorService = timeoutExecutor;
+			this.requestHandlerTimeoutScheduler = new TimeoutScheduler(new NonvirtualThreadFactory("request-handler-timeout"));
 			EventLoop eventLoop = null;
 
 			try {
@@ -566,13 +559,13 @@ final class DefaultHttpServer implements HttpServer {
 					}
 				}
 
-				ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
+				TimeoutScheduler requestHandlerTimeoutScheduler = getRequestHandlerTimeoutScheduler().orElse(null);
 
-				if (requestHandlerTimeoutExecutorService != null) {
-					requestHandlerTimeoutExecutorService.shutdown();
+				if (requestHandlerTimeoutScheduler != null) {
+					requestHandlerTimeoutScheduler.shutdown();
 					long remMillis = Math.max(0L, getShutdownTimeout().toMillis());
-					requestHandlerTimeoutExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
-					requestHandlerTimeoutExecutorService.shutdownNow();
+					requestHandlerTimeoutScheduler.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
+					requestHandlerTimeoutScheduler.shutdownNow();
 				}
 			} catch (InterruptedException e) {
 				interrupted = true;
@@ -588,7 +581,7 @@ final class DefaultHttpServer implements HttpServer {
 		} finally {
 			this.eventLoop = null;
 			this.requestHandlerExecutorService = null;
-			this.requestHandlerTimeoutExecutorService = null;
+			this.requestHandlerTimeoutScheduler = null;
 
 			getLock().unlock();
 		}
@@ -612,9 +605,9 @@ final class DefaultHttpServer implements HttpServer {
 		return new MicrohttpResponse(statusCode, reasonPhrase, headers, body);
 	}
 
-	private void cancelTimeout(@Nullable ScheduledFuture<?> timeoutFuture) {
-		if (timeoutFuture != null)
-			timeoutFuture.cancel(false);
+	private void cancelTimeout(TimeoutScheduler.@Nullable ScheduledTask timeoutTask) {
+		if (timeoutTask != null)
+			timeoutTask.cancel();
 	}
 
 	@NonNull
@@ -1137,8 +1130,8 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected Optional<ScheduledExecutorService> getRequestHandlerTimeoutExecutorService() {
-		return Optional.ofNullable(this.requestHandlerTimeoutExecutorService);
+	protected Optional<TimeoutScheduler> getRequestHandlerTimeoutScheduler() {
+		return Optional.ofNullable(this.requestHandlerTimeoutScheduler);
 	}
 
 	@NonNull
@@ -1188,15 +1181,15 @@ final class DefaultHttpServer implements HttpServer {
 			requestHandlerExecutorService.shutdownNow();
 		}
 
-		ScheduledExecutorService requestHandlerTimeoutExecutorService = this.requestHandlerTimeoutExecutorService;
+		TimeoutScheduler requestHandlerTimeoutScheduler = this.requestHandlerTimeoutScheduler;
 
-		if (requestHandlerTimeoutExecutorService != null) {
-			requestHandlerTimeoutExecutorService.shutdownNow();
+		if (requestHandlerTimeoutScheduler != null) {
+			requestHandlerTimeoutScheduler.shutdownNow();
 		}
 
 		this.eventLoop = null;
 		this.requestHandlerExecutorService = null;
-		this.requestHandlerTimeoutExecutorService = null;
+		this.requestHandlerTimeoutScheduler = null;
 	}
 
 	@ThreadSafe

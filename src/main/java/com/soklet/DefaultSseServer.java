@@ -67,9 +67,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -201,7 +198,7 @@ final class DefaultSseServer implements SseServer {
 		@NonNull
 		private final AtomicBoolean establishmentFailureNotified;
 		@NonNull
-		private final AtomicReference<ScheduledFuture<?>> handshakeTimeoutFutureRef;
+		private final AtomicReference<TimeoutScheduler.ScheduledTask> handshakeTimeoutFutureRef;
 		@NonNull
 		private final AtomicReference<Thread> handlerThreadRef;
 		@NonNull
@@ -275,7 +272,7 @@ final class DefaultSseServer implements SseServer {
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
-	private volatile ScheduledExecutorService requestHandlerTimeoutExecutorService;
+	private volatile TimeoutScheduler requestHandlerTimeoutScheduler;
 	@Nullable
 	private volatile ExecutorService requestReaderExecutorService;
 	@Nullable
@@ -915,11 +912,7 @@ final class DefaultSseServer implements SseServer {
 				throw new IllegalStateException(format("No %s was registered for %s", LifecycleObserver.class, getClass()));
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
-			ScheduledThreadPoolExecutor timeoutExecutor = new ScheduledThreadPoolExecutor(
-					1,
-					runnable -> new Thread(runnable, "sse-request-handler-timeout"));
-			timeoutExecutor.setRemoveOnCancelPolicy(true);
-			this.requestHandlerTimeoutExecutorService = timeoutExecutor;
+			this.requestHandlerTimeoutScheduler = new TimeoutScheduler(runnable -> new Thread(runnable, "sse-request-handler-timeout"));
 			this.requestReaderExecutorService = getRequestReaderExecutorServiceSupplier().get();
 			this.connectionExecutorService = getConnectionExecutorServiceSupplier().get();
 			this.stopping = false;
@@ -1076,12 +1069,11 @@ final class DefaultSseServer implements SseServer {
 				notifyDidAcceptConnection(remoteAddress);
 				notifyWillAcceptRequest(remoteAddress, null);
 
-				ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
-				if (requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
-					handshakeContext.handshakeTimeoutFutureRef.set(requestHandlerTimeoutExecutorService.schedule(() ->
+				TimeoutScheduler requestHandlerTimeoutScheduler = getRequestHandlerTimeoutScheduler().orElse(null);
+				if (requestHandlerTimeoutScheduler != null && !requestHandlerTimeoutScheduler.isShutdown()) {
+					handshakeContext.handshakeTimeoutFutureRef.set(requestHandlerTimeoutScheduler.schedule(() ->
 									handleHandshakeTimeout(clientSocketChannel, handshakeContext),
-							Math.max(1L, getRequestHandlerTimeout().toMillis()),
-							TimeUnit.MILLISECONDS));
+							getRequestHandlerTimeout()));
 				}
 
 				try {
@@ -1633,7 +1625,7 @@ final class DefaultSseServer implements SseServer {
 		SseConnection connectionSnapshot = sseConnection.getSnapshot();
 		Request connectionRequest = connectionSnapshot.getRequest();
 		ResourceMethod connectionResourceMethod = connectionSnapshot.getResourceMethod();
-		ScheduledExecutorService requestHandlerTimeoutExecutorService = getRequestHandlerTimeoutExecutorService().orElse(null);
+		TimeoutScheduler requestHandlerTimeoutScheduler = getRequestHandlerTimeoutScheduler().orElse(null);
 
 		try {
 			getLifecycleObserver().get().didEstablishSseConnection(connectionSnapshot);
@@ -1739,20 +1731,19 @@ final class DefaultSseServer implements SseServer {
 				Instant writeStarted = Instant.now();
 				Throwable writeThrowable = null;
 				AtomicBoolean writeTimedOut = null;
-				ScheduledFuture<?> writeTimeoutFuture = null;
-				long writeTimeoutMillis = getWriteTimeout().toMillis();
+				TimeoutScheduler.ScheduledTask writeTimeoutTask = null;
 
-				if (writeTimeoutMillis > 0 && requestHandlerTimeoutExecutorService != null && !requestHandlerTimeoutExecutorService.isShutdown()) {
+				if (!getWriteTimeout().isZero() && requestHandlerTimeoutScheduler != null && !requestHandlerTimeoutScheduler.isShutdown()) {
 					AtomicBoolean timedOut = new AtomicBoolean(false);
 					writeTimedOut = timedOut;
-					writeTimeoutFuture = requestHandlerTimeoutExecutorService.schedule(() -> {
+					writeTimeoutTask = requestHandlerTimeoutScheduler.schedule(() -> {
 						timedOut.set(true);
 						try {
 							clientSocketChannel.close();
 						} catch (IOException ignored) {
 							// Nothing to do
 						}
-					}, Math.max(1L, writeTimeoutMillis), TimeUnit.MILLISECONDS);
+					}, getWriteTimeout());
 				}
 
 				try {
@@ -1762,7 +1753,7 @@ final class DefaultSseServer implements SseServer {
 				} catch (Throwable t) {
 					writeThrowable = t;
 				} finally {
-					cancelTimeout(writeTimeoutFuture);
+					cancelTimeout(writeTimeoutTask);
 					if (writeTimedOut != null && writeTimedOut.get()
 							&& (writeThrowable == null || writeThrowable instanceof ClosedChannelException)) {
 						writeThrowable = new SocketTimeoutException("SSE write timed out");
@@ -2180,9 +2171,9 @@ final class DefaultSseServer implements SseServer {
 		writeFully(socketChannel, responseBytes);
 	}
 
-	private void cancelTimeout(@Nullable ScheduledFuture<?> timeoutFuture) {
-		if (timeoutFuture != null)
-			timeoutFuture.cancel(false);
+	private void cancelTimeout(TimeoutScheduler.@Nullable ScheduledTask timeoutTask) {
+		if (timeoutTask != null)
+			timeoutTask.cancel();
 	}
 
 	// Helper to write the marshaled response directly to the channel
@@ -3206,7 +3197,7 @@ final class DefaultSseServer implements SseServer {
 	public void stop() {
 		Thread eventLoopThreadSnapshot;
 		ExecutorService requestHandlerExecutorServiceSnapshot;
-		ScheduledExecutorService requestHandlerTimeoutExecutorServiceSnapshot;
+		TimeoutScheduler requestHandlerTimeoutSchedulerSnapshot;
 		ExecutorService requestReaderExecutorServiceSnapshot;
 		ExecutorService connectionExecutorServiceSnapshot;
 		ServerSocketChannel serverSocketChannelSnapshot;
@@ -3222,7 +3213,7 @@ final class DefaultSseServer implements SseServer {
 
 			eventLoopThreadSnapshot = this.eventLoopThread;
 			requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
-			requestHandlerTimeoutExecutorServiceSnapshot = this.requestHandlerTimeoutExecutorService;
+			requestHandlerTimeoutSchedulerSnapshot = this.requestHandlerTimeoutScheduler;
 			requestReaderExecutorServiceSnapshot = this.requestReaderExecutorService;
 			connectionExecutorServiceSnapshot = this.connectionExecutorService;
 			serverSocketChannelSnapshot = this.serverSocketChannel;
@@ -3277,8 +3268,8 @@ final class DefaultSseServer implements SseServer {
 		if (requestHandlerExecutorServiceSnapshot != null)
 			requestHandlerExecutorServiceSnapshot.shutdownNow();
 
-		if (requestHandlerTimeoutExecutorServiceSnapshot != null)
-			requestHandlerTimeoutExecutorServiceSnapshot.shutdownNow();
+		if (requestHandlerTimeoutSchedulerSnapshot != null)
+			requestHandlerTimeoutSchedulerSnapshot.shutdownNow();
 
 		if (requestReaderExecutorServiceSnapshot != null)
 			requestReaderExecutorServiceSnapshot.shutdownNow();
@@ -3298,8 +3289,8 @@ final class DefaultSseServer implements SseServer {
 		if (requestHandlerExecutorServiceSnapshot != null)
 			waits.add(awaitTerminationAsync(requestHandlerExecutorServiceSnapshot, grace));
 
-		if (requestHandlerTimeoutExecutorServiceSnapshot != null)
-			waits.add(awaitTerminationAsync(requestHandlerTimeoutExecutorServiceSnapshot, grace));
+		if (requestHandlerTimeoutSchedulerSnapshot != null)
+			waits.add(awaitTerminationAsync(requestHandlerTimeoutSchedulerSnapshot, grace));
 
 		if (requestReaderExecutorServiceSnapshot != null)
 			waits.add(awaitTerminationAsync(requestReaderExecutorServiceSnapshot, grace));
@@ -3326,8 +3317,8 @@ final class DefaultSseServer implements SseServer {
 		if (requestHandlerExecutorServiceSnapshot != null)
 			awaitPoolTermination(requestHandlerExecutorServiceSnapshot, remainingMillis(deadlineNanos));
 
-		if (requestHandlerTimeoutExecutorServiceSnapshot != null)
-			awaitPoolTermination(requestHandlerTimeoutExecutorServiceSnapshot, remainingMillis(deadlineNanos));
+		if (requestHandlerTimeoutSchedulerSnapshot != null)
+			awaitSchedulerTermination(requestHandlerTimeoutSchedulerSnapshot, remainingMillis(deadlineNanos));
 
 		if (requestReaderExecutorServiceSnapshot != null)
 			awaitPoolTermination(requestReaderExecutorServiceSnapshot, remainingMillis(deadlineNanos));
@@ -3342,7 +3333,7 @@ final class DefaultSseServer implements SseServer {
 			this.eventLoopThread = null;
 			this.serverSocketChannel = null;
 			this.requestHandlerExecutorService = null;
-			this.requestHandlerTimeoutExecutorService = null;
+			this.requestHandlerTimeoutScheduler = null;
 			this.requestReaderExecutorService = null;
 			this.connectionExecutorService = null;
 			this.getBroadcastersByResourcePath().clear();
@@ -3372,6 +3363,20 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
+	private void awaitSchedulerTermination(@Nullable TimeoutScheduler timeoutScheduler,
+																				 @NonNull Long millis) {
+		requireNonNull(millis);
+
+		if (timeoutScheduler == null)
+			return;
+
+		try {
+			timeoutScheduler.awaitTermination(Math.max(100L, millis), TimeUnit.MILLISECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
 	@NonNull
 	protected CompletableFuture<Boolean> awaitTerminationAsync(@Nullable ExecutorService executorService,
 																														 @NonNull Long millis) {
@@ -3383,6 +3388,24 @@ final class DefaultSseServer implements SseServer {
 		return CompletableFuture.supplyAsync(() -> {
 			try {
 				return executorService.awaitTermination(millis, TimeUnit.MILLISECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+		});
+	}
+
+	@NonNull
+	protected CompletableFuture<Boolean> awaitTerminationAsync(@Nullable TimeoutScheduler timeoutScheduler,
+																														 @NonNull Long millis) {
+		requireNonNull(millis);
+
+		if (timeoutScheduler == null || millis <= 0)
+			return CompletableFuture.completedFuture(false);
+
+		return CompletableFuture.supplyAsync(() -> {
+			try {
+				return timeoutScheduler.awaitTermination(millis, TimeUnit.MILLISECONDS);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				return false;
@@ -4042,8 +4065,8 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	protected Optional<ScheduledExecutorService> getRequestHandlerTimeoutExecutorService() {
-		return Optional.ofNullable(this.requestHandlerTimeoutExecutorService);
+	protected Optional<TimeoutScheduler> getRequestHandlerTimeoutScheduler() {
+		return Optional.ofNullable(this.requestHandlerTimeoutScheduler);
 	}
 
 	@NonNull
