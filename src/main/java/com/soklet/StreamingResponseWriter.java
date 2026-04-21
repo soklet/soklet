@@ -14,31 +14,24 @@
  * limitations under the License.
  */
 
-package com.soklet.internal.microhttp;
+package com.soklet;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.nio.channels.SocketChannel;
+import org.jspecify.annotations.NonNull;
 
 /**
- * A bounded response-body writer for the microhttp transport.
+ * Callback that writes a streaming HTTP response body.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-interface WritableSource extends Closeable {
-    default void start() throws IOException {
-        // No-op by default
-    }
-
-    default void writeReadyCallback(Runnable callback) {
-        // No-op by default
-    }
-
-    long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException;
-
-    boolean hasRemaining();
-
-    default boolean isReadyToWrite() {
-        return hasRemaining();
-    }
+@FunctionalInterface
+public interface StreamingResponseWriter {
+	/**
+	 * Writes response bytes to the provided output stream.
+	 *
+	 * @param output  the response stream
+	 * @param context runtime context for this streaming response
+	 * @throws Exception if the stream producer fails
+	 */
+	void writeTo(@NonNull ResponseStream output,
+							 @NonNull StreamingResponseContext context) throws Exception;
 }

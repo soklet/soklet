@@ -29,6 +29,7 @@ Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/do
 ### Design Goals
 
 - Main focus: routing HTTP/1.1 requests to Java methods
+- HTTP/1.1 response streaming for dynamic output
 - Near-instant startup
 - Zero dependencies
 - Immutability/thread-safety
@@ -43,7 +44,7 @@ Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/do
 ### Design Non-Goals
 
 - SSL/TLS (your load balancer should provide TLS termination)
-- Traditional HTTP streaming
+- HTTP/2
 - WebSockets
 - Dictate which technologies to use (Guice vs. Dagger, Gson vs. Jackson, etc.)
 - "Batteries included" authentication and authorization

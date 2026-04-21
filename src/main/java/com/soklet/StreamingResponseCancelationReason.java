@@ -14,31 +14,19 @@
  * limitations under the License.
  */
 
-package com.soklet.internal.microhttp;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.nio.channels.SocketChannel;
+package com.soklet;
 
 /**
- * A bounded response-body writer for the microhttp transport.
+ * Reasons a streaming response can be canceled.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-interface WritableSource extends Closeable {
-    default void start() throws IOException {
-        // No-op by default
-    }
-
-    default void writeReadyCallback(Runnable callback) {
-        // No-op by default
-    }
-
-    long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException;
-
-    boolean hasRemaining();
-
-    default boolean isReadyToWrite() {
-        return hasRemaining();
-    }
+public enum StreamingResponseCancelationReason {
+	CLIENT_DISCONNECTED,
+	SERVER_SHUTDOWN,
+	RESPONSE_TIMEOUT,
+	RESPONSE_IDLE_TIMEOUT,
+	PRODUCER_FAILED,
+	SIMULATOR_LIMIT_EXCEEDED,
+	APPLICATION_CANCELED
 }

@@ -23,12 +23,20 @@ import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CoderResult;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -50,6 +58,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
@@ -1287,7 +1297,7 @@ public final class Soklet implements AutoCloseable {
 			response = Response.withStatusCode(204).build();
 		} else if (responseObject instanceof MarshaledResponse) {
 			MarshaledResponse marshaledResponse = (MarshaledResponse) responseObject;
-			enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent());
+			enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent() || marshaledResponse.getStream().isPresent());
 
 			return HttpRequestResult.withMarshaledResponse(marshaledResponse)
 					.resourceMethod(resourceMethod)
@@ -1310,7 +1320,7 @@ public final class Soklet implements AutoCloseable {
 
 		MarshaledResponse marshaledResponse = responseMarshaler.forResourceMethod(request, response, resourceMethod);
 
-		enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent());
+		enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent() || marshaledResponse.getStream().isPresent());
 
 		return HttpRequestResult.withMarshaledResponse(marshaledResponse)
 				.response(response)
@@ -1421,12 +1431,15 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
 
+		if (marshaledResponse.isStreaming())
+			return marshaledResponse;
+
 		Set<String> normalizedHeaderNames = marshaledResponse.getHeaders().keySet().stream()
 				.map(headerName -> headerName.toLowerCase(Locale.US))
 				.collect(Collectors.toSet());
 
 		// If Content-Length is already specified, don't do anything
-		if (normalizedHeaderNames.contains("content-length"))
+		if (normalizedHeaderNames.contains("content-length") || normalizedHeaderNames.contains("transfer-encoding"))
 			return marshaledResponse;
 
 		// If Content-Length is not specified, specify as the number of bytes in the body
@@ -1565,7 +1578,23 @@ public final class Soklet implements AutoCloseable {
 	 */
 	public static void runSimulator(@NonNull SokletConfig sokletConfig,
 																	@NonNull Consumer<Simulator> simulatorConsumer) {
+		runSimulator(sokletConfig, SimulatorOptions.defaultInstance(), simulatorConsumer);
+	}
+
+	/**
+	 * Runs Soklet with special non-network "simulator" implementations of the configured transport servers - useful for integration testing.
+	 * <p>
+	 * See <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a> for how to write these tests.
+	 *
+	 * @param sokletConfig      configuration that drives the Soklet system
+	 * @param simulatorOptions  simulator behavior options
+	 * @param simulatorConsumer code to execute within the context of the simulator
+	 */
+	public static void runSimulator(@NonNull SokletConfig sokletConfig,
+																	@NonNull SimulatorOptions simulatorOptions,
+																	@NonNull Consumer<Simulator> simulatorConsumer) {
 		requireNonNull(sokletConfig);
+		requireNonNull(simulatorOptions);
 		requireNonNull(simulatorConsumer);
 
 		// Create Soklet instance - this initializes the REAL implementations through proxies
@@ -1618,7 +1647,7 @@ public final class Soklet implements AutoCloseable {
 				mockMcpServer.onClientDisconnectedMcpStream(soklet::handleSimulatedMcpStreamDisconnect);
 
 			// Create and provide simulator
-			Simulator simulator = new DefaultSimulator(mockServer, mockSseServer, mockMcpServer);
+			Simulator simulator = new DefaultSimulator(mockServer, mockSseServer, mockMcpServer, simulatorOptions);
 			simulatorConsumer.accept(simulator);
 		} finally {
 			// Always restore to real implementations
@@ -1656,13 +1685,23 @@ public final class Soklet implements AutoCloseable {
 		private MockSseServer sseServer;
 		@Nullable
 		private MockMcpServer mcpServer;
+		@NonNull
+		private final SimulatorOptions simulatorOptions;
 
 			public DefaultSimulator(@Nullable MockHttpServer server,
 															@Nullable MockSseServer sseServer,
 															@Nullable MockMcpServer mcpServer) {
+			this(server, sseServer, mcpServer, SimulatorOptions.defaultInstance());
+		}
+
+			public DefaultSimulator(@Nullable MockHttpServer server,
+															@Nullable MockSseServer sseServer,
+															@Nullable MockMcpServer mcpServer,
+															@NonNull SimulatorOptions simulatorOptions) {
 				this.server = server;
 				this.sseServer = sseServer;
 				this.mcpServer = mcpServer;
+			this.simulatorOptions = requireNonNull(simulatorOptions);
 		}
 
 		@NonNull
@@ -1684,7 +1723,200 @@ public final class Soklet implements AutoCloseable {
 				requestResultHolder.set(requestResult);
 			}));
 
-			return requestResultHolder.get();
+			return materializeStreamingResponse(requestResultHolder.get());
+		}
+
+		@NonNull
+		private HttpRequestResult materializeStreamingResponse(@Nullable HttpRequestResult requestResult) {
+			if (requestResult == null)
+				throw new IllegalStateException("No HTTP request result was produced by the simulator");
+
+			StreamingResponseBody stream = requestResult.getMarshaledResponse().getStream().orElse(null);
+
+			if (stream == null)
+				return requestResult;
+
+			byte[] bytes = materializeStreamingResponseBody(stream);
+			MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse().copy()
+					.withoutStream()
+					.body(bytes)
+					.finish();
+
+			return requestResult.copy()
+					.marshaledResponse(marshaledResponse)
+					.finish();
+		}
+
+		@NonNull
+		private byte[] materializeStreamingResponseBody(@NonNull StreamingResponseBody stream) {
+			requireNonNull(stream);
+
+			SimulatorCancelationToken cancelationToken = new SimulatorCancelationToken();
+			SimulatorStreamingResponseContext context = new SimulatorStreamingResponseContext(cancelationToken);
+			SimulatorResponseStream output = new SimulatorResponseStream(getSimulatorOptions().getStreamingResponseBodyLimitInBytes(), cancelationToken);
+
+			try {
+				if (stream instanceof StreamingResponseBody.WriterBody writerBody) {
+					writerBody.getWriter().writeTo(output, context);
+				} else if (stream instanceof StreamingResponseBody.InputStreamBody inputStreamBody) {
+					try (java.io.InputStream inputStream = requireNonNull(inputStreamBody.getInputStreamSupplier().get())) {
+						byte[] buffer = new byte[inputStreamBody.getBufferSizeInBytes()];
+						int read;
+
+						while ((read = inputStream.read(buffer)) >= 0) {
+							context.throwIfCanceled();
+							if (read > 0)
+								output.write(ByteBuffer.wrap(buffer, 0, read));
+						}
+					}
+				} else if (stream instanceof StreamingResponseBody.ReaderBody readerBody) {
+					try (java.io.Reader reader = requireNonNull(readerBody.getReaderSupplier().get())) {
+						materializeReader(readerBody, reader, output, context);
+					}
+				} else if (stream instanceof StreamingResponseBody.PublisherBody publisherBody) {
+					materializePublisher(publisherBody, output, context);
+				} else {
+					throw new IllegalStateException(format("Unsupported streaming response body type: %s", stream.getClass().getName()));
+				}
+			} catch (StreamingResponseCanceledException e) {
+				throw new IllegalStateException("Simulated streaming response was canceled: " + e.getCancelationReason().name(), e);
+			} catch (Exception e) {
+				throw new IllegalStateException("Simulated streaming response failed.", e);
+			}
+
+			return output.toByteArray();
+		}
+
+		private void materializeReader(com.soklet.StreamingResponseBody.@NonNull ReaderBody readerBody,
+																	 @NonNull Reader reader,
+																	 @NonNull SimulatorResponseStream output,
+																	 @NonNull SimulatorStreamingResponseContext context) throws IOException, InterruptedException, StreamingResponseCanceledException, CharacterCodingException {
+			requireNonNull(readerBody);
+			requireNonNull(reader);
+			requireNonNull(output);
+			requireNonNull(context);
+
+			CharsetEncoder encoder = readerBody.newEncoder();
+			CharBuffer charBuffer = CharBuffer.allocate(readerBody.getBufferSizeInCharacters());
+			ByteBuffer byteBuffer = ByteBuffer.allocate(Math.max(128, (int) Math.ceil(readerBody.getBufferSizeInCharacters() * encoder.maxBytesPerChar())));
+
+			while (reader.read(charBuffer) >= 0) {
+				context.throwIfCanceled();
+				charBuffer.flip();
+				encodeCharsForSimulator(encoder, charBuffer, byteBuffer, false, output);
+				charBuffer.compact();
+			}
+
+			charBuffer.flip();
+			encodeCharsForSimulator(encoder, charBuffer, byteBuffer, true, output);
+
+			CoderResult result;
+			do {
+				result = encoder.flush(byteBuffer);
+				writeEncodedBytesForSimulator(byteBuffer, output);
+				if (result.isError())
+					result.throwException();
+			} while (result.isOverflow());
+		}
+
+		private void encodeCharsForSimulator(@NonNull CharsetEncoder encoder,
+																				 @NonNull CharBuffer charBuffer,
+																				 @NonNull ByteBuffer byteBuffer,
+																				 boolean endOfInput,
+																				 @NonNull SimulatorResponseStream output) throws IOException, InterruptedException, StreamingResponseCanceledException, CharacterCodingException {
+			CoderResult result;
+
+			do {
+				result = encoder.encode(charBuffer, byteBuffer, endOfInput);
+				writeEncodedBytesForSimulator(byteBuffer, output);
+
+				if (result.isError())
+					result.throwException();
+			} while (result.isOverflow());
+		}
+
+		private void writeEncodedBytesForSimulator(@NonNull ByteBuffer byteBuffer,
+																							 @NonNull SimulatorResponseStream output) throws IOException, InterruptedException, StreamingResponseCanceledException {
+			byteBuffer.flip();
+			if (byteBuffer.hasRemaining())
+				output.write(byteBuffer);
+			byteBuffer.clear();
+		}
+
+		private void materializePublisher(com.soklet.StreamingResponseBody.@NonNull PublisherBody publisherBody,
+																			@NonNull SimulatorResponseStream output,
+																			@NonNull SimulatorStreamingResponseContext context) throws Exception {
+			requireNonNull(publisherBody);
+			requireNonNull(output);
+			requireNonNull(context);
+
+			CountDownLatch completed = new CountDownLatch(1);
+			AtomicReference<Throwable> failure = new AtomicReference<>();
+			AtomicReference<Flow.Subscription> subscriptionRef = new AtomicReference<>();
+
+			publisherBody.getPublisher().subscribe(new Flow.Subscriber<>() {
+				@Override
+				public void onSubscribe(Flow.Subscription subscription) {
+					requireNonNull(subscription);
+
+					if (!subscriptionRef.compareAndSet(null, subscription)) {
+						subscription.cancel();
+						return;
+					}
+
+					subscription.request(1L);
+				}
+
+				@Override
+				public void onNext(ByteBuffer item) {
+					Flow.Subscription subscription = subscriptionRef.get();
+
+					try {
+						context.throwIfCanceled();
+						output.write(requireNonNull(item));
+						context.throwIfCanceled();
+					} catch (Throwable t) {
+						failure.compareAndSet(null, t);
+
+						if (subscription != null)
+							subscription.cancel();
+
+						completed.countDown();
+						return;
+					}
+
+					if (subscription != null)
+						subscription.request(1L);
+				}
+
+				@Override
+				public void onError(Throwable throwable) {
+					failure.compareAndSet(null, throwable == null
+							? new IllegalStateException("Publisher failed without an error")
+							: throwable);
+					completed.countDown();
+				}
+
+				@Override
+				public void onComplete() {
+					completed.countDown();
+				}
+			});
+
+			while (!completed.await(100L, TimeUnit.MILLISECONDS))
+				context.throwIfCanceled();
+
+			Throwable throwable = failure.get();
+
+			if (throwable != null) {
+				if (throwable instanceof Exception exception)
+					throw exception;
+
+				if (throwable instanceof Error error)
+					throw error;
+
+				throw new RuntimeException(throwable);
+			}
 		}
 
 		@NonNull
@@ -1828,6 +2060,173 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		Optional<MockMcpServer> getMcpServer() {
 			return Optional.ofNullable(this.mcpServer);
+		}
+
+		@NonNull
+		SimulatorOptions getSimulatorOptions() {
+			return this.simulatorOptions;
+		}
+	}
+
+	@NotThreadSafe
+	private static final class SimulatorResponseStream implements ResponseStream {
+		@NonNull
+		private final ByteArrayOutputStream byteArrayOutputStream;
+		@NonNull
+		private final Integer limitInBytes;
+		@NonNull
+		private final SimulatorCancelationToken cancelationToken;
+		private boolean closed;
+
+		private SimulatorResponseStream(@NonNull Integer limitInBytes,
+																		@NonNull SimulatorCancelationToken cancelationToken) {
+			this.byteArrayOutputStream = new ByteArrayOutputStream();
+			this.limitInBytes = requireNonNull(limitInBytes);
+			this.cancelationToken = requireNonNull(cancelationToken);
+		}
+
+		@Override
+		public void write(@NonNull byte[] bytes) throws IOException, StreamingResponseCanceledException {
+			requireNonNull(bytes);
+			write(ByteBuffer.wrap(bytes));
+		}
+
+		@Override
+		public void write(@NonNull ByteBuffer byteBuffer) throws IOException, StreamingResponseCanceledException {
+			requireNonNull(byteBuffer);
+			this.cancelationToken.throwIfCanceled();
+
+			if (this.closed)
+				throw new StreamingResponseCanceledException(StreamingResponseCancelationReason.APPLICATION_CANCELED);
+
+			ByteBuffer source = byteBuffer.asReadOnlyBuffer();
+			int bytesToWrite = source.remaining();
+
+			if ((long) this.byteArrayOutputStream.size() + bytesToWrite > this.limitInBytes) {
+				this.cancelationToken.cancel(StreamingResponseCancelationReason.SIMULATOR_LIMIT_EXCEEDED, null);
+				throw new StreamingResponseCanceledException(StreamingResponseCancelationReason.SIMULATOR_LIMIT_EXCEEDED);
+			}
+
+			byte[] bytes = new byte[bytesToWrite];
+			source.get(bytes);
+			this.byteArrayOutputStream.write(bytes);
+		}
+
+		@Override
+		public void flush() throws StreamingResponseCanceledException {
+			this.cancelationToken.throwIfCanceled();
+		}
+
+		@Override
+		@NonNull
+		public Boolean isOpen() {
+			return !this.closed && !this.cancelationToken.isCanceled();
+		}
+
+		@NonNull
+		private byte[] toByteArray() {
+			this.closed = true;
+			return this.byteArrayOutputStream.toByteArray();
+		}
+	}
+
+	@ThreadSafe
+	private static final class SimulatorCancelationToken implements CancelationToken {
+		@NonNull
+		private final AtomicBoolean canceled;
+		@NonNull
+		private final CopyOnWriteArrayList<Runnable> callbacks;
+		@Nullable
+		private volatile StreamingResponseCancelationReason reason;
+		@Nullable
+		private volatile Throwable cause;
+
+		private SimulatorCancelationToken() {
+			this.canceled = new AtomicBoolean(false);
+			this.callbacks = new CopyOnWriteArrayList<>();
+		}
+
+		@Override
+		@NonNull
+		public Boolean isCanceled() {
+			return this.canceled.get();
+		}
+
+		@Override
+		@NonNull
+		public Optional<StreamingResponseCancelationReason> getCancelationReason() {
+			return Optional.ofNullable(this.reason);
+		}
+
+		@Override
+		@NonNull
+		public Optional<Throwable> getCancelationCause() {
+			return Optional.ofNullable(this.cause);
+		}
+
+		@Override
+		@NonNull
+		public AutoCloseable onCancel(@NonNull Runnable callback) {
+			requireNonNull(callback);
+
+			if (isCanceled()) {
+				callback.run();
+				return () -> {
+					// No-op
+				};
+			}
+
+			this.callbacks.add(callback);
+
+			if (isCanceled() && this.callbacks.remove(callback))
+				callback.run();
+
+			return () -> this.callbacks.remove(callback);
+		}
+
+		private boolean cancel(@NonNull StreamingResponseCancelationReason reason,
+													 @Nullable Throwable cause) {
+			requireNonNull(reason);
+
+			if (!this.canceled.compareAndSet(false, true))
+				return false;
+
+			this.reason = reason;
+			this.cause = cause;
+
+			for (Runnable callback : this.callbacks)
+				callback.run();
+
+			this.callbacks.clear();
+			return true;
+		}
+	}
+
+	@ThreadSafe
+	private static final class SimulatorStreamingResponseContext implements StreamingResponseContext {
+		@NonNull
+		private final CancelationToken cancelationToken;
+
+		private SimulatorStreamingResponseContext(@NonNull CancelationToken cancelationToken) {
+			this.cancelationToken = requireNonNull(cancelationToken);
+		}
+
+		@Override
+		@NonNull
+		public CancelationToken getCancelationToken() {
+			return this.cancelationToken;
+		}
+
+		@Override
+		@NonNull
+		public Optional<Instant> getDeadline() {
+			return Optional.empty();
+		}
+
+		@Override
+		@NonNull
+		public Optional<Duration> getIdleTimeout() {
+			return Optional.empty();
 		}
 	}
 

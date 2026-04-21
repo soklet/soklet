@@ -41,6 +41,20 @@ class CompositeWritableSource implements WritableSource {
     }
 
     @Override
+    public void start() throws IOException {
+        for (WritableSource source : sources) {
+            source.start();
+        }
+    }
+
+    @Override
+    public void writeReadyCallback(Runnable callback) {
+        for (WritableSource source : sources) {
+            source.writeReadyCallback(callback);
+        }
+    }
+
+    @Override
     public long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException {
         requireNonNull(socketChannel);
 
@@ -74,6 +88,16 @@ class CompositeWritableSource implements WritableSource {
         for (WritableSource source : sources) {
             if (source.hasRemaining()) {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean isReadyToWrite() {
+        for (WritableSource source : sources) {
+            if (source.hasRemaining()) {
+                return source.isReadyToWrite();
             }
         }
         return false;

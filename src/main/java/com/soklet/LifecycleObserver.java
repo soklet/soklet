@@ -306,6 +306,27 @@ public interface LifecycleObserver {
 	}
 
 	/**
+	 * Called after a streaming response terminates.
+	 *
+	 * @param serverType        the server type that wrote the stream
+	 * @param request           the request associated with the stream
+	 * @param resourceMethod    the resource method associated with the stream, or {@code null} if unavailable
+	 * @param marshaledResponse the streaming response
+	 * @param streamDuration    the stream duration
+	 * @param cancelationReason the cancelation reason, or {@code null} when the stream completed normally
+	 * @param throwable         an optional failure or cancelation cause, or {@code null} if not applicable
+	 */
+	default void didTerminateResponseStream(@NonNull ServerType serverType,
+																					@NonNull Request request,
+																					@Nullable ResourceMethod resourceMethod,
+																					@NonNull MarshaledResponse marshaledResponse,
+																					@NonNull Duration streamDuration,
+																					@Nullable StreamingResponseCancelationReason cancelationReason,
+																					@Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
 	 * Called before the MCP server starts.
 	 */
 	default void willStartMcpServer(@NonNull McpServer mcpServer) {

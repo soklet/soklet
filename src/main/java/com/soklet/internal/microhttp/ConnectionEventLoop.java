@@ -92,9 +92,11 @@ class ConnectionEventLoop {
 
         static final String HEADER_CONNECTION = "Connection";
         static final String HEADER_CONTENT_LENGTH = "Content-Length";
+        static final String HEADER_TRANSFER_ENCODING = "Transfer-Encoding";
 
         static final String KEEP_ALIVE = "Keep-Alive";
         static final String CLOSE = "close";
+        static final String CHUNKED = "chunked";
 
         static final byte[] BAD_REQUEST_RESPONSE =
                 "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
@@ -297,6 +299,11 @@ class ConnectionEventLoop {
         }
 
         private void prepareToWriteResponse(MicrohttpResponse microhttpResponse) throws IOException {
+            if (microhttpResponse.streaming() && httpOneDotZero) {
+                microhttpResponse = new MicrohttpResponse(505, "HTTP Version Not Supported",
+                        List.of(new Header(HEADER_CONNECTION, CLOSE)), new byte[0]);
+                closeAfterResponse = true;
+            }
             if (hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
                 closeAfterResponse = true;
             }
@@ -305,11 +312,17 @@ class ConnectionEventLoop {
             if (httpOneDotZero && keepAlive && !closeAfterResponse) {
                 headers.add(new Header(HEADER_CONNECTION, KEEP_ALIVE));
             }
-            if (!microhttpResponse.hasHeader(HEADER_CONTENT_LENGTH)) {
+            if (microhttpResponse.streaming()) {
+                if (!microhttpResponse.hasHeader(HEADER_TRANSFER_ENCODING)) {
+                    headers.add(new Header(HEADER_TRANSFER_ENCODING, CHUNKED));
+                }
+            } else if (!microhttpResponse.hasHeader(HEADER_CONTENT_LENGTH)) {
                 headers.add(new Header(HEADER_CONTENT_LENGTH, Long.toString(microhttpResponse.bodyLength())));
             }
             byte[] serializedHead = microhttpResponse.serializeHead(version, headers);
             writableSource = microhttpResponse.writableSource(serializedHead);
+            writableSource.writeReadyCallback(this::onWritableSourceReady);
+            writableSource.start();
             if (logger.enabled()) {
                 logger.log(
                         new LogEntry("event", "response_ready"),
@@ -329,6 +342,30 @@ class ConnectionEventLoop {
                             new LogEntry("id", id));
                 }
                 failSafeClose();
+            }
+        }
+
+        private void onWritableSourceReady() {
+            taskQueue.add(() -> {
+                if (closed.get() || writableSource == null || !selectionKey.isValid()) {
+                    return;
+                }
+                if ((selectionKey.interestOps() & SelectionKey.OP_WRITE) == 0) {
+                    selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
+                }
+                try {
+                    doOnWritable();
+                } catch (IOException | RuntimeException e) {
+                    if (logger.enabled()) {
+                        logger.log(e,
+                                new LogEntry("event", "write_error"),
+                                new LogEntry("id", id));
+                    }
+                    failSafeClose();
+                }
+            });
+            if (Thread.currentThread() != thread) {
+                selector.wakeup();
             }
         }
 
@@ -375,8 +412,12 @@ class ConnectionEventLoop {
                     }
                 }
             } else { // response not fully written, switch to or remain in write mode
-                if ((selectionKey.interestOps() & SelectionKey.OP_WRITE) == 0) {
-                    selectionKey.interestOps(SelectionKey.OP_WRITE);
+                if (writableSource.isReadyToWrite()) {
+                    if ((selectionKey.interestOps() & SelectionKey.OP_WRITE) == 0) {
+                        selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
+                    }
+                } else if ((selectionKey.interestOps() & SelectionKey.OP_WRITE) != 0) {
+                    selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_WRITE);
                 }
                 if (logger.enabled()) {
                     logger.log(

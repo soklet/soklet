@@ -366,6 +366,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			// so the client knows how long the response would have been.
 			marshaledResponse = getMethodMarshaledResponse.copy()
 					.withoutBody()
+					.withoutStream()
 					.cookies(getMethodMarshaledResponse.getCookies())
 					.headers((mutableHeaders) -> {
 						mutableHeaders.put("Content-Length", Set.of(String.valueOf(getMethodMarshaledResponse.getBodyLength())));

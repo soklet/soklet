@@ -96,6 +96,10 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_WRITE_RESPONSE_FAILED,
 	/**
+	 * Indicates {@link LifecycleObserver#didTerminateResponseStream(ServerType, Request, ResourceMethod, MarshaledResponse, Duration, StreamingResponseCancelationReason, Throwable)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
+	/**
 	 * Indicates {@link LifecycleObserver#didCreateMcpSession(Request, Class, String)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_CREATE_MCP_SESSION_FAILED,
@@ -171,6 +175,22 @@ public enum LogEventType {
 	 * Indicates that the {@link HttpServer} received a request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
 	 */
 	SERVER_UNPARSEABLE_REQUEST,
+	/**
+	 * Indicates a response stream failed while producing or writing bytes.
+	 */
+	RESPONSE_STREAM_FAILED,
+	/**
+	 * Indicates a response stream was canceled.
+	 */
+	RESPONSE_STREAM_CANCELED,
+	/**
+	 * Indicates a response stream failed while closing.
+	 */
+	RESPONSE_STREAM_CLOSE_FAILED,
+	/**
+	 * Indicates a response stream cancelation callback threw an exception.
+	 */
+	RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
 	/**
 	 * Indicates an internal {@link HttpServer} error occurred.
 	 */

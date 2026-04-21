@@ -86,6 +86,85 @@ public class MarshaledResponseTests {
 	}
 
 	@Test
+	public void build_rejects_known_length_body_and_stream() {
+		StreamingResponseBody stream = StreamingResponseBody.fromWriter((output, context) -> {
+			// No-op
+		});
+
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
+				.body(new byte[]{1, 2, 3})
+				.stream(stream)
+				.build());
+
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
+				.stream(stream)
+				.body(new byte[]{1, 2, 3})
+				.build());
+	}
+
+	@Test
+	public void explicit_without_body_allows_switching_to_stream() {
+		StreamingResponseBody stream = StreamingResponseBody.fromWriter((output, context) -> {
+			// No-op
+		});
+
+		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+				.body(new byte[]{1, 2, 3})
+				.withoutBody()
+				.stream(stream)
+				.build();
+
+		Assertions.assertTrue(response.getBody().isEmpty());
+		Assertions.assertSame(stream, response.getStream().orElseThrow());
+		Assertions.assertTrue(response.isStreaming());
+		Assertions.assertEquals(Long.valueOf(0), response.getBodyLength());
+	}
+
+	@Test
+	public void explicit_without_stream_allows_switching_to_known_length_body() {
+		StreamingResponseBody stream = StreamingResponseBody.fromWriter((output, context) -> {
+			// No-op
+		});
+
+		MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+				.stream(stream)
+				.withoutStream()
+				.body(new byte[]{1, 2, 3})
+				.build();
+
+		Assertions.assertTrue(response.getStream().isEmpty());
+		Assertions.assertTrue(response.getBody().isPresent());
+		Assertions.assertFalse(response.isStreaming());
+		Assertions.assertEquals(Long.valueOf(3), response.getBodyLength());
+	}
+
+	@Test
+	public void streaming_response_rejects_known_length_headers() {
+		StreamingResponseBody stream = StreamingResponseBody.fromWriter((output, context) -> {
+			// No-op
+		});
+
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
+				.headers(Map.of("Content-Length", Set.of("10")))
+				.stream(stream)
+				.build());
+
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
+				.headers(Map.of("Transfer-Encoding", Set.of("chunked")))
+				.stream(stream)
+				.build());
+	}
+
+	@Test
+	public void streaming_response_rejects_bodyless_status_code() {
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(204)
+				.stream(StreamingResponseBody.fromWriter((output, context) -> {
+					// No-op
+				}))
+				.build());
+	}
+
+	@Test
 	public void nullable_body_sources_remove_body(@TempDir Path tempDir) throws IOException {
 		Path file = tempDir.resolve("example.txt");
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);

@@ -183,6 +183,16 @@ public interface HttpServer extends AutoCloseable {
 		@Nullable
 		Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 		@Nullable
+		Supplier<ExecutorService> streamingExecutorServiceSupplier;
+		@Nullable
+		Integer streamingQueueCapacityInBytes;
+		@Nullable
+		Integer streamingChunkSizeInBytes;
+		@Nullable
+		Duration streamingResponseTimeout;
+		@Nullable
+		Duration streamingResponseIdleTimeout;
+		@Nullable
 		IdGenerator<?> idGenerator;
 
 		@NonNull
@@ -289,6 +299,70 @@ public interface HttpServer extends AutoCloseable {
 		@NonNull
 		public Builder requestHandlerExecutorServiceSupplier(@Nullable Supplier<ExecutorService> requestHandlerExecutorServiceSupplier) {
 			this.requestHandlerExecutorServiceSupplier = requestHandlerExecutorServiceSupplier;
+			return this;
+		}
+
+		/**
+		 * Sets the executor service supplier used to run streaming response producers.
+		 *
+		 * @param streamingExecutorServiceSupplier the executor service supplier, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder streamingExecutorServiceSupplier(@Nullable Supplier<ExecutorService> streamingExecutorServiceSupplier) {
+			this.streamingExecutorServiceSupplier = streamingExecutorServiceSupplier;
+			return this;
+		}
+
+		/**
+		 * Sets the per-stream producer queue capacity in bytes.
+		 *
+		 * @param streamingQueueCapacityInBytes the queue capacity, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder streamingQueueCapacityInBytes(@Nullable Integer streamingQueueCapacityInBytes) {
+			this.streamingQueueCapacityInBytes = streamingQueueCapacityInBytes;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum payload chunk size used for HTTP/1.1 chunked streaming.
+		 *
+		 * @param streamingChunkSizeInBytes the payload chunk size, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder streamingChunkSizeInBytes(@Nullable Integer streamingChunkSizeInBytes) {
+			this.streamingChunkSizeInBytes = streamingChunkSizeInBytes;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum total duration for a streaming response.
+		 * <p>
+		 * Use {@link Duration#ZERO} to disable the timeout.
+		 *
+		 * @param streamingResponseTimeout the streaming response timeout, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder streamingResponseTimeout(@Nullable Duration streamingResponseTimeout) {
+			this.streamingResponseTimeout = streamingResponseTimeout;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum idle duration between bytes produced for a streaming response.
+		 * <p>
+		 * Use {@link Duration#ZERO} to disable the timeout.
+		 *
+		 * @param streamingResponseIdleTimeout the streaming response idle timeout, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder streamingResponseIdleTimeout(@Nullable Duration streamingResponseIdleTimeout) {
+			this.streamingResponseIdleTimeout = streamingResponseIdleTimeout;
 			return this;
 		}
 

@@ -18,19 +18,21 @@ public final class MicrohttpResponse {
     private final long bodyLength;
     private final BodySourceFactory bodySourceFactory;
     private final byte[] body;
+    private final boolean streaming;
 
     public MicrohttpResponse(int status, String reason, List<Header> headers, byte[] body) {
-        this(status, reason, headers, requireNonNull(body).length, () -> new ByteBufferWritableSource(ByteBuffer.wrap(body)), body);
+        this(status, reason, headers, requireNonNull(body).length, () -> new ByteBufferWritableSource(ByteBuffer.wrap(body)), body, false);
     }
 
     private MicrohttpResponse(int status, String reason, List<Header> headers, long bodyLength,
-                              BodySourceFactory bodySourceFactory, byte[] body) {
+                              BodySourceFactory bodySourceFactory, byte[] body, boolean streaming) {
         this.status = status;
         this.reason = requireNonNull(reason);
         this.headers = requireNonNull(headers);
         this.bodyLength = bodyLength;
         this.bodySourceFactory = requireNonNull(bodySourceFactory);
         this.body = body;
+        this.streaming = streaming;
     }
 
     public static MicrohttpResponse withFileBody(int status, String reason, List<Header> headers,
@@ -41,7 +43,8 @@ public final class MicrohttpResponse {
 
         return new MicrohttpResponse(status, reason, headers, count,
                 () -> new FileChannelWritableSource(FileChannel.open(path, READ), offset, count, true),
-                null);
+                null,
+                false);
     }
 
     public static MicrohttpResponse withFileChannelBody(int status, String reason, List<Header> headers,
@@ -54,7 +57,8 @@ public final class MicrohttpResponse {
 
         return new MicrohttpResponse(status, reason, headers, count,
                 () -> new FileChannelWritableSource(fileChannel, offset, count, closeOnComplete),
-                null);
+                null,
+                false);
     }
 
     public static MicrohttpResponse withByteBufferBody(int status, String reason, List<Header> headers,
@@ -64,7 +68,14 @@ public final class MicrohttpResponse {
 
         return new MicrohttpResponse(status, reason, headers, responseBuffer.remaining(),
                 () -> new ByteBufferWritableSource(responseBuffer),
-                null);
+                null,
+                false);
+    }
+
+    static MicrohttpResponse withStreamingBody(int status, String reason, List<Header> headers,
+                                               BodySourceFactory bodySourceFactory) {
+        requireNonNull(bodySourceFactory);
+        return new MicrohttpResponse(status, reason, headers, 0L, bodySourceFactory, null, true);
     }
 
     public int status() {
@@ -91,7 +102,11 @@ public final class MicrohttpResponse {
     }
 
     public MicrohttpResponse withHeaders(List<Header> headers) {
-        return new MicrohttpResponse(status, reason, headers, bodyLength, bodySourceFactory, body);
+        return new MicrohttpResponse(status, reason, headers, bodyLength, bodySourceFactory, body, streaming);
+    }
+
+    public boolean streaming() {
+        return streaming;
     }
 
     public boolean hasHeader(String name) {
@@ -251,7 +266,7 @@ public final class MicrohttpResponse {
     }
 
     @FunctionalInterface
-    private interface BodySourceFactory {
+    interface BodySourceFactory {
         WritableSource create() throws IOException;
     }
 }

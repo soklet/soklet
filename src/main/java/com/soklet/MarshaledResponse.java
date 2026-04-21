@@ -69,6 +69,8 @@ public final class MarshaledResponse {
 	private final Set<@NonNull ResponseCookie> cookies;
 	@Nullable
 	private final MarshaledResponseBody body;
+	@Nullable
+	private final StreamingResponseBody stream;
 
 	/**
 	 * Acquires a builder for {@link MarshaledResponse} instances.
@@ -147,6 +149,7 @@ public final class MarshaledResponse {
 		this.headers = builder.headers == null ? Map.of() : new LinkedCaseInsensitiveMap<>(builder.headers);
 		this.cookies = builder.cookies == null ? Set.of() : new LinkedHashSet<>(builder.cookies);
 		this.body = builder.body;
+		this.stream = builder.stream;
 
 		// Verify headers are legal
 		for (Entry<String, Set<String>> entry : this.headers.entrySet()) {
@@ -155,6 +158,20 @@ public final class MarshaledResponse {
 
 			for (String headerValue : headerValues)
 				Utilities.validateHeaderNameAndValue(headerName, headerValue);
+		}
+
+		if (getBody().isPresent() && getStream().isPresent())
+			throw new IllegalStateException("A MarshaledResponse may not specify both a known-length body and a streaming response body.");
+
+		if (getStream().isPresent()) {
+			if (isBodylessStatusCode(getStatusCode()))
+				throw new IllegalStateException(format("HTTP status code %d must not include a streaming response body.", getStatusCode()));
+
+			if (this.headers.containsKey("Content-Length"))
+				throw new IllegalStateException("Streaming responses must not specify Content-Length.");
+
+			if (this.headers.containsKey("Transfer-Encoding"))
+				throw new IllegalStateException("Streaming responses must not specify Transfer-Encoding.");
 		}
 	}
 
@@ -209,6 +226,26 @@ public final class MarshaledResponse {
 	}
 
 	/**
+	 * The finalized streaming HTTP response body to write, if available.
+	 *
+	 * @return the streaming response body to write, or {@link Optional#empty()} if no stream should be written
+	 */
+	@NonNull
+	public Optional<StreamingResponseBody> getStream() {
+		return Optional.ofNullable(this.stream);
+	}
+
+	/**
+	 * Whether this response has a streaming response body.
+	 *
+	 * @return {@code true} if this response is streaming
+	 */
+	@NonNull
+	public Boolean isStreaming() {
+		return getStream().isPresent();
+	}
+
+	/**
 	 * The number of bytes this response body will write.
 	 *
 	 * @return the body length, or {@code 0} if no body is present
@@ -250,6 +287,10 @@ public final class MarshaledResponse {
 	/**
 	 * Builder used to construct instances of {@link MarshaledResponse} via {@link MarshaledResponse#withResponse(Response)} or {@link MarshaledResponse#withStatusCode(Integer)}.
 	 * <p>
+	 * Known-length bodies and streaming bodies are mutually exclusive. This builder does not automatically clear one
+	 * when the other is set; use {@link #withoutBody()} or {@link #withoutStream()} before {@link #build()} when
+	 * switching body modes.
+	 * <p>
 	 * This class is intended for use by a single thread.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -264,6 +305,8 @@ public final class MarshaledResponse {
 		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
 		@Nullable
 		private MarshaledResponseBody body;
+		@Nullable
+		private StreamingResponseBody stream;
 
 		protected Builder(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
@@ -382,6 +425,25 @@ public final class MarshaledResponse {
 		}
 
 		/**
+		 * Sets a streaming response body, or removes any current stream if {@code stream} is {@code null}.
+		 * <p>
+		 * A response may have a known-length body or a stream, but not both. Setting a stream does not remove any
+		 * current known-length body; call {@link #withoutBody()} first if replacing a known-length body with a stream.
+		 * {@link #build()} rejects responses that still specify both.
+		 *
+		 * @param stream the streaming response body to write, or {@code null} for no stream
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder stream(@Nullable StreamingResponseBody stream) {
+			if (stream == null)
+				return withoutStream();
+
+			this.stream = stream;
+			return this;
+		}
+
+		/**
 		 * Removes the response body from this builder.
 		 * <p>
 		 * If the current body owns a caller-supplied {@link FileChannel}, the channel is closed before it is
@@ -393,6 +455,17 @@ public final class MarshaledResponse {
 		public Builder withoutBody() {
 			releaseBodyResources(this.body);
 			this.body = null;
+			return this;
+		}
+
+		/**
+		 * Removes the streaming response body from this builder.
+		 *
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder withoutStream() {
+			this.stream = null;
 			return this;
 		}
 
@@ -422,6 +495,7 @@ public final class MarshaledResponse {
 					.cookies(new LinkedHashSet<>(marshaledResponse.getCookies()));
 
 			marshaledResponse.getBody().ifPresent(this.builder::body);
+			marshaledResponse.getStream().ifPresent(this.builder::stream);
 		}
 
 		@NonNull
@@ -506,6 +580,12 @@ public final class MarshaledResponse {
 			return this;
 		}
 
+		@NonNull
+		public Copier stream(@Nullable StreamingResponseBody stream) {
+			this.builder.stream(stream);
+			return this;
+		}
+
 		/**
 		 * Removes the response body from this copier.
 		 * <p>
@@ -517,6 +597,17 @@ public final class MarshaledResponse {
 		@NonNull
 		public Copier withoutBody() {
 			this.builder.withoutBody();
+			return this;
+		}
+
+		/**
+		 * Removes the streaming response body from this copier.
+		 *
+		 * @return this copier
+		 */
+		@NonNull
+		public Copier withoutStream() {
+			this.builder.withoutStream();
 			return this;
 		}
 
@@ -602,6 +693,11 @@ public final class MarshaledResponse {
 
 		if (offset + count > length)
 			throw new IllegalArgumentException(format("Offset plus count must be <= body length %d.", length));
+	}
+
+	private static boolean isBodylessStatusCode(@NonNull Integer statusCode) {
+		requireNonNull(statusCode);
+		return (statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 304;
 	}
 
 	@NonNull

@@ -27,6 +27,7 @@ import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.Options;
 import com.soklet.internal.microhttp.OptionsBuilder;
+import com.soklet.internal.microhttp.StreamingMicrohttpResponses;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -40,6 +41,7 @@ import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Collections;
@@ -53,6 +55,8 @@ import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -99,6 +103,14 @@ final class DefaultHttpServer implements HttpServer {
 	private static final Integer DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER;
 	@NonNull
 	private static final Integer DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER;
+	@NonNull
+	private static final Integer DEFAULT_STREAMING_QUEUE_CAPACITY_IN_BYTES;
+	@NonNull
+	private static final Integer DEFAULT_STREAMING_CHUNK_SIZE_IN_BYTES;
+	@NonNull
+	private static final Duration DEFAULT_STREAMING_RESPONSE_TIMEOUT;
+	@NonNull
+	private static final Integer DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -113,6 +125,10 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 		DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER = 64;
 		DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER = 16;
+		DEFAULT_STREAMING_QUEUE_CAPACITY_IN_BYTES = 1_024 * 1_024;
+		DEFAULT_STREAMING_CHUNK_SIZE_IN_BYTES = 1_024 * 16;
+		DEFAULT_STREAMING_RESPONSE_TIMEOUT = Duration.ZERO;
+		DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER = 4;
 	}
 
 	@NonNull
@@ -149,8 +165,22 @@ final class DefaultHttpServer implements HttpServer {
 	private final ReentrantLock lock;
 	@NonNull
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+	@NonNull
+	private final Supplier<ExecutorService> streamingExecutorServiceSupplier;
+	@NonNull
+	private final Integer streamingQueueCapacityInBytes;
+	@NonNull
+	private final Integer streamingChunkSizeInBytes;
+	@NonNull
+	private final Duration streamingResponseTimeout;
+	@NonNull
+	private final Duration streamingResponseIdleTimeout;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
+	@Nullable
+	private volatile ExecutorService streamingExecutorService;
+	@Nullable
+	private volatile ScheduledExecutorService streamingTimeoutExecutorService;
 	@Nullable
 	private volatile TimeoutScheduler requestHandlerTimeoutScheduler;
 	@Nullable
@@ -210,6 +240,66 @@ final class DefaultHttpServer implements HttpServer {
 			if (Utilities.virtualThreadsAvailable()) {
 				ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
+							.throwable(throwable)
+							.build());
+				});
+
+				return new ThreadPoolExecutor(
+						threadPoolSize,
+						threadPoolSize,
+						0L,
+						TimeUnit.MILLISECONDS,
+						new ArrayBlockingQueue<>(queueCapacity),
+						threadFactory);
+			}
+
+			return new ThreadPoolExecutor(
+					threadPoolSize,
+					threadPoolSize,
+					0L,
+					TimeUnit.MILLISECONDS,
+					new ArrayBlockingQueue<>(queueCapacity),
+					new NonvirtualThreadFactory(threadNamePrefix));
+		};
+
+		this.streamingQueueCapacityInBytes = builder.streamingQueueCapacityInBytes != null
+				? builder.streamingQueueCapacityInBytes
+				: DEFAULT_STREAMING_QUEUE_CAPACITY_IN_BYTES;
+
+		if (this.streamingQueueCapacityInBytes < 1)
+			throw new IllegalArgumentException("Streaming queue capacity must be > 0");
+
+		this.streamingChunkSizeInBytes = builder.streamingChunkSizeInBytes != null
+				? builder.streamingChunkSizeInBytes
+				: DEFAULT_STREAMING_CHUNK_SIZE_IN_BYTES;
+
+		if (this.streamingChunkSizeInBytes < 1)
+			throw new IllegalArgumentException("Streaming chunk size must be > 0");
+
+		this.streamingResponseTimeout = builder.streamingResponseTimeout != null
+				? builder.streamingResponseTimeout
+				: DEFAULT_STREAMING_RESPONSE_TIMEOUT;
+
+		if (this.streamingResponseTimeout.isNegative())
+			throw new IllegalArgumentException("Streaming response timeout must be >= 0");
+
+		this.streamingResponseIdleTimeout = builder.streamingResponseIdleTimeout != null
+				? builder.streamingResponseIdleTimeout
+				: this.requestTimeout;
+
+		if (this.streamingResponseIdleTimeout.isNegative())
+			throw new IllegalArgumentException("Streaming response idle timeout must be >= 0");
+
+		this.streamingExecutorServiceSupplier = builder.streamingExecutorServiceSupplier != null ? builder.streamingExecutorServiceSupplier : () -> {
+			String threadNamePrefix = "streaming-";
+			int threadPoolSize = Utilities.virtualThreadsAvailable()
+					? Math.max(1, getConcurrency() * DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER)
+					: Math.max(1, getConcurrency() * DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER);
+			int queueCapacity = Math.max(1, threadPoolSize * DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER);
+
+			if (Utilities.virtualThreadsAvailable()) {
+				ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (Thread thread, Throwable throwable) -> {
+					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server streaming response processing")
 							.throwable(throwable)
 							.build());
 				});
@@ -400,9 +490,13 @@ final class DefaultHttpServer implements HttpServer {
 
 							notifyDidReadRequest(remoteAddress, requestTarget);
 
-							requestHandler.handleRequest(request, (requestResult -> {
+							Request requestForResponse = request;
+
+							requestHandler.handleRequest(requestForResponse, (requestResult -> {
 								try {
-									MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestResult.getMarshaledResponse());
+									MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestForResponse,
+											requestResult.getResourceMethod().orElse(null),
+											requestResult.getMarshaledResponse());
 									if (responseWritten.compareAndSet(false, true)) {
 										cancelTimeout(timeoutFutureRef.getAndSet(null));
 										try {
@@ -495,6 +589,8 @@ final class DefaultHttpServer implements HttpServer {
 			});
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
+			this.streamingExecutorService = getStreamingExecutorServiceSupplier().get();
+			this.streamingTimeoutExecutorService = new ScheduledThreadPoolExecutor(1, new NonvirtualThreadFactory("streaming-timeout"));
 			this.requestHandlerTimeoutScheduler = new TimeoutScheduler(new NonvirtualThreadFactory("request-handler-timeout"));
 			EventLoop eventLoop = null;
 
@@ -559,6 +655,28 @@ final class DefaultHttpServer implements HttpServer {
 					}
 				}
 
+				ExecutorService streamingExecutorService = getStreamingExecutorService().orElse(null);
+
+				if (streamingExecutorService != null) {
+					streamingExecutorService.shutdown();
+
+					final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
+					long remMillis = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+					boolean done = remMillis == 0L || streamingExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
+
+					if (!done) {
+						streamingExecutorService.shutdownNow();
+						remMillis = Math.max(100L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+						streamingExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
+					}
+				}
+
+				ScheduledExecutorService streamingTimeoutExecutorService = getStreamingTimeoutExecutorService().orElse(null);
+
+				if (streamingTimeoutExecutorService != null) {
+					streamingTimeoutExecutorService.shutdownNow();
+				}
+
 				TimeoutScheduler requestHandlerTimeoutScheduler = getRequestHandlerTimeoutScheduler().orElse(null);
 
 				if (requestHandlerTimeoutScheduler != null) {
@@ -581,6 +699,8 @@ final class DefaultHttpServer implements HttpServer {
 		} finally {
 			this.eventLoop = null;
 			this.requestHandlerExecutorService = null;
+			this.streamingExecutorService = null;
+			this.streamingTimeoutExecutorService = null;
 			this.requestHandlerTimeoutScheduler = null;
 
 			getLock().unlock();
@@ -687,6 +807,13 @@ final class DefaultHttpServer implements HttpServer {
 
 	@NonNull
 	protected MicrohttpResponse toMicrohttpResponse(@NonNull MarshaledResponse marshaledResponse) {
+		return toMicrohttpResponse(null, null, marshaledResponse);
+	}
+
+	@NonNull
+	protected MicrohttpResponse toMicrohttpResponse(@Nullable Request request,
+																									@Nullable ResourceMethod resourceMethod,
+																									@NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(marshaledResponse);
 
 		List<Header> headers = new ArrayList<>();
@@ -722,6 +849,49 @@ final class DefaultHttpServer implements HttpServer {
 		headers.sort(Comparator.comparing(Header::name));
 
 		String reasonPhrase = reasonPhraseForStatusCode(marshaledResponse.getStatusCode());
+		StreamingResponseBody stream = marshaledResponse.getStream().orElse(null);
+
+		if (stream != null) {
+			ExecutorService streamingExecutorService = getStreamingExecutorService().orElse(null);
+			ScheduledExecutorService streamingTimeoutExecutorService = getStreamingTimeoutExecutorService().orElse(null);
+
+			if (streamingExecutorService == null)
+				throw new IllegalStateException("Streaming executor service is unavailable.");
+
+			if (streamingTimeoutExecutorService == null)
+				throw new IllegalStateException("Streaming timeout executor service is unavailable.");
+
+			Duration streamingResponseTimeout = getStreamingResponseTimeout();
+			Duration streamingResponseIdleTimeout = getStreamingResponseIdleTimeout();
+			Instant deadline = streamingResponseTimeout.isZero()
+					? null
+					: Instant.now().plus(streamingResponseTimeout);
+			Duration idleTimeout = streamingResponseIdleTimeout.isZero()
+					? null
+					: streamingResponseIdleTimeout;
+
+			return StreamingMicrohttpResponses.withStreamingBody(
+					marshaledResponse.getStatusCode(),
+					reasonPhrase,
+					headers,
+					stream,
+					streamingExecutorService,
+					streamingTimeoutExecutorService,
+					getStreamingQueueCapacityInBytes(),
+					getStreamingChunkSizeInBytes(),
+					deadline,
+					idleTimeout,
+					(streamDuration, cancelationReason, throwable) ->
+							notifyDidTerminateResponseStream(request, resourceMethod, marshaledResponse, streamDuration, cancelationReason, throwable),
+					(throwable) -> safelyLog(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
+									"An exception occurred while invoking a streaming response cancelation callback")
+							.throwable(throwable)
+							.request(request)
+							.resourceMethod(resourceMethod)
+							.marshaledResponse(marshaledResponse)
+							.build()));
+		}
+
 		MarshaledResponseBody body = marshaledResponse.getBody().orElse(null);
 
 		if (body == null)
@@ -824,6 +994,51 @@ final class DefaultHttpServer implements HttpServer {
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED, message)
 					.throwable(throwable)
+					.build());
+		}
+	}
+
+	private void notifyDidTerminateResponseStream(@Nullable Request request,
+																								@Nullable ResourceMethod resourceMethod,
+																								@NonNull MarshaledResponse marshaledResponse,
+																								@NonNull Duration streamDuration,
+																								@Nullable StreamingResponseCancelationReason cancelationReason,
+																								@Nullable Throwable throwable) {
+		requireNonNull(marshaledResponse);
+		requireNonNull(streamDuration);
+
+		if (cancelationReason != null) {
+			LogEventType logEventType = cancelationReason == StreamingResponseCancelationReason.PRODUCER_FAILED
+					? LogEventType.RESPONSE_STREAM_FAILED
+					: LogEventType.RESPONSE_STREAM_CANCELED;
+
+			safelyLog(LogEvent.with(logEventType, format("Streaming response terminated: %s", cancelationReason.name()))
+					.throwable(throwable)
+					.request(request)
+					.resourceMethod(resourceMethod)
+					.marshaledResponse(marshaledResponse)
+					.build());
+		}
+
+		if (request == null)
+			return;
+
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didTerminateResponseStream(ServerType.STANDARD_HTTP,
+							request,
+							resourceMethod,
+							marshaledResponse,
+							streamDuration,
+							cancelationReason,
+							throwable));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
+							format("An exception occurred while invoking %s::didTerminateResponseStream", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.request(request)
+					.resourceMethod(resourceMethod)
+					.marshaledResponse(marshaledResponse)
 					.build());
 		}
 	}
@@ -1085,6 +1300,26 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
+	protected Integer getStreamingQueueCapacityInBytes() {
+		return this.streamingQueueCapacityInBytes;
+	}
+
+	@NonNull
+	protected Integer getStreamingChunkSizeInBytes() {
+		return this.streamingChunkSizeInBytes;
+	}
+
+	@NonNull
+	protected Duration getStreamingResponseTimeout() {
+		return this.streamingResponseTimeout;
+	}
+
+	@NonNull
+	protected Duration getStreamingResponseIdleTimeout() {
+		return this.streamingResponseIdleTimeout;
+	}
+
+	@NonNull
 	protected Duration getSocketSelectTimeout() {
 		return this.socketSelectTimeout;
 	}
@@ -1130,6 +1365,16 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
+	protected Optional<ExecutorService> getStreamingExecutorService() {
+		return Optional.ofNullable(this.streamingExecutorService);
+	}
+
+	@NonNull
+	protected Optional<ScheduledExecutorService> getStreamingTimeoutExecutorService() {
+		return Optional.ofNullable(this.streamingTimeoutExecutorService);
+	}
+
+	@NonNull
 	protected Optional<TimeoutScheduler> getRequestHandlerTimeoutScheduler() {
 		return Optional.ofNullable(this.requestHandlerTimeoutScheduler);
 	}
@@ -1152,6 +1397,11 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	protected Supplier<ExecutorService> getRequestHandlerExecutorServiceSupplier() {
 		return this.requestHandlerExecutorServiceSupplier;
+	}
+
+	@NonNull
+	protected Supplier<ExecutorService> getStreamingExecutorServiceSupplier() {
+		return this.streamingExecutorServiceSupplier;
 	}
 
 	@NonNull
@@ -1181,6 +1431,18 @@ final class DefaultHttpServer implements HttpServer {
 			requestHandlerExecutorService.shutdownNow();
 		}
 
+		ExecutorService streamingExecutorService = this.streamingExecutorService;
+
+		if (streamingExecutorService != null) {
+			streamingExecutorService.shutdownNow();
+		}
+
+		ScheduledExecutorService streamingTimeoutExecutorService = this.streamingTimeoutExecutorService;
+
+		if (streamingTimeoutExecutorService != null) {
+			streamingTimeoutExecutorService.shutdownNow();
+		}
+
 		TimeoutScheduler requestHandlerTimeoutScheduler = this.requestHandlerTimeoutScheduler;
 
 		if (requestHandlerTimeoutScheduler != null) {
@@ -1189,6 +1451,8 @@ final class DefaultHttpServer implements HttpServer {
 
 		this.eventLoop = null;
 		this.requestHandlerExecutorService = null;
+		this.streamingExecutorService = null;
+		this.streamingTimeoutExecutorService = null;
 		this.requestHandlerTimeoutScheduler = null;
 	}
 
