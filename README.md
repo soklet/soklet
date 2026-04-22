@@ -475,6 +475,8 @@ SokletConfig config = SokletConfig.withHttpServer(
 ).build();
 ```
 
+##### Zero-Copy Responses
+
 Already know exactly what you want to send over the wire? Use [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) to skip additional processing.
 
 ```java
@@ -494,6 +496,33 @@ public MarshaledResponse exampleImage() {
 ```
 
 `MarshaledResponse` supports known-length byte-array, file, file-channel, and `ByteBuffer` bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory.
+
+##### Streaming Responses
+
+`MarshaledResponse` also supports streaming response bodies when the final byte length is not known up front. Streaming is intentionally a marshaled-response feature, like file-backed output: the resource method is taking direct control of what Soklet writes to the HTTP response.
+
+```java
+@GET("/tokens")
+public MarshaledResponse tokens(TokenService tokenService) {
+  return MarshaledResponse.withStatusCode(200)
+    .headers(Map.of(
+      "Content-Type", Set.of("text/plain; charset=UTF-8"),
+      "Cache-Control", Set.of("no-transform")
+    ))
+    .stream(StreamingResponseBody.fromWriter((output, context) -> {
+      try (AutoCloseable ignored = context.onCancel(tokenService::stop)) {
+        tokenService.generate(token -> {
+          context.throwIfCanceled();
+          output.write(token.getBytes(StandardCharsets.UTF_8));
+          output.flush();
+        });
+      }
+    }))
+    .build();
+}
+```
+
+Streaming responses use HTTP/1.1 chunked transfer encoding. Soklet owns `Transfer-Encoding`, rejects caller-supplied `Content-Length`, and gives the producer a `StreamingResponseContext` so upstream work can be canceled when the client disconnects or a streaming timeout fires.
 
 Redirects (via [`Response`](https://javadoc.soklet.com/com/soklet/Response.html)):
 

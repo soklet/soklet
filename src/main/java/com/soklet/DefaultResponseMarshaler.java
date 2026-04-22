@@ -362,15 +362,22 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		if (headHandler != null) {
 			marshaledResponse = headHandler.handle(request, getMethodMarshaledResponse);
 		} else {
-			// A HEAD can never write a response body, but we explicitly set its Content-Length header
-			// so the client knows how long the response would have been.
-			marshaledResponse = getMethodMarshaledResponse.copy()
+			MarshaledResponse.Copier responseCopier = getMethodMarshaledResponse.copy()
 					.withoutBody()
 					.withoutStream()
-					.cookies(getMethodMarshaledResponse.getCookies())
-					.headers((mutableHeaders) -> {
-						mutableHeaders.put("Content-Length", Set.of(String.valueOf(getMethodMarshaledResponse.getBodyLength())));
-					}).finish();
+					.cookies(getMethodMarshaledResponse.getCookies());
+
+			if (getMethodMarshaledResponse.isStreaming()) {
+				// Streaming response length is not known up front, so do not advertise a misleading Content-Length.
+				responseCopier.headers((mutableHeaders) -> mutableHeaders.remove("Content-Length"));
+			} else {
+				// A HEAD can never write a response body, but we explicitly set Content-Length so the client knows
+				// how long the GET response would have been.
+				responseCopier.headers((mutableHeaders) ->
+						mutableHeaders.put("Content-Length", Set.of(String.valueOf(getMethodMarshaledResponse.getBodyLength()))));
+			}
+
+			marshaledResponse = responseCopier.finish();
 		}
 
 		if (postProcessor != null)

@@ -61,6 +61,9 @@ public interface CancelationToken {
 	 * <p>
 	 * The returned handle removes the callback when closed. If the token is already canceled, the callback may run
 	 * before this method returns.
+	 * <p>
+	 * Callbacks run synchronously on the thread that performs cancelation. Keep callbacks fast and non-blocking; if
+	 * cleanup may take meaningful time, dispatch it to an application-owned executor from the callback.
 	 *
 	 * @param callback the callback to run on cancelation
 	 * @return a handle that removes the callback when closed

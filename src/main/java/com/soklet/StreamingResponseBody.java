@@ -65,6 +65,9 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 
 	/**
 	 * Creates a streaming response body backed by a {@link Flow.Publisher} of byte buffers.
+	 * <p>
+	 * Soklet requests one item at a time and writes each item through its bounded streaming queue. If the queue is
+	 * full, the subscriber's {@code onNext} path may block until space is available.
 	 *
 	 * @param publisher the publisher that emits response bytes
 	 * @return a streaming response body
@@ -80,6 +83,8 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	 * This adapter is intended for special cases where an existing streaming source is already exposed as an
 	 * {@link InputStream}. Dynamic application streaming should usually use {@link #fromWriter(StreamingResponseWriter)}
 	 * or {@link #fromPublisher(Flow.Publisher)}.
+	 * <p>
+	 * If the response is canceled while a read is blocked, Soklet closes the supplied input stream.
 	 *
 	 * @param inputStreamSupplier supplies the input stream to copy
 	 * @return a streaming response body
@@ -105,6 +110,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	 * <p>
 	 * The charset is required. Encoding errors default to {@link CodingErrorAction#REPORT}; use
 	 * {@link #withReader(Supplier, Charset)} to override the JDK encoder actions explicitly.
+	 * If the response is canceled while a read is blocked, Soklet closes the supplied reader.
 	 *
 	 * @param readerSupplier supplies the reader to copy
 	 * @param charset        charset used to encode characters to response bytes

@@ -349,6 +349,21 @@ public class MarshaledResponseTests {
 	}
 
 	@Test
+	public void default_head_response_omits_content_length_for_streaming_body() {
+		MarshaledResponse getResponse = MarshaledResponse.withStatusCode(200)
+				.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+				.stream(StreamingResponseBody.fromWriter((output, context) -> output.write(new byte[]{1, 2, 3})))
+				.build();
+		MarshaledResponse headResponse = DefaultResponseMarshaler.defaultInstance().forHead(
+				Request.withPath(HttpMethod.HEAD, "/stream").build(), getResponse);
+
+		Assertions.assertTrue(headResponse.getBody().isEmpty());
+		Assertions.assertTrue(headResponse.getStream().isEmpty());
+		Assertions.assertFalse(headResponse.getHeaders().containsKey("Content-Length"));
+		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), headResponse.getHeaders().get("Content-Type"));
+	}
+
+	@Test
 	public void file_body_rejects_non_regular_path(@TempDir Path tempDir) {
 		Assertions.assertThrows(IllegalArgumentException.class, () -> MarshaledResponse.withStatusCode(200).body(tempDir));
 	}
