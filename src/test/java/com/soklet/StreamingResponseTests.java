@@ -37,6 +37,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -335,6 +336,57 @@ public class StreamingResponseTests {
 	}
 
 	@Test
+	public void simulator_preserves_client_disconnected_reason_for_interrupted_producers() {
+		AtomicReference<StreamingResponseCancelationReason> cancelationReasonRef = new AtomicReference<>();
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didTerminateResponseStream(@NonNull ServerType serverType,
+																								 @NonNull Request request,
+																								 @Nullable ResourceMethod resourceMethod,
+																								 @NonNull MarshaledResponse marshaledResponse,
+																								 @NonNull Duration streamDuration,
+																								 @Nullable StreamingResponseCancelationReason cancelationReason,
+																								 @Nullable Throwable throwable) {
+						cancelationReasonRef.set(cancelationReason);
+					}
+				})
+				.build();
+
+		IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, () ->
+				Soklet.runSimulator(config, simulator ->
+						simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/interrupt").build())));
+
+		Assertions.assertInstanceOf(InterruptedException.class, exception.getCause());
+		Assertions.assertEquals(StreamingResponseCancelationReason.CLIENT_DISCONNECTED, cancelationReasonRef.get());
+	}
+
+	@Test
+	public void simulator_logs_cancelation_callback_failures() {
+		List<LogEventType> logEventTypes = new java.util.concurrent.CopyOnWriteArrayList<>();
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						logEventTypes.add(logEvent.getLogEventType());
+					}
+				})
+				.build();
+
+		SimulatorOptions simulatorOptions = SimulatorOptions.builder()
+				.streamingResponseBodyLimitInBytes(4)
+				.build();
+
+		Assertions.assertThrows(IllegalStateException.class, () ->
+				Soklet.runSimulator(config, simulatorOptions, simulator ->
+						simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/cancel-callback-failure").build())));
+
+		Assertions.assertTrue(logEventTypes.contains(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED));
+	}
+
+	@Test
 	public void reader_body_requires_explicit_charset_and_exposes_encoder_actions() {
 		StreamingResponseBody.ReaderBody body = (StreamingResponseBody.ReaderBody) StreamingResponseBody.withReader(
 						() -> new StringReader("reader"),
@@ -410,7 +462,31 @@ public class StreamingResponseTests {
 
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.stream(StreamingResponseBody.fromPublisher(publisher))
+						.stream(StreamingResponseBody.fromPublisher(publisher))
+						.build();
+		}
+
+		@GET("/interrupt")
+		public MarshaledResponse interrupt() {
+			return MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.stream(StreamingResponseBody.fromWriter((output, context) -> {
+						throw new InterruptedException("simulated interrupt");
+					}))
+					.build();
+		}
+
+		@GET("/cancel-callback-failure")
+		public MarshaledResponse cancelCallbackFailure() {
+			return MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.stream(StreamingResponseBody.fromWriter((output, context) -> {
+						try (AutoCloseable ignored = context.onCancel(() -> {
+							throw new IllegalStateException("callback failed");
+						})) {
+							output.write("hello world".getBytes(StandardCharsets.UTF_8));
+						}
+					}))
 					.build();
 		}
 	}

@@ -23,6 +23,7 @@ import com.soklet.annotation.McpResource;
 import com.soklet.annotation.McpServerEndpoint;
 import com.soklet.annotation.McpTool;
 import com.soklet.annotation.McpUriParameter;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -1167,6 +1168,50 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void getStreamRollsBackWhenSessionDisappearsAfterValidation() {
+		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
+		McpSessionStore sessionStore = McpSessionStore.fromInMemory();
+		AtomicReference<String> deletedSessionId = new AtomicReference<>();
+		McpRequestAdmissionPolicy admissionPolicy = new McpRequestAdmissionPolicy() {
+			@Override
+			public Optional<Response> checkRequest(@NonNull McpAdmissionContext context) {
+				if (context.getHttpMethod() == HttpMethod.GET)
+					context.getSessionId().ifPresent(sessionId -> {
+						deletedSessionId.set(sessionId);
+						sessionStore.deleteBySessionId(sessionId);
+					});
+
+				return Optional.empty();
+			}
+		};
+
+		Soklet.runSimulator(configuration(
+				lifecycleObserver,
+				MetricsCollector.disabledInstance(),
+				sessionStore,
+				null,
+				admissionPolicy), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+
+			McpRequestResult requestResult = simulator.performMcpRequest(Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+					.headers(Map.of(
+							"MCP-Session-Id", sessionHeaders.get("MCP-Session-Id"),
+							"MCP-Protocol-Version", sessionHeaders.get("MCP-Protocol-Version"),
+							"Accept", Set.of("text/event-stream")
+					))
+					.build());
+
+			Assertions.assertInstanceOf(McpRequestResult.ResponseCompleted.class, requestResult);
+			HttpRequestResult httpRequestResult = ((McpRequestResult.ResponseCompleted) requestResult).getHttpRequestResult();
+			Assertions.assertEquals(Integer.valueOf(404), httpRequestResult.getMarshaledResponse().getStatusCode());
+		});
+
+		Assertions.assertNotNull(deletedSessionId.get());
+		Assertions.assertTrue(lifecycleObserver.establishedStreamSessionIds.isEmpty());
+		Assertions.assertNull(lifecycleObserver.streamTerminationReason);
+	}
+
+	@Test
 	public void initializeFailureCreatesThenTerminatesSession() {
 		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
 
@@ -1275,20 +1320,28 @@ public class McpRuntimeTests {
 	}
 
 	private static SokletConfig configuration(LifecycleObserver lifecycleObserver,
-																							 MetricsCollector metricsCollector) {
+																								 MetricsCollector metricsCollector) {
 		return configuration(lifecycleObserver, metricsCollector, null);
 	}
 
 	private static SokletConfig configuration(LifecycleObserver lifecycleObserver,
-																							 MetricsCollector metricsCollector,
-																							 McpSessionStore sessionStore) {
+																								 MetricsCollector metricsCollector,
+																								 McpSessionStore sessionStore) {
 		return configuration(lifecycleObserver, metricsCollector, sessionStore, null);
 	}
 
 	private static SokletConfig configuration(LifecycleObserver lifecycleObserver,
-																							 MetricsCollector metricsCollector,
-																							 McpSessionStore sessionStore,
-																							 McpCorsAuthorizer corsAuthorizer) {
+																								 MetricsCollector metricsCollector,
+																								 McpSessionStore sessionStore,
+																								 McpCorsAuthorizer corsAuthorizer) {
+		return configuration(lifecycleObserver, metricsCollector, sessionStore, corsAuthorizer, null);
+	}
+
+	private static SokletConfig configuration(LifecycleObserver lifecycleObserver,
+																								 MetricsCollector metricsCollector,
+																								 McpSessionStore sessionStore,
+																								 McpCorsAuthorizer corsAuthorizer,
+																								 McpRequestAdmissionPolicy admissionPolicy) {
 		McpHandlerResolver handlerResolver = McpHandlerResolver.fromClasses(Set.of(CatalogEndpoint.class))
 				.withTool(new ProgrammaticEchoToolHandler(), CatalogEndpoint.class)
 				.withPrompt(new ProgrammaticCatalogPromptHandler(), CatalogEndpoint.class)
@@ -1302,6 +1355,9 @@ public class McpRuntimeTests {
 
 		if (corsAuthorizer != null)
 			mcpServerBuilder.corsAuthorizer(corsAuthorizer);
+
+		if (admissionPolicy != null)
+			mcpServerBuilder.requestAdmissionPolicy(admissionPolicy);
 
 		return SokletConfig.withMcpServer(mcpServerBuilder.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))

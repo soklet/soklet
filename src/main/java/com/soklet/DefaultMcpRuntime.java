@@ -327,10 +327,18 @@ final class DefaultMcpRuntime {
 		if (!storedSession.initializedNotificationReceived())
 			return plainTextResponse(request, 400, "MCP session has not received notifications/initialized.");
 
-		touchSession(mcpServer, storedSession);
-		registerMcpStream(request, resolvedEndpoint.endpointClass(), sessionId);
-		return httpRequestResultFromMarshaledResponse(request, eventStreamResponse());
-	}
+			touchSession(mcpServer, storedSession);
+			McpStreamState streamState = registerMcpStream(request, resolvedEndpoint.endpointClass(), sessionId);
+			observeIdleExpiredSessionIfPresent(mcpServer, sessionId);
+
+			if (!isStreamableSession(mcpServer, resolvedEndpoint.endpointClass(), sessionId)) {
+				unregisterMcpStreamQuietly(sessionId, streamState);
+				return plainTextResponse(request, 404, "Unknown MCP session.");
+			}
+
+			observeEstablishedMcpStream(request, resolvedEndpoint.endpointClass(), sessionId);
+			return httpRequestResultFromMarshaledResponse(request, eventStreamResponse());
+		}
 
 	@NonNull
 	private HttpRequestResult dispatchObservedPostRequest(@NonNull Request request,
@@ -2109,15 +2117,27 @@ final class DefaultMcpRuntime {
 				lifecycleObserver -> lifecycleObserver.didTerminateMcpSession(endpointClass, sessionId, sessionDuration, terminationReason, throwable));
 	}
 
-	private void registerMcpStream(@NonNull Request request,
-																 @NonNull Class<? extends McpEndpoint> endpointClass,
-																 @NonNull String sessionId) {
+	@NonNull
+	private McpStreamState registerMcpStream(@NonNull Request request,
+																					 @NonNull Class<? extends McpEndpoint> endpointClass,
+																					 @NonNull String sessionId) {
 		requireNonNull(request);
 		requireNonNull(endpointClass);
 		requireNonNull(sessionId);
 
+		McpStreamState streamState = new McpStreamState(request, endpointClass, sessionId, Instant.now());
 		this.mcpStreamsBySessionId.computeIfAbsent(sessionId, ignored -> new CopyOnWriteArrayList<>())
-				.add(new McpStreamState(request, endpointClass, sessionId, Instant.now()));
+				.add(streamState);
+
+		return streamState;
+	}
+
+	private void observeEstablishedMcpStream(@NonNull Request request,
+																					 @NonNull Class<? extends McpEndpoint> endpointClass,
+																					 @NonNull String sessionId) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
+		requireNonNull(sessionId);
 
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::didEstablishMcpSseStream", MetricsCollector.class.getSimpleName()),
@@ -2128,6 +2148,32 @@ final class DefaultMcpRuntime {
 				request,
 				null,
 				lifecycleObserver -> lifecycleObserver.didEstablishMcpSseStream(request, endpointClass, sessionId));
+	}
+
+	private void unregisterMcpStreamQuietly(@NonNull String sessionId,
+																				 @NonNull McpStreamState streamState) {
+		requireNonNull(sessionId);
+		requireNonNull(streamState);
+
+		this.mcpStreamsBySessionId.computeIfPresent(sessionId, (ignored, streamStates) -> {
+			streamStates.remove(streamState);
+			return streamStates.isEmpty() ? null : streamStates;
+		});
+	}
+
+	private boolean isStreamableSession(@NonNull McpServer mcpServer,
+																		 @NonNull Class<? extends McpEndpoint> endpointClass,
+																		 @NonNull String sessionId) {
+		requireNonNull(mcpServer);
+		requireNonNull(endpointClass);
+		requireNonNull(sessionId);
+
+		McpStoredSession storedSession = mcpServer.getSessionStore().findBySessionId(sessionId).orElse(null);
+		return storedSession != null
+				&& storedSession.terminatedAt() == null
+				&& storedSession.endpointClass().equals(endpointClass)
+				&& storedSession.initialized()
+				&& storedSession.initializedNotificationReceived();
 	}
 
 	void handleClientDisconnectedStream(@NonNull Request request,

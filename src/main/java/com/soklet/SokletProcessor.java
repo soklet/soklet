@@ -176,6 +176,10 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	// Cached mirrors resolved in init()
 	private TypeMirror sseHandshakeResultType;   // com.soklet.SseHandshakeResult
+	private TypeMirror mcpToolResultType;        // com.soklet.McpToolResult
+	private TypeMirror mcpPromptResultType;      // com.soklet.McpPromptResult
+	private TypeMirror mcpResourceContentsType;  // com.soklet.McpResourceContents
+	private TypeMirror mcpListResourcesResultType; // com.soklet.McpListResourcesResult
 	private TypeElement pathParameterElement;    // com.soklet.annotation.PathParameter
 	private TypeElement mcpEndpointElement;      // com.soklet.McpEndpoint
 
@@ -215,10 +219,18 @@ public final class SokletProcessor extends AbstractProcessor {
 		this.pruneDeletedEnabled = parseBooleanishOption(processingEnv.getOptions().get(PROCESSOR_OPTION_PRUNE_DELETED));
 		this.cacheMode = parseCacheMode(processingEnv.getOptions().get(PROCESSOR_OPTION_CACHE_MODE));
 
-		TypeElement hr = elements.getTypeElement("com.soklet.SseHandshakeResult");
-		this.sseHandshakeResultType = (hr == null ? null : hr.asType());
-		this.pathParameterElement = elements.getTypeElement("com.soklet.annotation.PathParameter");
-		this.mcpEndpointElement = elements.getTypeElement("com.soklet.McpEndpoint");
+			TypeElement hr = elements.getTypeElement("com.soklet.SseHandshakeResult");
+			this.sseHandshakeResultType = (hr == null ? null : hr.asType());
+			TypeElement mcpToolResult = elements.getTypeElement("com.soklet.McpToolResult");
+			this.mcpToolResultType = (mcpToolResult == null ? null : mcpToolResult.asType());
+			TypeElement mcpPromptResult = elements.getTypeElement("com.soklet.McpPromptResult");
+			this.mcpPromptResultType = (mcpPromptResult == null ? null : mcpPromptResult.asType());
+			TypeElement mcpResourceContents = elements.getTypeElement("com.soklet.McpResourceContents");
+			this.mcpResourceContentsType = (mcpResourceContents == null ? null : mcpResourceContents.asType());
+			TypeElement mcpListResourcesResult = elements.getTypeElement("com.soklet.McpListResourcesResult");
+			this.mcpListResourcesResultType = (mcpListResourcesResult == null ? null : mcpListResourcesResult.asType());
+			this.pathParameterElement = elements.getTypeElement("com.soklet.annotation.PathParameter");
+			this.mcpEndpointElement = elements.getTypeElement("com.soklet.McpEndpoint");
 
 		// If persistent mode was requested but cacheDir isn't configured, downgrade to SIDECAR.
 		if (this.cacheMode == CacheMode.PERSISTENT && persistentCacheRoot() == null) {
@@ -266,8 +278,9 @@ public final class SokletProcessor extends AbstractProcessor {
 			}
 		}
 
-		// SSE-specific return type check
-		enforceSseReturnTypes(roundEnv);
+			// SSE-specific return type check
+			enforceSseReturnTypes(roundEnv);
+			enforceMcpReturnTypes(roundEnv);
 
 		// Collect + validate
 		collect(roundEnv, HttpMethod.GET, GET.class, false);
@@ -805,23 +818,41 @@ public final class SokletProcessor extends AbstractProcessor {
 	// ---- SSE return-type validation ------------------------------------------
 
 	private void enforceSseReturnTypes(RoundEnvironment roundEnv) {
-		if (sseHandshakeResultType == null) return;
+		enforceAnnotatedReturnTypes(roundEnv, SseEventSource.class, sseHandshakeResultType, "SseHandshakeResult");
+	}
 
-		TypeElement sseAnn = elements.getTypeElement(SseEventSource.class.getCanonicalName());
-		if (sseAnn == null) return;
+	private void enforceMcpReturnTypes(RoundEnvironment roundEnv) {
+		enforceAnnotatedReturnTypes(roundEnv, McpTool.class, mcpToolResultType, "McpToolResult");
+		enforceAnnotatedReturnTypes(roundEnv, McpPrompt.class, mcpPromptResultType, "McpPromptResult");
+		enforceAnnotatedReturnTypes(roundEnv, McpResource.class, mcpResourceContentsType, "McpResourceContents");
+		enforceAnnotatedReturnTypes(roundEnv, McpListResources.class, mcpListResourcesResultType, "McpListResourcesResult");
+	}
 
-		for (Element e : roundEnv.getElementsAnnotatedWith(sseAnn)) {
-			if (e.getKind() != ElementKind.METHOD) {
-				error(e, "@%s can only be applied to methods.", SseEventSource.class.getSimpleName());
+	private void enforceAnnotatedReturnTypes(RoundEnvironment roundEnv,
+																					 Class<? extends Annotation> annotationType,
+																					 TypeMirror expectedReturnType,
+																					 String expectedReturnTypeName) {
+		if (expectedReturnType == null)
+			return;
+
+		TypeElement annotationElement = elements.getTypeElement(annotationType.getCanonicalName());
+		if (annotationElement == null)
+			return;
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(annotationElement)) {
+			if (element.getKind() != ElementKind.METHOD) {
+				error(element, "@%s can only be applied to methods.", annotationType.getSimpleName());
 				continue;
 			}
-			ExecutableElement method = (ExecutableElement) e;
+
+			ExecutableElement method = (ExecutableElement) element;
 			TypeMirror returnType = method.getReturnType();
-			boolean assignable = types.isAssignable(returnType, sseHandshakeResultType);
+			boolean assignable = types.isAssignable(returnType, expectedReturnType);
+
 			if (!assignable) {
-				error(e,
-						"Soklet: Resource Methods annotated with @%s must specify a return type of %s (found: %s).",
-						SseEventSource.class.getSimpleName(), "SseHandshakeResult", prettyType(returnType));
+				error(element,
+						"Soklet: Methods annotated with @%s must specify a return type of %s (found: %s).",
+						annotationType.getSimpleName(), expectedReturnTypeName, prettyType(returnType));
 			}
 		}
 	}

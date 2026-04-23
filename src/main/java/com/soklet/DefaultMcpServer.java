@@ -557,12 +557,19 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 					if (!reserveConnectionSlot(connectionSlotReserved)) {
 						writeMarshaledResponse(socket, request, serviceUnavailableResponse(request), true);
 						return;
-					}
+						}
 
-					liveConnection = registerLiveConnection(socket, request, connectionSlotReserved);
-					writeAcceptedEventStreamResponse(socket, request, requestResult.getMarshaledResponse());
-					markConnectionEstablished(liveConnection);
-					startConnectionProcessor(liveConnection);
+						liveConnection = registerLiveConnection(socket, request, connectionSlotReserved);
+
+						if (!sessionAllowsLiveGetStream(liveConnection.sessionId())) {
+							liveConnection.terminationReason().compareAndSet(null, McpStreamTerminationReason.SESSION_TERMINATED);
+							finishConnection(liveConnection, null);
+							return;
+						}
+
+						writeAcceptedEventStreamResponse(socket, request, requestResult.getMarshaledResponse());
+						markConnectionEstablished(liveConnection);
+						startConnectionProcessor(liveConnection);
 					handedOffToStreamProcessor = true;
 					return;
 				} catch (Throwable throwable) {
@@ -907,6 +914,16 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 		if (connections.remove(connection))
 			connections.add(connection);
+	}
+
+	private boolean sessionAllowsLiveGetStream(@NonNull String sessionId) {
+		requireNonNull(sessionId);
+
+		McpStoredSession storedSession = this.sessionStore.findBySessionId(sessionId).orElse(null);
+		return storedSession != null
+				&& storedSession.terminatedAt() == null
+				&& storedSession.initialized()
+				&& storedSession.initializedNotificationReceived();
 	}
 
 	private boolean isLiveEventStreamResponse(@NonNull Request request,

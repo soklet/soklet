@@ -377,6 +377,38 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void startedDefaultMcpServerClosesLiveGetStreamsWhenSessionStoreRejectsThem() throws Exception {
+		int mcpPort = findFreePort();
+		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(mcpPort)
+				.host("127.0.0.1")
+				.heartbeatInterval(Duration.ofSeconds(5))
+				.sessionStore(McpSessionStore.fromInMemory())
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(defaultMcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		defaultMcpServer.initialize(sokletConfig, (request, requestResultConsumer) -> requestResultConsumer.accept(
+				HttpRequestResult.fromMarshaledResponse(MarshaledResponse.withStatusCode(200)
+						.headers(Map.of("Content-Type", Set.of("text/event-stream; charset=UTF-8")))
+						.build())));
+
+		try {
+			defaultMcpServer.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(500);
+				writeMcpGet(socket, mcpPort, "orphaned-session");
+				Assertions.assertTrue(waitForEof(socket, 2000), "Expected orphaned live stream to be closed");
+			}
+		} finally {
+			defaultMcpServer.stop();
+		}
+	}
+
+	@Test
 	public void startedDefaultMcpServerRejectsTransferEncodingRequests() throws Exception {
 		int mcpPort = findFreePort();
 		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();

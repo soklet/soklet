@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.annotation.Multipart;
 import com.soklet.annotation.POST;
+import com.soklet.exception.IllegalRequestBodyException;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,21 @@ public class MultipartEdgeCaseTests {
 
 	private static byte[] simpleMultipartBody() {
 		return multipartBody("----AaB03x");
+	}
+
+	private static byte[] multipartBodyWithFieldCount(String boundary,
+																										int fieldCount) {
+		StringBuilder body = new StringBuilder();
+
+		for (int i = 0; i < fieldCount; i++) {
+			body.append("--").append(boundary).append("\r\n");
+			body.append("Content-Disposition: form-data; name=\"field").append(i).append("\"\r\n");
+			body.append("\r\n");
+			body.append(i).append("\r\n");
+		}
+
+		body.append("--").append(boundary).append("--\r\n");
+		return body.toString().getBytes(StandardCharsets.US_ASCII);
 	}
 
 	@Test
@@ -119,6 +135,29 @@ public class MultipartEdgeCaseTests {
 							.build());
 			Assertions.assertEquals(204, r.getMarshaledResponse().getStatusCode());
 		});
+	}
+
+	@Test
+	public void multipart_field_limit_rejects_the_1001st_field() {
+		String boundary = "----AaB03x-limit";
+		DefaultMultipartParser parser = (DefaultMultipartParser) DefaultMultipartParser.defaultInstance();
+
+		Request withinLimit = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.body(multipartBodyWithFieldCount(boundary, 1_000))
+				.build();
+
+		Map<String, Set<MultipartField>> fields = parser.extractMultipartFields(withinLimit);
+		Assertions.assertEquals(1_000, fields.size());
+
+		Request overLimit = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.body(multipartBodyWithFieldCount(boundary, 1_001))
+				.build();
+
+		IllegalRequestBodyException exception = Assertions.assertThrows(IllegalRequestBodyException.class,
+				() -> parser.extractMultipartFields(overLimit));
+		Assertions.assertTrue(exception.getMessage().contains("Maximum allowed is 1000"));
 	}
 
 	public static class UploadResource {

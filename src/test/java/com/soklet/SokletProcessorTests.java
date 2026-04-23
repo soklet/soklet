@@ -452,4 +452,49 @@ public class SokletProcessorTests {
 		assertThat(compilation).hadErrorContaining("At most one @McpListResources method may be declared");
 	}
 
+	@Test
+	void rejectsAnnotatedMcpMethodsWithWrongReturnTypes() {
+		JavaFileObject src = JavaFileObjects.forSourceString("example.BadMcpReturns",
+				"""
+						import com.soklet.McpEndpoint;
+						import com.soklet.annotation.McpListResources;
+						import com.soklet.annotation.McpPrompt;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						
+						@McpServerEndpoint(path="/mcp", name="bad-mcp-returns", version="1.0.0")
+						public class BadMcpReturns implements McpEndpoint {
+							@McpTool(name="lookup_recipe", description="Find a recipe")
+							public void lookupRecipe() {
+							}
+						
+							@McpPrompt(name="render_recipe_prompt", description="Render a prompt")
+							public String renderPrompt() {
+								return "prompt";
+							}
+						
+							@McpResource(uri="mcp://recipes/{recipeId}", name="recipe", mimeType="application/json")
+							public Integer recipe() {
+								return 1;
+							}
+						
+							@McpListResources
+							public Long listResources() {
+								return 1L;
+							}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(src);
+
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining("Methods annotated with @McpTool must specify a return type of McpToolResult");
+		assertThat(compilation).hadErrorContaining("Methods annotated with @McpPrompt must specify a return type of McpPromptResult");
+		assertThat(compilation).hadErrorContaining("Methods annotated with @McpResource must specify a return type of McpResourceContents");
+		assertThat(compilation).hadErrorContaining("Methods annotated with @McpListResources must specify a return type of McpListResourcesResult");
+	}
+
 }

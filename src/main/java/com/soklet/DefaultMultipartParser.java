@@ -239,8 +239,10 @@ final class DefaultMultipartParser implements MultipartParser {
 
 				hasNext = multipartStream.readBoundary();
 
-				if (++fieldCount > MAX_MULTIPART_FIELDS)
+				if (fieldCount >= MAX_MULTIPART_FIELDS)
 					throw new IllegalRequestBodyException(format("Too many multipart fields. Maximum allowed is %s", MAX_MULTIPART_FIELDS));
+
+				fieldCount++;
 			}
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
