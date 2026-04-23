@@ -26,7 +26,8 @@ import java.util.Optional;
  * <p>
  * Producers should check this token between expensive or blocking operations and stop producing when it becomes
  * canceled. Soklet cancels the token when a streaming response can no longer continue, such as when the client
- * disconnects or a streaming timeout is reached.
+ * disconnects, the server shuts down, the request HTTP version cannot support streaming, or a streaming timeout is
+ * reached.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

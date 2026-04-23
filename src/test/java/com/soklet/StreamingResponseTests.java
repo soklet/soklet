@@ -42,6 +42,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.soklet.TestSupport.connectWithRetry;
@@ -105,10 +106,30 @@ public class StreamingResponseTests {
 	@Test
 	public void http_1_0_streaming_request_is_rejected_without_chunked_transfer() throws Exception {
 		int port = findFreePort();
+		CountDownLatch terminatedLatch = new CountDownLatch(1);
+		AtomicReference<StreamingResponseCancelationReason> cancelationReasonRef = new AtomicReference<>();
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
 						.requestTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didTerminateResponseStream(@NonNull ServerType serverType,
+																								 @NonNull Request request,
+																								 @Nullable ResourceMethod resourceMethod,
+																								 @NonNull MarshaledResponse marshaledResponse,
+																								 @NonNull Duration streamDuration,
+																								 @Nullable StreamingResponseCancelationReason cancelationReason,
+																								 @Nullable Throwable throwable) {
+						cancelationReasonRef.set(cancelationReason);
+						terminatedLatch.countDown();
+					}
+
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						// Keep test output quiet.
+					}
+				})
 				.build();
 
 		try (Soklet soklet = Soklet.fromConfig(config)) {
@@ -125,6 +146,8 @@ public class StreamingResponseTests {
 				Assertions.assertTrue(responseHeaders.contains("Connection: close\r\n"), responseHeaders);
 				Assertions.assertTrue(responseHeaders.contains("Content-Length: 0\r\n"), responseHeaders);
 				Assertions.assertFalse(responseHeaders.contains("Transfer-Encoding:"), responseHeaders);
+				Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS), "Stream termination lifecycle hook was not invoked");
+				Assertions.assertEquals(StreamingResponseCancelationReason.HTTP_VERSION_UNSUPPORTED, cancelationReasonRef.get());
 			}
 		}
 	}
@@ -144,9 +167,132 @@ public class StreamingResponseTests {
 	}
 
 	@Test
+	public void publisher_subscription_is_canceled_when_timeout_cancels_stream() throws Exception {
+		int port = findFreePort();
+		PublisherCancelResource.publisherCanceledLatch = new CountDownLatch(1);
+		CountDownLatch terminatedLatch = new CountDownLatch(1);
+		AtomicReference<StreamingResponseCancelationReason> cancelationReasonRef = new AtomicReference<>();
+
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.requestTimeout(Duration.ofSeconds(5))
+						.streamingResponseTimeout(Duration.ofMillis(250))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(PublisherCancelResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didTerminateResponseStream(@NonNull ServerType serverType,
+																								 @NonNull Request request,
+																								 @Nullable ResourceMethod resourceMethod,
+																								 @NonNull MarshaledResponse marshaledResponse,
+																								 @NonNull Duration streamDuration,
+																								 @Nullable StreamingResponseCancelationReason cancelationReason,
+																								 @Nullable Throwable throwable) {
+						cancelationReasonRef.set(cancelationReason);
+						terminatedLatch.countDown();
+					}
+
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						// Keep test output quiet.
+					}
+				})
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+				socket.setSoTimeout(2_000);
+				writeRawRequest(socket, "GET /blocking-publisher HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+				String responseHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 8_192);
+
+				Assertions.assertNotNull(responseHeaders);
+				Assertions.assertTrue(responseHeaders.startsWith("HTTP/1.1 200 OK"), responseHeaders);
+				Assertions.assertTrue(PublisherCancelResource.publisherCanceledLatch.await(2, TimeUnit.SECONDS),
+						"Publisher subscription was not canceled");
+				Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS), "Stream termination lifecycle hook was not invoked");
+				Assertions.assertEquals(StreamingResponseCancelationReason.RESPONSE_TIMEOUT, cancelationReasonRef.get());
+			}
+		}
+	}
+
+	@Test
+	public void server_shutdown_reports_shutdown_cancelation_reason() throws Exception {
+		int port = findFreePort();
+		BlockingSourceResource.inputStreamClosedLatch = new CountDownLatch(1);
+		CountDownLatch terminatedLatch = new CountDownLatch(1);
+		AtomicReference<StreamingResponseCancelationReason> cancelationReasonRef = new AtomicReference<>();
+
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.requestTimeout(Duration.ofSeconds(5))
+						.streamingResponseTimeout(Duration.ZERO)
+						.streamingResponseIdleTimeout(Duration.ZERO)
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingSourceResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didTerminateResponseStream(@NonNull ServerType serverType,
+																								 @NonNull Request request,
+																								 @Nullable ResourceMethod resourceMethod,
+																								 @NonNull MarshaledResponse marshaledResponse,
+																								 @NonNull Duration streamDuration,
+																								 @Nullable StreamingResponseCancelationReason cancelationReason,
+																								 @Nullable Throwable throwable) {
+						cancelationReasonRef.set(cancelationReason);
+						terminatedLatch.countDown();
+					}
+
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						// Keep test output quiet.
+					}
+				})
+				.build();
+
+		Soklet soklet = Soklet.fromConfig(config);
+
+		try {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+				socket.setSoTimeout(2_000);
+				writeRawRequest(socket, "GET /blocking-input-stream HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+				String responseHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 8_192);
+
+				Assertions.assertNotNull(responseHeaders);
+				Assertions.assertTrue(responseHeaders.startsWith("HTTP/1.1 200 OK"), responseHeaders);
+				soklet.stop();
+				Assertions.assertTrue(BlockingSourceResource.inputStreamClosedLatch.await(2, TimeUnit.SECONDS),
+						"Source was not closed on server shutdown");
+				Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS), "Stream termination lifecycle hook was not invoked");
+				Assertions.assertEquals(StreamingResponseCancelationReason.SERVER_SHUTDOWN, cancelationReasonRef.get());
+			}
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
 	public void simulator_materializes_streaming_response_body() {
+		AtomicBoolean streamTerminated = new AtomicBoolean(false);
+		AtomicReference<StreamingResponseCancelationReason> cancelationReasonRef = new AtomicReference<>();
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didTerminateResponseStream(@NonNull ServerType serverType,
+																								 @NonNull Request request,
+																								 @Nullable ResourceMethod resourceMethod,
+																								 @NonNull MarshaledResponse marshaledResponse,
+																								 @NonNull Duration streamDuration,
+																								 @Nullable StreamingResponseCancelationReason cancelationReason,
+																								 @Nullable Throwable throwable) {
+						streamTerminated.set(true);
+						cancelationReasonRef.set(cancelationReason);
+					}
+				})
 				.build();
 
 		Soklet.runSimulator(config, simulator -> {
@@ -154,13 +300,28 @@ public class StreamingResponseTests {
 
 			Assertions.assertFalse(result.getMarshaledResponse().isStreaming());
 			Assertions.assertEquals("input stream", new String(result.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+			Assertions.assertTrue(streamTerminated.get());
+			Assertions.assertNull(cancelationReasonRef.get());
 		});
 	}
 
 	@Test
 	public void simulator_enforces_streaming_response_body_limit() {
+		AtomicReference<StreamingResponseCancelationReason> cancelationReasonRef = new AtomicReference<>();
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didTerminateResponseStream(@NonNull ServerType serverType,
+																								 @NonNull Request request,
+																								 @Nullable ResourceMethod resourceMethod,
+																								 @NonNull MarshaledResponse marshaledResponse,
+																								 @NonNull Duration streamDuration,
+																								 @Nullable StreamingResponseCancelationReason cancelationReason,
+																								 @Nullable Throwable throwable) {
+						cancelationReasonRef.set(cancelationReason);
+					}
+				})
 				.build();
 
 		SimulatorOptions simulatorOptions = SimulatorOptions.builder()
@@ -170,6 +331,7 @@ public class StreamingResponseTests {
 		Assertions.assertThrows(IllegalStateException.class, () ->
 				Soklet.runSimulator(config, simulatorOptions, simulator ->
 						simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/writer").build())));
+		Assertions.assertEquals(StreamingResponseCancelationReason.SIMULATOR_LIMIT_EXCEEDED, cancelationReasonRef.get());
 	}
 
 	@Test
@@ -273,6 +435,33 @@ public class StreamingResponseTests {
 					.stream(StreamingResponseBody.fromReader(() ->
 									new BlockingReader(readerClosedLatch),
 							StandardCharsets.UTF_8))
+					.build();
+		}
+	}
+
+	public static class PublisherCancelResource {
+		private static volatile CountDownLatch publisherCanceledLatch = new CountDownLatch(0);
+
+		@GET("/blocking-publisher")
+		public MarshaledResponse blockingPublisher() {
+			Flow.Publisher<ByteBuffer> publisher = subscriber -> subscriber.onSubscribe(new Flow.Subscription() {
+				private final AtomicBoolean canceled = new AtomicBoolean(false);
+
+				@Override
+				public void request(long n) {
+					// Keep the stream open without producing any bytes.
+				}
+
+				@Override
+				public void cancel() {
+					if (this.canceled.compareAndSet(false, true))
+						publisherCanceledLatch.countDown();
+				}
+			});
+
+			return MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.stream(StreamingResponseBody.fromPublisher(publisher))
 					.build();
 		}
 	}

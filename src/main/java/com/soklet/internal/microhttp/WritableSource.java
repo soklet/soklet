@@ -16,6 +16,8 @@
 
 package com.soklet.internal.microhttp;
 
+import com.soklet.StreamingResponseCancelationReason;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
@@ -40,5 +42,9 @@ interface WritableSource extends Closeable {
 
     default boolean isReadyToWrite() {
         return hasRemaining();
+    }
+
+    default void close(StreamingResponseCancelationReason cancelationReason, Throwable cause) throws IOException {
+        close();
     }
 }

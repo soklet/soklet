@@ -1,5 +1,7 @@
 package com.soklet.internal.microhttp;
 
+import com.soklet.StreamingResponseCancelationReason;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -151,6 +153,15 @@ public final class MicrohttpResponse {
         return new CompositeWritableSource(List.of(
                 new ByteBufferWritableSource(ByteBuffer.wrap(serializedHead)),
                 bodySourceFactory.create()));
+    }
+
+    void closeStreamingBody(StreamingResponseCancelationReason cancelationReason, Throwable cause) throws IOException {
+        if (!streaming) {
+            return;
+        }
+
+        WritableSource source = bodySourceFactory.create();
+        source.close(cancelationReason, cause);
     }
 
     private void appendHead(String version, List<Header> headers, HeadWriter writer) {

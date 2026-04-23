@@ -1,5 +1,7 @@
 package com.soklet.internal.microhttp;
 
+import com.soklet.StreamingResponseCancelationReason;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -300,6 +302,7 @@ class ConnectionEventLoop {
 
         private void prepareToWriteResponse(MicrohttpResponse microhttpResponse) throws IOException {
             if (microhttpResponse.streaming() && httpOneDotZero) {
+                microhttpResponse.closeStreamingBody(StreamingResponseCancelationReason.HTTP_VERSION_UNSUPPORTED, null);
                 microhttpResponse = new MicrohttpResponse(505, "HTTP Version Not Supported",
                         List.of(new Header(HEADER_CONNECTION, CLOSE)), new byte[0]);
                 closeAfterResponse = true;
@@ -429,13 +432,25 @@ class ConnectionEventLoop {
         }
 
         private void failSafeClose() {
+            failSafeClose(null, null);
+        }
+
+        private void failSafeClose(StreamingResponseCancelationReason cancelationReason, Throwable cause) {
             if (!closed.compareAndSet(false, true))
                 return;
             if (requestTimeoutTask != null) {
                 requestTimeoutTask.cancel();
             }
             if (writableSource != null) {
-                CloseUtils.closeQuietly(writableSource);
+                if (cancelationReason == null) {
+                    CloseUtils.closeQuietly(writableSource);
+                } else {
+                    try {
+                        writableSource.close(cancelationReason, cause);
+                    } catch (IOException ignore) {
+                        // suppress
+                    }
+                }
                 writableSource = null;
             }
             selectionKey.cancel();
@@ -507,7 +522,7 @@ class ConnectionEventLoop {
             for (SelectionKey selKey : selector.keys()) {
                 Object attachment = selKey.attachment();
                 if (attachment instanceof Connection connection) {
-                    connection.failSafeClose();
+                    connection.failSafeClose(StreamingResponseCancelationReason.SERVER_SHUTDOWN, null);
                 }
             }
             CloseUtils.closeQuietly(selector);

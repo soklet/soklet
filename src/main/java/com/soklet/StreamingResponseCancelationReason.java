@@ -22,11 +22,36 @@ package com.soklet;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum StreamingResponseCancelationReason {
+	/**
+	 * The client disconnected before the stream completed.
+	 */
 	CLIENT_DISCONNECTED,
+	/**
+	 * The server shut down before the stream completed.
+	 */
 	SERVER_SHUTDOWN,
+	/**
+	 * The request HTTP version cannot support streaming responses.
+	 */
+	HTTP_VERSION_UNSUPPORTED,
+	/**
+	 * The stream exceeded its configured total response timeout.
+	 */
 	RESPONSE_TIMEOUT,
+	/**
+	 * The stream exceeded its configured producer idle timeout.
+	 */
 	RESPONSE_IDLE_TIMEOUT,
+	/**
+	 * The stream producer failed.
+	 */
 	PRODUCER_FAILED,
+	/**
+	 * The simulator refused to materialize more streaming response bytes.
+	 */
 	SIMULATOR_LIMIT_EXCEEDED,
+	/**
+	 * Producer code intentionally aborted the stream.
+	 */
 	APPLICATION_CANCELED
 }

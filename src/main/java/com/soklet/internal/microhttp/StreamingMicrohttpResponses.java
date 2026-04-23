@@ -67,8 +67,29 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public final class StreamingMicrohttpResponses {
+	@NonNull
+	private static final TestHooks NO_OP_TEST_HOOKS = new TestHooks() {
+		// No-op
+	};
+	@NonNull
+	private static volatile TestHooks testHooks = NO_OP_TEST_HOOKS;
+
 	private StreamingMicrohttpResponses() {
 		// Utility class
+	}
+
+	static void setTestHooks(@Nullable TestHooks testHooks) {
+		StreamingMicrohttpResponses.testHooks = testHooks == null ? NO_OP_TEST_HOOKS : testHooks;
+	}
+
+	interface TestHooks {
+		default void beforeTerminalCompletion(@NonNull Runnable failWithResponseTimeout) {
+			// No-op by default
+		}
+
+		default void afterFailureReserved(@NonNull Runnable closeAsClientDisconnected) {
+			// No-op by default
+		}
 	}
 
 	@NonNull
@@ -275,6 +296,11 @@ public final class StreamingMicrohttpResponses {
 
 				if (chunk.isComplete()) {
 					boolean terminal = chunk.terminal;
+					boolean notifyCompleted = false;
+
+					if (terminal)
+						StreamingMicrohttpResponses.testHooks.beforeTerminalCompletion(() ->
+								fail(StreamingResponseCancelationReason.RESPONSE_TIMEOUT, null));
 
 					synchronized (this.lock) {
 						if (chunk.payloadBytes > 0)
@@ -282,13 +308,15 @@ public final class StreamingMicrohttpResponses {
 
 						this.currentChunk = null;
 
-						if (terminal)
+						if (terminal && !this.closed && this.failure == null && !this.completed) {
 							this.completed = true;
+							notifyCompleted = true;
+						}
 
 						this.lock.notifyAll();
 					}
 
-					if (terminal)
+					if (notifyCompleted)
 						notifyTerminated(null, null);
 
 					if (written == 0)
@@ -319,10 +347,16 @@ public final class StreamingMicrohttpResponses {
 
 		@Override
 		public void close() {
+			close(StreamingResponseCancelationReason.CLIENT_DISCONNECTED, null);
+		}
+
+		@Override
+		public void close(StreamingResponseCancelationReason cancelationReason, Throwable cause) {
+			requireNonNull(cancelationReason);
 			cancelTimeouts();
 
-			StreamingResponseCancelationReason reason = null;
-			Throwable cause = null;
+			StreamingResponseCancelationReason effectiveReason = null;
+			Throwable effectiveCause = null;
 
 			synchronized (this.lock) {
 				if (this.closed)
@@ -330,10 +364,9 @@ public final class StreamingMicrohttpResponses {
 
 				this.closed = true;
 
-				if (!this.completed) {
-					reason = this.cancelationToken.getCancelationReason()
-							.orElse(StreamingResponseCancelationReason.CLIENT_DISCONNECTED);
-					cause = this.cancelationToken.getCancelationCause().orElse(null);
+				if (!this.completed && this.failure == null) {
+					effectiveReason = this.cancelationToken.getCancelationReason().orElse(cancelationReason);
+					effectiveCause = this.cancelationToken.getCancelationCause().orElse(cause);
 				}
 
 				this.chunks.clear();
@@ -341,16 +374,16 @@ public final class StreamingMicrohttpResponses {
 				this.lock.notifyAll();
 			}
 
-			if (reason != null)
-				this.cancelationToken.cancel(reason, cause);
+			if (effectiveReason != null)
+				this.cancelationToken.cancel(effectiveReason, effectiveCause);
 
 			Future<?> producerFuture = this.producerFuture;
 
 			if (producerFuture != null && !producerFuture.isDone())
 				producerFuture.cancel(true);
 
-			if (reason != null)
-				notifyTerminated(reason, cause);
+			if (effectiveReason != null)
+				notifyTerminated(effectiveReason, effectiveCause);
 		}
 
 		private void runProducer() {
@@ -461,61 +494,79 @@ public final class StreamingMicrohttpResponses {
 			requireNonNull(body);
 
 			CountDownLatch completed = new CountDownLatch(1);
+			AtomicBoolean publisherTerminated = new AtomicBoolean(false);
 			AtomicReference<Throwable> failure = new AtomicReference<>();
 			AtomicReference<Flow.Subscription> subscriptionRef = new AtomicReference<>();
 			ResponseStreamAdapter responseStream = new ResponseStreamAdapter();
 
-			body.getPublisher().subscribe(new Flow.Subscriber<>() {
-				@Override
-				public void onSubscribe(Flow.Subscription subscription) {
-					requireNonNull(subscription);
+			try (AutoCloseable cancelationRegistration = this.context.onCancel(() -> {
+				Flow.Subscription subscription = subscriptionRef.get();
 
-					if (!subscriptionRef.compareAndSet(null, subscription)) {
-						subscription.cancel();
-						return;
+				if (subscription != null)
+					subscription.cancel();
+			})) {
+				body.getPublisher().subscribe(new Flow.Subscriber<>() {
+					@Override
+					public void onSubscribe(Flow.Subscription subscription) {
+						requireNonNull(subscription);
+
+						if (!subscriptionRef.compareAndSet(null, subscription)) {
+							subscription.cancel();
+							return;
+						}
+
+						subscription.request(1L);
 					}
 
-					subscription.request(1L);
-				}
+					@Override
+					public void onNext(ByteBuffer item) {
+						Flow.Subscription subscription = subscriptionRef.get();
 
-				@Override
-				public void onNext(ByteBuffer item) {
-					Flow.Subscription subscription = subscriptionRef.get();
+						try {
+							context.throwIfCanceled();
+							responseStream.write(requireNonNull(item));
+							context.throwIfCanceled();
+						} catch (Throwable t) {
+							failure.compareAndSet(null, t);
+							publisherTerminated.set(true);
 
-					try {
-						context.throwIfCanceled();
-						responseStream.write(requireNonNull(item));
-						context.throwIfCanceled();
-					} catch (Throwable t) {
-						failure.compareAndSet(null, t);
+							if (subscription != null)
+								subscription.cancel();
+
+							completed.countDown();
+							return;
+						}
 
 						if (subscription != null)
-							subscription.cancel();
-
-						completed.countDown();
-						return;
+							subscription.request(1L);
 					}
 
+					@Override
+					public void onError(Throwable throwable) {
+						publisherTerminated.set(true);
+						failure.compareAndSet(null, throwable == null
+								? new IllegalStateException("Publisher failed without an error")
+								: throwable);
+						completed.countDown();
+					}
+
+					@Override
+					public void onComplete() {
+						publisherTerminated.set(true);
+						completed.countDown();
+					}
+				});
+
+				while (!completed.await(100L, TimeUnit.MILLISECONDS))
+					this.context.throwIfCanceled();
+			} finally {
+				if (!publisherTerminated.get()) {
+					Flow.Subscription subscription = subscriptionRef.get();
+
 					if (subscription != null)
-						subscription.request(1L);
+						subscription.cancel();
 				}
-
-				@Override
-				public void onError(Throwable throwable) {
-					failure.compareAndSet(null, throwable == null
-							? new IllegalStateException("Publisher failed without an error")
-							: throwable);
-					completed.countDown();
-				}
-
-				@Override
-				public void onComplete() {
-					completed.countDown();
-				}
-			});
-
-			while (!completed.await(100L, TimeUnit.MILLISECONDS))
-				this.context.throwIfCanceled();
+			}
 
 			Throwable throwable = failure.get();
 
@@ -547,21 +598,24 @@ public final class StreamingMicrohttpResponses {
 											@Nullable Throwable cause) {
 			requireNonNull(reason);
 
-			this.cancelationToken.cancel(reason, cause);
-			StreamingResponseCancelationReason effectiveReason = this.cancelationToken.getCancelationReason()
-					.orElse(reason);
-			Throwable effectiveCause = this.cancelationToken.getCancelationCause().orElse(cause);
-			cancelTimeouts();
+			StreamingResponseCancelationReason effectiveReason;
+			Throwable effectiveCause;
 
 			synchronized (this.lock) {
-				if (this.completed || this.failure != null)
+				if (this.closed || this.completed || this.failure != null)
 					return;
 
+				effectiveReason = this.cancelationToken.getCancelationReason().orElse(reason);
+				effectiveCause = this.cancelationToken.getCancelationCause().orElse(cause);
 				this.failure = effectiveCause == null ? new StreamingResponseCanceledException(effectiveReason) : effectiveCause;
 				this.producerDone = true;
 				this.lock.notifyAll();
 			}
 
+			StreamingMicrohttpResponses.testHooks.afterFailureReserved(() ->
+					close(StreamingResponseCancelationReason.CLIENT_DISCONNECTED, null));
+			this.cancelationToken.cancel(effectiveReason, effectiveCause);
+			cancelTimeouts();
 			notifyTerminated(effectiveReason, effectiveCause);
 			wakeWriter();
 		}
@@ -821,19 +875,27 @@ public final class StreamingMicrohttpResponses {
 		public AutoCloseable onCancel(@NonNull Runnable callback) {
 			requireNonNull(callback);
 
-			if (isCanceled()) {
+			boolean runImmediately;
+
+			synchronized (this) {
+				runImmediately = this.canceled.get();
+
+				if (!runImmediately)
+					this.callbacks.add(callback);
+			}
+
+			if (runImmediately) {
 				runCallback(callback);
 				return () -> {
 					// No-op
 				};
 			}
 
-			this.callbacks.add(callback);
-
-			if (isCanceled() && this.callbacks.remove(callback))
-				runCallback(callback);
-
-			return () -> this.callbacks.remove(callback);
+			return () -> {
+				synchronized (this) {
+					this.callbacks.remove(callback);
+				}
+			};
 		}
 
 		private boolean cancel(@NonNull StreamingResponseCancelationReason reason,

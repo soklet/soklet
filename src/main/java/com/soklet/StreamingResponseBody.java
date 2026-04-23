@@ -68,6 +68,8 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	 * <p>
 	 * Soklet requests one item at a time and writes each item through its bounded streaming queue. If the queue is
 	 * full, the subscriber's {@code onNext} path may block until space is available.
+	 * <p>
+	 * If the response is canceled before the publisher terminates, Soklet cancels the publisher subscription.
 	 *
 	 * @param publisher the publisher that emits response bytes
 	 * @return a streaming response body

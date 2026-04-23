@@ -307,6 +307,11 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after a streaming response terminates.
+	 * <p>
+	 * If a stream is rejected before body bytes are written, {@code marshaledResponse} is the original
+	 * application-provided streaming response. For example, an HTTP/1.0 request for a streaming response
+	 * is rejected on the wire with {@code 505 HTTP Version Not Supported}, while this callback still
+	 * receives the original streaming response that was rejected.
 	 *
 	 * @param serverType        the server type that wrote the stream
 	 * @param request           the request associated with the stream
