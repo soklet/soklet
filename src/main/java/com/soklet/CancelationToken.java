@@ -47,7 +47,7 @@ public interface CancelationToken {
 	 * @return the cancelation reason, or {@link Optional#empty()} if not canceled
 	 */
 	@NonNull
-	Optional<StreamingResponseCancelationReason> getCancelationReason();
+	Optional<StreamTerminationReason> getCancelationReason();
 
 	/**
 	 * The underlying cancelation cause, if available.
@@ -78,7 +78,7 @@ public interface CancelationToken {
 	 * @throws StreamingResponseCanceledException if canceled
 	 */
 	default void throwIfCanceled() throws StreamingResponseCanceledException {
-		StreamingResponseCancelationReason reason = getCancelationReason().orElse(null);
+		StreamTerminationReason reason = getCancelationReason().orElse(null);
 
 		if (reason != null)
 			throw new StreamingResponseCanceledException(reason, getCancelationCause().orElse(null));

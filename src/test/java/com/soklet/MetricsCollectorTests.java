@@ -25,7 +25,7 @@ import com.soklet.MetricsCollector.RouteType;
 import com.soklet.MetricsCollector.SseCommentRouteKey;
 import com.soklet.MetricsCollector.SseEventRouteHandshakeFailureKey;
 import com.soklet.MetricsCollector.SseEventRouteKey;
-import com.soklet.MetricsCollector.SseEventRouteTerminationKey;
+import com.soklet.MetricsCollector.SseStreamRouteTerminationKey;
 import com.soklet.MetricsCollector.HistogramSnapshot;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -137,7 +137,7 @@ public class MetricsCollectorTests {
 		String noSseSnapshot = collector.snapshotText(prometheusOptions).orElseThrow();
 		assertTrue(noSseSnapshot.contains("soklet_http_requests_active"));
 		assertTrue(noSseSnapshot.contains("soklet_http_connections_accepted_total"));
-		assertFalse(noSseSnapshot.contains("soklet_sse_connections_active"));
+		assertFalse(noSseSnapshot.contains("soklet_sse_streams_active"));
 		assertFalse(noSseSnapshot.contains("soklet_sse_connections_accepted_total"));
 
 		SokletConfig withSseConfig = SokletConfig.withHttpServer(HttpServer.withPort(0).build())
@@ -147,7 +147,7 @@ public class MetricsCollectorTests {
 		collector.initialize(withSseConfig);
 
 		String withSseSnapshot = collector.snapshotText(prometheusOptions).orElseThrow();
-		assertTrue(withSseSnapshot.contains("soklet_sse_connections_active"));
+		assertTrue(withSseSnapshot.contains("soklet_sse_streams_active"));
 		assertTrue(withSseSnapshot.contains("soklet_sse_connections_accepted_total"));
 		assertTrue(withSseSnapshot.contains("soklet_sse_connections_rejected_total"));
 
@@ -201,7 +201,7 @@ public class MetricsCollectorTests {
 				.build();
 		String filteredSnapshot = collector.snapshotText(filtered).orElseThrow();
 		assertTrue(filteredSnapshot.contains("soklet_http_requests_active"));
-		assertFalse(filteredSnapshot.contains("soklet_sse_connections_active"));
+		assertFalse(filteredSnapshot.contains("soklet_sse_streams_active"));
 		assertFalse(filteredSnapshot.contains("soklet_http_request_duration_nanos"));
 
 		MetricsCollector.SnapshotTextOptions openMetricsOptions = MetricsCollector.SnapshotTextOptions
@@ -231,8 +231,9 @@ public class MetricsCollectorTests {
 				Duration.ofMillis(1), Duration.ofNanos(250), 4, 1);
 		collector.didWriteSseComment(connection, heartbeat,
 				Duration.ofMillis(1), Duration.ofNanos(100), 3, 2);
-		collector.didTerminateSseConnection(connection, Duration.ofSeconds(1),
-				SseConnection.TerminationReason.REMOTE_CLOSE, null);
+		collector.didTerminateSseConnection(connection, StreamTermination
+				.with(StreamTerminationReason.CLIENT_DISCONNECTED, Duration.ofSeconds(1))
+				.build());
 
 		MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 
@@ -244,8 +245,8 @@ public class MetricsCollectorTests {
 				SseComment.CommentType.HEARTBEAT);
 		SseEventRouteHandshakeFailureKey handshakeFailureKey = new SseEventRouteHandshakeFailureKey(
 				RouteType.MATCHED, eventsRoute, SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED);
-		SseEventRouteTerminationKey terminationKey = new SseEventRouteTerminationKey(RouteType.MATCHED, eventsRoute,
-				SseConnection.TerminationReason.REMOTE_CLOSE);
+		SseStreamRouteTerminationKey terminationKey = new SseStreamRouteTerminationKey(RouteType.MATCHED, eventsRoute,
+				StreamTerminationReason.CLIENT_DISCONNECTED);
 
 		HistogramSnapshot timeToFirstEvent = snapshot.getSseTimeToFirstEvent().get(routeKey);
 		assertNotNull(timeToFirstEvent);
@@ -290,13 +291,13 @@ public class MetricsCollectorTests {
 		assertEquals(1L, heartbeatDeliveryLag.getCount());
 		assertEquals(100L, heartbeatDeliveryLag.getSum());
 
-		HistogramSnapshot connectionDurations = snapshot.getSseConnectionDurations().get(terminationKey);
-		assertNotNull(connectionDurations);
-		assertEquals(1L, connectionDurations.getCount());
+		HistogramSnapshot streamDurations = snapshot.getSseStreamDurations().get(terminationKey);
+		assertNotNull(streamDurations);
+		assertEquals(1L, streamDurations.getCount());
 
 		assertEquals(1L, snapshot.getSseHandshakesAccepted().get(routeKey));
 		assertEquals(1L, snapshot.getSseHandshakesRejected().get(handshakeFailureKey));
-		assertEquals(0L, snapshot.getActiveSseConnections());
+		assertEquals(0L, snapshot.getActiveSseStreams());
 	}
 
 	@Test

@@ -1651,8 +1651,8 @@ public final class Soklet implements AutoCloseable {
 			simulatorConsumer.accept(simulator);
 		} finally {
 			// Always restore to real implementations
-				if (serverProxy != null)
-					serverProxy.disableSimulatorMode();
+			if (serverProxy != null)
+				serverProxy.disableSimulatorMode();
 
 			if (sseServerProxy != null)
 				sseServerProxy.disableSimulatorMode();
@@ -1678,9 +1678,9 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@ThreadSafe
-		static class DefaultSimulator implements Simulator {
-			@Nullable
-			private MockHttpServer server;
+	static class DefaultSimulator implements Simulator {
+		@Nullable
+		private MockHttpServer server;
 		@Nullable
 		private MockSseServer sseServer;
 		@Nullable
@@ -1688,33 +1688,33 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private final SimulatorOptions simulatorOptions;
 
-			public DefaultSimulator(@Nullable MockHttpServer server,
-															@Nullable MockSseServer sseServer,
-															@Nullable MockMcpServer mcpServer) {
+		public DefaultSimulator(@Nullable MockHttpServer server,
+														@Nullable MockSseServer sseServer,
+														@Nullable MockMcpServer mcpServer) {
 			this(server, sseServer, mcpServer, SimulatorOptions.defaultInstance());
 		}
 
-			public DefaultSimulator(@Nullable MockHttpServer server,
-															@Nullable MockSseServer sseServer,
-															@Nullable MockMcpServer mcpServer,
-															@NonNull SimulatorOptions simulatorOptions) {
-				this.server = server;
-				this.sseServer = sseServer;
-				this.mcpServer = mcpServer;
+		public DefaultSimulator(@Nullable MockHttpServer server,
+														@Nullable MockSseServer sseServer,
+														@Nullable MockMcpServer mcpServer,
+														@NonNull SimulatorOptions simulatorOptions) {
+			this.server = server;
+			this.sseServer = sseServer;
+			this.mcpServer = mcpServer;
 			this.simulatorOptions = requireNonNull(simulatorOptions);
 		}
 
 		@NonNull
-			@Override
-			public HttpRequestResult performHttpRequest(@NonNull Request request) {
-				MockHttpServer server = getHttpServer().orElse(null);
+		@Override
+		public HttpRequestResult performHttpRequest(@NonNull Request request) {
+			MockHttpServer server = getHttpServer().orElse(null);
 
-				if (server == null)
-					throw new IllegalStateException(format("You must specify a %s in your %s to simulate requests",
-							HttpServer.class.getSimpleName(), SokletConfig.class.getSimpleName()));
+			if (server == null)
+				throw new IllegalStateException(format("You must specify a %s in your %s to simulate requests",
+						HttpServer.class.getSimpleName(), SokletConfig.class.getSimpleName()));
 
-				AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
-				HttpServer.RequestHandler requestHandler = server.getRequestHandler().orElse(null);
+			AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
+			HttpServer.RequestHandler requestHandler = server.getRequestHandler().orElse(null);
 
 			if (requestHandler == null)
 				throw new IllegalStateException("You must register a request handler prior to simulating requests");
@@ -1739,25 +1739,27 @@ public final class Soklet implements AutoCloseable {
 			if (stream == null)
 				return requestResult;
 
-				byte[] bytes;
-				Instant streamStarted = Instant.now();
+			byte[] bytes;
+			Instant streamStarted = Instant.now();
 
-				try {
-					bytes = materializeStreamingResponseBody(request, requestResult, stream);
-					notifyDidTerminateSimulatorResponseStream(request, requestResult, Duration.between(streamStarted, Instant.now()), null, null);
-				} catch (StreamingResponseCanceledException e) {
-					StreamingResponseCancelationReason cancelationReason = e.getCancelationReason();
-					Throwable cause = e.getCancelationCause().orElse(null);
-					notifyDidTerminateSimulatorResponseStream(request, requestResult, Duration.between(streamStarted, Instant.now()), cancelationReason, cause);
-					throw new IllegalStateException("Simulated streaming response was canceled: " + cancelationReason.name(), e);
-				} catch (InterruptedException e) {
-					Thread.currentThread().interrupt();
-					notifyDidTerminateSimulatorResponseStream(request, requestResult, Duration.between(streamStarted, Instant.now()),
-							StreamingResponseCancelationReason.CLIENT_DISCONNECTED, e);
-					throw new IllegalStateException("Simulated streaming response was canceled: CLIENT_DISCONNECTED", e);
-				} catch (Throwable t) {
-					notifyDidTerminateSimulatorResponseStream(request, requestResult, Duration.between(streamStarted, Instant.now()),
-							StreamingResponseCancelationReason.PRODUCER_FAILED, t);
+			try {
+				bytes = materializeStreamingResponseBody(request, requestResult, stream);
+				notifyDidTerminateSimulatorResponseStream(request, requestResult, streamStarted,
+						Duration.between(streamStarted, Instant.now()), null, null);
+			} catch (StreamingResponseCanceledException e) {
+				StreamTerminationReason cancelationReason = e.getCancelationReason();
+				Throwable cause = e.getCancelationCause().orElse(null);
+				notifyDidTerminateSimulatorResponseStream(request, requestResult, streamStarted,
+						Duration.between(streamStarted, Instant.now()), cancelationReason, cause);
+				throw new IllegalStateException("Simulated streaming response was canceled: " + cancelationReason.name(), e);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				notifyDidTerminateSimulatorResponseStream(request, requestResult, streamStarted,
+						Duration.between(streamStarted, Instant.now()), StreamTerminationReason.CLIENT_DISCONNECTED, e);
+				throw new IllegalStateException("Simulated streaming response was canceled: CLIENT_DISCONNECTED", e);
+			} catch (Throwable t) {
+				notifyDidTerminateSimulatorResponseStream(request, requestResult, streamStarted,
+						Duration.between(streamStarted, Instant.now()), StreamTerminationReason.PRODUCER_FAILED, t);
 
 				if (t instanceof Error error)
 					throw error;
@@ -1777,11 +1779,13 @@ public final class Soklet implements AutoCloseable {
 
 		private void notifyDidTerminateSimulatorResponseStream(@NonNull Request request,
 																													 @NonNull HttpRequestResult requestResult,
+																													 @NonNull Instant establishedAt,
 																													 @NonNull Duration streamDuration,
-																													 @Nullable StreamingResponseCancelationReason cancelationReason,
+																													 @Nullable StreamTerminationReason cancelationReason,
 																													 @Nullable Throwable throwable) {
 			requireNonNull(request);
 			requireNonNull(requestResult);
+			requireNonNull(establishedAt);
 			requireNonNull(streamDuration);
 
 			MockHttpServer server = getHttpServer().orElse(null);
@@ -1793,15 +1797,31 @@ public final class Soklet implements AutoCloseable {
 			MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
 			ResourceMethod resourceMethod = requestResult.getResourceMethod().orElse(null);
 			LifecycleObserver lifecycleObserver = sokletConfig.getLifecycleObserver();
+			StreamingResponseHandle streamingResponse = new DefaultStreamingResponseHandle(ServerType.STANDARD_HTTP,
+					request, resourceMethod, marshaledResponse, establishedAt);
+			StreamTermination termination = StreamTermination
+					.with(cancelationReason == null ? StreamTerminationReason.COMPLETED : cancelationReason, streamDuration)
+					.cause(throwable)
+					.build();
 
 			try {
-				lifecycleObserver.didTerminateResponseStream(ServerType.STANDARD_HTTP,
-						request,
-						resourceMethod,
-						marshaledResponse,
-						streamDuration,
-						cancelationReason,
-						throwable);
+				lifecycleObserver.willTerminateResponseStream(streamingResponse, termination);
+			} catch (Throwable t) {
+				try {
+					lifecycleObserver.didReceiveLogEvent(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_RESPONSE_STREAM_FAILED,
+									format("An exception occurred while invoking %s::willTerminateResponseStream", LifecycleObserver.class.getSimpleName()))
+							.throwable(t)
+							.request(request)
+							.resourceMethod(resourceMethod)
+							.marshaledResponse(marshaledResponse)
+							.build());
+				} catch (Throwable ignored) {
+					// Keep simulator lifecycle observer failures contained.
+				}
+			}
+
+			try {
+				lifecycleObserver.didTerminateResponseStream(streamingResponse, termination);
 			} catch (Throwable t) {
 				try {
 					lifecycleObserver.didReceiveLogEvent(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
@@ -1815,50 +1835,50 @@ public final class Soklet implements AutoCloseable {
 					// Keep simulator lifecycle observer failures contained.
 				}
 			}
+		}
+
+		private void notifyDidReceiveSimulatorStreamCancelationCallbackFailure(@NonNull Request request,
+																																					@NonNull HttpRequestResult requestResult,
+																																					@NonNull Throwable throwable) {
+			requireNonNull(request);
+			requireNonNull(requestResult);
+			requireNonNull(throwable);
+
+			MockHttpServer server = getHttpServer().orElse(null);
+			SokletConfig sokletConfig = server == null ? null : server.getSokletConfig().orElse(null);
+
+			if (sokletConfig == null)
+				return;
+
+			LifecycleObserver lifecycleObserver = sokletConfig.getLifecycleObserver();
+			ResourceMethod resourceMethod = requestResult.getResourceMethod().orElse(null);
+			MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
+
+			try {
+				lifecycleObserver.didReceiveLogEvent(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
+								"An exception occurred while invoking a streaming response cancelation callback")
+						.throwable(throwable)
+						.request(request)
+						.resourceMethod(resourceMethod)
+						.marshaledResponse(marshaledResponse)
+						.build());
+			} catch (Throwable ignored) {
+				// Keep simulator lifecycle observer failures contained.
 			}
+		}
 
-			private void notifyDidReceiveSimulatorStreamCancelationCallbackFailure(@NonNull Request request,
-																																							 @NonNull HttpRequestResult requestResult,
-																																							 @NonNull Throwable throwable) {
-				requireNonNull(request);
-				requireNonNull(requestResult);
-				requireNonNull(throwable);
+		@NonNull
+		private byte[] materializeStreamingResponseBody(@NonNull Request request,
+																										@NonNull HttpRequestResult requestResult,
+																										@NonNull StreamingResponseBody stream) throws Exception {
+			requireNonNull(request);
+			requireNonNull(requestResult);
+			requireNonNull(stream);
 
-				MockHttpServer server = getHttpServer().orElse(null);
-				SokletConfig sokletConfig = server == null ? null : server.getSokletConfig().orElse(null);
-
-				if (sokletConfig == null)
-					return;
-
-				LifecycleObserver lifecycleObserver = sokletConfig.getLifecycleObserver();
-				ResourceMethod resourceMethod = requestResult.getResourceMethod().orElse(null);
-				MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
-
-				try {
-					lifecycleObserver.didReceiveLogEvent(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
-									"An exception occurred while invoking a streaming response cancelation callback")
-							.throwable(throwable)
-							.request(request)
-							.resourceMethod(resourceMethod)
-							.marshaledResponse(marshaledResponse)
-							.build());
-				} catch (Throwable ignored) {
-					// Keep simulator lifecycle observer failures contained.
-				}
-			}
-
-			@NonNull
-			private byte[] materializeStreamingResponseBody(@NonNull Request request,
-																										 @NonNull HttpRequestResult requestResult,
-																										 @NonNull StreamingResponseBody stream) throws Exception {
-				requireNonNull(request);
-				requireNonNull(requestResult);
-				requireNonNull(stream);
-
-				SimulatorCancelationToken cancelationToken = new SimulatorCancelationToken(throwable ->
-						notifyDidReceiveSimulatorStreamCancelationCallbackFailure(request, requestResult, throwable));
-				SimulatorStreamingResponseContext context = new SimulatorStreamingResponseContext(cancelationToken);
-				SimulatorResponseStream output = new SimulatorResponseStream(getSimulatorOptions().getStreamingResponseBodyLimitInBytes(), cancelationToken);
+			SimulatorCancelationToken cancelationToken = new SimulatorCancelationToken(throwable ->
+					notifyDidReceiveSimulatorStreamCancelationCallbackFailure(request, requestResult, throwable));
+			SimulatorStreamingResponseContext context = new SimulatorStreamingResponseContext(cancelationToken);
+			SimulatorResponseStream output = new SimulatorResponseStream(getSimulatorOptions().getStreamingResponseBodyLimitInBytes(), cancelationToken);
 
 			try {
 				if (stream instanceof StreamingResponseBody.WriterBody writerBody) {
@@ -1891,10 +1911,10 @@ public final class Soklet implements AutoCloseable {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				cancelationToken.cancel(cancelationToken.getCancelationReason()
-						.orElse(StreamingResponseCancelationReason.CLIENT_DISCONNECTED), e);
+						.orElse(StreamTerminationReason.CLIENT_DISCONNECTED), e);
 				throw e;
 			} catch (Throwable t) {
-				cancelationToken.cancel(StreamingResponseCancelationReason.PRODUCER_FAILED, t);
+				cancelationToken.cancel(StreamTerminationReason.PRODUCER_FAILED, t);
 
 				if (t instanceof Exception exception)
 					throw exception;
@@ -2248,14 +2268,14 @@ public final class Soklet implements AutoCloseable {
 			this.cancelationToken.throwIfCanceled();
 
 			if (this.closed)
-				throw new StreamingResponseCanceledException(StreamingResponseCancelationReason.APPLICATION_CANCELED);
+				throw new StreamingResponseCanceledException(StreamTerminationReason.APPLICATION_CANCELED);
 
 			ByteBuffer source = byteBuffer.asReadOnlyBuffer();
 			int bytesToWrite = source.remaining();
 
 			if ((long) this.byteArrayOutputStream.size() + bytesToWrite > this.limitInBytes) {
-				this.cancelationToken.cancel(StreamingResponseCancelationReason.SIMULATOR_LIMIT_EXCEEDED, null);
-				throw new StreamingResponseCanceledException(StreamingResponseCancelationReason.SIMULATOR_LIMIT_EXCEEDED);
+				this.cancelationToken.cancel(StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED, null);
+				throw new StreamingResponseCanceledException(StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED);
 			}
 
 			byte[] bytes = new byte[bytesToWrite];
@@ -2290,7 +2310,7 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private final Consumer<Throwable> callbackFailureConsumer;
 		@Nullable
-		private volatile StreamingResponseCancelationReason reason;
+		private volatile StreamTerminationReason reason;
 		@Nullable
 		private volatile Throwable cause;
 
@@ -2308,7 +2328,7 @@ public final class Soklet implements AutoCloseable {
 
 		@Override
 		@NonNull
-		public Optional<StreamingResponseCancelationReason> getCancelationReason() {
+		public Optional<StreamTerminationReason> getCancelationReason() {
 			return Optional.ofNullable(this.reason);
 		}
 
@@ -2346,9 +2366,12 @@ public final class Soklet implements AutoCloseable {
 			};
 		}
 
-		private boolean cancel(@NonNull StreamingResponseCancelationReason reason,
+		private boolean cancel(@NonNull StreamTerminationReason reason,
 													 @Nullable Throwable cause) {
 			requireNonNull(reason);
+
+			if (reason == StreamTerminationReason.COMPLETED)
+				throw new IllegalArgumentException("Cancelation reason cannot be COMPLETED");
 
 			List<Runnable> callbacksToRun;
 

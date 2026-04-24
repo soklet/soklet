@@ -881,8 +881,8 @@ final class DefaultHttpServer implements HttpServer {
 					getStreamingChunkSizeInBytes(),
 					deadline,
 					idleTimeout,
-					(streamDuration, cancelationReason, throwable) ->
-							notifyDidTerminateResponseStream(request, resourceMethod, marshaledResponse, streamDuration, cancelationReason, throwable),
+					(establishedAt, streamDuration, cancelationReason, throwable) ->
+							notifyDidTerminateResponseStream(request, resourceMethod, marshaledResponse, establishedAt, streamDuration, cancelationReason, throwable),
 					(throwable) -> safelyLog(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
 									"An exception occurred while invoking a streaming response cancelation callback")
 							.throwable(throwable)
@@ -1001,14 +1001,16 @@ final class DefaultHttpServer implements HttpServer {
 	private void notifyDidTerminateResponseStream(@Nullable Request request,
 																								@Nullable ResourceMethod resourceMethod,
 																								@NonNull MarshaledResponse marshaledResponse,
+																								@NonNull Instant establishedAt,
 																								@NonNull Duration streamDuration,
-																								@Nullable StreamingResponseCancelationReason cancelationReason,
+																								@Nullable StreamTerminationReason cancelationReason,
 																								@Nullable Throwable throwable) {
 		requireNonNull(marshaledResponse);
+		requireNonNull(establishedAt);
 		requireNonNull(streamDuration);
 
 		if (cancelationReason != null) {
-			LogEventType logEventType = cancelationReason == StreamingResponseCancelationReason.PRODUCER_FAILED
+			LogEventType logEventType = cancelationReason == StreamTerminationReason.PRODUCER_FAILED
 					? LogEventType.RESPONSE_STREAM_FAILED
 					: LogEventType.RESPONSE_STREAM_CANCELED;
 
@@ -1023,15 +1025,29 @@ final class DefaultHttpServer implements HttpServer {
 		if (request == null)
 			return;
 
+		StreamingResponseHandle streamingResponse = new DefaultStreamingResponseHandle(ServerType.STANDARD_HTTP,
+				request, resourceMethod, marshaledResponse, establishedAt);
+		StreamTermination termination = StreamTermination
+				.with(cancelationReason == null ? StreamTerminationReason.COMPLETED : cancelationReason, streamDuration)
+				.cause(throwable)
+				.build();
+
 		try {
 			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didTerminateResponseStream(ServerType.STANDARD_HTTP,
-							request,
-							resourceMethod,
-							marshaledResponse,
-							streamDuration,
-							cancelationReason,
-							throwable));
+					lifecycleObserver.willTerminateResponseStream(streamingResponse, termination));
+		} catch (Throwable t) {
+			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_RESPONSE_STREAM_FAILED,
+							format("An exception occurred while invoking %s::willTerminateResponseStream", LifecycleObserver.class.getSimpleName()))
+					.throwable(t)
+					.request(request)
+					.resourceMethod(resourceMethod)
+					.marshaledResponse(marshaledResponse)
+					.build());
+		}
+
+		try {
+			getLifecycleObserver().ifPresent(lifecycleObserver ->
+					lifecycleObserver.didTerminateResponseStream(streamingResponse, termination));
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
 							format("An exception occurred while invoking %s::didTerminateResponseStream", LifecycleObserver.class.getSimpleName()))

@@ -34,14 +34,14 @@ public class StreamingResponseCanceledException extends IOException {
 	private static final long serialVersionUID = 1L;
 
 	@NonNull
-	private final StreamingResponseCancelationReason cancelationReason;
+	private final StreamTerminationReason cancelationReason;
 
 	/**
 	 * Creates an exception with the given cancelation reason.
 	 *
 	 * @param cancelationReason the cancelation reason
 	 */
-	public StreamingResponseCanceledException(@NonNull StreamingResponseCancelationReason cancelationReason) {
+	public StreamingResponseCanceledException(@NonNull StreamTerminationReason cancelationReason) {
 		this(cancelationReason, null);
 	}
 
@@ -51,9 +51,11 @@ public class StreamingResponseCanceledException extends IOException {
 	 * @param cancelationReason the cancelation reason
 	 * @param cancelationCause  the underlying cause, or {@code null} if unavailable
 	 */
-	public StreamingResponseCanceledException(@NonNull StreamingResponseCancelationReason cancelationReason,
+	public StreamingResponseCanceledException(@NonNull StreamTerminationReason cancelationReason,
 																						@Nullable Throwable cancelationCause) {
 		super(format("Streaming response was canceled: %s", requireNonNull(cancelationReason).name()), cancelationCause);
+		if (cancelationReason == StreamTerminationReason.COMPLETED)
+			throw new IllegalArgumentException("Cancelation reason cannot be COMPLETED");
 		this.cancelationReason = cancelationReason;
 	}
 
@@ -63,7 +65,7 @@ public class StreamingResponseCanceledException extends IOException {
 	 * @return the cancelation reason
 	 */
 	@NonNull
-	public StreamingResponseCancelationReason getCancelationReason() {
+	public StreamTerminationReason getCancelationReason() {
 		return this.cancelationReason;
 	}
 

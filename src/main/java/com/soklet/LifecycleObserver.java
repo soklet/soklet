@@ -306,28 +306,33 @@ public interface LifecycleObserver {
 	}
 
 	/**
+	 * Called before a streaming response termination is reported as complete.
+	 * <p>
+	 * This is paired with {@link #didTerminateResponseStream(StreamingResponseHandle, StreamTermination)}. For standard
+	 * HTTP response streams, the two callbacks are normally invoked back-to-back because there is no broadcaster or
+	 * session registry cleanup phase between them.
+	 *
+	 * @param streamingResponse the stream that is terminating
+	 * @param termination       why and when the stream terminated
+	 */
+	default void willTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
+																					 @NonNull StreamTermination termination) {
+		// No-op by default
+	}
+
+	/**
 	 * Called after a streaming response terminates.
 	 * <p>
-	 * If a stream is rejected before body bytes are written, {@code marshaledResponse} is the original
-	 * application-provided streaming response. For example, an HTTP/1.0 request for a streaming response
-	 * is rejected on the wire with {@code 505 HTTP Version Not Supported}, while this callback still
-	 * receives the original streaming response that was rejected.
+	 * If a stream is rejected before body bytes are written, {@link StreamingResponseHandle#getMarshaledResponse()}
+	 * returns the original application-provided streaming response. For example, an HTTP/1.0 request for a streaming
+	 * response is rejected on the wire with {@code 505 HTTP Version Not Supported}, while this callback still receives
+	 * the original streaming response that was rejected.
 	 *
-	 * @param serverType        the server type that wrote the stream
-	 * @param request           the request associated with the stream
-	 * @param resourceMethod    the resource method associated with the stream, or {@code null} if unavailable
-	 * @param marshaledResponse the streaming response
-	 * @param streamDuration    the stream duration
-	 * @param cancelationReason the cancelation reason, or {@code null} when the stream completed normally
-	 * @param throwable         an optional failure or cancelation cause, or {@code null} if not applicable
+	 * @param streamingResponse the stream that terminated
+	 * @param termination       why and when the stream terminated
 	 */
-	default void didTerminateResponseStream(@NonNull ServerType serverType,
-																					@NonNull Request request,
-																					@Nullable ResourceMethod resourceMethod,
-																					@NonNull MarshaledResponse marshaledResponse,
-																					@NonNull Duration streamDuration,
-																					@Nullable StreamingResponseCancelationReason cancelationReason,
-																					@Nullable Throwable throwable) {
+	default void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
+																					@NonNull StreamTermination termination) {
 		// No-op by default
 	}
 
@@ -424,32 +429,23 @@ public interface LifecycleObserver {
 	/**
 	 * Called after an MCP GET stream is established.
 	 */
-	default void didEstablishMcpSseStream(@NonNull Request request,
-																										@NonNull Class<? extends McpEndpoint> endpointClass,
-																										@NonNull String sessionId) {
+	default void didEstablishMcpSseStream(@NonNull McpSseStream stream) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before an MCP GET stream is terminated.
 	 */
-	default void willTerminateMcpSseStream(@NonNull Request request,
-																										 @NonNull Class<? extends McpEndpoint> endpointClass,
-																										 @NonNull String sessionId,
-																										 @NonNull McpStreamTerminationReason terminationReason,
-																										 @Nullable Throwable throwable) {
+	default void willTerminateMcpSseStream(@NonNull McpSseStream stream,
+																										 @NonNull StreamTermination termination) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an MCP GET stream is terminated.
 	 */
-	default void didTerminateMcpSseStream(@NonNull Request request,
-																										@NonNull Class<? extends McpEndpoint> endpointClass,
-																										@NonNull String sessionId,
-																										@NonNull Duration connectionDuration,
-																										@NonNull McpStreamTerminationReason terminationReason,
-																										@Nullable Throwable throwable) {
+	default void didTerminateMcpSseStream(@NonNull McpSseStream stream,
+																										@NonNull StreamTermination termination) {
 		// No-op by default
 	}
 
@@ -529,8 +525,7 @@ public interface LifecycleObserver {
 	 * Called before an SSE connection is terminated.
 	 */
 	default void willTerminateSseConnection(@NonNull SseConnection sseConnection,
-																											SseConnection.@NonNull TerminationReason terminationReason,
-																											@Nullable Throwable throwable) {
+																											@NonNull StreamTermination termination) {
 		// No-op by default
 	}
 
@@ -538,9 +533,7 @@ public interface LifecycleObserver {
 	 * Called after an SSE connection is terminated.
 	 */
 	default void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																										 @NonNull Duration connectionDuration,
-																										 SseConnection.@NonNull TerminationReason terminationReason,
-																										 @Nullable Throwable throwable) {
+																										 @NonNull StreamTermination termination) {
 		// No-op by default
 	}
 

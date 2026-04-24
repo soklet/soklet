@@ -614,7 +614,7 @@ public class SseTests {
 				broadcaster.broadcastEvent(SseEvent.withEvent("bp").id("3").data("c").build());
 
 				Assertions.assertTrue(lifecycle.awaitTermination(10, SECONDS), "Termination not observed");
-				Assertions.assertEquals(SseConnection.TerminationReason.BACKPRESSURE, lifecycle.getReason());
+				Assertions.assertEquals(StreamTerminationReason.BACKPRESSURE, lifecycle.getReason());
 				lifecycle.releaseWriter();
 			}
 		}
@@ -698,7 +698,7 @@ public class SseTests {
 
 				app.stop();
 				Assertions.assertTrue(lifecycle.awaitTermination(5, SECONDS), "didTerminate not invoked");
-				Assertions.assertEquals(SseConnection.TerminationReason.SERVER_STOP, lifecycle.getReason());
+				Assertions.assertEquals(StreamTerminationReason.SERVER_STOPPING, lifecycle.getReason());
 			}
 		}
 	}
@@ -739,7 +739,7 @@ public class SseTests {
 
 				socket.close();
 				Assertions.assertTrue(lifecycle.awaitTermination(8, SECONDS), "didTerminate not invoked");
-				Assertions.assertEquals(SseConnection.TerminationReason.REMOTE_CLOSE, lifecycle.getReason());
+				Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, lifecycle.getReason());
 			}
 		}
 	}
@@ -1965,7 +1965,7 @@ public class SseTests {
 	private static class TerminationReasonLifecycle implements LifecycleObserver {
 		private final CountDownLatch establishedLatch;
 		private final CountDownLatch terminatedLatch;
-		private final AtomicReference<SseConnection.TerminationReason> reason;
+		private final AtomicReference<StreamTerminationReason> reason;
 
 		private TerminationReasonLifecycle() {
 			this.establishedLatch = new CountDownLatch(1);
@@ -1983,10 +1983,8 @@ public class SseTests {
 
 		@Override
 		public void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																											@NonNull Duration connectionDuration,
-																											SseConnection.@NonNull TerminationReason terminationReason,
-																											@Nullable Throwable throwable) {
-			this.reason.compareAndSet(null, terminationReason);
+																											@NonNull StreamTermination termination) {
+			this.reason.compareAndSet(null, termination.getReason());
 			this.terminatedLatch.countDown();
 		}
 
@@ -1998,7 +1996,7 @@ public class SseTests {
 			return this.terminatedLatch.await(timeout, unit);
 		}
 
-		SseConnection.TerminationReason getReason() {
+		StreamTerminationReason getReason() {
 			return this.reason.get();
 		}
 	}
@@ -2007,7 +2005,7 @@ public class SseTests {
 		private final CountDownLatch writeStarted;
 		private final CountDownLatch allowWrite;
 		private final CountDownLatch terminatedLatch;
-		private final AtomicReference<SseConnection.TerminationReason> reason;
+		private final AtomicReference<StreamTerminationReason> reason;
 		private final AtomicBoolean blocking;
 
 		private BackpressureLifecycle() {
@@ -2036,10 +2034,8 @@ public class SseTests {
 
 		@Override
 		public void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																											@NonNull Duration connectionDuration,
-																											SseConnection.@NonNull TerminationReason terminationReason,
-																											@Nullable Throwable throwable) {
-			this.reason.compareAndSet(null, terminationReason);
+																											@NonNull StreamTermination termination) {
+			this.reason.compareAndSet(null, termination.getReason());
 			this.terminatedLatch.countDown();
 		}
 
@@ -2055,7 +2051,7 @@ public class SseTests {
 			return this.terminatedLatch.await(timeout, unit);
 		}
 
-		SseConnection.TerminationReason getReason() {
+		StreamTerminationReason getReason() {
 			return this.reason.get();
 		}
 	}

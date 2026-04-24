@@ -19,7 +19,7 @@ package com.soklet.internal.microhttp;
 import com.soklet.CancelationToken;
 import com.soklet.ResponseStream;
 import com.soklet.StreamingResponseBody;
-import com.soklet.StreamingResponseCancelationReason;
+import com.soklet.StreamTerminationReason;
 import com.soklet.StreamingResponseCanceledException;
 import com.soklet.StreamingResponseContext;
 import org.jspecify.annotations.NonNull;
@@ -139,8 +139,9 @@ public final class StreamingMicrohttpResponses {
 	 */
 	@FunctionalInterface
 	public interface TerminationListener {
-		void didTerminate(@NonNull Duration streamDuration,
-											@Nullable StreamingResponseCancelationReason cancelationReason,
+		void didTerminate(@NonNull Instant establishedAt,
+											@NonNull Duration streamDuration,
+											@Nullable StreamTerminationReason cancelationReason,
 											@Nullable Throwable throwable);
 	}
 
@@ -250,7 +251,7 @@ public final class StreamingMicrohttpResponses {
 			try {
 				this.producerFuture = this.executorService.submit(this::runProducer);
 			} catch (RejectedExecutionException e) {
-				fail(StreamingResponseCancelationReason.PRODUCER_FAILED, e);
+				fail(StreamTerminationReason.PRODUCER_FAILED, e);
 			}
 		}
 
@@ -300,7 +301,7 @@ public final class StreamingMicrohttpResponses {
 
 					if (terminal)
 						StreamingMicrohttpResponses.testHooks.beforeTerminalCompletion(() ->
-								fail(StreamingResponseCancelationReason.RESPONSE_TIMEOUT, null));
+								fail(StreamTerminationReason.RESPONSE_TIMEOUT, null));
 
 					synchronized (this.lock) {
 						if (chunk.payloadBytes > 0)
@@ -347,15 +348,15 @@ public final class StreamingMicrohttpResponses {
 
 		@Override
 		public void close() {
-			close(StreamingResponseCancelationReason.CLIENT_DISCONNECTED, null);
+			close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
 		}
 
 		@Override
-		public void close(StreamingResponseCancelationReason cancelationReason, Throwable cause) {
+		public void close(StreamTerminationReason cancelationReason, Throwable cause) {
 			requireNonNull(cancelationReason);
 			cancelTimeouts();
 
-			StreamingResponseCancelationReason effectiveReason = null;
+			StreamTerminationReason effectiveReason = null;
 			Throwable effectiveCause = null;
 
 			synchronized (this.lock) {
@@ -408,9 +409,9 @@ public final class StreamingMicrohttpResponses {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				fail(this.cancelationToken.getCancelationReason()
-						.orElse(StreamingResponseCancelationReason.CLIENT_DISCONNECTED), e);
+						.orElse(StreamTerminationReason.CLIENT_DISCONNECTED), e);
 			} catch (Throwable t) {
-				fail(StreamingResponseCancelationReason.PRODUCER_FAILED, t);
+				fail(StreamTerminationReason.PRODUCER_FAILED, t);
 			}
 		}
 
@@ -594,11 +595,11 @@ public final class StreamingMicrohttpResponses {
 			wakeWriter();
 		}
 
-		private void fail(@NonNull StreamingResponseCancelationReason reason,
+		private void fail(@NonNull StreamTerminationReason reason,
 											@Nullable Throwable cause) {
 			requireNonNull(reason);
 
-			StreamingResponseCancelationReason effectiveReason;
+			StreamTerminationReason effectiveReason;
 			Throwable effectiveCause;
 
 			synchronized (this.lock) {
@@ -613,7 +614,7 @@ public final class StreamingMicrohttpResponses {
 			}
 
 			StreamingMicrohttpResponses.testHooks.afterFailureReserved(() ->
-					close(StreamingResponseCancelationReason.CLIENT_DISCONNECTED, null));
+					close(StreamTerminationReason.CLIENT_DISCONNECTED, null));
 			this.cancelationToken.cancel(effectiveReason, effectiveCause);
 			cancelTimeouts();
 			notifyTerminated(effectiveReason, effectiveCause);
@@ -629,7 +630,7 @@ public final class StreamingMicrohttpResponses {
 			long delayMillis = Math.max(0L, Duration.between(Instant.now(), deadline).toMillis());
 
 			ScheduledFuture<?> newResponseTimeoutFuture = this.timeoutExecutorService.schedule(() ->
-							fail(StreamingResponseCancelationReason.RESPONSE_TIMEOUT, null),
+							fail(StreamTerminationReason.RESPONSE_TIMEOUT, null),
 					delayMillis,
 					TimeUnit.MILLISECONDS);
 			ScheduledFuture<?> previousResponseTimeoutFuture = this.responseTimeoutFuture.getAndSet(newResponseTimeoutFuture);
@@ -645,7 +646,7 @@ public final class StreamingMicrohttpResponses {
 				return;
 
 			ScheduledFuture<?> newIdleTimeoutFuture = this.timeoutExecutorService.schedule(() ->
-							fail(StreamingResponseCancelationReason.RESPONSE_IDLE_TIMEOUT, null),
+							fail(StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null),
 					Math.max(1L, idleTimeout.toMillis()),
 					TimeUnit.MILLISECONDS);
 			ScheduledFuture<?> previousIdleTimeoutFuture = this.idleTimeoutFuture.getAndSet(newIdleTimeoutFuture);
@@ -670,13 +671,13 @@ public final class StreamingMicrohttpResponses {
 			this.writeReadyCallback.run();
 		}
 
-		private void notifyTerminated(@Nullable StreamingResponseCancelationReason reason,
+		private void notifyTerminated(@Nullable StreamTerminationReason reason,
 																	@Nullable Throwable throwable) {
 			if (!this.terminationNotified.compareAndSet(false, true))
 				return;
 
 			cancelTimeouts();
-			this.terminationListener.didTerminate(Duration.between(this.streamStarted, Instant.now()), reason, throwable);
+			this.terminationListener.didTerminate(this.streamStarted, Duration.between(this.streamStarted, Instant.now()), reason, throwable);
 		}
 
 		private IOException toIOException(@NonNull Throwable throwable) {
@@ -745,7 +746,7 @@ public final class StreamingMicrohttpResponses {
 					StreamingWritableSource.this.context.throwIfCanceled();
 
 					if (StreamingWritableSource.this.closed)
-						throw new StreamingResponseCanceledException(StreamingResponseCancelationReason.CLIENT_DISCONNECTED);
+						throw new StreamingResponseCanceledException(StreamTerminationReason.CLIENT_DISCONNECTED);
 
 					if (StreamingWritableSource.this.failure != null)
 						throw toIOException(StreamingWritableSource.this.failure);
@@ -842,7 +843,7 @@ public final class StreamingMicrohttpResponses {
 		@NonNull
 		private final Consumer<Throwable> callbackFailureConsumer;
 		@Nullable
-		private volatile StreamingResponseCancelationReason reason;
+		private volatile StreamTerminationReason reason;
 		@Nullable
 		private volatile Throwable cause;
 
@@ -860,7 +861,7 @@ public final class StreamingMicrohttpResponses {
 
 		@Override
 		@NonNull
-		public Optional<StreamingResponseCancelationReason> getCancelationReason() {
+		public Optional<StreamTerminationReason> getCancelationReason() {
 			return Optional.ofNullable(this.reason);
 		}
 
@@ -898,9 +899,12 @@ public final class StreamingMicrohttpResponses {
 			};
 		}
 
-		private boolean cancel(@NonNull StreamingResponseCancelationReason reason,
+		private boolean cancel(@NonNull StreamTerminationReason reason,
 													 @Nullable Throwable cause) {
 			requireNonNull(reason);
+
+			if (reason == StreamTerminationReason.COMPLETED)
+				throw new IllegalArgumentException("Cancelation reason cannot be COMPLETED");
 
 			List<Runnable> callbacksToRun;
 

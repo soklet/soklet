@@ -1889,30 +1889,33 @@ final class DefaultSseServer implements SseServer {
 					.build());
 		}
 
-		SseConnection.TerminationReason terminationReason =
+		StreamTerminationReason terminationReason =
 				sseConnection.getTerminationReason().orElse(null);
 
 		if (terminationReason == null) {
 			if (isStopping())
-				terminationReason = SseConnection.TerminationReason.SERVER_STOP;
+				terminationReason = StreamTerminationReason.SERVER_STOPPING;
 			else if (isRemoteClose(throwable))
-				terminationReason = SseConnection.TerminationReason.REMOTE_CLOSE;
+				terminationReason = StreamTerminationReason.CLIENT_DISCONNECTED;
 			else if (throwable != null)
-				terminationReason = SseConnection.TerminationReason.ERROR;
+				terminationReason = StreamTerminationReason.WRITE_FAILED;
 			else
-				terminationReason = SseConnection.TerminationReason.UNKNOWN;
+				terminationReason = StreamTerminationReason.UNKNOWN;
 
 			sseConnection.setTerminationReason(terminationReason);
 		}
 
-		SseConnection.TerminationReason effectiveTerminationReason = terminationReason;
+		StreamTerminationReason effectiveTerminationReason = terminationReason;
 		Throwable terminationThrowable = throwable;
+		StreamTermination willTermination = StreamTermination
+				.with(effectiveTerminationReason, Duration.between(sseConnection.getEstablishedAt(), Instant.now()))
+				.cause(terminationThrowable)
+				.build();
 
 		try {
 			getLifecycleObserver().get().willTerminateSseConnection(
 					connectionSnapshot,
-					effectiveTerminationReason,
-					terminationThrowable);
+					willTermination);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_SSE_CONNECTION_FAILED, format("An exception occurred while invoking %s::willTerminateSseConnection", LifecycleObserver.class.getSimpleName()))
 					.throwable(t)
@@ -1925,8 +1928,7 @@ final class DefaultSseServer implements SseServer {
 				connectionResourceMethod,
 				(metricsCollector) -> metricsCollector.willTerminateSseConnection(
 						connectionSnapshot,
-						effectiveTerminationReason,
-						terminationThrowable));
+						willTermination));
 
 		try {
 			registration.broadcaster().unregisterSseConnection(sseConnection, false);
@@ -1943,13 +1945,15 @@ final class DefaultSseServer implements SseServer {
 		Duration connectionDuration = Duration.between(
 				sseConnection.getEstablishedAt(),
 				connectionFinished);
+		StreamTermination didTermination = StreamTermination
+				.with(effectiveTerminationReason, connectionDuration)
+				.cause(terminationThrowable)
+				.build();
 
 		try {
 			getLifecycleObserver().get().didTerminateSseConnection(
 					connectionSnapshot,
-					connectionDuration,
-					effectiveTerminationReason,
-					terminationThrowable);
+					didTermination);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_SSE_CONNECTION_FAILED, format("An exception occurred while invoking %s::didTerminateSseConnection", LifecycleObserver.class.getSimpleName()))
 					.throwable(t)
@@ -1962,9 +1966,7 @@ final class DefaultSseServer implements SseServer {
 				connectionResourceMethod,
 				(metricsCollector) -> metricsCollector.didTerminateSseConnection(
 						connectionSnapshot,
-						connectionDuration,
-						effectiveTerminationReason,
-						terminationThrowable));
+						didTermination));
 	}
 
 	private void closeSocketChannel(@NonNull SocketChannel clientSocketChannel,
@@ -2387,7 +2389,7 @@ final class DefaultSseServer implements SseServer {
 		@NonNull
 		private final AtomicBoolean closing;
 		@NonNull
-		private final AtomicReference<SseConnection.TerminationReason> terminationReason;
+		private final AtomicReference<StreamTerminationReason> terminationReason;
 		@NonNull
 		private final SseConnectionSnapshot snapshot;
 
@@ -2540,13 +2542,13 @@ final class DefaultSseServer implements SseServer {
 			return this.closing;
 		}
 
-		public void setTerminationReason(SseConnection.@NonNull TerminationReason reason) {
+		public void setTerminationReason(@NonNull StreamTerminationReason reason) {
 			requireNonNull(reason);
 			this.terminationReason.compareAndSet(null, reason);
 		}
 
 		@NonNull
-		public Optional<SseConnection.TerminationReason> getTerminationReason() {
+		public Optional<StreamTerminationReason> getTerminationReason() {
 			return Optional.ofNullable(this.terminationReason.get());
 		}
 
@@ -3232,7 +3234,7 @@ final class DefaultSseServer implements SseServer {
 
 		List<DefaultSseConnection> connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
 		for (DefaultSseConnection connection : connectionsSnapshot)
-			connection.setTerminationReason(SseConnection.TerminationReason.SERVER_STOP);
+			connection.setTerminationReason(StreamTerminationReason.SERVER_STOPPING);
 
 		// Close client connections - sends poison pills to all registered connections
 		for (DefaultSseBroadcaster broadcaster : new ArrayList<>(getBroadcastersByResourcePath().values())) {
@@ -3633,7 +3635,7 @@ final class DefaultSseServer implements SseServer {
 		if (!connection.getClosing().compareAndSet(false, true))
 			return;
 
-		connection.setTerminationReason(SseConnection.TerminationReason.BACKPRESSURE);
+		connection.setTerminationReason(StreamTerminationReason.BACKPRESSURE);
 
 		// String message = format("Closing Server-Sent Event connection due to backpressure (write queue at capacity) while enqueuing %s. {resourcePath=%s, queueSize=%d, remainingCapacity=%d}",
 		//					cause, owner.getResourcePath(), writeQueue.size(), writeQueue.remainingCapacity());

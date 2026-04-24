@@ -1050,14 +1050,14 @@ public class McpRuntimeTests {
 							))
 							.build());
 
-			Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpStreams());
+			Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams());
 			streamOpened.close();
 			streamOpened.close();
 
 			Assertions.assertTrue(streamOpened.isClosed());
-			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED, lifecycleObserver.streamTerminationReason);
+			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, lifecycleObserver.streamTerminationReason);
 			Assertions.assertNull(lifecycleObserver.sessionTerminationReason);
-			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpStreams());
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams());
 
 			McpRequestResult.ResponseCompleted deleteResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
 					Request.withPath(HttpMethod.DELETE, "/tenants/acme/mcp")
@@ -1065,7 +1065,7 @@ public class McpRuntimeTests {
 							.build());
 
 			Assertions.assertEquals(Integer.valueOf(204), deleteResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
-			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED, lifecycleObserver.streamTerminationReason);
+			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, lifecycleObserver.streamTerminationReason);
 		});
 	}
 
@@ -1164,7 +1164,7 @@ public class McpRuntimeTests {
 		Assertions.assertEquals(McpRequestOutcome.SUCCESS_RESPONSE, lifecycleObserver.outcomesByMethod.get("tools/call"));
 		Assertions.assertEquals(1, lifecycleObserver.establishedStreamSessionIds.size());
 		Assertions.assertEquals(McpSessionTerminationReason.CLIENT_REQUESTED, lifecycleObserver.sessionTerminationReason);
-		Assertions.assertEquals(McpStreamTerminationReason.SESSION_TERMINATED, lifecycleObserver.streamTerminationReason);
+		Assertions.assertEquals(StreamTerminationReason.SESSION_TERMINATED, lifecycleObserver.streamTerminationReason);
 	}
 
 	@Test
@@ -1302,7 +1302,7 @@ public class McpRuntimeTests {
 		Assertions.assertTrue(snapshot.getHttpRequestDurations().isEmpty());
 		Assertions.assertEquals(0L, snapshot.getActiveRequests());
 		Assertions.assertEquals(0L, snapshot.getActiveMcpSessions());
-		Assertions.assertEquals(0L, snapshot.getActiveMcpStreams());
+		Assertions.assertEquals(0L, snapshot.getActiveMcpSseStreams());
 		Assertions.assertEquals(1L, snapshot.getMcpRequests().get(new MetricsCollector.McpEndpointRequestOutcomeKey(
 				CatalogEndpoint.class, "initialize", McpRequestOutcome.SUCCESS_RESPONSE)));
 		Assertions.assertEquals(1L, snapshot.getMcpRequests().get(new MetricsCollector.McpEndpointRequestOutcomeKey(
@@ -1311,8 +1311,8 @@ public class McpRuntimeTests {
 				CatalogEndpoint.class, "tools/call", McpRequestOutcome.TOOL_ERROR_RESULT)));
 		Assertions.assertEquals(1L, snapshot.getMcpSessionDurations().get(new MetricsCollector.McpEndpointSessionTerminationKey(
 				CatalogEndpoint.class, McpSessionTerminationReason.CLIENT_REQUESTED)).getCount());
-		Assertions.assertEquals(1L, snapshot.getMcpStreamDurations().get(new MetricsCollector.McpEndpointStreamTerminationKey(
-				CatalogEndpoint.class, McpStreamTerminationReason.SESSION_TERMINATED)).getCount());
+		Assertions.assertEquals(1L, snapshot.getMcpSseStreamDurations().get(new MetricsCollector.McpEndpointSseStreamTerminationKey(
+				CatalogEndpoint.class, StreamTerminationReason.SESSION_TERMINATED)).getCount());
 	}
 
 	private static SokletConfig configuration() {
@@ -1826,7 +1826,7 @@ public class McpRuntimeTests {
 		private final Map<String, McpRequestOutcome> outcomesByMethod;
 		private final List<String> establishedStreamSessionIds;
 		private McpSessionTerminationReason sessionTerminationReason;
-		private McpStreamTerminationReason streamTerminationReason;
+		private StreamTerminationReason streamTerminationReason;
 
 		private RecordingLifecycleObserver() {
 			this.createdSessionIds = new ArrayList<>();
@@ -1870,10 +1870,8 @@ public class McpRuntimeTests {
 		}
 
 		@Override
-		public void didEstablishMcpSseStream(Request request,
-																									 Class<? extends McpEndpoint> endpointClass,
-																									 String sessionId) {
-			this.establishedStreamSessionIds.add(sessionId);
+		public void didEstablishMcpSseStream(McpSseStream stream) {
+			this.establishedStreamSessionIds.add(stream.getSessionId());
 		}
 
 		@Override
@@ -1886,13 +1884,9 @@ public class McpRuntimeTests {
 		}
 
 		@Override
-		public void didTerminateMcpSseStream(Request request,
-																										 Class<? extends McpEndpoint> endpointClass,
-																										 String sessionId,
-																										 Duration connectionDuration,
-																										 McpStreamTerminationReason terminationReason,
-																										 Throwable throwable) {
-			this.streamTerminationReason = terminationReason;
+		public void didTerminateMcpSseStream(McpSseStream stream,
+																										 StreamTermination termination) {
+			this.streamTerminationReason = termination.getReason();
 		}
 	}
 }

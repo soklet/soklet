@@ -96,7 +96,11 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_WRITE_RESPONSE_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didTerminateResponseStream(ServerType, Request, ResourceMethod, MarshaledResponse, Duration, StreamingResponseCancelationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willTerminateResponseStream(StreamingResponseHandle, StreamTermination)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_WILL_TERMINATE_RESPONSE_STREAM_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didTerminateResponseStream(StreamingResponseHandle, StreamTermination)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
 	/**
@@ -116,15 +120,15 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didEstablishMcpSseStream(Request, Class, String)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didEstablishMcpSseStream(McpSseStream)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SSE_STREAM_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#willTerminateMcpSseStream(Request, Class, String, McpStreamTerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willTerminateMcpSseStream(McpSseStream, StreamTermination)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SSE_STREAM_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didTerminateMcpSseStream(Request, Class, String, Duration, McpStreamTerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didTerminateMcpSseStream(McpSseStream, StreamTermination)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SSE_STREAM_FAILED,
 	/**
@@ -136,11 +140,11 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#willTerminateSseConnection(SseConnection, SseConnection.TerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#willTerminateSseConnection(SseConnection, StreamTermination)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_WILL_TERMINATE_SSE_CONNECTION_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didTerminateSseConnection(SseConnection, Duration, SseConnection.TerminationReason, Throwable)} threw an exception.
+	 * Indicates {@link LifecycleObserver#didTerminateSseConnection(SseConnection, StreamTermination)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_DID_TERMINATE_SSE_CONNECTION_FAILED,
 	/**

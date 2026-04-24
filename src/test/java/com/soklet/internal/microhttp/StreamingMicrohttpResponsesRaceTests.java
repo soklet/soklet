@@ -17,7 +17,7 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.StreamingResponseBody;
-import com.soklet.StreamingResponseCancelationReason;
+import com.soklet.StreamTerminationReason;
 import com.soklet.StreamingResponseCanceledException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -56,8 +56,8 @@ public class StreamingMicrohttpResponsesRaceTests {
 	@Test
 	public void timeout_reserved_after_terminal_chunk_write_does_not_report_normal_completion() throws Exception {
 		AtomicInteger timeoutInjections = new AtomicInteger();
-		AtomicReference<StreamingResponseCancelationReason> callbackReasonRef = new AtomicReference<>();
-		AtomicReference<StreamingResponseCancelationReason> terminationReasonRef = new AtomicReference<>();
+		AtomicReference<StreamTerminationReason> callbackReasonRef = new AtomicReference<>();
+		AtomicReference<StreamTerminationReason> terminationReasonRef = new AtomicReference<>();
 		AtomicReference<Throwable> terminationThrowableRef = new AtomicReference<>();
 		AtomicReference<Throwable> callbackFailureRef = new AtomicReference<>();
 		CountDownLatch terminatedLatch = new CountDownLatch(1);
@@ -75,12 +75,12 @@ public class StreamingMicrohttpResponsesRaceTests {
 
 		Assertions.assertEquals(1, timeoutInjections.get(), "Timeout was not injected at the terminal write boundary");
 		Assertions.assertInstanceOf(StreamingResponseCanceledException.class, result.getFailure());
-		Assertions.assertEquals(StreamingResponseCancelationReason.RESPONSE_TIMEOUT,
+		Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
 				((StreamingResponseCanceledException) result.getFailure()).getCancelationReason());
 		Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS), "Stream termination lifecycle hook was not invoked");
-		Assertions.assertEquals(StreamingResponseCancelationReason.RESPONSE_TIMEOUT, terminationReasonRef.get());
+		Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, terminationReasonRef.get());
 		Assertions.assertNull(terminationThrowableRef.get());
-		Assertions.assertEquals(StreamingResponseCancelationReason.RESPONSE_TIMEOUT, callbackReasonRef.get());
+		Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, callbackReasonRef.get());
 		Assertions.assertNull(callbackFailureRef.get());
 	}
 
@@ -88,8 +88,8 @@ public class StreamingMicrohttpResponsesRaceTests {
 	public void close_after_failure_reservation_does_not_overwrite_cancelation_reason() throws Exception {
 		AtomicInteger timeoutInjections = new AtomicInteger();
 		AtomicInteger closeInjections = new AtomicInteger();
-		AtomicReference<StreamingResponseCancelationReason> callbackReasonRef = new AtomicReference<>();
-		AtomicReference<StreamingResponseCancelationReason> terminationReasonRef = new AtomicReference<>();
+		AtomicReference<StreamTerminationReason> callbackReasonRef = new AtomicReference<>();
+		AtomicReference<StreamTerminationReason> terminationReasonRef = new AtomicReference<>();
 		AtomicReference<Throwable> terminationThrowableRef = new AtomicReference<>();
 		AtomicReference<Throwable> callbackFailureRef = new AtomicReference<>();
 		CountDownLatch terminatedLatch = new CountDownLatch(1);
@@ -114,17 +114,17 @@ public class StreamingMicrohttpResponsesRaceTests {
 		Assertions.assertEquals(1, timeoutInjections.get(), "Timeout was not injected at the terminal write boundary");
 		Assertions.assertEquals(1, closeInjections.get(), "Close was not injected after failure reservation");
 		Assertions.assertInstanceOf(StreamingResponseCanceledException.class, result.getFailure());
-		Assertions.assertEquals(StreamingResponseCancelationReason.RESPONSE_TIMEOUT,
+		Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
 				((StreamingResponseCanceledException) result.getFailure()).getCancelationReason());
 		Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS), "Stream termination lifecycle hook was not invoked");
-		Assertions.assertEquals(StreamingResponseCancelationReason.RESPONSE_TIMEOUT, terminationReasonRef.get());
+		Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, terminationReasonRef.get());
 		Assertions.assertNull(terminationThrowableRef.get());
-		Assertions.assertEquals(StreamingResponseCancelationReason.RESPONSE_TIMEOUT, callbackReasonRef.get());
+		Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, callbackReasonRef.get());
 		Assertions.assertNull(callbackFailureRef.get());
 	}
 
-	private ExerciseResult exerciseTerminalWriteRace(AtomicReference<StreamingResponseCancelationReason> callbackReasonRef,
-																									AtomicReference<StreamingResponseCancelationReason> terminationReasonRef,
+	private ExerciseResult exerciseTerminalWriteRace(AtomicReference<StreamTerminationReason> callbackReasonRef,
+																									AtomicReference<StreamTerminationReason> terminationReasonRef,
 																									AtomicReference<Throwable> terminationThrowableRef,
 																									AtomicReference<Throwable> callbackFailureRef,
 																									CountDownLatch terminatedLatch) throws Exception {
@@ -148,8 +148,8 @@ public class StreamingMicrohttpResponsesRaceTests {
 
 	private WritableSource newStreamingSource(ExecutorService executorService,
 																						ScheduledExecutorService timeoutExecutorService,
-																						AtomicReference<StreamingResponseCancelationReason> callbackReasonRef,
-																						AtomicReference<StreamingResponseCancelationReason> terminationReasonRef,
+																						AtomicReference<StreamTerminationReason> callbackReasonRef,
+																						AtomicReference<StreamTerminationReason> terminationReasonRef,
 																						AtomicReference<Throwable> terminationThrowableRef,
 																						AtomicReference<Throwable> callbackFailureRef,
 																						CountDownLatch terminatedLatch) throws IOException {
@@ -168,7 +168,7 @@ public class StreamingMicrohttpResponsesRaceTests {
 				1_024,
 				null,
 				null,
-				(streamDuration, cancelationReason, throwable) -> {
+				(establishedAt, streamDuration, cancelationReason, throwable) -> {
 					terminationReasonRef.set(cancelationReason);
 					terminationThrowableRef.set(throwable);
 					terminatedLatch.countDown();

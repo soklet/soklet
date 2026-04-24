@@ -1,6 +1,6 @@
 package com.soklet.internal.microhttp;
 
-import com.soklet.StreamingResponseCancelationReason;
+import com.soklet.StreamTerminationReason;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -302,7 +302,7 @@ class ConnectionEventLoop {
 
         private void prepareToWriteResponse(MicrohttpResponse microhttpResponse) throws IOException {
             if (microhttpResponse.streaming() && httpOneDotZero) {
-                microhttpResponse.closeStreamingBody(StreamingResponseCancelationReason.HTTP_VERSION_UNSUPPORTED, null);
+                microhttpResponse.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
                 microhttpResponse = new MicrohttpResponse(505, "HTTP Version Not Supported",
                         List.of(new Header(HEADER_CONNECTION, CLOSE)), new byte[0]);
                 closeAfterResponse = true;
@@ -435,7 +435,7 @@ class ConnectionEventLoop {
             failSafeClose(null, null);
         }
 
-        private void failSafeClose(StreamingResponseCancelationReason cancelationReason, Throwable cause) {
+        private void failSafeClose(StreamTerminationReason cancelationReason, Throwable cause) {
             if (!closed.compareAndSet(false, true))
                 return;
             if (requestTimeoutTask != null) {
@@ -522,7 +522,7 @@ class ConnectionEventLoop {
             for (SelectionKey selKey : selector.keys()) {
                 Object attachment = selKey.attachment();
                 if (attachment instanceof Connection connection) {
-                    connection.failSafeClose(StreamingResponseCancelationReason.SERVER_SHUTDOWN, null);
+                    connection.failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
                 }
             }
             CloseUtils.closeQuietly(selector);

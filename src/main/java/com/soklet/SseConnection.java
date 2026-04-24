@@ -83,29 +83,4 @@ public interface SseConnection {
 		INTERNAL_ERROR
 	}
 
-	/**
-	 * Categorizes why a Server-Sent Event connection terminated.
-	 */
-	enum TerminationReason {
-		/**
-		 * Connection was closed due to backpressure (write queue at capacity).
-		 */
-		BACKPRESSURE,
-		/**
-		 * Connection was closed during server shutdown.
-		 */
-		SERVER_STOP,
-		/**
-		 * Connection ended due to an error while processing or writing.
-		 */
-		ERROR,
-		/**
-		 * Connection ended because the remote peer closed the socket.
-		 */
-		REMOTE_CLOSE,
-		/**
-		 * Connection ended for an unspecified reason.
-		 */
-		UNKNOWN
-	}
 }

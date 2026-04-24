@@ -17,23 +17,27 @@
 package com.soklet;
 
 /**
- * Reasons a streaming response can be canceled.
+ * Reasons why a streaming HTTP response, Server-Sent Event connection, or MCP SSE stream may terminate.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public enum StreamingResponseCancelationReason {
+public enum StreamTerminationReason {
+	/**
+	 * The stream completed normally.
+	 */
+	COMPLETED,
 	/**
 	 * The client disconnected before the stream completed.
 	 */
 	CLIENT_DISCONNECTED,
 	/**
-	 * The server shut down before the stream completed.
+	 * The server stopped before the stream completed.
 	 */
-	SERVER_SHUTDOWN,
+	SERVER_STOPPING,
 	/**
-	 * The request HTTP version cannot support streaming responses.
+	 * The request protocol cannot support the stream.
 	 */
-	HTTP_VERSION_UNSUPPORTED,
+	PROTOCOL_UNSUPPORTED,
 	/**
 	 * The stream exceeded its configured total response timeout.
 	 */
@@ -43,15 +47,35 @@ public enum StreamingResponseCancelationReason {
 	 */
 	RESPONSE_IDLE_TIMEOUT,
 	/**
+	 * Producer code intentionally aborted the stream.
+	 */
+	APPLICATION_CANCELED,
+	/**
+	 * The stream was closed due to backpressure.
+	 */
+	BACKPRESSURE,
+	/**
+	 * The stream ended because its owning session was terminated.
+	 */
+	SESSION_TERMINATED,
+	/**
+	 * A write to the stream failed.
+	 */
+	WRITE_FAILED,
+	/**
 	 * The stream producer failed.
 	 */
 	PRODUCER_FAILED,
+	/**
+	 * An unexpected internal error occurred.
+	 */
+	INTERNAL_ERROR,
 	/**
 	 * The simulator refused to materialize more streaming response bytes.
 	 */
 	SIMULATOR_LIMIT_EXCEEDED,
 	/**
-	 * Producer code intentionally aborted the stream.
+	 * The stream ended for an unspecified reason.
 	 */
-	APPLICATION_CANCELED
+	UNKNOWN
 }

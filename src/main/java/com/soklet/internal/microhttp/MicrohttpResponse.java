@@ -1,6 +1,6 @@
 package com.soklet.internal.microhttp;
 
-import com.soklet.StreamingResponseCancelationReason;
+import com.soklet.StreamTerminationReason;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -155,7 +155,7 @@ public final class MicrohttpResponse {
                 bodySourceFactory.create()));
     }
 
-    void closeStreamingBody(StreamingResponseCancelationReason cancelationReason, Throwable cause) throws IOException {
+    void closeStreamingBody(StreamTerminationReason cancelationReason, Throwable cause) throws IOException {
         if (!streaming) {
             return;
         }

@@ -327,18 +327,22 @@ final class DefaultMcpRuntime {
 		if (!storedSession.initializedNotificationReceived())
 			return plainTextResponse(request, 400, "MCP session has not received notifications/initialized.");
 
-			touchSession(mcpServer, storedSession);
-			McpStreamState streamState = registerMcpStream(request, resolvedEndpoint.endpointClass(), sessionId);
-			observeIdleExpiredSessionIfPresent(mcpServer, sessionId);
+		touchSession(mcpServer, storedSession);
+		McpStreamState streamState = registerMcpStream(request, resolvedEndpoint.endpointClass(), sessionId);
+		observeIdleExpiredSessionIfPresent(mcpServer, sessionId);
 
-			if (!isStreamableSession(mcpServer, resolvedEndpoint.endpointClass(), sessionId)) {
-				unregisterMcpStreamQuietly(sessionId, streamState);
-				return plainTextResponse(request, 404, "Unknown MCP session.");
-			}
-
-			observeEstablishedMcpStream(request, resolvedEndpoint.endpointClass(), sessionId);
-			return httpRequestResultFromMarshaledResponse(request, eventStreamResponse());
+		if (!isStreamableSession(mcpServer, resolvedEndpoint.endpointClass(), sessionId)) {
+			unregisterMcpStreamQuietly(sessionId, streamState);
+			return plainTextResponse(request, 404, "Unknown MCP session.");
 		}
+
+		if (!observeEstablishedMcpStream(streamState)) {
+			unregisterMcpStreamQuietly(sessionId, streamState);
+			return plainTextResponse(request, 404, "Unknown MCP session.");
+		}
+
+		return httpRequestResultFromMarshaledResponse(request, eventStreamResponse());
+	}
 
 	@NonNull
 	private HttpRequestResult dispatchObservedPostRequest(@NonNull Request request,
@@ -1082,7 +1086,7 @@ final class DefaultMcpRuntime {
 		observeSessionTerminated(resolvedEndpoint.endpointClass(), sessionId,
 				Duration.between(storedSession.createdAt(), terminatedAt),
 				McpSessionTerminationReason.CLIENT_REQUESTED, null);
-		terminateStreamsForSession(request, resolvedEndpoint.endpointClass(), sessionId, McpStreamTerminationReason.SESSION_TERMINATED, null);
+		terminateStreamsForSession(sessionId, StreamTerminationReason.SESSION_TERMINATED, null);
 		mcpServer.getSessionStore().deleteBySessionId(sessionId);
 		return httpRequestResultFromMarshaledResponse(request, MarshaledResponse.withStatusCode(204).build());
 	}
@@ -2132,22 +2136,27 @@ final class DefaultMcpRuntime {
 		return streamState;
 	}
 
-	private void observeEstablishedMcpStream(@NonNull Request request,
-																					 @NonNull Class<? extends McpEndpoint> endpointClass,
-																					 @NonNull String sessionId) {
-		requireNonNull(request);
-		requireNonNull(endpointClass);
-		requireNonNull(sessionId);
+	private boolean observeEstablishedMcpStream(@NonNull McpStreamState streamState) {
+		requireNonNull(streamState);
 
-		safelyCollectMetrics(
-				format("An exception occurred while invoking %s::didEstablishMcpSseStream", MetricsCollector.class.getSimpleName()),
-				request,
-				metricsCollector -> metricsCollector.didEstablishMcpSseStream(request, endpointClass, sessionId));
-		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SSE_STREAM_FAILED,
-				format("An exception occurred while invoking %s::didEstablishMcpSseStream", LifecycleObserver.class.getSimpleName()),
-				request,
-				null,
-				lifecycleObserver -> lifecycleObserver.didEstablishMcpSseStream(request, endpointClass, sessionId));
+		synchronized (streamState) {
+			// Session termination can race with GET-stream registration; keep establish/terminate observations paired.
+			if (streamState.isTerminated())
+				return false;
+
+			streamState.markEstablished();
+
+			safelyCollectMetrics(
+					format("An exception occurred while invoking %s::didEstablishMcpSseStream", MetricsCollector.class.getSimpleName()),
+					streamState.request(),
+					metricsCollector -> metricsCollector.didEstablishMcpSseStream(streamState));
+			safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SSE_STREAM_FAILED,
+					format("An exception occurred while invoking %s::didEstablishMcpSseStream", LifecycleObserver.class.getSimpleName()),
+					streamState.request(),
+					null,
+					lifecycleObserver -> lifecycleObserver.didEstablishMcpSseStream(streamState));
+			return true;
+		}
 	}
 
 	private void unregisterMcpStreamQuietly(@NonNull String sessionId,
@@ -2181,12 +2190,12 @@ final class DefaultMcpRuntime {
 		requireNonNull(request);
 		requireNonNull(sessionId);
 
-		handleTerminatedStream(request, sessionId, McpStreamTerminationReason.CLIENT_DISCONNECTED, null);
+		handleTerminatedStream(request, sessionId, StreamTerminationReason.CLIENT_DISCONNECTED, null);
 	}
 
 	void handleTerminatedStream(@NonNull Request request,
 															@NonNull String sessionId,
-															@NonNull McpStreamTerminationReason terminationReason,
+															@NonNull StreamTerminationReason terminationReason,
 															@Nullable Throwable throwable) {
 		requireNonNull(request);
 		requireNonNull(sessionId);
@@ -2219,13 +2228,9 @@ final class DefaultMcpRuntime {
 		observeTerminatedMcpStream(matchedStreamState, terminationReason, throwable);
 	}
 
-	private void terminateStreamsForSession(@NonNull Request request,
-																					@NonNull Class<? extends McpEndpoint> endpointClass,
-																					@NonNull String sessionId,
-																					@NonNull McpStreamTerminationReason terminationReason,
+	private void terminateStreamsForSession(@NonNull String sessionId,
+																					@NonNull StreamTerminationReason terminationReason,
 																					@Nullable Throwable throwable) {
-		requireNonNull(request);
-		requireNonNull(endpointClass);
 		requireNonNull(sessionId);
 		requireNonNull(terminationReason);
 
@@ -2239,43 +2244,47 @@ final class DefaultMcpRuntime {
 	}
 
 	private void observeTerminatedMcpStream(@NonNull McpStreamState streamState,
-																					@NonNull McpStreamTerminationReason terminationReason,
+																					@NonNull StreamTerminationReason terminationReason,
 																					@Nullable Throwable throwable) {
 		requireNonNull(streamState);
 		requireNonNull(terminationReason);
 
-		Duration streamDuration = Duration.between(streamState.establishedAt(), Instant.now());
-		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SSE_STREAM_FAILED,
-				format("An exception occurred while invoking %s::willTerminateMcpSseStream", LifecycleObserver.class.getSimpleName()),
-				streamState.request(),
-				null,
-				lifecycleObserver -> lifecycleObserver.willTerminateMcpSseStream(
-						streamState.request(),
-						streamState.endpointClass(),
-						streamState.sessionId(),
-						terminationReason,
-						throwable));
-		safelyCollectMetrics(
-				format("An exception occurred while invoking %s::didTerminateMcpSseStream", MetricsCollector.class.getSimpleName()),
-				streamState.request(),
-				metricsCollector -> metricsCollector.didTerminateMcpSseStream(
-						streamState.request(),
-						streamState.endpointClass(),
-						streamState.sessionId(),
-						streamDuration,
-						terminationReason,
-						throwable));
-		safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SSE_STREAM_FAILED,
-				format("An exception occurred while invoking %s::didTerminateMcpSseStream", LifecycleObserver.class.getSimpleName()),
-				streamState.request(),
-				null,
-				lifecycleObserver -> lifecycleObserver.didTerminateMcpSseStream(
-						streamState.request(),
-						streamState.endpointClass(),
-						streamState.sessionId(),
-						streamDuration,
-						terminationReason,
-						throwable));
+		synchronized (streamState) {
+			// Streams that terminate before establishment is observed were never visible to user callbacks or metrics.
+			if (streamState.isTerminated())
+				return;
+
+			streamState.markTerminated();
+
+			if (!streamState.isEstablished())
+				return;
+
+			Duration streamDuration = Duration.between(streamState.establishedAt(), Instant.now());
+			StreamTermination termination = StreamTermination
+					.with(terminationReason, streamDuration)
+					.cause(throwable)
+					.build();
+			safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SSE_STREAM_FAILED,
+					format("An exception occurred while invoking %s::willTerminateMcpSseStream", LifecycleObserver.class.getSimpleName()),
+					streamState.request(),
+					null,
+					lifecycleObserver -> lifecycleObserver.willTerminateMcpSseStream(
+							streamState,
+							termination));
+			safelyCollectMetrics(
+					format("An exception occurred while invoking %s::didTerminateMcpSseStream", MetricsCollector.class.getSimpleName()),
+					streamState.request(),
+					metricsCollector -> metricsCollector.didTerminateMcpSseStream(
+							streamState,
+							termination));
+			safelyInvokeLifecycleObserver(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SSE_STREAM_FAILED,
+					format("An exception occurred while invoking %s::didTerminateMcpSseStream", LifecycleObserver.class.getSimpleName()),
+					streamState.request(),
+					null,
+					lifecycleObserver -> lifecycleObserver.didTerminateMcpSseStream(
+							streamState,
+							termination));
+		}
 	}
 
 	private void safelyCollectMetrics(@NonNull String message,
@@ -3121,17 +3130,86 @@ final class DefaultMcpRuntime {
 		}
 	}
 
-	private record McpStreamState(
-			@NonNull Request request,
-			@NonNull Class<? extends McpEndpoint> endpointClass,
-			@NonNull String sessionId,
-			@NonNull Instant establishedAt
-	) {
-		private McpStreamState {
-			requireNonNull(request);
-			requireNonNull(endpointClass);
-			requireNonNull(sessionId);
-			requireNonNull(establishedAt);
+	private static final class McpStreamState implements McpSseStream {
+		@NonNull
+		private final Request request;
+		@NonNull
+		private final Class<? extends McpEndpoint> endpointClass;
+		@NonNull
+		private final String sessionId;
+		@NonNull
+		private final Instant establishedAt;
+		private boolean established;
+		private boolean terminated;
+
+		private McpStreamState(@NonNull Request request,
+													 @NonNull Class<? extends McpEndpoint> endpointClass,
+													 @NonNull String sessionId,
+													 @NonNull Instant establishedAt) {
+			this.request = requireNonNull(request);
+			this.endpointClass = requireNonNull(endpointClass);
+			this.sessionId = requireNonNull(sessionId);
+			this.establishedAt = requireNonNull(establishedAt);
+		}
+
+		@NonNull
+		Request request() {
+			return this.request;
+		}
+
+		@NonNull
+		Class<? extends McpEndpoint> endpointClass() {
+			return this.endpointClass;
+		}
+
+		@NonNull
+		String sessionId() {
+			return this.sessionId;
+		}
+
+		@NonNull
+		Instant establishedAt() {
+			return this.establishedAt;
+		}
+
+		boolean isEstablished() {
+			return this.established;
+		}
+
+		void markEstablished() {
+			this.established = true;
+		}
+
+		boolean isTerminated() {
+			return this.terminated;
+		}
+
+		void markTerminated() {
+			this.terminated = true;
+		}
+
+		@Override
+		@NonNull
+		public Request getRequest() {
+			return this.request;
+		}
+
+		@Override
+		@NonNull
+		public Class<? extends McpEndpoint> getEndpointClass() {
+			return this.endpointClass;
+		}
+
+		@Override
+		@NonNull
+		public String getSessionId() {
+			return this.sessionId;
+		}
+
+		@Override
+		@NonNull
+		public Instant getEstablishedAt() {
+			return this.establishedAt;
 		}
 	}
 

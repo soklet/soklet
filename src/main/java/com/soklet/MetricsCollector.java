@@ -322,21 +322,15 @@ public interface MetricsCollector {
 	/**
 	 * Called after an MCP GET stream is established.
 	 */
-	default void didEstablishMcpSseStream(@NonNull Request request,
-																										@NonNull Class<? extends McpEndpoint> endpointClass,
-																										@NonNull String sessionId) {
+	default void didEstablishMcpSseStream(@NonNull McpSseStream stream) {
 		// No-op by default
 	}
 
 	/**
 	 * Called after an MCP GET stream is terminated.
 	 */
-	default void didTerminateMcpSseStream(@NonNull Request request,
-																										@NonNull Class<? extends McpEndpoint> endpointClass,
-																										@NonNull String sessionId,
-																										@NonNull Duration connectionDuration,
-																										@NonNull McpStreamTerminationReason terminationReason,
-																										@Nullable Throwable throwable) {
+	default void didTerminateMcpSseStream(@NonNull McpSseStream stream,
+																										@NonNull StreamTermination termination) {
 		// No-op by default
 	}
 
@@ -372,8 +366,7 @@ public interface MetricsCollector {
 	 * Called before an SSE connection is terminated.
 	 */
 	default void willTerminateSseConnection(@NonNull SseConnection sseConnection,
-																											SseConnection.@NonNull TerminationReason terminationReason,
-																											@Nullable Throwable throwable) {
+																											@NonNull StreamTermination termination) {
 		// No-op by default
 	}
 
@@ -381,9 +374,7 @@ public interface MetricsCollector {
 	 * Called after an SSE connection is terminated.
 	 */
 	default void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																										 @NonNull Duration connectionDuration,
-																										 SseConnection.@NonNull TerminationReason terminationReason,
-																										 @Nullable Throwable throwable) {
+																										 @NonNull StreamTermination termination) {
 		// No-op by default
 	}
 
@@ -829,8 +820,8 @@ public interface MetricsCollector {
 	 * <p>
 	 * Durations are in nanoseconds, sizes are in bytes, and queue depths are raw counts.
 	 * Histogram values are captured as {@link HistogramSnapshot} instances.
-	 * Connection counts report total accepted/rejected connections for the HTTP and SSE servers.
-	 * Request read failures and request rejections are reported separately for HTTP and SSE traffic.
+	 * Connection counts report total accepted/rejected connections for the HTTP, SSE, and MCP servers.
+	 * Request read failures and request rejections are reported separately for HTTP, SSE, and MCP traffic.
 	 * Instances are typically produced by {@link MetricsCollector#snapshot()} but can also be built
 	 * manually via {@link #builder()}.
 	 *
@@ -841,11 +832,11 @@ public interface MetricsCollector {
 		@NonNull
 		private final Long activeRequests;
 		@NonNull
-		private final Long activeSseConnections;
+		private final Long activeSseStreams;
 		@NonNull
 		private final Long activeMcpSessions;
 		@NonNull
-		private final Long activeMcpStreams;
+		private final Long activeMcpSseStreams;
 		@NonNull
 		private final Long httpConnectionsAccepted;
 		@NonNull
@@ -909,7 +900,7 @@ public interface MetricsCollector {
 		@NonNull
 		private final Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth;
 		@NonNull
-		private final Map<@NonNull SseEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations;
+		private final Map<@NonNull SseStreamRouteTerminationKey, @NonNull HistogramSnapshot> sseStreamDurations;
 		@NonNull
 		private final Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull Long> mcpRequests;
 		@NonNull
@@ -917,7 +908,7 @@ public interface MetricsCollector {
 		@NonNull
 		private final Map<@NonNull McpEndpointSessionTerminationKey, @NonNull HistogramSnapshot> mcpSessionDurations;
 		@NonNull
-		private final Map<@NonNull McpEndpointStreamTerminationKey, @NonNull HistogramSnapshot> mcpStreamDurations;
+		private final Map<@NonNull McpEndpointSseStreamTerminationKey, @NonNull HistogramSnapshot> mcpSseStreamDurations;
 
 		/**
 		 * Acquires an "empty" builder for {@link Snapshot} instances.
@@ -933,9 +924,9 @@ public interface MetricsCollector {
 			requireNonNull(builder);
 
 			this.activeRequests = requireNonNull(builder.activeRequests);
-			this.activeSseConnections = requireNonNull(builder.activeSseConnections);
+			this.activeSseStreams = requireNonNull(builder.activeSseStreams);
 			this.activeMcpSessions = requireNonNull(builder.activeMcpSessions);
-			this.activeMcpStreams = requireNonNull(builder.activeMcpStreams);
+			this.activeMcpSseStreams = requireNonNull(builder.activeMcpSseStreams);
 			this.httpConnectionsAccepted = requireNonNull(builder.httpConnectionsAccepted);
 			this.httpConnectionsRejected = requireNonNull(builder.httpConnectionsRejected);
 			this.sseConnectionsAccepted = requireNonNull(builder.sseConnectionsAccepted);
@@ -967,11 +958,11 @@ public interface MetricsCollector {
 			this.sseCommentDeliveryLag = copyOrEmpty(builder.sseCommentDeliveryLag);
 			this.sseCommentSizes = copyOrEmpty(builder.sseCommentSizes);
 			this.sseCommentQueueDepth = copyOrEmpty(builder.sseCommentQueueDepth);
-			this.sseConnectionDurations = copyOrEmpty(builder.sseConnectionDurations);
+			this.sseStreamDurations = copyOrEmpty(builder.sseStreamDurations);
 			this.mcpRequests = copyOrEmpty(builder.mcpRequests);
 			this.mcpRequestDurations = copyOrEmpty(builder.mcpRequestDurations);
 			this.mcpSessionDurations = copyOrEmpty(builder.mcpSessionDurations);
-			this.mcpStreamDurations = copyOrEmpty(builder.mcpStreamDurations);
+			this.mcpSseStreamDurations = copyOrEmpty(builder.mcpSseStreamDurations);
 		}
 
 		/**
@@ -985,13 +976,13 @@ public interface MetricsCollector {
 		}
 
 		/**
-		 * Returns the number of active server-sent event connections.
+		 * Returns the number of active server-sent event streams.
 		 *
-		 * @return the active SSE connection count
+		 * @return the active SSE stream count
 		 */
 		@NonNull
-		public Long getActiveSseConnections() {
-			return this.activeSseConnections;
+		public Long getActiveSseStreams() {
+			return this.activeSseStreams;
 		}
 
 		/**
@@ -1005,13 +996,13 @@ public interface MetricsCollector {
 		}
 
 		/**
-		 * Returns the number of active MCP streams.
+		 * Returns the number of active MCP SSE streams.
 		 *
-		 * @return the active MCP stream count
+		 * @return the active MCP SSE stream count
 		 */
 		@NonNull
-		public Long getActiveMcpStreams() {
-			return this.activeMcpStreams;
+		public Long getActiveMcpSseStreams() {
+			return this.activeMcpSseStreams;
 		}
 
 		/**
@@ -1325,13 +1316,13 @@ public interface MetricsCollector {
 		}
 
 		/**
-		 * Returns SSE connection duration histograms keyed by route and termination reason.
+		 * Returns SSE stream duration histograms keyed by route and termination reason.
 		 *
-		 * @return SSE connection duration histograms
+		 * @return SSE stream duration histograms
 		 */
 		@NonNull
-		public Map<@NonNull SseEventRouteTerminationKey, @NonNull HistogramSnapshot> getSseConnectionDurations() {
-			return this.sseConnectionDurations;
+		public Map<@NonNull SseStreamRouteTerminationKey, @NonNull HistogramSnapshot> getSseStreamDurations() {
+			return this.sseStreamDurations;
 		}
 
 		/**
@@ -1365,13 +1356,13 @@ public interface MetricsCollector {
 		}
 
 		/**
-		 * Returns MCP stream duration histograms keyed by endpoint and termination reason.
+		 * Returns MCP SSE stream duration histograms keyed by endpoint and termination reason.
 		 *
-		 * @return MCP stream duration histograms
+		 * @return MCP SSE stream duration histograms
 		 */
 		@NonNull
-		public Map<@NonNull McpEndpointStreamTerminationKey, @NonNull HistogramSnapshot> getMcpStreamDurations() {
-			return this.mcpStreamDurations;
+		public Map<@NonNull McpEndpointSseStreamTerminationKey, @NonNull HistogramSnapshot> getMcpSseStreamDurations() {
+			return this.mcpSseStreamDurations;
 		}
 
 		@NonNull
@@ -1391,11 +1382,11 @@ public interface MetricsCollector {
 			@NonNull
 			private Long activeRequests;
 			@NonNull
-			private Long activeSseConnections;
+			private Long activeSseStreams;
 			@NonNull
 			private Long activeMcpSessions;
 			@NonNull
-			private Long activeMcpStreams;
+			private Long activeMcpSseStreams;
 			@NonNull
 			private Long httpConnectionsAccepted;
 			@NonNull
@@ -1459,7 +1450,7 @@ public interface MetricsCollector {
 			@Nullable
 			private Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth;
 			@Nullable
-			private Map<@NonNull SseEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations;
+			private Map<@NonNull SseStreamRouteTerminationKey, @NonNull HistogramSnapshot> sseStreamDurations;
 			@Nullable
 			private Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull Long> mcpRequests;
 			@Nullable
@@ -1467,13 +1458,13 @@ public interface MetricsCollector {
 			@Nullable
 			private Map<@NonNull McpEndpointSessionTerminationKey, @NonNull HistogramSnapshot> mcpSessionDurations;
 			@Nullable
-			private Map<@NonNull McpEndpointStreamTerminationKey, @NonNull HistogramSnapshot> mcpStreamDurations;
+			private Map<@NonNull McpEndpointSseStreamTerminationKey, @NonNull HistogramSnapshot> mcpSseStreamDurations;
 
 			private Builder() {
 				this.activeRequests = 0L;
-				this.activeSseConnections = 0L;
+				this.activeSseStreams = 0L;
 				this.activeMcpSessions = 0L;
-				this.activeMcpStreams = 0L;
+				this.activeMcpSseStreams = 0L;
 				this.httpConnectionsAccepted = 0L;
 				this.httpConnectionsRejected = 0L;
 				this.sseConnectionsAccepted = 0L;
@@ -1495,14 +1486,14 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets the active server-sent event connection count.
+			 * Sets the active server-sent event stream count.
 			 *
-			 * @param activeSseConnections the active SSE connection count
+			 * @param activeSseStreams the active SSE stream count
 			 * @return this builder
 			 */
 			@NonNull
-			public Builder activeSseConnections(@NonNull Long activeSseConnections) {
-				this.activeSseConnections = requireNonNull(activeSseConnections);
+			public Builder activeSseStreams(@NonNull Long activeSseStreams) {
+				this.activeSseStreams = requireNonNull(activeSseStreams);
 				return this;
 			}
 
@@ -1519,14 +1510,14 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets the active MCP stream count.
+			 * Sets the active MCP SSE stream count.
 			 *
-			 * @param activeMcpStreams the active MCP stream count
+			 * @param activeMcpSseStreams the active MCP SSE stream count
 			 * @return this builder
 			 */
 			@NonNull
-			public Builder activeMcpStreams(@NonNull Long activeMcpStreams) {
-				this.activeMcpStreams = requireNonNull(activeMcpStreams);
+			public Builder activeMcpSseStreams(@NonNull Long activeMcpSseStreams) {
+				this.activeMcpSseStreams = requireNonNull(activeMcpSseStreams);
 				return this;
 			}
 
@@ -1928,15 +1919,15 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets SSE connection duration histograms keyed by route and termination reason.
+			 * Sets SSE stream duration histograms keyed by route and termination reason.
 			 *
-			 * @param sseConnectionDurations the SSE connection duration histograms
+			 * @param sseStreamDurations the SSE stream duration histograms
 			 * @return this builder
 			 */
 			@NonNull
-			public Builder sseConnectionDurations(
-					@Nullable Map<@NonNull SseEventRouteTerminationKey, @NonNull HistogramSnapshot> sseConnectionDurations) {
-				this.sseConnectionDurations = sseConnectionDurations;
+			public Builder sseStreamDurations(
+					@Nullable Map<@NonNull SseStreamRouteTerminationKey, @NonNull HistogramSnapshot> sseStreamDurations) {
+				this.sseStreamDurations = sseStreamDurations;
 				return this;
 			}
 
@@ -1980,15 +1971,15 @@ public interface MetricsCollector {
 			}
 
 			/**
-			 * Sets MCP stream duration histograms keyed by endpoint and termination reason.
+			 * Sets MCP SSE stream duration histograms keyed by endpoint and termination reason.
 			 *
-			 * @param mcpStreamDurations the MCP stream duration histograms
+			 * @param mcpSseStreamDurations the MCP SSE stream duration histograms
 			 * @return this builder
 			 */
 			@NonNull
-			public Builder mcpStreamDurations(
-					@Nullable Map<@NonNull McpEndpointStreamTerminationKey, @NonNull HistogramSnapshot> mcpStreamDurations) {
-				this.mcpStreamDurations = mcpStreamDurations;
+			public Builder mcpSseStreamDurations(
+					@Nullable Map<@NonNull McpEndpointSseStreamTerminationKey, @NonNull HistogramSnapshot> mcpSseStreamDurations) {
+				this.mcpSseStreamDurations = mcpSseStreamDurations;
 				return this;
 			}
 
@@ -2514,14 +2505,14 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Key for metrics grouped by Server-Sent Event route match information and termination reason.
+	 * Key for metrics grouped by Server-Sent Event stream route match information and termination reason.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record SseEventRouteTerminationKey(@NonNull RouteType routeType,
+	record SseStreamRouteTerminationKey(@NonNull RouteType routeType,
 																						@Nullable ResourcePathDeclaration route,
-																						SseConnection.@NonNull TerminationReason terminationReason) {
-		public SseEventRouteTerminationKey {
+																						@NonNull StreamTerminationReason terminationReason) {
+		public SseStreamRouteTerminationKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
 				throw new IllegalArgumentException("Route must be provided when RouteType is MATCHED");
@@ -2560,13 +2551,13 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Key for metrics grouped by MCP endpoint class and stream termination reason.
+	 * Key for metrics grouped by MCP endpoint class and SSE stream termination reason.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
-	record McpEndpointStreamTerminationKey(@NonNull Class<? extends McpEndpoint> endpointClass,
-																				 @NonNull McpStreamTerminationReason terminationReason) {
-		public McpEndpointStreamTerminationKey {
+	record McpEndpointSseStreamTerminationKey(@NonNull Class<? extends McpEndpoint> endpointClass,
+																				 @NonNull StreamTerminationReason terminationReason) {
+		public McpEndpointSseStreamTerminationKey {
 			requireNonNull(endpointClass);
 			requireNonNull(terminationReason);
 		}

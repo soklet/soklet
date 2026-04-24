@@ -70,7 +70,7 @@ public interface StreamingResponseContext {
 	 * @return the cancelation reason, or {@link Optional#empty()} if not canceled
 	 */
 	@NonNull
-	default Optional<StreamingResponseCancelationReason> getCancelationReason() {
+	default Optional<StreamTerminationReason> getCancelationReason() {
 		return getCancelationToken().getCancelationReason();
 	}
 

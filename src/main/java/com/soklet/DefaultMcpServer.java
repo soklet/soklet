@@ -350,7 +350,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 		for (CopyOnWriteArrayList<McpLiveConnection> connections : new ArrayList<>(this.liveConnectionsBySessionId.values())) {
 			for (McpLiveConnection connection : connections)
-				closeLiveConnection(connection, McpStreamTerminationReason.SERVER_STOPPING, null, true);
+				closeLiveConnection(connection, StreamTerminationReason.SERVER_STOPPING, null, true);
 		}
 
 		this.liveConnectionsBySessionId.clear();
@@ -454,7 +454,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			return;
 
 		for (McpLiveConnection connection : connections)
-			closeLiveConnection(connection, McpStreamTerminationReason.SESSION_TERMINATED, null, false);
+			closeLiveConnection(connection, StreamTerminationReason.SESSION_TERMINATED, null, false);
 	}
 
 	private void acceptLoop() {
@@ -562,7 +562,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 						liveConnection = registerLiveConnection(socket, request, connectionSlotReserved);
 
 						if (!sessionAllowsLiveGetStream(liveConnection.sessionId())) {
-							liveConnection.terminationReason().compareAndSet(null, McpStreamTerminationReason.SESSION_TERMINATED);
+							liveConnection.terminationReason().compareAndSet(null, StreamTerminationReason.SESSION_TERMINATED);
 							finishConnection(liveConnection, null);
 							return;
 						}
@@ -583,7 +583,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 					if (runtime != null && sessionId != null)
 						runtime.handleTerminatedStream(request, sessionId,
-								isRemoteClose(throwable) ? McpStreamTerminationReason.CLIENT_DISCONNECTED : McpStreamTerminationReason.WRITE_FAILED,
+								isRemoteClose(throwable) ? StreamTerminationReason.CLIENT_DISCONNECTED : StreamTerminationReason.WRITE_FAILED,
 								throwable);
 
 					if (throwable instanceof IOException ioException)
@@ -775,7 +775,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			if (connection.writeQueue().offer(WriteQueueElement.payload(payload)))
 				return true;
 
-			closeLiveConnection(connection, McpStreamTerminationReason.WRITE_FAILED,
+			closeLiveConnection(connection, StreamTerminationReason.WRITE_FAILED,
 					new IllegalStateException("MCP stream write queue is full"), true);
 		}
 
@@ -788,14 +788,14 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		ExecutorService connectionExecutorService = this.connectionExecutorService;
 
 		if (connectionExecutorService == null || connectionExecutorService.isShutdown()) {
-			closeLiveConnection(connection, McpStreamTerminationReason.SERVER_STOPPING, null, true);
+			closeLiveConnection(connection, StreamTerminationReason.SERVER_STOPPING, null, true);
 			return;
 		}
 
 		try {
 			connectionExecutorService.submit(() -> processConnection(connection));
 		} catch (RejectedExecutionException e) {
-			closeLiveConnection(connection, McpStreamTerminationReason.SERVER_STOPPING, e, true);
+			closeLiveConnection(connection, StreamTerminationReason.SERVER_STOPPING, e, true);
 		}
 	}
 
@@ -858,22 +858,22 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		if (runtime == null)
 			return;
 
-		McpStreamTerminationReason terminationReason = connection.terminationReason().get();
+		StreamTerminationReason terminationReason = connection.terminationReason().get();
 
 		if (terminationReason == null) {
 			if (this.stopping)
-				terminationReason = McpStreamTerminationReason.SERVER_STOPPING;
+				terminationReason = StreamTerminationReason.SERVER_STOPPING;
 			else if (isRemoteClose(throwable))
-				terminationReason = McpStreamTerminationReason.CLIENT_DISCONNECTED;
+				terminationReason = StreamTerminationReason.CLIENT_DISCONNECTED;
 			else
-				terminationReason = McpStreamTerminationReason.WRITE_FAILED;
+				terminationReason = StreamTerminationReason.WRITE_FAILED;
 		}
 
 		runtime.handleTerminatedStream(connection.request(), connection.sessionId(), terminationReason, throwable);
 	}
 
 	private void closeLiveConnection(@NonNull McpLiveConnection connection,
-																	 @NonNull McpStreamTerminationReason terminationReason,
+																	 @NonNull StreamTerminationReason terminationReason,
 																	 @Nullable Throwable throwable,
 																	 @NonNull Boolean notifyRuntimeOnClose) {
 		requireNonNull(connection);
@@ -2068,7 +2068,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			@NonNull BlockingQueue<@NonNull WriteQueueElement> writeQueue,
 			@NonNull AtomicBoolean slotReserved,
 			@NonNull AtomicBoolean closing,
-			@NonNull AtomicReference<@Nullable McpStreamTerminationReason> terminationReason,
+			@NonNull AtomicReference<@Nullable StreamTerminationReason> terminationReason,
 			@NonNull AtomicReference<@Nullable Throwable> terminationThrowable,
 			@NonNull AtomicBoolean notifyRuntimeOnClose,
 			@NonNull AtomicReference<@Nullable Thread> processingThread,
