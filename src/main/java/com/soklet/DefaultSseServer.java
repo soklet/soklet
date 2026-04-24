@@ -3264,26 +3264,24 @@ final class DefaultSseServer implements SseServer {
 		// Clear global connections map for sanity (though it should be empty by this point)
 		getGlobalConnections().clear();
 
-		// Use shutdownNow() immediately for request handlers.
-		// Poison pills handle normal cases; interrupt handles edge cases where
-		// a connection registered after we iterated above.
+		// Begin graceful executor shutdown so already-queued callbacks and writes can drain.
 		if (requestHandlerExecutorServiceSnapshot != null)
-			requestHandlerExecutorServiceSnapshot.shutdownNow();
+			requestHandlerExecutorServiceSnapshot.shutdown();
 
 		if (requestHandlerTimeoutSchedulerSnapshot != null)
-			requestHandlerTimeoutSchedulerSnapshot.shutdownNow();
+			requestHandlerTimeoutSchedulerSnapshot.shutdown();
 
 		if (requestReaderExecutorServiceSnapshot != null)
-			requestReaderExecutorServiceSnapshot.shutdownNow();
+			requestReaderExecutorServiceSnapshot.shutdown();
 
 		if (connectionExecutorServiceSnapshot != null)
-			connectionExecutorServiceSnapshot.shutdownNow();
+			connectionExecutorServiceSnapshot.shutdown();
 
 		// Shared wall-clock deadline
 		final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
 
-		// Await the accept-loop thread and all executors **in parallel**
-		long grace = Math.min(250L, remainingMillis(deadlineNanos));
+		// Await the accept-loop thread and all executors **in parallel** for the configured shutdown budget.
+		long grace = remainingMillis(deadlineNanos);
 
 		List<CompletableFuture<Boolean>> waits = new ArrayList<>(3);
 		waits.add(joinAsync(eventLoopThreadSnapshot, grace));
@@ -3315,7 +3313,14 @@ final class DefaultSseServer implements SseServer {
 		// Escalate for any stragglers using remaining time
 		hardenJoin(eventLoopThreadSnapshot, remainingMillis(deadlineNanos));
 
-		// Pools already had shutdownNow() called; just await termination
+		shutdownNowIfNeeded(requestHandlerExecutorServiceSnapshot);
+
+		if (requestHandlerTimeoutSchedulerSnapshot != null)
+			requestHandlerTimeoutSchedulerSnapshot.shutdownNow();
+
+		shutdownNowIfNeeded(requestReaderExecutorServiceSnapshot);
+		shutdownNowIfNeeded(connectionExecutorServiceSnapshot);
+
 		if (requestHandlerExecutorServiceSnapshot != null)
 			awaitPoolTermination(requestHandlerExecutorServiceSnapshot, remainingMillis(deadlineNanos));
 
@@ -3363,6 +3368,11 @@ final class DefaultSseServer implements SseServer {
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
+	}
+
+	private void shutdownNowIfNeeded(@Nullable ExecutorService executorService) {
+		if (executorService != null && !executorService.isTerminated())
+			executorService.shutdownNow();
 	}
 
 	private void awaitSchedulerTermination(@Nullable TimeoutScheduler timeoutScheduler,

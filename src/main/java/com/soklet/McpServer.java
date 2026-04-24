@@ -323,7 +323,9 @@ public interface McpServer extends AutoCloseable {
 		}
 
 		/**
-		 * Sets the timeout for MCP handler execution.
+		 * Sets the timeout for MCP handler execution, including framework-managed
+		 * {@link McpEndpoint#initialize(McpInitializationContext, McpSessionContext)}
+		 * calls.
 		 *
 		 * @param requestHandlerTimeout the handler timeout
 		 * @return this builder

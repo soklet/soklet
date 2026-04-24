@@ -42,10 +42,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.LockSupport;
@@ -56,6 +58,7 @@ import java.lang.reflect.Method;
 import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
 import static com.soklet.TestSupport.readAll;
+import static java.util.Objects.requireNonNull;
 
 @ThreadSafe
 public class McpServerLifecycleTests {
@@ -576,6 +579,66 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void defaultMcpServerStopGracefullyShutsDownRequestHandlerExecutorBeforeInterrupting() throws Exception {
+		RecordingExecutorService handlerExecutor = new RecordingExecutorService();
+		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(0)
+				.requestHandlerExecutorServiceSupplier(() -> handlerExecutor)
+				.shutdownTimeout(Duration.ofSeconds(1))
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(new FakeMcpServer())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		defaultMcpServer.initialize(sokletConfig, (request, requestResultConsumer) -> {});
+
+		try {
+			defaultMcpServer.start();
+		} finally {
+			defaultMcpServer.stop();
+		}
+
+		Assertions.assertEquals(1, handlerExecutor.shutdownCalls.get());
+		Assertions.assertEquals(0, handlerExecutor.shutdownNowCalls.get());
+		Assertions.assertTrue(handlerExecutor.isShutdown());
+	}
+
+	@Test
+	public void mcpInitializeIsBoundedByRequestHandlerTimeout() throws Exception {
+		int mcpPort = findFreePort();
+		SlowInitializeMcpEndpoint.reset();
+		McpServer mcpServer = McpServer.withPort(mcpPort)
+				.host("127.0.0.1")
+				.requestHandlerTimeout(Duration.ofMillis(100))
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(SlowInitializeMcpEndpoint.class)))
+				.build();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(mcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeSlowInitializeRequest(socket, mcpPort);
+
+				Assertions.assertTrue(SlowInitializeMcpEndpoint.initializeStarted.get().await(2, TimeUnit.SECONDS));
+
+				try {
+					int firstByte = socket.getInputStream().read();
+					Assertions.assertEquals(-1, firstByte);
+				} catch (SocketException ignored) {
+					// The timeout path is allowed to close/reset the socket.
+				}
+			}
+		}
+
+		Assertions.assertTrue(SlowInitializeMcpEndpoint.initializeInterrupted.get());
+	}
+
+	@Test
 	public void defaultMcpServerWritesByteBackedMarshaledResponses() throws Exception {
 		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(0)
 				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
@@ -798,6 +861,33 @@ public class McpServerLifecycleTests {
 
 	@McpServerEndpoint(path = "/mcp", name = "example", version = "1.0.0")
 	public static class ExampleMcpEndpoint implements McpEndpoint {}
+
+	@McpServerEndpoint(path = "/slow-mcp", name = "slow", version = "1.0.0")
+	public static class SlowInitializeMcpEndpoint implements McpEndpoint {
+		private static final AtomicBoolean initializeInterrupted = new AtomicBoolean(false);
+		private static final AtomicReference<CountDownLatch> initializeStarted = new AtomicReference<>(new CountDownLatch(1));
+
+		private static void reset() {
+			initializeInterrupted.set(false);
+			initializeStarted.set(new CountDownLatch(1));
+		}
+
+		@NonNull
+		@Override
+		public McpSessionContext initialize(@NonNull McpInitializationContext context,
+																				@NonNull McpSessionContext session) throws Exception {
+			initializeStarted.get().countDown();
+
+			try {
+				Thread.sleep(Duration.ofSeconds(30).toMillis());
+			} catch (InterruptedException e) {
+				initializeInterrupted.set(true);
+				throw e;
+			}
+
+			return session;
+		}
+	}
 
 	private static class FakeMcpServer implements McpServer {
 		private final AtomicBoolean initialized;
@@ -1057,6 +1147,35 @@ public class McpServerLifecycleTests {
 		return sessionId;
 	}
 
+	private static void writeSlowInitializeRequest(@NonNull Socket socket,
+																								 int mcpPort) throws IOException {
+		requireNonNull(socket);
+
+		String body = """
+				{
+				  "jsonrpc":"2.0",
+				  "id":"req-1",
+				  "method":"initialize",
+				  "params":{
+				    "protocolVersion":"2025-11-25",
+				    "capabilities":{},
+				    "clientInfo":{"name":"test-client","version":"1.0.0"}
+				  }
+				}
+				""";
+		byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+		String request = "POST /slow-mcp HTTP/1.1\r\n"
+				+ "Host: 127.0.0.1:" + mcpPort + "\r\n"
+				+ "Content-Type: application/json\r\n"
+				+ "Accept: application/json, text/event-stream\r\n"
+				+ "Content-Length: " + bodyBytes.length + "\r\n"
+				+ "\r\n";
+		OutputStream outputStream = socket.getOutputStream();
+		outputStream.write(request.getBytes(StandardCharsets.UTF_8));
+		outputStream.write(bodyBytes);
+		outputStream.flush();
+	}
+
 	private static void writeMcpGet(Socket socket, int port, String sessionId) throws IOException {
 		String request = "GET /mcp HTTP/1.1\r\n"
 				+ "Host: 127.0.0.1:" + port + "\r\n"
@@ -1259,6 +1378,53 @@ public class McpServerLifecycleTests {
 		@Override
 		public void execute(@NonNull Runnable command) {
 			throw new RejectedExecutionException("queue full");
+		}
+	}
+
+	private static final class RecordingExecutorService extends AbstractExecutorService {
+		private final AtomicBoolean shutdown = new AtomicBoolean(false);
+		private final AtomicBoolean terminated = new AtomicBoolean(false);
+		private final AtomicInteger shutdownCalls = new AtomicInteger();
+		private final AtomicInteger shutdownNowCalls = new AtomicInteger();
+
+		@Override
+		public void shutdown() {
+			this.shutdownCalls.incrementAndGet();
+			this.shutdown.set(true);
+			this.terminated.set(true);
+		}
+
+		@NonNull
+		@Override
+		public List<Runnable> shutdownNow() {
+			this.shutdownNowCalls.incrementAndGet();
+			this.shutdown.set(true);
+			this.terminated.set(true);
+			return List.of();
+		}
+
+		@Override
+		public boolean isShutdown() {
+			return this.shutdown.get();
+		}
+
+		@Override
+		public boolean isTerminated() {
+			return this.terminated.get();
+		}
+
+		@Override
+		public boolean awaitTermination(long timeout,
+																		@NonNull TimeUnit unit) {
+			return true;
+		}
+
+		@Override
+		public void execute(@NonNull Runnable command) {
+			if (isShutdown())
+				throw new RejectedExecutionException("executor shut down");
+
+			command.run();
 		}
 	}
 

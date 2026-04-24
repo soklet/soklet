@@ -48,14 +48,17 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -356,18 +359,49 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.liveConnectionsBySessionId.clear();
 
 		if (requestHandlerExecutorServiceSnapshot != null)
-			requestHandlerExecutorServiceSnapshot.shutdownNow();
+			requestHandlerExecutorServiceSnapshot.shutdown();
 
 		if (requestHandlerTimeoutSchedulerSnapshot != null)
-			requestHandlerTimeoutSchedulerSnapshot.shutdownNow();
+			requestHandlerTimeoutSchedulerSnapshot.shutdown();
 
 		if (connectionExecutorServiceSnapshot != null)
-			connectionExecutorServiceSnapshot.shutdownNow();
+			connectionExecutorServiceSnapshot.shutdown();
 
 		final long deadlineNanos = System.nanoTime() + this.shutdownTimeout.toNanos();
 
 		try {
+			long grace = remainingMillis(deadlineNanos);
+			List<CompletableFuture<Boolean>> waits = new ArrayList<>(4);
+			waits.add(joinAsync(acceptThreadSnapshot, grace));
+
+			if (requestHandlerExecutorServiceSnapshot != null)
+				waits.add(awaitTerminationAsync(requestHandlerExecutorServiceSnapshot, grace));
+
+			if (requestHandlerTimeoutSchedulerSnapshot != null)
+				waits.add(awaitTerminationAsync(requestHandlerTimeoutSchedulerSnapshot, grace));
+
+			if (connectionExecutorServiceSnapshot != null)
+				waits.add(awaitTerminationAsync(connectionExecutorServiceSnapshot, grace));
+
+			try {
+				CompletableFuture.allOf(waits.toArray(CompletableFuture[]::new)).get(grace, TimeUnit.MILLISECONDS);
+			} catch (TimeoutException ignored) {
+				// Budget exhausted; escalate below.
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			} catch (ExecutionException e) {
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Exception while awaiting MCP shutdown").throwable(e).build());
+			}
+
 			hardenJoin(acceptThreadSnapshot, remainingMillis(deadlineNanos));
+
+			shutdownNowIfNeeded(requestHandlerExecutorServiceSnapshot);
+
+			if (requestHandlerTimeoutSchedulerSnapshot != null)
+				requestHandlerTimeoutSchedulerSnapshot.shutdownNow();
+
+			shutdownNowIfNeeded(connectionExecutorServiceSnapshot);
+
 			awaitPoolTermination(requestHandlerExecutorServiceSnapshot, remainingMillis(deadlineNanos));
 			awaitSchedulerTermination(requestHandlerTimeoutSchedulerSnapshot, remainingMillis(deadlineNanos));
 			awaitPoolTermination(connectionExecutorServiceSnapshot, remainingMillis(deadlineNanos));
@@ -1403,6 +1437,63 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
+	}
+
+	private void shutdownNowIfNeeded(@Nullable ExecutorService executorService) {
+		if (executorService != null && !executorService.isTerminated())
+			executorService.shutdownNow();
+	}
+
+	@NonNull
+	private CompletableFuture<Boolean> awaitTerminationAsync(@Nullable ExecutorService executorService,
+																													 long timeoutMillis) {
+		if (executorService == null || timeoutMillis <= 0L)
+			return CompletableFuture.completedFuture(false);
+
+		return CompletableFuture.supplyAsync(() -> {
+			try {
+				return executorService.awaitTermination(timeoutMillis, TimeUnit.MILLISECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+		});
+	}
+
+	@NonNull
+	private CompletableFuture<Boolean> awaitTerminationAsync(@Nullable TimeoutScheduler timeoutScheduler,
+																													 long timeoutMillis) {
+		if (timeoutScheduler == null || timeoutMillis <= 0L)
+			return CompletableFuture.completedFuture(false);
+
+		return CompletableFuture.supplyAsync(() -> {
+			try {
+				return timeoutScheduler.awaitTermination(timeoutMillis, TimeUnit.MILLISECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+		});
+	}
+
+	@NonNull
+	private CompletableFuture<Boolean> joinAsync(@Nullable Thread thread,
+																							 long timeoutMillis) {
+		if (thread == null || timeoutMillis <= 0L)
+			return CompletableFuture.completedFuture(true);
+
+		if (thread == Thread.currentThread())
+			return CompletableFuture.completedFuture(true);
+
+		return CompletableFuture.supplyAsync(() -> {
+			try {
+				thread.join(timeoutMillis);
+				return !thread.isAlive();
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+		});
 	}
 
 	private void awaitSchedulerTermination(@Nullable TimeoutScheduler timeoutScheduler,

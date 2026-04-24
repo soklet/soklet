@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -381,6 +382,37 @@ public class SseTests {
 			stopThread.join(3000);
 			Assertions.assertFalse(stopThread.isAlive(), "Stop did not complete after releasing task");
 		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sse_stopGracefullyShutsDownRequestHandlerExecutorBeforeInterrupting() throws Exception {
+		int ssePort = findFreePort();
+		RecordingExecutorService handlerExecutor = new RecordingExecutorService();
+		SseServer sse = SseServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestHandlerExecutorServiceSupplier(() -> handlerExecutor)
+				.shutdownTimeout(Duration.ofSeconds(1))
+				.build();
+		DefaultSseServer server = (DefaultSseServer) sse;
+		SokletConfig sokletConfig = SokletConfig.withSseServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		server.initialize(sokletConfig, (request, responseConsumer) -> {});
+
+		try {
+			server.start();
+			try (Socket ignored = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				// Wait until the accept loop is actually listening before stopping.
+			}
+		} finally {
+			server.stop();
+		}
+
+		Assertions.assertEquals(1, handlerExecutor.shutdownCalls.get());
+		Assertions.assertEquals(0, handlerExecutor.shutdownNowCalls.get());
+		Assertions.assertTrue(handlerExecutor.isShutdown());
 	}
 
 	@Test
@@ -2087,6 +2119,53 @@ public class SseTests {
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
 		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
+	}
+
+	private static final class RecordingExecutorService extends AbstractExecutorService {
+		private final AtomicBoolean shutdown = new AtomicBoolean(false);
+		private final AtomicBoolean terminated = new AtomicBoolean(false);
+		private final AtomicInteger shutdownCalls = new AtomicInteger();
+		private final AtomicInteger shutdownNowCalls = new AtomicInteger();
+
+		@Override
+		public void shutdown() {
+			this.shutdownCalls.incrementAndGet();
+			this.shutdown.set(true);
+			this.terminated.set(true);
+		}
+
+		@NonNull
+		@Override
+		public List<Runnable> shutdownNow() {
+			this.shutdownNowCalls.incrementAndGet();
+			this.shutdown.set(true);
+			this.terminated.set(true);
+			return List.of();
+		}
+
+		@Override
+		public boolean isShutdown() {
+			return this.shutdown.get();
+		}
+
+		@Override
+		public boolean isTerminated() {
+			return this.terminated.get();
+		}
+
+		@Override
+		public boolean awaitTermination(long timeout,
+																		@NonNull TimeUnit unit) {
+			return true;
+		}
+
+		@Override
+		public void execute(@NonNull Runnable command) {
+			if (isShutdown())
+				throw new java.util.concurrent.RejectedExecutionException("executor shut down");
+
+			command.run();
+		}
 	}
 
 	private static byte[] readN(InputStream in, int n, int timeoutMs) throws IOException {
