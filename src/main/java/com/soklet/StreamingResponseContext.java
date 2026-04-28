@@ -39,6 +39,14 @@ public interface StreamingResponseContext {
 	CancelationToken getCancelationToken();
 
 	/**
+	 * The request that produced this streaming response.
+	 *
+	 * @return the request that produced this streaming response
+	 */
+	@NonNull
+	Request getRequest();
+
+	/**
 	 * The absolute deadline for this stream, if one is configured.
 	 *
 	 * @return the streaming deadline, or {@link Optional#empty()} if no deadline is configured

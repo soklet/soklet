@@ -1877,7 +1877,7 @@ public final class Soklet implements AutoCloseable {
 
 			SimulatorCancelationToken cancelationToken = new SimulatorCancelationToken(throwable ->
 					notifyDidReceiveSimulatorStreamCancelationCallbackFailure(request, requestResult, throwable));
-			SimulatorStreamingResponseContext context = new SimulatorStreamingResponseContext(cancelationToken);
+			SimulatorStreamingResponseContext context = new SimulatorStreamingResponseContext(request, cancelationToken);
 			SimulatorResponseStream output = new SimulatorResponseStream(getSimulatorOptions().getStreamingResponseBodyLimitInBytes(), cancelationToken);
 
 			try {
@@ -2406,9 +2406,13 @@ public final class Soklet implements AutoCloseable {
 	@ThreadSafe
 	private static final class SimulatorStreamingResponseContext implements StreamingResponseContext {
 		@NonNull
+		private final Request request;
+		@NonNull
 		private final CancelationToken cancelationToken;
 
-		private SimulatorStreamingResponseContext(@NonNull CancelationToken cancelationToken) {
+		private SimulatorStreamingResponseContext(@NonNull Request request,
+																							@NonNull CancelationToken cancelationToken) {
+			this.request = requireNonNull(request);
 			this.cancelationToken = requireNonNull(cancelationToken);
 		}
 
@@ -2416,6 +2420,12 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		public CancelationToken getCancelationToken() {
 			return this.cancelationToken;
+		}
+
+		@Override
+		@NonNull
+		public Request getRequest() {
+			return this.request;
 		}
 
 		@Override

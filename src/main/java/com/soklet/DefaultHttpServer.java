@@ -874,6 +874,7 @@ final class DefaultHttpServer implements HttpServer {
 					marshaledResponse.getStatusCode(),
 					reasonPhrase,
 					headers,
+					request,
 					stream,
 					streamingExecutorService,
 					streamingTimeoutExecutorService,

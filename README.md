@@ -522,7 +522,7 @@ public MarshaledResponse tokens(TokenService tokenService) {
 }
 ```
 
-Streaming responses use HTTP/1.1 chunked transfer encoding. Soklet owns `Transfer-Encoding`, rejects caller-supplied `Content-Length`, and gives the producer a `StreamingResponseContext` so upstream work can be canceled when the client disconnects, the server shuts down, or a streaming timeout fires.
+Streaming responses use HTTP/1.1 chunked transfer encoding. Soklet owns `Transfer-Encoding`, rejects caller-supplied `Content-Length`, and gives the producer a `StreamingResponseContext` so upstream work can be canceled when the client disconnects, the server shuts down, or a streaming timeout fires. That context also exposes the originating `Request`, so producers can use `Request#getId()` for correlation without ambient thread-local state.
 
 Redirects (via [`Response`](https://javadoc.soklet.com/com/soklet/Response.html)):
 

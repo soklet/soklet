@@ -16,6 +16,8 @@
 
 package com.soklet.internal.microhttp;
 
+import com.soklet.HttpMethod;
+import com.soklet.Request;
 import com.soklet.StreamingResponseBody;
 import com.soklet.StreamTerminationReason;
 import com.soklet.StreamingResponseCanceledException;
@@ -161,6 +163,7 @@ public class StreamingMicrohttpResponsesRaceTests {
 				200,
 				"OK",
 				List.of(new Header("Transfer-Encoding", "chunked")),
+				Request.withPath(HttpMethod.GET, "/stream").build(),
 				body,
 				executorService,
 				timeoutExecutorService,

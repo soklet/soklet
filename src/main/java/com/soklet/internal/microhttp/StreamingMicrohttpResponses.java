@@ -17,9 +17,10 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.CancelationToken;
+import com.soklet.Request;
 import com.soklet.ResponseStream;
-import com.soklet.StreamingResponseBody;
 import com.soklet.StreamTerminationReason;
+import com.soklet.StreamingResponseBody;
 import com.soklet.StreamingResponseCanceledException;
 import com.soklet.StreamingResponseContext;
 import org.jspecify.annotations.NonNull;
@@ -96,6 +97,7 @@ public final class StreamingMicrohttpResponses {
 	public static MicrohttpResponse withStreamingBody(@NonNull Integer status,
 																									 @NonNull String reason,
 																									 @NonNull List<@NonNull Header> headers,
+																									 @NonNull Request request,
 																									 @NonNull StreamingResponseBody body,
 																									 @NonNull ExecutorService executorService,
 																									 @NonNull ScheduledExecutorService timeoutExecutorService,
@@ -108,6 +110,7 @@ public final class StreamingMicrohttpResponses {
 		requireNonNull(status);
 		requireNonNull(reason);
 		requireNonNull(headers);
+		requireNonNull(request);
 		requireNonNull(body);
 		requireNonNull(executorService);
 		requireNonNull(timeoutExecutorService);
@@ -123,6 +126,7 @@ public final class StreamingMicrohttpResponses {
 			throw new IllegalArgumentException("Streaming chunk size must be > 0");
 
 		return MicrohttpResponse.withStreamingBody(status, reason, headers, () -> new StreamingWritableSource(
+				request,
 				body,
 				executorService,
 				timeoutExecutorService,
@@ -209,7 +213,8 @@ public final class StreamingMicrohttpResponses {
 		@NonNull
 		private final Instant streamStarted;
 
-		private StreamingWritableSource(@NonNull StreamingResponseBody body,
+		private StreamingWritableSource(@NonNull Request request,
+																		@NonNull StreamingResponseBody body,
 																		@NonNull ExecutorService executorService,
 																		@NonNull ScheduledExecutorService timeoutExecutorService,
 																		@NonNull Integer queueCapacityInBytes,
@@ -218,6 +223,7 @@ public final class StreamingMicrohttpResponses {
 																		@Nullable Duration idleTimeout,
 																		@NonNull TerminationListener terminationListener,
 																		@NonNull Consumer<Throwable> cancelationCallbackFailureConsumer) {
+			requireNonNull(request);
 			this.body = requireNonNull(body);
 			this.executorService = requireNonNull(executorService);
 			this.timeoutExecutorService = requireNonNull(timeoutExecutorService);
@@ -227,7 +233,7 @@ public final class StreamingMicrohttpResponses {
 			this.idleTimeout = idleTimeout;
 			this.terminationListener = requireNonNull(terminationListener);
 			this.cancelationToken = new DefaultCancelationToken(cancelationCallbackFailureConsumer);
-			this.context = new DefaultStreamingResponseContext(this.cancelationToken, deadline, idleTimeout);
+			this.context = new DefaultStreamingResponseContext(request, this.cancelationToken, deadline, idleTimeout);
 			this.lock = new Object();
 			this.chunks = new ArrayDeque<>();
 			this.started = new AtomicBoolean(false);
@@ -939,15 +945,19 @@ public final class StreamingMicrohttpResponses {
 	@ThreadSafe
 	private static final class DefaultStreamingResponseContext implements StreamingResponseContext {
 		@NonNull
+		private final Request request;
+		@NonNull
 		private final CancelationToken cancelationToken;
 		@Nullable
 		private final Instant deadline;
 		@Nullable
 		private final Duration idleTimeout;
 
-		private DefaultStreamingResponseContext(@NonNull CancelationToken cancelationToken,
+		private DefaultStreamingResponseContext(@NonNull Request request,
+																						@NonNull CancelationToken cancelationToken,
 																						@Nullable Instant deadline,
 																						@Nullable Duration idleTimeout) {
+			this.request = requireNonNull(request);
 			this.cancelationToken = requireNonNull(cancelationToken);
 			this.deadline = deadline;
 			this.idleTimeout = idleTimeout;
@@ -957,6 +967,12 @@ public final class StreamingMicrohttpResponses {
 		@NonNull
 		public CancelationToken getCancelationToken() {
 			return this.cancelationToken;
+		}
+
+		@Override
+		@NonNull
+		public Request getRequest() {
+			return this.request;
 		}
 
 		@Override

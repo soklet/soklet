@@ -100,6 +100,27 @@ public class StreamingResponseTests {
 	}
 
 	@Test
+	public void streaming_response_context_exposes_originating_request_over_http() throws Exception {
+		int port = findFreePort();
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.requestTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			soklet.start();
+
+			HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/context-request").openConnection();
+			connection.setConnectTimeout(2_000);
+			connection.setReadTimeout(2_000);
+
+			Assertions.assertEquals(200, connection.getResponseCode());
+			Assertions.assertEquals("same", new String(readAll(connection.getInputStream()), StandardCharsets.UTF_8));
+		}
+	}
+
+	@Test
 	public void http_1_0_streaming_request_is_rejected_without_chunked_transfer() throws Exception {
 		int port = findFreePort();
 		CountDownLatch terminatedLatch = new CountDownLatch(1);
@@ -291,6 +312,21 @@ public class StreamingResponseTests {
 	}
 
 	@Test
+	public void simulator_streaming_response_context_exposes_originating_request() {
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+				.build();
+
+		Soklet.runSimulator(config, simulator -> {
+			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/context-request")
+					.id("simulator-request")
+					.build());
+
+			Assertions.assertEquals("same", new String(result.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+		});
+	}
+
+	@Test
 	public void simulator_enforces_streaming_response_body_limit() {
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
@@ -436,8 +472,19 @@ public class StreamingResponseTests {
 
 			return MarshaledResponse.withStatusCode(200)
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-						.stream(StreamingResponseBody.fromPublisher(publisher))
-						.build();
+					.stream(StreamingResponseBody.fromPublisher(publisher))
+					.build();
+		}
+
+		@GET("/context-request")
+		public MarshaledResponse contextRequest(@NonNull Request request) {
+			return MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.stream(StreamingResponseBody.fromWriter((output, context) -> {
+						boolean sameRequest = request.getId().equals(context.getRequest().getId());
+						output.write((sameRequest ? "same" : "missing").getBytes(StandardCharsets.UTF_8));
+					}))
+					.build();
 		}
 
 		@GET("/interrupt")
