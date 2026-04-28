@@ -91,6 +91,13 @@ public class IntegrationTests {
 			return cookies.keySet().stream().sorted().collect(Collectors.joining(","));
 		}
 
+		@GET("/trace-id")
+		public String traceId(@NonNull Request request) {
+			return request.getTraceContext()
+					.map(TraceContext::getTraceId)
+					.orElse("none");
+		}
+
 		@GET("/multivalued-headers")
 		public Response multivaluedHeaders(@NonNull Request request) {
 			return Response.withStatusCode(200)
@@ -131,6 +138,18 @@ public class IntegrationTests {
 		Soklet app = Soklet.fromConfig(cfg);
 		app.start();
 		return app;
+	}
+
+	@Test
+	public void traceContextIsParsedOverNetwork() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+			URL url = new URL("http://127.0.0.1:" + port + "/trace-id");
+			HttpURLConnection c = open("GET", url, Map.of("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"));
+			Assertions.assertEquals(200, c.getResponseCode());
+			String body = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
+			Assertions.assertEquals("0af7651916cd43dd8448eb211c80319c", body);
+		}
 	}
 
 	@Test

@@ -77,6 +77,8 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  */
 @ThreadSafe
 public class SseTests {
+	private static final String TRACEPARENT = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+
 	@ThreadSafe
 	public static class SseEventSimulatorResource {
 		@SseEventSource("/examples/{exampleId}")
@@ -97,6 +99,17 @@ public class SseTests {
 						);
 					})
 					.build();
+		}
+	}
+
+	@ThreadSafe
+	public static class SseTraceContextResource {
+		private static final AtomicReference<TraceContext> capturedTraceContext = new AtomicReference<>();
+
+		@SseEventSource("/trace")
+		public SseHandshakeResult trace(@NonNull Request request) {
+			capturedTraceContext.set(request.getTraceContext().orElse(null));
+			return SseHandshakeResult.accept();
 		}
 	}
 
@@ -179,6 +192,30 @@ public class SseTests {
 		Assertions.assertEquals("data", events.get(1).getData().get(), "Unexpected broadcast event data");
 		Assertions.assertEquals("Unicast comment", comments.get(0).getComment().orElseThrow(), "Unexpected unicast comment");
 		Assertions.assertEquals("just a test", comments.get(1).getComment().orElseThrow(), "Unexpected broadcast comment");
+	}
+
+	@Test
+	public void sseHandshakeRequestExposesTraceContext() {
+		SseTraceContextResource.capturedTraceContext.set(null);
+
+		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseTraceContextResource.class)))
+				.build();
+
+		Soklet.runSimulator(configuration, (simulator -> {
+			Request request = Request.withPath(HttpMethod.GET, "/trace")
+					.headers(Map.of("traceparent", Set.of(TRACEPARENT)))
+					.build();
+
+			SseRequestResult requestResult = simulator.performSseRequest(request);
+
+			Assertions.assertInstanceOf(HandshakeAccepted.class, requestResult);
+		}));
+
+		TraceContext traceContext = SseTraceContextResource.capturedTraceContext.get();
+
+		Assertions.assertNotNull(traceContext);
+		Assertions.assertEquals("0af7651916cd43dd8448eb211c80319c", traceContext.getTraceId());
 	}
 
 	@Test

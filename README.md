@@ -289,6 +289,8 @@ public void example(Request request /* param name is arbitrary */) {
   Map<String, Set<String>> headers = request.getHeaders();
   // Shorthand for plucking the first header value by name (case-insensitive)
   Optional<String> header = request.getHeader("Accept-Language");
+  // Parsed W3C trace context from traceparent/tracestate, if present
+  Optional<TraceContext> traceContext = request.getTraceContext();
   // Request cookies by name (names are case-insensitive)
   Map<String, Set<String>> cookies = request.getCookies();
   // Shorthand for plucking the first cookie value by name (case-insensitive)

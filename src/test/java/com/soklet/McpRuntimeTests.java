@@ -39,6 +39,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @ThreadSafe
 public class McpRuntimeTests {
+	private static final String TRACEPARENT = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+
 	@Test
 	public void initializeReturnsSessionIdAndServerMetadata() {
 		Soklet.runSimulator(configuration(), simulator -> {
@@ -74,6 +76,23 @@ public class McpRuntimeTests {
 			Assertions.assertEquals("Catalog MCP", ((McpString) serverInfo.get("title").orElseThrow()).value());
 			Assertions.assertEquals("Use read-only mode.", ((McpString) result.get("instructions").orElseThrow()).value());
 			});
+	}
+
+	@Test
+	public void initializeRequestExposesTraceContext() {
+		CatalogEndpoint.capturedTraceContext.set(null);
+
+		Soklet.runSimulator(configuration(), simulator -> {
+			McpRequestResult.ResponseCompleted requestResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of("traceparent", Set.of(TRACEPARENT))));
+
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+		});
+
+		TraceContext traceContext = CatalogEndpoint.capturedTraceContext.get();
+
+		Assertions.assertNotNull(traceContext);
+		Assertions.assertEquals("0af7651916cd43dd8448eb211c80319c", traceContext.getTraceId());
 	}
 
 	@Test
@@ -1514,10 +1533,12 @@ public class McpRuntimeTests {
 	)
 	public static class CatalogEndpoint implements McpEndpoint {
 		private static final AtomicReference<McpProgressReporter> capturedProgressReporter = new AtomicReference<>();
+		private static final AtomicReference<TraceContext> capturedTraceContext = new AtomicReference<>();
 
 		@Override
 		public McpSessionContext initialize(McpInitializationContext context,
 																				McpSessionContext session) {
+			capturedTraceContext.set(context.getRequest().getTraceContext().orElse(null));
 			return session.with("tenantId", context.getEndpointPathParameter("tenantId").orElseThrow());
 		}
 

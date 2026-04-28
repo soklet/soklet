@@ -36,6 +36,8 @@ import java.util.Set;
  */
 @ThreadSafe
 public class RequestTests {
+	private static final String TRACEPARENT = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+
 	@Test
 	public void queryDecodingUsesUtf8RegardlessOfContentTypeCharset() {
 		Map<String, Set<String>> headers = Map.of("Content-Type", Set.of("text/plain; charset=ISO-8859-1"));
@@ -131,6 +133,70 @@ public class RequestTests {
 		Assertions.assertFalse(request.getHeaders().containsKey("X-Empty"));
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> request.getHeaders().put("X-Test", Set.of("value")));
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> request.getHeaders().get("X-Trace-Id").add("def456"));
+	}
+
+	@Test
+	public void traceContextIsParsedFromRequestHeaders() {
+		Request request = Request.withPath(HttpMethod.GET, "/")
+				.headers(Map.of(
+						"traceparent", Set.of(TRACEPARENT),
+						"tracestate", new LinkedHashSet<>(List.of("rojo=00f067aa0ba902b7", "congo=t61rcWkgMzE"))))
+				.build();
+
+		TraceContext traceContext = request.getTraceContext().orElseThrow();
+
+		Assertions.assertEquals("0af7651916cd43dd8448eb211c80319c", traceContext.getTraceId());
+		Assertions.assertEquals("b7ad6b7169203331", traceContext.getParentId());
+		Assertions.assertEquals("rojo=00f067aa0ba902b7,congo=t61rcWkgMzE", traceContext.toTracestateHeaderValue().orElse(null));
+	}
+
+	@Test
+	public void duplicatePhysicalTraceparentHeadersAreMalformed() {
+		Request request = Request.withRawUrl(HttpMethod.GET, "/")
+				.microhttpHeaders(List.of(
+						new Header("traceparent", TRACEPARENT),
+						new Header("traceparent", TRACEPARENT)))
+				.build();
+
+		Assertions.assertTrue(request.getTraceContext().isEmpty());
+		Assertions.assertEquals(Set.of(TRACEPARENT), request.getHeaders().get("traceparent"));
+	}
+
+	@Test
+	public void explicitTraceContextWinsOverHeaders() {
+		TraceContext explicitTraceContext = TraceContext.fromHeaderValues(
+				Set.of("00-11111111111111111111111111111111-2222222222222222-00"),
+				null).orElseThrow();
+
+		Request request = Request.withPath(HttpMethod.GET, "/")
+				.headers(Map.of("traceparent", Set.of(TRACEPARENT)))
+				.traceContext(explicitTraceContext)
+				.build();
+
+		Assertions.assertEquals(explicitTraceContext, request.getTraceContext().orElse(null));
+	}
+
+	@Test
+	public void requestCopyPreservesOrRederivesTraceContextBasedOnHeaderChanges() {
+		TraceContext explicitTraceContext = TraceContext.fromHeaderValues(
+				Set.of("00-11111111111111111111111111111111-2222222222222222-00"),
+				null).orElseThrow();
+		Request request = Request.withPath(HttpMethod.GET, "/")
+				.traceContext(explicitTraceContext)
+				.build();
+
+		Request unchangedCopy = request.copy().finish();
+		Request headerChangedCopy = request.copy()
+				.headers(Map.of("traceparent", Set.of(TRACEPARENT)))
+				.finish();
+		Request explicitCopy = request.copy()
+				.headers(Map.of("traceparent", Set.of(TRACEPARENT)))
+				.traceContext(explicitTraceContext)
+				.finish();
+
+		Assertions.assertEquals(explicitTraceContext, unchangedCopy.getTraceContext().orElse(null));
+		Assertions.assertEquals("0af7651916cd43dd8448eb211c80319c", headerChangedCopy.getTraceContext().orElseThrow().getTraceId());
+		Assertions.assertEquals(explicitTraceContext, explicitCopy.getTraceContext().orElse(null));
 	}
 
 	@Test

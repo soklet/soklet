@@ -32,6 +32,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -103,6 +104,8 @@ public final class Request {
 	private final Charset charset;
 	@NonNull
 	private final RequestHeaders headers;
+	@Nullable
+	private final TraceContext traceContext;
 	@Nullable
 	private final InetSocketAddress remoteAddress;
 	@Nullable
@@ -235,11 +238,14 @@ public final class Request {
 		Boolean builderContentTooLarge = rawBuilder == null ? pathBuilder.contentTooLarge : rawBuilder.contentTooLarge;
 		RequestHeaders builderHeaders = rawBuilder == null ? new MapRequestHeaders(pathBuilder.headers) : rawBuilder.requestHeaders();
 		InetSocketAddress builderRemoteAddress = rawBuilder == null ? pathBuilder.remoteAddress : rawBuilder.remoteAddress;
+		Boolean builderTraceContextSpecified = rawBuilder == null ? pathBuilder.traceContextSpecified : rawBuilder.traceContextSpecified;
+		TraceContext builderTraceContext = rawBuilder == null ? pathBuilder.traceContext : rawBuilder.traceContext;
 
 		this.idGenerator = builderIdGenerator == null ? DEFAULT_ID_GENERATOR : builderIdGenerator;
 		this.multipartParser = builderMultipartParser == null ? DefaultMultipartParser.defaultInstance() : builderMultipartParser;
 
 		this.headers = builderHeaders;
+		this.traceContext = builderTraceContextSpecified ? builderTraceContext : extractTraceContext(builderHeaders).orElse(null);
 		String contentTypeHeaderValue = firstHeaderValue(this.headers, "Content-Type").orElse(null);
 		this.contentType = Utilities.extractContentTypeFromHeaderValue(contentTypeHeaderValue).orElse(null);
 		this.charset = Utilities.extractCharsetFromHeaderValue(contentTypeHeaderValue).orElse(null);
@@ -384,13 +390,14 @@ public final class Request {
 				&& Objects.equals(getPath(), request.getPath())
 				&& Objects.equals(getQueryParameters(), request.getQueryParameters())
 				&& Objects.equals(getHeaders(), request.getHeaders())
+				&& Objects.equals(getTraceContext(), request.getTraceContext())
 				&& Arrays.equals(this.body, request.body)
 				&& Objects.equals(isContentTooLarge(), request.isContentTooLarge());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getId(), getHttpMethod(), getPath(), getQueryParameters(), getHeaders(), Arrays.hashCode(this.body), isContentTooLarge());
+		return Objects.hash(getId(), getHttpMethod(), getPath(), getQueryParameters(), getHeaders(), getTraceContext(), Arrays.hashCode(this.body), isContentTooLarge());
 	}
 
 	private static boolean containsEncodedSlash(@NonNull String rawPath) {
@@ -625,6 +632,16 @@ public final class Request {
 	@NonNull
 	public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
 		return this.headers.asMap();
+	}
+
+	/**
+	 * The W3C trace context for this request, if one was supplied by the client or explicitly specified.
+	 *
+	 * @return the trace context, or {@link Optional#empty()} if unavailable
+	 */
+	@NonNull
+	public Optional<TraceContext> getTraceContext() {
+		return Optional.ofNullable(this.traceContext);
 	}
 
 	/**
@@ -1137,9 +1154,21 @@ public final class Request {
 		return Optional.ofNullable(trimAggressivelyToNull(values.stream().findFirst().orElse(null)));
 	}
 
+	@NonNull
+	private static Optional<TraceContext> extractTraceContext(@NonNull RequestHeaders headers) {
+		requireNonNull(headers);
+
+		// Physical request headers preserve duplicate traceparent values. Map-backed request construction
+		// uses Set values, so identical duplicates are already collapsed by the time parsing runs.
+		return TraceContext.fromHeaderValues(headers.values("traceparent"), headers.values("tracestate"));
+	}
+
 	private interface RequestHeaders {
 		@NonNull
 		Optional<Set<@NonNull String>> get(@NonNull String name);
+
+		@NonNull
+		List<@NonNull String> values(@NonNull String name);
 
 		@NonNull
 		Map<@NonNull String, @NonNull Set<@NonNull String>> asMap();
@@ -1163,6 +1192,19 @@ public final class Request {
 		public Optional<Set<@NonNull String>> get(@NonNull String name) {
 			requireNonNull(name);
 			return Optional.ofNullable(this.headers.get(name));
+		}
+
+		@Override
+		@NonNull
+		public List<@NonNull String> values(@NonNull String name) {
+			requireNonNull(name);
+
+			Set<String> values = this.headers.get(name);
+
+			if (values == null || values.isEmpty())
+				return List.of();
+
+			return List.copyOf(values);
 		}
 
 		@Override
@@ -1204,6 +1246,28 @@ public final class Request {
 				return Optional.empty();
 
 			return Optional.of(Collections.unmodifiableSet(matchingValues));
+		}
+
+		@Override
+		@NonNull
+		public List<@NonNull String> values(@NonNull String name) {
+			requireNonNull(name);
+
+			List<String> matchingValues = null;
+
+			for (Header header : this.headers) {
+				if (header == null || !name.equalsIgnoreCase(trimAggressivelyToEmpty(header.name())))
+					continue;
+
+				if (matchingValues == null)
+					matchingValues = new ArrayList<>();
+
+				matchingValues.add(trimAggressivelyToEmpty(header.value()));
+			}
+
+			return matchingValues == null || matchingValues.isEmpty()
+					? List.of()
+					: Collections.unmodifiableList(matchingValues);
 		}
 
 		@Override
@@ -1283,6 +1347,10 @@ public final class Request {
 		@Nullable
 		private List<@NonNull Header> microhttpHeaders;
 		@Nullable
+		private TraceContext traceContext;
+		@NonNull
+		private Boolean traceContextSpecified = false;
+		@Nullable
 		private InetSocketAddress remoteAddress;
 		@Nullable
 		private byte[] body;
@@ -1334,6 +1402,13 @@ public final class Request {
 		public RawBuilder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.headers = headers;
 			this.microhttpHeaders = null;
+			return this;
+		}
+
+		@NonNull
+		public RawBuilder traceContext(@Nullable TraceContext traceContext) {
+			this.traceContext = traceContext;
+			this.traceContextSpecified = true;
 			return this;
 		}
 
@@ -1403,6 +1478,10 @@ public final class Request {
 		private Map<@NonNull String, @NonNull Set<@NonNull String>> queryParameters;
 		@Nullable
 		private Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
+		@Nullable
+		private TraceContext traceContext;
+		@NonNull
+		private Boolean traceContextSpecified = false;
 		@Nullable
 		private InetSocketAddress remoteAddress;
 		@Nullable
@@ -1478,6 +1557,13 @@ public final class Request {
 		}
 
 		@NonNull
+		public PathBuilder traceContext(@Nullable TraceContext traceContext) {
+			this.traceContext = traceContext;
+			this.traceContextSpecified = true;
+			return this;
+		}
+
+		@NonNull
 		public PathBuilder remoteAddress(@Nullable InetSocketAddress remoteAddress) {
 			this.remoteAddress = remoteAddress;
 			return this;
@@ -1520,10 +1606,16 @@ public final class Request {
 		private String originalRawQuery;
 		@Nullable
 		private InetSocketAddress originalRemoteAddress;
+		@Nullable
+		private TraceContext originalTraceContext;
 		@NonNull
 		private Boolean pathModified = false;
 		@NonNull
 		private Boolean queryParametersModified = false;
+		@NonNull
+		private Boolean headersModified = false;
+		@NonNull
+		private Boolean traceContextModified = false;
 
 		Copier(@NonNull Request request) {
 			requireNonNull(request);
@@ -1531,6 +1623,7 @@ public final class Request {
 			this.originalRawPath = request.getRawPath();
 			this.originalRawQuery = request.rawQuery; // Direct field access
 			this.originalRemoteAddress = request.getRemoteAddress().orElse(null);
+			this.originalTraceContext = request.getTraceContext().orElse(null);
 
 			this.builder = new PathBuilder(request.getHttpMethod(), request.getPath())
 					.id(request.getId())
@@ -1596,6 +1689,14 @@ public final class Request {
 		@NonNull
 		public Copier headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.builder.headers(headers);
+			this.headersModified = true;
+			return this;
+		}
+
+		@NonNull
+		public Copier traceContext(@Nullable TraceContext traceContext) {
+			this.builder.traceContext(traceContext);
+			this.traceContextModified = true;
 			return this;
 		}
 
@@ -1614,6 +1715,7 @@ public final class Request {
 				this.builder.headers(new LinkedCaseInsensitiveMap<>());
 
 			headersConsumer.accept(this.builder.headers);
+			this.headersModified = true;
 			return this;
 		}
 
@@ -1640,6 +1742,9 @@ public final class Request {
 					this.builder.rawQuery(Utilities.encodeQueryParameters(queryParameters, QueryFormat.RFC_3986_STRICT));
 				}
 			}
+
+			if (!this.headersModified && !this.traceContextModified)
+				this.builder.traceContext(this.originalTraceContext);
 
 			return this.builder.build();
 		}
