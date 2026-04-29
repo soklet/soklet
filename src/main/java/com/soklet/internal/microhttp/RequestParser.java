@@ -47,6 +47,8 @@ class RequestParser {
     private final ByteTokenizer tokenizer;
     private final InetSocketAddress remoteAddress;
     private final int maxRequestSize;
+    private final int maxHeaderCount;
+    private final int maxRequestTargetLength;
 
     private State state = State.METHOD;
     private int contentLength;
@@ -76,12 +78,28 @@ class RequestParser {
     }
 
     RequestParser(ByteTokenizer tokenizer, InetSocketAddress remoteAddress, int maxRequestSize) {
+        this(tokenizer, remoteAddress, maxRequestSize, Integer.MAX_VALUE, Integer.MAX_VALUE);
+    }
+
+    RequestParser(ByteTokenizer tokenizer,
+                  InetSocketAddress remoteAddress,
+                  int maxRequestSize,
+                  int maxHeaderCount,
+                  int maxRequestTargetLength) {
         if (maxRequestSize < 1) {
             throw new IllegalArgumentException("Maximum request size must be > 0");
+        }
+        if (maxHeaderCount < 1) {
+            throw new IllegalArgumentException("Maximum header count must be > 0");
+        }
+        if (maxRequestTargetLength < 1) {
+            throw new IllegalArgumentException("Maximum request target length must be > 0");
         }
         this.tokenizer = tokenizer;
         this.remoteAddress = remoteAddress;
         this.maxRequestSize = maxRequestSize;
+        this.maxHeaderCount = maxHeaderCount;
+        this.maxRequestTargetLength = maxRequestTargetLength;
         reset();
     }
 
@@ -96,6 +114,14 @@ class RequestParser {
 
     MicrohttpRequest request() {
         return new MicrohttpRequest(method, uri, version, headers, body, false, remoteAddress);
+    }
+
+    boolean readingBody() {
+        return state == State.BODY
+                || state == State.CHUNK_SIZE
+                || state == State.CHUNK_DATA
+                || state == State.CHUNK_DATA_END
+                || state == State.CHUNK_TRAILER;
     }
 
     void reset() {
@@ -160,6 +186,9 @@ class RequestParser {
         if (token == null) {
             return false;
         }
+        if (token.length() > maxRequestTargetLength) {
+            throw new RequestTooLargeException();
+        }
         uri = token;
         state = State.VERSION;
         return true;
@@ -216,6 +245,12 @@ class RequestParser {
                 state = State.BODY;
             }
         } else {
+            if (isObsFoldLine(start, end)) {
+                throw new MalformedRequestException("header folding is not supported");
+            }
+            if (headers.size() >= maxHeaderCount) {
+                throw new RequestTooLargeException();
+            }
             Header header = parseHeaderLine(start, end);
             tokenizer.advanceTo(end + CRLF.length);
             headers.add(header);
@@ -252,6 +287,10 @@ class RequestParser {
         return new Header(
                 parseHeaderName(start, colonIndex),
                 tokenizer.string(spaceIndex, end, StandardCharsets.ISO_8859_1));
+    }
+
+    private boolean isObsFoldLine(int start, int end) {
+        return start < end && (tokenizer.rawByte(start) == ' ' || tokenizer.rawByte(start) == '\t');
     }
 
     private String parseHeaderName(int start, int end) {

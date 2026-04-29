@@ -159,7 +159,9 @@ public interface HttpServer extends AutoCloseable {
 		@Nullable
 		Integer concurrency;
 		@Nullable
-		Duration requestTimeout;
+		Duration requestHeaderTimeout;
+		@Nullable
+		Duration requestBodyTimeout;
 		@Nullable
 		Duration requestHandlerTimeout;
 		@Nullable
@@ -172,6 +174,10 @@ public interface HttpServer extends AutoCloseable {
 		Duration shutdownTimeout;
 		@Nullable
 		Integer maximumRequestSizeInBytes;
+		@Nullable
+		Integer maximumHeaderCount;
+		@Nullable
+		Integer maximumRequestTargetLengthInBytes;
 		@Nullable
 		Integer requestReadBufferSizeInBytes;
 		@Nullable
@@ -220,9 +226,32 @@ public interface HttpServer extends AutoCloseable {
 			return this;
 		}
 
+		/**
+		 * Sets the maximum duration for reading the HTTP request line and headers.
+		 * <p>
+		 * If this value is not specified, Soklet uses the server default.
+		 *
+		 * @param requestHeaderTimeout the request header timeout, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder requestTimeout(@Nullable Duration requestTimeout) {
-			this.requestTimeout = requestTimeout;
+		public Builder requestHeaderTimeout(@Nullable Duration requestHeaderTimeout) {
+			this.requestHeaderTimeout = requestHeaderTimeout;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum duration for reading the HTTP request body after the request
+		 * line and headers have been received.
+		 * <p>
+		 * If this value is not specified, Soklet uses the server default.
+		 *
+		 * @param requestBodyTimeout the request body timeout, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder requestBodyTimeout(@Nullable Duration requestBodyTimeout) {
+			this.requestBodyTimeout = requestBodyTimeout;
 			return this;
 		}
 
@@ -281,6 +310,30 @@ public interface HttpServer extends AutoCloseable {
 		@NonNull
 		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
 			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum number of HTTP header fields accepted in one request.
+		 *
+		 * @param maximumHeaderCount the maximum header count, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumHeaderCount(@Nullable Integer maximumHeaderCount) {
+			this.maximumHeaderCount = maximumHeaderCount;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum request-target length accepted in bytes.
+		 *
+		 * @param maximumRequestTargetLengthInBytes the maximum request-target length, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumRequestTargetLengthInBytes(@Nullable Integer maximumRequestTargetLengthInBytes) {
+			this.maximumRequestTargetLengthInBytes = maximumRequestTargetLengthInBytes;
 			return this;
 		}
 

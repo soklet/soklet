@@ -1279,7 +1279,7 @@ public class AdvancedTests {
 	}
 
 	private SokletConfig config(int port) {
-		return SokletConfig.withHttpServer(HttpServer.withPort(port).requestTimeout(Duration.ofSeconds(2)).build())
+		return SokletConfig.withHttpServer(HttpServer.withPort(port).requestHeaderTimeout(Duration.ofSeconds(2)).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override

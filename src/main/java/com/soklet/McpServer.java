@@ -182,7 +182,9 @@ public interface McpServer extends AutoCloseable {
 		@Nullable
 		McpSessionStore sessionStore;
 		@Nullable
-		Duration requestTimeout;
+		Duration requestHeaderTimeout;
+		@Nullable
+		Duration requestBodyTimeout;
 		@Nullable
 		Duration requestHandlerTimeout;
 		@Nullable
@@ -193,6 +195,10 @@ public interface McpServer extends AutoCloseable {
 		Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 		@Nullable
 		Integer maximumRequestSizeInBytes;
+		@Nullable
+		Integer maximumHeaderCount;
+		@Nullable
+		Integer maximumRequestTargetLengthInBytes;
 		@Nullable
 		Integer requestReadBufferSizeInBytes;
 		@Nullable
@@ -311,14 +317,31 @@ public interface McpServer extends AutoCloseable {
 		}
 
 		/**
-		 * Sets the end-to-end request timeout.
+		 * Sets the maximum duration for reading the MCP HTTP request line and headers.
+		 * <p>
+		 * If this value is not specified, Soklet uses the server default.
 		 *
-		 * @param requestTimeout the request timeout
+		 * @param requestHeaderTimeout the request header timeout, or {@code null} for the default
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder requestTimeout(@Nullable Duration requestTimeout) {
-			this.requestTimeout = requestTimeout;
+		public Builder requestHeaderTimeout(@Nullable Duration requestHeaderTimeout) {
+			this.requestHeaderTimeout = requestHeaderTimeout;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum duration for reading the MCP HTTP request body after the request
+		 * line and headers have been received.
+		 * <p>
+		 * If this value is not specified, Soklet uses the server default.
+		 *
+		 * @param requestBodyTimeout the request body timeout, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder requestBodyTimeout(@Nullable Duration requestBodyTimeout) {
+			this.requestBodyTimeout = requestBodyTimeout;
 			return this;
 		}
 
@@ -384,6 +407,30 @@ public interface McpServer extends AutoCloseable {
 		@NonNull
 		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
 			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum number of HTTP header fields accepted in one MCP request.
+		 *
+		 * @param maximumHeaderCount the maximum header count, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumHeaderCount(@Nullable Integer maximumHeaderCount) {
+			this.maximumHeaderCount = maximumHeaderCount;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum MCP HTTP request-target length accepted in bytes.
+		 *
+		 * @param maximumRequestTargetLengthInBytes the maximum request-target length, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumRequestTargetLengthInBytes(@Nullable Integer maximumRequestTargetLengthInBytes) {
+			this.maximumRequestTargetLengthInBytes = maximumRequestTargetLengthInBytes;
 			return this;
 		}
 

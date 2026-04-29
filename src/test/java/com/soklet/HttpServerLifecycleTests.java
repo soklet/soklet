@@ -55,7 +55,7 @@ public class HttpServerLifecycleTests {
 	public void start_stop_isStarted_toggles_and_serves_requests() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HealthResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
@@ -131,7 +131,7 @@ public class HttpServerLifecycleTests {
 		executor.shutdown();
 
 		HttpServer httpServer = HttpServer.withPort(port)
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.requestHandlerExecutorServiceSupplier(() -> executor)
 				.build();
 

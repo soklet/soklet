@@ -22,6 +22,7 @@ import com.soklet.SseRequestResult.RequestFailed;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.SseEventSource;
+import com.soklet.exception.IllegalRequestException;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -330,7 +331,7 @@ public class SseTests {
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(3))
+				.requestHeaderTimeout(Duration.ofSeconds(3))
 				.shutdownTimeout(Duration.ofSeconds(1))
 				.build();
 
@@ -460,7 +461,7 @@ public class SseTests {
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.verifyConnectionOnceEstablished(false)
 				.build();
 
@@ -523,7 +524,7 @@ public class SseTests {
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.verifyConnectionOnceEstablished(false)
 				.build();
 
@@ -578,7 +579,7 @@ public class SseTests {
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.build();
 
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
@@ -648,7 +649,7 @@ public class SseTests {
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.connectionQueueCapacity(1)
 				.heartbeatInterval(Duration.ofSeconds(30))
 				.verifyConnectionOnceEstablished(false)
@@ -697,7 +698,7 @@ public class SseTests {
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.build();
 
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
@@ -742,7 +743,7 @@ public class SseTests {
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.build();
 
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
@@ -782,7 +783,7 @@ public class SseTests {
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.heartbeatInterval(Duration.ofSeconds(1))
 				.verifyConnectionOnceEstablished(false)
 				.build();
@@ -823,7 +824,7 @@ public class SseTests {
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.verifyConnectionOnceEstablished(false)
 				.concurrentConnectionLimit(1)
 				.build();
@@ -877,7 +878,7 @@ public class SseTests {
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.requestTimeout(Duration.ofSeconds(5))
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.requestHandlerTimeout(Duration.ofSeconds(5))
 				.requestHandlerConcurrency(1)
 				.requestHandlerQueueCapacity(1)
@@ -983,7 +984,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RejectingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1033,7 +1034,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1068,7 +1069,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1104,7 +1105,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1140,7 +1141,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1174,7 +1175,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1209,7 +1210,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1245,7 +1246,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1283,7 +1284,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1323,7 +1324,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.requestHandlerTimeout(Duration.ofMillis(200))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingHandshakeResource.class)))
@@ -1356,7 +1357,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofMillis(200))
+						.requestHeaderTimeout(Duration.ofMillis(200))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1393,7 +1394,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RejectWithExplicitContentLength.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -1432,7 +1433,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.corsAuthorizer(cors)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseCorsResource.class)))
@@ -1479,7 +1480,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.corsAuthorizer(cors)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RejectingSseCorsResource.class)))
@@ -1525,7 +1526,7 @@ public class SseTests {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.corsAuthorizer(cors)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseCorsResource.class)))
@@ -1776,6 +1777,33 @@ public class SseTests {
 
 		Assertions.assertEquals(": one\n: two\n: three\n: four\n:\n\n", formatted);
 		Assertions.assertEquals(":\n\n", server.formatCommentForResponse(""));
+	}
+
+	@Test
+	public void sseHandshakeParserRejectsTooManyHeaders() {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.maximumHeaderCount(1)
+				.build();
+
+		Assertions.assertThrows(IllegalRequestException.class, () -> server.parseRequest("""
+				GET /sse HTTP/1.1\r
+				Host: localhost\r
+				X-Test: abc\r
+				\r
+				""", null));
+	}
+
+	@Test
+	public void sseHandshakeParserRejectsTooLongRequestTarget() {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.maximumRequestTargetLengthInBytes(4)
+				.build();
+
+		Assertions.assertThrows(IllegalRequestException.class, () -> server.parseRequest("""
+				GET /too-long HTTP/1.1\r
+				Host: localhost\r
+				\r
+				""", null));
 	}
 
 	@Test

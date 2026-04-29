@@ -8,10 +8,13 @@ public class OptionsBuilder {
     private boolean reuseAddr;
     private boolean reusePort;
     private Duration resolution;
-    private Duration requestTimeout;
+    private Duration requestHeaderTimeout;
+    private Duration requestBodyTimeout;
     private int readBufferSize;
     private int acceptLength;
     private int maxRequestSize;
+    private int maxHeaderCount;
+    private int maxRequestTargetLength;
     private int maxConnections;
     private int concurrency;
 
@@ -21,10 +24,13 @@ public class OptionsBuilder {
         this.reuseAddr = false;
         this.reusePort = false;
         this.resolution = Duration.ofMillis(100);
-        this.requestTimeout = Duration.ofSeconds(60);
+        this.requestHeaderTimeout = null;
+        this.requestBodyTimeout = null;
         this.readBufferSize = 1_024 * 64;
         this.acceptLength = 0;
         this.maxRequestSize = 1_024 * 1_024;
+        this.maxHeaderCount = 100;
+        this.maxRequestTargetLength = 8_192;
         this.maxConnections = 0;
         this.concurrency = Runtime.getRuntime().availableProcessors();
     }
@@ -39,10 +45,13 @@ public class OptionsBuilder {
             this.reuseAddr,
             this.reusePort,
             this.resolution,
-            this.requestTimeout,
+            this.requestHeaderTimeout == null ? Duration.ofSeconds(60) : this.requestHeaderTimeout,
+            this.requestBodyTimeout == null ? Duration.ofSeconds(60) : this.requestBodyTimeout,
             this.readBufferSize,
             this.acceptLength,
             this.maxRequestSize,
+            this.maxHeaderCount,
+            this.maxRequestTargetLength,
             this.maxConnections,
             this.concurrency);
     }
@@ -72,8 +81,13 @@ public class OptionsBuilder {
         return this;
     }
 
-    public OptionsBuilder withRequestTimeout(Duration requestTimeout) {
-        this.requestTimeout = requestTimeout;
+    public OptionsBuilder withRequestHeaderTimeout(Duration requestHeaderTimeout) {
+        this.requestHeaderTimeout = requestHeaderTimeout;
+        return this;
+    }
+
+    public OptionsBuilder withRequestBodyTimeout(Duration requestBodyTimeout) {
+        this.requestBodyTimeout = requestBodyTimeout;
         return this;
     }
 
@@ -89,6 +103,16 @@ public class OptionsBuilder {
 
     public OptionsBuilder withMaxRequestSize(int maxRequestSize) {
         this.maxRequestSize = maxRequestSize;
+        return this;
+    }
+
+    public OptionsBuilder withMaxHeaderCount(int maxHeaderCount) {
+        this.maxHeaderCount = maxHeaderCount;
+        return this;
+    }
+
+    public OptionsBuilder withMaxRequestTargetLength(int maxRequestTargetLength) {
+        this.maxRequestTargetLength = maxRequestTargetLength;
         return this;
     }
 

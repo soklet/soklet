@@ -305,7 +305,7 @@ public class MetricsCollectorTests {
 		int port = findFreePort();
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 
-		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port).requestTimeout(Duration.ofSeconds(3)).build())
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port).requestHeaderTimeout(Duration.ofSeconds(3)).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HttpMetricsResource.class)))
 				.metricsCollector(collector)
 				.build();
@@ -374,7 +374,7 @@ public class MetricsCollectorTests {
 				.host("127.0.0.1")
 				.verifyConnectionOnceEstablished(false)
 				.heartbeatInterval(Duration.ofMinutes(5))
-				.requestTimeout(Duration.ofSeconds(3))
+				.requestHeaderTimeout(Duration.ofSeconds(3))
 				.build();
 
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())

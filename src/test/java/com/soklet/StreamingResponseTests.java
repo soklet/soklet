@@ -63,7 +63,7 @@ public class StreamingResponseTests {
 		AtomicReference<Throwable> throwableRef = new AtomicReference<>();
 
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
@@ -103,7 +103,7 @@ public class StreamingResponseTests {
 	public void streaming_response_context_exposes_originating_request_over_http() throws Exception {
 		int port = findFreePort();
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.build();
@@ -126,7 +126,7 @@ public class StreamingResponseTests {
 		CountDownLatch terminatedLatch = new CountDownLatch(1);
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
@@ -186,7 +186,7 @@ public class StreamingResponseTests {
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
 
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.streamingResponseTimeout(Duration.ofMillis(250))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(PublisherCancelResource.class)))
@@ -232,7 +232,7 @@ public class StreamingResponseTests {
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
 
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.streamingResponseTimeout(Duration.ZERO)
 						.streamingResponseIdleTimeout(Duration.ZERO)
 						.build())
@@ -570,7 +570,7 @@ public class StreamingResponseTests {
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
 
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.streamingResponseTimeout(Duration.ofMillis(250))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingSourceResource.class)))

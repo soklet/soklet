@@ -483,6 +483,103 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void startedDefaultMcpServerRejectsTooManyHeadersWith400() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.maximumHeaderCount(1)
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeRawRequest(socket, """
+						POST /mcp HTTP/1.1\r
+						Host: 127.0.0.1:%d\r
+						X-Test: abc\r
+						Content-Length: 2\r
+						\r
+						{}
+						""".formatted(mcpPort));
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 400"));
+			}
+		}
+	}
+
+	@Test
+	public void startedDefaultMcpServerRejectsTooLongRequestTargetWith400() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.maximumRequestTargetLengthInBytes(4)
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeRawRequest(socket, """
+						POST /too-long HTTP/1.1\r
+						Host: 127.0.0.1:%d\r
+						Content-Length: 2\r
+						\r
+						{}
+						""".formatted(mcpPort));
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 400"));
+			}
+		}
+	}
+
+	@Test
+	public void startedDefaultMcpServerBodyReadTimeoutReturns408() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.requestHeaderTimeout(Duration.ofSeconds(5))
+						.requestBodyTimeout(Duration.ofMillis(200))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeRawRequest(socket, """
+						POST /mcp HTTP/1.1\r
+						Host: 127.0.0.1:%d\r
+						Content-Length: 2\r
+						\r
+						""".formatted(mcpPort));
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 408"));
+			}
+		}
+	}
+
+	@Test
 	public void stoppingDefaultMcpServerClosesLiveGetStreams() throws Exception {
 		int mcpPort = findFreePort();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)

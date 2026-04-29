@@ -79,7 +79,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@NonNull
 	private static final String DEFAULT_HOST;
 	@NonNull
-	private static final Duration DEFAULT_REQUEST_TIMEOUT;
+	private static final Duration DEFAULT_REQUEST_HEADER_TIMEOUT;
+	@NonNull
+	private static final Duration DEFAULT_REQUEST_BODY_TIMEOUT;
 	@NonNull
 	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
 	@NonNull
@@ -88,6 +90,10 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	private static final Integer DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER;
 	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
+	@NonNull
+	private static final Integer DEFAULT_MAXIMUM_HEADER_COUNT;
+	@NonNull
+	private static final Integer DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 	@NonNull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 	@NonNull
@@ -103,11 +109,14 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
-		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
+		DEFAULT_REQUEST_HEADER_TIMEOUT = Duration.ofSeconds(60);
+		DEFAULT_REQUEST_BODY_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER = 64;
 		DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER = 16;
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024 * 10;
+		DEFAULT_MAXIMUM_HEADER_COUNT = 100;
+		DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES = 8_192;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
 		DEFAULT_CONNECTION_QUEUE_CAPACITY = 128;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
@@ -135,7 +144,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@NonNull
 	private final IdGenerator<String> sessionIdGenerator;
 	@NonNull
-	private final Duration requestTimeout;
+	private final Duration requestHeaderTimeout;
+	@NonNull
+	private final Duration requestBodyTimeout;
 	@NonNull
 	private final Duration requestHandlerTimeout;
 	@NonNull
@@ -144,6 +155,10 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	private final Integer requestHandlerQueueCapacity;
 	@NonNull
 	private final Integer maximumRequestSizeInBytes;
+	@NonNull
+	private final Integer maximumHeaderCount;
+	@NonNull
+	private final Integer maximumRequestTargetLengthInBytes;
 	@NonNull
 	private final Integer requestReadBufferSizeInBytes;
 	@NonNull
@@ -204,9 +219,12 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.sessionIdGenerator = builder.sessionIdGenerator != null ? builder.sessionIdGenerator : IdGenerator.defaultSessionInstance();
 		this.port = builder.port;
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
-		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
+		this.requestHeaderTimeout = builder.requestHeaderTimeout != null ? builder.requestHeaderTimeout : DEFAULT_REQUEST_HEADER_TIMEOUT;
+		this.requestBodyTimeout = builder.requestBodyTimeout != null ? builder.requestBodyTimeout : DEFAULT_REQUEST_BODY_TIMEOUT;
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
+		this.maximumHeaderCount = builder.maximumHeaderCount != null ? builder.maximumHeaderCount : DEFAULT_MAXIMUM_HEADER_COUNT;
+		this.maximumRequestTargetLengthInBytes = builder.maximumRequestTargetLengthInBytes != null ? builder.maximumRequestTargetLengthInBytes : DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : 0;
 		this.connectionQueueCapacity = builder.connectionQueueCapacity != null ? builder.connectionQueueCapacity : DEFAULT_CONNECTION_QUEUE_CAPACITY;
@@ -241,6 +259,12 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		if (this.maximumRequestSizeInBytes < 1)
 			throw new IllegalArgumentException("Maximum request size must be > 0");
 
+		if (this.maximumHeaderCount < 1)
+			throw new IllegalArgumentException("Maximum header count must be > 0");
+
+		if (this.maximumRequestTargetLengthInBytes < 1)
+			throw new IllegalArgumentException("Maximum request target length must be > 0");
+
 		if (this.requestReadBufferSizeInBytes < 1)
 			throw new IllegalArgumentException("Request read buffer size must be > 0");
 
@@ -250,8 +274,11 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		if (this.concurrentConnectionLimit < 0)
 			throw new IllegalArgumentException("Concurrent connection limit must be >= 0");
 
-		if (this.requestTimeout.isNegative() || this.requestTimeout.isZero())
-			throw new IllegalArgumentException("Request timeout must be > 0");
+		if (this.requestHeaderTimeout.isNegative() || this.requestHeaderTimeout.isZero())
+			throw new IllegalArgumentException("Request header timeout must be > 0");
+
+		if (this.requestBodyTimeout.isNegative() || this.requestBodyTimeout.isZero())
+			throw new IllegalArgumentException("Request body timeout must be > 0");
 
 		if (this.requestHandlerTimeout.isNegative() || this.requestHandlerTimeout.isZero())
 			throw new IllegalArgumentException("Request handler timeout must be > 0");
@@ -507,7 +534,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				notifyWillAcceptConnection(remoteAddress);
 				socket.setKeepAlive(true);
 				socket.setTcpNoDelay(true);
-				socket.setSoTimeout(Math.toIntExact(Math.max(1L, this.requestTimeout.toMillis())));
+				socket.setSoTimeout(Math.toIntExact(Math.max(1L, this.requestHeaderTimeout.toMillis())));
 				notifyDidAcceptConnection(remoteAddress);
 				submitRequest(socket, remoteAddress);
 			} catch (SocketException e) {
@@ -1025,6 +1052,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		int requiredBodyLength = (int) contentLength;
 
 		if (requiredBodyLength > 0) {
+			socket.setSoTimeout(Math.toIntExact(Math.max(1L, this.requestBodyTimeout.toMillis())));
 			body = new byte[requiredBodyLength];
 			int copied = Math.min(bodyPrefixLength, requiredBodyLength);
 
@@ -1073,6 +1101,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		HttpMethod httpMethod = null;
 		String rawUrl = null;
 		int hostHeaderCount = 0;
+		int headerCount = 0;
 		String hostHeaderValue = null;
 		List<String> rawHeaderLines = new ArrayList<>();
 
@@ -1092,6 +1121,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				requireAsciiToken(components[1], "request target");
 				requireAsciiToken(components[2], "HTTP version");
 
+				if (components[1].length() > this.maximumRequestTargetLengthInBytes)
+					throw new IllegalRequestException(format("Request target exceeds maximum length of %d bytes", this.maximumRequestTargetLengthInBytes));
+
 				if (!"HTTP/1.1".equalsIgnoreCase(components[2]))
 					throw new IllegalRequestException(format("Unsupported HTTP version '%s' for MCP requests", components[2]));
 
@@ -1110,6 +1142,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 			if (rawLine.charAt(0) == ' ' || rawLine.charAt(0) == '\t')
 				throw new IllegalRequestException("Header folding is not supported for MCP requests");
+
+			if (++headerCount > this.maximumHeaderCount)
+				throw new IllegalRequestException(format("Too many MCP request headers. Maximum allowed is %d", this.maximumHeaderCount));
 
 			int firstColonIndex = rawLine.indexOf(':');
 

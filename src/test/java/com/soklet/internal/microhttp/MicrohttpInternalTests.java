@@ -114,6 +114,39 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void parserRejectsObsFoldHeaderLines() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("GET / HTTP/1.1\r\nHost: localhost\r\n X-Folded: nope\r\n\r\n");
+
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
+
+		Assertions.assertThrows(MalformedRequestException.class, parser::parse);
+	}
+
+	@Test
+	public void parserRejectsTooManyHeaders() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("GET / HTTP/1.1\r\nHost: localhost\r\nX-Test: abc\r\n\r\n");
+
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 1, 1024);
+
+		Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+	}
+
+	@Test
+	public void parserRejectsTooLongRequestTarget() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("GET /too-long HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 4);
+
+		Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+	}
+
+	@Test
 	public void microhttpRequestHeaderHelpersTolerateNullHeaderRecordFields() {
 		MicrohttpRequest request = new MicrohttpRequest(
 				"GET",

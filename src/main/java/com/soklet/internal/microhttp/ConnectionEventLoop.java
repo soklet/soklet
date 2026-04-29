@@ -10,6 +10,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -111,7 +112,8 @@ class ConnectionEventLoop {
         final InetSocketAddress remoteAddress;
         RequestParser requestParser;
         WritableSource writableSource;
-        Cancellable requestTimeoutTask;
+        Cancellable requestReadTimeoutTask;
+        boolean requestReadTimeoutBodyPhase;
         boolean httpOneDotZero;
         boolean keepAlive;
         boolean closeAfterResponse;
@@ -123,12 +125,13 @@ class ConnectionEventLoop {
             byteTokenizer = new ByteTokenizer();
             id = Long.toString(connectionCounter.getAndIncrement());
             this.remoteAddress = remoteAddress;
-            requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestSize());
-            requestTimeoutTask = timeoutQueue.schedule(this::onRequestTimeout, options.requestTimeout());
+            requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestSize(),
+                    options.maxHeaderCount(), options.maxRequestTargetLength());
+            scheduleRequestReadTimeoutForCurrentParserState();
             closed = new AtomicBoolean(false);
         }
 
-        private void onRequestTimeout() {
+        private void onRequestReadTimeout() {
             if (logger.enabled()) {
                 logger.log(
                         new LogEntry("event", "request_timeout"),
@@ -205,6 +208,7 @@ class ConnectionEventLoop {
                 }
                 onParseRequest();
             } else {
+                scheduleRequestReadTimeoutForCurrentParserState();
                 if (byteTokenizer.size() > options.maxRequestSize()) {
                     if (logger.enabled()) {
                         logger.log(
@@ -223,9 +227,9 @@ class ConnectionEventLoop {
                 selectionKey.interestOps(0);
             }
 
-            if (requestTimeoutTask != null) {
-                requestTimeoutTask.cancel();
-                requestTimeoutTask = null;
+            if (requestReadTimeoutTask != null) {
+                requestReadTimeoutTask.cancel();
+                requestReadTimeoutTask = null;
             }
 
             MicrohttpRequest request = requestParser.request();
@@ -249,9 +253,9 @@ class ConnectionEventLoop {
             if (selectionKey.interestOps() != 0) {
                 selectionKey.interestOps(0);
             }
-            if (requestTimeoutTask != null) {
-                requestTimeoutTask.cancel();
-                requestTimeoutTask = null;
+            if (requestReadTimeoutTask != null) {
+                requestReadTimeoutTask.cancel();
+                requestReadTimeoutTask = null;
             }
             closeAfterResponse = true;
             writableSource = new ByteBufferWritableSource(ByteBuffer.wrap(BAD_REQUEST_RESPONSE));
@@ -266,9 +270,9 @@ class ConnectionEventLoop {
             if (selectionKey.interestOps() != 0) {
                 selectionKey.interestOps(0);
             }
-            if (requestTimeoutTask != null) {
-                requestTimeoutTask.cancel();
-                requestTimeoutTask = null;
+            if (requestReadTimeoutTask != null) {
+                requestReadTimeoutTask.cancel();
+                requestReadTimeoutTask = null;
             }
             MicrohttpRequest request = requestParser.request();
             applyConnectionPolicy(request);
@@ -410,7 +414,7 @@ class ConnectionEventLoop {
                         }
                         onParseRequest();
                     } else { // switch back to read mode
-                        requestTimeoutTask = timeoutQueue.schedule(this::onRequestTimeout, options.requestTimeout());
+                        scheduleRequestReadTimeoutForCurrentParserState();
                         selectionKey.interestOps(SelectionKey.OP_READ);
                     }
                 }
@@ -438,8 +442,8 @@ class ConnectionEventLoop {
         private void failSafeClose(StreamTerminationReason cancelationReason, Throwable cause) {
             if (!closed.compareAndSet(false, true))
                 return;
-            if (requestTimeoutTask != null) {
-                requestTimeoutTask.cancel();
+            if (requestReadTimeoutTask != null) {
+                requestReadTimeoutTask.cancel();
             }
             if (writableSource != null) {
                 if (cancelationReason == null) {
@@ -456,6 +460,25 @@ class ConnectionEventLoop {
             selectionKey.cancel();
             CloseUtils.closeQuietly(socketChannel);
             connectionCount.decrementAndGet();
+        }
+
+        private void scheduleRequestReadTimeoutForCurrentParserState() {
+            boolean bodyPhase = requestParser.readingBody();
+
+            if (requestReadTimeoutTask != null && requestReadTimeoutBodyPhase == bodyPhase) {
+                return;
+            }
+
+            Duration timeout = bodyPhase
+                    ? options.requestBodyTimeout()
+                    : options.requestHeaderTimeout();
+
+            if (requestReadTimeoutTask != null) {
+                requestReadTimeoutTask.cancel();
+            }
+
+            requestReadTimeoutBodyPhase = bodyPhase;
+            requestReadTimeoutTask = timeoutQueue.schedule(this::onRequestReadTimeout, timeout);
         }
 
         private void applyConnectionPolicy(MicrohttpRequest request) {

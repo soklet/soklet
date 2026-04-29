@@ -92,7 +92,7 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private static final String DEFAULT_HOST;
 	@NonNull
-	private static final Duration DEFAULT_REQUEST_TIMEOUT;
+	private static final Duration DEFAULT_REQUEST_HEADER_TIMEOUT;
 	@NonNull
 	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
 	@NonNull
@@ -103,6 +103,10 @@ final class DefaultSseServer implements SseServer {
 	private static final Duration DEFAULT_WRITE_TIMEOUT;
 	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
+	@NonNull
+	private static final Integer DEFAULT_MAXIMUM_HEADER_COUNT;
+	@NonNull
+	private static final Integer DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 	@NonNull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 	@NonNull
@@ -143,12 +147,14 @@ final class DefaultSseServer implements SseServer {
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
-		DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
+		DEFAULT_REQUEST_HEADER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER = 64;
 		DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER = 16;
 		DEFAULT_WRITE_TIMEOUT = Duration.ZERO;
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 64 * 1_024;
+		DEFAULT_MAXIMUM_HEADER_COUNT = 100;
+		DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES = 8_192;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
 		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(1);
@@ -226,7 +232,7 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private final String host;
 	@NonNull
-	private final Duration requestTimeout;
+	private final Duration requestHeaderTimeout;
 	@NonNull
 	private final Duration requestHandlerTimeout;
 	@NonNull
@@ -241,6 +247,10 @@ final class DefaultSseServer implements SseServer {
 	private final Duration heartbeatInterval;
 	@NonNull
 	private final Integer maximumRequestSizeInBytes;
+	@NonNull
+	private final Integer maximumHeaderCount;
+	@NonNull
+	private final Integer maximumRequestTargetLengthInBytes;
 	@NonNull
 	private final Integer requestReadBufferSizeInBytes;
 	@NonNull
@@ -708,10 +718,12 @@ final class DefaultSseServer implements SseServer {
 		this.port = builder.port;
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
+		this.maximumHeaderCount = builder.maximumHeaderCount != null ? builder.maximumHeaderCount : DEFAULT_MAXIMUM_HEADER_COUNT;
+		this.maximumRequestTargetLengthInBytes = builder.maximumRequestTargetLengthInBytes != null ? builder.maximumRequestTargetLengthInBytes : DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.verifyConnectionOnceEstablished = builder.verifyConnectionOnceEstablished != null ? builder.verifyConnectionOnceEstablished : DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
 		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.defaultInstance();
-		this.requestTimeout = builder.requestTimeout != null ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
+		this.requestHeaderTimeout = builder.requestHeaderTimeout != null ? builder.requestHeaderTimeout : DEFAULT_REQUEST_HEADER_TIMEOUT;
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		int defaultRequestHandlerConcurrency = Math.max(1, Runtime.getRuntime().availableProcessors() * DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER);
 		this.requestHandlerConcurrency = builder.requestHandlerConcurrency != null ? builder.requestHandlerConcurrency : defaultRequestHandlerConcurrency;
@@ -726,11 +738,17 @@ final class DefaultSseServer implements SseServer {
 		if (this.maximumRequestSizeInBytes <= 0)
 			throw new IllegalArgumentException("Maximum request size must be > 0");
 
+		if (this.maximumHeaderCount <= 0)
+			throw new IllegalArgumentException("Maximum header count must be > 0");
+
+		if (this.maximumRequestTargetLengthInBytes <= 0)
+			throw new IllegalArgumentException("Maximum request target length must be > 0");
+
 		if (this.requestReadBufferSizeInBytes <= 0)
 			throw new IllegalArgumentException("Request read buffer size must be > 0");
 
-		if (this.requestTimeout.isNegative() || this.requestTimeout.isZero())
-			throw new IllegalArgumentException("Request timeout must be > 0");
+		if (this.requestHeaderTimeout.isNegative() || this.requestHeaderTimeout.isZero())
+			throw new IllegalArgumentException("Request header timeout must be > 0");
 
 		if (this.requestHandlerTimeout.isNegative() || this.requestHandlerTimeout.isZero())
 			throw new IllegalArgumentException("Request handler timeout must be > 0");
@@ -2733,6 +2751,7 @@ final class DefaultSseServer implements SseServer {
 		Request.RawBuilder requestBuilder = null;
 		List<String> headerLines = new ArrayList<>();
 		int hostHeaderCount = 0;
+		int headerCount = 0;
 		String hostHeaderValue = null;
 
 		// Preserve empty lines so we can detect the end-of-headers
@@ -2759,6 +2778,9 @@ final class DefaultSseServer implements SseServer {
 				requireAsciiToken(rawUrl, "request target");
 				requireAsciiToken(rawVersion, "HTTP version");
 
+				if (rawUrl.length() > getMaximumRequestTargetLengthInBytes())
+					throw new IllegalRequestException(format("Request target exceeds maximum length of %d bytes", getMaximumRequestTargetLengthInBytes()));
+
 				if (!"HTTP/1.1".equalsIgnoreCase(rawVersion))
 					throw new IllegalRequestException(format("Unsupported HTTP version '%s' for Server-Sent Event requests", rawVersion));
 
@@ -2781,6 +2803,9 @@ final class DefaultSseServer implements SseServer {
 
 			if (rawLine.charAt(0) == ' ' || rawLine.charAt(0) == '\t')
 				throw new IllegalRequestException("Header folding is not supported for Server-Sent Event requests");
+
+			if (++headerCount > getMaximumHeaderCount())
+				throw new IllegalRequestException(format("Too many Server-Sent Event request headers. Maximum allowed is %d", getMaximumHeaderCount()));
 
 			// Header line
 			int indexOfFirstColon = rawLine.indexOf(':');
@@ -2942,7 +2967,7 @@ final class DefaultSseServer implements SseServer {
 		Future<String> readFuture = null;
 
 		// How long to wait for the request to be read (minimum of 1 millisecond)
-		long timeoutMillis = Math.max(1L, getRequestTimeout().toMillis());
+		long timeoutMillis = Math.max(1L, getRequestHeaderTimeout().toMillis());
 
 		try {
 			ExecutorService requestReaderExecutorService = getRequestReaderExecutorService().orElse(null);
@@ -4011,8 +4036,8 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	protected Duration getRequestTimeout() {
-		return this.requestTimeout;
+	protected Duration getRequestHeaderTimeout() {
+		return this.requestHeaderTimeout;
 	}
 
 	@NonNull
@@ -4048,6 +4073,16 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	protected Integer getMaximumRequestSizeInBytes() {
 		return this.maximumRequestSizeInBytes;
+	}
+
+	@NonNull
+	protected Integer getMaximumHeaderCount() {
+		return this.maximumHeaderCount;
+	}
+
+	@NonNull
+	protected Integer getMaximumRequestTargetLengthInBytes() {
+		return this.maximumRequestTargetLengthInBytes;
 	}
 
 	@NonNull

@@ -188,7 +188,7 @@ public interface SseServer extends AutoCloseable {
 		@Nullable
 		String host;
 		@Nullable
-		Duration requestTimeout;
+		Duration requestHeaderTimeout;
 		@Nullable
 		Duration requestHandlerTimeout;
 		@Nullable
@@ -203,6 +203,10 @@ public interface SseServer extends AutoCloseable {
 		Duration heartbeatInterval;
 		@Nullable
 		Integer maximumRequestSizeInBytes;
+		@Nullable
+		Integer maximumHeaderCount;
+		@Nullable
+		Integer maximumRequestTargetLengthInBytes;
 		@Nullable
 		Integer requestReadBufferSizeInBytes;
 		@Nullable
@@ -239,9 +243,17 @@ public interface SseServer extends AutoCloseable {
 			return this;
 		}
 
+		/**
+		 * Sets the maximum duration for reading the SSE handshake request line and headers.
+		 * <p>
+		 * If this value is not specified, Soklet uses the server default.
+		 *
+		 * @param requestHeaderTimeout the request header timeout, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
-		public Builder requestTimeout(@Nullable Duration requestTimeout) {
-			this.requestTimeout = requestTimeout;
+		public Builder requestHeaderTimeout(@Nullable Duration requestHeaderTimeout) {
+			this.requestHeaderTimeout = requestHeaderTimeout;
 			return this;
 		}
 
@@ -294,6 +306,30 @@ public interface SseServer extends AutoCloseable {
 		@NonNull
 		public Builder maximumRequestSizeInBytes(@Nullable Integer maximumRequestSizeInBytes) {
 			this.maximumRequestSizeInBytes = maximumRequestSizeInBytes;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum number of HTTP header fields accepted in one SSE handshake.
+		 *
+		 * @param maximumHeaderCount the maximum header count, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumHeaderCount(@Nullable Integer maximumHeaderCount) {
+			this.maximumHeaderCount = maximumHeaderCount;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum SSE handshake request-target length accepted in bytes.
+		 *
+		 * @param maximumRequestTargetLengthInBytes the maximum request-target length, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumRequestTargetLengthInBytes(@Nullable Integer maximumRequestTargetLengthInBytes) {
+			this.maximumRequestTargetLengthInBytes = maximumRequestTargetLengthInBytes;
 			return this;
 		}
 

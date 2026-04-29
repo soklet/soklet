@@ -20,6 +20,7 @@ import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
+import com.soklet.annotation.RequestBody;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -98,6 +99,11 @@ public class IntegrationTests {
 					.orElse("none");
 		}
 
+		@POST("/body")
+		public String body(@NonNull @RequestBody String body) {
+			return body;
+		}
+
 		@GET("/multivalued-headers")
 		public Response multivaluedHeaders(@NonNull Request request) {
 			return Response.withStatusCode(200)
@@ -131,7 +137,7 @@ public class IntegrationTests {
 	}
 
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
-		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port).requestTimeout(Duration.ofSeconds(5)).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port).requestHeaderTimeout(Duration.ofSeconds(5)).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
@@ -215,7 +221,7 @@ public class IntegrationTests {
 	public void malformedRequest_withNonAsciiHeaderName_returns400() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -244,7 +250,7 @@ public class IntegrationTests {
 	public void malformedRequest_withControlCharHeaderValue_returns400() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -275,7 +281,7 @@ public class IntegrationTests {
 	public void malformedRequest_missingHost_returns400() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -303,7 +309,7 @@ public class IntegrationTests {
 	public void malformedRequest_invalidHost_returns400() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -332,7 +338,7 @@ public class IntegrationTests {
 	public void malformedRequest_invalidHttpVersion_returns400() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -361,7 +367,7 @@ public class IntegrationTests {
 	public void malformedRequest_expect100Continue_returns400() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -391,7 +397,7 @@ public class IntegrationTests {
 	public void maximumConnections_rejectsExcessConnections() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.maximumConnections(1)
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
@@ -869,7 +875,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
 						.maximumRequestSizeInBytes(256)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Echo2Resource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -901,7 +907,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
 						.maximumRequestSizeInBytes(256)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Echo2Resource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -937,11 +943,74 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void headerCountOverLimit_returns413() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.maximumHeaderCount(1)
+						.requestHeaderTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(4000);
+				out.write((
+						"GET /hello HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"X-Test: abc\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"));
+			}
+		}
+	}
+
+	@Test
+	public void requestBodyTimeout_closesSlowBodyConnection() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.requestHeaderTimeout(Duration.ofSeconds(5))
+						.requestBodyTimeout(Duration.ofMillis(200))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(2000);
+				out.write((
+						"POST /body HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Content-Length: 4\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				Assertions.assertEquals(-1, in.read(), "Connection should close when body read times out");
+			}
+		}
+	}
+
+	@Test
 	public void requestHandlerTimeout_closesConnection() throws Exception {
 		int port = findFreePort();
 
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestTimeout(Duration.ofSeconds(5))
+						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.requestHandlerTimeout(Duration.ofMillis(200))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingResource.class)))
