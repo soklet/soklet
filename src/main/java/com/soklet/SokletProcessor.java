@@ -107,7 +107,7 @@ import java.util.stream.Collectors;
  *     </configuration>
  * </plugin>}</pre>
  * Using <a href="https://gradle.org" target="_blank">Gradle</a>:
- * <pre>{@code def sokletVersion = "3.1.0" // (use your actual version)
+ * <pre>{@code def sokletVersion = "3.1.1" // (use your actual version)
  *
  * dependencies {
  *   // Soklet used by your code at compile/run time
