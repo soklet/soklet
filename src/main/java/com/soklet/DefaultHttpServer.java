@@ -200,8 +200,8 @@ final class DefaultHttpServer implements HttpServer {
 	private volatile TimeoutScheduler requestHandlerTimeoutScheduler;
 	@Nullable
 	private volatile RequestHandler requestHandler;
-	@Nullable
-	private volatile LifecycleObserver lifecycleObserver;
+	@NonNull
+	private volatile LifecycleObserver lifecycleObserver = LifecycleObserver.defaultInstance();
 	@Nullable
 	private volatile MetricsCollector metricsCollector;
 	@Nullable
@@ -369,9 +369,6 @@ final class DefaultHttpServer implements HttpServer {
 
 			if (getRequestHandler().isEmpty())
 				throw new IllegalStateException(format("No %s was registered for %s", RequestHandler.class, getClass()));
-
-			if (getLifecycleObserver().isEmpty())
-				throw new IllegalStateException(format("No %s was registered for %s", LifecycleObserver.class, getClass()));
 
 			Options options = OptionsBuilder.newBuilder()
 					.withHost(getHost())
@@ -1005,7 +1002,7 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(logEvent);
 
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver -> lifecycleObserver.didReceiveLogEvent(logEvent));
+			getLifecycleObserver().didReceiveLogEvent(logEvent);
 		} catch (Throwable throwable) {
 			// The LifecycleObserver implementation errored out, but we can't let that affect us - swallow its exception.
 			// Not much else we can do here but dump to stderr
@@ -1067,8 +1064,7 @@ final class DefaultHttpServer implements HttpServer {
 				.build();
 
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.willTerminateResponseStream(streamingResponse, termination));
+			getLifecycleObserver().willTerminateResponseStream(streamingResponse, termination);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_RESPONSE_STREAM_FAILED,
 							format("An exception occurred while invoking %s::willTerminateResponseStream", LifecycleObserver.class.getSimpleName()))
@@ -1080,8 +1076,7 @@ final class DefaultHttpServer implements HttpServer {
 		}
 
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didTerminateResponseStream(streamingResponse, termination));
+			getLifecycleObserver().didTerminateResponseStream(streamingResponse, termination);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
 							format("An exception occurred while invoking %s::didTerminateResponseStream", LifecycleObserver.class.getSimpleName()))
@@ -1095,8 +1090,7 @@ final class DefaultHttpServer implements HttpServer {
 
 	private void notifyWillAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.willAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress));
+			getLifecycleObserver().willAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::willAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -1113,8 +1107,7 @@ final class DefaultHttpServer implements HttpServer {
 
 	private void notifyDidAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress));
+			getLifecycleObserver().didAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::didAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -1135,8 +1128,7 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(reason);
 
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didFailToAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress, reason, throwable));
+			getLifecycleObserver().didFailToAcceptConnection(ServerType.STANDARD_HTTP, remoteAddress, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::didFailToAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -1159,8 +1151,7 @@ final class DefaultHttpServer implements HttpServer {
 	private void notifyWillAcceptRequest(@Nullable InetSocketAddress remoteAddress,
 																			 @Nullable String requestTarget) {
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.willAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget));
+			getLifecycleObserver().willAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::willAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -1181,8 +1172,7 @@ final class DefaultHttpServer implements HttpServer {
 	private void notifyDidAcceptRequest(@Nullable InetSocketAddress remoteAddress,
 																			@Nullable String requestTarget) {
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget));
+			getLifecycleObserver().didAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -1207,8 +1197,7 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(reason);
 
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didFailToAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget, reason, throwable));
+			getLifecycleObserver().didFailToAcceptRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didFailToAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -1233,8 +1222,7 @@ final class DefaultHttpServer implements HttpServer {
 	private void notifyWillReadRequest(@Nullable InetSocketAddress remoteAddress,
 																		 @Nullable String requestTarget) {
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.willReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget));
+			getLifecycleObserver().willReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::willReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -1255,8 +1243,7 @@ final class DefaultHttpServer implements HttpServer {
 	private void notifyDidReadRequest(@Nullable InetSocketAddress remoteAddress,
 																		@Nullable String requestTarget) {
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget));
+			getLifecycleObserver().didReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -1281,8 +1268,7 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(reason);
 
 		try {
-			getLifecycleObserver().ifPresent(lifecycleObserver ->
-					lifecycleObserver.didFailToReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget, reason, throwable));
+			getLifecycleObserver().didFailToReadRequest(ServerType.STANDARD_HTTP, remoteAddress, requestTarget, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didFailToReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -1470,8 +1456,8 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected Optional<LifecycleObserver> getLifecycleObserver() {
-		return Optional.ofNullable(this.lifecycleObserver);
+	protected LifecycleObserver getLifecycleObserver() {
+		return this.lifecycleObserver;
 	}
 
 	@NonNull
