@@ -938,6 +938,7 @@ public class WidgetResource {
 
 Implement [`LifecycleObserver`](https://javadoc.soklet.com/com/soklet/LifecycleObserver.html) and
 [`RequestInterceptor`](https://javadoc.soklet.com/com/soklet/RequestInterceptor.html) to hook into server and request lifecycles.
+Use [`SokletConfig.Builder::lifecycleObservers`](<https://javadoc.soklet.com/com/soklet/SokletConfig.Builder.html#lifecycleObservers(java.util.Collection)>) when you want multiple observers, for example an audit observer plus an OpenTelemetry tracing observer.
 
 HTTP Server Start/Stop: execute code immediately before and after [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html) startup and shutdown.
 
@@ -1377,7 +1378,7 @@ public void basicIntegrationTest() {
 
 #### Metrics Collection
 
-Soklet includes a [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html) hook for collecting HTTP and SSE telemetry. The default in-memory
+Soklet includes a [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html) hook for collecting HTTP and SSE telemetry. Use metrics collectors for low-cardinality counters, gauges, and histograms; use [`LifecycleObserver`](https://javadoc.soklet.com/com/soklet/LifecycleObserver.html) for per-request tracing and audit hooks. The default in-memory
 collector is enabled automatically, but you can replace or disable it:
 
 ```java

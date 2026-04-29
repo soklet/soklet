@@ -22,6 +22,8 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import static java.lang.String.format;
@@ -52,7 +54,9 @@ public final class SokletConfig {
 	@NonNull
 	private final RequestInterceptor requestInterceptor;
 	@NonNull
-	private final LifecycleObserver lifecycleObserver;
+	private final List<LifecycleObserver> lifecycleObservers;
+	@NonNull
+	private final LifecycleObserver aggregateLifecycleObserver;
 	@NonNull
 	private final MetricsCollector metricsCollector;
 	@NonNull
@@ -125,7 +129,8 @@ public final class SokletConfig {
 		this.resourceMethodResolver = builder.resourceMethodResolver != null ? builder.resourceMethodResolver : ResourceMethodResolver.fromClasspathIntrospection();
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : ResponseMarshaler.defaultInstance();
 		this.requestInterceptor = builder.requestInterceptor != null ? builder.requestInterceptor : RequestInterceptor.defaultInstance();
-		this.lifecycleObserver = builder.lifecycleObserver != null ? builder.lifecycleObserver : LifecycleObserver.defaultInstance();
+		this.lifecycleObservers = builder.lifecycleObservers != null ? builder.lifecycleObservers : List.of(LifecycleObserver.defaultInstance());
+		this.aggregateLifecycleObserver = LifecycleObservers.aggregate(this.lifecycleObservers);
 		this.metricsCollector = builder.metricsCollector != null ? builder.metricsCollector : MetricsCollector.defaultInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : CorsAuthorizer.rejectAllInstance();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(this);
@@ -213,12 +218,25 @@ public final class SokletConfig {
 
 	/**
 	 * How Soklet will <a href="https://www.soklet.com/docs/request-lifecycle">observe server and request lifecycle events</a>.
+	 * <p>
+	 * This is an aggregate facade over {@link #getLifecycleObservers()}. Prefer {@link #getLifecycleObservers()} when
+	 * you need to inspect configured observers directly.
 	 *
-	 * @return the instance responsible for lifecycle observation
+	 * @return an aggregate lifecycle observer
 	 */
 	@NonNull
 	public LifecycleObserver getLifecycleObserver() {
-		return this.lifecycleObserver;
+		return this.aggregateLifecycleObserver;
+	}
+
+	/**
+	 * How Soklet will <a href="https://www.soklet.com/docs/request-lifecycle">observe server and request lifecycle events</a>.
+	 *
+	 * @return the lifecycle observers that are invoked in registration order
+	 */
+	@NonNull
+	public List<LifecycleObserver> getLifecycleObservers() {
+		return this.lifecycleObservers;
 	}
 
 	/**
@@ -303,7 +321,7 @@ public final class SokletConfig {
 		@Nullable
 		private RequestInterceptor requestInterceptor;
 		@Nullable
-		private LifecycleObserver lifecycleObserver;
+		private List<LifecycleObserver> lifecycleObservers;
 		@Nullable
 		private MetricsCollector metricsCollector;
 		@Nullable
@@ -375,7 +393,13 @@ public final class SokletConfig {
 
 		@NonNull
 		public Builder lifecycleObserver(@Nullable LifecycleObserver lifecycleObserver) {
-			this.lifecycleObserver = lifecycleObserver;
+			this.lifecycleObservers = lifecycleObserver == null ? List.of() : List.of(lifecycleObserver);
+			return this;
+		}
+
+		@NonNull
+		public Builder lifecycleObservers(@Nullable Collection<? extends LifecycleObserver> lifecycleObservers) {
+			this.lifecycleObservers = copyLifecycleObservers(lifecycleObservers);
 			return this;
 		}
 
@@ -479,7 +503,7 @@ public final class SokletConfig {
 					.resourceMethodParameterProvider(sokletConfig.resourceMethodParameterProvider)
 					.responseMarshaler(sokletConfig.responseMarshaler)
 					.requestInterceptor(sokletConfig.requestInterceptor)
-					.lifecycleObserver(sokletConfig.lifecycleObserver)
+					.lifecycleObservers(sokletConfig.lifecycleObservers)
 					.metricsCollector(sokletConfig.metricsCollector)
 					.corsAuthorizer(sokletConfig.corsAuthorizer);
 		}
@@ -551,6 +575,12 @@ public final class SokletConfig {
 		}
 
 		@NonNull
+		public Copier lifecycleObservers(@Nullable Collection<? extends LifecycleObserver> lifecycleObservers) {
+			this.builder.lifecycleObservers(lifecycleObservers);
+			return this;
+		}
+
+		@NonNull
 		public Copier metricsCollector(@Nullable MetricsCollector metricsCollector) {
 			this.builder.metricsCollector(metricsCollector);
 			return this;
@@ -566,5 +596,13 @@ public final class SokletConfig {
 		public SokletConfig finish() {
 			return this.builder.build();
 		}
+	}
+
+	@NonNull
+	private static List<LifecycleObserver> copyLifecycleObservers(@Nullable Collection<? extends LifecycleObserver> lifecycleObservers) {
+		if (lifecycleObservers == null || lifecycleObservers.isEmpty())
+			return List.of();
+
+		return List.copyOf(lifecycleObservers);
 	}
 }
