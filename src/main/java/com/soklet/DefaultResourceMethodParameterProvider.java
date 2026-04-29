@@ -341,7 +341,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			return configuredInjection;
 
 		configuredInjection = extractConfiguredComponentInjection(basicParameterType, LifecycleObserver.class,
-				sokletConfig.getLifecycleObserver(), resourceMethod);
+				sokletConfig.getAggregateLifecycleObserver(), resourceMethod);
 
 		if (configuredInjection != null)
 			return configuredInjection;

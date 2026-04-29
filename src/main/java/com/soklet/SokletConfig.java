@@ -216,16 +216,8 @@ public final class SokletConfig {
 		return this.requestInterceptor;
 	}
 
-	/**
-	 * How Soklet will <a href="https://www.soklet.com/docs/request-lifecycle">observe server and request lifecycle events</a>.
-	 * <p>
-	 * This is an aggregate facade over {@link #getLifecycleObservers()}. Prefer {@link #getLifecycleObservers()} when
-	 * you need to inspect configured observers directly.
-	 *
-	 * @return an aggregate lifecycle observer
-	 */
 	@NonNull
-	public LifecycleObserver getLifecycleObserver() {
+	LifecycleObserver getAggregateLifecycleObserver() {
 		return this.aggregateLifecycleObserver;
 	}
 

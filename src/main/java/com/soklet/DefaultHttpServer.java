@@ -789,7 +789,7 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(sokletConfig);
 
 		this.requestHandler = requestHandler;
-		this.lifecycleObserver = sokletConfig.getLifecycleObserver();
+		this.lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 		this.metricsCollector = sokletConfig.getMetricsCollector();
 	}
 

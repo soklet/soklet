@@ -875,7 +875,7 @@ final class DefaultSseServer implements SseServer {
 		requireNonNull(sokletConfig);
 		requireNonNull(requestHandler);
 
-		this.lifecycleObserver = sokletConfig.getLifecycleObserver();
+		this.lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 		this.metricsCollector = sokletConfig.getMetricsCollector();
 		this.responseMarshaler = sokletConfig.getResponseMarshaler();
 		this.requestHandler = requestHandler;

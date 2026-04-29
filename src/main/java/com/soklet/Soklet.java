@@ -231,7 +231,7 @@ public final class Soklet implements AutoCloseable {
 			try {
 				defaultMetricsCollector.initialize(sokletConfig);
 			} catch (Throwable t) {
-				sokletConfig.getLifecycleObserver().didReceiveLogEvent(
+				sokletConfig.getAggregateLifecycleObserver().didReceiveLogEvent(
 						LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED,
 										format("An exception occurred while initializing %s", metricsCollector.getClass().getSimpleName()))
 								.throwable(t)
@@ -278,7 +278,7 @@ public final class Soklet implements AutoCloseable {
 			getAwaitShutdownLatchReference().set(new CountDownLatch(1));
 
 			SokletConfig sokletConfig = getSokletConfig();
-			LifecycleObserver lifecycleObserver = sokletConfig.getLifecycleObserver();
+			LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 
 				// 1. Notify global intent to start
 				lifecycleObserver.willStartSoklet(this);
@@ -482,7 +482,7 @@ public final class Soklet implements AutoCloseable {
 		try {
 			if (isStarted()) {
 				SokletConfig sokletConfig = getSokletConfig();
-				LifecycleObserver lifecycleObserver = sokletConfig.getLifecycleObserver();
+				LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 
 				// 1. Notify global intent to stop
 				lifecycleObserver.willStopSoklet(this);
@@ -578,7 +578,7 @@ public final class Soklet implements AutoCloseable {
 							format("Ignoring request for %s.%s - it is unsupported in this environment (no interactive TTY detected)", ShutdownTrigger.class.getSimpleName(), ShutdownTrigger.ENTER_KEY.name())
 					).build();
 
-					getSokletConfig().getLifecycleObserver().didReceiveLogEvent(logEvent);
+					getSokletConfig().getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
 				}
 			}
 
@@ -713,7 +713,7 @@ public final class Soklet implements AutoCloseable {
 		SokletConfig sokletConfig = getSokletConfig();
 		ResourceMethodResolver resourceMethodResolver = sokletConfig.getResourceMethodResolver();
 		ResponseMarshaler responseMarshaler = sokletConfig.getResponseMarshaler();
-		LifecycleObserver lifecycleObserver = sokletConfig.getLifecycleObserver();
+		LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 		RequestInterceptor requestInterceptor = sokletConfig.getRequestInterceptor();
 		MetricsCollector metricsCollector = sokletConfig.getMetricsCollector();
 
@@ -1796,7 +1796,7 @@ public final class Soklet implements AutoCloseable {
 
 			MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
 			ResourceMethod resourceMethod = requestResult.getResourceMethod().orElse(null);
-			LifecycleObserver lifecycleObserver = sokletConfig.getLifecycleObserver();
+			LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 			StreamingResponseHandle streamingResponse = new DefaultStreamingResponseHandle(ServerType.STANDARD_HTTP,
 					request, resourceMethod, marshaledResponse, establishedAt);
 			StreamTermination termination = StreamTermination
@@ -1850,7 +1850,7 @@ public final class Soklet implements AutoCloseable {
 			if (sokletConfig == null)
 				return;
 
-			LifecycleObserver lifecycleObserver = sokletConfig.getLifecycleObserver();
+			LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 			ResourceMethod resourceMethod = requestResult.getResourceMethod().orElse(null);
 			MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
 

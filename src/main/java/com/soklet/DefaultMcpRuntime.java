@@ -2313,7 +2313,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(invocation);
 
 		try {
-			invocation.accept(getSoklet().getSokletConfig().getLifecycleObserver());
+			invocation.accept(getSoklet().getSokletConfig().getAggregateLifecycleObserver());
 		} catch (Throwable throwable) {
 			if (throwables != null)
 				throwables.add(throwable);
@@ -2329,7 +2329,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(logEvent);
 
 		try {
-			getSoklet().getSokletConfig().getLifecycleObserver().didReceiveLogEvent(logEvent);
+			getSoklet().getSokletConfig().getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
 		} catch (Throwable ignored) {
 			ignored.printStackTrace();
 		}

@@ -60,7 +60,7 @@ public class SokletConfigTests {
 				.lifecycleObservers(List.of(first, second))
 				.build();
 
-		config.getLifecycleObserver().didStartRequestHandling(ServerType.STANDARD_HTTP, Request.fromPath(HttpMethod.GET, "/"), null);
+		config.getAggregateLifecycleObserver().didStartRequestHandling(ServerType.STANDARD_HTTP, Request.fromPath(HttpMethod.GET, "/"), null);
 
 		Assertions.assertEquals(List.of(first, second), config.getLifecycleObservers());
 		Assertions.assertEquals(List.of("first", "second"), calls);
@@ -96,7 +96,7 @@ public class SokletConfigTests {
 				.build();
 
 		RuntimeException actual = Assertions.assertThrows(RuntimeException.class,
-				() -> config.getLifecycleObserver().didStartRequestHandling(ServerType.STANDARD_HTTP, Request.fromPath(HttpMethod.GET, "/"), null));
+				() -> config.getAggregateLifecycleObserver().didStartRequestHandling(ServerType.STANDARD_HTTP, Request.fromPath(HttpMethod.GET, "/"), null));
 
 		Assertions.assertSame(expected, actual);
 		Assertions.assertArrayEquals(new Throwable[]{expectedSuppressed}, actual.getSuppressed());

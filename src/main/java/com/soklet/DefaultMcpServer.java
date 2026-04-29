@@ -1591,7 +1591,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			return;
 
 		try {
-			sokletConfig.getLifecycleObserver().didReceiveLogEvent(logEvent);
+			sokletConfig.getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
 		} catch (Throwable throwable) {
 			throwable.printStackTrace(System.err);
 		}
@@ -1621,7 +1621,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().willAcceptConnection(ServerType.MCP, remoteAddress);
+				sokletConfig.getAggregateLifecycleObserver().willAcceptConnection(ServerType.MCP, remoteAddress);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::willAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -1641,7 +1641,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().didAcceptConnection(ServerType.MCP, remoteAddress);
+				sokletConfig.getAggregateLifecycleObserver().didAcceptConnection(ServerType.MCP, remoteAddress);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::didAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -1665,7 +1665,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().didFailToAcceptConnection(ServerType.MCP, remoteAddress, reason, throwable);
+				sokletConfig.getAggregateLifecycleObserver().didFailToAcceptConnection(ServerType.MCP, remoteAddress, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
 							format("An exception occurred while invoking %s::didFailToAcceptConnection", LifecycleObserver.class.getSimpleName()))
@@ -1691,7 +1691,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().willAcceptRequest(ServerType.MCP, remoteAddress, requestTarget);
+				sokletConfig.getAggregateLifecycleObserver().willAcceptRequest(ServerType.MCP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::willAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -1715,7 +1715,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().didAcceptRequest(ServerType.MCP, remoteAddress, requestTarget);
+				sokletConfig.getAggregateLifecycleObserver().didAcceptRequest(ServerType.MCP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -1743,7 +1743,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().didFailToAcceptRequest(ServerType.MCP, remoteAddress, requestTarget, reason, throwable);
+				sokletConfig.getAggregateLifecycleObserver().didFailToAcceptRequest(ServerType.MCP, remoteAddress, requestTarget, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didFailToAcceptRequest", LifecycleObserver.class.getSimpleName()))
@@ -1771,7 +1771,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().willReadRequest(ServerType.MCP, remoteAddress, requestTarget);
+				sokletConfig.getAggregateLifecycleObserver().willReadRequest(ServerType.MCP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::willReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -1795,7 +1795,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().didReadRequest(ServerType.MCP, remoteAddress, requestTarget);
+				sokletConfig.getAggregateLifecycleObserver().didReadRequest(ServerType.MCP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -1823,7 +1823,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().didFailToReadRequest(ServerType.MCP, remoteAddress, requestTarget, reason, throwable);
+				sokletConfig.getAggregateLifecycleObserver().didFailToReadRequest(ServerType.MCP, remoteAddress, requestTarget, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,
 							format("An exception occurred while invoking %s::didFailToReadRequest", LifecycleObserver.class.getSimpleName()))
@@ -1854,7 +1854,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().willWriteResponse(ServerType.MCP, request, null, marshaledResponse);
+				sokletConfig.getAggregateLifecycleObserver().willWriteResponse(ServerType.MCP, request, null, marshaledResponse);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_RESPONSE_FAILED,
 							format("An exception occurred while invoking %s::willWriteResponse", LifecycleObserver.class.getSimpleName()))
@@ -1879,7 +1879,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().didWriteResponse(ServerType.MCP, request, null, marshaledResponse, responseWriteDuration);
+				sokletConfig.getAggregateLifecycleObserver().didWriteResponse(ServerType.MCP, request, null, marshaledResponse, responseWriteDuration);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_RESPONSE_FAILED,
 							format("An exception occurred while invoking %s::didWriteResponse", LifecycleObserver.class.getSimpleName()))
@@ -1906,7 +1906,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			SokletConfig sokletConfig = this.sokletConfig;
 
 			if (sokletConfig != null)
-				sokletConfig.getLifecycleObserver().didFailToWriteResponse(ServerType.MCP, request, null, marshaledResponse, responseWriteDuration, throwable);
+				sokletConfig.getAggregateLifecycleObserver().didFailToWriteResponse(ServerType.MCP, request, null, marshaledResponse, responseWriteDuration, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_RESPONSE_FAILED,
 							format("An exception occurred while invoking %s::didFailToWriteResponse", LifecycleObserver.class.getSimpleName()))
