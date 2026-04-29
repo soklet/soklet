@@ -215,24 +215,21 @@ public class UtilitiesTests {
 		InetSocketAddress remoteAddress = new InetSocketAddress(InetAddress.getByName("203.0.113.10"), 1234);
 
 		assertEquals(Optional.empty(),
-				Utilities.extractEffectiveOrigin(
-						Utilities.EffectiveOriginResolver.withHeaders(headers, Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
-								.remoteAddress(remoteAddress)
-				));
+				EffectiveOriginResolver.withHeaders(headers, EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
+						.remoteAddress(remoteAddress)
+						.resolve());
 
 		assertEquals(Optional.empty(),
-				Utilities.extractEffectiveOrigin(
-						Utilities.EffectiveOriginResolver.withHeaders(headers, Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST)
-								.remoteAddress(remoteAddress)
-								.trustedProxyAddresses(Set.of(InetAddress.getByName("203.0.113.11")))
-				));
+				EffectiveOriginResolver.withHeaders(headers, EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(remoteAddress)
+						.trustedProxyAddresses(Set.of(InetAddress.getByName("203.0.113.11")))
+						.resolve());
 
 		assertEquals(Optional.of("https://public.soklet.com"),
-				Utilities.extractEffectiveOrigin(
-						Utilities.EffectiveOriginResolver.withHeaders(headers, Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST)
-								.remoteAddress(remoteAddress)
-								.trustedProxyAddresses(Set.of(InetAddress.getByName("203.0.113.10")))
-				));
+				EffectiveOriginResolver.withHeaders(headers, EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(remoteAddress)
+						.trustedProxyAddresses(Set.of(InetAddress.getByName("203.0.113.10")))
+						.resolve());
 	}
 
 	@Test
@@ -242,15 +239,13 @@ public class UtilitiesTests {
 		);
 
 		assertEquals(Optional.empty(),
-				Utilities.extractEffectiveOrigin(
-						Utilities.EffectiveOriginResolver.withHeaders(headers, Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
-				));
+				EffectiveOriginResolver.withHeaders(headers, EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
+						.resolve());
 
 		assertEquals(Optional.of("https://api.example.com:8443"),
-				Utilities.extractEffectiveOrigin(
-						Utilities.EffectiveOriginResolver.withHeaders(headers, Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
-								.allowOriginFallback(true)
-				));
+				EffectiveOriginResolver.withHeaders(headers, EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
+						.allowOriginFallback(true)
+						.resolve());
 	}
 
 	@Test
@@ -797,12 +792,10 @@ public class UtilitiesTests {
 	}
 
 	private static Optional<String> extractEffectiveOrigin(Map<String, Set<String>> headers) {
-		return Utilities.extractEffectiveOrigin(
-				Utilities.EffectiveOriginResolver.withHeaders(
-						headers,
-						Utilities.EffectiveOriginResolver.TrustPolicy.TRUST_ALL
-				)
-		);
+		return EffectiveOriginResolver.withHeaders(
+				headers,
+				EffectiveOriginResolver.TrustPolicy.TRUST_ALL
+		).resolve();
 	}
 
 	// --- header parsing helpers ---
