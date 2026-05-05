@@ -24,15 +24,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.HttpCookie;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
-import java.time.format.SignStyle;
-import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -76,33 +69,6 @@ public final class ResponseCookie {
 	private final Priority priority;
 	@NonNull
 	private final Boolean partitioned;
-
-	@NonNull
-	private static final DateTimeFormatter RFC_1123_FORMATTER;
-	@NonNull
-	private static final DateTimeFormatter RFC_1036_PARSER;
-	@NonNull
-	private static final DateTimeFormatter ASCTIME_PARSER;
-
-	static {
-		RFC_1123_FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME.withZone(ZoneId.of("GMT"));
-		RFC_1036_PARSER = new DateTimeFormatterBuilder()
-				.parseCaseInsensitive()
-				.appendPattern("EEE, dd MMM ")
-				.appendValueReduced(ChronoField.YEAR, 2, 2, 1900)
-				.appendPattern(" HH:mm:ss zzz")
-				.toFormatter(Locale.US)
-				.withZone(ZoneOffset.UTC);
-		ASCTIME_PARSER = new DateTimeFormatterBuilder()
-				.parseCaseInsensitive()
-				.appendPattern("EEE MMM")
-				.appendLiteral(' ')
-				.optionalStart().appendLiteral(' ').optionalEnd()
-				.appendValue(ChronoField.DAY_OF_MONTH, 1, 2, SignStyle.NOT_NEGATIVE)
-				.appendPattern(" HH:mm:ss yyyy")
-				.toFormatter(Locale.US)
-				.withZone(ZoneOffset.UTC);
-	}
 
 	/**
 	 * Acquires a builder for {@link ResponseCookie} instances.
@@ -244,12 +210,8 @@ public final class ResponseCookie {
 
 			if ("expires".equalsIgnoreCase(attributeName)) {
 				if (attributes.expires == null && attributeValue != null) {
-					try {
-						attributeValue = stripOptionalQuotes(attributeValue);
-						attributes.expires = parseHttpDate(attributeValue);
-					} catch (IllegalArgumentException ignored) {
-						// Ignore malformed Expires attribute
-					}
+					attributeValue = stripOptionalQuotes(attributeValue);
+					attributes.expires = HttpDate.fromHeaderValue(attributeValue).orElse(null);
 				}
 				continue;
 			}
@@ -267,26 +229,6 @@ public final class ResponseCookie {
 		}
 
 		return attributes;
-	}
-
-	@NonNull
-	private static Instant parseHttpDate(@NonNull String value) {
-		requireNonNull(value);
-
-		String trimmed = trimAggressivelyToNull(value);
-
-		if (trimmed == null)
-			throw new IllegalArgumentException("Date value cannot be blank");
-
-		for (DateTimeFormatter formatter : List.of(RFC_1123_FORMATTER, RFC_1036_PARSER, ASCTIME_PARSER)) {
-			try {
-				return Instant.from(formatter.parse(trimmed));
-			} catch (Exception ignored) {
-				// try next formatter
-			}
-		}
-
-		throw new IllegalArgumentException(format("Unable to parse HTTP-date value '%s'", trimmed));
 	}
 
 	@NonNull
@@ -425,7 +367,7 @@ public final class ResponseCookie {
 			components.add(format("Max-Age=%d", maxAge));
 
 		if (getExpires().isPresent())
-			components.add(format("Expires=%s", RFC_1123_FORMATTER.format(getExpires().get())));
+			components.add(format("Expires=%s", HttpDate.toHeaderValue(getExpires().get())));
 
 		if (getSecure())
 			components.add("Secure");

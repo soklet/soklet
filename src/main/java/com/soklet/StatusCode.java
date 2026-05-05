@@ -92,7 +92,7 @@ public enum StatusCode {
 	/**
 	 * This response code is used in response to a <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests">range request</a> when the client has requested a part or parts of a resource.
 	 * <p>
-	 * Soklet does not currently support <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests">range requests</a> out-of-the-box.
+	 * Soklet's {@link FileResponse} and {@link StaticFiles} helpers support satisfiable single byte ranges.
 	 */
 	HTTP_206(206, "Partial Content"),
 	/**

@@ -39,6 +39,7 @@ Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/do
 - Best-in-class support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
 - First-class support for [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
 - HTTP/1.1 response streaming for dynamic output
+- Safe static-file helpers with cache validators and single byte ranges
 - [Servlet Integration](https://www.soklet.com/docs/servlet-integration) for legacy code
 
 ### Design Non-Goals
@@ -497,7 +498,7 @@ public MarshaledResponse exampleImage() {
 }
 ```
 
-`MarshaledResponse` supports known-length byte-array, file, file-channel, and `ByteBuffer` bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory.
+`MarshaledResponse` supports known-length byte-array, file, file-channel, and `ByteBuffer` bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory. For safe static roots, use [`StaticFiles`](https://www.soklet.com/docs/static-files) instead of hand-rolled path joins; it handles root containment, validators, single byte ranges, MIME defaults, and `GET`/`HEAD` behavior.
 
 ##### Streaming Responses
 

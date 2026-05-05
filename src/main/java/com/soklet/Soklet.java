@@ -40,8 +40,6 @@ import java.nio.charset.CoderResult;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -1417,7 +1415,7 @@ public final class Soklet implements AutoCloseable {
 		// If the Date header is missing, add it using our cached provider
 		if (!marshaledResponse.getHeaders().containsKey("Date"))
 			marshaledResponse = marshaledResponse.copy()
-					.headers(headers -> headers.put("Date", Set.of(CachedHttpDate.getCurrentValue())))
+					.headers(headers -> headers.put("Date", Set.of(HttpDate.currentSecondHeaderValue())))
 					.finish();
 
 		marshaledResponse = applyCorsResponseIfApplicable(request, marshaledResponse);
@@ -3119,36 +3117,4 @@ public final class Soklet implements AutoCloseable {
 		}
 	}
 
-	/**
-	 * Efficiently provides the current time in RFC 1123 HTTP-date format.
-	 * Updates once per second to avoid the overhead of formatting dates on every request.
-	 */
-	@ThreadSafe
-	private static final class CachedHttpDate {
-		@NonNull
-		private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss z", Locale.ENGLISH)
-				.withZone(ZoneId.of("GMT"));
-		@NonNull
-		private static volatile String CURRENT_VALUE = FORMATTER.format(Instant.now());
-
-		static {
-			Thread t = new Thread(() -> {
-				while (true) {
-					try {
-						Thread.sleep(1000);
-						CURRENT_VALUE = FORMATTER.format(Instant.now());
-					} catch (InterruptedException e) {
-						break; // Allow thread to die on JVM shutdown
-					}
-				}
-			}, "soklet-date-header-value-updater");
-			t.setDaemon(true);
-			t.start();
-		}
-
-		@NonNull
-		static String getCurrentValue() {
-			return CURRENT_VALUE;
-		}
-	}
 }
