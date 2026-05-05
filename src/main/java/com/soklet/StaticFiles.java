@@ -35,11 +35,9 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -173,15 +171,14 @@ public final class StaticFiles {
 		Boolean rangeRequests = requireNonNull(getRangeRequestsResolver().rangeRequestsFor(file, attributes), "rangeRequestsResolver returned null; return false to disable range requests.");
 		String contentType = requireNonNull(getMimeTypeResolver().contentTypeFor(file), "mimeTypeResolver returned null; use Optional.empty() to omit Content-Type.").orElse(null);
 
-		MarshaledResponse response = FileResponse.withPathAndAttributes(file, attributes)
+		MarshaledResponse response = MarshaledResponse.withFile(file, request, attributes)
 				.contentType(contentType)
 				.entityTag(entityTag)
 				.lastModified(lastModified)
 				.cacheControl(cacheControl)
 				.headers(headers)
 				.rangeRequests(rangeRequests)
-				.build()
-				.marshaledResponseFor(request);
+				.build();
 
 		return Optional.of(response);
 	}
@@ -434,16 +431,7 @@ public final class StaticFiles {
 
 	@NonNull
 	private static MimeTypeResolver defaultingMimeTypeResolver(@Nullable MimeTypeResolver userResolver) {
-		MimeTypeResolver defaultResolver = DefaultMimeTypeResolver.defaultInstance();
-
-		if (userResolver == null)
-			return defaultResolver;
-
-		return (path) -> {
-			requireNonNull(path);
-			Optional<String> contentType = requireNonNull(userResolver.contentTypeFor(path), "mimeTypeResolver returned null; use Optional.empty() to omit Content-Type.");
-			return contentType.isPresent() ? contentType : defaultResolver.contentTypeFor(path);
-		};
+		return userResolver == null ? MimeTypeResolver.defaultInstance() : userResolver;
 	}
 
 	@NonNull
@@ -498,6 +486,18 @@ public final class StaticFiles {
 			return this;
 		}
 
+		/**
+		 * Sets the resolver used to produce {@code Content-Type} values.
+		 * <p>
+		 * The configured resolver fully replaces the default resolver. Soklet's default resolver uses a
+		 * small deterministic set of common web-asset extensions, returns {@link Optional#empty()} for
+		 * unknown extensions, and does not call {@link Files#probeContentType(Path)}. Applications that
+		 * need OS-level MIME database behavior can configure a resolver that calls
+		 * {@code Files.probeContentType(...)} directly.
+		 *
+		 * @param mimeTypeResolver the resolver to use, or {@code null} to restore the default resolver
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder mimeTypeResolver(@Nullable MimeTypeResolver mimeTypeResolver) {
 			this.mimeTypeResolver = mimeTypeResolver;
@@ -895,92 +895,4 @@ public final class StaticFiles {
 		}
 	}
 
-	@ThreadSafe
-	private static final class DefaultMimeTypeResolver implements MimeTypeResolver {
-		@NonNull
-		private static final DefaultMimeTypeResolver INSTANCE;
-		@NonNull
-		private static final Map<@NonNull String, @NonNull String> CONTENT_TYPES_BY_EXTENSION;
-		@NonNull
-		private final Map<@NonNull String, @NonNull Optional<String>> probedContentTypesByExtension;
-
-		static {
-			INSTANCE = new DefaultMimeTypeResolver();
-			CONTENT_TYPES_BY_EXTENSION = Map.ofEntries(
-					Map.entry("html", "text/html; charset=UTF-8"),
-					Map.entry("htm", "text/html; charset=UTF-8"),
-					Map.entry("css", "text/css; charset=UTF-8"),
-					Map.entry("js", "text/javascript; charset=UTF-8"),
-					Map.entry("mjs", "text/javascript; charset=UTF-8"),
-					Map.entry("json", "application/json; charset=UTF-8"),
-					Map.entry("txt", "text/plain; charset=UTF-8"),
-					Map.entry("xml", "application/xml; charset=UTF-8"),
-					Map.entry("svg", "image/svg+xml"),
-					Map.entry("png", "image/png"),
-					Map.entry("jpg", "image/jpeg"),
-					Map.entry("jpeg", "image/jpeg"),
-					Map.entry("gif", "image/gif"),
-					Map.entry("webp", "image/webp"),
-					Map.entry("avif", "image/avif"),
-					Map.entry("ico", "image/x-icon"),
-					Map.entry("pdf", "application/pdf"),
-					Map.entry("wasm", "application/wasm"),
-					Map.entry("woff", "font/woff"),
-					Map.entry("woff2", "font/woff2")
-			);
-		}
-
-		private DefaultMimeTypeResolver() {
-			this.probedContentTypesByExtension = new ConcurrentHashMap<>();
-		}
-
-		@NonNull
-		static DefaultMimeTypeResolver defaultInstance() {
-			return INSTANCE;
-		}
-
-		@Override
-		@NonNull
-		public Optional<String> contentTypeFor(@NonNull Path path) {
-			requireNonNull(path);
-
-			String extension = extensionFor(path).orElse(null);
-
-			if (extension == null)
-				return probeContentType(path);
-
-			Optional<String> probedContentType = this.probedContentTypesByExtension.computeIfAbsent(extension, ignored -> probeContentType(path));
-			return probedContentType.isPresent() ? probedContentType : Optional.ofNullable(CONTENT_TYPES_BY_EXTENSION.get(extension));
-		}
-
-		@NonNull
-		private static Optional<String> probeContentType(@NonNull Path path) {
-			requireNonNull(path);
-
-			try {
-				String probedContentType = Utilities.trimAggressivelyToNull(Files.probeContentType(path));
-
-				if (probedContentType != null)
-					return Optional.of(probedContentType);
-			} catch (IOException ignored) {
-				// Fall through to extension-based resolution.
-			}
-
-			return Optional.empty();
-		}
-
-		@NonNull
-		private static Optional<String> extensionFor(@NonNull Path path) {
-			requireNonNull(path);
-
-			String filename = path.getFileName() == null ? "" : path.getFileName().toString();
-			int lastDotIndex = filename.lastIndexOf('.');
-
-			if (lastDotIndex < 0 || lastDotIndex == filename.length() - 1)
-				return Optional.empty();
-
-			String extension = filename.substring(lastDotIndex + 1).toLowerCase(Locale.US);
-			return Optional.of(extension);
-		}
-	}
 }

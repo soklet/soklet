@@ -48,7 +48,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class FileResponse {
+final class FileResponse {
 	@NonNull
 	private static final Set<@NonNull String> CONTROLLED_HEADER_NAMES;
 	@NonNull
@@ -87,17 +87,9 @@ public final class FileResponse {
 	private final BasicFileAttributes attributes;
 
 	@NonNull
-	public static Builder withPath(@NonNull Path path) {
+	static Builder withPath(@NonNull Path path) {
 		requireNonNull(path);
 		return new Builder(path);
-	}
-
-	@NonNull
-	static Builder withPathAndAttributes(@NonNull Path path,
-																			 @NonNull BasicFileAttributes attributes) {
-		requireNonNull(path);
-		requireNonNull(attributes);
-		return new Builder(path).attributes(attributes);
 	}
 
 	private FileResponse(@NonNull Builder builder) {
@@ -116,12 +108,12 @@ public final class FileResponse {
 	}
 
 	@NonNull
-	public MarshaledResponse marshaledResponseFor(@NonNull Request request) {
-		requireNonNull(request);
+	MarshaledResponse marshaledResponseFor(@NonNull RequestContext requestContext) {
+		requireNonNull(requestContext);
 
 		BasicFileAttributes attributes = getAttributes().orElseGet(this::readAttributes);
 		Long fileLength = attributes.size();
-		PreconditionResult preconditionResult = evaluatePreconditions(request);
+		PreconditionResult preconditionResult = evaluatePreconditions(requestContext);
 
 		if (preconditionResult == PreconditionResult.NOT_MODIFIED)
 			return bodylessResponse(304);
@@ -129,9 +121,9 @@ public final class FileResponse {
 		if (preconditionResult == PreconditionResult.PRECONDITION_FAILED)
 			return bodylessResponse(412);
 
-		if (request.getHttpMethod() == HttpMethod.GET && getRangeRequests()) {
-			String rangeHeaderValue = headerValueFor(request, "Range").orElse(null);
-			ByteRangeSelection rangeSelection = shouldApplyRange(request)
+		if (requestContext.httpMethod() == HttpMethod.GET && getRangeRequests()) {
+			String rangeHeaderValue = requestContext.rangeHeaderValue();
+			ByteRangeSelection rangeSelection = shouldApplyRange(requestContext)
 					? ByteRangeSelection.fromHeaderValue(rangeHeaderValue, fileLength)
 					: ByteRangeSelection.fromHeaderValue(null, fileLength);
 
@@ -213,30 +205,31 @@ public final class FileResponse {
 	}
 
 	@NonNull
-	private PreconditionResult evaluatePreconditions(@NonNull Request request) {
+	private PreconditionResult evaluatePreconditions(@NonNull RequestContext requestContext) {
+		requireNonNull(requestContext);
 		EntityTag entityTag = getEntityTag().orElse(null);
 		Instant lastModified = getLastModified().orElse(null);
-		EntityTagCondition ifMatch = entityTagConditionFor(headerValueFor(request, "If-Match").orElse(null)).orElse(null);
+		EntityTagCondition ifMatch = entityTagConditionFor(requestContext.ifMatchHeaderValue()).orElse(null);
 
 		if (ifMatch != null) {
 			if (!ifMatch.matchesStrong(entityTag, true))
 				return PreconditionResult.PRECONDITION_FAILED;
 		} else {
-			Instant ifUnmodifiedSince = HttpDate.fromHeaderValue(headerValueFor(request, "If-Unmodified-Since").orElse(null)).orElse(null);
+			Instant ifUnmodifiedSince = HttpDate.fromHeaderValue(requestContext.ifUnmodifiedSinceHeaderValue()).orElse(null);
 
 			if (ifUnmodifiedSince != null && lastModified != null && lastModified.isAfter(truncateToSeconds(ifUnmodifiedSince)))
 				return PreconditionResult.PRECONDITION_FAILED;
 		}
 
-		EntityTagCondition ifNoneMatch = entityTagConditionFor(headerValueFor(request, "If-None-Match").orElse(null)).orElse(null);
+		EntityTagCondition ifNoneMatch = entityTagConditionFor(requestContext.ifNoneMatchHeaderValue()).orElse(null);
 
 		if (ifNoneMatch != null) {
 			if (ifNoneMatch.matchesWeak(entityTag, true))
-				return request.getHttpMethod() == HttpMethod.GET || request.getHttpMethod() == HttpMethod.HEAD
+				return requestContext.httpMethod() == HttpMethod.GET || requestContext.httpMethod() == HttpMethod.HEAD
 						? PreconditionResult.NOT_MODIFIED
 						: PreconditionResult.PRECONDITION_FAILED;
-		} else if (request.getHttpMethod() == HttpMethod.GET || request.getHttpMethod() == HttpMethod.HEAD) {
-			Instant ifModifiedSince = HttpDate.fromHeaderValue(headerValueFor(request, "If-Modified-Since").orElse(null)).orElse(null);
+		} else if (requestContext.httpMethod() == HttpMethod.GET || requestContext.httpMethod() == HttpMethod.HEAD) {
+			Instant ifModifiedSince = HttpDate.fromHeaderValue(requestContext.ifModifiedSinceHeaderValue()).orElse(null);
 
 			if (ifModifiedSince != null && lastModified != null && !lastModified.isAfter(truncateToSeconds(ifModifiedSince)))
 				return PreconditionResult.NOT_MODIFIED;
@@ -246,13 +239,14 @@ public final class FileResponse {
 	}
 
 	@NonNull
-	private Boolean shouldApplyRange(@NonNull Request request) {
-		String rangeHeaderValue = Utilities.trimAggressivelyToNull(headerValueFor(request, "Range").orElse(null));
+	private Boolean shouldApplyRange(@NonNull RequestContext requestContext) {
+		requireNonNull(requestContext);
+		String rangeHeaderValue = Utilities.trimAggressivelyToNull(requestContext.rangeHeaderValue());
 
 		if (rangeHeaderValue == null)
 			return false;
 
-		String ifRange = Utilities.trimAggressivelyToNull(headerValueFor(request, "If-Range").orElse(null));
+		String ifRange = Utilities.trimAggressivelyToNull(requestContext.ifRangeHeaderValue());
 
 		if (ifRange == null)
 			return true;
@@ -440,7 +434,7 @@ public final class FileResponse {
 			String normalizedHeaderName = headerName.toLowerCase(Locale.US);
 
 			if (CONTROLLED_HEADER_NAMES.contains(normalizedHeaderName))
-				throw new IllegalArgumentException(format("Header '%s' is controlled by FileResponse; use the dedicated builder method when available.", headerName));
+				throw new IllegalArgumentException(format("Header '%s' is controlled by file responses; use the dedicated builder method when available.", headerName));
 		}
 	}
 
@@ -492,8 +486,34 @@ public final class FileResponse {
 		}
 	}
 
+	record RequestContext(@NonNull HttpMethod httpMethod,
+												@Nullable String rangeHeaderValue,
+												@Nullable String ifRangeHeaderValue,
+												@Nullable String ifMatchHeaderValue,
+												@Nullable String ifUnmodifiedSinceHeaderValue,
+												@Nullable String ifNoneMatchHeaderValue,
+												@Nullable String ifModifiedSinceHeaderValue) {
+		RequestContext {
+			requireNonNull(httpMethod);
+		}
+
+		@NonNull
+		static RequestContext fromRequest(@NonNull Request request) {
+			requireNonNull(request);
+			return new RequestContext(
+					request.getHttpMethod(),
+					headerValueFor(request, "Range").orElse(null),
+					headerValueFor(request, "If-Range").orElse(null),
+					headerValueFor(request, "If-Match").orElse(null),
+					headerValueFor(request, "If-Unmodified-Since").orElse(null),
+					headerValueFor(request, "If-None-Match").orElse(null),
+					headerValueFor(request, "If-Modified-Since").orElse(null)
+			);
+		}
+	}
+
 	@NotThreadSafe
-	public static final class Builder {
+	static final class Builder {
 		@NonNull
 		private final Path path;
 		@Nullable
@@ -517,37 +537,37 @@ public final class FileResponse {
 		}
 
 		@NonNull
-		public Builder contentType(@Nullable String contentType) {
+		Builder contentType(@Nullable String contentType) {
 			this.contentType = Utilities.trimAggressivelyToNull(contentType);
 			return this;
 		}
 
 		@NonNull
-		public Builder entityTag(@Nullable EntityTag entityTag) {
+		Builder entityTag(@Nullable EntityTag entityTag) {
 			this.entityTag = entityTag;
 			return this;
 		}
 
 		@NonNull
-		public Builder lastModified(@Nullable Instant lastModified) {
+		Builder lastModified(@Nullable Instant lastModified) {
 			this.lastModified = lastModified;
 			return this;
 		}
 
 		@NonNull
-		public Builder cacheControl(@Nullable String cacheControl) {
+		Builder cacheControl(@Nullable String cacheControl) {
 			this.cacheControl = Utilities.trimAggressivelyToNull(cacheControl);
 			return this;
 		}
 
 		@NonNull
-		public Builder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		Builder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			this.headers = headers;
 			return this;
 		}
 
 		@NonNull
-		public Builder rangeRequests(@Nullable Boolean rangeRequests) {
+		Builder rangeRequests(@Nullable Boolean rangeRequests) {
 			this.rangeRequests = rangeRequests;
 			return this;
 		}
@@ -559,7 +579,7 @@ public final class FileResponse {
 		}
 
 		@NonNull
-		public FileResponse build() {
+		FileResponse build() {
 			return new FileResponse(this);
 		}
 	}

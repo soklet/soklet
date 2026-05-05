@@ -29,6 +29,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -52,7 +54,7 @@ import static java.util.Objects.requireNonNull;
  * Alternatively, your <em>Resource Method</em> might want to directly serve bytes to clients (e.g. an image or PDF) and skip the {@link ResponseMarshaler} entirely.
  * To accomplish this, just have your <em>Resource Method</em> return a {@link MarshaledResponse} instance: this tells Soklet "I already know exactly what bytes I want to send; don't go through the normal marshaling process".
  * <p>
- * Instances can be acquired via the {@link #withResponse(Response)} or {@link #withStatusCode(Integer)} builder factory methods.
+ * Instances can be acquired via the {@link #withResponse(Response)}, {@link #withStatusCode(Integer)}, or {@link #withFile(Path, Request)} builder factory methods.
  * Convenience instance factories are also available via {@link #fromResponse(Response)} and {@link #fromStatusCode(Integer)}.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
@@ -130,6 +132,37 @@ public final class MarshaledResponse {
 	@NonNull
 	public static MarshaledResponse fromStatusCode(@NonNull Integer statusCode) {
 		return withStatusCode(statusCode).build();
+	}
+
+	/**
+	 * Acquires a file-specific builder for {@link MarshaledResponse} instances.
+	 * <p>
+	 * Files are special among known-length response bodies: correct file responses can depend on request
+	 * headers such as {@code Range}, {@code If-Range}, {@code If-Match}, and {@code If-None-Match}, plus
+	 * filesystem metadata such as length and last-modified time. This custom factory keeps that behavior
+	 * in one place. Other known-length body types should use {@link Builder#body(MarshaledResponseBody)}
+	 * or one of its overloads.
+	 *
+	 * @param path the file path to write
+	 * @param request the incoming request whose method and conditional/range headers should be honored
+	 * @return a file-specific builder
+	 */
+	@NonNull
+	public static FileBuilder withFile(@NonNull Path path,
+																		 @NonNull Request request) {
+		requireNonNull(path);
+		requireNonNull(request);
+		return new FileBuilder(path, request);
+	}
+
+	@NonNull
+	static FileBuilder withFile(@NonNull Path path,
+															@NonNull Request request,
+															@NonNull BasicFileAttributes attributes) {
+		requireNonNull(path);
+		requireNonNull(request);
+		requireNonNull(attributes);
+		return new FileBuilder(path, request).attributes(attributes);
 	}
 
 	/**
@@ -472,6 +505,81 @@ public final class MarshaledResponse {
 		@NonNull
 		public MarshaledResponse build() {
 			return new MarshaledResponse(this);
+		}
+	}
+
+	/**
+	 * File-specific builder used by {@link MarshaledResponse#withFile(Path, Request)}.
+	 * <p>
+	 * Files are special among known-length response bodies because validators, byte ranges, and
+	 * {@code HEAD} behavior depend on the current request and filesystem metadata. This builder produces
+	 * the final {@link MarshaledResponse} directly from those inputs; for ordinary precomputed bytes,
+	 * buffers, channels, or path-backed bodies without HTTP file semantics, use {@link Builder#body(byte[])},
+	 * {@link Builder#body(ByteBuffer)}, {@link Builder#body(FileChannel, Long, Long, Boolean)}, or
+	 * {@link Builder#body(Path)} instead.
+	 * <p>
+	 * This class is intended for use by a single thread.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	public static final class FileBuilder {
+		private final FileResponse.@NonNull Builder builder;
+		private final FileResponse.@NonNull RequestContext requestContext;
+
+		private FileBuilder(@NonNull Path path,
+												@NonNull Request request) {
+			requireNonNull(path);
+			requireNonNull(request);
+			this.builder = FileResponse.withPath(path);
+			this.requestContext = FileResponse.RequestContext.fromRequest(request);
+		}
+
+		@NonNull
+		public FileBuilder contentType(@Nullable String contentType) {
+			this.builder.contentType(contentType);
+			return this;
+		}
+
+		@NonNull
+		public FileBuilder entityTag(@Nullable EntityTag entityTag) {
+			this.builder.entityTag(entityTag);
+			return this;
+		}
+
+		@NonNull
+		public FileBuilder lastModified(@Nullable Instant lastModified) {
+			this.builder.lastModified(lastModified);
+			return this;
+		}
+
+		@NonNull
+		public FileBuilder cacheControl(@Nullable String cacheControl) {
+			this.builder.cacheControl(cacheControl);
+			return this;
+		}
+
+		@NonNull
+		public FileBuilder headers(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+			this.builder.headers(headers);
+			return this;
+		}
+
+		@NonNull
+		public FileBuilder rangeRequests(@Nullable Boolean rangeRequests) {
+			this.builder.rangeRequests(rangeRequests);
+			return this;
+		}
+
+		@NonNull
+		FileBuilder attributes(@Nullable BasicFileAttributes attributes) {
+			this.builder.attributes(attributes);
+			return this;
+		}
+
+		@NonNull
+		public MarshaledResponse build() {
+			return this.builder.build().marshaledResponseFor(this.requestContext);
 		}
 	}
 
