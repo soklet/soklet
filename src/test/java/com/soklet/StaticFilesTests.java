@@ -416,6 +416,83 @@ public class StaticFilesTests {
 	}
 
 	@Test
+	public void staticFilesDefaultMimeTypeResolverCoversCommonWebAssets(@TempDir Path tempDir) throws IOException {
+		Map<String, String> contentTypesByExtension = Map.ofEntries(
+				Map.entry("html", "text/html; charset=UTF-8"),
+				Map.entry("htm", "text/html; charset=UTF-8"),
+				Map.entry("css", "text/css; charset=UTF-8"),
+				Map.entry("js", "text/javascript; charset=UTF-8"),
+				Map.entry("mjs", "text/javascript; charset=UTF-8"),
+				Map.entry("json", "application/json; charset=UTF-8"),
+				Map.entry("map", "application/json"),
+				Map.entry("webmanifest", "application/manifest+json"),
+				Map.entry("txt", "text/plain; charset=UTF-8"),
+				Map.entry("xml", "application/xml; charset=UTF-8"),
+				Map.entry("xhtml", "application/xhtml+xml"),
+				Map.entry("atom", "application/atom+xml"),
+				Map.entry("rss", "application/rss+xml"),
+				Map.entry("csv", "text/csv; charset=UTF-8"),
+				Map.entry("md", "text/markdown; charset=UTF-8"),
+				Map.entry("markdown", "text/markdown; charset=UTF-8"),
+				Map.entry("yaml", "application/yaml"),
+				Map.entry("yml", "application/yaml"),
+				Map.entry("jsonld", "application/ld+json"),
+				Map.entry("ndjson", "application/x-ndjson"),
+				Map.entry("svg", "image/svg+xml"),
+				Map.entry("png", "image/png"),
+				Map.entry("jpg", "image/jpeg"),
+				Map.entry("jpeg", "image/jpeg"),
+				Map.entry("gif", "image/gif"),
+				Map.entry("webp", "image/webp"),
+				Map.entry("avif", "image/avif"),
+				Map.entry("jxl", "image/jxl"),
+				Map.entry("heic", "image/heic"),
+				Map.entry("heif", "image/heif"),
+				Map.entry("apng", "image/apng"),
+				Map.entry("bmp", "image/bmp"),
+				Map.entry("tiff", "image/tiff"),
+				Map.entry("tif", "image/tiff"),
+				Map.entry("ico", "image/x-icon"),
+				Map.entry("pdf", "application/pdf"),
+				Map.entry("wasm", "application/wasm"),
+				Map.entry("woff", "font/woff"),
+				Map.entry("woff2", "font/woff2"),
+				Map.entry("ttf", "font/ttf"),
+				Map.entry("otf", "font/otf"),
+				Map.entry("mp3", "audio/mpeg"),
+				Map.entry("wav", "audio/wav"),
+				Map.entry("ogg", "audio/ogg"),
+				Map.entry("m4a", "audio/mp4"),
+				Map.entry("aac", "audio/aac"),
+				Map.entry("flac", "audio/flac"),
+				Map.entry("opus", "audio/opus"),
+				Map.entry("mp4", "video/mp4"),
+				Map.entry("webm", "video/webm"),
+				Map.entry("ogv", "video/ogg"),
+				Map.entry("mov", "video/quicktime"),
+				Map.entry("m4v", "video/mp4"),
+				Map.entry("m3u8", "application/vnd.apple.mpegurl"),
+				Map.entry("mpd", "application/dash+xml"),
+				Map.entry("vtt", "text/vtt; charset=UTF-8")
+		);
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).build();
+
+		for (Map.Entry<String, String> entry : contentTypesByExtension.entrySet()) {
+			String extension = entry.getKey();
+			Path file = tempDir.resolve("example-" + extension + "." + extension);
+			Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+
+			MarshaledResponse response = staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/" + file.getFileName()), file.getFileName().toString()).orElseThrow();
+			Assertions.assertEquals(Set.of(entry.getValue()), response.getHeaders().get("Content-Type"), extension);
+		}
+
+		Path uppercaseFile = tempDir.resolve("example.JSON");
+		Files.writeString(uppercaseFile, "{}", StandardCharsets.UTF_8);
+		MarshaledResponse uppercaseResponse = staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.JSON"), "example.JSON").orElseThrow();
+		Assertions.assertEquals(Set.of("application/json; charset=UTF-8"), uppercaseResponse.getHeaders().get("Content-Type"));
+	}
+
+	@Test
 	public void staticFilesUsesOneAttributeSnapshotForResolversAndResponseLength(@TempDir Path tempDir) throws IOException {
 		Path file = tempDir.resolve("example.txt");
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);

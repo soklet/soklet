@@ -27,7 +27,7 @@ import java.util.Optional;
  * Implementations used with {@link StaticFiles} must be thread-safe; {@link StaticFiles} invokes
  * resolvers concurrently from request-handling threads.
  * <p>
- * {@link StaticFiles}' default resolver uses a small deterministic extension map for common web
+ * {@link StaticFiles}' default resolver uses a curated deterministic extension map for common web
  * assets. It does not call {@link java.nio.file.Files#probeContentType(Path)}. A custom resolver
  * fully replaces that default, and {@link Optional#empty()} means no {@code Content-Type} header is
  * emitted.
@@ -52,7 +52,7 @@ public interface MimeTypeResolver {
 	/**
 	 * Acquires Soklet's default threadsafe {@link MimeTypeResolver}.
 	 * <p>
-	 * The default resolver uses a small deterministic extension map for common web assets and returns
+	 * The default resolver uses a curated deterministic extension map for common web assets and returns
 	 * {@link Optional#empty()} for unknown extensions.
 	 *
 	 * @return the default {@code MimeTypeResolver}

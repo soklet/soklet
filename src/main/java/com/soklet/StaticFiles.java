@@ -490,7 +490,7 @@ public final class StaticFiles {
 		 * Sets the resolver used to produce {@code Content-Type} values.
 		 * <p>
 		 * The configured resolver fully replaces the default resolver. Soklet's default resolver uses a
-		 * small deterministic set of common web-asset extensions, returns {@link Optional#empty()} for
+		 * curated deterministic set of common web-asset extensions, returns {@link Optional#empty()} for
 		 * unknown extensions, and does not call {@link Files#probeContentType(Path)}. Applications that
 		 * need OS-level MIME database behavior can configure a resolver that calls
 		 * {@code Files.probeContentType(...)} directly.
