@@ -31,11 +31,18 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -324,6 +331,9 @@ public class StaticFilesTests {
 		Assertions.assertTrue(appResponse.isPresent());
 		Assertions.assertEquals(200, appResponse.get().getStatusCode());
 		Assertions.assertTrue(appResponse.get().getHeaders().containsKey("ETag"));
+		String defaultEntityTag = appResponse.get().getHeaders().get("ETag").iterator().next();
+		Assertions.assertTrue(defaultEntityTag.startsWith("W/\"mtime-"));
+		Assertions.assertTrue(defaultEntityTag.endsWith("-size-" + Files.size(appJs) + "\""));
 		Assertions.assertTrue(appResponse.get().getHeaders().containsKey("Last-Modified"));
 
 		Optional<MarshaledResponse> indexResponse = staticFiles.marshaledResponseFor("", Request.fromPath(HttpMethod.GET, "/assets/"));
@@ -512,6 +522,318 @@ public class StaticFilesTests {
 
 		MarshaledResponse response = staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
 		Assertions.assertEquals(Long.valueOf(6), response.getBodyLength());
+	}
+
+	@Test
+	public void staticFilesContentHashEntityTagResolverProducesStrongDeterministicTags(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("example.txt");
+		Path emptyFile = tempDir.resolve("empty.txt");
+		Path largeFile = tempDir.resolve("large.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+		Files.write(emptyFile, new byte[0]);
+		Files.writeString(largeFile, "a".repeat(9000), StandardCharsets.UTF_8);
+
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+				.entityTagResolver(StaticFiles.EntityTagResolver.fromContentHash())
+				.build();
+
+		MarshaledResponse response = staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
+		Assertions.assertEquals(Set.of("\"sha256-bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721\""), response.getHeaders().get("ETag"));
+
+		MarshaledResponse secondResponse = StaticFiles.withRoot(tempDir)
+				.entityTagResolver(StaticFiles.EntityTagResolver.fromContentHash())
+				.build()
+				.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt"))
+				.orElseThrow();
+		Assertions.assertEquals(response.getHeaders().get("ETag"), secondResponse.getHeaders().get("ETag"));
+
+		MarshaledResponse emptyResponse = staticFiles.marshaledResponseFor("empty.txt", Request.fromPath(HttpMethod.GET, "/empty.txt")).orElseThrow();
+		Assertions.assertEquals(Set.of("\"sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\""), emptyResponse.getHeaders().get("ETag"));
+
+		MarshaledResponse largeResponse = staticFiles.marshaledResponseFor("large.txt", Request.fromPath(HttpMethod.GET, "/large.txt")).orElseThrow();
+		Assertions.assertEquals(Set.of("\"sha256-0598aa54768194ade580b9806ac98ace43a0310aeceae95762f62491625eee52\""), largeResponse.getHeaders().get("ETag"));
+
+		Files.writeString(file, "abcdefg", StandardCharsets.UTF_8);
+		MarshaledResponse changedResponse = staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
+		Assertions.assertNotEquals(response.getHeaders().get("ETag"), changedResponse.getHeaders().get("ETag"));
+
+		Request notModifiedRequest = Request.withPath(HttpMethod.GET, "/example.txt")
+				.headers(Map.of("If-None-Match", changedResponse.getHeaders().get("ETag")))
+				.build();
+		Assertions.assertEquals(304, staticFiles.marshaledResponseFor("example.txt", notModifiedRequest).orElseThrow().getStatusCode());
+
+		Request failedPreconditionRequest = Request.withPath(HttpMethod.GET, "/example.txt")
+				.headers(Map.of("If-Match", Set.of("\"sha256-bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721\"")))
+				.build();
+		Assertions.assertEquals(412, staticFiles.marshaledResponseFor("example.txt", failedPreconditionRequest).orElseThrow().getStatusCode());
+
+		Request ifRangeRequest = Request.withPath(HttpMethod.GET, "/example.txt")
+				.headers(Map.of(
+						"Range", Set.of("bytes=0-2"),
+						"If-Range", changedResponse.getHeaders().get("ETag")
+				))
+				.build();
+		Assertions.assertEquals(206, staticFiles.marshaledResponseFor("example.txt", ifRangeRequest).orElseThrow().getStatusCode());
+
+		Request nonmatchingIfRangeRequest = Request.withPath(HttpMethod.GET, "/example.txt")
+				.headers(Map.of(
+						"Range", Set.of("bytes=0-2"),
+						"If-Range", Set.of("\"sha256-bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721\"")
+				))
+				.build();
+		MarshaledResponse nonmatchingIfRangeResponse = staticFiles.marshaledResponseFor("example.txt", nonmatchingIfRangeRequest).orElseThrow();
+		Assertions.assertEquals(200, nonmatchingIfRangeResponse.getStatusCode());
+		Assertions.assertFalse(nonmatchingIfRangeResponse.getHeaders().containsKey("Content-Range"));
+	}
+
+	@Test
+	public void staticFilesContentHashResolverRunsOnceForGetAndHead(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("example.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+		AtomicInteger invocations = new AtomicInteger();
+		StaticFiles.EntityTagResolver contentHashResolver = StaticFiles.EntityTagResolver.fromContentHash();
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+				.entityTagResolver((path, attributes) -> {
+					invocations.incrementAndGet();
+					return contentHashResolver.entityTagFor(path, attributes);
+				})
+				.build();
+
+		staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
+		Assertions.assertEquals(1, invocations.get());
+
+		staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.HEAD, "/example.txt")).orElseThrow();
+		Assertions.assertEquals(2, invocations.get());
+	}
+
+	@Test
+	public void staticFilesAccessResolverAllowsHidesAndDeniesFiles(@TempDir Path tempDir) throws IOException {
+		Path publicFile = tempDir.resolve("public.txt");
+		Path hiddenFile = tempDir.resolve(".env");
+		Path deniedFile = tempDir.resolve("internal.json");
+		Files.writeString(publicFile, "public", StandardCharsets.UTF_8);
+		Files.writeString(hiddenFile, "secret", StandardCharsets.UTF_8);
+		Files.writeString(deniedFile, "internal", StandardCharsets.UTF_8);
+		AtomicReference<Path> resolvedPath = new AtomicReference<>();
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+				.accessResolver((path, attributes) -> {
+					resolvedPath.set(path);
+
+					if (path.getFileName().toString().equals(".env"))
+						return StaticFiles.Access.HIDE;
+
+					if (path.getFileName().toString().equals("internal.json"))
+						return StaticFiles.Access.DENY;
+
+					return StaticFiles.Access.ALLOW;
+				})
+				.build();
+
+		Assertions.assertEquals(200, staticFiles.marshaledResponseFor("public.txt", Request.fromPath(HttpMethod.GET, "/public.txt")).orElseThrow().getStatusCode());
+		Assertions.assertTrue(Files.isSameFile(publicFile, resolvedPath.get()));
+		Assertions.assertTrue(staticFiles.marshaledResponseFor(".env", Request.fromPath(HttpMethod.GET, "/.env")).isEmpty());
+		MarshaledResponse deniedResponse = staticFiles.marshaledResponseFor("internal.json", Request.fromPath(HttpMethod.GET, "/internal.json")).orElseThrow();
+		Assertions.assertEquals(403, deniedResponse.getStatusCode());
+		Assertions.assertTrue(deniedResponse.getBody().isEmpty());
+
+		StaticFiles defaultStaticFiles = StaticFiles.withRoot(tempDir)
+				.accessResolver(null)
+				.build();
+		Assertions.assertTrue(defaultStaticFiles.marshaledResponseFor(".env", Request.fromPath(HttpMethod.GET, "/.env")).isPresent());
+	}
+
+	@Test
+	public void staticFilesAccessResolverShortCircuitsContentResolvers(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("hidden.txt");
+		Files.writeString(file, "hidden", StandardCharsets.UTF_8);
+
+		for (StaticFiles.Access access : List.of(StaticFiles.Access.HIDE, StaticFiles.Access.DENY)) {
+			AtomicInteger mimeInvocations = new AtomicInteger();
+			AtomicInteger entityTagInvocations = new AtomicInteger();
+			AtomicInteger lastModifiedInvocations = new AtomicInteger();
+			AtomicInteger cacheControlInvocations = new AtomicInteger();
+			AtomicInteger headersInvocations = new AtomicInteger();
+			AtomicInteger rangeInvocations = new AtomicInteger();
+			StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+					.accessResolver((path, attributes) -> access)
+					.mimeTypeResolver((path) -> {
+						mimeInvocations.incrementAndGet();
+						return Optional.of("text/plain");
+					})
+					.entityTagResolver((path, attributes) -> {
+						entityTagInvocations.incrementAndGet();
+						return Optional.of(EntityTag.fromStrongValue("v1"));
+					})
+					.lastModifiedResolver((path, attributes) -> {
+						lastModifiedInvocations.incrementAndGet();
+						return Optional.of(Instant.now());
+					})
+					.cacheControlResolver((path, attributes) -> {
+						cacheControlInvocations.incrementAndGet();
+						return Optional.of("no-cache");
+					})
+					.headersResolver((path, attributes) -> {
+						headersInvocations.incrementAndGet();
+						return Map.of("X-Test", Set.of("true"));
+					})
+					.rangeRequestsResolver((path, attributes) -> {
+						rangeInvocations.incrementAndGet();
+						return true;
+					})
+					.build();
+
+			Optional<MarshaledResponse> response = staticFiles.marshaledResponseFor("hidden.txt", Request.fromPath(HttpMethod.GET, "/hidden.txt"));
+
+			if (access == StaticFiles.Access.HIDE) {
+				Assertions.assertTrue(response.isEmpty());
+			} else {
+				Assertions.assertEquals(403, response.orElseThrow().getStatusCode());
+			}
+
+			Assertions.assertEquals(0, mimeInvocations.get());
+			Assertions.assertEquals(0, entityTagInvocations.get());
+			Assertions.assertEquals(0, lastModifiedInvocations.get());
+			Assertions.assertEquals(0, cacheControlInvocations.get());
+			Assertions.assertEquals(0, headersInvocations.get());
+			Assertions.assertEquals(0, rangeInvocations.get());
+		}
+	}
+
+	@Test
+	public void staticFilesAccessResolverIsNotInvokedForUnresolvedPaths(@TempDir Path tempDir) throws IOException {
+		Path root = tempDir.resolve("root");
+		Path outside = tempDir.resolve("outside");
+		Files.createDirectories(root);
+		Files.createDirectories(outside);
+		Path secret = outside.resolve("secret.txt");
+		Files.writeString(secret, "secret", StandardCharsets.UTF_8);
+		AtomicInteger accessInvocations = new AtomicInteger();
+		StaticFiles staticFiles = StaticFiles.withRoot(root)
+				.followSymlinks(true)
+				.accessResolver((path, attributes) -> {
+					accessInvocations.incrementAndGet();
+					throw new AssertionError("access resolver should not run for unresolved paths");
+				})
+				.build();
+
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("missing.txt", Request.fromPath(HttpMethod.GET, "/missing.txt")).isEmpty());
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("../outside/secret.txt", Request.fromPath(HttpMethod.GET, "/secret.txt")).isEmpty());
+
+		Path link = root.resolve("link.txt");
+
+		try {
+			Files.createSymbolicLink(link, secret);
+			Assertions.assertTrue(staticFiles.marshaledResponseFor("link.txt", Request.fromPath(HttpMethod.GET, "/link.txt")).isEmpty());
+		} catch (UnsupportedOperationException | IOException e) {
+			// Some platforms or filesystems disallow symlink creation.
+		}
+
+		Assertions.assertEquals(0, accessInvocations.get());
+	}
+
+	@Test
+	public void staticFilesAccessResolverIsSafeUnderConcurrentRequests(@TempDir Path tempDir) throws Exception {
+		Path file = tempDir.resolve("example.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+		AtomicInteger accessInvocations = new AtomicInteger();
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+				.accessResolver((path, attributes) -> {
+					accessInvocations.incrementAndGet();
+					return StaticFiles.Access.ALLOW;
+				})
+				.build();
+		ExecutorService executorService = Executors.newFixedThreadPool(8);
+		CountDownLatch startLatch = new CountDownLatch(1);
+		List<Future<?>> futures = new ArrayList<>();
+
+		try {
+			for (int i = 0; i < 50; i++)
+				futures.add(executorService.submit(() -> {
+					startLatch.await();
+					Assertions.assertEquals(200, staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow().getStatusCode());
+					return null;
+				}));
+
+			startLatch.countDown();
+
+			for (Future<?> future : futures)
+				future.get(10L, TimeUnit.SECONDS);
+		} finally {
+			executorService.shutdownNow();
+		}
+
+		Assertions.assertEquals(50, accessInvocations.get());
+	}
+
+	@Test
+	public void staticFilesContentHashFailuresPropagate(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("example.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+		StaticFiles.EntityTagResolver contentHashResolver = StaticFiles.EntityTagResolver.fromContentHash();
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+				.entityTagResolver((path, attributes) -> {
+					try {
+						Files.delete(path);
+					} catch (IOException e) {
+						throw new UncheckedIOException(e);
+					}
+
+					return contentHashResolver.entityTagFor(path, attributes);
+				})
+				.build();
+
+		UncheckedIOException exception = Assertions.assertThrows(UncheckedIOException.class, () ->
+				staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")));
+		Assertions.assertTrue(exception.getMessage().contains("Unable to hash static file"));
+	}
+
+	@Test
+	public void staticFilesAccessResolverDoesNotFallbackAfterHiddenIndex(@TempDir Path tempDir) throws IOException {
+		Path indexHtml = tempDir.resolve("index.html");
+		Path indexHtm = tempDir.resolve("index.htm");
+		Files.writeString(indexHtml, "hidden", StandardCharsets.UTF_8);
+		Files.writeString(indexHtm, "fallback", StandardCharsets.UTF_8);
+		AtomicReference<Path> resolvedPath = new AtomicReference<>();
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+				.indexFileNames(List.of("index.html", "index.htm"))
+				.accessResolver((path, attributes) -> {
+					resolvedPath.set(path);
+					return path.getFileName().toString().equals("index.html")
+							? StaticFiles.Access.HIDE
+							: StaticFiles.Access.ALLOW;
+				})
+				.build();
+
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("", Request.fromPath(HttpMethod.GET, "/")).isEmpty());
+		Assertions.assertTrue(Files.isSameFile(indexHtml, resolvedPath.get()));
+	}
+
+	@Test
+	public void staticFilesAccessResolverRejectsNullAndPropagatesExceptionsBeforeHeaders(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("example.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+
+		StaticFiles nullReturningAccessResolver = StaticFiles.withRoot(tempDir)
+				.accessResolver((path, attributes) -> null)
+				.build();
+		NullPointerException nullPointerException = Assertions.assertThrows(NullPointerException.class, () ->
+				nullReturningAccessResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")));
+		Assertions.assertTrue(nullPointerException.getMessage().contains("accessResolver returned null"));
+
+		AtomicInteger headerInvocations = new AtomicInteger();
+		StaticFiles throwingAccessResolver = StaticFiles.withRoot(tempDir)
+				.accessResolver((path, attributes) -> {
+					throw new IllegalStateException("boom");
+				})
+				.headersResolver((path, attributes) -> {
+					headerInvocations.incrementAndGet();
+					return Map.of("X-Test", Set.of("true"));
+				})
+				.build();
+		IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, () ->
+				throwingAccessResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")));
+		Assertions.assertEquals("boom", exception.getMessage());
+		Assertions.assertEquals(0, headerInvocations.get());
 	}
 
 	@Test

@@ -22,6 +22,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
@@ -30,8 +31,11 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -53,10 +57,16 @@ public final class StaticFiles {
 	private static final Integer MAX_RELATIVE_PATH_UTF_8_LENGTH;
 	@NonNull
 	private static final Integer MAX_RELATIVE_PATH_SEGMENTS;
+	@NonNull
+	private static final Integer CONTENT_HASH_BUFFER_SIZE;
+	@NonNull
+	private static final HexFormat HEX_FORMAT;
 
 	static {
 		MAX_RELATIVE_PATH_UTF_8_LENGTH = 4096;
 		MAX_RELATIVE_PATH_SEGMENTS = 256;
+		CONTENT_HASH_BUFFER_SIZE = 8192;
+		HEX_FORMAT = HexFormat.of();
 	}
 
 	@NonNull
@@ -71,6 +81,8 @@ public final class StaticFiles {
 	private final MimeTypeResolver mimeTypeResolver;
 	@NonNull
 	private final EntityTagResolver entityTagResolver;
+	@NonNull
+	private final AccessResolver accessResolver;
 	@NonNull
 	private final LastModifiedResolver lastModifiedResolver;
 	@NonNull
@@ -109,6 +121,7 @@ public final class StaticFiles {
 		this.indexFileNames = List.copyOf(builder.indexFileNames == null ? List.of() : builder.indexFileNames);
 		this.mimeTypeResolver = defaultingMimeTypeResolver(builder.mimeTypeResolver);
 		this.entityTagResolver = builder.entityTagResolver == null ? EntityTagResolver.defaultInstance() : builder.entityTagResolver;
+		this.accessResolver = builder.accessResolver == null ? AccessResolver.allowAllInstance() : builder.accessResolver;
 		this.lastModifiedResolver = builder.lastModifiedResolver == null ? LastModifiedResolver.fromAttributes() : builder.lastModifiedResolver;
 		this.cacheControlResolver = builder.cacheControlResolver == null ? CacheControlResolver.disabledInstance() : builder.cacheControlResolver;
 		this.headersResolver = builder.headersResolver == null ? HeadersResolver.disabledInstance() : builder.headersResolver;
@@ -164,6 +177,15 @@ public final class StaticFiles {
 
 		Path file = resolvedFile.path();
 		BasicFileAttributes attributes = resolvedFile.attributes();
+		Access access = requireNonNull(getAccessResolver().accessFor(file, attributes), "accessResolver returned null; return Access.ALLOW, Access.DENY, or Access.HIDE.");
+
+		if (access == Access.HIDE)
+			return Optional.empty();
+
+		if (access == Access.DENY)
+			// Access denial is not a file representation, so validators and file headers do not apply.
+			return Optional.of(MarshaledResponse.fromStatusCode(StatusCode.HTTP_403.getStatusCode()));
+
 		EntityTag entityTag = requireNonNull(getEntityTagResolver().entityTagFor(file, attributes), "entityTagResolver returned null; use Optional.empty() to omit the header.").orElse(null);
 		Instant lastModified = requireNonNull(getLastModifiedResolver().lastModifiedFor(file, attributes), "lastModifiedResolver returned null; use Optional.empty() to omit the header.").orElse(null);
 		String cacheControl = requireNonNull(getCacheControlResolver().cacheControlFor(file, attributes), "cacheControlResolver returned null; use Optional.empty() to omit the header.").orElse(null);
@@ -206,6 +228,11 @@ public final class StaticFiles {
 	@NonNull
 	private EntityTagResolver getEntityTagResolver() {
 		return this.entityTagResolver;
+	}
+
+	@NonNull
+	private AccessResolver getAccessResolver() {
+		return this.accessResolver;
 	}
 
 	@NonNull
@@ -465,6 +492,8 @@ public final class StaticFiles {
 		@Nullable
 		private EntityTagResolver entityTagResolver;
 		@Nullable
+		private AccessResolver accessResolver;
+		@Nullable
 		private LastModifiedResolver lastModifiedResolver;
 		@Nullable
 		private CacheControlResolver cacheControlResolver;
@@ -507,6 +536,23 @@ public final class StaticFiles {
 		@NonNull
 		public Builder entityTagResolver(@Nullable EntityTagResolver entityTagResolver) {
 			this.entityTagResolver = entityTagResolver;
+			return this;
+		}
+
+		/**
+		 * Sets the resolver used to decide whether resolved files are served, denied, or hidden.
+		 * <p>
+		 * The access resolver runs after path safety, index-file resolution, symlink policy,
+		 * readability, regular-file checks, and attribute reads, but before MIME, validator,
+		 * cache-control, extra-header, and range-request resolvers. It receives the resolved file path,
+		 * not the original request path.
+		 *
+		 * @param accessResolver the resolver to use, or {@code null} to restore the allow-all default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder accessResolver(@Nullable AccessResolver accessResolver) {
+			this.accessResolver = accessResolver;
 			return this;
 		}
 
@@ -570,6 +616,22 @@ public final class StaticFiles {
 		}
 
 		/**
+		 * Returns a strong content-hash ETag resolver.
+		 * <p>
+		 * This resolver streams the served file through SHA-256 on the request-handling thread and
+		 * emits strong ETags with values of the form {@code sha256-&lt;lowercase-hex&gt;}. It does not
+		 * cache digests and it fully reads the file for {@link HttpMethod#HEAD} requests as well as
+		 * {@link HttpMethod#GET} requests. Applications serving large files or HEAD-heavy traffic should
+		 * prefer a manifest-backed resolver.
+		 *
+		 * @return a strong content-hash entity-tag resolver
+		 */
+		@NonNull
+		static EntityTagResolver fromContentHash() {
+			return ContentHashEntityTagResolver.defaultInstance();
+		}
+
+		/**
 		 * Resolves the ETag for the file being served.
 		 * <p>
 		 * Implementations must be thread-safe; {@link StaticFiles} invokes resolvers concurrently from
@@ -583,6 +645,50 @@ public final class StaticFiles {
 		@NonNull
 		Optional<EntityTag> entityTagFor(@NonNull Path path,
 																		 @NonNull BasicFileAttributes attributes);
+	}
+
+	/**
+	 * Access outcome for a resolved static file.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	public enum Access {
+		/**
+		 * Continue normal static-file response generation.
+		 */
+		ALLOW,
+		/**
+		 * Return a bodyless {@code 403 Forbidden} response.
+		 */
+		DENY,
+		/**
+		 * Return {@link Optional#empty()} from {@link StaticFiles#marshaledResponseFor(String, Request)}.
+		 */
+		HIDE
+	}
+
+	@FunctionalInterface
+	public interface AccessResolver {
+		@NonNull
+		static AccessResolver allowAllInstance() {
+			return AllowAllAccessResolver.defaultInstance();
+		}
+
+		/**
+		 * Resolves static-file access for the file being served.
+		 * <p>
+		 * Implementations must be thread-safe; {@link StaticFiles} invokes resolvers concurrently from
+		 * request-handling threads. This resolver is intentionally path- and attribute-based. For
+		 * request-aware access decisions, gate {@link StaticFiles#marshaledResponseFor(String, Request)}
+		 * from the resource method or another higher application layer.
+		 *
+		 * @param path the resolved file path being served
+		 * @param attributes the file attributes read for this response
+		 * @return the access outcome
+		 */
+		@NonNull
+		Access accessFor(@NonNull Path path,
+										 @NonNull BasicFileAttributes attributes);
 	}
 
 	@FunctionalInterface
@@ -722,6 +828,73 @@ public final class StaticFiles {
 			requireNonNull(path);
 			requireNonNull(attributes);
 			return Optional.empty();
+		}
+	}
+
+	@ThreadSafe
+	private static final class ContentHashEntityTagResolver implements EntityTagResolver {
+		@NonNull
+		private static final ContentHashEntityTagResolver INSTANCE;
+
+		static {
+			INSTANCE = new ContentHashEntityTagResolver();
+		}
+
+		@NonNull
+		static ContentHashEntityTagResolver defaultInstance() {
+			return INSTANCE;
+		}
+
+		@Override
+		@NonNull
+		public Optional<EntityTag> entityTagFor(@NonNull Path path,
+																						@NonNull BasicFileAttributes attributes) {
+			requireNonNull(path);
+			requireNonNull(attributes);
+
+			MessageDigest messageDigest;
+
+			try {
+				messageDigest = MessageDigest.getInstance("SHA-256");
+			} catch (NoSuchAlgorithmException e) {
+				throw new IllegalStateException("SHA-256 message digest is not available.", e);
+			}
+
+			byte[] buffer = new byte[CONTENT_HASH_BUFFER_SIZE];
+
+			try (InputStream inputStream = Files.newInputStream(path)) {
+				for (int bytesRead = inputStream.read(buffer); bytesRead >= 0; bytesRead = inputStream.read(buffer))
+					if (bytesRead > 0)
+						messageDigest.update(buffer, 0, bytesRead);
+			} catch (IOException e) {
+				throw new UncheckedIOException(format("Unable to hash static file '%s'.", path), e);
+			}
+
+			return Optional.of(EntityTag.fromStrongValue(format("sha256-%s", HEX_FORMAT.formatHex(messageDigest.digest()))));
+		}
+	}
+
+	@ThreadSafe
+	private static final class AllowAllAccessResolver implements AccessResolver {
+		@NonNull
+		private static final AllowAllAccessResolver INSTANCE;
+
+		static {
+			INSTANCE = new AllowAllAccessResolver();
+		}
+
+		@NonNull
+		static AllowAllAccessResolver defaultInstance() {
+			return INSTANCE;
+		}
+
+		@Override
+		@NonNull
+		public Access accessFor(@NonNull Path path,
+														@NonNull BasicFileAttributes attributes) {
+			requireNonNull(path);
+			requireNonNull(attributes);
+			return Access.ALLOW;
 		}
 	}
 
