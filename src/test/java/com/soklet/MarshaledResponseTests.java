@@ -27,6 +27,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 
@@ -252,6 +253,33 @@ public class MarshaledResponseTests {
 		Assertions.assertEquals(Long.valueOf(0), body.getOffset());
 		Assertions.assertEquals(Long.valueOf(6), body.getCount());
 		Assertions.assertEquals("abcdef", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+	}
+
+	@Test
+	public void with_file_builds_marshaled_file_response(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("example.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+		Instant lastModified = Instant.parse("2026-05-04T01:02:03Z");
+
+		MarshaledResponse response = MarshaledResponse.withFile(file, Request.fromPath(HttpMethod.GET, "/example.txt"))
+				.contentType("text/plain; charset=UTF-8")
+				.entityTag(EntityTag.fromStrongValue("v1"))
+				.lastModified(lastModified)
+				.cacheControl("public, max-age=60")
+				.build();
+
+		Assertions.assertEquals(200, response.getStatusCode());
+		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), response.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(Set.of("\"v1\""), response.getHeaders().get("ETag"));
+		Assertions.assertEquals(Set.of("Mon, 04 May 2026 01:02:03 GMT"), response.getHeaders().get("Last-Modified"));
+		Assertions.assertEquals(Set.of("public, max-age=60"), response.getHeaders().get("Cache-Control"));
+		Assertions.assertEquals(Set.of("bytes"), response.getHeaders().get("Accept-Ranges"));
+		Assertions.assertEquals(Long.valueOf(6), response.getBodyLength());
+		Assertions.assertTrue(response.getBody().orElseThrow() instanceof MarshaledResponseBody.File);
+		MarshaledResponseBody.File body = (MarshaledResponseBody.File) response.getBody().orElseThrow();
+		Assertions.assertEquals(file, body.getPath());
+		Assertions.assertEquals(Long.valueOf(0), body.getOffset());
+		Assertions.assertEquals(Long.valueOf(6), body.getCount());
 	}
 
 	@Test
