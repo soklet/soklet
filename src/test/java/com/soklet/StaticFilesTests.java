@@ -320,27 +320,27 @@ public class StaticFilesTests {
 				.indexFileNames(List.of("index.html"))
 				.build();
 
-		Optional<MarshaledResponse> appResponse = staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/assets/app.js"), "app.js");
+		Optional<MarshaledResponse> appResponse = staticFiles.marshaledResponseFor("app.js", Request.fromPath(HttpMethod.GET, "/assets/app.js"));
 		Assertions.assertTrue(appResponse.isPresent());
 		Assertions.assertEquals(200, appResponse.get().getStatusCode());
 		Assertions.assertTrue(appResponse.get().getHeaders().containsKey("ETag"));
 		Assertions.assertTrue(appResponse.get().getHeaders().containsKey("Last-Modified"));
 
-		Optional<MarshaledResponse> indexResponse = staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/assets/"), "");
+		Optional<MarshaledResponse> indexResponse = staticFiles.marshaledResponseFor("", Request.fromPath(HttpMethod.GET, "/assets/"));
 		Assertions.assertTrue(indexResponse.isPresent());
 		Assertions.assertEquals(200, indexResponse.get().getStatusCode());
 
-		Assertions.assertTrue(staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.POST, "/assets/app.js"), "app.js").isEmpty());
-		Assertions.assertTrue(staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/assets/missing.js"), "missing.js").isEmpty());
-		Assertions.assertTrue(staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/assets/secret"), "../secret").isEmpty());
-		Assertions.assertTrue(staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/assets/secret"), tempDir.resolve("app.js").toString()).isEmpty());
-		Assertions.assertTrue(staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/assets/app.js"), "nested\\app.js").isEmpty());
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("app.js", Request.fromPath(HttpMethod.POST, "/assets/app.js")).isEmpty());
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("missing.js", Request.fromPath(HttpMethod.GET, "/assets/missing.js")).isEmpty());
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("../secret", Request.fromPath(HttpMethod.GET, "/assets/secret")).isEmpty());
+		Assertions.assertTrue(staticFiles.marshaledResponseFor(tempDir.resolve("app.js").toString(), Request.fromPath(HttpMethod.GET, "/assets/secret")).isEmpty());
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("nested\\app.js", Request.fromPath(HttpMethod.GET, "/assets/app.js")).isEmpty());
 
 		Path wellKnown = tempDir.resolve(".well-known");
 		Files.createDirectories(wellKnown);
 		Files.writeString(wellKnown.resolve("security.txt"), "contact: mailto:security@example.com", StandardCharsets.UTF_8);
-		Assertions.assertTrue(staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/assets/.well-known/security.txt"), ".well-known/security.txt").isPresent());
-		Assertions.assertTrue(staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/assets/long"), "a".repeat(4097)).isEmpty());
+		Assertions.assertTrue(staticFiles.marshaledResponseFor(".well-known/security.txt", Request.fromPath(HttpMethod.GET, "/assets/.well-known/security.txt")).isPresent());
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("a".repeat(4097), Request.fromPath(HttpMethod.GET, "/assets/long")).isEmpty());
 	}
 
 	@Test
@@ -365,13 +365,13 @@ public class StaticFilesTests {
 						: Optional.empty())
 				.build();
 
-		MarshaledResponse indexResponse = staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/assets/"), "").orElseThrow();
+		MarshaledResponse indexResponse = staticFiles.marshaledResponseFor("", Request.fromPath(HttpMethod.GET, "/assets/")).orElseThrow();
 		Assertions.assertTrue(Files.isSameFile(indexHtml, resolvedPath.get()));
 		Assertions.assertEquals(Set.of("no-cache"), indexResponse.getHeaders().get("Cache-Control"));
 		Assertions.assertFalse(indexResponse.getHeaders().containsKey("Accept-Ranges"));
 		Assertions.assertEquals(Set.of("index.html"), indexResponse.getHeaders().get("X-Static"));
 
-		MarshaledResponse appResponse = staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/assets/app.js"), "app.js").orElseThrow();
+		MarshaledResponse appResponse = staticFiles.marshaledResponseFor("app.js", Request.fromPath(HttpMethod.GET, "/assets/app.js")).orElseThrow();
 		Assertions.assertEquals(Set.of("public, max-age=31536000, immutable"), appResponse.getHeaders().get("Cache-Control"));
 		Assertions.assertEquals(Set.of("bytes"), appResponse.getHeaders().get("Accept-Ranges"));
 	}
@@ -386,21 +386,21 @@ public class StaticFilesTests {
 		Files.writeString(unknownFile, "abcdef", StandardCharsets.UTF_8);
 
 		StaticFiles defaultStaticFiles = StaticFiles.withRoot(tempDir).build();
-		MarshaledResponse textResponse = defaultStaticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.txt"), "example.txt").orElseThrow();
+		MarshaledResponse textResponse = defaultStaticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
 		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), textResponse.getHeaders().get("Content-Type"));
-		MarshaledResponse unknownResponse = defaultStaticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.unknown"), "example.unknown").orElseThrow();
+		MarshaledResponse unknownResponse = defaultStaticFiles.marshaledResponseFor("example.unknown", Request.fromPath(HttpMethod.GET, "/example.unknown")).orElseThrow();
 		Assertions.assertFalse(unknownResponse.getHeaders().containsKey("Content-Type"));
 
 		StaticFiles omittedStaticFiles = StaticFiles.withRoot(tempDir)
 				.mimeTypeResolver((path) -> Optional.empty())
 				.build();
-		MarshaledResponse omittedResponse = omittedStaticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.txt"), "example.txt").orElseThrow();
+		MarshaledResponse omittedResponse = omittedStaticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
 		Assertions.assertFalse(omittedResponse.getHeaders().containsKey("Content-Type"));
 
 		StaticFiles customStaticFiles = StaticFiles.withRoot(tempDir)
 				.mimeTypeResolver((path) -> Optional.of("application/x-example"))
 				.build();
-		MarshaledResponse customResponse = customStaticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.txt"), "example.txt").orElseThrow();
+		MarshaledResponse customResponse = customStaticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
 		Assertions.assertEquals(Set.of("application/x-example"), customResponse.getHeaders().get("Content-Type"));
 
 		MimeTypeResolver defaultMimeTypeResolver = MimeTypeResolver.defaultInstance();
@@ -409,9 +409,9 @@ public class StaticFilesTests {
 						? Optional.of("application/x-foo")
 						: defaultMimeTypeResolver.contentTypeFor(path))
 				.build();
-		MarshaledResponse extendedCustomResponse = extendedStaticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.foo"), "example.foo").orElseThrow();
+		MarshaledResponse extendedCustomResponse = extendedStaticFiles.marshaledResponseFor("example.foo", Request.fromPath(HttpMethod.GET, "/example.foo")).orElseThrow();
 		Assertions.assertEquals(Set.of("application/x-foo"), extendedCustomResponse.getHeaders().get("Content-Type"));
-		MarshaledResponse extendedTextResponse = extendedStaticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.txt"), "example.txt").orElseThrow();
+		MarshaledResponse extendedTextResponse = extendedStaticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
 		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), extendedTextResponse.getHeaders().get("Content-Type"));
 	}
 
@@ -482,13 +482,13 @@ public class StaticFilesTests {
 			Path file = tempDir.resolve("example-" + extension + "." + extension);
 			Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 
-			MarshaledResponse response = staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/" + file.getFileName()), file.getFileName().toString()).orElseThrow();
+			MarshaledResponse response = staticFiles.marshaledResponseFor(file.getFileName().toString(), Request.fromPath(HttpMethod.GET, "/" + file.getFileName())).orElseThrow();
 			Assertions.assertEquals(Set.of(entry.getValue()), response.getHeaders().get("Content-Type"), extension);
 		}
 
 		Path uppercaseFile = tempDir.resolve("example.JSON");
 		Files.writeString(uppercaseFile, "{}", StandardCharsets.UTF_8);
-		MarshaledResponse uppercaseResponse = staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.JSON"), "example.JSON").orElseThrow();
+		MarshaledResponse uppercaseResponse = staticFiles.marshaledResponseFor("example.JSON", Request.fromPath(HttpMethod.GET, "/example.JSON")).orElseThrow();
 		Assertions.assertEquals(Set.of("application/json; charset=UTF-8"), uppercaseResponse.getHeaders().get("Content-Type"));
 	}
 
@@ -510,7 +510,7 @@ public class StaticFilesTests {
 				})
 				.build();
 
-		MarshaledResponse response = staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.txt"), "example.txt").orElseThrow();
+		MarshaledResponse response = staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
 		Assertions.assertEquals(Long.valueOf(6), response.getBodyLength());
 	}
 
@@ -523,14 +523,14 @@ public class StaticFilesTests {
 				.cacheControlResolver((path, attributes) -> null)
 				.build();
 		NullPointerException nullPointerException = Assertions.assertThrows(NullPointerException.class, () ->
-				nullReturningResolver.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.txt"), "example.txt"));
+				nullReturningResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")));
 		Assertions.assertTrue(nullPointerException.getMessage().contains("cacheControlResolver returned null"));
 
 		StaticFiles conflictingHeaderResolver = StaticFiles.withRoot(tempDir)
 				.headersResolver(StaticFiles.HeadersResolver.fromHeaders(Map.of("Content-Encoding", Set.of("gzip"))))
 				.build();
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				conflictingHeaderResolver.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/example.txt"), "example.txt"));
+				conflictingHeaderResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")));
 
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				StaticFiles.CacheControlResolver.fromValue(" "));
@@ -554,12 +554,12 @@ public class StaticFilesTests {
 		}
 
 		StaticFiles noFollowStaticFiles = StaticFiles.withRoot(tempDir).build();
-		Assertions.assertTrue(noFollowStaticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/link.txt"), "link.txt").isEmpty());
+		Assertions.assertTrue(noFollowStaticFiles.marshaledResponseFor("link.txt", Request.fromPath(HttpMethod.GET, "/link.txt")).isEmpty());
 
 		StaticFiles followStaticFiles = StaticFiles.withRoot(tempDir)
 				.followSymlinks(true)
 				.build();
-		Assertions.assertTrue(followStaticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/link.txt"), "link.txt").isPresent());
+		Assertions.assertTrue(followStaticFiles.marshaledResponseFor("link.txt", Request.fromPath(HttpMethod.GET, "/link.txt")).isPresent());
 	}
 
 	@Test
@@ -583,7 +583,7 @@ public class StaticFilesTests {
 		StaticFiles staticFiles = StaticFiles.withRoot(root)
 				.followSymlinks(true)
 				.build();
-		Assertions.assertTrue(staticFiles.marshaledResponseFor(Request.fromPath(HttpMethod.GET, "/link1.txt"), "link1.txt").isEmpty());
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("link1.txt", Request.fromPath(HttpMethod.GET, "/link1.txt")).isEmpty());
 	}
 
 	@Test
@@ -705,7 +705,7 @@ public class StaticFilesTests {
 		@GET("/assets/{assetPath*}")
 		public MarshaledResponse asset(@NonNull Request request,
 																		@PathParameter @NonNull String assetPath) {
-			return this.staticFiles.marshaledResponseFor(request, assetPath).orElseGet(() -> MarshaledResponse.fromStatusCode(404));
+			return this.staticFiles.marshaledResponseFor(assetPath, request).orElseGet(() -> MarshaledResponse.fromStatusCode(404));
 		}
 	}
 }

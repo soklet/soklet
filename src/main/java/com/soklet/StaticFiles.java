@@ -144,15 +144,15 @@ public final class StaticFiles {
 	 * Resolvers receive the resolved file path after index-file resolution, not the original
 	 * {@code relativePath}.
 	 *
-	 * @param request the incoming request
 	 * @param relativePath the root-relative file path
+	 * @param request the incoming request
 	 * @return the marshaled response, if a static file was resolved
 	 */
 	@NonNull
-	public Optional<MarshaledResponse> marshaledResponseFor(@NonNull Request request,
-																													@NonNull String relativePath) {
-		requireNonNull(request);
+	public Optional<MarshaledResponse> marshaledResponseFor(@NonNull String relativePath,
+																													@NonNull Request request) {
 		requireNonNull(relativePath);
+		requireNonNull(request);
 
 		if (request.getHttpMethod() != HttpMethod.GET && request.getHttpMethod() != HttpMethod.HEAD)
 			return Optional.empty();
