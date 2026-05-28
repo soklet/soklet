@@ -22,4 +22,16 @@ public interface Logger {
      */
     void log(Exception e, LogEntry... entries);
 
+    /**
+     * Creates a new log event consisting of a throwable and multiple log entries.
+     */
+    default void log(Throwable throwable, LogEntry... entries) {
+        if (throwable instanceof Exception e) {
+            log(e, entries);
+            return;
+        }
+
+        log(new RuntimeException(throwable), entries);
+    }
+
 }

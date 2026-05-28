@@ -734,7 +734,7 @@ public final class Soklet implements AutoCloseable {
 			try {
 				lifecycleObserver.didReceiveLogEvent(logEvent);
 			} catch (Throwable throwable) {
-				throwable.printStackTrace();
+				// The LifecycleObserver implementation errored out, but we can't let that affect us.
 				throwables.add(throwable);
 			}
 		});
@@ -2701,20 +2701,25 @@ public final class Soklet implements AutoCloseable {
 		private final Consumer<SseComment> commentConsumer;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
+		@NonNull
+		private final Consumer<LogEvent> logEventConsumer;
 
 		public MockSseUnicaster(@NonNull ResourcePath resourcePath,
 																				@NonNull Consumer<SseEvent> eventConsumer,
 																				@NonNull Consumer<SseComment> commentConsumer,
-																				@NonNull AtomicReference<Consumer<Throwable>> unicastErrorHandler) {
+																				@NonNull AtomicReference<Consumer<Throwable>> unicastErrorHandler,
+																				@NonNull Consumer<LogEvent> logEventConsumer) {
 			requireNonNull(resourcePath);
 			requireNonNull(eventConsumer);
 			requireNonNull(commentConsumer);
 			requireNonNull(unicastErrorHandler);
+			requireNonNull(logEventConsumer);
 
 			this.resourcePath = resourcePath;
 			this.eventConsumer = eventConsumer;
 			this.commentConsumer = commentConsumer;
 			this.unicastErrorHandler = unicastErrorHandler;
+			this.logEventConsumer = logEventConsumer;
 		}
 
 		@Override
@@ -2766,7 +2771,20 @@ public final class Soklet implements AutoCloseable {
 				}
 			}
 
-			throwable.printStackTrace();
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+							"SSE simulator unicast consumer failed")
+					.throwable(throwable)
+					.build());
+		}
+
+		protected void safelyLog(@NonNull LogEvent logEvent) {
+			requireNonNull(logEvent);
+
+			try {
+				this.logEventConsumer.accept(logEvent);
+			} catch (Throwable ignored) {
+				// No safe fallback sink is available here.
+			}
 		}
 	}
 
@@ -2792,16 +2810,21 @@ public final class Soklet implements AutoCloseable {
 		private final Map<@NonNull Consumer<SseComment>, @NonNull Object> commentConsumers;
 		@NonNull
 		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
+		@NonNull
+		private final Consumer<LogEvent> logEventConsumer;
 
 		public MockSseBroadcaster(@NonNull ResourcePath resourcePath,
-																					@NonNull AtomicReference<Consumer<Throwable>> broadcastErrorHandler) {
+															@NonNull AtomicReference<Consumer<Throwable>> broadcastErrorHandler,
+															@NonNull Consumer<LogEvent> logEventConsumer) {
 			requireNonNull(resourcePath);
 			requireNonNull(broadcastErrorHandler);
+			requireNonNull(logEventConsumer);
 
 			this.resourcePath = resourcePath;
 			this.eventConsumers = new ConcurrentHashMap<>();
 			this.commentConsumers = new ConcurrentHashMap<>();
 			this.broadcastErrorHandler = broadcastErrorHandler;
+			this.logEventConsumer = logEventConsumer;
 		}
 
 		@NonNull
@@ -2961,7 +2984,20 @@ public final class Soklet implements AutoCloseable {
 				}
 			}
 
-			throwable.printStackTrace();
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+							"SSE simulator broadcast consumer failed")
+					.throwable(throwable)
+					.build());
+		}
+
+		protected void safelyLog(@NonNull LogEvent logEvent) {
+			requireNonNull(logEvent);
+
+			try {
+				this.logEventConsumer.accept(logEvent);
+			} catch (Throwable ignored) {
+				// No safe fallback sink is available here.
+			}
 		}
 	}
 
@@ -3011,7 +3047,7 @@ public final class Soklet implements AutoCloseable {
 				return Optional.empty();
 
 			MockSseBroadcaster broadcaster = getBroadcastersByResourcePath()
-					.computeIfAbsent(resourcePath, rp -> new MockSseBroadcaster(rp, broadcastErrorHandler));
+					.computeIfAbsent(resourcePath, rp -> new MockSseBroadcaster(rp, broadcastErrorHandler, this::safelyLog));
 
 			return Optional.of(broadcaster);
 		}
@@ -3028,7 +3064,7 @@ public final class Soklet implements AutoCloseable {
 			requireNonNull(eventConsumer);
 
 			MockSseBroadcaster broadcaster = getBroadcastersByResourcePath()
-					.computeIfAbsent(resourcePath, rp -> new MockSseBroadcaster(rp, broadcastErrorHandler));
+					.computeIfAbsent(resourcePath, rp -> new MockSseBroadcaster(rp, broadcastErrorHandler, this::safelyLog));
 
 			broadcaster.registerEventConsumer(eventConsumer, context);
 		}
@@ -3059,7 +3095,7 @@ public final class Soklet implements AutoCloseable {
 			requireNonNull(commentConsumer);
 
 			MockSseBroadcaster broadcaster = getBroadcastersByResourcePath()
-					.computeIfAbsent(resourcePath, rp -> new MockSseBroadcaster(rp, broadcastErrorHandler));
+					.computeIfAbsent(resourcePath, rp -> new MockSseBroadcaster(rp, broadcastErrorHandler, this::safelyLog));
 
 			broadcaster.registerCommentConsumer(commentConsumer, context);
 		}
@@ -3094,6 +3130,21 @@ public final class Soklet implements AutoCloseable {
 
 		public void onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
 			this.unicastErrorHandler.set(onUnicastError);
+		}
+
+		void safelyLog(@NonNull LogEvent logEvent) {
+			requireNonNull(logEvent);
+
+			SokletConfig sokletConfig = this.sokletConfig;
+
+			if (sokletConfig == null)
+				return;
+
+			try {
+				sokletConfig.getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
+			} catch (Throwable ignored) {
+				// No safe fallback sink is available here.
+			}
 		}
 
 		@NonNull

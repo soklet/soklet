@@ -10,6 +10,7 @@ public class OptionsBuilder {
     private Duration resolution;
     private Duration requestHeaderTimeout;
     private Duration requestBodyTimeout;
+    private Duration responseWriteIdleTimeout;
     private int readBufferSize;
     private int acceptLength;
     private int maxRequestSize;
@@ -26,6 +27,7 @@ public class OptionsBuilder {
         this.resolution = Duration.ofMillis(100);
         this.requestHeaderTimeout = null;
         this.requestBodyTimeout = null;
+        this.responseWriteIdleTimeout = null;
         this.readBufferSize = 1_024 * 64;
         this.acceptLength = 0;
         this.maxRequestSize = 1_024 * 1_024;
@@ -47,6 +49,7 @@ public class OptionsBuilder {
             this.resolution,
             this.requestHeaderTimeout == null ? Duration.ofSeconds(60) : this.requestHeaderTimeout,
             this.requestBodyTimeout == null ? Duration.ofSeconds(60) : this.requestBodyTimeout,
+            this.responseWriteIdleTimeout == null ? Duration.ofSeconds(60) : this.responseWriteIdleTimeout,
             this.readBufferSize,
             this.acceptLength,
             this.maxRequestSize,
@@ -88,6 +91,11 @@ public class OptionsBuilder {
 
     public OptionsBuilder withRequestBodyTimeout(Duration requestBodyTimeout) {
         this.requestBodyTimeout = requestBodyTimeout;
+        return this;
+    }
+
+    public OptionsBuilder withResponseWriteIdleTimeout(Duration responseWriteIdleTimeout) {
+        this.responseWriteIdleTimeout = responseWriteIdleTimeout;
         return this;
     }
 

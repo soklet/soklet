@@ -64,6 +64,35 @@ public class MultipartEdgeCaseTests {
 		return body.toString().getBytes(StandardCharsets.US_ASCII);
 	}
 
+	private static byte[] multipartBodyWithUnnamedFieldCount(String boundary,
+																													 int fieldCount) {
+		StringBuilder body = new StringBuilder();
+
+		for (int i = 0; i < fieldCount; i++) {
+			body.append("--").append(boundary).append("\r\n");
+			body.append("Content-Disposition: form-data; filename=\"field").append(i).append(".txt\"\r\n");
+			body.append("\r\n");
+			body.append(i).append("\r\n");
+		}
+
+		body.append("--").append(boundary).append("--\r\n");
+		return body.toString().getBytes(StandardCharsets.US_ASCII);
+	}
+
+	private static byte[] multipartBodyWithUnnamedPartBeforeNamedPart(String boundary) {
+		String body = ""
+				+ "--" + boundary + "\r\n"
+				+ "Content-Disposition: form-data; filename=\"ignored.txt\"\r\n"
+				+ "\r\n"
+				+ "ignored\r\n"
+				+ "--" + boundary + "\r\n"
+				+ "Content-Disposition: form-data; name=\"a\"\r\n"
+				+ "\r\n"
+				+ "1\r\n"
+				+ "--" + boundary + "--\r\n";
+		return body.getBytes(StandardCharsets.US_ASCII);
+	}
+
 	@Test
 	public void missing_required_field_yields_400() {
 		SokletConfig cfg = SokletConfig.forSimulatorTesting()
@@ -157,6 +186,36 @@ public class MultipartEdgeCaseTests {
 
 		IllegalRequestBodyException exception = Assertions.assertThrows(IllegalRequestBodyException.class,
 				() -> parser.extractMultipartFields(overLimit));
+		Assertions.assertTrue(exception.getMessage().contains("Maximum allowed is 1000"));
+	}
+
+	@Test
+	public void unnamed_multipart_part_is_discarded_before_next_part() {
+		String boundary = "----AaB03x-unnamed";
+		DefaultMultipartParser parser = (DefaultMultipartParser) DefaultMultipartParser.defaultInstance();
+
+		Request request = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.body(multipartBodyWithUnnamedPartBeforeNamedPart(boundary))
+				.build();
+
+		Map<String, Set<MultipartField>> fields = parser.extractMultipartFields(request);
+		Assertions.assertEquals(Set.of("a"), fields.keySet());
+		Assertions.assertEquals("1", fields.get("a").iterator().next().getDataAsString().orElseThrow());
+	}
+
+	@Test
+	public void unnamed_multipart_parts_count_toward_field_limit() {
+		String boundary = "----AaB03x-unnamed-limit";
+		DefaultMultipartParser parser = (DefaultMultipartParser) DefaultMultipartParser.defaultInstance();
+
+		Request request = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.body(multipartBodyWithUnnamedFieldCount(boundary, 1_001))
+				.build();
+
+		IllegalRequestBodyException exception = Assertions.assertThrows(IllegalRequestBodyException.class,
+				() -> parser.extractMultipartFields(request));
 		Assertions.assertTrue(exception.getMessage().contains("Maximum allowed is 1000"));
 	}
 

@@ -2331,7 +2331,7 @@ final class DefaultMcpRuntime {
 		try {
 			getSoklet().getSokletConfig().getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
 		} catch (Throwable ignored) {
-			ignored.printStackTrace();
+			// The LifecycleObserver implementation errored out, but we can't let that affect us.
 		}
 	}
 

@@ -88,6 +88,8 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private static final Duration DEFAULT_REQUEST_BODY_TIMEOUT;
 	@NonNull
+	private static final Duration DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT;
+	@NonNull
 	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
 	@NonNull
 	private static final Duration DEFAULT_SOCKET_SELECT_TIMEOUT;
@@ -123,6 +125,7 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_CONCURRENCY = Runtime.getRuntime().availableProcessors();
 		DEFAULT_REQUEST_HEADER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_BODY_TIMEOUT = Duration.ofSeconds(60);
+		DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024 * 10;
@@ -150,6 +153,8 @@ final class DefaultHttpServer implements HttpServer {
 	private final Duration requestHeaderTimeout;
 	@NonNull
 	private final Duration requestBodyTimeout;
+	@NonNull
+	private final Duration responseWriteIdleTimeout;
 	@NonNull
 	private final Duration requestHandlerTimeout;
 	@NonNull
@@ -221,6 +226,7 @@ final class DefaultHttpServer implements HttpServer {
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.requestHeaderTimeout = builder.requestHeaderTimeout != null ? builder.requestHeaderTimeout : DEFAULT_REQUEST_HEADER_TIMEOUT;
 		this.requestBodyTimeout = builder.requestBodyTimeout != null ? builder.requestBodyTimeout : DEFAULT_REQUEST_BODY_TIMEOUT;
+		this.responseWriteIdleTimeout = builder.responseWriteIdleTimeout != null ? builder.responseWriteIdleTimeout : DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT;
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
@@ -261,6 +267,9 @@ final class DefaultHttpServer implements HttpServer {
 
 		if (this.requestBodyTimeout.isNegative() || this.requestBodyTimeout.isZero())
 			throw new IllegalArgumentException("Request body timeout must be > 0");
+
+		if (this.responseWriteIdleTimeout.isNegative())
+			throw new IllegalArgumentException("Response write idle timeout must be >= 0");
 
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "request-handler-";
@@ -376,6 +385,7 @@ final class DefaultHttpServer implements HttpServer {
 					.withConcurrency(getConcurrency())
 					.withRequestHeaderTimeout(getRequestHeaderTimeout())
 					.withRequestBodyTimeout(getRequestBodyTimeout())
+					.withResponseWriteIdleTimeout(getResponseWriteIdleTimeout())
 					.withResolution(getSocketSelectTimeout())
 					.withReadBufferSize(getRequestReadBufferSizeInBytes())
 					.withMaxRequestSize(getMaximumRequestSizeInBytes())
@@ -1004,9 +1014,7 @@ final class DefaultHttpServer implements HttpServer {
 		try {
 			getLifecycleObserver().didReceiveLogEvent(logEvent);
 		} catch (Throwable throwable) {
-			// The LifecycleObserver implementation errored out, but we can't let that affect us - swallow its exception.
-			// Not much else we can do here but dump to stderr
-			throwable.printStackTrace(System.err);
+			// The LifecycleObserver implementation errored out, but we can't let that affect us.
 		}
 	}
 
@@ -1323,6 +1331,11 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	protected Duration getRequestBodyTimeout() {
 		return this.requestBodyTimeout;
+	}
+
+	@NonNull
+	protected Duration getResponseWriteIdleTimeout() {
+		return this.responseWriteIdleTimeout;
 	}
 
 	@NonNull

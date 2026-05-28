@@ -80,6 +80,12 @@ public final class MicrohttpResponse {
         return new MicrohttpResponse(status, reason, headers, 0L, bodySourceFactory, null, true);
     }
 
+    static MicrohttpResponse withWritableSourceBody(int status, String reason, List<Header> headers,
+                                                    long bodyLength, BodySourceFactory bodySourceFactory) {
+        requireNonNull(bodySourceFactory);
+        return new MicrohttpResponse(status, reason, headers, bodyLength, bodySourceFactory, null, false);
+    }
+
     public int status() {
         return status;
     }

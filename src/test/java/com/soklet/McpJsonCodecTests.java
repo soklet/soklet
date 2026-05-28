@@ -87,4 +87,47 @@ public class McpJsonCodecTests {
 				() -> McpJsonCodec.parse("true false"));
 		Assertions.assertTrue(exception.getMessage().contains("Unexpected trailing content"));
 	}
+
+	@Test
+	public void parseRejectsExcessiveNestingDepth() {
+		StringBuilder json = new StringBuilder();
+
+		for (int i = 0; i < 257; i++)
+			json.append('[');
+
+		json.append('0');
+
+		for (int i = 0; i < 257; i++)
+			json.append(']');
+
+		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse(json.toString()));
+		Assertions.assertTrue(exception.getMessage().contains("nesting depth"));
+	}
+
+	@Test
+	public void parseRejectsExcessiveNumberLength() {
+		String json = "1" + "0".repeat(512);
+
+		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse(json));
+		Assertions.assertTrue(exception.getMessage().contains("number length"));
+	}
+
+	@Test
+	public void parseAcceptsMaximumExponentMagnitude() {
+		Assertions.assertDoesNotThrow(() -> McpJsonCodec.parse("1e10000"));
+		Assertions.assertDoesNotThrow(() -> McpJsonCodec.parse("1e-10000"));
+	}
+
+	@Test
+	public void parseRejectsExcessiveExponentMagnitude() {
+		IllegalArgumentException positiveException = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse("1e10001"));
+		Assertions.assertTrue(positiveException.getMessage().contains("exponent magnitude"));
+
+		IllegalArgumentException negativeException = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse("1e-10001"));
+		Assertions.assertTrue(negativeException.getMessage().contains("exponent magnitude"));
+	}
 }

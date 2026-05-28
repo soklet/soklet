@@ -815,10 +815,7 @@ final class DefaultSseServer implements SseServer {
 							.throwable(throwable)
 							.build());
 				} catch (Throwable loggingThrowable) {
-					// We are in a bad state - the log operation in the uncaught exception handler failed.
-					// Not much else we can do here but dump to stderr and try to stop the server.
-					throwable.printStackTrace(System.err);
-					loggingThrowable.printStackTrace(System.err);
+					// No safe fallback sink is available from an uncaught exception handler.
 				}
 			});
 
@@ -842,10 +839,7 @@ final class DefaultSseServer implements SseServer {
 							.throwable(throwable)
 							.build());
 				} catch (Throwable loggingThrowable) {
-					// We are in a bad state - the log operation in the uncaught exception handler failed.
-					// Not much else we can do here but dump to stderr and try to stop the server.
-					throwable.printStackTrace(System.err);
-					loggingThrowable.printStackTrace(System.err);
+					// No safe fallback sink is available from an uncaught exception handler.
 				}
 			});
 
@@ -866,8 +860,7 @@ final class DefaultSseServer implements SseServer {
 								.throwable(throwable)
 								.build());
 					} catch (Throwable loggingThrowable) {
-						throwable.printStackTrace(System.err);
-						loggingThrowable.printStackTrace(System.err);
+						// No safe fallback sink is available from an uncaught exception handler.
 					}
 				});
 
@@ -1066,61 +1059,7 @@ final class DefaultSseServer implements SseServer {
 
 			while (!getStopPoisonPill().get()) {
 				SocketChannel clientSocketChannel = this.serverSocketChannel.accept();
-				Socket socket = clientSocketChannel.socket();
-				socket.setKeepAlive(true);
-				socket.setTcpNoDelay(true);
-
-				InetSocketAddress remoteAddress = null;
-				try {
-					SocketAddress socketAddress = clientSocketChannel.getRemoteAddress();
-					if (socketAddress instanceof InetSocketAddress)
-						remoteAddress = (InetSocketAddress) socketAddress;
-				} catch (IOException ignored) {
-					// Best effort
-				}
-
-				HandshakeContext handshakeContext = new HandshakeContext(remoteAddress);
-				notifyWillAcceptConnection(remoteAddress);
-				notifyDidAcceptConnection(remoteAddress);
-				notifyWillAcceptRequest(remoteAddress, null);
-
-				TimeoutScheduler requestHandlerTimeoutScheduler = getRequestHandlerTimeoutScheduler().orElse(null);
-				if (requestHandlerTimeoutScheduler != null && !requestHandlerTimeoutScheduler.isShutdown()) {
-					handshakeContext.handshakeTimeoutFutureRef.set(requestHandlerTimeoutScheduler.schedule(() ->
-									handleHandshakeTimeout(clientSocketChannel, handshakeContext),
-							getRequestHandlerTimeout()));
-				}
-
-				try {
-					executorService.submit(() -> handleClientSocketChannel(clientSocketChannel, handshakeContext));
-					notifyDidAcceptRequest(remoteAddress, null);
-				} catch (RejectedExecutionException e) {
-					RequestRejectionReason rejectionReason = rejectionReasonFor(executorService);
-					notifyDidFailToAcceptRequest(remoteAddress, null, rejectionReason, e);
-
-					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
-					handshakeContext.handshakeResponseWritten.compareAndSet(false, true);
-					handshakeContext.acceptanceFinalized.compareAndSet(false, true);
-					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
-
-					safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
-							.throwable(e)
-							.build());
-
-					try {
-						writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
-					} catch (Throwable t) {
-						// best effort
-					} finally {
-						try {
-							clientSocketChannel.close();
-						} catch (IOException ignored) {
-							// Nothing to do
-						}
-					}
-
-					continue;
-				}
+				handleAcceptedSocketChannel(clientSocketChannel, executorService);
 			}
 		} catch (ClosedChannelException ignored) {
 			// expected during shutdown
@@ -1143,6 +1082,114 @@ final class DefaultSseServer implements SseServer {
 			// If the socket was never bound, ensure a correct stop
 			if (!bindSucceeded)
 				stop();
+		}
+	}
+
+	private void handleAcceptedSocketChannel(@NonNull SocketChannel clientSocketChannel,
+																					 @NonNull ExecutorService executorService) {
+		requireNonNull(clientSocketChannel);
+		requireNonNull(executorService);
+
+		HandshakeContext handshakeContext = null;
+		InetSocketAddress remoteAddress = null;
+		boolean submitted = false;
+
+		try {
+			Socket socket = clientSocketChannel.socket();
+			socket.setKeepAlive(true);
+			socket.setTcpNoDelay(true);
+
+			remoteAddress = remoteAddress(clientSocketChannel);
+			handshakeContext = new HandshakeContext(remoteAddress);
+			notifyWillAcceptConnection(remoteAddress);
+			notifyDidAcceptConnection(remoteAddress);
+			notifyWillAcceptRequest(remoteAddress, null);
+
+			TimeoutScheduler requestHandlerTimeoutScheduler = getRequestHandlerTimeoutScheduler().orElse(null);
+			if (requestHandlerTimeoutScheduler != null && !requestHandlerTimeoutScheduler.isShutdown()) {
+				HandshakeContext handshakeContextSnapshot = handshakeContext;
+				handshakeContext.handshakeTimeoutFutureRef.set(requestHandlerTimeoutScheduler.schedule(() ->
+								handleHandshakeTimeout(clientSocketChannel, handshakeContextSnapshot),
+						getRequestHandlerTimeout()));
+			}
+
+			HandshakeContext handshakeContextSnapshot = handshakeContext;
+			executorService.submit(() -> handleClientSocketChannel(clientSocketChannel, handshakeContextSnapshot));
+			submitted = true;
+			notifyDidAcceptRequest(remoteAddress, null);
+		} catch (RejectedExecutionException e) {
+			RequestRejectionReason rejectionReason = rejectionReasonFor(executorService);
+			if (handshakeContext != null) {
+				notifyDidFailToAcceptRequest(remoteAddress, null, rejectionReason, e);
+				finalizeFailedAcceptedHandshake(handshakeContext, remoteAddress, e);
+			}
+
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
+					.throwable(e)
+					.build());
+
+			writeFailsafeHandshakeAndClose(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
+		} catch (Throwable t) {
+			if (!submitted && handshakeContext != null) {
+				notifyDidFailToAcceptRequest(remoteAddress, null, RequestRejectionReason.INTERNAL_ERROR, t);
+				finalizeFailedAcceptedHandshake(handshakeContext, remoteAddress, t);
+			}
+
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+							"Unable to prepare accepted Server-Sent Event connection")
+					.throwable(t)
+					.build());
+		} finally {
+			if (!submitted)
+				closeAcceptedSocketChannel(clientSocketChannel);
+		}
+	}
+
+	@Nullable
+	private InetSocketAddress remoteAddress(@NonNull SocketChannel socketChannel) {
+		requireNonNull(socketChannel);
+
+		try {
+			SocketAddress socketAddress = socketChannel.getRemoteAddress();
+			return socketAddress instanceof InetSocketAddress inetSocketAddress ? inetSocketAddress : null;
+		} catch (IOException ignored) {
+			return null;
+		}
+	}
+
+	private void finalizeFailedAcceptedHandshake(@NonNull HandshakeContext handshakeContext,
+																							 @Nullable InetSocketAddress remoteAddress,
+																							 @NonNull Throwable throwable) {
+		requireNonNull(handshakeContext);
+		requireNonNull(throwable);
+
+		cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
+		handshakeContext.handshakeResponseWritten.compareAndSet(false, true);
+		handshakeContext.acceptanceFinalized.compareAndSet(false, true);
+		notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
+	}
+
+	private void writeFailsafeHandshakeAndClose(@NonNull SocketChannel clientSocketChannel,
+																							@NonNull byte[] responseBytes) {
+		requireNonNull(clientSocketChannel);
+		requireNonNull(responseBytes);
+
+		try {
+			writeFully(clientSocketChannel, responseBytes);
+		} catch (Throwable t) {
+			// best effort
+		} finally {
+			closeAcceptedSocketChannel(clientSocketChannel);
+		}
+	}
+
+	private void closeAcceptedSocketChannel(@NonNull SocketChannel clientSocketChannel) {
+		requireNonNull(clientSocketChannel);
+
+		try {
+			clientSocketChannel.close();
+		} catch (IOException ignored) {
+			// Nothing to do
 		}
 	}
 
@@ -3722,9 +3769,7 @@ final class DefaultSseServer implements SseServer {
 		try {
 			getLifecycleObserver().didReceiveLogEvent(logEvent);
 		} catch (Throwable throwable) {
-			// The LifecycleObserver implementation errored out, but we can't let that affect us - swallow its exception.
-			// Not much else we can do here but dump to stderr
-			throwable.printStackTrace(System.err);
+			// The LifecycleObserver implementation errored out, but we can't let that affect us.
 		}
 	}
 

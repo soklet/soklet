@@ -189,6 +189,11 @@ final class DefaultMultipartParser implements MultipartParser {
 			boolean hasNext = multipartStream.skipPreamble();
 
 			while (hasNext) {
+				fieldCount++;
+
+				if (fieldCount > MAX_MULTIPART_FIELDS)
+					throw new IllegalRequestBodyException(format("Too many multipart fields. Maximum allowed is %s", MAX_MULTIPART_FIELDS));
+
 				// Example headers:
 				//
 				// Content-Disposition: form-data; name="doc"; filename="test.pdf"
@@ -203,8 +208,11 @@ final class DefaultMultipartParser implements MultipartParser {
 
 				String name = trimAggressivelyToNull(contentDispositionFields.get("name"));
 
-				if (name == null)
+				if (name == null) {
+					multipartStream.discardBodyData();
+					hasNext = multipartStream.readBoundary();
 					continue;
+				}
 
 				ByteArrayOutputStream data = new ByteArrayOutputStream();
 				multipartStream.readBodyData(data);
@@ -238,11 +246,6 @@ final class DefaultMultipartParser implements MultipartParser {
 				multipartFields.add(multipartField);
 
 				hasNext = multipartStream.readBoundary();
-
-				if (fieldCount >= MAX_MULTIPART_FIELDS)
-					throw new IllegalRequestBodyException(format("Too many multipart fields. Maximum allowed is %s", MAX_MULTIPART_FIELDS));
-
-				fieldCount++;
 			}
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
@@ -1096,8 +1099,7 @@ final class DefaultMultipartParser implements MultipartParser {
 
 		/**
 		 * Retrieves the character encoding used when reading the headers of an
-		 * individual part. When not specified, or {@code null}, the platform
-		 * default encoding is used.
+		 * individual part. When not specified, or {@code null}, UTF-8 is used.
 		 *
 		 * @return The encoding used to read part headers.
 		 */
@@ -1107,8 +1109,7 @@ final class DefaultMultipartParser implements MultipartParser {
 
 		/**
 		 * Specifies the character encoding to be used when reading the headers of
-		 * individual parts. When not specified, or {@code null}, the platform
-		 * default encoding is used.
+		 * individual parts. When not specified, or {@code null}, UTF-8 is used.
 		 *
 		 * @param encoding The encoding used to read part headers.
 		 */
@@ -1284,12 +1285,10 @@ final class DefaultMultipartParser implements MultipartParser {
 				try {
 					headers = baos.toString(headerEncoding);
 				} catch (final UnsupportedEncodingException e) {
-					// Fall back to platform default if specified encoding is not
-					// supported.
-					headers = baos.toString();
+					headers = baos.toString(StandardCharsets.UTF_8);
 				}
 			} else {
-				headers = baos.toString();
+				headers = baos.toString(StandardCharsets.UTF_8);
 			}
 
 			return headers;

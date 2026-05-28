@@ -39,6 +39,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.net.SocketException;
 import java.net.SocketOption;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
@@ -254,6 +255,54 @@ public class SseTests {
 		}));
 
 		Assertions.assertEquals(2, errorCount.get(), "Unexpected number of unicast errors");
+	}
+
+	@Test
+	public void sseServerSimulator_logsConsumerErrorsWhenNoErrorHandlerConfigured() {
+		List<LogEvent> logEvents = new ArrayList<>();
+		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						logEvents.add(logEvent);
+					}
+				})
+				.build();
+
+		Soklet.runSimulator(configuration, (simulator -> {
+			Request request = Request.withPath(HttpMethod.GET, "/examples/abc")
+					.build();
+
+			SseRequestResult requestResult = simulator.performSseRequest(request);
+
+			if (requestResult instanceof HandshakeAccepted handshakeAccepted) {
+				handshakeAccepted.registerEventConsumer((event) -> {
+					throw new IllegalStateException("Unicast event error");
+				});
+
+				handshakeAccepted.registerCommentConsumer((comment) -> {
+					throw new IllegalStateException("Unicast comment error");
+				});
+
+				SseBroadcaster broadcaster = configuration.getSseServer().orElseThrow()
+						.acquireBroadcaster(ResourcePath.fromPath("/examples/abc"))
+						.orElseThrow();
+				broadcaster.broadcastEvent(SseEvent.withData("broadcast").build());
+			} else if (requestResult instanceof HandshakeRejected handshakeRejected) {
+				Assertions.fail("SSE handshake rejected: " + handshakeRejected);
+			} else if (requestResult instanceof RequestFailed requestFailed) {
+				Assertions.fail("SSE request failed: " + requestFailed);
+			} else {
+				throw new IllegalStateException(format("Unexpected SSE result: %s", requestResult.getClass()));
+			}
+		}));
+
+		Assertions.assertEquals(3, logEvents.size(), "Unexpected number of simulator consumer errors");
+		Assertions.assertTrue(logEvents.stream().allMatch(logEvent ->
+				logEvent.getLogEventType() == LogEventType.SSE_SERVER_INTERNAL_ERROR));
+		Assertions.assertTrue(logEvents.stream().allMatch(logEvent ->
+				logEvent.getThrowable().isPresent()));
 	}
 
 	@Test
@@ -1900,6 +1949,28 @@ public class SseTests {
 	}
 
 	@Test
+	public void acceptedSocketChannelClosesWhenSocketSetupFails() throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
+				.lifecycleObserver(new QuietLifecycle())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
+				.build();
+		server.initialize(sokletConfig, (request, requestResultConsumer) -> { /* no-op */ });
+
+		SetupFailingSocketChannel channel = new SetupFailingSocketChannel();
+		ExecutorService executorService = Executors.newSingleThreadExecutor();
+		try {
+			Method method = DefaultSseServer.class.getDeclaredMethod("handleAcceptedSocketChannel", SocketChannel.class, ExecutorService.class);
+			method.setAccessible(true);
+			method.invoke(server, channel, executorService);
+		} finally {
+			executorService.shutdownNow();
+		}
+
+		Assertions.assertTrue(channel.isClosed(), "Accepted SSE channel should close after setup failure");
+	}
+
+	@Test
 	public void writeMarshaledResponseToChannel_handlesPartialWrites() throws Exception {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
 		ResponseCookie cookie = ResponseCookie.with("session", "abc").path("/").build();
@@ -2056,6 +2127,36 @@ public class SseTests {
 		@Override
 		protected void implConfigureBlocking(boolean block) {
 			// no-op
+		}
+	}
+
+	private static final class SetupFailingSocketChannel extends PartialWriteSocketChannel {
+		private final AtomicBoolean closed;
+		private final Socket socket;
+
+		private SetupFailingSocketChannel() {
+			super(1);
+			this.closed = new AtomicBoolean(false);
+			this.socket = new Socket() {
+				@Override
+				public void setKeepAlive(boolean on) throws SocketException {
+					throw new SocketException("keepalive failed");
+				}
+			};
+		}
+
+		boolean isClosed() {
+			return this.closed.get();
+		}
+
+		@Override
+		public Socket socket() {
+			return this.socket;
+		}
+
+		@Override
+		protected void implCloseSelectableChannel() {
+			this.closed.set(true);
 		}
 	}
 

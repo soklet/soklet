@@ -1628,7 +1628,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		try {
 			sokletConfig.getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
 		} catch (Throwable throwable) {
-			throwable.printStackTrace(System.err);
+			// The LifecycleObserver implementation errored out, but we can't let that affect us.
 		}
 	}
 
@@ -1982,16 +1982,19 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	}
 
 	@NonNull
-	private static ExecutorService createExecutorService(@NonNull String threadNamePrefix,
-																											 @NonNull Integer threadPoolSize,
-																											 @NonNull Integer queueCapacity) {
+	private ExecutorService createExecutorService(@NonNull String threadNamePrefix,
+																								@NonNull Integer threadPoolSize,
+																								@NonNull Integer queueCapacity) {
 		requireNonNull(threadNamePrefix);
 		requireNonNull(threadPoolSize);
 		requireNonNull(queueCapacity);
 
 		if (Utilities.virtualThreadsAvailable()) {
 			ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (thread, throwable) -> {
-				throwable.printStackTrace(System.err);
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
+								"Unexpected exception occurred during MCP executor processing")
+						.throwable(throwable)
+						.build());
 			});
 
 			return new ThreadPoolExecutor(

@@ -6,6 +6,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketOption;
@@ -17,6 +19,7 @@ import java.nio.channels.spi.SelectorProvider;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 
@@ -340,8 +343,163 @@ public class MicrohttpInternalTests {
 				ascii(channel.getWrittenBytes()));
 	}
 
+	@Test
+	public void connectionEventLoopSurvivesUncheckedResponseTaskFailure() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofSeconds(2))
+				.withRequestBodyTimeout(Duration.ofSeconds(2))
+				.withConcurrency(1)
+				.build();
+		EventLoop eventLoop = new EventLoop(options, NoopLogger.instance(), (request, callback) -> {
+			if ("/boom".equals(request.uri())) {
+				callback.accept(MicrohttpResponse.withStreamingBody(200, "OK", List.of(), () -> new WritableSource() {
+					@Override
+					public void start() {
+						throw new AssertionError("boom");
+					}
+
+					@Override
+					public long writeTo(SocketChannel socketChannel, long maxBytes) {
+						return 0L;
+					}
+
+					@Override
+					public boolean hasRemaining() {
+						return true;
+					}
+
+					@Override
+					public void close() {
+						// no-op
+					}
+				}));
+				return;
+			}
+
+			callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong")));
+		});
+
+		eventLoop.start();
+
+		try {
+			sendRequestAndReadResponse(eventLoop.getPort(), "GET /boom HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+			String response = sendRequestAndReadResponse(eventLoop.getPort(), "GET /ok HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
+			Assertions.assertTrue(response.endsWith("pong"), response);
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void responseWriteIdleTimeoutClosesNonStreamingResponseWithoutProgress() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofSeconds(2))
+				.withRequestBodyTimeout(Duration.ofSeconds(2))
+				.withResponseWriteIdleTimeout(Duration.ofMillis(50))
+				.withMaxConnections(1)
+				.withConcurrency(1)
+				.build();
+		EventLoop eventLoop = new EventLoop(options, NoopLogger.instance(), (request, callback) -> {
+			if ("/stall".equals(request.uri())) {
+				callback.accept(MicrohttpResponse.withWritableSourceBody(200, "OK", List.of(), 1L, () -> new WritableSource() {
+					@Override
+					public long writeTo(SocketChannel socketChannel, long maxBytes) {
+						return 0L;
+					}
+
+					@Override
+					public boolean hasRemaining() {
+						return true;
+					}
+
+					@Override
+					public boolean isReadyToWrite() {
+						return false;
+					}
+
+					@Override
+					public void close() {
+						// no-op
+					}
+				}));
+				return;
+			}
+
+			callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong")));
+		});
+
+		eventLoop.start();
+
+		try (Socket stalledSocket = new Socket("localhost", eventLoop.getPort())) {
+			stalledSocket.getOutputStream().write(ascii("GET /stall HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+			stalledSocket.getOutputStream().flush();
+
+			String response = awaitSuccessfulResponse(eventLoop.getPort(),
+					"GET /ok HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
+			Assertions.assertTrue(response.endsWith("pong"), response);
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
 	private static void add(ByteTokenizer tokenizer, byte[] bytes) {
 		tokenizer.add(ByteBuffer.wrap(bytes));
+	}
+
+	private static String sendRequestAndReadResponse(int port, String request) throws IOException {
+		try (Socket socket = new Socket("localhost", port)) {
+			socket.setSoTimeout(2_000);
+			OutputStream outputStream = socket.getOutputStream();
+			outputStream.write(ascii(request));
+			outputStream.flush();
+
+			ByteArrayOutputStream response = new ByteArrayOutputStream();
+			InputStream inputStream = socket.getInputStream();
+			byte[] buffer = new byte[256];
+			int read;
+
+			while ((read = inputStream.read(buffer)) >= 0)
+				response.write(buffer, 0, read);
+
+			return ascii(response.toByteArray());
+		}
+	}
+
+	private static String awaitSuccessfulResponse(int port, String request) throws Exception {
+		Throwable lastFailure = null;
+		long deadline = System.nanoTime() + Duration.ofSeconds(3).toNanos();
+
+		while (System.nanoTime() < deadline) {
+			try {
+				String response = sendRequestAndReadResponse(port, request);
+
+				if (response.startsWith("HTTP/1.1 200 OK"))
+					return response;
+
+				lastFailure = new AssertionError(response);
+			} catch (IOException e) {
+				lastFailure = e;
+			}
+
+			Thread.sleep(25L);
+		}
+
+		AssertionError timeout = new AssertionError("Timed out waiting for successful response");
+
+		if (lastFailure != null)
+			timeout.initCause(lastFailure);
+
+		throw timeout;
 	}
 
 	private static byte[] ascii(String value) {

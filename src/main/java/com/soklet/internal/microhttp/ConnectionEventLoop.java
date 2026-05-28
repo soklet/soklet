@@ -56,6 +56,11 @@ import java.util.concurrent.atomic.AtomicLong;
 class ConnectionEventLoop {
     private static final long MAX_RESPONSE_BYTES_PER_WRITE_TURN = 1024L * 1024L;
 
+    @FunctionalInterface
+    private interface ThrowingTask {
+        void run() throws Exception;
+    }
+
     private final Options options;
     private final Logger logger;
     private final Handler handler;
@@ -113,7 +118,9 @@ class ConnectionEventLoop {
         RequestParser requestParser;
         WritableSource writableSource;
         Cancellable requestReadTimeoutTask;
+        Cancellable responseWriteIdleTimeoutTask;
         boolean requestReadTimeoutBodyPhase;
+        boolean responseWriteIdleTimeoutEnabled;
         boolean httpOneDotZero;
         boolean keepAlive;
         boolean closeAfterResponse;
@@ -223,7 +230,7 @@ class ConnectionEventLoop {
         }
 
         private void respondToRequestTooLarge() {
-            if (selectionKey.interestOps() != 0) {
+            if (selectionKey.isValid() && selectionKey.interestOps() != 0) {
                 selectionKey.interestOps(0);
             }
 
@@ -250,13 +257,14 @@ class ConnectionEventLoop {
         }
 
         private void respondToMalformedRequest() {
-            if (selectionKey.interestOps() != 0) {
+            if (selectionKey.isValid() && selectionKey.interestOps() != 0) {
                 selectionKey.interestOps(0);
             }
             if (requestReadTimeoutTask != null) {
                 requestReadTimeoutTask.cancel();
                 requestReadTimeoutTask = null;
             }
+            cancelResponseWriteIdleTimeout();
             closeAfterResponse = true;
             writableSource = new ByteBufferWritableSource(ByteBuffer.wrap(BAD_REQUEST_RESPONSE));
             try {
@@ -267,7 +275,7 @@ class ConnectionEventLoop {
         }
 
         private void onParseRequest() {
-            if (selectionKey.interestOps() != 0) {
+            if (selectionKey.isValid() && selectionKey.interestOps() != 0) {
                 selectionKey.interestOps(0);
             }
             if (requestReadTimeoutTask != null) {
@@ -285,18 +293,7 @@ class ConnectionEventLoop {
             // enqueuing the callback invocation and waking the selector
             // ensures that the microhttpResponse callback works properly when
             // invoked inline from the event loop thread or a separate background thread
-            taskQueue.add(() -> {
-                try {
-                    prepareToWriteResponse(microhttpResponse);
-                } catch (IOException e) {
-                    if (logger.enabled()) {
-                        logger.log(e,
-                                new LogEntry("event", "response_ready_error"),
-                                new LogEntry("id", id));
-                    }
-                    failSafeClose();
-                }
-            });
+            queueConnectionTask("response_ready_error", () -> prepareToWriteResponse(microhttpResponse));
             // selector wakeup is not necessary if callback was invoked within event loop thread
             // since scheduler tasks are processed at the end of every event loop iteration
             if (Thread.currentThread() != thread) {
@@ -314,6 +311,8 @@ class ConnectionEventLoop {
             if (hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
                 closeAfterResponse = true;
             }
+            responseWriteIdleTimeoutEnabled = !microhttpResponse.streaming()
+                    && !options.responseWriteIdleTimeout().isZero();
             String version = httpOneDotZero ? HTTP_1_0 : HTTP_1_1;
             List<Header> headers = new ArrayList<>();
             if (httpOneDotZero && keepAlive && !closeAfterResponse) {
@@ -330,6 +329,7 @@ class ConnectionEventLoop {
             writableSource = microhttpResponse.writableSource(serializedHead);
             writableSource.writeReadyCallback(this::onWritableSourceReady);
             writableSource.start();
+            resetResponseWriteIdleTimeoutIfNeeded();
             if (logger.enabled()) {
                 logger.log(
                         new LogEntry("event", "response_ready"),
@@ -353,23 +353,14 @@ class ConnectionEventLoop {
         }
 
         private void onWritableSourceReady() {
-            taskQueue.add(() -> {
+            queueConnectionTask("write_error", () -> {
                 if (closed.get() || writableSource == null || !selectionKey.isValid()) {
                     return;
                 }
                 if ((selectionKey.interestOps() & SelectionKey.OP_WRITE) == 0) {
                     selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
                 }
-                try {
-                    doOnWritable();
-                } catch (IOException | RuntimeException e) {
-                    if (logger.enabled()) {
-                        logger.log(e,
-                                new LogEntry("event", "write_error"),
-                                new LogEntry("id", id));
-                    }
-                    failSafeClose();
-                }
+                doOnWritable();
             });
             if (Thread.currentThread() != thread) {
                 selector.wakeup();
@@ -378,9 +369,13 @@ class ConnectionEventLoop {
 
         private void doOnWritable() throws IOException {
             long numBytes = writableSource.writeTo(socketChannel, MAX_RESPONSE_BYTES_PER_WRITE_TURN);
+            if (numBytes > 0) {
+                resetResponseWriteIdleTimeoutIfNeeded();
+            }
             if (!writableSource.hasRemaining()) { // response fully written
                 writableSource.close();
                 writableSource = null; // done with current write source, remove reference
+                cancelResponseWriteIdleTimeout();
                 if (logger.enabled()) {
                     logger.log(
                             new LogEntry("event", "write_response"),
@@ -415,10 +410,18 @@ class ConnectionEventLoop {
                         onParseRequest();
                     } else { // switch back to read mode
                         scheduleRequestReadTimeoutForCurrentParserState();
+                        if (!selectionKey.isValid()) {
+                            failSafeClose();
+                            return;
+                        }
                         selectionKey.interestOps(SelectionKey.OP_READ);
                     }
                 }
             } else { // response not fully written, switch to or remain in write mode
+                if (!selectionKey.isValid()) {
+                    failSafeClose();
+                    return;
+                }
                 if (writableSource.isReadyToWrite()) {
                     if ((selectionKey.interestOps() & SelectionKey.OP_WRITE) == 0) {
                         selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
@@ -445,6 +448,7 @@ class ConnectionEventLoop {
             if (requestReadTimeoutTask != null) {
                 requestReadTimeoutTask.cancel();
             }
+            cancelResponseWriteIdleTimeout();
             if (writableSource != null) {
                 if (cancelationReason == null) {
                     CloseUtils.closeQuietly(writableSource);
@@ -478,7 +482,49 @@ class ConnectionEventLoop {
             }
 
             requestReadTimeoutBodyPhase = bodyPhase;
-            requestReadTimeoutTask = timeoutQueue.schedule(this::onRequestReadTimeout, timeout);
+            requestReadTimeoutTask = timeoutQueue.schedule(() -> runConnectionTask("request_timeout_error", this::onRequestReadTimeout), timeout);
+        }
+
+        private void onResponseWriteIdleTimeout() {
+            if (logger.enabled()) {
+                logger.log(
+                        new LogEntry("event", "response_write_idle_timeout"),
+                        new LogEntry("id", id));
+            }
+            failSafeClose();
+        }
+
+        private void resetResponseWriteIdleTimeoutIfNeeded() {
+            if (!responseWriteIdleTimeoutEnabled) {
+                return;
+            }
+
+            cancelResponseWriteIdleTimeout();
+            responseWriteIdleTimeoutTask = timeoutQueue.schedule(
+                    () -> runConnectionTask("response_write_idle_timeout_error", this::onResponseWriteIdleTimeout),
+                    options.responseWriteIdleTimeout());
+        }
+
+        private void cancelResponseWriteIdleTimeout() {
+            if (responseWriteIdleTimeoutTask != null) {
+                responseWriteIdleTimeoutTask.cancel();
+                responseWriteIdleTimeoutTask = null;
+            }
+        }
+
+        private void queueConnectionTask(String failureEvent, ThrowingTask task) {
+            taskQueue.add(() -> runConnectionTask(failureEvent, task));
+        }
+
+        private void runConnectionTask(String failureEvent, ThrowingTask task) {
+            try {
+                task.run();
+            } catch (Throwable throwable) {
+                logThrowable(throwable,
+                        new LogEntry("event", failureEvent),
+                        new LogEntry("id", id));
+                failSafeClose();
+            }
         }
 
         private void applyConnectionPolicy(MicrohttpRequest request) {
@@ -559,17 +605,34 @@ class ConnectionEventLoop {
             Iterator<SelectionKey> it = selectedKeys.iterator();
             while (it.hasNext()) {
                 SelectionKey selKey = it.next();
-                if (selKey.isReadable()) {
-                    ((Connection) selKey.attachment()).onReadable();
-                } else if (selKey.isWritable()) {
-                    ((Connection) selKey.attachment()).onWritable();
+                try {
+                    if (!selKey.isValid()) {
+                        continue;
+                    }
+                    Object attachment = selKey.attachment();
+                    if (attachment instanceof Connection connection) {
+                        if (selKey.isReadable()) {
+                            connection.runConnectionTask("read_error", connection::onReadable);
+                        } else if (selKey.isWritable()) {
+                            connection.runConnectionTask("write_error", connection::onWritable);
+                        }
+                    }
+                } catch (Throwable throwable) {
+                    logThrowable(throwable, new LogEntry("event", "selection_key_error"));
+                    Object attachment = selKey.attachment();
+                    if (attachment instanceof Connection connection) {
+                        connection.failSafeClose();
+                    } else {
+                        selKey.cancel();
+                    }
+                } finally {
+                    it.remove();
                 }
-                it.remove();
             }
-            timeoutQueue.expired().forEach(Runnable::run);
+            timeoutQueue.expired().forEach(task -> runLoopTask(task, "timeout_task_error"));
             Runnable task;
             while ((task = taskQueue.poll()) != null) {
-                task.run();
+                runLoopTask(task, "task_error");
             }
         }
     }
@@ -578,8 +641,8 @@ class ConnectionEventLoop {
         taskQueue.add(() -> {
             try {
                 doRegister(socketChannel);
-            } catch (IOException e) {
-                logger.log(e, new LogEntry("event", "register_error"));
+            } catch (Throwable e) {
+                logThrowable(e, new LogEntry("event", "register_error"));
                 CloseUtils.closeQuietly(socketChannel);
             }
         });
@@ -604,6 +667,24 @@ class ConnectionEventLoop {
                     new LogEntry("event", "accept"),
                     new LogEntry("remote_address", remoteAddressString),
                     new LogEntry("id", connection.id));
+        }
+    }
+
+    private void runLoopTask(Runnable task, String failureEvent) {
+        try {
+            task.run();
+        } catch (Throwable throwable) {
+            logThrowable(throwable, new LogEntry("event", failureEvent));
+        }
+    }
+
+    private void logThrowable(Throwable throwable, LogEntry... entries) {
+        try {
+            if (logger.enabled()) {
+                logger.log(throwable, entries);
+            }
+        } catch (Throwable ignored) {
+            // Logging must not terminate the event loop.
         }
     }
 }

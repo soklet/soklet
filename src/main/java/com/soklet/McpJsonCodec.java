@@ -37,6 +37,10 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class McpJsonCodec {
+	private static final int MAX_NESTING_DEPTH = 256;
+	private static final int MAX_NUMBER_LENGTH = 512;
+	private static final int MAX_EXPONENT_ABSOLUTE_VALUE = 10_000;
+
 	private McpJsonCodec() {}
 
 	@NonNull
@@ -175,7 +179,7 @@ final class McpJsonCodec {
 		@NonNull
 		private McpValue parse() {
 			skipWhitespace();
-			McpValue value = parseValue();
+			McpValue value = parseValue(0);
 			skipWhitespace();
 
 			if (!isAtEnd())
@@ -185,7 +189,7 @@ final class McpJsonCodec {
 		}
 
 		@NonNull
-		private McpValue parseValue() {
+		private McpValue parseValue(int depth) {
 			skipWhitespace();
 
 			if (isAtEnd())
@@ -194,10 +198,10 @@ final class McpJsonCodec {
 			char c = current();
 
 			if (c == '{')
-				return parseObject();
+				return parseObject(depth + 1);
 
 			if (c == '[')
-				return parseArray();
+				return parseArray(depth + 1);
 
 			if (c == '"')
 				return new McpString(parseString());
@@ -224,7 +228,8 @@ final class McpJsonCodec {
 		}
 
 		@NonNull
-		private McpObject parseObject() {
+		private McpObject parseObject(int depth) {
+			validateDepth(depth);
 			expect('{');
 			skipWhitespace();
 
@@ -245,7 +250,7 @@ final class McpJsonCodec {
 				skipWhitespace();
 				expect(':');
 				skipWhitespace();
-				values.put(name, parseValue());
+				values.put(name, parseValue(depth));
 				skipWhitespace();
 
 				if (peek('}')) {
@@ -258,7 +263,8 @@ final class McpJsonCodec {
 		}
 
 		@NonNull
-		private McpArray parseArray() {
+		private McpArray parseArray(int depth) {
+			validateDepth(depth);
 			expect('[');
 			skipWhitespace();
 
@@ -270,7 +276,7 @@ final class McpJsonCodec {
 			}
 
 			while (true) {
-				values.add(parseValue());
+				values.add(parseValue(depth));
 				skipWhitespace();
 
 				if (peek(']')) {
@@ -280,6 +286,11 @@ final class McpJsonCodec {
 
 				expect(',');
 			}
+		}
+
+		private void validateDepth(int depth) {
+			if (depth > MAX_NESTING_DEPTH)
+				throw parseException(format("JSON nesting depth exceeds maximum of %s", MAX_NESTING_DEPTH));
 		}
 
 		@NonNull
@@ -376,45 +387,72 @@ final class McpJsonCodec {
 			int numberStart = this.index;
 
 			if (peek('-'))
-				index++;
+				consumeNumberCharacter(numberStart);
 
 			if (isAtEnd())
 				throw parseException("Incomplete number");
 
 			if (peek('0')) {
-				index++;
+				consumeNumberCharacter(numberStart);
 
 				if (!isAtEnd() && isDigit(current()))
 					throw parseException("Leading zeroes are not permitted in JSON numbers");
 			} else {
-				consumeDigits("Expected digit in number");
+				consumeDigits("Expected digit in number", numberStart);
 			}
 
 			if (peek('.')) {
-				index++;
-				consumeDigits("Fractional JSON number part must contain at least one digit");
+				consumeNumberCharacter(numberStart);
+				consumeDigits("Fractional JSON number part must contain at least one digit", numberStart);
 			}
 
 			if (peek('e') || peek('E')) {
-				index++;
+				consumeNumberCharacter(numberStart);
 
 				if (peek('+') || peek('-'))
-					index++;
+					consumeNumberCharacter(numberStart);
 
-				consumeDigits("Exponent JSON number part must contain at least one digit");
+				consumeExponentDigits(numberStart);
 			}
 
 			return new BigDecimal(this.json.substring(numberStart, this.index));
 		}
 
-		private void consumeDigits(@NonNull String ifMissingDigitsMessage) {
+		private void consumeDigits(@NonNull String ifMissingDigitsMessage,
+															 int numberStart) {
 			requireNonNull(ifMissingDigitsMessage);
 
 			if (isAtEnd() || !isDigit(current()))
 				throw parseException(ifMissingDigitsMessage);
 
 			while (!isAtEnd() && isDigit(current()))
-				index++;
+				consumeNumberCharacter(numberStart);
+		}
+
+		private void consumeExponentDigits(int numberStart) {
+			if (isAtEnd() || !isDigit(current()))
+				throw parseException("Exponent JSON number part must contain at least one digit");
+
+			int exponentAbsoluteValue = 0;
+
+			while (!isAtEnd() && isDigit(current())) {
+				int digit = current() - '0';
+
+				if (exponentAbsoluteValue > MAX_EXPONENT_ABSOLUTE_VALUE / 10
+						|| (exponentAbsoluteValue == MAX_EXPONENT_ABSOLUTE_VALUE / 10
+						&& digit > MAX_EXPONENT_ABSOLUTE_VALUE % 10))
+					throw parseException(format("JSON number exponent magnitude exceeds maximum of %s", MAX_EXPONENT_ABSOLUTE_VALUE));
+
+				exponentAbsoluteValue = exponentAbsoluteValue * 10 + digit;
+				consumeNumberCharacter(numberStart);
+			}
+		}
+
+		private void consumeNumberCharacter(int numberStart) {
+			index++;
+
+			if (index - numberStart > MAX_NUMBER_LENGTH)
+				throw parseException(format("JSON number length exceeds maximum of %s", MAX_NUMBER_LENGTH));
 		}
 
 		private void consumeLiteral(@NonNull String literal) {

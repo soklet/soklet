@@ -131,7 +131,8 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 								}
 							}
 						},
-						getUnicastErrorHandler())
+						getUnicastErrorHandler(),
+						this::safelyLog)
 				);
 			}
 		}
@@ -280,7 +281,16 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 				}
 			}
 
-			throwable.printStackTrace();
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+							"SSE simulator unicast consumer failed")
+					.throwable(throwable)
+					.build());
+		}
+
+		private void safelyLog(@NonNull LogEvent logEvent) {
+			requireNonNull(logEvent);
+
+			getSimulator().getSseServer().ifPresent(sseServer -> sseServer.safelyLog(logEvent));
 		}
 
 		@NonNull

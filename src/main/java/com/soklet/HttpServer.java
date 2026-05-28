@@ -163,6 +163,8 @@ public interface HttpServer extends AutoCloseable {
 		@Nullable
 		Duration requestBodyTimeout;
 		@Nullable
+		Duration responseWriteIdleTimeout;
+		@Nullable
 		Duration requestHandlerTimeout;
 		@Nullable
 		Integer requestHandlerConcurrency;
@@ -252,6 +254,23 @@ public interface HttpServer extends AutoCloseable {
 		@NonNull
 		public Builder requestBodyTimeout(@Nullable Duration requestBodyTimeout) {
 			this.requestBodyTimeout = requestBodyTimeout;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum idle duration while writing a non-streaming HTTP response.
+		 * <p>
+		 * The timeout is reset each time response bytes are written to the socket.
+		 * Use {@link Duration#ZERO} to disable this timeout.
+		 * <p>
+		 * If this value is not specified, Soklet uses the server default.
+		 *
+		 * @param responseWriteIdleTimeout the response write idle timeout, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder responseWriteIdleTimeout(@Nullable Duration responseWriteIdleTimeout) {
+			this.responseWriteIdleTimeout = responseWriteIdleTimeout;
 			return this;
 		}
 
