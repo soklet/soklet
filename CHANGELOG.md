@@ -7,3 +7,4 @@
 - Hardened MCP JSON parsing with nesting-depth, number-token length, and exponent-magnitude limits.
 - Fixed multipart parsing for unnamed parts and made multipart header decoding explicitly UTF-8.
 - Closed accepted SSE socket channels on pre-submit setup failures.
+- `SseServer` now requires virtual threads only to **start**, not to construct. An SSE-configured `SokletConfig` can now be built and exercised with the off-network simulator on JDK 17-20; starting a *live* SSE server still requires JDK 21+. Previously, merely constructing an `SseServer` threw on a non-virtual-thread runtime.

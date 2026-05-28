@@ -800,10 +800,6 @@ final class DefaultSseServer implements SseServer {
 			}
 		});
 
-		// Cowardly refuse to run on anything other than a runtime that supports Virtual threads.
-		if (!Utilities.virtualThreadsAvailable())
-			throw new IllegalStateException(format("Virtual threads are required for %s", getClass().getSimpleName()));
-
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "sse-request-handler-";
 			int threadPoolSize = getRequestHandlerConcurrency();
@@ -914,6 +910,14 @@ final class DefaultSseServer implements SseServer {
 		try {
 			if (isStarted())
 				return;
+
+			// Cowardly refuse to START on a runtime without virtual threads.
+			// Checked here, not in the constructor, so an SSE server can be built and carried in a
+			// SokletConfig on any supported JDK; only starting a *live* SSE server requires virtual
+			// threads (JDK 21+). This keeps HTTP/MCP-only apps and the off-network simulator usable
+			// on JDK 17-20.
+			if (!Utilities.virtualThreadsAvailable())
+				throw new IllegalStateException(format("Virtual threads are required to start %s", getClass().getSimpleName()));
 
 			// Should never happen, this would already be set by the Soklet instance
 			if (getRequestHandler().isEmpty())
