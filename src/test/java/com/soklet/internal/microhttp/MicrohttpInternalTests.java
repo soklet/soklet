@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static java.nio.file.StandardOpenOption.READ;
 
@@ -401,6 +403,7 @@ public class MicrohttpInternalTests {
 
 	@Test
 	public void responseWriteIdleTimeoutClosesNonStreamingResponseWithoutProgress() throws Exception {
+		CountDownLatch stalledWriteAttempted = new CountDownLatch(1);
 		Options options = OptionsBuilder.newBuilder()
 				.withPort(0)
 				.withResolution(Duration.ofMillis(10))
@@ -416,6 +419,7 @@ public class MicrohttpInternalTests {
 				callback.accept(MicrohttpResponse.withWritableSourceBody(200, "OK", List.of(), 1L, () -> new WritableSource() {
 					@Override
 					public long writeTo(SocketChannel socketChannel, long maxBytes) {
+						stalledWriteAttempted.countDown();
 						return 0L;
 					}
 
@@ -445,6 +449,7 @@ public class MicrohttpInternalTests {
 		try (Socket stalledSocket = new Socket("localhost", eventLoop.getPort())) {
 			stalledSocket.getOutputStream().write(ascii("GET /stall HTTP/1.1\r\nHost: localhost\r\n\r\n"));
 			stalledSocket.getOutputStream().flush();
+			Assertions.assertTrue(stalledWriteAttempted.await(2, TimeUnit.SECONDS), "Timed out waiting for stalled response write attempt");
 
 			String response = awaitSuccessfulResponse(eventLoop.getPort(),
 					"GET /ok HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
