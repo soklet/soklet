@@ -49,6 +49,11 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <!-- Empty by default. The "jdk23-plus-unsafe-memory-access" profile sets this to the JDK 23+
+             "sun.misc.Unsafe memory-access" allow flag (JEP 471), which the JVM only recognizes on
+             JDK 23 and newer. Passing it on JDK 17 through 22 crashes the forked test VM with an
+             "Unrecognized option" error. -->
+        <surefire.unsafeMemoryAccessArg></surefire.unsafeMemoryAccessArg>
     </properties>
 
     <build>
@@ -167,7 +172,7 @@
                 <configuration>
                     <argLine>
                         --enable-native-access=ALL-UNNAMED
-                        --sun-misc-unsafe-memory-access=allow
+                        ${surefire.unsafeMemoryAccessArg}
                     </argLine>
                 </configuration>
             </plugin>
@@ -203,4 +208,21 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <profiles>
+        <!-- The "sun.misc.Unsafe memory-access" allow flag exists only on JDK 23+ (JEP 471). Apply it
+             (to silence sun.misc.Unsafe deprecation warnings) only where the JVM recognizes it; on
+             JDK 17 through 22 the property stays empty so the forked Surefire test VM starts normally.
+             Profile activation keys off the JDK running Maven, which on CI is the same JDK that forks
+             the test VM. -->
+        <profile>
+            <id>jdk23-plus-unsafe-memory-access</id>
+            <activation>
+                <jdk>[23,)</jdk>
+            </activation>
+            <properties>
+                <surefire.unsafeMemoryAccessArg>--sun-misc-unsafe-memory-access=allow</surefire.unsafeMemoryAccessArg>
+            </properties>
+        </profile>
+    </profiles>
 </project>
