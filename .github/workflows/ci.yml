@@ -36,3 +36,6 @@ jobs:
 
       - name: Build Javadoc
         run: mvn -B -ntp javadoc:javadoc
+
+      - name: Compile benchmarks
+        run: mvn -B -ntp -f benchmarks/pom.xml -DskipTests compile

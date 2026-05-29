@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.URL;
@@ -33,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.soklet.TestSupport.findFreePort;
 import static com.soklet.TestSupport.readAll;
@@ -182,6 +184,40 @@ public class HttpServerLifecycleTests {
 	}
 
 	@Test
+	public void defaultRequestHandlerExecutorUsesRuntimeThreadStrategy() throws Exception {
+		int port = findFreePort();
+		AtomicReference<Boolean> handlerThreadVirtual = new AtomicReference<>();
+
+		HttpServer httpServer = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.build();
+
+		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		httpServer.initialize(cfg, (request, consumer) -> {
+			handlerThreadVirtual.set(currentThreadIsVirtual());
+			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("text/plain")))
+					.body("ok".getBytes(StandardCharsets.UTF_8))
+					.build();
+			consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
+		});
+
+		httpServer.start();
+
+		try {
+			URL url = new URL("http://127.0.0.1:" + port + "/health");
+			HttpURLConnection connection = open("GET", url, Map.of("Accept", "text/plain"));
+			Assertions.assertEquals(200, connection.getResponseCode());
+			Assertions.assertEquals(Boolean.valueOf(Utilities.virtualThreadsAvailable()), handlerThreadVirtual.get());
+		} finally {
+			httpServer.stop();
+		}
+	}
+
+	@Test
 	public void requestHandlerQueueCapacity_defaultsFromExplicitConcurrency() {
 		HttpServer httpServer = HttpServer.withPort(0)
 				.requestHandlerConcurrency(4)
@@ -211,6 +247,17 @@ public class HttpServerLifecycleTests {
 	public static class HealthResource {
 		@GET("/health")
 		public String health() {return "ok";}
+	}
+
+	private static boolean currentThreadIsVirtual() {
+		try {
+			Method isVirtual = Thread.class.getMethod("isVirtual");
+			return Boolean.TRUE.equals(isVirtual.invoke(Thread.currentThread()));
+		} catch (NoSuchMethodException e) {
+			return false;
+		} catch (ReflectiveOperationException e) {
+			throw new AssertionError("Unable to determine whether current thread is virtual", e);
+		}
 	}
 
 	private static class QuietLifecycle implements LifecycleObserver {
