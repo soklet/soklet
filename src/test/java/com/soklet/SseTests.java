@@ -28,6 +28,8 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.JRE;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
@@ -78,6 +80,9 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
+// SSE requires virtual threads: DefaultSseServer refuses to start on a non-VT runtime, so the
+// entire SSE test suite runs only on JDK 21+. HTTP/MCP fallback coverage lives in other tests.
+@EnabledForJreRange(min = JRE.JAVA_21)
 public class SseTests {
 	private static final String TRACEPARENT = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
 

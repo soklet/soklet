@@ -58,8 +58,15 @@ public class SetCookieHeaderWritingTests {
 			List<String> setCookies = headers.get("Set-Cookie");
 			assertNotNull(setCookies, "No Set-Cookie headers present");
 			assertEquals(2, setCookies.size(), "Expected two Set-Cookie headers, got: " + setCookies);
-			assertTrue(setCookies.get(0).startsWith("a="));
-			assertTrue(setCookies.get(1).startsWith("b="));
+			// Soklet writes Set-Cookie in a deterministic order (sorted by name), but
+			// HttpURLConnection.getHeaderFields() does not preserve same-name header order
+			// consistently across JDK versions (notably JDK 17 vs 21+), so assert presence
+			// order-independently. The point of this test is that the cookies are emitted as
+			// SEPARATE Set-Cookie headers, which the size check above already verifies.
+			assertTrue(setCookies.stream().anyMatch(value -> value.startsWith("a=")),
+					"Missing 'a' cookie among: " + setCookies);
+			assertTrue(setCookies.stream().anyMatch(value -> value.startsWith("b=")),
+					"Missing 'b' cookie among: " + setCookies);
 		}
 	}
 

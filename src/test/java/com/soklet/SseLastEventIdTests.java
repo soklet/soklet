@@ -21,6 +21,8 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.JRE;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedReader;
@@ -38,6 +40,8 @@ import static com.soklet.TestSupport.findFreePort;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
+// SSE requires virtual threads (DefaultSseServer refuses to start on a non-VT runtime); JDK 21+ only.
+@EnabledForJreRange(min = JRE.JAVA_21)
 public class SseLastEventIdTests {
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)

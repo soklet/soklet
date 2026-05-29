@@ -31,6 +31,8 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.JRE;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
@@ -365,6 +367,8 @@ public class MetricsCollectorTests {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	// Starts a live SSE server, which requires virtual threads (JDK 21+).
+	@EnabledForJreRange(min = JRE.JAVA_21)
 	public void sseMetricsSnapshot_overNetwork() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();

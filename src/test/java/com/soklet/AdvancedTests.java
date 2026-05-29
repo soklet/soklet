@@ -32,6 +32,8 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.JRE;
 
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
@@ -82,6 +84,8 @@ public class AdvancedTests {
 	// ==================== SSE Connection Race Conditions ====================
 
 	@Test
+	// Starts a live SSE server, which requires virtual threads (JDK 21+).
+	@EnabledForJreRange(min = JRE.JAVA_21)
 	public void testSSERaceConditionOnConcurrentConnectionsAndDisconnections() throws Exception {
 		// This test attempts to trigger race conditions in SSE connection management
 		// by rapidly connecting and disconnecting multiple clients concurrently
@@ -417,6 +421,8 @@ public class AdvancedTests {
 	// ==================== Concurrency and Thread Safety Tests ====================
 
 	@Test
+	// Explicitly supplies a virtual-thread-per-task executor, so it requires JDK 21+.
+	@EnabledForJreRange(min = JRE.JAVA_21)
 	public void testConcurrentRequestProcessing() throws Exception {
 		// Test thread safety of request processing under high concurrency
 		HttpServer httpServer = HttpServer.withPort(findFreePort())
@@ -568,6 +574,8 @@ public class AdvancedTests {
 	// ==================== Memory Leak Tests ====================
 
 	@Test
+	// Starts a live SSE server, which requires virtual threads (JDK 21+).
+	@EnabledForJreRange(min = JRE.JAVA_21)
 	public void testSSEBroadcasterMemoryLeak() throws Exception {
 		// Test that SSE broadcasters don't leak memory when connections are closed
 		HttpServer httpServer = HttpServer.withPort(findFreePort()).build();
@@ -662,6 +670,8 @@ public class AdvancedTests {
 	}
 
 	@Test
+	// Starts a live SSE server, which requires virtual threads (JDK 21+).
+	@EnabledForJreRange(min = JRE.JAVA_21)
 	public void testSseServerClearsCachesOnStop() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1482,6 +1492,8 @@ public class AdvancedTests {
 	}
 
 	@Test
+	// Starts a live SSE server, which requires virtual threads (JDK 21+).
+	@EnabledForJreRange(min = JRE.JAVA_21)
 	public void testSSEConcurrentConnectionLimitWithCustomResponse() throws Exception {
 		// 1. Setup an SSE server with a STRICT limit of 1 connection
 		// We assume findFreePort() is available in your test suite
