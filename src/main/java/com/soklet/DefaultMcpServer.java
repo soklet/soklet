@@ -683,7 +683,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		} catch (Throwable throwable) {
 			if (request == null)
 				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.INTERNAL_ERROR, throwable);
-			recordTransportFailure(MetricsCollector.TransportFailureReason.TASK_ERROR, throwable, "task_error");
+			if (request == null)
+				recordTransportFailure(MetricsCollector.TransportFailureReason.TASK_ERROR, throwable, "task_error");
 
 			safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during MCP request handling")
 					.throwable(throwable)
@@ -894,9 +895,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				throwable = e;
 		} catch (Throwable t) {
 			throwable = t;
-			recordTransportFailure(transportFailureReasonForWrite(t),
-					t,
-					t instanceof SocketTimeoutException ? "write_timeout" : "write_error");
+			recordWriteTransportFailure(t);
 		} finally {
 			finishConnection(connection, throwable);
 		}
@@ -1389,17 +1388,15 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		try {
 			writeOperation.write();
 		} catch (IOException e) {
-			recordTransportFailure(transportFailureReasonForWrite(e),
-					e,
-					e instanceof SocketTimeoutException ? "write_timeout" : "write_error");
+			recordWriteTransportFailure(e);
 			notifyDidFailToWriteResponse(request, marshaledResponse, Duration.ofNanos(System.nanoTime() - startedAtNanos), e);
 			throw e;
 		} catch (RuntimeException e) {
-			recordTransportFailure(MetricsCollector.TransportFailureReason.WRITE_ERROR, e, "write_error");
+			recordWriteTransportFailure(e);
 			notifyDidFailToWriteResponse(request, marshaledResponse, Duration.ofNanos(System.nanoTime() - startedAtNanos), e);
 			throw e;
 		} catch (Error e) {
-			recordTransportFailure(MetricsCollector.TransportFailureReason.WRITE_ERROR, e, "write_error");
+			recordWriteTransportFailure(e);
 			notifyDidFailToWriteResponse(request, marshaledResponse, Duration.ofNanos(System.nanoTime() - startedAtNanos), e);
 			throw e;
 		}
@@ -1436,9 +1433,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 					.body(body.getBytes(StandardCharsets.UTF_8))
 					.build(), true);
 		} catch (IOException e) {
-			recordTransportFailure(transportFailureReasonForWrite(e),
-					e,
-					e instanceof SocketTimeoutException ? "write_timeout" : "write_error");
+			recordWriteTransportFailure(e);
 		}
 	}
 
@@ -1665,6 +1660,18 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		safelyCollectMetrics(
 				format("An exception occurred while invoking %s::didRecordTransportFailure", MetricsCollector.class.getSimpleName()),
 				(metricsCollector) -> metricsCollector.didRecordTransportFailure(ServerType.MCP, reason, throwable));
+	}
+
+	private void recordWriteTransportFailure(@NonNull Throwable throwable) {
+		requireNonNull(throwable);
+
+		if (isRemoteClose(throwable) && !(throwable instanceof SocketTimeoutException))
+			return;
+
+		recordTransportFailure(
+				transportFailureReasonForWrite(throwable),
+				throwable,
+				throwable instanceof SocketTimeoutException ? "write_timeout" : "write_error");
 	}
 
 	private static MetricsCollector.TransportFailureReason transportFailureReasonForWrite(@NonNull Throwable throwable) {

@@ -1247,7 +1247,7 @@ final class DefaultSseServer implements SseServer {
 			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to write SSE handshake timeout response")
 					.throwable(t)
 					.build());
-			recordTransportFailure(MetricsCollector.TransportFailureReason.WRITE_ERROR, t, "write_error");
+			recordWriteTransportFailure(t);
 		} finally {
 			try {
 				synchronized (handshakeContext.channelLock) {
@@ -1560,7 +1560,7 @@ final class DefaultSseServer implements SseServer {
 						safelyLog(LogEvent.with(LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED, "Unable to write SSE handshake response")
 								.throwable(t)
 								.build());
-						recordTransportFailure(MetricsCollector.TransportFailureReason.WRITE_ERROR, t, "write_error");
+						recordWriteTransportFailure(t);
 
 						// Clear the accepted handshake reference in case it was set
 						handshakeAcceptedReference.set(null);
@@ -1939,9 +1939,7 @@ final class DefaultSseServer implements SseServer {
 					}
 
 					if (writeThrowableSnapshot != null) {
-						recordTransportFailure(transportFailureReasonForWrite(writeThrowableSnapshot),
-								writeThrowableSnapshot,
-								writeThrowableSnapshot instanceof SocketTimeoutException ? "write_timeout" : "write_error");
+						recordWriteTransportFailure(writeThrowableSnapshot);
 						throw writeThrowableSnapshot;
 					}
 				}
@@ -3814,6 +3812,18 @@ final class DefaultSseServer implements SseServer {
 				null,
 				null,
 				(metricsCollector) -> metricsCollector.didRecordTransportFailure(ServerType.SSE, reason, throwable));
+	}
+
+	private void recordWriteTransportFailure(@NonNull Throwable throwable) {
+		requireNonNull(throwable);
+
+		if (isRemoteClose(throwable) && !(throwable instanceof SocketTimeoutException))
+			return;
+
+		recordTransportFailure(
+				transportFailureReasonForWrite(throwable),
+				throwable,
+				throwable instanceof SocketTimeoutException ? "write_timeout" : "write_error");
 	}
 
 	private static MetricsCollector.TransportFailureReason transportFailureReasonForWrite(@NonNull Throwable throwable) {

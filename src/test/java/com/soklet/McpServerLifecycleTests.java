@@ -380,6 +380,49 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void startedDefaultMcpServerDoesNotRecordTransportFailureForClientClosedLiveGetStream() throws Exception {
+		int mcpPort = findFreePort();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(mcpPort)
+				.host("127.0.0.1")
+				.heartbeatInterval(Duration.ofSeconds(5))
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(defaultMcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.metricsCollector(metricsCollector)
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			String sessionId = initializedSessionId(mcpPort);
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeMcpGet(socket, mcpPort, sessionId);
+				Assertions.assertNotNull(readUntil(socket.getInputStream(), "\r\n\r\n", 8192));
+				Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams());
+
+				socket.setSoLinger(true, 0);
+				socket.close();
+
+				long deadline = System.nanoTime() + Duration.ofSeconds(3).toNanos();
+				while (System.nanoTime() < deadline
+						&& metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams() != 0L) {
+					defaultMcpServer.publishSessionMessage(sessionId, internalSessionNotification("after-close"));
+					TimeUnit.MILLISECONDS.sleep(25);
+				}
+			}
+
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams());
+			Assertions.assertTrue(metricsCollector.snapshot().orElseThrow().getTransportFailures().values().stream()
+					.allMatch(value -> value == 0L));
+		}
+	}
+
+	@Test
 	public void startedDefaultMcpServerClosesLiveGetStreamsWhenSessionStoreRejectsThem() throws Exception {
 		int mcpPort = findFreePort();
 		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(mcpPort)

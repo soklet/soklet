@@ -200,7 +200,7 @@ public enum LogEventType {
 	 */
 	SERVER_INTERNAL_ERROR,
 	/**
-	 * Indicates the standard HTTP transport encountered a low-level timeout, I/O error, or event-loop failure.
+	 * Indicates an HTTP, SSE, or MCP transport encountered a low-level timeout, I/O error, or event-loop failure.
 	 */
 	SERVER_TRANSPORT_FAILURE,
 	/**

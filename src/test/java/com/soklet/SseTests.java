@@ -39,6 +39,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketException;
@@ -834,6 +835,7 @@ public class SseTests {
 		int ssePort = findFreePort();
 
 		TerminationReasonLifecycle lifecycle = new TerminationReasonLifecycle();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
@@ -846,6 +848,7 @@ public class SseTests {
 				.sseServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(lifecycle)
+				.metricsCollector(metricsCollector)
 				.build();
 
 		try (Soklet app = Soklet.fromConfig(cfg)) {
@@ -864,7 +867,53 @@ public class SseTests {
 				socket.close();
 				Assertions.assertTrue(lifecycle.awaitTermination(8, SECONDS), "didTerminate not invoked");
 				Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, lifecycle.getReason());
+				Assertions.assertTrue(metricsCollector.snapshot().orElseThrow().getTransportFailures().values().stream()
+						.allMatch(value -> value == 0L));
 			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 15, unit = SECONDS)
+	public void sseHandshakeClientCloseDoesNotRecordTransportFailure() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		BlockingHandshakeResource.prepare(1);
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		AcceptFailureLifecycle lifecycle = new AcceptFailureLifecycle();
+
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
+				.sseServer(SseServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestHeaderTimeout(Duration.ofSeconds(5))
+						.requestHandlerTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingHandshakeResource.class)))
+				.lifecycleObserver(lifecycle)
+				.metricsCollector(metricsCollector)
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(4000);
+				socket.setSoLinger(true, 0);
+
+				writeHttpGet(socket, "/sse/limit", ssePort);
+				BlockingHandshakeResource.awaitReady(5, SECONDS);
+
+				socket.close();
+				BlockingHandshakeResource.release();
+
+				Assertions.assertTrue(lifecycle.awaitFailure(5, SECONDS), "didFailToAcceptConnection not invoked");
+				Assertions.assertEquals(ConnectionRejectionReason.INTERNAL_ERROR, lifecycle.getReason());
+				Assertions.assertTrue(metricsCollector.snapshot().orElseThrow().getTransportFailures().values().stream()
+						.allMatch(value -> value == 0L));
+			}
+		} finally {
+			BlockingHandshakeResource.release();
 		}
 	}
 
@@ -2214,6 +2263,38 @@ public class SseTests {
 		}
 
 		StreamTerminationReason getReason() {
+			return this.reason.get();
+		}
+	}
+
+	private static class AcceptFailureLifecycle implements LifecycleObserver {
+		private final CountDownLatch failedLatch;
+		private final AtomicReference<ConnectionRejectionReason> reason;
+
+		private AcceptFailureLifecycle() {
+			this.failedLatch = new CountDownLatch(1);
+			this.reason = new AtomicReference<>();
+		}
+
+		@Override
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
+
+		@Override
+		public void didFailToAcceptConnection(@NonNull ServerType serverType,
+																					@Nullable InetSocketAddress remoteAddress,
+																					@NonNull ConnectionRejectionReason rejectionReason,
+																					@Nullable Throwable throwable) {
+			if (serverType == ServerType.SSE) {
+				this.reason.compareAndSet(null, rejectionReason);
+				this.failedLatch.countDown();
+			}
+		}
+
+		boolean awaitFailure(long timeout, TimeUnit unit) throws InterruptedException {
+			return this.failedLatch.await(timeout, unit);
+		}
+
+		ConnectionRejectionReason getReason() {
 			return this.reason.get();
 		}
 	}
