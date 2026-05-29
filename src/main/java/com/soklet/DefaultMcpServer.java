@@ -546,6 +546,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an IO error")
 						.throwable(e)
 						.build());
+				recordTransportFailure(MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, e, "accept_loop_error");
 			} catch (IOException e) {
 				if (this.stopPoisonPill.get())
 					break;
@@ -555,6 +556,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an IO error")
 						.throwable(e)
 						.build());
+				recordTransportFailure(MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, e, "accept_loop_error");
 			} catch (RuntimeException e) {
 				if (this.stopPoisonPill.get())
 					break;
@@ -564,6 +566,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an unexpected error")
 						.throwable(e)
 						.build());
+				recordTransportFailure(MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, e, "connection_setup_error");
 			}
 		}
 	}
@@ -661,20 +664,26 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				request.getHeader("MCP-Session-Id").ifPresent(this::terminateStreamsForSession);
 		} catch (RequestTooLargeException e) {
 			notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_REJECTED, e);
+			recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE, e, "exceed_request_max_close");
 			writePlainTextResponse(socket, 413, "Request entity too large");
 		} catch (SocketTimeoutException e) {
-			if (request == null)
+			if (request == null) {
 				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_TIMEOUT, e);
+				recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT, e, "request_timeout");
+			}
 			writePlainTextResponse(socket, 408, "Request timed out");
 		} catch (IllegalRequestException e) {
 			if (request == null)
 				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.UNPARSEABLE_REQUEST, e);
+			recordTransportFailure(MetricsCollector.TransportFailureReason.MALFORMED_REQUEST, e, "malformed_request");
 			writePlainTextResponse(socket, 400, "Bad request");
 		} catch (IOException e) {
-			// client disconnected or write/read failed; nothing to do
+			if (request == null)
+				recordTransportFailure(MetricsCollector.TransportFailureReason.READ_ERROR, e, "read_error");
 		} catch (Throwable throwable) {
 			if (request == null)
 				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.INTERNAL_ERROR, throwable);
+			recordTransportFailure(MetricsCollector.TransportFailureReason.TASK_ERROR, throwable, "task_error");
 
 			safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during MCP request handling")
 					.throwable(throwable)
@@ -856,6 +865,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		try {
 			connectionExecutorService.submit(() -> processConnection(connection));
 		} catch (RejectedExecutionException e) {
+			recordTransportFailure(MetricsCollector.TransportFailureReason.TASK_ERROR, e, "task_error");
 			closeLiveConnection(connection, StreamTerminationReason.SERVER_STOPPING, e, true);
 		}
 	}
@@ -884,6 +894,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				throwable = e;
 		} catch (Throwable t) {
 			throwable = t;
+			recordTransportFailure(transportFailureReasonForWrite(t),
+					t,
+					t instanceof SocketTimeoutException ? "write_timeout" : "write_error");
 		} finally {
 			finishConnection(connection, throwable);
 		}
@@ -1376,12 +1389,17 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		try {
 			writeOperation.write();
 		} catch (IOException e) {
+			recordTransportFailure(transportFailureReasonForWrite(e),
+					e,
+					e instanceof SocketTimeoutException ? "write_timeout" : "write_error");
 			notifyDidFailToWriteResponse(request, marshaledResponse, Duration.ofNanos(System.nanoTime() - startedAtNanos), e);
 			throw e;
 		} catch (RuntimeException e) {
+			recordTransportFailure(MetricsCollector.TransportFailureReason.WRITE_ERROR, e, "write_error");
 			notifyDidFailToWriteResponse(request, marshaledResponse, Duration.ofNanos(System.nanoTime() - startedAtNanos), e);
 			throw e;
 		} catch (Error e) {
+			recordTransportFailure(MetricsCollector.TransportFailureReason.WRITE_ERROR, e, "write_error");
 			notifyDidFailToWriteResponse(request, marshaledResponse, Duration.ofNanos(System.nanoTime() - startedAtNanos), e);
 			throw e;
 		}
@@ -1417,8 +1435,10 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
 					.body(body.getBytes(StandardCharsets.UTF_8))
 					.build(), true);
-		} catch (IOException ignored) {
-			// Nothing to do
+		} catch (IOException e) {
+			recordTransportFailure(transportFailureReasonForWrite(e),
+					e,
+					e instanceof SocketTimeoutException ? "write_timeout" : "write_error");
 		}
 	}
 
@@ -1630,6 +1650,30 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		} catch (Throwable throwable) {
 			// The LifecycleObserver implementation errored out, but we can't let that affect us.
 		}
+	}
+
+	private void recordTransportFailure(MetricsCollector.TransportFailureReason reason,
+																			@Nullable Throwable throwable,
+																			@NonNull String event) {
+		requireNonNull(reason);
+		requireNonNull(event);
+
+		safelyLog(LogEvent.with(LogEventType.SERVER_TRANSPORT_FAILURE,
+						format("MCP transport failure: %s", event))
+				.throwable(throwable)
+				.build());
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didRecordTransportFailure", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didRecordTransportFailure(ServerType.MCP, reason, throwable));
+	}
+
+	private static MetricsCollector.TransportFailureReason transportFailureReasonForWrite(@NonNull Throwable throwable) {
+		requireNonNull(throwable);
+
+		if (throwable instanceof SocketTimeoutException)
+			return MetricsCollector.TransportFailureReason.WRITE_TIMEOUT;
+
+		return MetricsCollector.TransportFailureReason.WRITE_ERROR;
 	}
 
 	private void safelyCollectMetrics(@NonNull String message,

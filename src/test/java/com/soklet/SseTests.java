@@ -1956,8 +1956,16 @@ public class SseTests {
 	@Test
 	public void acceptedSocketChannelClosesWhenSocketSetupFails() throws Exception {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		List<LogEvent> logEvents = new ArrayList<>();
 		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
-				.lifecycleObserver(new QuietLifecycle())
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						logEvents.add(logEvent);
+					}
+				})
+				.metricsCollector(metricsCollector)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
 				.build();
 		server.initialize(sokletConfig, (request, requestResultConsumer) -> { /* no-op */ });
@@ -1973,6 +1981,12 @@ public class SseTests {
 		}
 
 		Assertions.assertTrue(channel.isClosed(), "Accepted SSE channel should close after setup failure");
+		Assertions.assertEquals(Long.valueOf(1L), metricsCollector.snapshot().orElseThrow().getTransportFailures()
+				.get(new MetricsCollector.TransportFailureKey(
+						ServerType.SSE,
+						MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR)));
+		Assertions.assertTrue(logEvents.stream().anyMatch(logEvent ->
+				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE));
 	}
 
 	@Test

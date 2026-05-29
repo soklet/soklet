@@ -395,23 +395,7 @@ final class DefaultHttpServer implements HttpServer {
 					.withMaxConnections(getMaximumConnections())
 					.build();
 
-			Logger logger = new Logger() {
-				@Override
-				public boolean enabled() {
-					return false;
-				}
-
-				@Override
-				public void log(@Nullable LogEntry... logEntries) {
-					// No-op
-				}
-
-				@Override
-				public void log(@Nullable Exception e,
-												@Nullable LogEntry... logEntries) {
-					// No-op
-				}
-			};
+			Logger logger = transportLogger();
 
 			ConnectionListener connectionListener = new ConnectionListener() {
 				@Override
@@ -831,6 +815,107 @@ final class DefaultHttpServer implements HttpServer {
 		this.requestHandler = requestHandler;
 		this.lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 		this.metricsCollector = sokletConfig.getMetricsCollector();
+	}
+
+	@NonNull
+	Logger transportLogger() {
+		return new Logger() {
+			@Override
+			public boolean enabled() {
+				return false;
+			}
+
+			@Override
+			public boolean failureEnabled() {
+				return true;
+			}
+
+			@Override
+			public void log(@Nullable LogEntry... logEntries) {
+				// Trace logging is disabled for the embedded transport by default.
+			}
+
+			@Override
+			public void log(@Nullable Exception e,
+											@Nullable LogEntry... logEntries) {
+				// Trace logging is disabled for the embedded transport by default.
+			}
+
+			@Override
+			public void logFailure(@Nullable LogEntry... logEntries) {
+				logTransportFailure(null, logEntries);
+			}
+
+			@Override
+			public void logFailure(@Nullable Exception e,
+														 @Nullable LogEntry... logEntries) {
+				logTransportFailure(e, logEntries);
+			}
+
+			@Override
+			public void logFailure(@Nullable Throwable throwable,
+														 @Nullable LogEntry... logEntries) {
+				logTransportFailure(throwable, logEntries);
+			}
+		};
+	}
+
+	private void logTransportFailure(@Nullable Throwable throwable,
+																	 @Nullable LogEntry... logEntries) {
+		String event = valueForLogEntry("event", logEntries).orElse("unknown");
+		MetricsCollector.TransportFailureReason reason = transportFailureReasonFor(event);
+		String connectionId = valueForLogEntry("id", logEntries).orElse(null);
+		String message = connectionId == null
+				? format("HTTP transport failure: %s", event)
+				: format("HTTP transport failure: %s (connectionId=%s)", event, connectionId);
+
+		safelyLog(LogEvent.with(LogEventType.SERVER_TRANSPORT_FAILURE, message)
+				.throwable(throwable)
+				.build());
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didRecordTransportFailure", MetricsCollector.class.getSimpleName()),
+				(metricsCollector) -> metricsCollector.didRecordTransportFailure(ServerType.STANDARD_HTTP, reason, throwable));
+	}
+
+	@NonNull
+	private static Optional<String> valueForLogEntry(@NonNull String key,
+																									 @Nullable LogEntry... logEntries) {
+		requireNonNull(key);
+
+		if (logEntries == null)
+			return Optional.empty();
+
+		for (LogEntry logEntry : logEntries) {
+			if (logEntry == null)
+				continue;
+			if (key.equals(logEntry.key()))
+				return Optional.ofNullable(logEntry.value());
+		}
+
+		return Optional.empty();
+	}
+
+	private static MetricsCollector.TransportFailureReason transportFailureReasonFor(@Nullable String event) {
+		if (event == null)
+			return MetricsCollector.TransportFailureReason.UNKNOWN;
+
+		return switch (event) {
+			case "request_timeout" -> MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT;
+			case "exceed_request_max_close" -> MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE;
+			case "malformed_request" -> MetricsCollector.TransportFailureReason.MALFORMED_REQUEST;
+			case "read_error" -> MetricsCollector.TransportFailureReason.READ_ERROR;
+			case "write_error" -> MetricsCollector.TransportFailureReason.WRITE_ERROR;
+			case "response_write_idle_timeout" -> MetricsCollector.TransportFailureReason.RESPONSE_WRITE_IDLE_TIMEOUT;
+			case "response_ready_error" -> MetricsCollector.TransportFailureReason.RESPONSE_READY_ERROR;
+			case "request_timeout_error" -> MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT_ERROR;
+			case "response_write_idle_timeout_error" -> MetricsCollector.TransportFailureReason.RESPONSE_WRITE_IDLE_TIMEOUT_ERROR;
+			case "task_error" -> MetricsCollector.TransportFailureReason.TASK_ERROR;
+			case "timeout_task_error" -> MetricsCollector.TransportFailureReason.TIMEOUT_TASK_ERROR;
+			case "selection_key_error" -> MetricsCollector.TransportFailureReason.SELECTION_KEY_ERROR;
+			case "register_error" -> MetricsCollector.TransportFailureReason.REGISTER_ERROR;
+			case "event_loop_terminate", "sub_event_loop_terminate" -> MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED;
+			default -> MetricsCollector.TransportFailureReason.UNKNOWN;
+		};
 	}
 
 	@NonNull

@@ -200,6 +200,10 @@ public enum LogEventType {
 	 */
 	SERVER_INTERNAL_ERROR,
 	/**
+	 * Indicates the standard HTTP transport encountered a low-level timeout, I/O error, or event-loop failure.
+	 */
+	SERVER_TRANSPORT_FAILURE,
+	/**
 	 * Indicates that the {@link SseServer} received a request with an illegal structure, such as a missing or invalid HTTP verb or an unsupported HTTP/2.0 request.
 	 */
 	SSE_SERVER_UNPARSEABLE_REQUEST,

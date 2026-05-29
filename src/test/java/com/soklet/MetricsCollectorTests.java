@@ -79,6 +79,9 @@ public class MetricsCollectorTests {
 		collector.willAcceptConnection(ServerType.STANDARD_HTTP, null);
 		collector.didAcceptConnection(ServerType.STANDARD_HTTP, null);
 		collector.didFailToAcceptConnection(ServerType.STANDARD_HTTP, null, ConnectionRejectionReason.MAX_CONNECTIONS, null);
+		collector.didRecordTransportFailure(ServerType.STANDARD_HTTP, MetricsCollector.TransportFailureReason.WRITE_ERROR, null);
+		collector.didRecordTransportFailure(ServerType.SSE, MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, null);
+		collector.didRecordTransportFailure(ServerType.MCP, MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, null);
 		collector.didStartRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod);
 		collector.willWriteResponse(ServerType.STANDARD_HTTP, request, resourceMethod, response);
 		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod, response, Duration.ofMillis(5), List.of());
@@ -113,7 +116,23 @@ public class MetricsCollectorTests {
 
 		assertEquals(1L, snapshot.getHttpConnectionsAccepted());
 		assertEquals(1L, snapshot.getHttpConnectionsRejected());
+		assertEquals(1L, snapshot.getTransportFailures().get(new MetricsCollector.TransportFailureKey(
+				ServerType.STANDARD_HTTP, MetricsCollector.TransportFailureReason.WRITE_ERROR)));
+		assertEquals(1L, snapshot.getTransportFailures().get(new MetricsCollector.TransportFailureKey(
+				ServerType.SSE, MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR)));
+		assertEquals(1L, snapshot.getTransportFailures().get(new MetricsCollector.TransportFailureKey(
+				ServerType.MCP, MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR)));
 		assertEquals(0L, snapshot.getActiveRequests());
+
+		String snapshotText = collector.snapshotText(MetricsCollector.SnapshotTextOptions
+				.withMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS)
+				.build()).orElseThrow();
+		assertTrue(snapshotText.contains(
+				"soklet_transport_failures_total{server_type=\"STANDARD_HTTP\",reason=\"WRITE_ERROR\"} 1"));
+		assertTrue(snapshotText.contains(
+				"soklet_transport_failures_total{server_type=\"SSE\",reason=\"CONNECTION_SETUP_ERROR\"} 1"));
+		assertTrue(snapshotText.contains(
+				"soklet_transport_failures_total{server_type=\"MCP\",reason=\"ACCEPT_LOOP_ERROR\"} 1"));
 
 		collector.reset();
 		MetricsCollector.Snapshot resetSnapshot = collector.snapshot().orElseThrow();
@@ -121,6 +140,7 @@ public class MetricsCollectorTests {
 		assertTrue(resetRequestDurations == null || resetRequestDurations.getCount() == 0L);
 		assertEquals(0L, resetSnapshot.getHttpConnectionsAccepted());
 		assertEquals(0L, resetSnapshot.getHttpConnectionsRejected());
+		assertTrue(resetSnapshot.getTransportFailures().values().stream().allMatch(value -> value == 0L));
 		assertEquals(0L, resetSnapshot.getActiveRequests());
 	}
 

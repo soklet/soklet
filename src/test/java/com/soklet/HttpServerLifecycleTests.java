@@ -17,6 +17,8 @@
 package com.soklet;
 
 import com.soklet.annotation.GET;
+import com.soklet.internal.microhttp.LogEntry;
+import com.soklet.internal.microhttp.Logger;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,8 @@ import java.net.ServerSocket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -215,6 +219,48 @@ public class HttpServerLifecycleTests {
 		} finally {
 			httpServer.stop();
 		}
+	}
+
+	@Test
+	public void transportLoggerEmitsLogEventAndMetric() {
+		List<LogEvent> logEvents = new ArrayList<>();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		HttpServer httpServer = HttpServer.withPort(0).build();
+		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						logEvents.add(logEvent);
+					}
+				})
+				.metricsCollector(metricsCollector)
+				.build();
+
+		httpServer.initialize(cfg, (request, consumer) -> {
+			throw new AssertionError("not used");
+		});
+
+		AssertionError throwable = new AssertionError("boom");
+		Logger logger = ((DefaultHttpServer) httpServer).transportLogger();
+		logger.logFailure(throwable,
+				new LogEntry("event", "response_ready_error"),
+				new LogEntry("id", "7"));
+		logger.logFailure(
+				new LogEntry("event", "response_write_idle_timeout"),
+				new LogEntry("id", "8"));
+
+		Assertions.assertEquals(2, logEvents.size());
+		Assertions.assertTrue(logEvents.stream().allMatch(logEvent ->
+				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE));
+		Assertions.assertTrue(logEvents.get(0).getMessage().contains("response_ready_error"));
+		Assertions.assertTrue(logEvents.get(0).getMessage().contains("connectionId=7"));
+		Assertions.assertSame(throwable, logEvents.get(0).getThrowable().orElse(null));
+
+		MetricsCollector.Snapshot snapshot = metricsCollector.snapshot().orElseThrow();
+		Assertions.assertEquals(1L, snapshot.getTransportFailures().get(new MetricsCollector.TransportFailureKey(
+				ServerType.STANDARD_HTTP, MetricsCollector.TransportFailureReason.RESPONSE_READY_ERROR)));
+		Assertions.assertEquals(1L, snapshot.getTransportFailures().get(new MetricsCollector.TransportFailureKey(
+				ServerType.STANDARD_HTTP, MetricsCollector.TransportFailureReason.RESPONSE_WRITE_IDLE_TIMEOUT)));
 	}
 
 	@Test

@@ -20,6 +20,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -352,7 +354,8 @@ public class MicrohttpInternalTests {
 				.withRequestBodyTimeout(Duration.ofSeconds(2))
 				.withConcurrency(1)
 				.build();
-		EventLoop eventLoop = new EventLoop(options, NoopLogger.instance(), (request, callback) -> {
+		RecordingLogger logger = new RecordingLogger();
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) -> {
 			if ("/boom".equals(request.uri())) {
 				callback.accept(MicrohttpResponse.withStreamingBody(200, "OK", List.of(), () -> new WritableSource() {
 					@Override
@@ -389,6 +392,7 @@ public class MicrohttpInternalTests {
 
 			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
 			Assertions.assertTrue(response.endsWith("pong"), response);
+			Assertions.assertTrue(logger.containsFailureEvent("response_ready_error"), logger.events().toString());
 		} finally {
 			eventLoop.stop();
 			eventLoop.join();
@@ -406,7 +410,8 @@ public class MicrohttpInternalTests {
 				.withMaxConnections(1)
 				.withConcurrency(1)
 				.build();
-		EventLoop eventLoop = new EventLoop(options, NoopLogger.instance(), (request, callback) -> {
+		RecordingLogger logger = new RecordingLogger();
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) -> {
 			if ("/stall".equals(request.uri())) {
 				callback.accept(MicrohttpResponse.withWritableSourceBody(200, "OK", List.of(), 1L, () -> new WritableSource() {
 					@Override
@@ -446,6 +451,7 @@ public class MicrohttpInternalTests {
 
 			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
 			Assertions.assertTrue(response.endsWith("pong"), response);
+			Assertions.assertTrue(logger.containsFailureEvent("response_write_idle_timeout"), logger.events().toString());
 		} finally {
 			eventLoop.stop();
 			eventLoop.join();
@@ -512,6 +518,73 @@ public class MicrohttpInternalTests {
 
 	private static InetSocketAddress remoteAddress() {
 		return new InetSocketAddress("127.0.0.1", 12345);
+	}
+
+	private static class RecordingLogger implements Logger {
+		private final List<String> failureEvents;
+
+		private RecordingLogger() {
+			this.failureEvents = Collections.synchronizedList(new ArrayList<>());
+		}
+
+		@Override
+		public boolean enabled() {
+			return false;
+		}
+
+		@Override
+		public boolean failureEnabled() {
+			return true;
+		}
+
+		@Override
+		public void log(LogEntry... entries) {
+			// Trace logging disabled for this test logger.
+		}
+
+		@Override
+		public void log(Exception e, LogEntry... entries) {
+			// Trace logging disabled for this test logger.
+		}
+
+		@Override
+		public void logFailure(LogEntry... entries) {
+			record(entries);
+		}
+
+		@Override
+		public void logFailure(Exception e, LogEntry... entries) {
+			record(entries);
+		}
+
+		@Override
+		public void logFailure(Throwable throwable, LogEntry... entries) {
+			record(entries);
+		}
+
+		boolean containsFailureEvent(String event) {
+			synchronized (failureEvents) {
+				return failureEvents.contains(event);
+			}
+		}
+
+		List<String> events() {
+			synchronized (failureEvents) {
+				return List.copyOf(failureEvents);
+			}
+		}
+
+		private void record(LogEntry... entries) {
+			if (entries == null)
+				return;
+
+			for (LogEntry entry : entries) {
+				if (entry != null && "event".equals(entry.key())) {
+					failureEvents.add(entry.value());
+					return;
+				}
+			}
+		}
 	}
 
 	private static class PartialWriteSocketChannel extends SocketChannel {

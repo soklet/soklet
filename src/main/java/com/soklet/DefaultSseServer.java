@@ -1070,6 +1070,7 @@ final class DefaultSseServer implements SseServer {
 		} catch (IOException e) {
 			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
 					"SSE event loop encountered an IO error").throwable(e).build());
+			recordTransportFailure(MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, e, "accept_loop_error");
 		} finally {
 			// Close the server socket if we opened it
 			ServerSocketChannel serverSocketChannelToClose = this.serverSocketChannel;
@@ -1143,6 +1144,7 @@ final class DefaultSseServer implements SseServer {
 							"Unable to prepare accepted Server-Sent Event connection")
 					.throwable(t)
 					.build());
+			recordTransportFailure(MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, t, "connection_setup_error");
 		} finally {
 			if (!submitted)
 				closeAcceptedSocketChannel(clientSocketChannel);
@@ -1234,6 +1236,7 @@ final class DefaultSseServer implements SseServer {
 			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to prepare SSE handshake timeout response")
 					.throwable(t)
 					.build());
+			recordTransportFailure(MetricsCollector.TransportFailureReason.RESPONSE_READY_ERROR, t, "response_ready_error");
 		}
 
 		try {
@@ -1244,6 +1247,7 @@ final class DefaultSseServer implements SseServer {
 			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to write SSE handshake timeout response")
 					.throwable(t)
 					.build());
+			recordTransportFailure(MetricsCollector.TransportFailureReason.WRITE_ERROR, t, "write_error");
 		} finally {
 			try {
 				synchronized (handshakeContext.channelLock) {
@@ -1314,6 +1318,7 @@ final class DefaultSseServer implements SseServer {
 				request = e.getTooLargeRequest();
 				if (remoteAddress != null)
 					request = request.copy().remoteAddress(remoteAddress).finish();
+				recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE, e, "exceed_request_max_close");
 			} catch (RequestReadRejectedException e) {
 				if (handshakeResponseWritten.get()) {
 					closeSocketChannel(clientSocketChannel, channelLock);
@@ -1329,6 +1334,7 @@ final class DefaultSseServer implements SseServer {
 								"Request reader executor rejected task")
 						.throwable(e)
 						.build());
+				recordTransportFailure(MetricsCollector.TransportFailureReason.TASK_ERROR, e, "task_error");
 
 				if (handshakeResponseWritten.compareAndSet(false, true)) {
 					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
@@ -1357,6 +1363,7 @@ final class DefaultSseServer implements SseServer {
 				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
 						.throwable(e)
 						.build());
+				recordTransportFailure(MetricsCollector.TransportFailureReason.MALFORMED_REQUEST, e, "malformed_request");
 
 				if (handshakeResponseWritten.compareAndSet(false, true)) {
 					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
@@ -1378,6 +1385,7 @@ final class DefaultSseServer implements SseServer {
 				}
 
 				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_TIMEOUT, e);
+				recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT, e, "request_timeout");
 
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.REQUEST_READ_TIMEOUT, e);
@@ -1410,6 +1418,7 @@ final class DefaultSseServer implements SseServer {
 				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_UNPARSEABLE_REQUEST, "Unable to parse Server-Sent Event request")
 						.throwable(e)
 						.build());
+				recordTransportFailure(MetricsCollector.TransportFailureReason.READ_ERROR, e, "read_error");
 				throw e;
 			}
 
@@ -1528,6 +1537,7 @@ final class DefaultSseServer implements SseServer {
 						safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to generate SSE handshake response")
 								.throwable(t)
 								.build());
+						recordTransportFailure(MetricsCollector.TransportFailureReason.RESPONSE_READY_ERROR, t, "response_ready_error");
 
 						// Clear the accepted handshake reference in case it was set
 						handshakeAcceptedReference.set(null);
@@ -1550,6 +1560,7 @@ final class DefaultSseServer implements SseServer {
 						safelyLog(LogEvent.with(LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED, "Unable to write SSE handshake response")
 								.throwable(t)
 								.build());
+						recordTransportFailure(MetricsCollector.TransportFailureReason.WRITE_ERROR, t, "write_error");
 
 						// Clear the accepted handshake reference in case it was set
 						handshakeAcceptedReference.set(null);
@@ -1559,6 +1570,8 @@ final class DefaultSseServer implements SseServer {
 					}
 				});
 			} catch (Throwable t) {
+				recordTransportFailure(MetricsCollector.TransportFailureReason.TASK_ERROR, t, "task_error");
+
 				if (handshakeResponseWritten.compareAndSet(false, true)) {
 					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 					try {
@@ -1602,7 +1615,11 @@ final class DefaultSseServer implements SseServer {
 						(metricsCollector) -> metricsCollector.willEstablishSseConnection(willEstablishRequest, willEstablishResourceMethod));
 
 				clientSocketChannelRegistration = registerClientSocketChannel(clientSocketChannel, request, handshakeAccepted)
-						.orElseThrow(() -> new IllegalStateException("SSE handshake accepted but connection could not be registered"));
+						.orElseThrow(() -> {
+							IllegalStateException exception = new IllegalStateException("SSE handshake accepted but connection could not be registered");
+							recordTransportFailure(MetricsCollector.TransportFailureReason.REGISTER_ERROR, exception, "register_error");
+							return exception;
+						});
 				connectionSlotReserved.set(false);
 
 				if (startConnectionProcessing(clientSocketChannelRegistration, channelLock)) {
@@ -1676,6 +1693,7 @@ final class DefaultSseServer implements SseServer {
 				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Connection executor rejected task")
 						.throwable(e)
 						.build());
+				recordTransportFailure(MetricsCollector.TransportFailureReason.TASK_ERROR, e, "task_error");
 			}
 			return false;
 		}
@@ -1920,8 +1938,12 @@ final class DefaultSseServer implements SseServer {
 						}
 					}
 
-					if (writeThrowableSnapshot != null)
+					if (writeThrowableSnapshot != null) {
+						recordTransportFailure(transportFailureReasonForWrite(writeThrowableSnapshot),
+								writeThrowableSnapshot,
+								writeThrowableSnapshot instanceof SocketTimeoutException ? "write_timeout" : "write_error");
 						throw writeThrowableSnapshot;
+					}
 				}
 			}
 		} catch (Throwable t) {
@@ -3775,6 +3797,32 @@ final class DefaultSseServer implements SseServer {
 		} catch (Throwable throwable) {
 			// The LifecycleObserver implementation errored out, but we can't let that affect us.
 		}
+	}
+
+	private void recordTransportFailure(MetricsCollector.TransportFailureReason reason,
+																			@Nullable Throwable throwable,
+																			@NonNull String event) {
+		requireNonNull(reason);
+		requireNonNull(event);
+
+		safelyLog(LogEvent.with(LogEventType.SERVER_TRANSPORT_FAILURE,
+						format("SSE transport failure: %s", event))
+				.throwable(throwable)
+				.build());
+		safelyCollectMetrics(
+				format("An exception occurred while invoking %s::didRecordTransportFailure", MetricsCollector.class.getSimpleName()),
+				null,
+				null,
+				(metricsCollector) -> metricsCollector.didRecordTransportFailure(ServerType.SSE, reason, throwable));
+	}
+
+	private static MetricsCollector.TransportFailureReason transportFailureReasonForWrite(@NonNull Throwable throwable) {
+		requireNonNull(throwable);
+
+		if (throwable instanceof SocketTimeoutException)
+			return MetricsCollector.TransportFailureReason.WRITE_TIMEOUT;
+
+		return MetricsCollector.TransportFailureReason.WRITE_ERROR;
 	}
 
 	private void notifyWillAcceptConnection(@Nullable InetSocketAddress remoteAddress) {

@@ -139,8 +139,8 @@ class ConnectionEventLoop {
         }
 
         private void onRequestReadTimeout() {
-            if (logger.enabled()) {
-                logger.log(
+            if (logger.failureEnabled()) {
+                logger.logFailure(
                         new LogEntry("event", "request_timeout"),
                         new LogEntry("id", id));
             }
@@ -151,23 +151,23 @@ class ConnectionEventLoop {
             try {
                 doOnReadable();
             } catch (RequestTooLargeException e) {
-                if (logger.enabled()) {
-                    logger.log(
+                if (logger.failureEnabled()) {
+                    logger.logFailure(
                             new LogEntry("event", "exceed_request_max_close"),
                             new LogEntry("id", id),
                             new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
                 }
                 respondToRequestTooLarge();
             } catch (MalformedRequestException e) {
-                if (logger.enabled()) {
-                    logger.log(e,
+                if (logger.failureEnabled()) {
+                    logger.logFailure(e,
                             new LogEntry("event", "malformed_request"),
                             new LogEntry("id", id));
                 }
                 respondToMalformedRequest();
             } catch (IOException | RuntimeException e) {
-                if (logger.enabled()) {
-                    logger.log(e,
+                if (logger.failureEnabled()) {
+                    logger.logFailure(e,
                             new LogEntry("event", "read_error"),
                             new LogEntry("id", id));
                 }
@@ -198,8 +198,8 @@ class ConnectionEventLoop {
             }
             if (requestParser.parse()) {
                 if (byteTokenizer.position() > options.maxRequestSize()) {
-                    if (logger.enabled()) {
-                        logger.log(
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(
                                 new LogEntry("event", "exceed_request_max_close"),
                                 new LogEntry("id", id),
                                 new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
@@ -217,8 +217,8 @@ class ConnectionEventLoop {
             } else {
                 scheduleRequestReadTimeoutForCurrentParserState();
                 if (byteTokenizer.size() > options.maxRequestSize()) {
-                    if (logger.enabled()) {
-                        logger.log(
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(
                                 new LogEntry("event", "exceed_request_max_close"),
                                 new LogEntry("id", id),
                                 new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
@@ -343,8 +343,8 @@ class ConnectionEventLoop {
             try {
                 doOnWritable();
             } catch (IOException | RuntimeException e) {
-                if (logger.enabled()) {
-                    logger.log(e,
+                if (logger.failureEnabled()) {
+                    logger.logFailure(e,
                             new LogEntry("event", "write_error"),
                             new LogEntry("id", id));
                 }
@@ -392,8 +392,8 @@ class ConnectionEventLoop {
                 } else { // persistent connection
                     if (requestParser.parse()) { // subsequent request in buffer
                         if (byteTokenizer.position() > options.maxRequestSize()) {
-                            if (logger.enabled()) {
-                                logger.log(
+                            if (logger.failureEnabled()) {
+                                logger.logFailure(
                                         new LogEntry("event", "exceed_request_max_close"),
                                         new LogEntry("id", id),
                                         new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
@@ -486,8 +486,8 @@ class ConnectionEventLoop {
         }
 
         private void onResponseWriteIdleTimeout() {
-            if (logger.enabled()) {
-                logger.log(
+            if (logger.failureEnabled()) {
+                logger.logFailure(
                         new LogEntry("event", "response_write_idle_timeout"),
                         new LogEntry("id", id));
             }
@@ -583,8 +583,8 @@ class ConnectionEventLoop {
         try {
             doStart();
         } catch (IOException e) {
-            if (logger.enabled()) {
-                logger.log(e, new LogEntry("event", "sub_event_loop_terminate"));
+            if (logger.failureEnabled()) {
+                logger.logFailure(e, new LogEntry("event", "sub_event_loop_terminate"));
             }
             stop.set(true); // stop the world on critical error
         } finally {
@@ -680,8 +680,8 @@ class ConnectionEventLoop {
 
     private void logThrowable(Throwable throwable, LogEntry... entries) {
         try {
-            if (logger.enabled()) {
-                logger.log(throwable, entries);
+            if (logger.failureEnabled()) {
+                logger.logFailure(throwable, entries);
             }
         } catch (Throwable ignored) {
             // Logging must not terminate the event loop.

@@ -117,6 +117,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final LongAdder sseConnectionsRejected;
 	private final LongAdder mcpConnectionsAccepted;
 	private final LongAdder mcpConnectionsRejected;
+	private final ConcurrentLruMap<TransportFailureKey, LongAdder> transportFailuresByServerTypeAndReason;
 	private final AtomicBoolean includeSseMetrics;
 	private final AtomicBoolean includeMcpMetrics;
 
@@ -169,6 +170,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.sseConnectionsRejected = new LongAdder();
 		this.mcpConnectionsAccepted = new LongAdder();
 		this.mcpConnectionsRejected = new LongAdder();
+		this.transportFailuresByServerTypeAndReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.includeSseMetrics = new AtomicBoolean(false);
 		this.includeMcpMetrics = new AtomicBoolean(false);
 	}
@@ -278,6 +280,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			counterFor(this.sseRequestRejectionsByReason, key).increment();
 		else if (serverType == ServerType.MCP)
 			counterFor(this.mcpRequestRejectionsByReason, key).increment();
+	}
+
+	@Override
+	public void didRecordTransportFailure(@NonNull ServerType serverType,
+																				@NonNull TransportFailureReason reason,
+																				@Nullable Throwable throwable) {
+		requireNonNull(serverType);
+		requireNonNull(reason);
+
+		counterFor(this.transportFailuresByServerTypeAndReason, new TransportFailureKey(serverType, reason)).increment();
 	}
 
 	@Override
@@ -784,6 +796,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.sseConnectionsRejected(getSseConnectionsRejected())
 				.mcpConnectionsAccepted(getMcpConnectionsAccepted())
 				.mcpConnectionsRejected(getMcpConnectionsRejected())
+				.transportFailures(snapshotTransportFailures())
 				.httpRequestReadFailures(snapshotHttpRequestReadFailures())
 				.httpRequestRejections(snapshotHttpRequestRejections())
 				.sseRequestReadFailures(snapshotSseRequestReadFailures())
@@ -835,6 +848,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshot.getHttpConnectionsAccepted(), options);
 		appendCounter(sb, "soklet_http_connections_rejected_total", "Total rejected HTTP connections",
 				snapshot.getHttpConnectionsRejected(), options);
+		appendCounter(sb, "soklet_transport_failures_total", "Total low-level transport failures",
+				snapshot.getTransportFailures(), DefaultMetricsCollector::labelsForTransportFailureKey, options);
 		appendCounter(sb, "soklet_http_request_read_failures_total", "Total HTTP request read failures",
 				snapshot.getHttpRequestReadFailures(), DefaultMetricsCollector::labelsForRequestReadFailureKey, options);
 		appendCounter(sb, "soklet_http_requests_rejected_total", "Total HTTP requests rejected before handling",
@@ -964,6 +979,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	long getMcpConnectionsRejected() {
 		return this.mcpConnectionsRejected.sum();
+	}
+
+	@NonNull
+	Map<@NonNull TransportFailureKey, @NonNull Long> snapshotTransportFailures() {
+		return snapshotCounterMap(this.transportFailuresByServerTypeAndReason);
 	}
 
 	@NonNull
@@ -1131,6 +1151,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.requestsInFlightByIdentity.clear();
 		this.requestsInFlightById.clear();
 		this.sseConnectionsByIdentity.clear();
+		resetCounterMap(this.transportFailuresByServerTypeAndReason);
 		resetCounterMap(this.httpRequestReadFailuresByReason);
 		resetCounterMap(this.httpRequestRejectionsByReason);
 		resetCounterMap(this.sseRequestReadFailuresByReason);
@@ -1499,6 +1520,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		Map<String, String> labels = new LinkedHashMap<>(2);
 		labels.put("method", key.method().name());
 		labels.put("route", routeLabel(key.routeType(), key.route()));
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForTransportFailureKey(@NonNull TransportFailureKey key) {
+		requireNonNull(key);
+
+		Map<String, String> labels = new LinkedHashMap<>(2);
+		labels.put("server_type", key.serverType().name());
+		labels.put("reason", key.reason().name());
 		return new LabelSet(labels);
 	}
 

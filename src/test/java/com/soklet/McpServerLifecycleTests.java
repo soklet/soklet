@@ -954,6 +954,10 @@ public class McpServerLifecycleTests {
 		});
 		Assertions.assertTrue(lifecycleObserver.getEvents().contains("didFailToAcceptConnection:MCP:INTERNAL_ERROR"));
 		Assertions.assertEquals(Long.valueOf(1L), metricsCollector.snapshot().orElseThrow().getMcpConnectionsRejected());
+		Assertions.assertEquals(Long.valueOf(1L), metricsCollector.snapshot().orElseThrow().getTransportFailures()
+				.get(new MetricsCollector.TransportFailureKey(
+						ServerType.MCP,
+						MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR)));
 	}
 
 	@McpServerEndpoint(path = "/mcp", name = "example", version = "1.0.0")

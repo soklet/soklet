@@ -89,8 +89,8 @@ public class EventLoop {
         try {
             doRun();
         } catch (IOException e) {
-            if (logger.enabled()) {
-                logger.log(e, new LogEntry("event", "event_loop_terminate"));
+            if (logger.failureEnabled()) {
+                logger.logFailure(e, new LogEntry("event", "event_loop_terminate"));
             }
             stop.set(true); // stop the world on critical error
         } finally {

@@ -175,6 +175,19 @@ public interface MetricsCollector {
 	}
 
 	/**
+	 * Called when a server transport records a low-level failure or timeout outside normal application request handling.
+	 *
+	 * @param serverType the server type whose transport recorded the failure
+	 * @param reason     the transport failure reason
+	 * @param throwable  an optional underlying cause, or {@code null} if not applicable
+	 */
+	default void didRecordTransportFailure(@NonNull ServerType serverType,
+																				 @NonNull TransportFailureReason reason,
+																				 @Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
 	 * Called when Soklet is about to read or parse a request into a valid {@link Request}.
 	 *
 	 * @param serverType    the server type that received the request
@@ -821,6 +834,7 @@ public interface MetricsCollector {
 	 * Durations are in nanoseconds, sizes are in bytes, and queue depths are raw counts.
 	 * Histogram values are captured as {@link HistogramSnapshot} instances.
 	 * Connection counts report total accepted/rejected connections for the HTTP, SSE, and MCP servers.
+	 * Transport failures are reported by server type and low-level failure reason.
 	 * Request read failures and request rejections are reported separately for HTTP, SSE, and MCP traffic.
 	 * Instances are typically produced by {@link MetricsCollector#snapshot()} but can also be built
 	 * manually via {@link #builder()}.
@@ -849,6 +863,8 @@ public interface MetricsCollector {
 		private final Long mcpConnectionsAccepted;
 		@NonNull
 		private final Long mcpConnectionsRejected;
+		@NonNull
+		private final Map<@NonNull TransportFailureKey, @NonNull Long> transportFailures;
 		@NonNull
 		private final Map<@NonNull RequestReadFailureKey, @NonNull Long> httpRequestReadFailures;
 		@NonNull
@@ -933,6 +949,7 @@ public interface MetricsCollector {
 			this.sseConnectionsRejected = requireNonNull(builder.sseConnectionsRejected);
 			this.mcpConnectionsAccepted = requireNonNull(builder.mcpConnectionsAccepted);
 			this.mcpConnectionsRejected = requireNonNull(builder.mcpConnectionsRejected);
+			this.transportFailures = copyOrEmpty(builder.transportFailures);
 			this.httpRequestReadFailures = copyOrEmpty(builder.httpRequestReadFailures);
 			this.httpRequestRejections = copyOrEmpty(builder.httpRequestRejections);
 			this.sseRequestReadFailures = copyOrEmpty(builder.sseRequestReadFailures);
@@ -1063,6 +1080,16 @@ public interface MetricsCollector {
 		@NonNull
 		public Long getMcpConnectionsRejected() {
 			return this.mcpConnectionsRejected;
+		}
+
+		/**
+		 * Returns transport failure counters keyed by server type and failure reason.
+		 *
+		 * @return transport failure counters
+		 */
+		@NonNull
+		public Map<@NonNull TransportFailureKey, @NonNull Long> getTransportFailures() {
+			return this.transportFailures;
 		}
 
 		/**
@@ -1400,6 +1427,8 @@ public interface MetricsCollector {
 			@NonNull
 			private Long mcpConnectionsRejected;
 			@Nullable
+			private Map<@NonNull TransportFailureKey, @NonNull Long> transportFailures;
+			@Nullable
 			private Map<@NonNull RequestReadFailureKey, @NonNull Long> httpRequestReadFailures;
 			@Nullable
 			private Map<@NonNull RequestRejectionKey, @NonNull Long> httpRequestRejections;
@@ -1590,6 +1619,19 @@ public interface MetricsCollector {
 			@NonNull
 			public Builder mcpConnectionsRejected(@NonNull Long mcpConnectionsRejected) {
 				this.mcpConnectionsRejected = requireNonNull(mcpConnectionsRejected);
+				return this;
+			}
+
+			/**
+			 * Sets transport failure counters keyed by server type and failure reason.
+			 *
+			 * @param transportFailures the transport failure counters
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder transportFailures(
+					@Nullable Map<@NonNull TransportFailureKey, @NonNull Long> transportFailures) {
+				this.transportFailures = transportFailures;
 				return this;
 			}
 
@@ -2269,6 +2311,86 @@ public interface MetricsCollector {
 	}
 
 	/**
+	 * Low-level server transport failure reasons.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	enum TransportFailureReason {
+		/**
+		 * A request header/body read timed out.
+		 */
+		REQUEST_READ_TIMEOUT,
+		/**
+		 * A request exceeded configured transport limits.
+		 */
+		REQUEST_TOO_LARGE,
+		/**
+		 * A request could not be parsed by the transport.
+		 */
+		MALFORMED_REQUEST,
+		/**
+		 * A socket read failed.
+		 */
+		READ_ERROR,
+		/**
+		 * A response write failed.
+		 */
+		WRITE_ERROR,
+		/**
+		 * A non-streaming response made no write progress before its idle timeout.
+		 */
+		RESPONSE_WRITE_IDLE_TIMEOUT,
+		/**
+		 * A response-ready callback failed before the response could be written.
+		 */
+		RESPONSE_READY_ERROR,
+		/**
+		 * A request-timeout callback failed.
+		 */
+		REQUEST_READ_TIMEOUT_ERROR,
+		/**
+		 * A response-write-idle-timeout callback failed.
+		 */
+		RESPONSE_WRITE_IDLE_TIMEOUT_ERROR,
+		/**
+		 * A server accept loop failed while accepting or preparing a connection.
+		 */
+		ACCEPT_LOOP_ERROR,
+		/**
+		 * An accepted connection could not be prepared before request handling began.
+		 */
+		CONNECTION_SETUP_ERROR,
+		/**
+		 * A transport event-loop task failed.
+		 */
+		TASK_ERROR,
+		/**
+		 * A timeout scheduler task failed.
+		 */
+		TIMEOUT_TASK_ERROR,
+		/**
+		 * A selection-key dispatch failed.
+		 */
+		SELECTION_KEY_ERROR,
+		/**
+		 * A connection registration failed.
+		 */
+		REGISTER_ERROR,
+		/**
+		 * A socket write made no progress before its timeout.
+		 */
+		WRITE_TIMEOUT,
+		/**
+		 * A transport event-loop terminated after an unrecoverable error.
+		 */
+		EVENT_LOOP_TERMINATED,
+		/**
+		 * The transport reported a failure that Soklet does not classify.
+		 */
+		UNKNOWN
+	}
+
+	/**
 	 * Indicates whether a request was matched to a {@link ResourcePathDeclaration}.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -2314,6 +2436,19 @@ public interface MetricsCollector {
 		 * The per-connection write queue was full.
 		 */
 		QUEUE_FULL
+	}
+
+	/**
+	 * Key for transport failures grouped by server type and reason.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	record TransportFailureKey(@NonNull ServerType serverType,
+														 @NonNull TransportFailureReason reason) {
+		public TransportFailureKey {
+			requireNonNull(serverType);
+			requireNonNull(reason);
+		}
 	}
 
 	/**
