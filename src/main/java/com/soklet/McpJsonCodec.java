@@ -243,6 +243,9 @@ final class McpJsonCodec {
 			while (true) {
 				skipWhitespace();
 
+				if (isAtEnd())
+					throw parseException("Expected object property name");
+
 				if (current() != '"')
 					throw parseException("Expected object property name");
 

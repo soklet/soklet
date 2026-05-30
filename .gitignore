@@ -1,5 +1,8 @@
 /.apt_generated/
 /target/
 /benchmarks/target/
+/fuzz/target/
+/fuzz/.cifuzz-corpus/
+/fuzz/src/test/resources/**/crash-*
 .idea
 soklet.iml

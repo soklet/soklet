@@ -89,6 +89,17 @@ public class McpJsonCodecTests {
 	}
 
 	@Test
+	public void parseRejectsIncompleteObjectPropertyName() {
+		IllegalArgumentException topLevelException = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse("{"));
+		Assertions.assertTrue(topLevelException.getMessage().contains("Expected object property name"));
+
+		IllegalArgumentException nestedException = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse("[[{"));
+		Assertions.assertTrue(nestedException.getMessage().contains("Expected object property name"));
+	}
+
+	@Test
 	public void parseRejectsExcessiveNestingDepth() {
 		StringBuilder json = new StringBuilder();
 
