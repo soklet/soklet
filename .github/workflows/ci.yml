@@ -82,8 +82,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: fuzz/.cifuzz-corpus
-          key: jazzer-${{ runner.os }}-${{ github.ref_name }}
+          key: jazzer-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
           restore-keys: |
+            jazzer-${{ runner.os }}-${{ github.ref_name }}-
             jazzer-${{ runner.os }}-
 
       - name: Run fuzz targets
