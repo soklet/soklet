@@ -1,0 +1,13 @@
+------SokletFuzzBoundary
+Content-Disposition: form-data; name="a"
+
+1
+------SokletFuzzBoundary
+Content-Disposition: form-data; name="b"
+
+2
+------SokletFuzzBoundary
+Content-Disposition: form-data; name="c"
+
+3
+------SokletFuzzBoundary--

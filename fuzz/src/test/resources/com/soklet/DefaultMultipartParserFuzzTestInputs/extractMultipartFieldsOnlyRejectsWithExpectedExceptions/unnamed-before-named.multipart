@@ -1,0 +1,9 @@
+------SokletFuzzBoundary
+Content-Disposition: form-data; filename="ignored.txt"
+
+ignored
+------SokletFuzzBoundary
+Content-Disposition: form-data; name="a"
+
+1
+------SokletFuzzBoundary--
