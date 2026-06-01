@@ -55,6 +55,41 @@ public class McpJsonCodecTests {
 	}
 
 	@Test
+	public void serializesUnpairedSurrogatesWithoutCorruption() {
+		// A lone low surrogate is accepted on input; serializing it must not let UTF-8 encoding silently
+		// replace it with '?'. It must be escaped and survive a parse -> serialize -> parse cycle.
+		McpString parsed = (McpString) McpJsonCodec.parse("\"\\uDC00\"");
+		byte[] serialized = McpJsonCodec.toUtf8Bytes(parsed);
+		String serializedText = new String(serialized, StandardCharsets.UTF_8);
+
+		Assertions.assertFalse(serializedText.contains("?"),
+				"Unpaired surrogate was corrupted during serialization: " + serializedText);
+
+		McpString reparsed = (McpString) McpJsonCodec.parse(serialized);
+		Assertions.assertEquals(parsed.value(), reparsed.value());
+	}
+
+	@Test
+	public void serializesValidSurrogatePairsVerbatim() {
+		// A well-formed surrogate pair (an emoji) must round-trip and be emitted as UTF-8, not escaped away.
+		McpString parsed = (McpString) McpJsonCodec.parse("\"\\uD83D\\uDE00\"");
+		Assertions.assertEquals("\"😀\"", McpJsonCodec.toJson(parsed));
+		McpString reparsed = (McpString) McpJsonCodec.parse(McpJsonCodec.toUtf8Bytes(parsed));
+		Assertions.assertEquals(parsed.value(), reparsed.value());
+		Assertions.assertEquals("😀", reparsed.value());
+	}
+
+	@Test
+	public void serializesExponentNumbersCompactlyEnoughToReparse() {
+		McpNumber parsed = (McpNumber) McpJsonCodec.parse("1e600");
+		String json = McpJsonCodec.toJson(parsed);
+
+		Assertions.assertEquals("1E+600", json);
+		Assertions.assertTrue(json.length() <= 512);
+		Assertions.assertEquals(0, parsed.value().compareTo(((McpNumber) McpJsonCodec.parse(json)).value()));
+	}
+
+	@Test
 	public void writerEscapesAndRoundTripsValues() {
 		Map<String, McpValue> values = new LinkedHashMap<>();
 		values.put("message", new McpString("Hello\n\"MCP\""));
@@ -140,5 +175,27 @@ public class McpJsonCodecTests {
 		IllegalArgumentException negativeException = Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpJsonCodec.parse("1e-10001"));
 		Assertions.assertTrue(negativeException.getMessage().contains("exponent magnitude"));
+	}
+
+	@Test
+	public void parseRejectsNumbersWhoseCanonicalFormExceedsLengthCap() {
+		// "9...9e9" (511-char token) satisfies the input-token cap, but its canonical
+		// BigDecimal.toString() form is longer than 512 characters. Soklet must reject it rather than
+		// emit a number it could not itself re-parse.
+		String json = "9".repeat(509) + "e9";
+		Assertions.assertTrue(json.length() <= 512);
+
+		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse(json));
+		Assertions.assertTrue(exception.getMessage().contains("number length"));
+	}
+
+	@Test
+	public void parseRejectsNumbersWhoseCanonicalExponentExceedsCap() {
+		// "12e10000" sits at the exponent cap on input, but normalizes to "1.2E+10001" - one past the
+		// cap - so Soklet must reject it for the same round-trip self-consistency reason.
+		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse("12e10000"));
+		Assertions.assertTrue(exception.getMessage().contains("exponent magnitude"));
 	}
 }

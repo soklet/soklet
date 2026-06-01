@@ -117,7 +117,7 @@ final class McpJsonCodec {
 		}
 
 		if (value instanceof McpNumber mcpNumber) {
-			json.append(mcpNumber.value().toPlainString());
+			json.append(mcpNumber.value().toString());
 			return;
 		}
 
@@ -153,10 +153,27 @@ final class McpJsonCodec {
 				case '\r' -> json.append("\\r");
 				case '\t' -> json.append("\\t");
 				default -> {
-					if (c < 0x20)
+					if (c < 0x20) {
 						json.append(format("\\u%04x", (int) c));
-					else
+					} else if (Character.isHighSurrogate(c)) {
+						char low = (i + 1 < value.length()) ? value.charAt(i + 1) : '\0';
+
+						if (Character.isLowSurrogate(low)) {
+							// Well-formed surrogate pair: emit verbatim so UTF-8 encodes the full code point.
+							json.append(c);
+							json.append(low);
+							i++;
+						} else {
+							// Unpaired high surrogate: escape it. Emitting it verbatim would let UTF-8
+							// encoding silently replace it with '?', corrupting the value.
+							json.append(format("\\u%04x", (int) c));
+						}
+					} else if (Character.isLowSurrogate(c)) {
+						// Unpaired low surrogate: escape it for the same reason as above.
+						json.append(format("\\u%04x", (int) c));
+					} else {
 						json.append(c);
+					}
 				}
 			}
 		}
@@ -409,7 +426,9 @@ final class McpJsonCodec {
 				consumeDigits("Fractional JSON number part must contain at least one digit", numberStart);
 			}
 
-			if (peek('e') || peek('E')) {
+			boolean hasExponent = peek('e') || peek('E');
+
+			if (hasExponent) {
 				consumeNumberCharacter(numberStart);
 
 				if (peek('+') || peek('-'))
@@ -418,7 +437,47 @@ final class McpJsonCodec {
 				consumeExponentDigits(numberStart);
 			}
 
-			return new BigDecimal(this.json.substring(numberStart, this.index));
+			BigDecimal number = new BigDecimal(this.json.substring(numberStart, this.index));
+
+			// A number can satisfy the input-token caps yet have a canonical BigDecimal.toString() form
+			// that would not: "12e10000" normalizes to "1.2E+10001" (exponent one past the cap), and a
+			// long high-precision mantissa with a small exponent can expand past the length cap. Soklet
+			// serializes numbers via toString(), so reject any number whose canonical form would exceed
+			// the same caps - otherwise the codec could emit JSON that it would itself reject. Only
+			// exponent-bearing inputs can produce such a canonical form, so plain numbers skip the check.
+			if (hasExponent)
+				validateCanonicalNumberWithinCaps(number.toString());
+
+			return number;
+		}
+
+		// Mirrors the input-token caps (MAX_NUMBER_LENGTH, MAX_EXPONENT_ABSOLUTE_VALUE) against a
+		// canonical BigDecimal.toString() form. Sharing the same constants keeps the parser and
+		// serializer from drifting apart on what counts as an acceptable number.
+		private void validateCanonicalNumberWithinCaps(@NonNull String canonicalNumber) {
+			requireNonNull(canonicalNumber);
+
+			if (canonicalNumber.length() > MAX_NUMBER_LENGTH)
+				throw parseException(format("JSON number length exceeds maximum of %s", MAX_NUMBER_LENGTH));
+
+			int exponentIndex = canonicalNumber.indexOf('E');
+
+			if (exponentIndex < 0)
+				exponentIndex = canonicalNumber.indexOf('e');
+
+			if (exponentIndex < 0)
+				return;
+
+			long exponentAbsoluteValue;
+
+			try {
+				exponentAbsoluteValue = Math.abs(Long.parseLong(canonicalNumber.substring(exponentIndex + 1)));
+			} catch (NumberFormatException e) {
+				throw parseException("JSON number exponent could not be validated");
+			}
+
+			if (exponentAbsoluteValue > MAX_EXPONENT_ABSOLUTE_VALUE)
+				throw parseException(format("JSON number exponent magnitude exceeds maximum of %s", MAX_EXPONENT_ABSOLUTE_VALUE));
 		}
 
 		private void consumeDigits(@NonNull String ifMissingDigitsMessage,
