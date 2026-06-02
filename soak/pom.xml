@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.soklet</groupId>
+    <artifactId>soklet-soak</artifactId>
+    <version>3.2.1-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>Soklet Soak Tests</name>
+    <description>Long-running load and resource-leak soak tests for Soklet internals.</description>
+
+    <!--
+        Standalone module (no parent, not listed in the root pom), built like the fuzz module:
+        build-helper adds ../src/main/java as a source root so the soak tests exercise the real
+        core sources rather than a published artifact. Tests stand up a REAL loopback server (not
+        the off-network simulator) so the NIO/socket layer - where a file-descriptor or channel
+        leak would actually live - is exercised, then assert that file descriptors and Soklet's
+        own active-resource gauges return to baseline after load stops.
+
+        Two run modes, mirroring the fuzz module's JAZZER_FUZZ split:
+          - default (smoke): short churn that still moves enough connections/sessions to expose a
+            per-iteration leak. Fast enough to gate pull requests.
+          - SOKLET_SOAK=1 (soak): sustained, higher-volume churn for nightly runs.
+    -->
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <maven.compiler.release>17</maven.compiler.release>
+        <junit.version>5.9.0</junit.version>
+        <junit.platform.version>1.9.0</junit.platform.version>
+        <!-- See the root pom for why this is empty before JDK 23. -->
+        <surefire.unsafeMemoryAccessArg></surefire.unsafeMemoryAccessArg>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <version>${junit.platform.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>jsr305</artifactId>
+            <version>3.0.2</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>add-soklet-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.basedir}/../src/main/java</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.0</version>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                        <arg>-Xlint:unchecked</arg>
+                    </compilerArgs>
+                    <proc>none</proc>
+                    <showDeprecation>true</showDeprecation>
+                    <showWarnings>true</showWarnings>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.4</version>
+                <configuration>
+                    <!--
+                        A modest heap makes a genuine memory leak surface as pressure sooner in the
+                        long soak run rather than being absorbed silently.
+                    -->
+                    <argLine>
+                        -Xmx512m
+                        ${surefire.unsafeMemoryAccessArg}
+                    </argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>jdk23-plus-unsafe-memory-access</id>
+            <activation>
+                <jdk>[23,)</jdk>
+            </activation>
+            <properties>
+                <surefire.unsafeMemoryAccessArg>--sun-misc-unsafe-memory-access=allow</surefire.unsafeMemoryAccessArg>
+            </properties>
+        </profile>
+    </profiles>
+</project>

@@ -526,6 +526,7 @@ final class DefaultMcpRuntime {
 				0L
 		);
 
+		observeIdleExpiredSessionsIfDue(mcpServer);
 		mcpServer.getSessionStore().create(initialSession);
 		observeSessionCreated(request, resolvedEndpoint.endpointClass(), sessionId);
 
@@ -1226,6 +1227,21 @@ final class DefaultMcpRuntime {
 						Duration.between(expiredSession.createdAt(), Instant.now()),
 						McpSessionTerminationReason.IDLE_TIMEOUT,
 						null));
+	}
+
+	private void observeIdleExpiredSessionsIfDue(@NonNull McpServer mcpServer) {
+		requireNonNull(mcpServer);
+
+		if (!(mcpServer.getSessionStore() instanceof DefaultMcpSessionStore defaultMcpSessionStore))
+			return;
+
+		for (McpStoredSession expiredSession : defaultMcpSessionStore.takeExpiredSessionsIfSweepDue()) {
+			observeSessionTerminated(expiredSession.endpointClass(),
+					expiredSession.sessionId(),
+					Duration.between(expiredSession.createdAt(), Instant.now()),
+					McpSessionTerminationReason.IDLE_TIMEOUT,
+					null);
+		}
 	}
 
 	@NonNull

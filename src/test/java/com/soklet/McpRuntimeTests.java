@@ -1141,6 +1141,26 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void abandonedMcpSessionsSweptDuringSubsequentInitializeAreObservedTerminated() throws Exception {
+		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+
+		Soklet.runSimulator(configuration(lifecycleObserver,
+				metricsCollector,
+				McpSessionStore.fromInMemory(Duration.ofMillis(50))), simulator -> {
+			initializedSessionHeaders(simulator);
+
+			Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
+
+			sleepUnchecked(120L);
+			initializedSessionHeaders(simulator);
+
+			Assertions.assertEquals(McpSessionTerminationReason.IDLE_TIMEOUT, lifecycleObserver.sessionTerminationReason);
+			Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
+		});
+	}
+
+	@Test
 	public void lifecycleObserverReceivesMcpSessionRequestAndStreamCallbacks() {
 		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
 

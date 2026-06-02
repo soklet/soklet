@@ -21,6 +21,8 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -131,7 +133,8 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 	@Override
 	public void create(@NonNull McpStoredSession session) {
 		requireNonNull(session);
-		maybeSweepExpiredSessions();
+		// Direct store users still get opportunistic reclamation; runtime-managed stores observe returned sessions first.
+		takeExpiredSessionsIfSweepDue();
 
 		McpStoredSession previous = this.sessions.putIfAbsent(session.sessionId(), session);
 
@@ -206,6 +209,31 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 				: Optional.empty();
 	}
 
+	@NonNull
+	List<McpStoredSession> takeExpiredSessionsIfSweepDue() {
+		if (ZERO.equals(this.idleTimeout))
+			return List.of();
+
+		Instant now = Instant.now();
+		Duration sweepInterval = sweepInterval();
+
+		if (between(this.lastSweepAt, now).compareTo(sweepInterval) < 0)
+			return List.of();
+
+		this.lastSweepAt = now;
+
+		List<McpStoredSession> expiredSessions = new ArrayList<>();
+
+		for (var entry : this.sessions.entrySet()) {
+			McpStoredSession storedSession = entry.getValue();
+
+			if (isExpired(storedSession) && this.sessions.remove(entry.getKey(), storedSession))
+				expiredSessions.add(storedSession);
+		}
+
+		return expiredSessions;
+	}
+
 	private boolean isExpired(@NonNull McpStoredSession storedSession) {
 		requireNonNull(storedSession);
 
@@ -220,26 +248,6 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 
 		Duration idleDuration = between(storedSession.lastActivityAt(), Instant.now());
 		return idleDuration.compareTo(this.idleTimeout) > 0;
-	}
-
-	private void maybeSweepExpiredSessions() {
-		if (ZERO.equals(this.idleTimeout))
-			return;
-
-		Instant now = Instant.now();
-		Duration sweepInterval = sweepInterval();
-
-		if (between(this.lastSweepAt, now).compareTo(sweepInterval) < 0)
-			return;
-
-		this.lastSweepAt = now;
-
-		for (var entry : this.sessions.entrySet()) {
-			McpStoredSession storedSession = entry.getValue();
-
-			if (isExpired(storedSession))
-				this.sessions.remove(entry.getKey(), storedSession);
-		}
 	}
 
 	@NonNull
