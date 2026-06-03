@@ -1,5 +1,7 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.Nullable;
+
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -58,7 +60,7 @@ class ByteTokenizer {
         size += bufferLen;
     }
 
-    byte[] next(int length) {
+    byte @Nullable [] next(int length) {
         if (size - position < length) {
             return null;
         }
@@ -67,7 +69,7 @@ class ByteTokenizer {
         return result;
     }
 
-    byte[] next(byte[] delimiter) {
+    byte @Nullable [] next(byte[] delimiter) {
         int index = indexOf(delimiter);
         if (index < 0) {
             return null;
@@ -77,6 +79,7 @@ class ByteTokenizer {
         return result;
     }
 
+    @Nullable
     String nextAsciiString(byte[] delimiter, String field) {
         int index = indexOf(delimiter);
         if (index < 0) {

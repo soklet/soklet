@@ -555,7 +555,8 @@ final class DefaultHttpServer implements HttpServer {
 							if (t instanceof IllegalRequestException) {
 								failsafeStatusCode = 400;
 								failureReason = RequestReadFailureReason.UNPARSEABLE_REQUEST;
-								safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, t.getMessage())
+								String message = t.getMessage() == null ? t.getClass().getName() : t.getMessage();
+								safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, message)
 										.throwable(t)
 										.build());
 							} else if (t instanceof URISyntaxException) {
@@ -977,6 +978,8 @@ final class DefaultHttpServer implements HttpServer {
 		StreamingResponseBody stream = marshaledResponse.getStream().orElse(null);
 
 		if (stream != null) {
+			Request streamingRequest = requireNonNull(request);
+			ResourceMethod streamingResourceMethod = requireNonNull(resourceMethod);
 			ExecutorService streamingExecutorService = getStreamingExecutorService().orElse(null);
 			ScheduledExecutorService streamingTimeoutExecutorService = getStreamingTimeoutExecutorService().orElse(null);
 
@@ -999,7 +1002,7 @@ final class DefaultHttpServer implements HttpServer {
 					marshaledResponse.getStatusCode(),
 					reasonPhrase,
 					headers,
-					request,
+					streamingRequest,
 					stream,
 					streamingExecutorService,
 					streamingTimeoutExecutorService,
@@ -1008,12 +1011,12 @@ final class DefaultHttpServer implements HttpServer {
 					deadline,
 					idleTimeout,
 					(establishedAt, streamDuration, cancelationReason, throwable) ->
-							notifyDidTerminateResponseStream(request, resourceMethod, marshaledResponse, establishedAt, streamDuration, cancelationReason, throwable),
+							notifyDidTerminateResponseStream(streamingRequest, streamingResourceMethod, marshaledResponse, establishedAt, streamDuration, cancelationReason, throwable),
 					(throwable) -> safelyLog(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
 									"An exception occurred while invoking a streaming response cancelation callback")
 							.throwable(throwable)
-							.request(request)
-							.resourceMethod(resourceMethod)
+							.request(streamingRequest)
+							.resourceMethod(streamingResourceMethod)
 							.marshaledResponse(marshaledResponse)
 							.build()));
 		}

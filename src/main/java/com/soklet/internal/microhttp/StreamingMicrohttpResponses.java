@@ -358,8 +358,9 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		@Override
-		public void close(StreamTerminationReason cancelationReason, Throwable cause) {
-			requireNonNull(cancelationReason);
+		public void close(@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable cause) {
+			StreamTerminationReason defaultedCancelationReason =
+					cancelationReason == null ? StreamTerminationReason.CLIENT_DISCONNECTED : cancelationReason;
 			cancelTimeouts();
 
 			StreamTerminationReason effectiveReason = null;
@@ -372,7 +373,7 @@ public final class StreamingMicrohttpResponses {
 				this.closed = true;
 
 				if (!this.completed && this.failure == null) {
-					effectiveReason = this.cancelationToken.getCancelationReason().orElse(cancelationReason);
+					effectiveReason = this.cancelationToken.getCancelationReason().orElse(defaultedCancelationReason);
 					effectiveCause = this.cancelationToken.getCancelationCause().orElse(cause);
 				}
 

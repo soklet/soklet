@@ -57,7 +57,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.soklet.Utilities.trimAggressively;
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -165,10 +164,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				throw new IllegalStateException(format("Path parameter '%s' for resource method %s is defined as supporting varargs. Its type was declared as %s, but varargs path parameters must be of type %s.",
 						pathParameterName, resourceMethod, parameter.getType(), String.class));
 
-			ValueConverter<Object, Object> valueConverter = getSokletConfig().getValueConverterRegistry().get(String.class, parameter.getType()).orElse(null);
-
-			if (valueConverter == null)
-				throwValueConverterMissingException(parameter, String.class, parameter.getType(), resourceMethod);
+			ValueConverter<Object, Object> valueConverter = valueConverterFor(parameter, String.class, parameter.getType(), resourceMethod);
 
 			Object result;
 
@@ -469,7 +465,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		if (values == null)
 			values = Set.of();
 
-		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
+		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<String>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
 				.optional(queryParameter.optional())
 				.values(new ArrayList<>(values))
 				.missingExceptionProvider((message, name) -> new MissingQueryParameterException(message, parameterName))
@@ -499,7 +495,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		if (values == null)
 			values = Set.of();
 
-		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
+		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<String>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
 				.optional(formParameter.optional())
 				.values(new ArrayList<>(values))
 				.missingExceptionProvider((message, name) -> new MissingFormParameterException(message, parameterName))
@@ -529,7 +525,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		if (values == null)
 			values = Set.of();
 
-		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
+		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<String>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
 				.optional(requestHeader.optional())
 				.values(new ArrayList<>(values))
 				.missingExceptionProvider((message, name) -> new MissingRequestHeaderException(message, parameterName))
@@ -559,7 +555,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		if (values == null)
 			values = Set.of();
 
-		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
+		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<String>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
 				.optional(requestCookie.optional())
 				.values(new ArrayList<>(values))
 				.missingExceptionProvider((message, name) -> new MissingRequestCookieException(message, parameterName))
@@ -569,7 +565,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		return extractRequestValue(requestValueExtractionConfig);
 	}
 
-	@NonNull
+	@Nullable
 	@SuppressWarnings("unchecked")
 	protected Object extractRequestMultipartValue(@NonNull Request request,
 																								@NonNull ResourceMethod resourceMethod,
@@ -600,7 +596,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			}
 		}
 
-		ValueMetadatumConverter<MultipartField> valueMetadatumConverter = (MultipartField multipartField, Type toType, ValueConverter<Object, Object> valueConverter) -> {
+		ValueMetadatumConverter<MultipartField> valueMetadatumConverter = (MultipartField multipartField, Type toType, @Nullable ValueConverter<Object, Object> valueConverter) -> {
 			if (toType.equals(MultipartField.class))
 				return multipartField;
 
@@ -610,23 +606,24 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			if (toType.equals(byte[].class))
 				return multipartField.getData().orElse(null);
 
-			Optional<Object> valueConverterResult = valueConverter.convert(multipartField.getDataAsString().orElse(null));
+			ValueConverter<Object, Object> activeValueConverter = requireNonNull(valueConverter);
+			Optional<Object> valueConverterResult = activeValueConverter.convert(multipartField.getDataAsString().orElse(null));
 			return valueConverterResult == null ? null : valueConverterResult.orElse(null);
 		};
 
-		RequestValueExtractionConfig<MultipartField> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
+		RequestValueExtractionConfig<MultipartField> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<MultipartField>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
 				.optional(multipart == null ? false : multipart.optional())
 				.values(new ArrayList<>(values))
 				.valuesMetadata(valuesMetadata)
 				.valueMetadatumConverter(valueMetadatumConverter)
 				.missingExceptionProvider((message, name) -> new MissingMultipartFieldException(message, parameterName))
-				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalMultipartFieldException(message, cause, ((Optional<MultipartField>) valueMetadatum).orElse(null)))
+				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalMultipartFieldException(message, cause, requireNonNull(valueMetadatum)))
 				.build();
 
 		return extractRequestValue(requestValueExtractionConfig);
 	}
 
-	@NonNull
+	@Nullable
 	@SuppressWarnings("unchecked")
 	protected <T> Object extractRequestValue(@NonNull RequestValueExtractionConfig<T> requestValueExtractionConfig) {
 		requireNonNull(requestValueExtractionConfig);
@@ -641,48 +638,47 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		List<@NonNull T> valuesMetadata = requestValueExtractionConfig.getValuesMetadata();
 		ValueMetadatumConverter<T> valueMetadatumConverter = requestValueExtractionConfig.getValueMetadatumConverter().orElse(null);
 		MissingExceptionProvider missingExceptionProvider = requestValueExtractionConfig.getMissingExceptionProvider();
-		IllegalExceptionProvider illegalExceptionProvider = requestValueExtractionConfig.getIllegalExceptionProvider();
+		IllegalExceptionProvider<T> illegalExceptionProvider = requestValueExtractionConfig.getIllegalExceptionProvider();
 
 		boolean returnMetadataInsteadOfValues = valueMetadatumConverter != null;
 		Type toType = parameterType.isList() ? parameterType.getListElementType().get() : parameterType.getNormalizedType();
 
-		ValueConverter<Object, Object> valueConverter = getSokletConfig().getValueConverterRegistry().get(String.class, toType).orElse(null);
-
-		if (valueConverter == null && !returnMetadataInsteadOfValues)
-			throwValueConverterMissingException(parameter, String.class, toType, resourceMethod);
+		ValueConverter<Object, Object> valueConverter = returnMetadataInsteadOfValues
+				? getSokletConfig().getValueConverterRegistry().get(String.class, toType).orElse(null)
+				: valueConverterFor(parameter, String.class, toType, resourceMethod);
 
 		// Special handling for Lists (support for multiple query parameters/headers/cookies with the same name)
 		if (parameterType.isList()) {
 			List<@Nullable Object> results = new ArrayList<>(values.size());
 
 			if (returnMetadataInsteadOfValues) {
+				ValueMetadatumConverter<T> activeValueMetadatumConverter = requireNonNull(valueMetadatumConverter);
 				for (int i = 0; i < valuesMetadata.size(); ++i) {
-					Object valueMetadatum = valuesMetadata.get(i);
+					T valueMetadatum = valuesMetadata.get(i);
 
-					if (valueMetadatum != null)
-						try {
-							valueMetadatum = valueMetadatumConverter.convert((T) valueMetadatum, toType, valueConverter);
-							results.add(valueMetadatum);
-						} catch (ValueConversionException e) {
-							throw illegalExceptionProvider.provide(
-									format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", valueMetadatum,
-											parameterDescription, parameterName, valueConverter.getToType()), e, parameterName, null, Optional
-											.ofNullable(valuesMetadata.size() > i ? valuesMetadata.get(i) : null));
-						}
+					try {
+						results.add(activeValueMetadatumConverter.convert(valueMetadatum, toType, valueConverter));
+					} catch (ValueConversionException e) {
+						throw illegalExceptionProvider.provide(
+								format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", valueMetadatum,
+										parameterDescription, parameterName, expectedTypeName(toType, valueConverter)), e, parameterName, null,
+								valueMetadatum);
+					}
 				}
 			} else {
+				ValueConverter<Object, Object> activeValueConverter = requireNonNull(valueConverter);
 				for (int i = 0; i < values.size(); ++i) {
 					String value = values.get(i);
 
-					if (value != null && trimAggressively(value).length() > 0)
+					if (value != null && trimAggressivelyToNull(value) != null)
 						try {
-							Optional<Object> valueConverterResult = valueConverter.convert(value);
+							Optional<Object> valueConverterResult = activeValueConverter.convert(value);
 							results.add(valueConverterResult == null ? null : valueConverterResult.orElse(null));
 						} catch (ValueConversionException e) {
 							throw illegalExceptionProvider.provide(
 									format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
-											parameterDescription, parameterName, valueConverter.getToType()), e, parameterName, value, Optional
-											.ofNullable(valuesMetadata.size() > i ? valuesMetadata.get(i) : null));
+											parameterDescription, parameterName, activeValueConverter.getToType()), e, parameterName, value,
+									valuesMetadata.size() > i ? valuesMetadata.get(i) : null);
 						}
 				}
 			}
@@ -709,19 +705,20 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 						format("Multiple values specified for %s '%s' (but expected single value): %s",
 								parameterDescription, parameterName, valuesAsString),
 						new IllegalArgumentException("Multiple values provided for single-value parameter"),
-						parameterName, valuesAsString, Optional.empty());
+						parameterName, valuesAsString, valuesMetadata.get(0));
 			}
 
 			result = valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null;
 
 			if (result != null) {
+				ValueMetadatumConverter<T> activeValueMetadatumConverter = requireNonNull(valueMetadatumConverter);
 				try {
-					result = valueMetadatumConverter.convert((T) result, toType, valueConverter);
+					result = activeValueMetadatumConverter.convert((T) result, toType, valueConverter);
 				} catch (ValueConversionException e) {
 					throw illegalExceptionProvider.provide(
 							format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", result,
-									parameterDescription, parameterName, valueConverter.getToType()), e, parameterName, null, Optional
-									.ofNullable(valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null));
+									parameterDescription, parameterName, expectedTypeName(toType, valueConverter)), e, parameterName, null,
+							valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null);
 				}
 			}
 
@@ -738,44 +735,62 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 						format("Multiple values specified for %s '%s' (but expected single value): %s",
 								parameterDescription, parameterName, valuesAsString),
 						new IllegalArgumentException("Multiple values provided for single-value parameter"),
-						parameterName, valuesAsString, Optional.empty());
+						parameterName, valuesAsString, null);
 			}
 
 			String value = values.size() > 0 ? values.get(0) : null;
 
-			if (value != null && trimAggressively(value).length() == 0) value = null;
+			if (value != null && trimAggressivelyToNull(value) == null) value = null;
 
 			boolean required = !parameterType.isWrappedInOptional() && !optional;
 
 			if (required && value == null)
 				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", parameterDescription, parameterName), parameterName);
 
+			ValueConverter<Object, Object> activeValueConverter = requireNonNull(valueConverter);
 			try {
-				Optional<Object> valueConverterResult = valueConverter.convert(value);
+				Optional<Object> valueConverterResult = activeValueConverter.convert(value);
 				result = valueConverterResult == null ? null : valueConverterResult.orElse(null);
 			} catch (ValueConversionException e) {
 				throw illegalExceptionProvider.provide(
 						format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
-								parameterDescription, parameterName, valueConverter.getToType()), e, parameterName, value, Optional
-								.ofNullable(valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null));
+								parameterDescription, parameterName, activeValueConverter.getToType()), e, parameterName, value,
+						valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null);
 			}
 		}
 
 		return parameterType.isWrappedInOptional() ? Optional.ofNullable(result) : result;
 	}
 
-	protected void throwValueConverterMissingException(@NonNull Parameter parameter,
-																										 @NonNull Type fromType,
-																										 @NonNull Type toType,
-																										 @NonNull ResourceMethod resourceMethod) {
+	@NonNull
+	protected ValueConverter<Object, Object> valueConverterFor(@NonNull Parameter parameter,
+																														 @NonNull Type fromType,
+																														 @NonNull Type toType,
+																														 @NonNull ResourceMethod resourceMethod) {
+		return getSokletConfig().getValueConverterRegistry().get(fromType, toType)
+				.orElseThrow(() -> valueConverterMissingException(parameter, fromType, toType, resourceMethod));
+	}
+
+	@NonNull
+	protected RuntimeException valueConverterMissingException(@NonNull Parameter parameter,
+																														@NonNull Type fromType,
+																														@NonNull Type toType,
+																														@NonNull ResourceMethod resourceMethod) {
 		requireNonNull(parameter);
 		requireNonNull(fromType);
 		requireNonNull(toType);
 		requireNonNull(resourceMethod);
 
-		throw new IllegalArgumentException(format(
+		return new IllegalArgumentException(format(
 				"No %s is registered for converting %s to %s for parameter '%s' in resource method %s ",
 				ValueConverter.class.getSimpleName(), fromType, toType, parameter, resourceMethod));
+	}
+
+	@NonNull
+	protected String expectedTypeName(@NonNull Type toType,
+																		@Nullable ValueConverter<Object, Object> valueConverter) {
+		requireNonNull(toType);
+		return valueConverter == null ? toType.getTypeName() : valueConverter.getToType().getTypeName();
 	}
 
 	@NonNull
@@ -802,10 +817,10 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 	@FunctionalInterface
 	protected interface ValueMetadatumConverter<T> {
-		@NonNull
+		@Nullable
 		Object convert(@NonNull T valueMetadatum,
 									 @NonNull Type toType,
-									 @NonNull ValueConverter<Object, Object> valueConverter) throws ValueConversionException;
+									 @Nullable ValueConverter<Object, Object> valueConverter) throws ValueConversionException;
 	}
 
 	@NotThreadSafe
@@ -831,10 +846,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		@NonNull
 		private final MissingExceptionProvider missingExceptionProvider;
 		@NonNull
-		private final IllegalExceptionProvider illegalExceptionProvider;
+		private final IllegalExceptionProvider<T> illegalExceptionProvider;
 
-		@SuppressWarnings("unchecked")
-		protected RequestValueExtractionConfig(@NonNull Builder builder) {
+		protected RequestValueExtractionConfig(@NonNull Builder<T> builder) {
 			requireNonNull(builder);
 
 			this.resourceMethod = requireNonNull(builder.resourceMethod);
@@ -873,7 +887,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			@Nullable
 			private MissingExceptionProvider missingExceptionProvider;
 			@Nullable
-			private IllegalExceptionProvider illegalExceptionProvider;
+			private IllegalExceptionProvider<T> illegalExceptionProvider;
 
 			public Builder(@NonNull ResourceMethod resourceMethod,
 										 @NonNull Parameter parameter,
@@ -894,44 +908,44 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			}
 
 			@NonNull
-			public Builder optional(@Nullable Boolean optional) {
+			public Builder<T> optional(@Nullable Boolean optional) {
 				this.optional = optional;
 				return this;
 			}
 
 			@NonNull
-			public Builder values(@Nullable List<@Nullable String> values) {
+			public Builder<T> values(@Nullable List<@Nullable String> values) {
 				this.values = values;
 				return this;
 			}
 
 			@NonNull
-			public Builder valuesMetadata(@Nullable List<@NonNull T> valuesMetadata) {
+			public Builder<T> valuesMetadata(@Nullable List<@NonNull T> valuesMetadata) {
 				this.valuesMetadata = valuesMetadata;
 				return this;
 			}
 
 			@NonNull
-			public Builder valueMetadatumConverter(@Nullable ValueMetadatumConverter<T> valueMetadatumConverter) {
+			public Builder<T> valueMetadatumConverter(@Nullable ValueMetadatumConverter<T> valueMetadatumConverter) {
 				this.valueMetadatumConverter = valueMetadatumConverter;
 				return this;
 			}
 
 			@NonNull
-			public Builder missingExceptionProvider(@Nullable MissingExceptionProvider missingExceptionProvider) {
+			public Builder<T> missingExceptionProvider(@Nullable MissingExceptionProvider missingExceptionProvider) {
 				this.missingExceptionProvider = missingExceptionProvider;
 				return this;
 			}
 
 			@NonNull
-			public Builder illegalExceptionProvider(@Nullable IllegalExceptionProvider illegalExceptionProvider) {
+			public Builder<T> illegalExceptionProvider(@Nullable IllegalExceptionProvider<T> illegalExceptionProvider) {
 				this.illegalExceptionProvider = illegalExceptionProvider;
 				return this;
 			}
 
 			@NonNull
-			public RequestValueExtractionConfig build() {
-				return new RequestValueExtractionConfig(this);
+			public RequestValueExtractionConfig<T> build() {
+				return new RequestValueExtractionConfig<>(this);
 			}
 		}
 
@@ -986,7 +1000,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		}
 
 		@NonNull
-		public IllegalExceptionProvider getIllegalExceptionProvider() {
+		public IllegalExceptionProvider<T> getIllegalExceptionProvider() {
 			return this.illegalExceptionProvider;
 		}
 	}

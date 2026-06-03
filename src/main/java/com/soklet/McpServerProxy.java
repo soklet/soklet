@@ -123,7 +123,7 @@ final class McpServerProxy implements McpServer, InternalMcpSessionMessagePublis
 
 	@NonNull
 	McpServer getActiveImplementation() {
-		return this.activeImplementation.get();
+		return requireNonNull(this.activeImplementation.get());
 	}
 
 	@NonNull

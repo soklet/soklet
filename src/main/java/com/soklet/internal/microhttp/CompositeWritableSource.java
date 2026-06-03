@@ -17,6 +17,7 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.StreamTerminationReason;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
@@ -111,7 +112,7 @@ class CompositeWritableSource implements WritableSource {
     }
 
     @Override
-    public void close(StreamTerminationReason cancelationReason, Throwable cause) throws IOException {
+    public void close(@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable cause) throws IOException {
         IOException firstException = null;
         while (!sources.isEmpty()) {
             try {

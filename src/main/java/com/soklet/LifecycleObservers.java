@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.InvocationTargetException;
@@ -63,7 +64,7 @@ final class LifecycleObservers {
 				(proxy, method, args) -> invoke(proxy, method, args, lifecycleObserversSnapshot));
 	}
 
-	@NonNull
+	@Nullable
 	private static Object invoke(@NonNull Object proxy,
 															 @NonNull Method method,
 															 Object[] args,
@@ -109,8 +110,8 @@ final class LifecycleObservers {
 	}
 
 	@NonNull
-	private static Throwable collectThrowable(Throwable firstThrowable,
-																						Throwable throwable) {
+	private static Throwable collectThrowable(@Nullable Throwable firstThrowable,
+																						@Nullable Throwable throwable) {
 		if (throwable == null)
 			throwable = new NullPointerException("Lifecycle observer invocation failed without an underlying cause");
 

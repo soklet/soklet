@@ -1910,6 +1910,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		}
 	}
 
+	@Nullable
 	private RequestState requestStateFor(@NonNull Request request) {
 		requireNonNull(request);
 

@@ -94,6 +94,6 @@ final class SseServerProxy implements SseServer {
 
 	@NonNull
 	SseServer getActiveImplementation() {
-		return this.activeImplementation.get();
+		return requireNonNull(this.activeImplementation.get());
 	}
 }

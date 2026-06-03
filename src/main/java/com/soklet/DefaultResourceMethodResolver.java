@@ -231,8 +231,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 		// Line format written by SokletProcessor:
 		// METHOD|b64(path)|b64(class)|b64(method)|b64(param1;param2;...)|true|false
-		@NonNull
-		private static ResourceMethodDeclaration parseLine(@NonNull String line) {
+			@Nullable
+			private static ResourceMethodDeclaration parseLine(@NonNull String line) {
 			requireNonNull(line);
 
 			String[] parts = line.split("\\|", -1);

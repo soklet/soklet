@@ -86,6 +86,6 @@ final class HttpServerProxy implements HttpServer {
 
 	@NonNull
 	HttpServer getActiveImplementation() {
-		return this.activeImplementation.get();
+		return requireNonNull(this.activeImplementation.get());
 	}
 }

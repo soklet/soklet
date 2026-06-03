@@ -120,7 +120,11 @@ class RequestParser {
         return true;
     }
 
+    @SuppressWarnings("NullAway")
     MicrohttpRequest request() {
+        // This can be called after a parse failure to decide whether enough of the
+        // request line was read to send an error response. In that case, some fields
+        // are intentionally still null.
         return new MicrohttpRequest(method, uri, version, headers, body, false, remoteAddress);
     }
 
@@ -529,7 +533,8 @@ class RequestParser {
         }
     }
 
-    private static String normalizeTransferEncoding(String value) {
+    @Nullable
+    private static String normalizeTransferEncoding(@Nullable String value) {
         if (value == null) {
             return null;
         }
@@ -546,7 +551,7 @@ class RequestParser {
         return token.toLowerCase(Locale.ROOT);
     }
 
-    private boolean hasOnlyChunkedEncoding(List<String> transferEncodings) {
+    private boolean hasOnlyChunkedEncoding(@Nullable List<String> transferEncodings) {
         return transferEncodings != null && transferEncodings.size() == 1 && CHUNKED.equals(transferEncodings.get(0));
     }
 
