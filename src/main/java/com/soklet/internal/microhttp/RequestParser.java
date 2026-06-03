@@ -10,8 +10,8 @@ import java.util.Locale;
 
 class RequestParser {
 
-    private static final byte[] CRLF = "\r\n".getBytes();
-    private static final byte[] SPACE = " ".getBytes();
+    private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
+    private static final byte[] SPACE = " ".getBytes(StandardCharsets.US_ASCII);
 
     private static final String HEADER_CONTENT_LENGTH = "Content-Length";
     private static final String HEADER_TRANSFER_ENCODING = "Transfer-Encoding";
@@ -507,7 +507,7 @@ class RequestParser {
             return;
         }
 
-        for (String part : value.split(",")) {
+        for (String part : value.split(",", -1)) {
             String normalized = normalizeTransferEncoding(part);
             if (normalized != null) {
                 if (transferEncodings == null) {

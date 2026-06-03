@@ -224,7 +224,6 @@ public interface SseServer extends AutoCloseable {
 		@Nullable
 		IdGenerator<?> idGenerator;
 
-		@NonNull
 		protected Builder(@NonNull Integer port) {
 			requireNonNull(port);
 			this.port = port;

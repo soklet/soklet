@@ -29,6 +29,7 @@ import com.soklet.annotation.PATCH;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.SseEventSource;
+import com.google.errorprone.annotations.FormatMethod;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -358,14 +359,14 @@ public final class SokletProcessor extends AbstractProcessor {
 				for (String placeholder : vr.placeholders) {
 					if (!pb.paramNames.contains(placeholder)) {
 						String shown = vr.original.getOrDefault(placeholder, placeholder);
-						error(method, "Resource Method path parameter {" + shown + "} not bound to a @PathParameter argument");
+						error(method, "Resource Method path parameter {%s} not bound to a @PathParameter argument", shown);
 					}
 				}
 
 				// b) annotated params must exist in template
 				for (String annotated : pb.paramNames) {
 					if (!vr.placeholders.contains(annotated)) {
-						error(method, "No placeholder {" + annotated + "} present in resource path declaration");
+						error(method, "No placeholder {%s} present in resource path declaration", annotated);
 					}
 				}
 
@@ -514,7 +515,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				}
 
 				if (!names.add(normalized)) {
-					error(reportOn, "Soklet: Duplicate @PathParameter name: " + normalized);
+					error(reportOn, "Soklet: Duplicate @PathParameter name: %s", normalized);
 				}
 				originalTokens.putIfAbsent(normalized, token);
 
@@ -1173,6 +1174,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			Path root = outputRootFromUri(fo.toUri(), OUTPUT_ROOT_MARKER_PATH);
 			if (root != null) return root;
 		} catch (IOException ignored) {
+			// The marker may not exist yet; create it below if possible.
 		}
 
 		// Create marker to discover root
@@ -1519,10 +1521,12 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	// ---- Messaging ------------------------------------------------------------
 
+	@FormatMethod
 	private void error(Element e, String fmt, Object... args) {
 		messager.printMessage(Diagnostic.Kind.ERROR, String.format(fmt, args), e);
 	}
 
+	@FormatMethod
 	private void debug(String fmt, Object... args) {
 		if (!debugEnabled) return;
 		messager.printMessage(Diagnostic.Kind.NOTE, String.format(fmt, args));

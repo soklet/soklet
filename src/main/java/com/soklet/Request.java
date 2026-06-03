@@ -1296,8 +1296,6 @@ public final class Request {
 	@NotThreadSafe
 	private static class MultipleValuesException extends Exception {
 		@NonNull
-		private final String name;
-		@NonNull
 		private final Set<?> values;
 
 		private MultipleValuesException(@NonNull String name,
@@ -1307,7 +1305,6 @@ public final class Request {
 			requireNonNull(name);
 			requireNonNull(values);
 
-			this.name = name;
 			this.values = Collections.unmodifiableSet(new LinkedHashSet<>(values));
 		}
 

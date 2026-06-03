@@ -40,15 +40,18 @@ class Scheduler {
         return t;
     }
 
-    List<Runnable> expired() {
-        long time = clock.nanoTime();
-        List<Runnable> result = new ArrayList<>();
-        Iterator<Task> it = tasks.iterator();
-        Task item;
-        while (it.hasNext() && (item = it.next()).time <= time) {
-            result.add(item.task);
-            it.remove();
-        }
+	    List<Runnable> expired() {
+	        long time = clock.nanoTime();
+	        List<Runnable> result = new ArrayList<>();
+	        Iterator<Task> it = tasks.iterator();
+	        while (it.hasNext()) {
+	            Task item = it.next();
+	            if (item.time > time) {
+	                break;
+	            }
+	            result.add(item.task);
+	            it.remove();
+	        }
         return result;
     }
 

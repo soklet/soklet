@@ -64,6 +64,13 @@
             <artifactId>jsr305</artifactId>
             <version>3.0.2</version>
         </dependency>
+        <dependency>
+            <!-- Soklet's main sources (compiled here directly) reference @FormatMethod; needed to compile them. -->
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_annotations</artifactId>
+            <version>2.49.0</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>

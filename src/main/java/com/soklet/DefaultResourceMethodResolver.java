@@ -205,11 +205,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				throw new RuntimeException(format("Unable to access Soklet's Resource Method lookup table. Is '%s' on the classpath and well-formed? Did you supply javac with the following options? '-parameters -processor %s'?", SokletProcessor.RESOURCE_METHOD_LOOKUP_TABLE_PATH, SokletProcessor.class.getName()), e);
 			}
 
-			int resourcesCount = 0;
-
 			try {
 				while (resources.hasMoreElements()) {
-					++resourcesCount;
 					URL url = resources.nextElement();
 					try (var in = url.openStream();
 							 var br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
@@ -672,7 +669,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			requireNonNull(serverType);
 			requireNonNull(resourcePath);
 
-			if (resourcePath == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH)
+			if (isOptionsSplat(resourcePath))
 				return Collections.emptySet();
 
 			RouteNode root = this.roots.get(new RouteIndexKey(httpMethod, serverType == ServerType.SSE));
@@ -716,6 +713,12 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 			removeFalsePositives(matches, resourcePath);
 			return matches.isEmpty() ? Collections.emptySet() : matches;
+		}
+
+		@SuppressWarnings("ReferenceEquality")
+		private Boolean isOptionsSplat(@NonNull ResourcePath resourcePath) {
+			requireNonNull(resourcePath);
+			return resourcePath == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH;
 		}
 
 		private void removeFalsePositives(@NonNull Set<@NonNull ResourceMethod> matches,

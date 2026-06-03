@@ -203,7 +203,6 @@ public interface HttpServer extends AutoCloseable {
 		@Nullable
 		IdGenerator<?> idGenerator;
 
-		@NonNull
 		private Builder(@NonNull Integer port) {
 			requireNonNull(port);
 			this.port = port;

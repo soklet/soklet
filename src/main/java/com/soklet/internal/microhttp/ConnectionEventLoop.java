@@ -557,7 +557,7 @@ class ConnectionEventLoop {
                 if (value == null) {
                     continue;
                 }
-                for (String part : value.split(",")) {
+                for (String part : value.split(",", -1)) {
                     if (token.equalsIgnoreCase(part.trim())) {
                         return true;
                     }

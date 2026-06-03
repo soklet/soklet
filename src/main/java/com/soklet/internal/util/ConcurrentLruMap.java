@@ -952,8 +952,4 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		return keys;
 	}
 
-	@NonNull
-	private BiConsumer<K, V> getEvictionListener() {
-		return this.evictionListener;
-	}
 }

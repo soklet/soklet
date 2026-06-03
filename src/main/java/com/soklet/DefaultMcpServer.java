@@ -1124,7 +1124,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				if (line == null)
 					continue;
 
-				String[] components = line.trim().split("\\s+");
+				String[] components = line.trim().split("\\s+", -1);
 
 				if (components.length != 3)
 					throw new IllegalRequestException(format("Malformed MCP request line '%s'. Expected '<METHOD> <request-target> HTTP/1.1'", line));

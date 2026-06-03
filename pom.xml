@@ -193,6 +193,12 @@
             <version>3.0.2</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_annotations</artifactId>
+            <version>2.49.0</version>
+            <scope>provided</scope>
+        </dependency>
 
         <!-- Testing-only deps -->
         <dependency>
@@ -235,9 +241,10 @@
              Error Prone + NullAway run as compiler plugins via annotationProcessorPaths. NullAway uses
              legacy AnnotatedPackages mode (the code carries explicit @NonNull/@Nullable everywhere, and
              JSpecify mode is still experimental), treating com.soklet as non-null-by-default and honoring
-             the existing @Nullable markers. Error Prone's default-ERROR checks are enforced; NullAway runs
-             at WARN as an advisory ratchet while the existing inventory is burned down. Vendored Spring
-             sources are excluded, but Soklet-owned internals such as microhttp remain in scope. -->
+             the existing @Nullable markers. Error Prone's default-ERROR checks and selected high-signal
+             WARNING checks are enforced; NullAway runs at WARN as an advisory ratchet while the existing
+             inventory is burned down. Vendored Spring sources are excluded, but Soklet-owned internals such
+             as microhttp remain in scope. -->
         <profile>
             <id>static-analysis</id>
             <build>
@@ -276,7 +283,7 @@
                                 <arg>-XDcompilePolicy=simple</arg>
                                 <arg>--should-stop=ifError=FLOW</arg>
                                 <arg>-XDaddTypeAnnotationsToSymbol=true</arg>
-                                <arg>-Xplugin:ErrorProne -XepExcludedPaths:.*/com/soklet/internal/spring/.* -Xep:NullAway:WARN -XepOpt:NullAway:AnnotatedPackages=com.soklet -XepOpt:NullAway:UnannotatedSubPackages=com.soklet.internal -Xep:EffectivelyPrivate:OFF -Xep:PatternMatchingInstanceof:OFF -Xep:ProtectedMembersInFinalClass:OFF -Xep:UnnecessaryParentheses:OFF -Xep:MissingSummary:OFF -Xep:ClassCanBeStatic:OFF -Xep:StatementSwitchToExpressionSwitch:OFF -Xep:BadImport:OFF -Xep:BooleanLiteral:OFF -Xep:SameNameButDifferent:OFF -Xep:TypeParameterUnusedInFormals:OFF -Xep:NullablePrimitiveArray:OFF -Xep:JdkObsolete:OFF -Xep:IntLiteralCast:OFF -Xep:JavaUtilDate:OFF -Xep:ArrayRecordComponent:OFF -Xep:UnnecessaryAsync:OFF -Xep:TimeInStaticInitializer:OFF -Xep:NarrowingCompoundAssignment:OFF</arg>
+                                <arg>-Xplugin:ErrorProne -XepExcludedPaths:.*/com/soklet/internal/spring/.* -Xep:NullAway:WARN -XepOpt:NullAway:AnnotatedPackages=com.soklet -XepOpt:NullAway:UnannotatedSubPackages=com.soklet.internal.spring -Xep:DefaultCharset:ERROR -Xep:StringSplitter:ERROR -Xep:StringCaseLocaleUsage:ERROR -Xep:ReferenceEquality:ERROR -Xep:EmptyCatch:ERROR -Xep:NullableVoid:ERROR -Xep:AnnotateFormatMethod:ERROR -Xep:UnusedMethod:ERROR -Xep:UnusedVariable:ERROR -Xep:Finally:ERROR -Xep:NarrowingCompoundAssignment:ERROR -Xep:EffectivelyPrivate:OFF -Xep:PatternMatchingInstanceof:OFF -Xep:ProtectedMembersInFinalClass:OFF -Xep:UnnecessaryParentheses:OFF -Xep:MissingSummary:OFF -Xep:ClassCanBeStatic:OFF -Xep:StatementSwitchToExpressionSwitch:OFF -Xep:BadImport:OFF -Xep:BooleanLiteral:OFF -Xep:SameNameButDifferent:OFF -Xep:TypeParameterUnusedInFormals:OFF -Xep:NullablePrimitiveArray:OFF -Xep:JdkObsolete:OFF -Xep:IntLiteralCast:OFF -Xep:JavaUtilDate:OFF -Xep:ArrayRecordComponent:OFF -Xep:UnnecessaryAsync:OFF -Xep:TimeInStaticInitializer:OFF</arg>
                                 <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
                                 <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
                                 <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>

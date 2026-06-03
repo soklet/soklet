@@ -279,7 +279,7 @@ final class DefaultMultipartParser implements MultipartParser {
 
 	protected LinkedCaseInsensitiveMap<String> splitHeaders(String readHeaders) {
 		LinkedCaseInsensitiveMap<String> headersBuilder = new LinkedCaseInsensitiveMap<>();
-		String[] headers = readHeaders.split("\r\n");
+		String[] headers = readHeaders.split("\r\n", -1);
 		for (String headerLine : headers) {
 			int index = headerLine.indexOf(':');
 			if (index < 0) {
@@ -1669,7 +1669,7 @@ final class DefaultMultipartParser implements MultipartParser {
 					}
 				}
 				final long res = Math.min(av, bytes);
-				head += res;
+				head = head + (int) res;
 				return res;
 			}
 

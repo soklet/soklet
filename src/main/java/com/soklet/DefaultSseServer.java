@@ -936,11 +936,13 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
+	@SuppressWarnings("ReferenceEquality")
 	private static DefaultSseConnection.@NonNull PreSerializedPayload preSerializeSseEvent(@NonNull SseEvent sseEvent) {
 		requireNonNull(sseEvent);
 
 		StringBuilder stringBuilder = new StringBuilder(DEFAULT_SSE_BUILDER_CAPACITY);
 		String formatted = formatSseEventForResponse(sseEvent, stringBuilder);
+		// formatSseEventForResponse returns this shared sentinel for heartbeat events.
 		byte[] payloadBytes = formatted == HEARTBEAT_COMMENT_PAYLOAD
 				? HEARTBEAT_COMMENT_PAYLOAD_BYTES
 				: formatted.getBytes(StandardCharsets.UTF_8);
@@ -1799,7 +1801,7 @@ final class DefaultSseServer implements SseServer {
 
 				Duration deliveryLag = null;
 				Integer payloadByteCount = null;
-				Integer queueDepth = null;
+				Integer queueDepth;
 
 				long enqueuedAtNanos = writeQueueElement.getEnqueuedAtNanos();
 				long nowNanos = System.nanoTime();
@@ -1938,10 +1940,15 @@ final class DefaultSseServer implements SseServer {
 						}
 					}
 
-					if (writeThrowableSnapshot != null) {
+					if (writeThrowableSnapshot != null)
 						recordWriteTransportFailure(writeThrowableSnapshot);
-						throw writeThrowableSnapshot;
-					}
+				}
+
+				if (writeThrowable != null) {
+					throwable = writeThrowable;
+					if (writeThrowable instanceof InterruptedException)
+						Thread.currentThread().interrupt();
+					break;
 				}
 			}
 		} catch (Throwable t) {
@@ -2460,10 +2467,6 @@ final class DefaultSseServer implements SseServer {
 	// We deliberately don't explicitly implement the SseConnection interface - we never want a direct ref to this to leak out to clients.
 	@ThreadSafe
 	private static final class DefaultSseConnection /* implements SseConnection */ {
-		@NonNull
-		private final Request request;
-		@NonNull
-		private final ResourceMethod resourceMethod;
 		@Nullable
 		private final Object clientContext;
 		@NonNull
@@ -2579,8 +2582,6 @@ final class DefaultSseServer implements SseServer {
 			requireNonNull(connectionQueueCapacity);
 			requireNonNull(socketChannel);
 
-			this.request = request;
-			this.resourceMethod = resourceMethod;
 			this.clientContext = clientContext;
 			this.writeQueue = new ArrayBlockingQueue<>(connectionQueueCapacity);
 			this.establishedAt = Instant.now();
@@ -2591,16 +2592,6 @@ final class DefaultSseServer implements SseServer {
 			// Cache off an immutable data-only snapshot.
 			// This can be safely exposed to client code without worrying about holding onto internal state (e.g. write queue)
 			this.snapshot = new SseConnectionSnapshot(request, resourceMethod, establishedAt, clientContext);
-		}
-
-		@NonNull
-		public Request getRequest() {
-			return this.request;
-		}
-
-		@NonNull
-		public ResourceMethod getResourceMethod() {
-			return this.resourceMethod;
 		}
 
 		@NonNull
@@ -2834,7 +2825,7 @@ final class DefaultSseServer implements SseServer {
 				if (line == null)
 					continue;
 
-				String[] components = line.trim().split("\\s+");
+				String[] components = line.trim().split("\\s+", -1);
 				if (components.length != 3)
 					throw new IllegalRequestException(format("Malformed Server-Sent Event request line '%s'. Expected '<METHOD> <request-target> HTTP/1.1'", line));
 
@@ -3186,7 +3177,7 @@ final class DefaultSseServer implements SseServer {
 		if (firstLine == null || firstLine.length() == 0)
 			return Optional.empty();
 
-		String[] parts = firstLine.trim().split("\\s+");
+		String[] parts = firstLine.trim().split("\\s+", -1);
 
 		// First line of the request is malformed
 		if (parts.length < 2)
@@ -3766,6 +3757,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
+	@SuppressWarnings("ReferenceEquality")
 	protected Optional<ResourcePathDeclaration> matchingResourcePath(@Nullable ResourcePath resourcePath) {
 		if (resourcePath == null)
 			return Optional.empty();
@@ -3780,7 +3772,7 @@ final class DefaultSseServer implements SseServer {
 					return NO_MATCH_SENTINEL;
 				});
 
-		// Convert sentinel back to empty Optional
+		// Convert sentinel back to empty Optional.
 		if (resourcePathDeclaration == NO_MATCH_SENTINEL)
 			return Optional.empty();
 

@@ -1169,7 +1169,7 @@ public final class Soklet implements AutoCloseable {
 					.build();
 
 		// Special short-circuit for OPTIONS *
-		if (request.getResourcePath() == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH)
+		if (isOptionsSplat(request.getResourcePath()))
 			return HttpRequestResult.withMarshaledResponse(responseMarshaler.forOptionsSplat(request)).build();
 
 		// No resource method was found for this HTTP method and path.
@@ -1482,7 +1482,7 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(serverType);
 
 		// Special handling for OPTIONS *
-		if (request.getResourcePath() == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH)
+		if (isOptionsSplat(request.getResourcePath()))
 			return new LinkedHashMap<>();
 
 		Map<HttpMethod, ResourceMethod> matchingResourceMethodsByHttpMethod = new LinkedHashMap<>(HttpMethod.values().length);
@@ -1497,6 +1497,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		return matchingResourceMethodsByHttpMethod;
+	}
+
+	@SuppressWarnings("ReferenceEquality")
+	private static Boolean isOptionsSplat(@NonNull ResourcePath resourcePath) {
+		requireNonNull(resourcePath);
+		return resourcePath == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH;
 	}
 
 	@NonNull

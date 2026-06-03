@@ -96,9 +96,11 @@ public static ResourcePath fromPath(@NonNull String path) {
 	 * @return {@code true} if this resource path matches, {@code false} otherwise
 	 */
 	@NonNull
+	@SuppressWarnings("ReferenceEquality")
 	public Boolean matches(@NonNull ResourcePathDeclaration resourcePathDeclaration) {
 		requireNonNull(resourcePathDeclaration);
 
+		// OPTIONS * is represented by a singleton sentinel, not a normal path value.
 		if (this == OPTIONS_SPLAT_RESOURCE_PATH)
 			return false;
 

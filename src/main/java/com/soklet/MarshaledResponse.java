@@ -823,6 +823,14 @@ public final class MarshaledResponse {
 		requireNonNull(count);
 		requireNonNull(closeOnComplete);
 
+		if (closeOnComplete) {
+			try (FileChannel managedFileChannel = fileChannel) {
+				return materializeFileChannel(managedFileChannel, offset, count, false);
+			} catch (IOException e) {
+				throw new UncheckedIOException("Unable to close file-channel response body.", e);
+			}
+		}
+
 		if (count > Integer.MAX_VALUE)
 			throw new IllegalStateException("Response body is too large to materialize as a byte array.");
 
@@ -842,14 +850,6 @@ public final class MarshaledResponse {
 			return bytes;
 		} catch (IOException e) {
 			throw new UncheckedIOException("Unable to materialize file-channel response body.", e);
-		} finally {
-			if (closeOnComplete) {
-				try {
-					fileChannel.close();
-				} catch (IOException e) {
-					throw new UncheckedIOException("Unable to close file-channel response body.", e);
-				}
-			}
 		}
 	}
 

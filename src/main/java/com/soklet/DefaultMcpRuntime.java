@@ -52,6 +52,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -2209,6 +2210,7 @@ final class DefaultMcpRuntime {
 		handleTerminatedStream(request, sessionId, StreamTerminationReason.CLIENT_DISCONNECTED, null);
 	}
 
+	@SuppressWarnings("ReferenceEquality")
 	void handleTerminatedStream(@NonNull Request request,
 															@NonNull String sessionId,
 															@NonNull StreamTerminationReason terminationReason,
@@ -2225,6 +2227,7 @@ final class DefaultMcpRuntime {
 		McpStreamState matchedStreamState = null;
 
 		for (McpStreamState streamState : streamStates) {
+			// Stream termination targets the exact request object that established the stream.
 			if (streamState.request() == request) {
 				matchedStreamState = streamState;
 				break;
@@ -2707,7 +2710,7 @@ final class DefaultMcpRuntime {
 
 		for (McpPromptMessage message : promptResult.messages()) {
 			Map<String, McpValue> messageValue = new LinkedHashMap<>();
-			messageValue.put("role", new McpString(message.role().name().toLowerCase()));
+			messageValue.put("role", new McpString(message.role().name().toLowerCase(Locale.ROOT)));
 			messageValue.put("content", textContentValue(message.content()));
 			messages.add(new McpObject(messageValue));
 		}
@@ -2909,7 +2912,7 @@ final class DefaultMcpRuntime {
 		if (acceptHeaderValues == null || acceptHeaderValues.isEmpty())
 			return true;
 
-		String[] requestedTypeAndSubtype = mediaType.toLowerCase().split("/", 2);
+		String[] requestedTypeAndSubtype = mediaType.toLowerCase(Locale.ROOT).split("/", 2);
 
 		if (requestedTypeAndSubtype.length != 2)
 			throw new IllegalArgumentException("Invalid media type '%s'".formatted(mediaType));
@@ -2920,7 +2923,7 @@ final class DefaultMcpRuntime {
 			if (acceptHeaderValue == null)
 				continue;
 
-			for (String fragment : acceptHeaderValue.split(",")) {
+			for (String fragment : acceptHeaderValue.split(",", -1)) {
 				AcceptMediaRange mediaRange = AcceptMediaRange.parse(fragment).orElse(null);
 
 				if (mediaRange == null || !mediaRange.matches(requestedTypeAndSubtype[0], requestedTypeAndSubtype[1]))
@@ -3063,8 +3066,8 @@ final class DefaultMcpRuntime {
 			if (fragment == null || fragment.isBlank())
 				return Optional.empty();
 
-			String[] segments = fragment.split(";");
-			String[] typeAndSubtype = segments[0].trim().toLowerCase().split("/", 2);
+			String[] segments = fragment.split(";", -1);
+			String[] typeAndSubtype = segments[0].trim().toLowerCase(Locale.ROOT).split("/", 2);
 
 			if (typeAndSubtype.length != 2)
 				return Optional.empty();
@@ -3171,16 +3174,6 @@ final class DefaultMcpRuntime {
 		@NonNull
 		Request request() {
 			return this.request;
-		}
-
-		@NonNull
-		Class<? extends McpEndpoint> endpointClass() {
-			return this.endpointClass;
-		}
-
-		@NonNull
-		String sessionId() {
-			return this.sessionId;
 		}
 
 		@NonNull
