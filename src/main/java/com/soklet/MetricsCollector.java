@@ -2048,8 +2048,7 @@ public interface MetricsCollector {
 	 */
 	@ThreadSafe
 	final class Histogram {
-		@NonNull
-		private final long[] bucketBoundaries;
+		private final long @NonNull [] bucketBoundaries;
 		@NonNull
 		private final LongAdder[] bucketCounts;
 		@NonNull
@@ -2066,7 +2065,7 @@ public interface MetricsCollector {
 		 *
 		 * @param bucketBoundaries inclusive upper bounds for buckets
 		 */
-		public Histogram(@NonNull long[] bucketBoundaries) {
+		public Histogram(long @NonNull [] bucketBoundaries) {
 			requireNonNull(bucketBoundaries);
 
 			this.bucketBoundaries = bucketBoundaries.clone();
@@ -2176,10 +2175,8 @@ public interface MetricsCollector {
 	 */
 	@ThreadSafe
 	final class HistogramSnapshot {
-		@NonNull
-		private final long[] bucketBoundaries;
-		@NonNull
-		private final long[] bucketCumulativeCounts;
+		private final long @NonNull [] bucketBoundaries;
+		private final long @NonNull [] bucketCumulativeCounts;
 		private final long count;
 		private final long sum;
 		private final long min;
@@ -2195,8 +2192,8 @@ public interface MetricsCollector {
 		 * @param min                    smallest recorded value (or 0 if none)
 		 * @param max                    largest recorded value (or 0 if none)
 		 */
-		public HistogramSnapshot(@NonNull long[] bucketBoundaries,
-														 @NonNull long[] bucketCumulativeCounts,
+		public HistogramSnapshot(long @NonNull [] bucketBoundaries,
+														 long @NonNull [] bucketCumulativeCounts,
 														 long count,
 														 long sum,
 														 long min,

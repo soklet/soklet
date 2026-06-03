@@ -611,10 +611,10 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		final K key;
 		final V value;
 
-		@GuardedBy("maintenanceLock")
+		// Guarded by the owning ConcurrentLruMap's maintenanceLock.
 		Node<K, V> prev;
 
-		@GuardedBy("maintenanceLock")
+		// Guarded by the owning ConcurrentLruMap's maintenanceLock.
 		Node<K, V> next;
 
 		volatile int state = ALIVE;

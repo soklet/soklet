@@ -224,5 +224,74 @@
                 <surefire.unsafeMemoryAccessArg>--sun-misc-unsafe-memory-access=allow</surefire.unsafeMemoryAccessArg>
             </properties>
         </profile>
+
+        <!-- Static-analysis gate (M5). Opt-in; run on JDK 21+ ONLY. Error Prone requires JDK 21+ to
+             run and lags the newest JDKs, so it is NOT part of the JDK 17/25 test matrix - it runs as a
+             dedicated lint job on JDK 21. The default build, the release-17 target, and every test leg
+             are untouched when this profile is inactive.
+
+               JAVA_HOME=<jdk21> mvn -Pstatic-analysis clean compile
+
+             Error Prone + NullAway run as compiler plugins via annotationProcessorPaths. NullAway uses
+             legacy AnnotatedPackages mode (the code carries explicit @NonNull/@Nullable everywhere, and
+             JSpecify mode is still experimental), treating com.soklet as non-null-by-default and honoring
+             the existing @Nullable markers. Error Prone's default-ERROR checks are enforced; NullAway runs
+             at WARN as an advisory ratchet while the existing inventory is burned down. Vendored Spring
+             sources are excluded, but Soklet-owned internals such as microhttp remain in scope. -->
+        <profile>
+            <id>static-analysis</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration combine.self="override">
+                            <release>17</release>
+                            <fork>true</fork>
+                            <!-- The default build sets proc=none; Error Prone needs annotation
+                                 processing enabled. Listing only Error Prone + NullAway on the processor
+                                 path keeps Soklet's own SokletProcessor from self-applying. -->
+                            <proc>full</proc>
+                            <annotationProcessorPaths>
+                                <path>
+                                    <groupId>com.google.errorprone</groupId>
+                                    <artifactId>error_prone_core</artifactId>
+                                    <version>2.49.0</version>
+                                </path>
+                                <path>
+                                    <groupId>com.uber.nullaway</groupId>
+                                    <artifactId>nullaway</artifactId>
+                                    <version>0.13.4</version>
+                                </path>
+                            </annotationProcessorPaths>
+                            <compilerArgs>
+                                <arg>-parameters</arg>
+                                <arg>-Xlint:unchecked</arg>
+                                <!-- javac caps displayed errors/warnings at 100 by default; raise both so
+                                     the static-analysis run reports the COMPLETE finding inventory. -->
+                                <arg>-Xmaxwarns</arg>
+                                <arg>100000</arg>
+                                <arg>-Xmaxerrs</arg>
+                                <arg>100000</arg>
+                                <arg>-XDcompilePolicy=simple</arg>
+                                <arg>--should-stop=ifError=FLOW</arg>
+                                <arg>-XDaddTypeAnnotationsToSymbol=true</arg>
+                                <arg>-Xplugin:ErrorProne -XepExcludedPaths:.*/com/soklet/internal/spring/.* -Xep:NullAway:WARN -XepOpt:NullAway:AnnotatedPackages=com.soklet -XepOpt:NullAway:UnannotatedSubPackages=com.soklet.internal -Xep:EffectivelyPrivate:OFF -Xep:PatternMatchingInstanceof:OFF -Xep:ProtectedMembersInFinalClass:OFF -Xep:UnnecessaryParentheses:OFF -Xep:MissingSummary:OFF -Xep:ClassCanBeStatic:OFF -Xep:StatementSwitchToExpressionSwitch:OFF -Xep:BadImport:OFF -Xep:BooleanLiteral:OFF -Xep:SameNameButDifferent:OFF -Xep:TypeParameterUnusedInFormals:OFF -Xep:NullablePrimitiveArray:OFF -Xep:JdkObsolete:OFF -Xep:IntLiteralCast:OFF -Xep:JavaUtilDate:OFF -Xep:ArrayRecordComponent:OFF -Xep:UnnecessaryAsync:OFF -Xep:TimeInStaticInitializer:OFF -Xep:NarrowingCompoundAssignment:OFF</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
+                                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
+                                <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
+                                <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

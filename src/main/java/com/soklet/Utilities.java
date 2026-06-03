@@ -66,10 +66,8 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class Utilities {
-	@NonNull
 	private static final boolean VIRTUAL_THREADS_AVAILABLE;
-	@NonNull
-	private static final byte[] EMPTY_BYTE_ARRAY;
+	private static final byte @NonNull [] EMPTY_BYTE_ARRAY;
 	@NonNull
 	private static final Pattern HEAD_WHITESPACE_PATTERN;
 	@NonNull
@@ -235,8 +233,7 @@ public final class Utilities {
 	 *
 	 * @return a zero-length byte array (never {@code null})
 	 */
-	@NonNull
-	static byte[] emptyByteArray() {
+	static byte @NonNull [] emptyByteArray() {
 		return EMPTY_BYTE_ARRAY;
 	}
 
@@ -424,7 +421,7 @@ public final class Utilities {
 			return Map.of();
 
 		Map<String, Set<String>> queryParameters = new LinkedHashMap<>();
-		for (String pair : query.split("&")) {
+		for (String pair : query.split("&", -1)) {
 			if (pair.isEmpty())
 				continue;
 
@@ -723,11 +720,8 @@ public final class Utilities {
 			for (int i = 0; i < inner.length(); i++) {
 				char c = inner.charAt(i);
 				if (escape) {
-					// Only special-case a few common escapes; otherwise keep the char
-					if (c == '"' || c == '\\' || c == ';')
-						sb.append(c);
-					else
-						sb.append(c); // unknown escape -> keep literally (liberal in what we accept)
+					// Keep the escaped character literally (liberal in what we accept).
+					sb.append(c);
 
 					escape = false;
 				} else if (c == '\\') {
@@ -1599,7 +1593,7 @@ public final class Utilities {
 
 		for (int i = 0; i < value.length(); i++) {
 			char c = value.charAt(i);
-			if (c == '\r' || c == '\n' || c == 0x00 || c > 0xFF || (c >= 0x00 && c < 0x20 && c != '\t')) {
+			if (c == '\r' || c == '\n' || c == 0x00 || c > 0xFF || (c < 0x20 && c != '\t')) {
 				throw new IllegalArgumentException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", value, name, printableChar(c)));
 			}
 		}
@@ -2029,7 +2023,7 @@ public final class Utilities {
 
 		Deque<String> stack = new ArrayDeque<>();
 
-		for (String seg : path.split("/")) {
+		for (String seg : path.split("/", -1)) {
 			if (seg.isEmpty() || ".".equals(seg))
 				continue;
 

@@ -70,7 +70,7 @@ public final class CorsResponse {
 		return new Copier(this);
 	}
 
-	protected CorsResponse(@NonNull Builder builder) {
+	CorsResponse(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.accessControlAllowOrigin = builder.accessControlAllowOrigin;
@@ -151,7 +151,7 @@ public final class CorsResponse {
 		@Nullable
 		private Set<@NonNull String> accessControlExposeHeaders;
 
-		protected Builder(@NonNull String accessControlAllowOrigin) {
+		Builder(@NonNull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
 			this.accessControlAllowOrigin = accessControlAllowOrigin;
 		}

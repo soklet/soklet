@@ -212,7 +212,7 @@ final class DefaultHttpServer implements HttpServer {
 	@Nullable
 	private volatile EventLoop eventLoop;
 
-	protected DefaultHttpServer(@NonNull Builder builder) {
+	DefaultHttpServer(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.lock = new ReentrantLock();
@@ -785,7 +785,7 @@ final class DefaultHttpServer implements HttpServer {
 			if (value == null)
 				continue;
 
-			for (String part : value.split(",")) {
+			for (String part : value.split(",", -1)) {
 				if ("close".equalsIgnoreCase(part.trim()))
 					return true;
 			}

@@ -175,7 +175,7 @@ public final class MarshaledResponse {
 		return new Copier(this);
 	}
 
-	protected MarshaledResponse(@NonNull Builder builder) {
+	MarshaledResponse(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.statusCode = builder.statusCode;
@@ -289,8 +289,7 @@ public final class MarshaledResponse {
 		return body == null ? 0L : body.getLength();
 	}
 
-	@Nullable
-	byte[] bodyBytesOrNull() {
+	byte @Nullable [] bodyBytesOrNull() {
 		MarshaledResponseBody body = getBody().orElse(null);
 
 		if (body == null)
@@ -311,8 +310,7 @@ public final class MarshaledResponse {
 		throw new IllegalStateException(format("Unsupported marshaled response body type: %s", body.getClass().getName()));
 	}
 
-	@NonNull
-	byte[] bodyBytesOrEmpty() {
+	byte @NonNull [] bodyBytesOrEmpty() {
 		byte[] bytes = bodyBytesOrNull();
 		return bytes == null ? Utilities.emptyByteArray() : bytes;
 	}
@@ -341,7 +339,7 @@ public final class MarshaledResponse {
 		@Nullable
 		private StreamingResponseBody stream;
 
-		protected Builder(@NonNull Integer statusCode) {
+		Builder(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
 			this.statusCode = statusCode;
 		}
@@ -372,7 +370,7 @@ public final class MarshaledResponse {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder body(@Nullable byte[] bytes) {
+		public Builder body(byte @Nullable [] bytes) {
 			return bytes == null
 					? withoutBody()
 					: body(new MarshaledResponseBody.Bytes(bytes));
@@ -650,7 +648,7 @@ public final class MarshaledResponse {
 		}
 
 		@NonNull
-		public Copier body(@Nullable byte[] bytes) {
+		public Copier body(byte @Nullable [] bytes) {
 			this.builder.body(bytes);
 			return this;
 		}
@@ -808,8 +806,7 @@ public final class MarshaledResponse {
 		return (statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 304;
 	}
 
-	@NonNull
-	private static byte[] materializeFile(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
+	private static byte @NonNull [] materializeFile(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
 		try (FileChannel fileChannel = FileChannel.open(path, READ)) {
 			return materializeFileChannel(fileChannel, offset, count, false);
 		} catch (IOException e) {
@@ -817,8 +814,7 @@ public final class MarshaledResponse {
 		}
 	}
 
-	@NonNull
-	private static byte[] materializeFileChannel(@NonNull FileChannel fileChannel,
+	private static byte @NonNull [] materializeFileChannel(@NonNull FileChannel fileChannel,
 																							 @NonNull Long offset,
 																							 @NonNull Long count,
 																							 @NonNull Boolean closeOnComplete) {
@@ -860,9 +856,6 @@ public final class MarshaledResponse {
 	@NonNull
 	private static byte[] materializeByteBuffer(@NonNull ByteBuffer byteBuffer) {
 		requireNonNull(byteBuffer);
-
-		if (byteBuffer.remaining() > Integer.MAX_VALUE)
-			throw new IllegalStateException("Response body is too large to materialize as a byte array.");
 
 		ByteBuffer duplicate = byteBuffer.asReadOnlyBuffer();
 		byte[] bytes = new byte[duplicate.remaining()];

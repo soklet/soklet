@@ -55,8 +55,7 @@ public final class MultipartField {
 
 	@NonNull
 	private final String name;
-	@Nullable
-	private final byte[] data;
+	private final byte @Nullable [] data;
 	@Nullable
 	private String dataAsString;
 	@Nullable
@@ -89,7 +88,7 @@ public final class MultipartField {
 	 */
 	@NonNull
 	public static Builder with(@NonNull String name,
-														 @Nullable byte[] value) {
+														 byte @Nullable [] value) {
 		requireNonNull(name);
 		return new Builder(name, value);
 	}
@@ -104,7 +103,7 @@ public final class MultipartField {
 		return new Copier(this);
 	}
 
-	protected MultipartField(@NonNull Builder builder) {
+	MultipartField(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		String name = trimAggressivelyToNull(builder.name);
@@ -166,8 +165,7 @@ public final class MultipartField {
 	public static final class Builder {
 		@NonNull
 		private String name;
-		@Nullable
-		private byte[] data;
+		private byte @Nullable [] data;
 		@Nullable
 		private String filename;
 		@Nullable
@@ -175,12 +173,12 @@ public final class MultipartField {
 		@Nullable
 		private Charset charset;
 
-		protected Builder(@NonNull String name) {
+		Builder(@NonNull String name) {
 			this(name, null);
 		}
 
-		protected Builder(@NonNull String name,
-											@Nullable byte[] data) {
+		Builder(@NonNull String name,
+											byte @Nullable [] data) {
 			requireNonNull(name);
 			requireNonNull(data);
 
@@ -196,7 +194,7 @@ public final class MultipartField {
 		}
 
 		@NonNull
-		public Builder data(@Nullable byte[] data) {
+		public Builder data(byte @Nullable [] data) {
 			this.data = data;
 			return this;
 		}
@@ -254,7 +252,7 @@ public final class MultipartField {
 		}
 
 		@NonNull
-		public Copier data(@Nullable byte[] data) {
+		public Copier data(byte @Nullable [] data) {
 			this.builder.data(data);
 			return this;
 		}
@@ -294,7 +292,7 @@ public final class MultipartField {
 		if (this.data != null && this.dataAsString == null) {
 			getLock().lock();
 			try {
-				if (this.data != null && this.dataAsString == null)
+				if (this.dataAsString == null)
 					this.dataAsString = new String(this.data, getCharset().orElse(DEFAULT_CHARSET));
 			} finally {
 				getLock().unlock();

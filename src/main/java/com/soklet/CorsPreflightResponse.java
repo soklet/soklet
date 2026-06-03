@@ -75,7 +75,7 @@ public final class CorsPreflightResponse {
 		return new Copier(this);
 	}
 
-	protected CorsPreflightResponse(@NonNull Builder builder) {
+	CorsPreflightResponse(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		this.accessControlAllowOrigin = builder.accessControlAllowOrigin;
@@ -186,7 +186,7 @@ public final class CorsPreflightResponse {
 		@Nullable
 		private Set<@NonNull String> accessControlAllowHeaders;
 
-		protected Builder(@NonNull String accessControlAllowOrigin) {
+		Builder(@NonNull String accessControlAllowOrigin) {
 			requireNonNull(accessControlAllowOrigin);
 			this.accessControlAllowOrigin = accessControlAllowOrigin;
 		}

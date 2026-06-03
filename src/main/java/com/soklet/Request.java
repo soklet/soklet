@@ -112,8 +112,7 @@ public final class Request {
 	private final Cors cors;
 	@Nullable
 	private final CorsPreflight corsPreflight;
-	@Nullable
-	private final byte[] body;
+	private final byte @Nullable [] body;
 	@NonNull
 	private final Boolean multipart;
 	@NonNull
@@ -767,7 +766,7 @@ public final class Request {
 			try {
 				result = this.bodyAsString;
 
-				if (this.body != null && result == null) {
+				if (result == null) {
 					result = new String(this.body, getCharset().orElse(DEFAULT_CHARSET));
 					this.bodyAsString = result;
 				}
@@ -1313,11 +1312,6 @@ public final class Request {
 		}
 
 		@NonNull
-		public String getName() {
-			return this.name;
-		}
-
-		@NonNull
 		public Set<?> getValues() {
 			return this.values;
 		}
@@ -1352,12 +1346,11 @@ public final class Request {
 		private Boolean traceContextSpecified = false;
 		@Nullable
 		private InetSocketAddress remoteAddress;
-		@Nullable
-		private byte[] body;
+		private byte @Nullable [] body;
 		@Nullable
 		private Boolean contentTooLarge;
 
-		protected RawBuilder(@NonNull HttpMethod httpMethod,
+		RawBuilder(@NonNull HttpMethod httpMethod,
 												 @NonNull String rawUrl) {
 			requireNonNull(httpMethod);
 			requireNonNull(rawUrl);
@@ -1426,7 +1419,7 @@ public final class Request {
 		}
 
 		@NonNull
-		public RawBuilder body(@Nullable byte[] body) {
+		public RawBuilder body(byte @Nullable [] body) {
 			this.body = body;
 			return this;
 		}
@@ -1484,12 +1477,11 @@ public final class Request {
 		private Boolean traceContextSpecified = false;
 		@Nullable
 		private InetSocketAddress remoteAddress;
-		@Nullable
-		private byte[] body;
+		private byte @Nullable [] body;
 		@Nullable
 		private Boolean contentTooLarge;
 
-		protected PathBuilder(@NonNull HttpMethod httpMethod,
+		PathBuilder(@NonNull HttpMethod httpMethod,
 													@NonNull String path) {
 			requireNonNull(httpMethod);
 			requireNonNull(path);
@@ -1570,7 +1562,7 @@ public final class Request {
 		}
 
 		@NonNull
-		public PathBuilder body(@Nullable byte[] body) {
+		public PathBuilder body(byte @Nullable [] body) {
 			this.body = body;
 			return this;
 		}
@@ -1608,8 +1600,6 @@ public final class Request {
 		private InetSocketAddress originalRemoteAddress;
 		@Nullable
 		private TraceContext originalTraceContext;
-		@NonNull
-		private Boolean pathModified = false;
 		@NonNull
 		private Boolean queryParametersModified = false;
 		@NonNull
@@ -1650,7 +1640,6 @@ public final class Request {
 		public Copier path(@NonNull String path) {
 			requireNonNull(path);
 			this.builder.path(path);
-			this.pathModified = true;
 			// Clear preserved raw path since decoded path changed
 			this.builder.rawPath(null);
 			return this;
@@ -1720,7 +1709,7 @@ public final class Request {
 		}
 
 		@NonNull
-		public Copier body(@Nullable byte[] body) {
+		public Copier body(byte @Nullable [] body) {
 			this.builder.body(body);
 			return this;
 		}

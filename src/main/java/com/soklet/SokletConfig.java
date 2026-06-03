@@ -112,7 +112,7 @@ public final class SokletConfig {
 		return SokletConfig.withHttpServer(HttpServer.withPort(0).build()).sseServer(SseServer.withPort(0).build());
 	}
 
-	protected SokletConfig(@NonNull Builder builder) {
+	SokletConfig(@NonNull Builder builder) {
 		requireNonNull(builder);
 
 		// Wrap servers in proxies transparently

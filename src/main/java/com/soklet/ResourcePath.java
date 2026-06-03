@@ -209,7 +209,7 @@ public static ResourcePath fromPath(@NonNull String path) {
 	 * @return Logical components of the supplied {@code path}
 	 */
 	@NonNull
-	protected List<@NonNull String> extractComponents(@NonNull String path) {
+	List<@NonNull String> extractComponents(@NonNull String path) {
 		requireNonNull(path);
 
 		if ("/".equals(path))

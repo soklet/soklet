@@ -2928,7 +2928,7 @@ final class DefaultMcpRuntime {
 
 				if (bestMatch == null
 						|| mediaRange.specificity() > bestMatch.specificity()
-						|| (mediaRange.specificity() == bestMatch.specificity()
+						|| (mediaRange.specificity().equals(bestMatch.specificity())
 						&& mediaRange.quality().compareTo(bestMatch.quality()) > 0))
 					bestMatch = mediaRange;
 			}
