@@ -244,7 +244,8 @@ public final class ValueConverterRegistry {
 		// Special case for enums.
 		// If no converter was registered for converting a String to an Enum<?>, create a simple converter and cache it off
 		if (this.enableEnumAutoConversion && valueConverter == null && String.class.equals(normalizedFromType) && toType instanceof @SuppressWarnings("rawtypes")Class toClass) {
-			if (toClass.isEnum()) {
+			ConcurrentLruMap<CacheKey, ValueConverter<?, ?>> enumConverterCache = this.enumConverterCache;
+			if (toClass.isEnum() && enumConverterCache != null) {
 				valueConverter = new ValueConverter<>() {
 					@Override
 					@NonNull
@@ -279,7 +280,7 @@ public final class ValueConverterRegistry {
 					}
 				};
 
-				this.enumConverterCache.putIfAbsent(new CacheKey(normalizedFromType, normalizedToType), valueConverter);
+				enumConverterCache.putIfAbsent(new CacheKey(normalizedFromType, normalizedToType), valueConverter);
 			}
 		}
 

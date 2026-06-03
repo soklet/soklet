@@ -1,6 +1,7 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.internal.util.HostHeaderValidator;
+import org.jspecify.annotations.Nullable;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -45,7 +46,7 @@ class RequestParser {
     }
 
     private final ByteTokenizer tokenizer;
-    private final InetSocketAddress remoteAddress;
+    private final @Nullable InetSocketAddress remoteAddress;
     private final int maxRequestSize;
     private final int maxHeaderCount;
     private final int maxRequestTargetLength;
@@ -55,34 +56,41 @@ class RequestParser {
     private boolean contentLengthHeaderPresent;
     private long contentLengthHeader;
     private boolean transferEncodingHeaderPresent;
+    @Nullable
     private List<String> transferEncodings;
     private int hostHeaderCount;
+    @Nullable
     private String hostHeaderValue;
     private boolean expectHeaderPresent;
     private int chunkSize;
     private long chunkBodySize;
+    @Nullable
     private ByteMerger chunks;
 
+    @Nullable
     private String method;
+    @Nullable
     private String uri;
+    @Nullable
     private String version;
+    @Nullable
     private List<Header> headers;
-    private byte[] body;
+    private byte @Nullable [] body;
 
     RequestParser(ByteTokenizer tokenizer) {
         this(tokenizer, null, Integer.MAX_VALUE);
     }
 
-    RequestParser(ByteTokenizer tokenizer, InetSocketAddress remoteAddress) {
+    RequestParser(ByteTokenizer tokenizer, @Nullable InetSocketAddress remoteAddress) {
         this(tokenizer, remoteAddress, Integer.MAX_VALUE);
     }
 
-    RequestParser(ByteTokenizer tokenizer, InetSocketAddress remoteAddress, int maxRequestSize) {
+    RequestParser(ByteTokenizer tokenizer, @Nullable InetSocketAddress remoteAddress, int maxRequestSize) {
         this(tokenizer, remoteAddress, maxRequestSize, Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
     RequestParser(ByteTokenizer tokenizer,
-                  InetSocketAddress remoteAddress,
+                  @Nullable InetSocketAddress remoteAddress,
                   int maxRequestSize,
                   int maxHeaderCount,
                   int maxRequestTargetLength) {
@@ -248,12 +256,15 @@ class RequestParser {
             if (isObsFoldLine(start, end)) {
                 throw new MalformedRequestException("header folding is not supported");
             }
-            if (headers.size() >= maxHeaderCount) {
+            List<Header> parsedHeaders = headers == null ? new ArrayList<>() : headers;
+            headers = parsedHeaders;
+
+            if (parsedHeaders.size() >= maxHeaderCount) {
                 throw new RequestTooLargeException();
             }
             Header header = parseHeaderLine(start, end);
             tokenizer.advanceTo(end + CRLF.length);
-            headers.add(header);
+            parsedHeaders.add(header);
             observeHeader(header);
         }
 

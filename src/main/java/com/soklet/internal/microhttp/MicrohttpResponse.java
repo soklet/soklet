@@ -1,6 +1,7 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.StreamTerminationReason;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -19,7 +20,7 @@ public final class MicrohttpResponse {
     private final List<Header> headers;
     private final long bodyLength;
     private final BodySourceFactory bodySourceFactory;
-    private final byte[] body;
+    private final byte @Nullable [] body;
     private final boolean streaming;
 
     public MicrohttpResponse(int status, String reason, List<Header> headers, byte[] body) {
@@ -27,7 +28,7 @@ public final class MicrohttpResponse {
     }
 
     private MicrohttpResponse(int status, String reason, List<Header> headers, long bodyLength,
-                              BodySourceFactory bodySourceFactory, byte[] body, boolean streaming) {
+                              BodySourceFactory bodySourceFactory, byte @Nullable [] body, boolean streaming) {
         this.status = status;
         this.reason = requireNonNull(reason);
         this.headers = requireNonNull(headers);
@@ -161,7 +162,7 @@ public final class MicrohttpResponse {
                 bodySourceFactory.create()));
     }
 
-    void closeStreamingBody(StreamTerminationReason cancelationReason, Throwable cause) throws IOException {
+    void closeStreamingBody(StreamTerminationReason cancelationReason, @Nullable Throwable cause) throws IOException {
         if (!streaming) {
             return;
         }

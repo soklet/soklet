@@ -32,7 +32,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static com.soklet.Utilities.trimAggressively;
+import static com.soklet.Utilities.trimAggressivelyToEmpty;
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
@@ -303,7 +303,7 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 	static String normalizePath(@NonNull String path) {
 		requireNonNull(path);
 
-		path = trimAggressively(path);
+		path = trimAggressivelyToEmpty(path);
 
 		if (path.length() == 0)
 			return "/";

@@ -29,7 +29,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.soklet.Utilities.trimAggressively;
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
@@ -54,7 +53,7 @@ import static java.util.Objects.requireNonNull;
 public final class CorsPreflight {
 	@NonNull
 	private final String origin;
-	@Nullable
+	@NonNull
 	private final HttpMethod accessControlRequestMethod;
 	@NonNull
 	private final Set<@NonNull String> accessControlRequestHeaders;
@@ -144,8 +143,8 @@ public final class CorsPreflight {
 					} catch (Exception ignored) {
 						return false;
 					}
-				})
-				.map((headerValue -> HttpMethod.valueOf(trimAggressively(headerValue))))
+					})
+					.map((headerValue -> HttpMethod.valueOf(trimAggressivelyToEmpty(headerValue))))
 				.toList();
 
 		// Preflights are required to have Access-Control-Request-Method defined

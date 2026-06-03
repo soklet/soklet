@@ -165,8 +165,8 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		this.map = new ConcurrentHashMap<>(capacity);
 		this.evictionListener = evictionListener != null ? evictionListener : (k, v) -> {};
 
-		this.head = new Node<>(null, null);
-		this.tail = new Node<>(null, null);
+		this.head = new Node<>();
+		this.tail = new Node<>();
 		this.head.next = this.tail;
 		this.tail.prev = this.head;
 
@@ -209,6 +209,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
+	@Nullable
 	public V get(Object key) {
 		Node<K, V> node = map.get(key);
 		if (node == null)
@@ -233,6 +234,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	// ===================================================================================
 
 	@Override
+	@Nullable
 	public V put(K key, V value) {
 		Objects.requireNonNull(key, "key");
 		Objects.requireNonNull(value, "value");
@@ -251,6 +253,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
+	@Nullable
 	public V putIfAbsent(K key, V value) {
 		Objects.requireNonNull(key, "key");
 		Objects.requireNonNull(value, "value");
@@ -268,6 +271,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
+	@Nullable
 	public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
 		Objects.requireNonNull(key, "key");
 		Objects.requireNonNull(mappingFunction, "mappingFunction");
@@ -302,6 +306,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
+	@Nullable
 	public V remove(Object key) {
 		Node<K, V> node = map.remove(key);
 		if (node == null)
@@ -338,9 +343,9 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			map.clear();
 
 			// Unlink everything currently on the list
-			Node<K, V> current = head.next;
+			Node<K, V> current = Objects.requireNonNull(head.next);
 			while (current != tail) {
-				Node<K, V> next = current.next;
+				Node<K, V> next = Objects.requireNonNull(current.next);
 				current.prev = null;
 				current.next = null;
 				current.state = DEAD;
@@ -507,7 +512,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 				break;
 
 			case UPDATE:
-				unlinkNodeLocked(task.oldNode);
+				unlinkNodeLocked(Objects.requireNonNull(task.oldNode));
 				promoteToHeadLocked(task.node);
 				break;
 		}
@@ -518,7 +523,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		List<Node<K, V>> evicted = new ArrayList<>();
 
 		while (map.size() > capacity) {
-			Node<K, V> victim = tail.prev;
+			Node<K, V> victim = Objects.requireNonNull(tail.prev);
 			if (victim == head)
 				break;
 
@@ -580,7 +585,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			node.next.prev = node.prev;
 
 		// Link at head
-		Node<K, V> first = head.next;
+		Node<K, V> first = Objects.requireNonNull(head.next);
 		node.prev = head;
 		node.next = first;
 		head.next = node;
@@ -612,14 +617,22 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		final V value;
 
 		// Guarded by the owning ConcurrentLruMap's maintenanceLock.
+		@Nullable
 		Node<K, V> prev;
 
 		// Guarded by the owning ConcurrentLruMap's maintenanceLock.
+		@Nullable
 		Node<K, V> next;
 
 		volatile int state = ALIVE;
 
-		Node(@Nullable K key, @Nullable V value) {
+		@SuppressWarnings("NullAway")
+		Node() {
+			this.key = null;
+			this.value = null;
+		}
+
+		Node(@NonNull K key, @NonNull V value) {
 			this.key = key;
 			this.value = value;
 		}
@@ -630,6 +643,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 		final Type type;
 		final Node<K, V> node;
+		@Nullable
 		final Node<K, V> oldNode; // only for UPDATE
 
 		private WriteTask(@NonNull Type type, @NonNull Node<K, V> node, @Nullable Node<K, V> oldNode) {
@@ -676,7 +690,9 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			final Iterator<K> it = map.keySet().iterator();
 
 			return new Iterator<>() {
+				@Nullable
 				private K lastKey;
+				@Nullable
 				private Node<K, V> lastNode;
 
 				@Override
@@ -742,6 +758,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			final Iterator<Entry<K, Node<K, V>>> it = map.entrySet().iterator();
 
 			return new Iterator<>() {
+				@Nullable
 				private Entry<K, Node<K, V>> last;
 
 				@Override
@@ -830,6 +847,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			final Iterator<Entry<K, Node<K, V>>> it = map.entrySet().iterator();
 
 			return new Iterator<>() {
+				@Nullable
 				private Entry<K, Node<K, V>> last;
 
 				@Override
@@ -878,6 +896,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
+		@Nullable
 		public V getValue() {
 			Node<K, V> node = map.get(key);
 			return node == null ? null : node.value;
@@ -888,6 +907,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		 * may differ from what was actually replaced.
 		 */
 		@Override
+		@Nullable
 		public V setValue(V value) {
 			Objects.requireNonNull(value, "value");
 			Node<K, V> prior = map.get(key);
@@ -938,11 +958,11 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		try {
 			evicted = performMaintenanceLocked();
 
-			Node<K, V> current = head.next;
+			Node<K, V> current = Objects.requireNonNull(head.next);
 			while (current != tail) {
 				if (current.key != null)
 					keys.add(current.key);
-				current = current.next;
+				current = Objects.requireNonNull(current.next);
 			}
 		} finally {
 			maintenanceLock.unlock();

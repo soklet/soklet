@@ -56,7 +56,7 @@ public final class HttpDate {
 	@NonNull
 	private static final List<@NonNull DateTimeFormatter> PARSERS;
 	@NonNull
-	private static final AtomicReference<CachedValue> CURRENT_SECOND_HEADER_VALUE;
+	private static final AtomicReference<@NonNull CachedValue> CURRENT_SECOND_HEADER_VALUE;
 
 	static {
 		GMT = ZoneId.of("GMT");
@@ -121,7 +121,7 @@ public final class HttpDate {
 	@NonNull
 	public static String currentSecondHeaderValue() {
 		Long currentEpochSecond = Instant.now().getEpochSecond();
-		CachedValue cachedValue = CURRENT_SECOND_HEADER_VALUE.get();
+		CachedValue cachedValue = requireNonNull(CURRENT_SECOND_HEADER_VALUE.get());
 
 		if (cachedValue.epochSecond().equals(currentEpochSecond))
 			return cachedValue.headerValue();
@@ -131,7 +131,7 @@ public final class HttpDate {
 		if (CURRENT_SECOND_HEADER_VALUE.compareAndSet(cachedValue, newValue))
 			return newValue.headerValue();
 
-		return CURRENT_SECOND_HEADER_VALUE.get().headerValue();
+		return requireNonNull(CURRENT_SECOND_HEADER_VALUE.get()).headerValue();
 	}
 
 	private record CachedValue(@NonNull Long epochSecond,

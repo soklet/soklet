@@ -1,5 +1,7 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.Nullable;
+
 import java.time.Duration;
 
 public class OptionsBuilder {
@@ -8,8 +10,11 @@ public class OptionsBuilder {
     private boolean reuseAddr;
     private boolean reusePort;
     private Duration resolution;
+    @Nullable
     private Duration requestHeaderTimeout;
+    @Nullable
     private Duration requestBodyTimeout;
+    @Nullable
     private Duration responseWriteIdleTimeout;
     private int readBufferSize;
     private int acceptLength;

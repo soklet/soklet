@@ -29,7 +29,7 @@ import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.soklet.Utilities.trimAggressively;
+import static com.soklet.Utilities.trimAggressivelyToEmpty;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -162,7 +162,7 @@ public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<
 	@NonNull
 	private static String normalizeOrigin(@NonNull String origin) {
 		requireNonNull(origin);
-		return trimAggressively(origin).toLowerCase(Locale.ROOT);
+		return trimAggressivelyToEmpty(origin).toLowerCase(Locale.ROOT);
 	}
 
 	@NonNull

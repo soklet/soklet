@@ -1,5 +1,7 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.Nullable;
+
 import java.net.InetSocketAddress;
 
 /**
@@ -12,17 +14,17 @@ public final class NoopConnectionListener implements ConnectionListener {
     }
 
     @Override
-    public void willAcceptConnection(InetSocketAddress remoteAddress) {
+    public void willAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
         // No-op
     }
 
     @Override
-    public void didAcceptConnection(InetSocketAddress remoteAddress) {
+    public void didAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
         // No-op
     }
 
     @Override
-    public void didFailToAcceptConnection(InetSocketAddress remoteAddress) {
+    public void didFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
         // No-op
     }
 

@@ -1,6 +1,7 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.StreamTerminationReason;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -114,10 +115,13 @@ class ConnectionEventLoop {
         final SelectionKey selectionKey;
         final ByteTokenizer byteTokenizer;
         final String id;
-        final InetSocketAddress remoteAddress;
+        final @Nullable InetSocketAddress remoteAddress;
         RequestParser requestParser;
+        @Nullable
         WritableSource writableSource;
+        @Nullable
         Cancellable requestReadTimeoutTask;
+        @Nullable
         Cancellable responseWriteIdleTimeoutTask;
         boolean requestReadTimeoutBodyPhase;
         boolean responseWriteIdleTimeoutEnabled;
@@ -126,7 +130,7 @@ class ConnectionEventLoop {
         boolean closeAfterResponse;
         final AtomicBoolean closed;
 
-        private Connection(SocketChannel socketChannel, SelectionKey selectionKey, InetSocketAddress remoteAddress) throws IOException {
+        private Connection(SocketChannel socketChannel, SelectionKey selectionKey, @Nullable InetSocketAddress remoteAddress) throws IOException {
             this.socketChannel = socketChannel;
             this.selectionKey = selectionKey;
             byteTokenizer = new ByteTokenizer();
@@ -368,12 +372,18 @@ class ConnectionEventLoop {
         }
 
         private void doOnWritable() throws IOException {
-            long numBytes = writableSource.writeTo(socketChannel, MAX_RESPONSE_BYTES_PER_WRITE_TURN);
+            WritableSource activeWritableSource = writableSource;
+            if (activeWritableSource == null) {
+                failSafeClose();
+                return;
+            }
+
+            long numBytes = activeWritableSource.writeTo(socketChannel, MAX_RESPONSE_BYTES_PER_WRITE_TURN);
             if (numBytes > 0) {
                 resetResponseWriteIdleTimeoutIfNeeded();
             }
-            if (!writableSource.hasRemaining()) { // response fully written
-                writableSource.close();
+            if (!activeWritableSource.hasRemaining()) { // response fully written
+                activeWritableSource.close();
                 writableSource = null; // done with current write source, remove reference
                 cancelResponseWriteIdleTimeout();
                 if (logger.enabled()) {
@@ -422,7 +432,7 @@ class ConnectionEventLoop {
                     failSafeClose();
                     return;
                 }
-                if (writableSource.isReadyToWrite()) {
+                if (activeWritableSource.isReadyToWrite()) {
                     if ((selectionKey.interestOps() & SelectionKey.OP_WRITE) == 0) {
                         selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
                     }
@@ -442,7 +452,7 @@ class ConnectionEventLoop {
             failSafeClose(null, null);
         }
 
-        private void failSafeClose(StreamTerminationReason cancelationReason, Throwable cause) {
+        private void failSafeClose(@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable cause) {
             if (!closed.compareAndSet(false, true))
                 return;
             if (requestReadTimeoutTask != null) {
@@ -545,7 +555,7 @@ class ConnectionEventLoop {
             }
         }
 
-        private boolean hasHeaderToken(List<Header> headers, String headerName, String token) {
+        private boolean hasHeaderToken(@Nullable List<Header> headers, String headerName, String token) {
             if (headers == null) {
                 return false;
             }

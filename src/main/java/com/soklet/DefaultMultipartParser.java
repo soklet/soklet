@@ -24,6 +24,7 @@ import com.soklet.exception.IllegalRequestBodyException;
 import com.soklet.exception.MissingRequestHeaderException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayInputStream;
@@ -1019,11 +1020,13 @@ final class DefaultMultipartParser implements MultipartParser {
 		/**
 		 * The content encoding to use when reading headers.
 		 */
+		@Nullable
 		private String headerEncoding;
 
 		/**
 		 * The progress notifier, if any, or null.
 		 */
+		@Nullable
 		private final ProgressNotifier notifier;
 
 		// ----------------------------------------------------------- Constructors

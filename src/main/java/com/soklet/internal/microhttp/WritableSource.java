@@ -17,6 +17,7 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.StreamTerminationReason;
+import org.jspecify.annotations.Nullable;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -44,7 +45,7 @@ interface WritableSource extends Closeable {
         return hasRemaining();
     }
 
-    default void close(StreamTerminationReason cancelationReason, Throwable cause) throws IOException {
+    default void close(@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable cause) throws IOException {
         close();
     }
 }

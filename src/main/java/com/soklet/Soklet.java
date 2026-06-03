@@ -171,7 +171,7 @@ public final class Soklet implements AutoCloseable {
 	@NonNull
 	private final ReentrantLock lock;
 	@NonNull
-	private final AtomicReference<CountDownLatch> awaitShutdownLatchReference;
+	private final AtomicReference<@NonNull CountDownLatch> awaitShutdownLatchReference;
 	@NonNull
 	private final DefaultMcpRuntime defaultMcpRuntime;
 
@@ -539,7 +539,7 @@ public final class Soklet implements AutoCloseable {
 			}
 		} finally {
 			try {
-				getAwaitShutdownLatchReference().get().countDown();
+				requireNonNull(getAwaitShutdownLatchReference().get()).countDown();
 			} finally {
 				getLock().unlock();
 			}
@@ -592,7 +592,7 @@ public final class Soklet implements AutoCloseable {
 			Runtime.getRuntime().addShutdownHook(shutdownHook);
 
 			// Wait until "close" finishes
-			getAwaitShutdownLatchReference().get().await();
+			requireNonNull(getAwaitShutdownLatchReference().get()).await();
 		} finally {
 			if (registeredEnterKeyShutdownTrigger)
 				KeypressManager.unregister(this);
@@ -1331,7 +1331,8 @@ public final class Soklet implements AutoCloseable {
 	private MarshaledResponse toMarshaledResponse(SseHandshakeResult.@NonNull Accepted accepted) {
 		requireNonNull(accepted);
 
-		Map<String, Set<String>> headers = accepted.getHeaders();
+		Map<String, Set<String>> acceptedHeaders = accepted.getHeaders();
+		Map<String, Set<String>> headers = acceptedHeaders == null ? Map.of() : acceptedHeaders;
 		LinkedCaseInsensitiveMap<Set<String>> finalHeaders = new LinkedCaseInsensitiveMap<>(DEFAULT_ACCEPTED_HANDSHAKE_HEADERS.size() + headers.size());
 
 		// Start with defaults
@@ -1677,7 +1678,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected AtomicReference<CountDownLatch> getAwaitShutdownLatchReference() {
+	protected AtomicReference<@NonNull CountDownLatch> getAwaitShutdownLatchReference() {
 		return this.awaitShutdownLatchReference;
 	}
 
@@ -2114,6 +2115,9 @@ public final class Soklet implements AutoCloseable {
 			}));
 
 			HttpRequestResult requestResult = requestResultHolder.get();
+			if (requestResult == null)
+				throw new IllegalStateException("SSE request handler did not provide a request result");
+
 			SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
 
 			if (sseHandshakeResult == null)

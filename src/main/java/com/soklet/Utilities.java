@@ -1482,8 +1482,12 @@ public final class Utilities {
 		}
 
 		if (finishedCharsetName) {
+			String specifiedCharsetName = charsetName;
+			if (specifiedCharsetName == null)
+				return Optional.empty();
+
 			// e.g. charset=UTF-8 or charset="UTF-8" or charset='UTF-8'
-			String possibleCharsetName = trimAggressivelyToNull(charsetName.replace("charset=", ""));
+			String possibleCharsetName = trimAggressivelyToNull(specifiedCharsetName.replace("charset=", ""));
 
 			if (possibleCharsetName != null) {
 				// strip optional surrounding quotes
@@ -1550,6 +1554,8 @@ public final class Utilities {
 			return null;
 
 		string = trimAggressively(string);
+		if (string == null)
+			return null;
 		return string.length() == 0 ? null : string;
 	}
 
@@ -1566,7 +1572,8 @@ public final class Utilities {
 		if (string == null)
 			return "";
 
-		return trimAggressively(string);
+		String trimmed = trimAggressively(string);
+		return trimmed == null ? "" : trimmed;
 	}
 
 	static void validateHeaderNameAndValue(@Nullable String name,
@@ -1722,17 +1729,18 @@ public final class Utilities {
 		requireNonNull(headers);
 
 		String key = trimAggressivelyToEmpty(name); // keep original case for display
-		if (trimAggressivelyToNull(value) == null)
+		String trimmedValue = trimAggressivelyToNull(value);
+		if (trimmedValue == null)
 			return;
 
 		if (COMMA_JOINABLE_HEADER_NAMES.contains(key.toLowerCase(Locale.ROOT))) {
-			for (String part : splitCommaAware(value)) {
+			for (String part : splitCommaAware(trimmedValue)) {
 				String v = trimAggressivelyToNull(part);
 				if (v != null)
 					addStringValue(headers, key, v);
 			}
 		} else {
-			addStringValue(headers, key, value.trim());
+			addStringValue(headers, key, trimmedValue.trim());
 		}
 	}
 

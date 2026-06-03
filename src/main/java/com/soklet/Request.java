@@ -229,16 +229,42 @@ public final class Request {
 		if (rawBuilder == null && pathBuilder == null)
 			throw new IllegalStateException(format("Neither %s nor %s were specified", RawBuilder.class.getSimpleName(), PathBuilder.class.getSimpleName()));
 
-		IdGenerator builderIdGenerator = rawBuilder == null ? pathBuilder.idGenerator : rawBuilder.idGenerator;
-		Object builderId = rawBuilder == null ? pathBuilder.id : rawBuilder.id;
-		HttpMethod builderHttpMethod = rawBuilder == null ? pathBuilder.httpMethod : rawBuilder.httpMethod;
-		byte[] builderBody = rawBuilder == null ? pathBuilder.body : rawBuilder.body;
-		MultipartParser builderMultipartParser = rawBuilder == null ? pathBuilder.multipartParser : rawBuilder.multipartParser;
-		Boolean builderContentTooLarge = rawBuilder == null ? pathBuilder.contentTooLarge : rawBuilder.contentTooLarge;
-		RequestHeaders builderHeaders = rawBuilder == null ? new MapRequestHeaders(pathBuilder.headers) : rawBuilder.requestHeaders();
-		InetSocketAddress builderRemoteAddress = rawBuilder == null ? pathBuilder.remoteAddress : rawBuilder.remoteAddress;
-		Boolean builderTraceContextSpecified = rawBuilder == null ? pathBuilder.traceContextSpecified : rawBuilder.traceContextSpecified;
-		TraceContext builderTraceContext = rawBuilder == null ? pathBuilder.traceContext : rawBuilder.traceContext;
+		IdGenerator builderIdGenerator;
+		Object builderId;
+		HttpMethod builderHttpMethod;
+		byte[] builderBody;
+		MultipartParser builderMultipartParser;
+		Boolean builderContentTooLarge;
+		RequestHeaders builderHeaders;
+		InetSocketAddress builderRemoteAddress;
+		Boolean builderTraceContextSpecified;
+		TraceContext builderTraceContext;
+
+		if (rawBuilder == null) {
+			PathBuilder activePathBuilder = requireNonNull(pathBuilder);
+			builderIdGenerator = activePathBuilder.idGenerator;
+			builderId = activePathBuilder.id;
+			builderHttpMethod = activePathBuilder.httpMethod;
+			builderBody = activePathBuilder.body;
+			builderMultipartParser = activePathBuilder.multipartParser;
+			builderContentTooLarge = activePathBuilder.contentTooLarge;
+			builderHeaders = new MapRequestHeaders(activePathBuilder.headers);
+			builderRemoteAddress = activePathBuilder.remoteAddress;
+			builderTraceContextSpecified = activePathBuilder.traceContextSpecified;
+			builderTraceContext = activePathBuilder.traceContext;
+		} else {
+			RawBuilder activeRawBuilder = rawBuilder;
+			builderIdGenerator = activeRawBuilder.idGenerator;
+			builderId = activeRawBuilder.id;
+			builderHttpMethod = activeRawBuilder.httpMethod;
+			builderBody = activeRawBuilder.body;
+			builderMultipartParser = activeRawBuilder.multipartParser;
+			builderContentTooLarge = activeRawBuilder.contentTooLarge;
+			builderHeaders = activeRawBuilder.requestHeaders();
+			builderRemoteAddress = activeRawBuilder.remoteAddress;
+			builderTraceContextSpecified = activeRawBuilder.traceContextSpecified;
+			builderTraceContext = activeRawBuilder.traceContext;
+		}
 
 		this.idGenerator = builderIdGenerator == null ? DEFAULT_ID_GENERATOR : builderIdGenerator;
 		this.multipartParser = builderMultipartParser == null ? DefaultMultipartParser.defaultInstance() : builderMultipartParser;
@@ -254,6 +280,7 @@ public final class Request {
 		String rawBuilderRawQuery = null;
 		String rawQueryForLazyParameters = null;
 		Boolean lazyQueryParameters = false;
+		@Nullable
 		Map<String, Set<String>> initialQueryParameters;
 
 		// If we use PathBuilder, use its path directly.
@@ -273,7 +300,7 @@ public final class Request {
 			initialQueryParameters = pathBuilder.queryParameters == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(pathBuilder.queryParameters));
 		} else {
 			// RawBuilder scenario
-			String rawUrl = trimAggressivelyToEmpty(rawBuilder.rawUrl);
+			String rawUrl = trimAggressivelyToEmpty(requireNonNull(rawBuilder).rawUrl);
 
 			// Special handling for OPTIONS *
 			if ("*".equals(rawUrl)) {
@@ -325,15 +352,16 @@ public final class Request {
 					rawPath = Utilities.encodePath(path);
 				}
 
-				if (initialQueryParameters.isEmpty()) {
+				Map<String, Set<String>> queryParameters = requireNonNull(initialQueryParameters);
+				if (queryParameters.isEmpty()) {
 					rawQuery = null;
 				} else {
-					rawQuery = Utilities.encodeQueryParameters(initialQueryParameters, QueryFormat.RFC_3986_STRICT);
+					rawQuery = Utilities.encodeQueryParameters(queryParameters, QueryFormat.RFC_3986_STRICT);
 				}
 			}
 		} else {
 			// RawBuilder scenario: extract raw components from rawUrl
-			String rawUrl = trimAggressivelyToEmpty(rawBuilder.rawUrl);
+			String rawUrl = trimAggressivelyToEmpty(requireNonNull(rawBuilder).rawUrl);
 
 			if ("*".equals(rawUrl)) {
 				rawPath = "*";
@@ -540,7 +568,7 @@ public final class Request {
 
 				if (result == null) {
 					if (this.body != null && this.contentType != null && this.contentType.equalsIgnoreCase("application/x-www-form-urlencoded")) {
-						String bodyAsString = getBodyAsString().orElse(null);
+						String bodyAsString = getBodyAsString().orElse("");
 						result = Collections.unmodifiableMap(Utilities.extractQueryParametersFromQuery(bodyAsString, QueryFormat.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET)));
 					} else {
 						result = Map.of();
@@ -1039,7 +1067,7 @@ public final class Request {
 			return singleValueForName(name, getMultipartFields());
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
-			MultipartField firstMultipartField = getMultipartFields().get(name).stream().findFirst().get();
+			MultipartField firstMultipartField = requireNonNull(getMultipartFields().get(name)).stream().findFirst().get();
 			String valuesAsString = format("[%s]", e.getValues().stream()
 					.map(multipartField -> multipartField.toString())
 					.collect(Collectors.joining(", ")));

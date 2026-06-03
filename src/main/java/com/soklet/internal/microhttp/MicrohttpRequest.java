@@ -1,5 +1,7 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.Nullable;
+
 import java.net.InetSocketAddress;
 import java.util.List;
 
@@ -14,8 +16,9 @@ public record MicrohttpRequest(
         List<Header> headers,
         byte[] body,
         boolean contentTooLarge,
-        InetSocketAddress remoteAddress) {
+        @Nullable InetSocketAddress remoteAddress) {
 
+    @Nullable
     public String header(String name) {
         for (Header header : headers) {
             if (equalsIgnoreCase(header.name(), name)) {
