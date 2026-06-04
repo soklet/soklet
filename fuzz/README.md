@@ -26,6 +26,11 @@ The current targets are:
 - `McpJsonCodecFuzzTest`
 - `RequestParserFuzzTest`
 - `DefaultMultipartParserFuzzTest`
+- `HttpDateFuzzTest`
+- `ParameterizedHeaderValueFuzzTest`
+- `QueryFormatFuzzTest`
+- `ResponseCookieFuzzTest`
+- `TraceContextFuzzTest`
 
 ## Corpus Policy
 
