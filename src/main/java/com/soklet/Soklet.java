@@ -1197,13 +1197,11 @@ public final class Soklet implements AutoCloseable {
 
 						return HttpRequestResult.withMarshaledResponse(marshaledResponse)
 								.corsPreflightResponse(corsPreflightResponse)
-								.resourceMethod(resourceMethod)
 								.build();
 					}
 
 					// Reject
 					return HttpRequestResult.withMarshaledResponse(responseMarshaler.forCorsPreflightRejected(request, corsPreflight))
-							.resourceMethod(resourceMethod)
 							.build();
 				} else {
 					// Just a normal OPTIONS response (non-CORS-preflight).
@@ -1216,7 +1214,6 @@ public final class Soklet implements AutoCloseable {
 						Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(matchingResourceMethodsByHttpMethod, true);
 
 						return HttpRequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, allowedHttpMethods))
-								.resourceMethod(resourceMethod)
 								.build();
 					}
 				}
@@ -1229,7 +1226,6 @@ public final class Soklet implements AutoCloseable {
 					resourceMethod = headGetResourceMethod;
 				else
 					return HttpRequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
-							.resourceMethod(resourceMethod)
 							.build();
 			} else {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
@@ -1243,12 +1239,10 @@ public final class Soklet implements AutoCloseable {
 					// ...if some do, it's a 405
 					Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(otherMatchingResourceMethodsByHttpMethod, true);
 					return HttpRequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, allowedHttpMethods))
-							.resourceMethod(resourceMethod)
 							.build();
 				} else {
 					// no matching resource method found, it's a 404
 					return HttpRequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
-							.resourceMethod(resourceMethod)
 							.build();
 				}
 			}

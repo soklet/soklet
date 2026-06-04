@@ -49,6 +49,15 @@ public class MultipartEdgeCaseTests {
 		return multipartBody("----AaB03x");
 	}
 
+	@Test
+	public void multipartFieldWithNameAllowsAbsentData() {
+		MultipartField field = MultipartField.withName("field").build();
+
+		Assertions.assertEquals("field", field.getName());
+		Assertions.assertTrue(field.getData().isEmpty());
+		Assertions.assertTrue(field.getDataAsString().isEmpty());
+	}
+
 	private static byte[] multipartBodyWithFieldCount(String boundary,
 																										int fieldCount) {
 		StringBuilder body = new StringBuilder();

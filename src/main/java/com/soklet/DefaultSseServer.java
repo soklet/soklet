@@ -1800,7 +1800,7 @@ final class DefaultSseServer implements SseServer {
 				}
 
 				Duration deliveryLag = null;
-				Integer payloadByteCount = null;
+				Integer payloadByteCount;
 				Integer queueDepth;
 
 				long enqueuedAtNanos = writeQueueElement.getEnqueuedAtNanos();
@@ -1809,8 +1809,7 @@ final class DefaultSseServer implements SseServer {
 				if (enqueuedAtNanos > 0L)
 					deliveryLag = Duration.ofNanos(Math.max(0L, nowNanos - enqueuedAtNanos));
 
-				if (payloadBytes != null)
-					payloadByteCount = payloadBytes.length;
+				payloadByteCount = payloadBytes.length;
 
 				queueDepth = writeQueue.size();
 
@@ -3198,23 +3197,23 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		String rawUri = parts[1];
+		if (rawUri == null)
+			return Optional.empty();
 
 		// Validate URI
-		if (rawUri != null) {
-			URI uri;
+		URI uri;
 
-			try {
-				uri = new URI(rawUri.trim());
-			} catch (Exception e) {
-				// Malformed URI specified
-				return Optional.empty();
-			}
-
-			// Normalize absolute URIs to relative form
-			String rawPath = uri.getRawPath() == null ? "/" : uri.getRawPath();
-			String rawQuery = uri.getRawQuery();
-			rawUri = rawQuery == null ? rawPath : rawPath + "?" + rawQuery;
+		try {
+			uri = new URI(rawUri.trim());
+		} catch (Exception e) {
+			// Malformed URI specified
+			return Optional.empty();
 		}
+
+		// Normalize absolute URIs to relative form
+		String rawPath = uri.getRawPath() == null ? "/" : uri.getRawPath();
+		String rawQuery = uri.getRawQuery();
+		rawUri = rawQuery == null ? rawPath : rawPath + "?" + rawQuery;
 
 		List<String> rawHeaderLines = new ArrayList<>();
 		int headerStartIndex = crLfIndex + firstLineSeparatorLength;

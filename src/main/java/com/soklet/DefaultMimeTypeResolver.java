@@ -137,7 +137,8 @@ final class DefaultMimeTypeResolver implements MimeTypeResolver {
 	private static Optional<String> extensionFor(@NonNull Path path) {
 		requireNonNull(path);
 
-		String filename = path.getFileName() == null ? "" : path.getFileName().toString();
+		Path filenamePath = path.getFileName();
+		String filename = filenamePath == null ? "" : filenamePath.toString();
 		int lastDotIndex = filename.lastIndexOf('.');
 
 		if (lastDotIndex < 0 || lastDotIndex == filename.length() - 1)

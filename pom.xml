@@ -300,5 +300,31 @@
                 </plugins>
             </build>
         </profile>
+
+        <!-- SpotBugs gate (M5). Opt-in and CI-pinned to JDK 21. The exclude filter is a documented
+             reviewed baseline for low-signal categories in this codebase; new unfiltered correctness,
+             nullness, threading, and resource-management findings fail the build.
+
+               JAVA_HOME=<jdk21> mvn -Pspotbugs -DskipTests compile spotbugs:check
+        -->
+        <profile>
+            <id>spotbugs</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.spotbugs</groupId>
+                        <artifactId>spotbugs-maven-plugin</artifactId>
+                        <version>4.9.8.3</version>
+                        <configuration>
+                            <effort>Max</effort>
+                            <threshold>Medium</threshold>
+                            <failOnError>true</failOnError>
+                            <xmlOutput>true</xmlOutput>
+                            <excludeFilterFile>${project.basedir}/config/spotbugs-exclude.xml</excludeFilterFile>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

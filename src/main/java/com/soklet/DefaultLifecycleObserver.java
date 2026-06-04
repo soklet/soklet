@@ -32,6 +32,10 @@ final class DefaultLifecycleObserver implements LifecycleObserver {
 		DEFAULT_INSTANCE = new DefaultLifecycleObserver();
 	}
 
+	private DefaultLifecycleObserver() {
+		// Singleton
+	}
+
 	@NonNull
 	public static DefaultLifecycleObserver defaultInstance() {
 		return DEFAULT_INSTANCE;

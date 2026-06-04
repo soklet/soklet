@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+	<!-- Vendored Spring utilities are tracked as a frozen internal fork. Keep SpotBugs focused on Soklet-owned code. -->
+	<Match>
+		<Package name="~com\.soklet\.internal\.spring(\..*)?"/>
+	</Match>
+
+	<!-- Soklet intentionally exposes selected representations for zero-copy response bodies, Throwable causes,
+	     reflection Method handles, FileChannel-backed responses, and immutable-or-builder maps/lists/sets.
+	     Copying every flagged object would be a broad compatibility/performance change, not a production-hardening
+	     fix. Keep these as a documented baseline instead of suppressing them inline across public APIs. -->
+	<Match>
+		<Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2,MS_EXPOSE_REP,MS_PKGPROTECT"/>
+	</Match>
+
+	<!-- Constructors validate required arguments early. The reported types are final, abstract base classes, or
+	     package-private/internal classes without finalizers, so SpotBugs' finalizer-attack warning is not useful here. -->
+	<Match>
+		<Bug pattern="CT_CONSTRUCTOR_THROW"/>
+	</Match>
+
+	<!-- These format strings intentionally contain protocol CRLFs or fixed diagnostic line breaks. Replacing them
+	     with platform-dependent %n would be incorrect for HTTP/MCP wire output and noisy for multi-line diagnostics. -->
+	<Match>
+		<Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
+	</Match>
+
+	<!-- Reviewed lock false positives: these methods lock then unlock in finally, sometimes through accessor
+	     methods SpotBugs does not model precisely. Keep the category live everywhere else. -->
+	<Match>
+		<Class name="com.soklet.DefaultHttpServer"/>
+		<Or>
+			<Method name="start"/>
+			<Method name="stop"/>
+		</Or>
+		<Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH"/>
+	</Match>
+	<Match>
+		<Class name="com.soklet.DefaultMcpServer"/>
+		<Or>
+			<Method name="start"/>
+			<Method name="stop"/>
+		</Or>
+		<Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH"/>
+	</Match>
+	<Match>
+		<Class name="com.soklet.DefaultSseServer"/>
+		<Or>
+			<Method name="isStarted"/>
+			<Method name="isStopping"/>
+			<Method name="start"/>
+			<Method name="stop"/>
+		</Or>
+		<Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH"/>
+	</Match>
+	<Match>
+		<Class name="com.soklet.Soklet"/>
+		<Method name="start"/>
+		<Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH"/>
+	</Match>
+	<Match>
+		<Class name="com.soklet.SseRequestResult$HandshakeAccepted"/>
+		<Method name="unregisterConsumers"/>
+		<Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH"/>
+	</Match>
+
+	<!-- Reviewed best-effort queue wakeups: close paths also close the socket and/or interrupt the processor,
+	     so blocking to force enqueue would make shutdown behavior worse. Keep the category live elsewhere. -->
+	<Match>
+		<Class name="com.soklet.DefaultMcpServer"/>
+		<Method name="closeLiveConnection"/>
+		<Bug pattern="RV_RETURN_VALUE_IGNORED_BAD_PRACTICE"/>
+	</Match>
+	<Match>
+		<Class name="com.soklet.DefaultSseServer"/>
+		<Or>
+			<Method name="closeConnectionDueToBackpressure"/>
+			<Method name="registerClientSocketChannel"/>
+		</Or>
+		<Bug pattern="RV_RETURN_VALUE_IGNORED_BAD_PRACTICE"/>
+	</Match>
+
+	<!-- Low-signal mechanical/performance findings kept out of the production-hardening gate for now. -->
+	<Match>
+		<Bug pattern="BX_UNBOXING_IMMEDIATELY_REBOXED,SIC_INNER_SHOULD_BE_STATIC"/>
+	</Match>
+
+	<!-- DefaultResponseMarshaler supports both a shared default instance and configured instances via its public
+	     builder-backed constructor, so the singleton heuristic does not apply. -->
+	<Match>
+		<Class name="com.soklet.DefaultResponseMarshaler"/>
+		<Bug pattern="SING_SINGLETON_HAS_NONPRIVATE_CONSTRUCTOR"/>
+	</Match>
+
+	<!-- Keep the defensive System.in null check even though the JDK normally treats System.in as non-null. -->
+	<Match>
+		<Class name="com.soklet.Soklet$KeypressManager"/>
+		<Method name="canReadFromStdin"/>
+		<Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>
+	</Match>
+</FindBugsFilter>

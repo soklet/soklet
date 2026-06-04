@@ -1193,7 +1193,9 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (classOutputRoot == null) return null;
 		Path parent = classOutputRoot.getParent();
 		if (parent == null) return null;
-		String outputRootName = classOutputRoot.getFileName().toString();
+		Path outputRootFileName = classOutputRoot.getFileName();
+		if (outputRootFileName == null) return null;
+		String outputRootName = outputRootFileName.toString();
 		return parent.resolve(SIDE_CAR_DIR_NAME).resolve(outputRootName).resolve(SIDE_CAR_INDEX_FILENAME);
 	}
 
@@ -1210,7 +1212,9 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (classOutputRoot == null) return null;
 		Path parent = classOutputRoot.getParent();
 		if (parent == null) return null;
-		String outputRootName = classOutputRoot.getFileName().toString();
+		Path outputRootFileName = classOutputRoot.getFileName();
+		if (outputRootFileName == null) return null;
+		String outputRootName = outputRootFileName.toString();
 		return parent.resolve(SIDE_CAR_DIR_NAME).resolve(outputRootName).resolve(MCP_SIDE_CAR_INDEX_FILENAME);
 	}
 
@@ -1486,7 +1490,11 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (parent != null) Files.createDirectories(parent);
 
 		// temp file in same dir so move is atomic on most filesystems
-		Path tmp = Files.createTempFile(parent, target.getFileName().toString(), ".tmp");
+		Path targetFileName = target.getFileName();
+		if (targetFileName == null)
+			throw new IOException("Unable to determine filename for " + target);
+
+		Path tmp = Files.createTempFile(parent == null ? Path.of(".") : parent, targetFileName.toString(), ".tmp");
 		try (Writer w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
 			writeIndexToWriter(w, routes);
 		}
@@ -1502,7 +1510,11 @@ public final class SokletProcessor extends AbstractProcessor {
 		Path parent = target.getParent();
 		if (parent != null) Files.createDirectories(parent);
 
-		Path tmp = Files.createTempFile(parent, target.getFileName().toString(), ".tmp");
+		Path targetFileName = target.getFileName();
+		if (targetFileName == null)
+			throw new IOException("Unable to determine filename for " + target);
+
+		Path tmp = Files.createTempFile(parent == null ? Path.of(".") : parent, targetFileName.toString(), ".tmp");
 		try (Writer w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
 			writeMcpIndexToWriter(w, endpoints);
 		}

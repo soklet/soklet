@@ -178,9 +178,8 @@ public final class MultipartField {
 		}
 
 		Builder(@NonNull String name,
-											byte @Nullable [] data) {
+												byte @Nullable [] data) {
 			requireNonNull(name);
-			requireNonNull(data);
 
 			this.name = name;
 			this.data = data;

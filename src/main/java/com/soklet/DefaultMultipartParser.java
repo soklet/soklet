@@ -66,6 +66,10 @@ final class DefaultMultipartParser implements MultipartParser {
 		DEFAULT_INSTANCE = new DefaultMultipartParser();
 	}
 
+	private DefaultMultipartParser() {
+		// Singleton
+	}
+
 	@NonNull
 	public static DefaultMultipartParser defaultInstance() {
 		return DEFAULT_INSTANCE;

@@ -1922,8 +1922,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		state = this.requestsInFlightById.get(request.getId());
 
-		if (state != null)
-			this.requestsInFlightByIdentity.putIfAbsent(identityKey, state);
+		if (state != null) {
+			RequestState existingState = this.requestsInFlightByIdentity.putIfAbsent(identityKey, state);
+			if (existingState != null)
+				return existingState;
+		}
 
 		return state;
 	}

@@ -36,6 +36,10 @@ final class DefaultInstanceProvider implements InstanceProvider {
 		DEFAULT_INSTANCE = new DefaultInstanceProvider();
 	}
 
+	private DefaultInstanceProvider() {
+		// Singleton
+	}
+
 	@NonNull
 	public static DefaultInstanceProvider defaultInstance() {
 		return DEFAULT_INSTANCE;

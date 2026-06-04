@@ -32,6 +32,10 @@ final class DefaultRequestInterceptor implements RequestInterceptor {
 		DEFAULT_INSTANCE = new DefaultRequestInterceptor();
 	}
 
+	private DefaultRequestInterceptor() {
+		// Singleton
+	}
+
 	@NonNull
 	public static DefaultRequestInterceptor defaultInstance() {
 		return DEFAULT_INSTANCE;
