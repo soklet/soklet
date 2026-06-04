@@ -155,6 +155,8 @@ final class McpJsonCodec {
 				default -> {
 					if (c < 0x20) {
 						json.append(format("\\u%04x", (int) c));
+					} else if (c == '\u2028' || c == '\u2029') {
+						json.append(format("\\u%04x", (int) c));
 					} else if (Character.isHighSurrogate(c)) {
 						char low = (i + 1 < value.length()) ? value.charAt(i + 1) : '\0';
 
@@ -164,13 +166,10 @@ final class McpJsonCodec {
 							json.append(low);
 							i++;
 						} else {
-							// Unpaired high surrogate: escape it. Emitting it verbatim would let UTF-8
-							// encoding silently replace it with '?', corrupting the value.
-							json.append(format("\\u%04x", (int) c));
+							throw new IllegalArgumentException("Unpaired high surrogate is not permitted in MCP JSON strings");
 						}
 					} else if (Character.isLowSurrogate(c)) {
-						// Unpaired low surrogate: escape it for the same reason as above.
-						json.append(format("\\u%04x", (int) c));
+						throw new IllegalArgumentException("Unpaired low surrogate is not permitted in MCP JSON strings");
 					} else {
 						json.append(c);
 					}
@@ -267,6 +266,9 @@ final class McpJsonCodec {
 					throw parseException("Expected object property name");
 
 				String name = parseString();
+				if (values.containsKey(name))
+					throw parseException(format("Duplicate object property '%s'", name));
+
 				skipWhitespace();
 				expect(':');
 				skipWhitespace();
@@ -333,6 +335,19 @@ final class McpJsonCodec {
 				if (c < 0x20)
 					throw parseException("Control characters must be escaped in JSON strings");
 
+				if (Character.isHighSurrogate(c)) {
+					if (isAtEnd() || !Character.isLowSurrogate(current()))
+						throw parseException("Expected low surrogate after high surrogate");
+
+					value.append(c);
+					value.append(current());
+					index++;
+					continue;
+				}
+
+				if (Character.isLowSurrogate(c))
+					throw parseException("Unexpected low surrogate");
+
 				value.append(c);
 			}
 
@@ -362,6 +377,9 @@ final class McpJsonCodec {
 		@NonNull
 		private String parseUnicodeEscape() {
 			char first = parseHexCharacter();
+
+			if (Character.isLowSurrogate(first))
+				throw parseException("Unexpected low surrogate escape sequence");
 
 			if (!Character.isHighSurrogate(first))
 				return String.valueOf(first);

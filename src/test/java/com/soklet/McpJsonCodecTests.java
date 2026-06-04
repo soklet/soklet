@@ -55,18 +55,12 @@ public class McpJsonCodecTests {
 	}
 
 	@Test
-	public void serializesUnpairedSurrogatesWithoutCorruption() {
-		// A lone low surrogate is accepted on input; serializing it must not let UTF-8 encoding silently
-		// replace it with '?'. It must be escaped and survive a parse -> serialize -> parse cycle.
-		McpString parsed = (McpString) McpJsonCodec.parse("\"\\uDC00\"");
-		byte[] serialized = McpJsonCodec.toUtf8Bytes(parsed);
-		String serializedText = new String(serialized, StandardCharsets.UTF_8);
-
-		Assertions.assertFalse(serializedText.contains("?"),
-				"Unpaired surrogate was corrupted during serialization: " + serializedText);
-
-		McpString reparsed = (McpString) McpJsonCodec.parse(serialized);
-		Assertions.assertEquals(parsed.value(), reparsed.value());
+	public void serializeRejectsUnpairedSurrogatesWithoutCorruption() {
+		// Rejecting is better than emitting a surrogate-half escape that Soklet's strict parser rejects.
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.toUtf8Bytes(new McpString("\uD800")));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.toUtf8Bytes(new McpString("\uDC00")));
 	}
 
 	@Test
@@ -77,6 +71,15 @@ public class McpJsonCodecTests {
 		McpString reparsed = (McpString) McpJsonCodec.parse(McpJsonCodec.toUtf8Bytes(parsed));
 		Assertions.assertEquals(parsed.value(), reparsed.value());
 		Assertions.assertEquals("😀", reparsed.value());
+	}
+
+	@Test
+	public void serializesJavaScriptLineSeparatorsEscaped() {
+		McpString value = new McpString("a\u2028b\u2029c");
+		String json = McpJsonCodec.toJson(value);
+
+		Assertions.assertEquals("\"a\\u2028b\\u2029c\"", json);
+		Assertions.assertEquals(value, McpJsonCodec.parse(json));
 	}
 
 	@Test
@@ -121,6 +124,31 @@ public class McpJsonCodecTests {
 		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpJsonCodec.parse("true false"));
 		Assertions.assertTrue(exception.getMessage().contains("Unexpected trailing content"));
+	}
+
+	@Test
+	public void parseRejectsLeadingBom() {
+		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse("\uFEFF{}"));
+		Assertions.assertTrue(exception.getMessage().contains("Unexpected character"));
+	}
+
+	@Test
+	public void parseRejectsDuplicateObjectKeys() {
+		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse("{\"a\":1,\"a\":2}"));
+		Assertions.assertTrue(exception.getMessage().contains("Duplicate object property"));
+	}
+
+	@Test
+	public void parseRejectsLoneLowSurrogates() {
+		IllegalArgumentException escapedException = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse("\"\\uDC00\""));
+		Assertions.assertTrue(escapedException.getMessage().contains("low surrogate"));
+
+		IllegalArgumentException rawException = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpJsonCodec.parse("\"\uDC00\""));
+		Assertions.assertTrue(rawException.getMessage().contains("low surrogate"));
 	}
 
 	@Test
