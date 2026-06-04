@@ -341,6 +341,105 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void startedDefaultMcpServerTerminatesLiveGetStreamOnceWhenDeleteRacesWithSessionMessageWrites() throws Exception {
+		int mcpPort = findFreePort();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		CountingMcpLifecycle lifecycleObserver = new CountingMcpLifecycle(1);
+		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(mcpPort)
+				.host("127.0.0.1")
+				.heartbeatInterval(Duration.ofSeconds(5))
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(defaultMcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(metricsCollector)
+				.build();
+		ExecutorService raceExecutor = java.util.concurrent.Executors.newFixedThreadPool(2);
+		AtomicBoolean stopPublishing = new AtomicBoolean(false);
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			String sessionId = initializedSessionId(mcpPort);
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeMcpGet(socket, mcpPort, sessionId);
+				Assertions.assertNotNull(readUntil(socket.getInputStream(), "\r\n\r\n", 8192));
+				Assertions.assertTrue(lifecycleObserver.awaitEstablishedStreams(2, TimeUnit.SECONDS));
+				Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams());
+
+				AtomicInteger acceptedPublishes = new AtomicInteger();
+				AtomicReference<Throwable> readerFailure = new AtomicReference<>();
+				java.util.concurrent.Future<?> readerFuture = raceExecutor.submit(() -> {
+					try {
+						byte[] buffer = new byte[512];
+						InputStream inputStream = socket.getInputStream();
+
+						while (inputStream.read(buffer) != -1) {
+							// Drain server-sent events so the write path can stay active during DELETE.
+						}
+					} catch (SocketException e) {
+						if (!socket.isClosed())
+							readerFailure.compareAndSet(null, e);
+					} catch (Throwable throwable) {
+						readerFailure.compareAndSet(null, throwable);
+					}
+				});
+				java.util.concurrent.Future<?> publisherFuture = raceExecutor.submit(() -> {
+					int sequence = 0;
+
+					while (!stopPublishing.get()) {
+						if (defaultMcpServer.publishSessionMessage(sessionId, internalSessionNotification("race-" + sequence++)))
+							acceptedPublishes.incrementAndGet();
+
+						LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(2));
+					}
+				});
+
+				long publishDeadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+				while (acceptedPublishes.get() < 3 && System.nanoTime() < publishDeadline)
+					TimeUnit.MILLISECONDS.sleep(10);
+
+				Assertions.assertTrue(acceptedPublishes.get() > 0, "Expected at least one live publish before DELETE");
+
+				HttpURLConnection deleteConnection = (HttpURLConnection) new URL("http://127.0.0.1:" + mcpPort + "/mcp").openConnection();
+				deleteConnection.setRequestMethod("DELETE");
+				deleteConnection.setConnectTimeout(2000);
+				deleteConnection.setReadTimeout(2000);
+				deleteConnection.setRequestProperty("MCP-Session-Id", sessionId);
+				deleteConnection.setRequestProperty("MCP-Protocol-Version", "2025-11-25");
+				Assertions.assertEquals(204, deleteConnection.getResponseCode());
+
+				stopPublishing.set(true);
+				publisherFuture.get(2, TimeUnit.SECONDS);
+				readerFuture.get(3, TimeUnit.SECONDS);
+
+				Throwable readerThrowable = readerFailure.get();
+				if (readerThrowable != null)
+					throw new AssertionError("MCP stream reader failed", readerThrowable);
+
+				Assertions.assertTrue(lifecycleObserver.awaitTerminatedStreams(2, TimeUnit.SECONDS));
+				Assertions.assertTrue(lifecycleObserver.awaitTerminatedSessions(2, TimeUnit.SECONDS));
+				Assertions.assertEquals(List.of(StreamTerminationReason.SESSION_TERMINATED),
+						lifecycleObserver.getStreamTerminationReasons());
+				Assertions.assertEquals(List.of(McpSessionTerminationReason.CLIENT_REQUESTED),
+						lifecycleObserver.getSessionTerminationReasons());
+				Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams());
+				Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
+				Assertions.assertFalse(defaultMcpServer.publishSessionMessage(sessionId, internalSessionNotification("after-delete")));
+				Assertions.assertTrue(metricsCollector.snapshot().orElseThrow().getTransportFailures().values().stream()
+						.allMatch(value -> value == 0L));
+			}
+		} finally {
+			stopPublishing.set(true);
+			raceExecutor.shutdownNow();
+			Assertions.assertTrue(raceExecutor.awaitTermination(2, TimeUnit.SECONDS));
+		}
+	}
+
+	@Test
 	public void startedDefaultMcpServerRoutesInternalSessionMessagesToMostRecentLiveGetStream() throws Exception {
 		int mcpPort = findFreePort();
 		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(mcpPort)
@@ -1395,6 +1494,69 @@ public class McpServerLifecycleTests {
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
 		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
+	}
+
+	private static final class CountingMcpLifecycle extends QuietLifecycle {
+		private final CountDownLatch establishedStreams;
+		private final CountDownLatch terminatedStreams;
+		private final CountDownLatch terminatedSessions;
+		private final CopyOnWriteArrayList<StreamTerminationReason> streamTerminationReasons;
+		private final CopyOnWriteArrayList<McpSessionTerminationReason> sessionTerminationReasons;
+
+		private CountingMcpLifecycle(int expectedStreams) {
+			this.establishedStreams = new CountDownLatch(expectedStreams);
+			this.terminatedStreams = new CountDownLatch(expectedStreams);
+			this.terminatedSessions = new CountDownLatch(1);
+			this.streamTerminationReasons = new CopyOnWriteArrayList<>();
+			this.sessionTerminationReasons = new CopyOnWriteArrayList<>();
+		}
+
+		@Override
+		public void didEstablishMcpSseStream(@NonNull McpSseStream stream) {
+			this.establishedStreams.countDown();
+		}
+
+		@Override
+		public void didTerminateMcpSseStream(@NonNull McpSseStream stream,
+																										 @NonNull StreamTermination termination) {
+			this.streamTerminationReasons.add(termination.getReason());
+			this.terminatedStreams.countDown();
+		}
+
+		@Override
+		public void didTerminateMcpSession(@NonNull Class<? extends McpEndpoint> endpointClass,
+																			 @NonNull String sessionId,
+																			 @NonNull Duration sessionDuration,
+																			 @NonNull McpSessionTerminationReason terminationReason,
+																			 @Nullable Throwable throwable) {
+			this.sessionTerminationReasons.add(terminationReason);
+			this.terminatedSessions.countDown();
+		}
+
+		private boolean awaitEstablishedStreams(long timeout,
+																						@NonNull TimeUnit unit) throws InterruptedException {
+			return this.establishedStreams.await(timeout, unit);
+		}
+
+		private boolean awaitTerminatedStreams(long timeout,
+																					 @NonNull TimeUnit unit) throws InterruptedException {
+			return this.terminatedStreams.await(timeout, unit);
+		}
+
+		private boolean awaitTerminatedSessions(long timeout,
+																							@NonNull TimeUnit unit) throws InterruptedException {
+			return this.terminatedSessions.await(timeout, unit);
+		}
+
+		@NonNull
+		private List<StreamTerminationReason> getStreamTerminationReasons() {
+			return this.streamTerminationReasons;
+		}
+
+		@NonNull
+		private List<McpSessionTerminationReason> getSessionTerminationReasons() {
+			return this.sessionTerminationReasons;
+		}
 	}
 
 	private static final class RecordingLifecycle extends QuietLifecycle {

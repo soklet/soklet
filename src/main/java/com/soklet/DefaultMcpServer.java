@@ -895,10 +895,18 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				throwable = e;
 		} catch (Throwable t) {
 			throwable = t;
-			recordWriteTransportFailure(t);
+			if (shouldRecordStreamWriteFailure(connection))
+				recordWriteTransportFailure(t);
 		} finally {
 			finishConnection(connection, throwable);
 		}
+	}
+
+	private boolean shouldRecordStreamWriteFailure(@NonNull McpLiveConnection connection) {
+		requireNonNull(connection);
+
+		StreamTerminationReason terminationReason = connection.terminationReason().get();
+		return terminationReason == null || terminationReason == StreamTerminationReason.WRITE_FAILED;
 	}
 
 	private void writePayload(@NonNull McpLiveConnection connection,

@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
+import com.soklet.internal.util.HostHeaderValidator;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -1145,7 +1146,7 @@ public final class Utilities {
 
 							if ("host".equalsIgnoreCase(name)) {
 								if (entryHost == null) {
-									HostPort hostPort = parseHostPort(value).orElse(null);
+									HostPort hostPort = parseForwardedHostPort(value).orElse(null);
 
 									if (hostPort != null) {
 										entryHost = hostPort.getHost();
@@ -1215,7 +1216,7 @@ public final class Utilities {
 		if (trustForwardedHeaders && host == null) {
 			String xForwardedHostHeader = firstHeaderValue(headers.get("X-Forwarded-Host"));
 			if (xForwardedHostHeader != null) {
-				HostPort hostPort = parseHostPort(xForwardedHostHeader).orElse(null);
+				HostPort hostPort = parseForwardedHostPort(xForwardedHostHeader).orElse(null);
 
 				if (hostPort != null) {
 					host = hostPort.getHost();
@@ -1967,6 +1968,21 @@ public final class Utilities {
 		public Optional<Integer> getPort() {
 			return Optional.ofNullable(this.port);
 		}
+	}
+
+	@NonNull
+	private static Optional<HostPort> parseForwardedHostPort(@Nullable String input) {
+		input = trimAggressivelyToNull(input);
+
+		if (input == null)
+			return Optional.empty();
+
+		input = stripOptionalQuotes(input);
+
+		if (!HostHeaderValidator.isValidHostHeaderValue(input))
+			return Optional.empty();
+
+		return parseHostPort(input);
 	}
 
 	@NonNull

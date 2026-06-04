@@ -335,6 +335,66 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void mcpOriginValidationRejectsUnauthorizedPostGetAndDeleteBeforeSideEffects() {
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		Soklet.runSimulator(configuration(
+				LifecycleObserver.defaultInstance(),
+				metricsCollector,
+				null,
+				McpCorsAuthorizer.fromWhitelistedOrigins(Set.of("https://allowed.example"))), simulator -> {
+			McpRequestResult.ResponseCompleted rejectedInitialize = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of(
+							"Origin", Set.of("https://attacker.example")
+					)));
+
+			Assertions.assertEquals(Integer.valueOf(403), rejectedInitialize.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertFalse(rejectedInitialize.getHttpRequestResult().getMarshaledResponse().getHeaders().containsKey("MCP-Session-Id"));
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
+
+			McpRequestResult.ResponseCompleted rejectedMalformedInitialize = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-2"), Map.of(
+							"Origin", Set.of("https://attacker.example bad")
+					)));
+
+			Assertions.assertEquals(Integer.valueOf(403), rejectedMalformedInitialize.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertFalse(rejectedMalformedInitialize.getHttpRequestResult().getMarshaledResponse().getHeaders().containsKey("MCP-Session-Id"));
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
+
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+			Map<String, Set<String>> rejectedGetHeaders = new java.util.LinkedHashMap<>(sessionHeaders);
+			rejectedGetHeaders.put("Accept", Set.of("text/event-stream"));
+			rejectedGetHeaders.put("Origin", Set.of("https://attacker.example"));
+
+			McpRequestResult.ResponseCompleted rejectedGet = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+							.headers(rejectedGetHeaders)
+							.build());
+
+			Assertions.assertEquals(Integer.valueOf(403), rejectedGet.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams());
+
+			Map<String, Set<String>> rejectedDeleteHeaders = new java.util.LinkedHashMap<>(sessionHeaders);
+			rejectedDeleteHeaders.put("Origin", Set.of("https://attacker.example"));
+
+			McpRequestResult.ResponseCompleted rejectedDelete = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.DELETE, "/tenants/acme/mcp")
+							.headers(rejectedDeleteHeaders)
+							.build());
+
+			Assertions.assertEquals(Integer.valueOf(403), rejectedDelete.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
+
+			McpRequestResult.ResponseCompleted acceptedDelete = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.DELETE, "/tenants/acme/mcp")
+							.headers(sessionHeaders)
+							.build());
+
+			Assertions.assertEquals(Integer.valueOf(204), acceptedDelete.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
+		});
+	}
+
+	@Test
 	public void generatedListsRequireInitializedNotificationAndExposeSchemas() {
 		Soklet.runSimulator(configuration(), simulator -> {
 			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(

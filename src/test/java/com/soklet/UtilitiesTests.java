@@ -539,6 +539,56 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void forwardedHostValidation_rejectsSpoofedForwardedHost() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Forwarded", Set.of("for=203.0.113.60; proto=https; host=\"public.example.com evil.example\""));
+
+		Optional<String> prefix = extractEffectiveOrigin(headers);
+		Assertions.assertTrue(prefix.isEmpty(), "Invalid Forwarded host must not become the effective origin");
+	}
+
+	@Test
+	public void forwardedHostValidation_rejectsSpoofedForwardedHostAndFallsBackToHost() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Host", Set.of("internal.soklet.local"));
+		headers.put("Forwarded", Set.of("for=203.0.113.60; proto=https; host=\"public.example.com\r\nX-Evil: yes\""));
+
+		Optional<String> prefix = extractEffectiveOrigin(headers);
+		Assertions.assertTrue(prefix.isPresent());
+		Assertions.assertEquals("https://internal.soklet.local", prefix.get());
+	}
+
+	@Test
+	public void forwardedHostValidation_rejectsSpoofedXForwardedHostAndFallsBackToHost() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Host", Set.of("internal.soklet.local"));
+		headers.put("X-Forwarded-Host", Set.of("public.example.com\tbad"));
+		headers.put("X-Forwarded-Proto", Set.of("https"));
+
+		Optional<String> prefix = extractEffectiveOrigin(headers);
+		Assertions.assertTrue(prefix.isPresent());
+		Assertions.assertEquals("https://internal.soklet.local", prefix.get());
+	}
+
+	@Test
+	public void forwardedHostValidation_rejectsInvalidForwardedPorts() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Forwarded", Set.of("for=203.0.113.60; proto=https; host=\"example.com:99999\""));
+
+		Optional<String> prefix = extractEffectiveOrigin(headers);
+		Assertions.assertTrue(prefix.isEmpty(), "Invalid Forwarded host ports must not be ignored into a host-only origin");
+	}
+
+	@Test
+	public void forwardedHostValidation_rejectsUnbracketedIpv6() {
+		Map<String, Set<String>> headers = new HashMap<>();
+		headers.put("Forwarded", Set.of("for=203.0.113.60; proto=https; host=2001:db8::1"));
+
+		Optional<String> prefix = extractEffectiveOrigin(headers);
+		Assertions.assertTrue(prefix.isEmpty(), "Unbracketed IPv6 host values must not become the effective origin");
+	}
+
+	@Test
 	public void forwardedHeaderLists_useFirstEntry() {
 		Map<String, Set<String>> headers = new HashMap<>();
 		headers.put("Host", Set.of("internal.soklet.local"));

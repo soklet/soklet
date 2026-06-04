@@ -40,6 +40,9 @@ import static java.util.Objects.requireNonNull;
  * Extraction order is: trusted forwarded headers → {@code Host} → (optional) {@code Origin} fallback. {@code Origin}
  * never overrides a conflicting host value; it only fills missing scheme/port or supplies host when absent.
  * <p>
+ * Trusted {@code Forwarded host=} and {@code X-Forwarded-Host} values are validated against the same host grammar
+ * Soklet applies to {@code Host}; invalid forwarded host values are ignored.
+ * <p>
  * Defaults: if {@link #allowOriginFallback(Boolean)} is left unset, {@code Origin} fallback is enabled only for
  * {@link TrustPolicy#TRUST_ALL}; otherwise it is disabled.
  */

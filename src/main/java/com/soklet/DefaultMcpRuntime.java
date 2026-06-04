@@ -131,12 +131,12 @@ final class DefaultMcpRuntime {
 
 			return switch (request.getHttpMethod()) {
 				case OPTIONS -> handleOptionsRequest(request, mcpServer, resolvedEndpoint);
-				case POST -> applyCorsIfApplicable(request, mcpServer, resolvedEndpoint,
-						handlePostRequest(request, mcpServer, resolvedEndpoint));
-				case GET -> applyCorsIfApplicable(request, mcpServer, resolvedEndpoint,
-						handleGetRequest(request, mcpServer, resolvedEndpoint));
-				case DELETE -> applyCorsIfApplicable(request, mcpServer, resolvedEndpoint,
-						handleDeleteRequest(request, mcpServer, resolvedEndpoint));
+				case POST -> handleOriginValidatedRequest(request, mcpServer, resolvedEndpoint,
+						() -> handlePostRequest(request, mcpServer, resolvedEndpoint));
+				case GET -> handleOriginValidatedRequest(request, mcpServer, resolvedEndpoint,
+						() -> handleGetRequest(request, mcpServer, resolvedEndpoint));
+				case DELETE -> handleOriginValidatedRequest(request, mcpServer, resolvedEndpoint,
+						() -> handleDeleteRequest(request, mcpServer, resolvedEndpoint));
 				default -> httpRequestResultFromMarshaledResponse(request,
 						getSoklet().getSokletConfig().getResponseMarshaler().forMethodNotAllowed(request, Set.of(HttpMethod.POST, HttpMethod.GET, HttpMethod.DELETE, HttpMethod.OPTIONS)));
 			};
@@ -156,10 +156,8 @@ final class DefaultMcpRuntime {
 		CorsPreflight corsPreflight = request.getCorsPreflight().orElse(null);
 
 		if (corsPreflight != null) {
-			CorsPreflightResponse corsPreflightResponse = mcpServer.getCorsAuthorizer().authorizePreflight(
-					mcpCorsContext(request, resolvedEndpoint.endpointClass(), request.getHeader("MCP-Session-Id").orElse(null)),
-					corsPreflight,
-					MCP_TRANSPORT_HTTP_METHODS).orElse(null);
+			CorsPreflightResponse corsPreflightResponse = authorizePreflightOrigin(request, mcpServer, resolvedEndpoint,
+					corsPreflight).orElse(null);
 
 			if (corsPreflightResponse != null)
 				return HttpRequestResult.withMarshaledResponse(getSoklet().getSokletConfig().getResponseMarshaler()
@@ -1094,26 +1092,26 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private HttpRequestResult applyCorsIfApplicable(@NonNull Request request,
-																							@NonNull McpServer mcpServer,
-																							@NonNull ResolvedEndpoint resolvedEndpoint,
-																							@NonNull HttpRequestResult requestResult) {
+	private HttpRequestResult handleOriginValidatedRequest(@NonNull Request request,
+																												 @NonNull McpServer mcpServer,
+																												 @NonNull ResolvedEndpoint resolvedEndpoint,
+																												 @NonNull McpRequestOperation operation) throws Exception {
 		requireNonNull(request);
 		requireNonNull(mcpServer);
 		requireNonNull(resolvedEndpoint);
-		requireNonNull(requestResult);
+		requireNonNull(operation);
 
 		Cors cors = request.getCors().orElse(null);
 
 		if (cors == null)
-			return requestResult;
+			return operation.handle();
 
-		CorsResponse corsResponse = mcpServer.getCorsAuthorizer().authorize(
-				mcpCorsContext(request, resolvedEndpoint.endpointClass(), request.getHeader("MCP-Session-Id").orElse(null)),
-				cors).orElse(null);
+		CorsResponse corsResponse = authorizeOrigin(request, mcpServer, resolvedEndpoint, cors).orElse(null);
 
 		if (corsResponse == null)
-			return requestResult;
+			return plainTextResponse(request, 403, "Forbidden MCP Origin.");
+
+		HttpRequestResult requestResult = operation.handle();
 
 		MarshaledResponse marshaledResponse = getSoklet().getSokletConfig().getResponseMarshaler().forCorsAllowed(
 				request,
@@ -1124,6 +1122,45 @@ final class DefaultMcpRuntime {
 		return requestResult.copy()
 				.marshaledResponse(marshaledResponse)
 				.finish();
+	}
+
+	@NonNull
+	private Optional<CorsResponse> authorizeOrigin(@NonNull Request request,
+																								 @NonNull McpServer mcpServer,
+																								 @NonNull ResolvedEndpoint resolvedEndpoint,
+																								 @NonNull Cors cors) {
+		requireNonNull(request);
+		requireNonNull(mcpServer);
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(cors);
+
+		try {
+			return mcpServer.getCorsAuthorizer().authorize(
+					mcpCorsContext(request, resolvedEndpoint.endpointClass(), request.getHeader("MCP-Session-Id").orElse(null)),
+					cors);
+		} catch (IllegalArgumentException e) {
+			return Optional.empty();
+		}
+	}
+
+	@NonNull
+	private Optional<CorsPreflightResponse> authorizePreflightOrigin(@NonNull Request request,
+																																	@NonNull McpServer mcpServer,
+																																	@NonNull ResolvedEndpoint resolvedEndpoint,
+																																	@NonNull CorsPreflight corsPreflight) {
+		requireNonNull(request);
+		requireNonNull(mcpServer);
+		requireNonNull(resolvedEndpoint);
+		requireNonNull(corsPreflight);
+
+		try {
+			return mcpServer.getCorsAuthorizer().authorizePreflight(
+					mcpCorsContext(request, resolvedEndpoint.endpointClass(), request.getHeader("MCP-Session-Id").orElse(null)),
+					corsPreflight,
+					MCP_TRANSPORT_HTTP_METHODS);
+		} catch (IllegalArgumentException e) {
+			return Optional.empty();
+		}
 	}
 
 	@Nullable
@@ -3778,5 +3815,11 @@ final class DefaultMcpRuntime {
 			requireNonNull(binding);
 			requireNonNull(uriParameters);
 		}
+	}
+
+	@FunctionalInterface
+	private interface McpRequestOperation {
+		@NonNull
+		HttpRequestResult handle() throws Exception;
 	}
 }
