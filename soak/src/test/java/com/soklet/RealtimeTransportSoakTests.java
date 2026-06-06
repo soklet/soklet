@@ -103,9 +103,9 @@ public class RealtimeTransportSoakTests {
 					PROFILE.resourceTolerance());
 			SoakReport.recordPassedScenario(
 					"concurrent SSE churn",
-					"clients=%d, streamsPerClient=%d, concurrentConnectionLimit=%d, interStreamPause=%s"
+					"clients=%d, streamsPerClient=%d, concurrentConnectionLimit=%d, interStreamPause=%s, clientSocketTimeout=%s"
 							.formatted(PROFILE.concurrentClients(), PROFILE.sseStreamsPerClient(),
-									PROFILE.sseConcurrentConnectionLimit(), PROFILE.sseInterStreamPause()),
+									PROFILE.sseConcurrentConnectionLimit(), PROFILE.sseInterStreamPause(), PROFILE.clientSocketTimeout()),
 					Duration.ofNanos(System.nanoTime() - startedAt),
 					baseline,
 					finalSnapshot,
@@ -219,7 +219,7 @@ public class RealtimeTransportSoakTests {
 	private static void openSseStreamTakeEventAndClose(int port,
 																										 @NonNull String streamId) throws Exception {
 		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
-			socket.setSoTimeout(2_000);
+			socket.setSoTimeout(Math.toIntExact(PROFILE.clientSocketTimeout().toMillis()));
 			writeAscii(socket, """
 					GET /events/%s HTTP/1.1\r
 					Host: 127.0.0.1:%s\r
@@ -551,6 +551,7 @@ public class RealtimeTransportSoakTests {
 																		 int mcpSessionsPerClient,
 																		 int sseConcurrentConnectionLimit,
 																		 int mcpConcurrentConnectionLimit,
+																		 @NonNull Duration clientSocketTimeout,
 																		 @NonNull Duration mcpSessionIdleTimeout,
 																		 @NonNull Duration sseInterStreamPause,
 																		 @NonNull Duration runTimeout,
@@ -567,6 +568,7 @@ public class RealtimeTransportSoakTests {
 						4,
 						256,
 						128,
+						Duration.ofSeconds(10),
 						Duration.ofSeconds(2),
 						Duration.ofMillis(20),
 						Duration.ofSeconds(90),
@@ -580,6 +582,7 @@ public class RealtimeTransportSoakTests {
 					3,
 					64,
 					32,
+					Duration.ofSeconds(5),
 					Duration.ofSeconds(2),
 					Duration.ofMillis(20),
 					Duration.ofSeconds(30),
