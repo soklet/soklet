@@ -239,11 +239,29 @@ public final class ByteRangeSelection {
 		return Optional.of(new BigInteger(text));
 	}
 
+	/**
+	 * Classification of a parsed byte-range selection.
+	 */
 	public enum ByteRangeSelectionType {
+		/**
+		 * No {@code Range} header value was provided.
+		 */
 		ABSENT,
+		/**
+		 * The {@code Range} header value used byte-range syntax but was malformed.
+		 */
 		MALFORMED,
+		/**
+		 * The {@code Range} header value requested a range form Soklet does not serve, such as a non-byte unit or multiple ranges.
+		 */
 		UNSUPPORTED,
+		/**
+		 * The {@code Range} header value was valid but selected no bytes from the representation.
+		 */
 		UNSATISFIABLE,
+		/**
+		 * The {@code Range} header value selected a byte range that can be served.
+		 */
 		SATISFIABLE
 	}
 }

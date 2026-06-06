@@ -94,6 +94,15 @@ public class StaticFilesTests {
 	}
 
 	@Test
+	public void httpDateRejectsInstantsOutsideImfFixdateYearRange() {
+		Assertions.assertEquals("Fri, 31 Dec 9999 23:59:59 GMT", HttpDate.toHeaderValue(Instant.parse("9999-12-31T23:59:59Z")));
+		Assertions.assertThrows(IllegalArgumentException.class, () -> HttpDate.toHeaderValue(Instant.parse("+10000-01-01T00:00:00Z")));
+		Assertions.assertThrows(IllegalArgumentException.class, () -> HttpDate.toHeaderValue(Instant.parse("0000-12-31T23:59:59Z")));
+		Assertions.assertThrows(IllegalArgumentException.class, () -> HttpDate.toHeaderValue(Instant.MAX));
+		Assertions.assertThrows(IllegalArgumentException.class, () -> HttpDate.toHeaderValue(Instant.MIN));
+	}
+
+	@Test
 	public void byteRangeSelectionDistinguishesRangeStates() {
 		Assertions.assertEquals(ByteRangeSelectionType.ABSENT, ByteRangeSelection.fromHeaderValue(null, 10L).getType());
 		Assertions.assertEquals(ByteRangeSelectionType.UNSUPPORTED, ByteRangeSelection.fromHeaderValue("items=0-1", 10L).getType());

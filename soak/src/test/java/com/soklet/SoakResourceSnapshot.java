@@ -48,10 +48,11 @@ record SoakResourceSnapshot(
 		return capture();
 	}
 
-	static void assertReturnsNear(@NonNull String scenario,
-																@NonNull SoakResourceSnapshot baseline,
-																@NonNull Duration timeout,
-																@NonNull ResourceTolerance tolerance) throws InterruptedException {
+	@NonNull
+	static SoakResourceSnapshot assertReturnsNear(@NonNull String scenario,
+																								@NonNull SoakResourceSnapshot baseline,
+																								@NonNull Duration timeout,
+																								@NonNull ResourceTolerance tolerance) throws InterruptedException {
 		requireNonNull(scenario);
 		requireNonNull(baseline);
 		requireNonNull(timeout);
@@ -62,7 +63,7 @@ record SoakResourceSnapshot(
 
 		while (System.nanoTime() < deadline) {
 			if (last.isNear(baseline, tolerance))
-				return;
+				return last;
 
 			Thread.sleep(250L);
 			last = captureAfterGc();
@@ -70,6 +71,7 @@ record SoakResourceSnapshot(
 
 		Assertions.fail("%s resources did not return near baseline within %s. Baseline=%s, last=%s, tolerance=%s"
 				.formatted(scenario, timeout, baseline, last, tolerance));
+		throw new AssertionError("Unreachable");
 	}
 
 	@NonNull

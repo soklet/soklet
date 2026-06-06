@@ -124,6 +124,9 @@
                         -Xmx512m
                         ${surefire.unsafeMemoryAccessArg}
                     </argLine>
+                    <systemPropertyVariables>
+                        <soklet.soak.reportPath>${project.build.directory}/soak-report.md</soklet.soak.reportPath>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>

@@ -53,6 +53,7 @@ public class HttpSoakTests {
 
 	@Test
 	public void concurrentHttpChurnReturnsResourcesAndActiveRequestsToBaseline() throws Exception {
+		long startedAt = System.nanoTime();
 		MetricsCollector metricsCollector = MetricsCollector.defaultInstance();
 		int port = findFreePort();
 		HttpServer httpServer = httpServer(port, PROFILE.serverConcurrency());
@@ -72,11 +73,23 @@ public class HttpSoakTests {
 			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.cleanRequestsPerClient(), result.completed());
 			Assertions.assertTrue(result.failures().isEmpty(), () -> "Unexpected clean churn failures: " + result.failures());
 			assertActiveRequestsReturnToZero(metricsCollector, PROFILE.settleTimeout());
-			SoakResourceSnapshot.assertReturnsNear(
+			SoakResourceSnapshot finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
 					"concurrent HTTP churn",
 					baseline,
 					PROFILE.settleTimeout(),
 					PROFILE.resourceTolerance());
+			SoakReport.recordPassedScenario(
+					"concurrent HTTP churn",
+					"clients=%d, requestsPerClient=%d, serverConcurrency=%d"
+							.formatted(PROFILE.concurrentClients(), PROFILE.cleanRequestsPerClient(), PROFILE.serverConcurrency()),
+					Duration.ofNanos(System.nanoTime() - startedAt),
+					baseline,
+					finalSnapshot,
+					PROFILE.resourceTolerance(),
+					SoakReport.observations(
+							"Completed operations", Integer.toString(result.completed()),
+							"Active requests", activeRequests(metricsCollector).toString(),
+							"Settle timeout", PROFILE.settleTimeout().toString()));
 		}
 
 		assertHttpServerStopped(httpServer);
@@ -84,6 +97,7 @@ public class HttpSoakTests {
 
 	@Test
 	public void httpAbortChurnReturnsResourcesAndActiveRequestsToBaseline() throws Exception {
+		long startedAt = System.nanoTime();
 		MetricsCollector metricsCollector = MetricsCollector.defaultInstance();
 		int port = findFreePort();
 		HttpServer httpServer = httpServer(port, PROFILE.serverConcurrency());
@@ -111,11 +125,23 @@ public class HttpSoakTests {
 			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.abortIterationsPerClient(), result.completed());
 			Assertions.assertTrue(result.failures().isEmpty(), () -> "Unexpected abort churn failures: " + result.failures());
 			assertActiveRequestsReturnToZero(metricsCollector, PROFILE.settleTimeout());
-			SoakResourceSnapshot.assertReturnsNear(
+			SoakResourceSnapshot finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
 					"HTTP abort churn",
 					baseline,
 					PROFILE.settleTimeout(),
 					PROFILE.resourceTolerance());
+			SoakReport.recordPassedScenario(
+					"HTTP abort churn",
+					"clients=%d, abortIterationsPerClient=%d, abortModes=connect-close/partial-headers/close-before-read, serverConcurrency=%d"
+							.formatted(PROFILE.concurrentClients(), PROFILE.abortIterationsPerClient(), PROFILE.serverConcurrency()),
+					Duration.ofNanos(System.nanoTime() - startedAt),
+					baseline,
+					finalSnapshot,
+					PROFILE.resourceTolerance(),
+					SoakReport.observations(
+							"Completed operations", Integer.toString(result.completed()),
+							"Active requests", activeRequests(metricsCollector).toString(),
+							"Settle timeout", PROFILE.settleTimeout().toString()));
 		}
 
 		assertHttpServerStopped(httpServer);

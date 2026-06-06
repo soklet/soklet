@@ -64,6 +64,7 @@ public class RealtimeTransportSoakTests {
 	public void concurrentSseChurnReturnsResourcesAndActiveStreamsToBaseline() throws Exception {
 		assumeVirtualThreadRuntime();
 
+		long startedAt = System.nanoTime();
 		MetricsCollector metricsCollector = MetricsCollector.defaultInstance();
 		int port = findFreePort();
 		SseServer sseServer = SseServer.withPort(port)
@@ -95,11 +96,24 @@ public class RealtimeTransportSoakTests {
 			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.sseStreamsPerClient(), result.completed());
 			Assertions.assertTrue(result.failures().isEmpty(), () -> "Unexpected SSE churn failures: " + result.failures());
 			assertGaugeReturnsToZero("active SSE streams", () -> activeSseStreams(metricsCollector), PROFILE.settleTimeout());
-			SoakResourceSnapshot.assertReturnsNear(
+			SoakResourceSnapshot finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
 					"concurrent SSE churn",
 					baseline,
 					PROFILE.settleTimeout(),
 					PROFILE.resourceTolerance());
+			SoakReport.recordPassedScenario(
+					"concurrent SSE churn",
+					"clients=%d, streamsPerClient=%d, concurrentConnectionLimit=%d, interStreamPause=%s"
+							.formatted(PROFILE.concurrentClients(), PROFILE.sseStreamsPerClient(),
+									PROFILE.sseConcurrentConnectionLimit(), PROFILE.sseInterStreamPause()),
+					Duration.ofNanos(System.nanoTime() - startedAt),
+					baseline,
+					finalSnapshot,
+					PROFILE.resourceTolerance(),
+					SoakReport.observations(
+							"Completed operations", Integer.toString(result.completed()),
+							"Active SSE streams", activeSseStreams(metricsCollector).toString(),
+							"Settle timeout", PROFILE.settleTimeout().toString()));
 		}
 
 		assertSseServerStopped(sseServer);
@@ -109,6 +123,7 @@ public class RealtimeTransportSoakTests {
 	public void mcpAbandonedSessionChurnReturnsResourcesAndActiveSessionsToBaseline() throws Exception {
 		assumeVirtualThreadRuntime();
 
+		long startedAt = System.nanoTime();
 		MetricsCollector metricsCollector = MetricsCollector.defaultInstance();
 		int port = findFreePort();
 		McpServer mcpServer = McpServer.withPort(port)
@@ -177,11 +192,27 @@ public class RealtimeTransportSoakTests {
 			Assertions.assertTrue(deleteResult.failures().isEmpty(), () -> "Unexpected MCP trigger-session delete failures: " + deleteResult.failures());
 			assertGaugeReturnsToZero("active MCP sessions", () -> activeMcpSessions(metricsCollector), PROFILE.settleTimeout());
 			Assertions.assertEquals(Long.valueOf(0L), activeMcpSseStreams(metricsCollector));
-			SoakResourceSnapshot.assertReturnsNear(
+			SoakResourceSnapshot finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
 					"MCP abandoned session churn",
 					baseline,
 					PROFILE.settleTimeout(),
 					PROFILE.resourceTolerance());
+			SoakReport.recordPassedScenario(
+					"MCP abandoned session churn",
+					"clients=%d, abandonedSessionsPerClient=%d, triggerSessionsPerClient=%d, concurrentConnectionLimit=%d, idleTimeout=%s"
+							.formatted(PROFILE.concurrentClients(), PROFILE.mcpSessionsPerClient(), PROFILE.mcpSessionsPerClient(),
+									PROFILE.mcpConcurrentConnectionLimit(), PROFILE.mcpSessionIdleTimeout()),
+					Duration.ofNanos(System.nanoTime() - startedAt),
+					baseline,
+					finalSnapshot,
+					PROFILE.resourceTolerance(),
+					SoakReport.observations(
+							"Created abandoned sessions", Integer.toString(createResult.completed()),
+							"Created sweep-trigger sessions", Integer.toString(sweepTriggerResult.completed()),
+							"Deleted trigger sessions", Integer.toString(deleteResult.completed()),
+							"Active MCP sessions", activeMcpSessions(metricsCollector).toString(),
+							"Active MCP SSE streams", activeMcpSseStreams(metricsCollector).toString(),
+							"Settle timeout", PROFILE.settleTimeout().toString()));
 		}
 	}
 

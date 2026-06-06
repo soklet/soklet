@@ -73,7 +73,7 @@ JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>3.2.0</version>
+  <version>3.3.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -85,17 +85,17 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.soklet:soklet:3.2.0'
+  implementation 'com.soklet:soklet:3.3.0-SNAPSHOT'
 }
 ```
 
 #### Direct Download
 
-If you don't use Maven or Gradle, you can drop [soklet-3.2.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.2.0/soklet-3.2.0.jar) directly into your project. No other dependencies are required.
+If you don't use Maven or Gradle, you can drop [soklet-3.3.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.3.0-SNAPSHOT/soklet-3.3.0-SNAPSHOT.jar) directly into your project. No other dependencies are required.
 
 ### Code Sample
 
-Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-3.2.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.2.0/soklet-3.2.0.jar) and the JDK. There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
+Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-3.3.0-SNAPSHOT.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.3.0-SNAPSHOT/soklet-3.3.0-SNAPSHOT.jar) and the JDK. There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
 
 Soklet systems can be structurally as simple as a "hello world" app.
 
@@ -162,13 +162,13 @@ This example requires JDK 17+ to be installed on your machine ([or see this exam
 #### Build
 
 ```shell
-javac -parameters -cp soklet-3.2.0.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
+javac -parameters -cp soklet-3.3.0-SNAPSHOT.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
 ```
 
 #### Run
 
 ```shell
-java -cp soklet-3.2.0.jar:build com/soklet/example/App
+java -cp soklet-3.3.0-SNAPSHOT.jar:build com/soklet/example/App
 ```
 
 #### Test
@@ -707,8 +707,13 @@ SokletConfig config = SokletConfig.withMcpServer(
 ```
 
 That enables `OPTIONS` preflight handling plus `Access-Control-*` response headers on MCP
-`POST` / `GET` / `DELETE` responses for the configured origins. The default
-`nonBrowserClientsOnlyInstance()` remains conservative and keeps browser CORS disabled.
+`POST` / `GET` / `DELETE` responses for the configured origins. It also authorizes MCP
+transport requests that carry an `Origin` header; if `Origin` is present and the configured
+`McpCorsAuthorizer` does not authorize it, Soklet rejects the request with HTTP 403 before
+running MCP endpoint code or mutating session/stream state. The default
+`nonBrowserClientsOnlyInstance()` remains conservative: non-browser clients that omit
+`Origin` work normally, while browser-originated MCP transport requests are rejected unless
+you explicitly allow the origin.
 
 Soklet's MCP v1 support is intentionally conservative: single-request JSON-RPC only, framework-generated
 `tools/list` / `prompts/list` / `resources/templates/list` responses without cursor pagination, and

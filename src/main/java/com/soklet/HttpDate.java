@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -43,6 +44,8 @@ import static java.util.Objects.requireNonNull;
 public final class HttpDate {
 	@NonNull
 	private static final ZoneId GMT;
+	private static final int MINIMUM_IMF_FIXDATE_YEAR;
+	private static final int MAXIMUM_IMF_FIXDATE_YEAR;
 	@NonNull
 	private static final DateTimeFormatter IMF_FIXDATE_FORMATTER;
 	@NonNull
@@ -60,7 +63,14 @@ public final class HttpDate {
 
 	static {
 		GMT = ZoneId.of("GMT");
-		IMF_FIXDATE_FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US)
+		MINIMUM_IMF_FIXDATE_YEAR = 1;
+		MAXIMUM_IMF_FIXDATE_YEAR = 9_999;
+		IMF_FIXDATE_FORMATTER = new DateTimeFormatterBuilder()
+				.parseCaseInsensitive()
+				.appendPattern("EEE, dd MMM ")
+				.appendValue(ChronoField.YEAR, 4)
+				.appendPattern(" HH:mm:ss 'GMT'")
+				.toFormatter(Locale.US)
 				.withZone(GMT);
 		RFC_1123_PARSER = DateTimeFormatter.RFC_1123_DATE_TIME.withZone(GMT);
 		RFC_1036_PARSER = new DateTimeFormatterBuilder()
@@ -94,9 +104,17 @@ public final class HttpDate {
 		// Non-instantiable
 	}
 
+	/**
+	 * Formats the provided instant as an IMF-fixdate HTTP header value.
+	 *
+	 * @param instant the instant to format
+	 * @return the HTTP-date header value
+	 * @throws IllegalArgumentException if the instant cannot be represented with a four-digit IMF-fixdate year
+	 */
 	@NonNull
 	public static String toHeaderValue(@NonNull Instant instant) {
 		requireNonNull(instant);
+		validateImfFixdateYear(instant);
 		return IMF_FIXDATE_FORMATTER.format(instant);
 	}
 
@@ -132,6 +150,19 @@ public final class HttpDate {
 			return newValue.headerValue();
 
 		return requireNonNull(CURRENT_SECOND_HEADER_VALUE.get()).headerValue();
+	}
+
+	private static void validateImfFixdateYear(@NonNull Instant instant) {
+		int year;
+
+		try {
+			year = instant.atZone(GMT).get(ChronoField.YEAR);
+		} catch (DateTimeException e) {
+			throw new IllegalArgumentException("Instant is outside the supported IMF-fixdate year range.", e);
+		}
+
+		if (year < MINIMUM_IMF_FIXDATE_YEAR || year > MAXIMUM_IMF_FIXDATE_YEAR)
+			throw new IllegalArgumentException("IMF-fixdate year must be between 0001 and 9999.");
 	}
 
 	private record CachedValue(@NonNull Long epochSecond,
