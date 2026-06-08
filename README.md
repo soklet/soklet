@@ -18,10 +18,9 @@ Soklet codes like a library, not a framework.
 
 ### Why?
 
-The Java web ecosystem is missing a server solution that is dependency-free but offers support for virtual threads, hooks for dependency injection, and annotation-based request handling. Soklet aims to fill this void.
+The Java web ecosystem is missing an HTTP server solution that is dependency-free but offers support for [Server-Sent Events (SSE)](/docs/server-sent-events) and [Model Context Protocol (MCP)](/docs/mcp) along with hooks for dependency injection and annotation-based request handling. Soklet aims to fill this void.
 
-Soklet provides the plumbing to build "transactional" REST APIs that exchange small amounts of data with clients.
-It is well-suited for building tool-backed agentic systems that stream results via SSE or expose tools, prompts, and resources via MCP.
+Soklet provides the plumbing to build "transactional" REST APIs as well as agentic systems that stream results with [HTTP response streaming](https://www.soklet.com/docs/response-writing#streaming-responses) or [SSE](https://www.soklet.com/docs/server-sent-events), and expose tools, prompts, and resources via [MCP](https://www.soklet.com/docs/mcp).
 It does not make technology choices on your behalf (but [an example of how to build a full-featured API is available](https://www.soklet.com/docs/toystore-app)). It does not natively support [Reactive Programming](https://en.wikipedia.org/wiki/Reactive_programming) or similar methodologies. It _does_ give you the foundation to build your system, your way.
 
 Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/docs/licensing), proudly powering production systems since 2015.
@@ -32,20 +31,20 @@ Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/do
 - Near-instant startup
 - Zero dependencies
 - Immutability/thread-safety
-- Small, comprehensible codebase
-- Support for automated unit and integration testing
-- Emphasis on configurability
+- Small, comprehensible codebase - auditable end-to-end by a human or AI agent
+- No runtime classpath scanning or autoconfiguration (explicit behavior, statically analyzable)
+- Contract/interface-driven: bring your own implementations for almost anything
 - Thorough, high-quality documentation
+- Extensive support for [automated unit and integration testing](https://www.soklet.com/docs/testing)
+- Fine-grained [telemetry and metrics collection](https://www.soklet.com/docs/metrics-collection)
 - Best-in-class support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
 - First-class support for [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
-- HTTP/1.1 response streaming for dynamic output
-- Safe static-file helpers with cache validators, access policy, and single byte ranges
 - [Servlet Integration](https://www.soklet.com/docs/servlet-integration) for legacy code
 
 ### Design Non-Goals
 
 - SSL/TLS (your load balancer should provide TLS termination)
-- HTTP/2
+- HTTP/2, HTTP/3 (also handled by your load balancer)
 - WebSockets
 - Dictate which technologies to use (Guice vs. Dagger, Gson vs. Jackson, etc.)
 - "Batteries included" authentication and authorization
@@ -65,7 +64,7 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 Soklet is a single JAR, available on Maven Central.
 
-JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)).
+JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events) and [MCP](https://www.soklet.com/docs/mcp)).
 
 #### Maven
 
