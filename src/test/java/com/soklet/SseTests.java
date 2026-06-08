@@ -330,6 +330,17 @@ public class SseTests {
 		Assertions.assertEquals(Optional.of("abc123"), parsedRequest.getHeader("X-Trace-Id"));
 	}
 
+	@Test
+	public void defaultConcurrentConnectionLimitIsBoundedAndCanBeDisabled() {
+		DefaultSseServer defaultServer = (DefaultSseServer) SseServer.withPort(0).build();
+		DefaultSseServer disabledServer = (DefaultSseServer) SseServer.withPort(0)
+				.concurrentConnectionLimit(0)
+				.build();
+
+		Assertions.assertEquals(8_192, defaultServer.getConcurrentConnectionLimit());
+		Assertions.assertEquals(0, disabledServer.getConcurrentConnectionLimit());
+	}
+
 	@ThreadSafe
 	protected static class SseEventResource {
 		@NonNull
@@ -967,6 +978,54 @@ public class SseTests {
 
 				Assertions.assertTrue(h1Ok ^ h2Ok, "Expected exactly one 200 handshake");
 				Assertions.assertTrue(h1Busy ^ h2Busy, "Expected exactly one 503 handshake");
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sse_concurrentConnectionLimitZeroDisablesCap() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		BlockingHandshakeResource.prepare(2);
+
+		SseServer sse = SseServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.verifyConnectionOnceEstablished(false)
+				.concurrentConnectionLimit(0)
+				.build();
+
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
+				.sseServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingHandshakeResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket1 = connectWithRetry("127.0.0.1", ssePort, 2000);
+					 Socket socket2 = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket1.setSoTimeout(4000);
+				socket2.setSoTimeout(4000);
+
+				writeHttpGet(socket1, "/sse/limit", ssePort);
+				writeHttpGet(socket2, "/sse/limit", ssePort);
+
+				BlockingHandshakeResource.awaitReady(5, SECONDS);
+				BlockingHandshakeResource.release();
+
+				String h1 = readUntil(socket1.getInputStream(), "\r\n\r\n", 4096);
+				if (h1 == null) h1 = readUntil(socket1.getInputStream(), "\n\n", 4096);
+				String h2 = readUntil(socket2.getInputStream(), "\r\n\r\n", 4096);
+				if (h2 == null) h2 = readUntil(socket2.getInputStream(), "\n\n", 4096);
+
+				Assertions.assertNotNull(h1, "No handshake response on socket1");
+				Assertions.assertNotNull(h2, "No handshake response on socket2");
+				Assertions.assertTrue(h1.startsWith("HTTP/1.1 200"), "Expected socket1 to be accepted");
+				Assertions.assertTrue(h2.startsWith("HTTP/1.1 200"), "Expected socket2 to be accepted");
 			}
 		}
 	}

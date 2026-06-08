@@ -862,8 +862,8 @@ final class DefaultSseServer implements SseServer {
 
 		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : DEFAULT_CONCURRENT_CONNECTION_LIMIT;
 
-		if (this.concurrentConnectionLimit < 1)
-			throw new IllegalArgumentException("The value for concurrentConnectionLimit must be > 0");
+		if (this.concurrentConnectionLimit < 0)
+			throw new IllegalArgumentException("The value for concurrentConnectionLimit must be >= 0 (0 disables the cap)");
 
 		this.connectionQueueCapacity = builder.connectionQueueCapacity != null ? builder.connectionQueueCapacity : DEFAULT_CONNECTION_QUEUE_CAPACITY;
 
@@ -872,7 +872,7 @@ final class DefaultSseServer implements SseServer {
 
 		// Initialize the global LRU map with the specified limit.
 		// We do not need an eviction listener because we will not evict active connections.
-		this.globalConnections = new ConcurrentHashMap<>(getConcurrentConnectionLimit());
+		this.globalConnections = new ConcurrentHashMap<>(getConcurrentConnectionLimit() > 0 ? getConcurrentConnectionLimit() : DEFAULT_CONCURRENT_CONNECTION_LIMIT);
 		this.activeConnectionCount = new AtomicInteger(0);
 	}
 
@@ -1466,7 +1466,7 @@ final class DefaultSseServer implements SseServer {
 			handshakeContext.resourceMethodRef.set(resourceMethod);
 
 			// Fast-path check for overload (authoritative limit enforcement occurs after handshake acceptance)
-			if (resourcePathDeclaration != null && getActiveConnectionCount() >= getConcurrentConnectionLimit()) {
+			if (resourcePathDeclaration != null && getConcurrentConnectionLimit() > 0 && getActiveConnectionCount() >= getConcurrentConnectionLimit()) {
 				if (acceptanceFinalized.compareAndSet(false, true))
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.MAX_CONNECTIONS, null);
 
@@ -3623,8 +3623,9 @@ final class DefaultSseServer implements SseServer {
 				closeConnectionDueToBackpressure(owner, connection, cause);
 
 		// Scale initial capacity with connection limit, but cap to avoid large per-route allocations.
-		int connectionSetInitialCapacity = Math.max(1,
-				Math.min(getConcurrentConnectionLimit(), DEFAULT_BROADCASTER_CONNECTION_SET_CAPACITY));
+		int connectionSetInitialCapacity = getConcurrentConnectionLimit() > 0
+				? Math.max(1, Math.min(getConcurrentConnectionLimit(), DEFAULT_BROADCASTER_CONNECTION_SET_CAPACITY))
+				: DEFAULT_BROADCASTER_CONNECTION_SET_CAPACITY;
 
 		return new DefaultSseBroadcaster(
 				resourceMethod,
@@ -3675,7 +3676,7 @@ final class DefaultSseServer implements SseServer {
 		while (true) {
 			int current = this.activeConnectionCount.get();
 
-			if (current >= getConcurrentConnectionLimit())
+			if (getConcurrentConnectionLimit() > 0 && current >= getConcurrentConnectionLimit())
 				return false;
 
 			if (this.activeConnectionCount.compareAndSet(current, current + 1))
