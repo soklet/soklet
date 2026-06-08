@@ -394,11 +394,11 @@ public class IntegrationTests {
 	}
 
 	@Test
-	public void maximumConnections_rejectsExcessConnections() throws Exception {
+	public void concurrentConnectionLimit_rejectsExcessConnections() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
 						.requestHeaderTimeout(Duration.ofSeconds(5))
-						.maximumConnections(1)
+						.concurrentConnectionLimit(1)
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new QuietLifecycle())

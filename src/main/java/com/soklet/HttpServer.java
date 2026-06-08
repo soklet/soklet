@@ -185,7 +185,7 @@ public interface HttpServer extends AutoCloseable {
 		@Nullable
 		Integer socketPendingConnectionLimit;
 		@Nullable
-		Integer maximumConnections;
+		Integer concurrentConnectionLimit;
 		@Nullable
 		MultipartParser multipartParser;
 		@Nullable
@@ -304,8 +304,8 @@ public interface HttpServer extends AutoCloseable {
 		}
 
 		@NonNull
-		public Builder maximumConnections(@Nullable Integer maximumConnections) {
-			this.maximumConnections = maximumConnections;
+		public Builder concurrentConnectionLimit(@Nullable Integer concurrentConnectionLimit) {
+			this.concurrentConnectionLimit = concurrentConnectionLimit;
 			return this;
 		}
 

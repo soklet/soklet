@@ -104,7 +104,7 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private static final Integer DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 	@NonNull
-	private static final Integer DEFAULT_MAXIMUM_CONNECTIONS;
+	private static final Integer DEFAULT_CONCURRENT_CONNECTION_LIMIT;
 	@NonNull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 	@NonNull
@@ -133,7 +133,7 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES = 8_192;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
-		DEFAULT_MAXIMUM_CONNECTIONS = 0;
+		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 		DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER = 64;
 		DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER = 16;
@@ -176,7 +176,7 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private final Integer socketPendingConnectionLimit;
 	@NonNull
-	private final Integer maximumConnections;
+	private final Integer concurrentConnectionLimit;
 	@NonNull
 	private final MultipartParser multipartParser;
 	@NonNull
@@ -230,7 +230,7 @@ final class DefaultHttpServer implements HttpServer {
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
-		this.maximumConnections = builder.maximumConnections != null ? builder.maximumConnections : DEFAULT_MAXIMUM_CONNECTIONS;
+		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : DEFAULT_CONCURRENT_CONNECTION_LIMIT;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.defaultInstance();
 		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.defaultInstance();
@@ -364,8 +364,8 @@ final class DefaultHttpServer implements HttpServer {
 		if (this.requestHandlerTimeout.isNegative() || this.requestHandlerTimeout.isZero())
 			throw new IllegalArgumentException("Request handler timeout must be > 0");
 
-		if (this.maximumConnections < 0)
-			throw new IllegalArgumentException("Maximum connections must be >= 0");
+		if (this.concurrentConnectionLimit < 0)
+			throw new IllegalArgumentException("Concurrent connection limit must be >= 0");
 	}
 
 	@Override
@@ -392,7 +392,7 @@ final class DefaultHttpServer implements HttpServer {
 					.withMaxHeaderCount(getMaximumHeaderCount())
 					.withMaxRequestTargetLength(getMaximumRequestTargetLengthInBytes())
 					.withAcceptLength(getSocketPendingConnectionLimit())
-					.withMaxConnections(getMaximumConnections())
+					.withMaxConnections(getConcurrentConnectionLimit())
 					.build();
 
 			Logger logger = transportLogger();
@@ -1497,8 +1497,8 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected Integer getMaximumConnections() {
-		return this.maximumConnections;
+	protected Integer getConcurrentConnectionLimit() {
+		return this.concurrentConnectionLimit;
 	}
 
 	@NonNull

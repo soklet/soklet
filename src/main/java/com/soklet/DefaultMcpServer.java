@@ -97,6 +97,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@NonNull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 	@NonNull
+	private static final Integer DEFAULT_CONCURRENT_CONNECTION_LIMIT;
+	@NonNull
 	private static final Integer DEFAULT_CONNECTION_QUEUE_CAPACITY;
 	@NonNull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
@@ -118,6 +120,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		DEFAULT_MAXIMUM_HEADER_COUNT = 100;
 		DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES = 8_192;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
+		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
 		DEFAULT_CONNECTION_QUEUE_CAPACITY = 128;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 		DEFAULT_WRITE_TIMEOUT = Duration.ZERO;
@@ -226,7 +229,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.maximumHeaderCount = builder.maximumHeaderCount != null ? builder.maximumHeaderCount : DEFAULT_MAXIMUM_HEADER_COUNT;
 		this.maximumRequestTargetLengthInBytes = builder.maximumRequestTargetLengthInBytes != null ? builder.maximumRequestTargetLengthInBytes : DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
-		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : 0;
+		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : DEFAULT_CONCURRENT_CONNECTION_LIMIT;
 		this.connectionQueueCapacity = builder.connectionQueueCapacity != null ? builder.connectionQueueCapacity : DEFAULT_CONNECTION_QUEUE_CAPACITY;
 		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.writeTimeout = builder.writeTimeout != null ? builder.writeTimeout : DEFAULT_WRITE_TIMEOUT;
@@ -2027,6 +2030,11 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@NonNull
 	private ReentrantLock getLock() {
 		return this.lock;
+	}
+
+	@NonNull
+	Integer getConcurrentConnectionLimit() {
+		return this.concurrentConnectionLimit;
 	}
 
 	private static void closeQuietly(@Nullable AutoCloseable closeable) {

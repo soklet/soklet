@@ -14,6 +14,17 @@ import java.util.Set;
 
 public class DefaultHttpServerTests {
 	@Test
+	public void defaultConcurrentConnectionLimitIsBoundedAndCanBeDisabled() {
+		DefaultHttpServer defaultServer = (DefaultHttpServer) HttpServer.withPort(0).build();
+		DefaultHttpServer disabledServer = (DefaultHttpServer) HttpServer.withPort(0)
+				.concurrentConnectionLimit(0)
+				.build();
+
+		Assertions.assertEquals(8_192, defaultServer.getConcurrentConnectionLimit());
+		Assertions.assertEquals(0, disabledServer.getConcurrentConnectionLimit());
+	}
+
+	@Test
 	public void headersFromMicrohttpRequestPreservesNormalizedHeaderBehavior() {
 		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0).build();
 		MicrohttpRequest microhttpRequest = new MicrohttpRequest(

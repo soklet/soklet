@@ -68,6 +68,20 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void defaultMcpServerConcurrentConnectionLimitIsBoundedAndCanBeDisabled() {
+		DefaultMcpServer defaultServer = (DefaultMcpServer) McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		DefaultMcpServer disabledServer = (DefaultMcpServer) McpServer.withPort(0)
+				.concurrentConnectionLimit(0)
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+
+		Assertions.assertEquals(8_192, defaultServer.getConcurrentConnectionLimit());
+		Assertions.assertEquals(0, disabledServer.getConcurrentConnectionLimit());
+	}
+
+	@Test
 	public void mcpOnlyConfigDoesNotRequireHttpResourceMethodsAndStartsConfiguredMcpServer() throws Exception {
 		FakeMcpServer fakeMcpServer = new FakeMcpServer();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(fakeMcpServer)
