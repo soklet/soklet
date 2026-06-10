@@ -670,6 +670,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE, e, "exceed_request_max_close");
 			writePlainTextResponse(socket, 413, "Request entity too large");
 		} catch (SocketTimeoutException e) {
+			if (request == null && !requestReadTimeoutMadeProgress(e))
+				return;
+
 			if (request == null) {
 				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_TIMEOUT, e);
 				recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT, e, "request_timeout");
@@ -1043,7 +1046,13 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		int bodyPrefixLength = 0;
 
 		while (headerEndIndex == -1) {
-			int bytesRead = inputStream.read(buffer);
+			int bytesRead;
+
+			try {
+				bytesRead = inputStream.read(buffer);
+			} catch (SocketTimeoutException e) {
+				throw requestReadTimeoutException(e, headerBytes.size() > 0);
+			}
 
 			if (bytesRead == -1)
 				throw new EOFException("Client closed the connection before the request was complete");
@@ -1085,7 +1094,13 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			int offset = copied;
 
 			while (offset < requiredBodyLength) {
-				int bytesRead = inputStream.read(body, offset, requiredBodyLength - offset);
+				int bytesRead;
+
+				try {
+					bytesRead = inputStream.read(body, offset, requiredBodyLength - offset);
+				} catch (SocketTimeoutException e) {
+					throw requestReadTimeoutException(e, true);
+				}
 
 				if (bytesRead == -1)
 					throw new EOFException("Client closed the connection before request body was complete");
@@ -1095,6 +1110,26 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		}
 
 		return buildRequest(parsedStartLineAndHeaders, remoteAddress, body, false);
+	}
+
+	@NonNull
+	private RequestReadTimeoutException requestReadTimeoutException(@NonNull SocketTimeoutException socketTimeoutException,
+																																	boolean requestMadeProgress) {
+		requireNonNull(socketTimeoutException);
+
+		RequestReadTimeoutException requestReadTimeoutException =
+				new RequestReadTimeoutException(socketTimeoutException.getMessage(), requestMadeProgress);
+		requestReadTimeoutException.initCause(socketTimeoutException);
+		return requestReadTimeoutException;
+	}
+
+	private boolean requestReadTimeoutMadeProgress(@NonNull SocketTimeoutException socketTimeoutException) {
+		requireNonNull(socketTimeoutException);
+
+		if (socketTimeoutException instanceof RequestReadTimeoutException requestReadTimeoutException)
+			return requestReadTimeoutException.requestMadeProgress();
+
+		return true;
 	}
 
 	@NonNull
@@ -2332,4 +2367,20 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	}
 
 	private static final class RequestTooLargeException extends IOException {}
+
+	private static final class RequestReadTimeoutException extends SocketTimeoutException {
+		private static final long serialVersionUID = 1L;
+
+		private final boolean requestMadeProgress;
+
+		private RequestReadTimeoutException(@Nullable String message,
+																				boolean requestMadeProgress) {
+			super(message);
+			this.requestMadeProgress = requestMadeProgress;
+		}
+
+		private boolean requestMadeProgress() {
+			return this.requestMadeProgress;
+		}
+	}
 }

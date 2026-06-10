@@ -247,6 +247,112 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void startedDefaultMcpServerRequestReadTimeoutWithoutProgressClosesQuietly() throws Exception {
+		int mcpPort = findFreePort();
+		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.requestHeaderTimeout(Duration.ofMillis(50))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(metricsCollector)
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				Assertions.assertTrue(waitForEof(socket, 3000), "Expected zero-progress MCP request timeout to close the socket");
+			}
+		}
+
+		Assertions.assertFalse(lifecycleObserver.getEvents().contains("didFailToReadRequest:MCP:REQUEST_READ_TIMEOUT"),
+				lifecycleObserver.getEvents().toString());
+		Assertions.assertEquals(0L, transportFailureCount(metricsCollector, ServerType.MCP,
+				MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
+		Assertions.assertTrue(lifecycleObserver.getLogEvents().stream().noneMatch(logEvent ->
+				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), lifecycleObserver.getLogEvents().toString());
+	}
+
+	@Test
+	public void startedDefaultMcpServerPartialRequestReadTimeoutRecordsTransportFailure() throws Exception {
+		int mcpPort = findFreePort();
+		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.requestHeaderTimeout(Duration.ofMillis(50))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(metricsCollector)
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeRawRequest(socket, "POST /mcp HTTP/1.1\r\nHo");
+
+				Assertions.assertTrue(waitForEof(socket, 3000), "Expected partial MCP request timeout to close the socket");
+			}
+		}
+
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("didFailToReadRequest:MCP:REQUEST_READ_TIMEOUT"),
+				lifecycleObserver.getEvents().toString());
+		Assertions.assertEquals(1L, transportFailureCount(metricsCollector, ServerType.MCP,
+				MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
+		Assertions.assertTrue(lifecycleObserver.getLogEvents().stream().anyMatch(logEvent ->
+				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), lifecycleObserver.getLogEvents().toString());
+	}
+
+	@Test
+	public void startedDefaultMcpServerRequestBodyReadTimeoutRecordsTransportFailure() throws Exception {
+		int mcpPort = findFreePort();
+		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.requestHeaderTimeout(Duration.ofSeconds(2))
+						.requestBodyTimeout(Duration.ofMillis(50))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(metricsCollector)
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeRawRequest(socket, "POST /mcp HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1:" + mcpPort + "\r\n"
+						+ "Content-Type: application/json\r\n"
+						+ "Content-Length: 4\r\n"
+						+ "\r\n"
+						+ "{}");
+
+				Assertions.assertTrue(waitForEof(socket, 3000), "Expected partial MCP request body timeout to close the socket");
+			}
+		}
+
+		Assertions.assertTrue(lifecycleObserver.getEvents().contains("didFailToReadRequest:MCP:REQUEST_READ_TIMEOUT"),
+				lifecycleObserver.getEvents().toString());
+		Assertions.assertEquals(1L, transportFailureCount(metricsCollector, ServerType.MCP,
+				MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
+		Assertions.assertTrue(lifecycleObserver.getLogEvents().stream().anyMatch(logEvent ->
+				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), lifecycleObserver.getLogEvents().toString());
+	}
+
+	@Test
 	public void startedDefaultMcpServerReportsRequestHandlerExecutorRejections() throws Exception {
 		int mcpPort = findFreePort();
 		ExecutorService executorService = new RejectingExecutorService();
@@ -1490,6 +1596,17 @@ public class McpServerLifecycleTests {
 		return false;
 	}
 
+	private static long transportFailureCount(@NonNull DefaultMetricsCollector metricsCollector,
+																						@NonNull ServerType serverType,
+																						MetricsCollector.TransportFailureReason reason) {
+		requireNonNull(metricsCollector);
+		requireNonNull(serverType);
+		requireNonNull(reason);
+
+		return metricsCollector.snapshot().orElseThrow().getTransportFailures()
+				.getOrDefault(new MetricsCollector.TransportFailureKey(serverType, reason), 0L);
+	}
+
 	private static McpObject internalSessionNotification(String value) {
 		return new McpObject(Map.of(
 				"jsonrpc", new McpString("2.0"),
@@ -1575,9 +1692,16 @@ public class McpServerLifecycleTests {
 
 	private static final class RecordingLifecycle extends QuietLifecycle {
 		private final CopyOnWriteArrayList<String> events;
+		private final CopyOnWriteArrayList<LogEvent> logEvents;
 
 		private RecordingLifecycle() {
 			this.events = new CopyOnWriteArrayList<>();
+			this.logEvents = new CopyOnWriteArrayList<>();
+		}
+
+		@Override
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+			this.logEvents.add(logEvent);
 		}
 
 		@Override
@@ -1657,6 +1781,11 @@ public class McpServerLifecycleTests {
 		@NonNull
 		private List<String> getEvents() {
 			return this.events;
+		}
+
+		@NonNull
+		private List<LogEvent> getLogEvents() {
+			return this.logEvents;
 		}
 	}
 

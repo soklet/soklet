@@ -16,9 +16,19 @@ class ByteTokenizer {
     private int base;
     private int position;
     private int size;
+    private long totalBytesAdded;
 
     int size() {
         return size - base;
+    }
+
+    /**
+     * Monotonic count of all bytes ever added to this tokenizer, unaffected by tokenization or
+     * compaction. Lets callers detect whether NEW bytes arrived during a window by comparing
+     * against an earlier snapshot of this value.
+     */
+    long totalBytesAdded() {
+        return totalBytesAdded;
     }
 
     int capacity() {
@@ -58,6 +68,7 @@ class ByteTokenizer {
         }
         buffer.get(array, size, bufferLen);
         size += bufferLen;
+        totalBytesAdded += bufferLen;
     }
 
     byte @Nullable [] next(int length) {

@@ -59,6 +59,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -411,6 +412,85 @@ public class SseTests {
 			app.start();
 			// if stop hangs due to accept(), this test times out
 		} // try-with-resources stops both HTTP and SSE servers
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sseRequestReadTimeoutWithoutRequestProgressClosesQuietly() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		CopyOnWriteArrayList<LogEvent> logEvents = new CopyOnWriteArrayList<>();
+
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
+				.sseServer(SseServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestHeaderTimeout(Duration.ofMillis(50))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						logEvents.add(logEvent);
+					}
+				})
+				.metricsCollector(metricsCollector)
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(2000);
+				Assertions.assertTrue(waitForEof(socket, 3000), "Expected zero-progress SSE request timeout to close the socket");
+			}
+		}
+
+		Assertions.assertEquals(0L, transportFailureCount(metricsCollector, ServerType.SSE,
+				MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
+		Assertions.assertTrue(logEvents.stream().noneMatch(logEvent ->
+				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void ssePartialRequestReadTimeoutRecordsTransportFailure() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		CopyOnWriteArrayList<LogEvent> logEvents = new CopyOnWriteArrayList<>();
+
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
+				.sseServer(SseServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.requestHeaderTimeout(Duration.ofMillis(50))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						logEvents.add(logEvent);
+					}
+				})
+				.metricsCollector(metricsCollector)
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(2000);
+				socket.getOutputStream().write("GET /sse/abc HTTP/1.1\r\nHo".getBytes(StandardCharsets.UTF_8));
+				socket.getOutputStream().flush();
+
+				Assertions.assertTrue(waitForEof(socket, 3000), "Expected partial SSE request timeout to close the socket");
+			}
+		}
+
+		Assertions.assertEquals(1L, transportFailureCount(metricsCollector, ServerType.SSE,
+				MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
+		Assertions.assertTrue(logEvents.stream().anyMatch(logEvent ->
+				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());
 	}
 
 	@Test
@@ -2574,6 +2654,17 @@ public class SseTests {
 			}
 		}
 		return false;
+	}
+
+	private static long transportFailureCount(@NonNull DefaultMetricsCollector metricsCollector,
+																						@NonNull ServerType serverType,
+																						MetricsCollector.TransportFailureReason reason) {
+		requireNonNull(metricsCollector);
+		requireNonNull(serverType);
+		requireNonNull(reason);
+
+		return metricsCollector.snapshot().orElseThrow().getTransportFailures()
+				.getOrDefault(new MetricsCollector.TransportFailureKey(serverType, reason), 0L);
 	}
 
 	@NonNull

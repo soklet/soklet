@@ -114,6 +114,8 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
 	@NonNull
+	private static final Duration REQUEST_READ_PROGRESS_SETTLE;
+	@NonNull
 	private static final Integer DEFAULT_CONNECTION_QUEUE_CAPACITY;
 	@NonNull
 	private static final Integer DEFAULT_CONCURRENT_CONNECTION_LIMIT;
@@ -158,6 +160,7 @@ final class DefaultSseServer implements SseServer {
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
 		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(1);
+		REQUEST_READ_PROGRESS_SETTLE = Duration.ofMillis(5);
 		DEFAULT_CONNECTION_QUEUE_CAPACITY = 128;
 		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
 		DEFAULT_BROADCASTER_CACHE_CAPACITY = 1_024;
@@ -1382,6 +1385,11 @@ final class DefaultSseServer implements SseServer {
 				return;
 			} catch (SocketTimeoutException e) {
 				if (handshakeResponseWritten.get()) {
+					closeSocketChannel(clientSocketChannel, channelLock);
+					return;
+				}
+
+				if (!requestReadTimeoutMadeProgress(e)) {
 					closeSocketChannel(clientSocketChannel, channelLock);
 					return;
 				}
@@ -3026,6 +3034,7 @@ final class DefaultSseServer implements SseServer {
 
 		// How long to wait for the request to be read (minimum of 1 millisecond)
 		long timeoutMillis = Math.max(1L, getRequestHeaderTimeout().toMillis());
+		AtomicBoolean requestMadeProgress = new AtomicBoolean(false);
 
 		try {
 			ExecutorService requestReaderExecutorService = getRequestReaderExecutorService().orElse(null);
@@ -3059,6 +3068,8 @@ final class DefaultSseServer implements SseServer {
 
 					// Track total bytes read from the wire
 					totalBytesRead += bytesRead;
+					if (bytesRead > 0)
+						requestMadeProgress.set(true);
 
 					// Flip the buffer to "read mode" so the decoder can consume bytes
 					buffer.flip();
@@ -3127,7 +3138,23 @@ final class DefaultSseServer implements SseServer {
 			if (readFuture != null)
 				readFuture.cancel(false);
 
-			throw new SocketTimeoutException(format("Reading request took longer than %d ms", timeoutMillis));
+			// The reader task publishes the progress flag from its own thread. First bytes that arrived
+			// just before the deadline may not be visible here yet, which would misclassify a partial
+			// request as a zero-progress idle reap and skip transport-failure recording. If no progress
+			// is visible, give publication one brief bounded settle and re-check before deciding.
+			boolean madeProgress = requestMadeProgress.get();
+
+			if (!madeProgress) {
+				try {
+					Thread.sleep(REQUEST_READ_PROGRESS_SETTLE.toMillis());
+				} catch (InterruptedException interruptedException) {
+					Thread.currentThread().interrupt();
+				}
+
+				madeProgress = requestMadeProgress.get();
+			}
+
+			throw new RequestReadTimeoutException(format("Reading request took longer than %d ms", timeoutMillis), madeProgress);
 		} catch (InterruptedException e) {
 			if (readFuture != null)
 				readFuture.cancel(true);
@@ -3145,6 +3172,15 @@ final class DefaultSseServer implements SseServer {
 
 			throw new IOException("Unexpected exception while reading request", e.getCause());
 		}
+	}
+
+	private boolean requestReadTimeoutMadeProgress(@NonNull SocketTimeoutException socketTimeoutException) {
+		requireNonNull(socketTimeoutException);
+
+		if (socketTimeoutException instanceof RequestReadTimeoutException requestReadTimeoutException)
+			return requestReadTimeoutException.requestMadeProgress();
+
+		return true;
 	}
 
 	/**
@@ -3258,6 +3294,23 @@ final class DefaultSseServer implements SseServer {
 		public RequestReadRejectedException(@Nullable String message,
 																				@Nullable Throwable cause) {
 			super(message, cause);
+		}
+	}
+
+	@NotThreadSafe
+	protected static class RequestReadTimeoutException extends SocketTimeoutException {
+		private static final long serialVersionUID = 1L;
+
+		private final boolean requestMadeProgress;
+
+		public RequestReadTimeoutException(@Nullable String message,
+																			 boolean requestMadeProgress) {
+			super(message);
+			this.requestMadeProgress = requestMadeProgress;
+		}
+
+		public boolean requestMadeProgress() {
+			return this.requestMadeProgress;
 		}
 	}
 

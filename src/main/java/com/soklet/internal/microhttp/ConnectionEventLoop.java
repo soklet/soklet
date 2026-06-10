@@ -124,6 +124,7 @@ class ConnectionEventLoop {
         @Nullable
         Cancellable responseWriteIdleTimeoutTask;
         boolean requestReadTimeoutBodyPhase;
+        long requestReadTimeoutTokenizerMark;
         boolean responseWriteIdleTimeoutEnabled;
         boolean httpOneDotZero;
         boolean keepAlive;
@@ -143,7 +144,17 @@ class ConnectionEventLoop {
         }
 
         private void onRequestReadTimeout() {
-            if (logger.failureEnabled()) {
+            // Policy: close quietly ONLY when no request data is in flight - nothing buffered (e.g. a
+            // browser/LB preconnect or a clean idle keep-alive reap) AND no bytes arrived since this wait
+            // began (the tokenizer mark was captured when the timeout was scheduled). Anything else - body
+            // phase, buffered partial request bytes (including a stalled pipelined request), or bytes that
+            // arrived during the wait - is a partial-request timeout and must be recorded; otherwise a
+            // slow client could hold connection slots without ever appearing in transport-failure signals.
+            boolean requestMadeProgress = requestReadTimeoutBodyPhase
+                    || byteTokenizer.size() > 0
+                    || byteTokenizer.totalBytesAdded() > requestReadTimeoutTokenizerMark;
+
+            if (requestMadeProgress && logger.failureEnabled()) {
                 logger.logFailure(
                         new LogEntry("event", "request_timeout"),
                         new LogEntry("id", id));
@@ -492,6 +503,7 @@ class ConnectionEventLoop {
             }
 
             requestReadTimeoutBodyPhase = bodyPhase;
+            requestReadTimeoutTokenizerMark = byteTokenizer.totalBytesAdded();
             requestReadTimeoutTask = timeoutQueue.schedule(() -> runConnectionTask("request_timeout_error", this::onRequestReadTimeout), timeout);
         }
 

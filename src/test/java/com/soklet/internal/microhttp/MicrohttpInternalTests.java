@@ -402,6 +402,169 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void requestReadTimeoutWithoutRequestProgressClosesQuietly() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofMillis(50))
+				.withRequestBodyTimeout(Duration.ofMillis(50))
+				.withConcurrency(1)
+				.build();
+		RecordingLogger logger = new RecordingLogger();
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) ->
+				callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong"))));
+
+		eventLoop.start();
+
+		try (Socket socket = new Socket("localhost", eventLoop.getPort())) {
+			socket.setSoTimeout(2_000);
+
+			waitForSocketClose(socket);
+
+			Assertions.assertFalse(logger.containsFailureEvent("request_timeout"), logger.events().toString());
+			Assertions.assertTrue(logger.events().isEmpty(), logger.events().toString());
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void idleKeepAliveReadTimeoutAfterCompletedRequestClosesQuietly() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofMillis(50))
+				.withRequestBodyTimeout(Duration.ofMillis(50))
+				.withConcurrency(1)
+				.build();
+		RecordingLogger logger = new RecordingLogger();
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) ->
+				callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong"))));
+
+		eventLoop.start();
+
+		try (Socket socket = new Socket("localhost", eventLoop.getPort())) {
+			socket.setSoTimeout(2_000);
+			OutputStream outputStream = socket.getOutputStream();
+			outputStream.write(ascii("GET /ok HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+			outputStream.flush();
+
+			String response = readUntil(socket.getInputStream(), "pong");
+
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
+			Assertions.assertTrue(response.endsWith("pong"), response);
+
+			waitForSocketClose(socket);
+
+			Assertions.assertFalse(logger.containsFailureEvent("request_timeout"), logger.events().toString());
+			Assertions.assertTrue(logger.events().isEmpty(), logger.events().toString());
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void pipelinedPartialRequestThenIdleReadTimeoutRecordsTransportFailure() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofMillis(50))
+				.withRequestBodyTimeout(Duration.ofMillis(50))
+				.withConcurrency(1)
+				.build();
+		RecordingLogger logger = new RecordingLogger();
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) ->
+				callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong"))));
+
+		eventLoop.start();
+
+		try (Socket socket = new Socket("localhost", eventLoop.getPort())) {
+			socket.setSoTimeout(2_000);
+			OutputStream outputStream = socket.getOutputStream();
+			// A complete request with the partial start of a pipelined second request behind it, in one write
+			outputStream.write(ascii("GET /ok HTTP/1.1\r\nHost: localhost\r\n\r\nGET /pipelined HTTP/1.1\r\nHo"));
+			outputStream.flush();
+
+			String response = readUntil(socket.getInputStream(), "pong");
+
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
+			Assertions.assertTrue(response.endsWith("pong"), response);
+
+			// The buffered partial pipelined request is request data in flight; stalling on it must be
+			// recorded as a request timeout (quiet closes are reserved for connections with NO request
+			// data in flight), otherwise slow clients could hold connection slots invisibly.
+			waitForSocketClose(socket);
+
+			Assertions.assertTrue(logger.containsFailureEvent("request_timeout"), logger.events().toString());
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void partialRequestReadTimeoutRecordsTransportFailure() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofMillis(50))
+				.withRequestBodyTimeout(Duration.ofMillis(50))
+				.withConcurrency(1)
+				.build();
+		RecordingLogger logger = new RecordingLogger();
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) ->
+				callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong"))));
+
+		eventLoop.start();
+
+		try (Socket socket = new Socket("localhost", eventLoop.getPort())) {
+			socket.setSoTimeout(2_000);
+			OutputStream outputStream = socket.getOutputStream();
+			outputStream.write(ascii("GET /partial HTTP/1.1\r\nHo"));
+			outputStream.flush();
+
+			waitForSocketClose(socket);
+
+			Assertions.assertTrue(logger.containsFailureEvent("request_timeout"), logger.events().toString());
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void requestBodyReadTimeoutRecordsTransportFailure() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofMillis(50))
+				.withRequestBodyTimeout(Duration.ofMillis(50))
+				.withConcurrency(1)
+				.build();
+		RecordingLogger logger = new RecordingLogger();
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) ->
+				callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong"))));
+
+		eventLoop.start();
+
+		try (Socket socket = new Socket("localhost", eventLoop.getPort())) {
+			socket.setSoTimeout(2_000);
+			OutputStream outputStream = socket.getOutputStream();
+			outputStream.write(ascii("POST /partial-body HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\nab"));
+			outputStream.flush();
+
+			waitForSocketClose(socket);
+
+			Assertions.assertTrue(logger.containsFailureEvent("request_timeout"), logger.events().toString());
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
 	public void responseWriteIdleTimeoutClosesNonStreamingResponseWithoutProgress() throws Exception {
 		CountDownLatch stalledWriteAttempted = new CountDownLatch(1);
 		Options options = OptionsBuilder.newBuilder()
@@ -511,6 +674,32 @@ public class MicrohttpInternalTests {
 			timeout.initCause(lastFailure);
 
 		throw timeout;
+	}
+
+	private static String readUntil(InputStream inputStream, String expectedSuffix) throws IOException {
+		ByteArrayOutputStream response = new ByteArrayOutputStream();
+		byte[] buffer = new byte[64];
+
+		while (true) {
+			int read = inputStream.read(buffer);
+
+			if (read < 0)
+				return ascii(response.toByteArray());
+
+			response.write(buffer, 0, read);
+
+			String value = ascii(response.toByteArray());
+			if (value.endsWith(expectedSuffix))
+				return value;
+		}
+	}
+
+	private static void waitForSocketClose(Socket socket) throws IOException {
+		InputStream inputStream = socket.getInputStream();
+
+		while (inputStream.read() >= 0) {
+			// Drain until the server closes the connection.
+		}
 	}
 
 	private static byte[] ascii(String value) {
