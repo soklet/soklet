@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.3.0-SNAPSHOT
+## 3.3.0 (2026-06-10)
 
 ### Behavior Changes
 
