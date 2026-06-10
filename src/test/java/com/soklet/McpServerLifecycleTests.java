@@ -20,6 +20,7 @@ import com.soklet.annotation.McpServerEndpoint;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -421,6 +422,46 @@ public class McpServerLifecycleTests {
 
 				String heartbeat = readUntil(socket.getInputStream(), "\n\n", 64);
 				Assertions.assertEquals(":\n\n", heartbeat);
+			}
+		}
+	}
+
+	@Test
+	public void startedDefaultMcpServerUsesVirtualThreadPerLiveGetStreamWhenAvailable() throws Exception {
+		Assumptions.assumeTrue(Utilities.virtualThreadsAvailable());
+
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.requestHandlerConcurrency(1)
+						.connectionQueueCapacity(1)
+						.heartbeatInterval(Duration.ofMillis(100))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			String sessionId = initializedSessionId(mcpPort);
+
+			try (Socket firstSocket = connectWithRetry("127.0.0.1", mcpPort, 2000);
+					 Socket secondSocket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				firstSocket.setSoTimeout(2500);
+				secondSocket.setSoTimeout(2500);
+				writeMcpGet(firstSocket, mcpPort, sessionId);
+				writeMcpGet(secondSocket, mcpPort, sessionId);
+
+				String firstHandshake = readUntil(firstSocket.getInputStream(), "\r\n\r\n", 8192);
+				String secondHandshake = readUntil(secondSocket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(firstHandshake);
+				Assertions.assertNotNull(secondHandshake);
+				Assertions.assertTrue(firstHandshake.startsWith("HTTP/1.1 200"));
+				Assertions.assertTrue(secondHandshake.startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals(":\n\n", readUntil(firstSocket.getInputStream(), "\n\n", 64));
+				Assertions.assertEquals(":\n\n", readUntil(secondSocket.getInputStream(), "\n\n", 64));
 			}
 		}
 	}

@@ -453,6 +453,9 @@ class RequestParser {
         if (length < 0) {
             return false;
         }
+        if (length != 0) {
+            throw new MalformedRequestException("invalid chunk data terminator");
+        }
         state = State.CHUNK_SIZE;
         return true;
     }

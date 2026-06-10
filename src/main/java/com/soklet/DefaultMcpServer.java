@@ -298,7 +298,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null
 				? builder.requestHandlerExecutorServiceSupplier
 				: () -> createExecutorService("mcp-request-handler-", this.requestHandlerConcurrency, this.requestHandlerQueueCapacity);
-		this.connectionExecutorServiceSupplier = () -> createExecutorService("mcp-stream-", this.requestHandlerConcurrency, this.connectionQueueCapacity);
+		this.connectionExecutorServiceSupplier = this::createConnectionExecutorService;
 	}
 
 	void mcpRuntime(@NonNull DefaultMcpRuntime mcpRuntime) {
@@ -2115,6 +2115,19 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				TimeUnit.MILLISECONDS,
 				new ArrayBlockingQueue<>(queueCapacity),
 				new DefaultHttpServer.NonvirtualThreadFactory(threadNamePrefix));
+	}
+
+	@NonNull
+	private ExecutorService createConnectionExecutorService() {
+		if (Utilities.virtualThreadsAvailable())
+			return Utilities.createVirtualThreadsNewThreadPerTaskExecutor("mcp-stream-", (thread, throwable) -> {
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
+								"Unexpected exception occurred during MCP stream connection processing")
+						.throwable(throwable)
+						.build());
+			});
+
+		return createExecutorService("mcp-stream-", this.requestHandlerConcurrency, this.connectionQueueCapacity);
 	}
 
 	private boolean reserveConnectionSlot(@NonNull AtomicBoolean slotReserved) {

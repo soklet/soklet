@@ -202,7 +202,7 @@ final class DefaultMcpRuntime {
 		}
 
 		if (parsedRequest.operationType() == null)
-			return jsonRpcErrorResponse(request, parsedRequest.requestId(), McpJsonRpcError.fromCodeAndMessage(-32601, "Method not found"));
+			return methodNotFoundResponse(request, parsedRequest.requestId());
 
 		Optional<McpStoredSession> storedSession = Optional.empty();
 		String sessionId = request.getHeader("MCP-Session-Id").orElse(null);
@@ -473,8 +473,7 @@ final class DefaultMcpRuntime {
 					handleResourceTemplatesList(request, resolvedEndpoint, parsedRequest, storedSession.orElseThrow(), requestContext);
 			case RESOURCES_READ ->
 					handleResourceRead(request, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession.orElseThrow(), requestContext);
-			default ->
-					jsonRpcErrorResponse(request, parsedRequest.requestId(), McpJsonRpcError.fromCodeAndMessage(-32601, "Method not found"));
+			default -> methodNotFoundResponse(request, parsedRequest.requestId());
 		};
 	}
 
@@ -1993,6 +1992,17 @@ final class DefaultMcpRuntime {
 		requireNonNull(request);
 		requireNonNull(error);
 		return httpRequestResultFromMarshaledResponse(request, jsonResponse(jsonRpcErrorEnvelope(requestId, error), Map.of()));
+	}
+
+	@NonNull
+	private HttpRequestResult methodNotFoundResponse(@NonNull Request request,
+																									 @Nullable McpJsonRpcRequestId requestId) {
+		requireNonNull(request);
+
+		if (requestId == null)
+			return emptyAcceptedResponse(request);
+
+		return jsonRpcErrorResponse(request, requestId, McpJsonRpcError.fromCodeAndMessage(-32601, "Method not found"));
 	}
 
 	@NonNull

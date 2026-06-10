@@ -198,6 +198,42 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void unknownNotificationIsAcceptedWithoutJsonRpcError() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator, "/tenants/acme/mcp");
+
+			McpRequestResult.ResponseCompleted notificationResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "method":"notifications/unknown",
+							  "params":{}
+							}
+							""", sessionHeaders));
+
+			Assertions.assertEquals(Integer.valueOf(202), notificationResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertNull(notificationResult.getHttpRequestResult().getMarshaledResponse().bodyBytesOrNull());
+
+			McpRequestResult.ResponseCompleted requestResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-unknown",
+							  "method":"notifications/unknown",
+							  "params":{}
+							}
+							""", sessionHeaders));
+
+			Assertions.assertEquals(Integer.valueOf(200), requestResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			McpObject body = jsonBody(requestResult);
+			Assertions.assertEquals("req-unknown", ((McpString) body.get("id").orElseThrow()).value());
+			McpObject error = (McpObject) body.get("error").orElseThrow();
+			Assertions.assertEquals("-32601", ((McpNumber) error.get("code").orElseThrow()).value().toPlainString());
+			Assertions.assertEquals("Method not found", ((McpString) error.get("message").orElseThrow()).value());
+		});
+	}
+
+	@Test
 	public void rejectsInvalidSessionIdsBeforeLookup() {
 		Soklet.runSimulator(configuration(), simulator -> {
 			for (String sessionId : List.of("bad session", "a".repeat(129))) {

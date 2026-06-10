@@ -149,7 +149,7 @@ jobs:
             jazzer-${{ runner.os }}-
 
       - name: Run fuzz targets
-        run: JAZZER_FUZZ=1 mvn -B -ntp -f fuzz/pom.xml -Dtest=McpJsonCodecFuzzTest,RequestParserFuzzTest,DefaultMultipartParserFuzzTest,TraceContextFuzzTest -Djazzer.max_duration=5m test
+        run: JAZZER_FUZZ=1 mvn -B -ntp -f fuzz/pom.xml -Djazzer.max_duration=5m test
 
       - name: Upload fuzz artifacts
         if: always()

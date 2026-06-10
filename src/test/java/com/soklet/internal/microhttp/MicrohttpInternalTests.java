@@ -195,6 +195,23 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void chunkDataTerminatorRejectsBytesBeforeCrLf() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("POST / HTTP/1.1\r\n"
+				+ "Host: localhost\r\n"
+				+ "Transfer-Encoding: chunked\r\n"
+				+ "\r\n"
+				+ "3\r\n"
+				+ "abcx\r\n"
+				+ "0\r\n"
+				+ "\r\n");
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
+
+		Assertions.assertThrows(MalformedRequestException.class, parser::parse);
+	}
+
+	@Test
 	public void byteBufferWritableSourceHonorsWriteBudget() throws IOException {
 		ByteBufferWritableSource source = new ByteBufferWritableSource(ByteBuffer.wrap(ascii("abcdef")));
 		PartialWriteSocketChannel channel = new PartialWriteSocketChannel(10);

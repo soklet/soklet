@@ -88,9 +88,13 @@ public class EventLoop {
     private void run() {
         try {
             doRun();
-        } catch (IOException e) {
-            if (logger.failureEnabled()) {
-                logger.logFailure(e, new LogEntry("event", "event_loop_terminate"));
+        } catch (Throwable throwable) {
+            try {
+                if (logger.failureEnabled()) {
+                    logger.logFailure(throwable, new LogEntry("event", "event_loop_terminate"));
+                }
+            } catch (Throwable ignored) {
+                // No safe fallback sink is available from the accept-loop thread.
             }
             stop.set(true); // stop the world on critical error
         } finally {
