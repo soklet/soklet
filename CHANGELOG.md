@@ -18,8 +18,9 @@
 
 ### Observability
 
-- Standard HTTP, SSE, and MCP transport failures such as response write-idle timeouts, write timeouts, event-loop task failures, selection-key failures, accept-loop failures, and socket read/write errors now emit `LogEventType.SERVER_TRANSPORT_FAILURE` and increment `MetricsCollector` transport-failure counters.
+- Standard HTTP, SSE, and MCP transport failures such as response write-idle timeouts, write timeouts, event-loop task failures, selection-key failures, accept-loop failures, socket write errors, and socket read errors with request data in flight now emit `LogEventType.SERVER_TRANSPORT_FAILURE` and increment `MetricsCollector` transport-failure counters.
 - Zero-progress HTTP, SSE, and MCP request-read timeouts, such as idle keep-alive reaps and browser/LB preconnects that never send bytes, close quietly instead of emitting `SERVER_TRANSPORT_FAILURE` or incrementing transport-failure counters.
+- Standard HTTP remote socket resets with no request data in flight, such as browser/static-asset keep-alive churn, close quietly instead of emitting `SERVER_TRANSPORT_FAILURE` or incrementing transport-failure counters. Resets after partial request bytes are still recorded as read failures.
 - MCP live-stream writes interrupted by intentional session termination no longer emit false `SERVER_TRANSPORT_FAILURE` events or transport-failure metric increments.
 
 ### Fixes

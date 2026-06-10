@@ -507,6 +507,81 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void remoteResetWithoutRequestDataInFlightClosesQuietly() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofSeconds(2))
+				.withRequestBodyTimeout(Duration.ofSeconds(2))
+				.withMaxConnections(1)
+				.withConcurrency(1)
+				.build();
+		RecordingLogger logger = new RecordingLogger();
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) ->
+				callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong"))));
+
+		eventLoop.start();
+
+		try {
+			try (Socket socket = new Socket("localhost", eventLoop.getPort())) {
+				socket.setSoTimeout(2_000);
+				OutputStream outputStream = socket.getOutputStream();
+				outputStream.write(ascii("GET /ok HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+				outputStream.flush();
+
+				String response = readUntil(socket.getInputStream(), "pong");
+
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
+				Assertions.assertTrue(response.endsWith("pong"), response);
+
+				socket.setSoLinger(true, 0);
+			}
+
+			String response = awaitSuccessfulResponse(eventLoop.getPort(),
+					"GET /after-reset HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
+			Assertions.assertFalse(logger.containsFailureEvent("read_error"), logger.events().toString());
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void remoteResetWithPartialRequestDataRecordsReadError() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofSeconds(2))
+				.withRequestBodyTimeout(Duration.ofSeconds(2))
+				.withConcurrency(1)
+				.build();
+		RecordingLogger logger = new RecordingLogger(true);
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) ->
+				callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong"))));
+
+		eventLoop.start();
+
+		try (Socket socket = new Socket("localhost", eventLoop.getPort())) {
+			socket.setSoTimeout(2_000);
+			OutputStream outputStream = socket.getOutputStream();
+			outputStream.write(ascii("GET /partial HTTP/1.1\r\nHo"));
+			outputStream.flush();
+
+			Assertions.assertTrue(logger.awaitTraceEvent("read_bytes"), logger.traceEvents().toString());
+
+			socket.setSoLinger(true, 0);
+			socket.close();
+
+			Assertions.assertTrue(logger.awaitFailureEvent("read_error"), logger.events().toString());
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
 	public void pipelinedPartialRequestThenIdleReadTimeoutRecordsTransportFailure() throws Exception {
 		Options options = OptionsBuilder.newBuilder()
 				.withPort(0)
@@ -794,15 +869,23 @@ public class MicrohttpInternalTests {
 	}
 
 	private static class RecordingLogger implements Logger {
+		private final boolean traceEnabled;
+		private final List<String> traceEvents;
 		private final List<String> failureEvents;
 
 		private RecordingLogger() {
+			this(false);
+		}
+
+		private RecordingLogger(boolean traceEnabled) {
+			this.traceEnabled = traceEnabled;
+			this.traceEvents = Collections.synchronizedList(new ArrayList<>());
 			this.failureEvents = Collections.synchronizedList(new ArrayList<>());
 		}
 
 		@Override
 		public boolean enabled() {
-			return false;
+			return traceEnabled;
 		}
 
 		@Override
@@ -812,48 +895,81 @@ public class MicrohttpInternalTests {
 
 		@Override
 		public void log(LogEntry... entries) {
-			// Trace logging disabled for this test logger.
+			record(traceEvents, entries);
 		}
 
 		@Override
 		public void log(Exception e, LogEntry... entries) {
-			// Trace logging disabled for this test logger.
+			record(traceEvents, entries);
 		}
 
 		@Override
 		public void logFailure(LogEntry... entries) {
-			record(entries);
+			record(failureEvents, entries);
 		}
 
 		@Override
 		public void logFailure(Exception e, LogEntry... entries) {
-			record(entries);
+			record(failureEvents, entries);
 		}
 
 		@Override
 		public void logFailure(Throwable throwable, LogEntry... entries) {
-			record(entries);
+			record(failureEvents, entries);
 		}
 
 		boolean containsFailureEvent(String event) {
-			synchronized (failureEvents) {
-				return failureEvents.contains(event);
-			}
+			return containsEvent(failureEvents, event);
+		}
+
+		boolean awaitTraceEvent(String event) throws InterruptedException {
+			return awaitEvent(traceEvents, event);
+		}
+
+		boolean awaitFailureEvent(String event) throws InterruptedException {
+			return awaitEvent(failureEvents, event);
 		}
 
 		List<String> events() {
-			synchronized (failureEvents) {
-				return List.copyOf(failureEvents);
+			return events(failureEvents);
+		}
+
+		List<String> traceEvents() {
+			return events(traceEvents);
+		}
+
+		private boolean awaitEvent(List<String> events, String event) throws InterruptedException {
+			long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+
+			while (System.nanoTime() < deadline) {
+				if (containsEvent(events, event))
+					return true;
+
+				Thread.sleep(10L);
+			}
+
+			return containsEvent(events, event);
+		}
+
+		private boolean containsEvent(List<String> events, String event) {
+			synchronized (events) {
+				return events.contains(event);
 			}
 		}
 
-		private void record(LogEntry... entries) {
+		private List<String> events(List<String> events) {
+			synchronized (events) {
+				return List.copyOf(events);
+			}
+		}
+
+		private void record(List<String> events, LogEntry... entries) {
 			if (entries == null)
 				return;
 
 			for (LogEntry entry : entries) {
 				if (entry != null && "event".equals(entry.key())) {
-					failureEvents.add(entry.value());
+					events.add(entry.value());
 					return;
 				}
 			}

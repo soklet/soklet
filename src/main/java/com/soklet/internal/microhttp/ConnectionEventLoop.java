@@ -3,10 +3,12 @@ package com.soklet.internal.microhttp;
 import com.soklet.StreamTerminationReason;
 import org.jspecify.annotations.Nullable;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
@@ -15,6 +17,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -150,11 +153,7 @@ class ConnectionEventLoop {
             // phase, buffered partial request bytes (including a stalled pipelined request), or bytes that
             // arrived during the wait - is a partial-request timeout and must be recorded; otherwise a
             // slow client could hold connection slots without ever appearing in transport-failure signals.
-            boolean requestMadeProgress = requestReadTimeoutBodyPhase
-                    || byteTokenizer.size() > 0
-                    || byteTokenizer.totalBytesAdded() > requestReadTimeoutTokenizerMark;
-
-            if (requestMadeProgress && logger.failureEnabled()) {
+            if (requestDataInFlight() && logger.failureEnabled()) {
                 logger.logFailure(
                         new LogEntry("event", "request_timeout"),
                         new LogEntry("id", id));
@@ -181,7 +180,7 @@ class ConnectionEventLoop {
                 }
                 respondToMalformedRequest();
             } catch (IOException | RuntimeException e) {
-                if (logger.failureEnabled()) {
+                if (shouldRecordReadFailure(e) && logger.failureEnabled()) {
                     logger.logFailure(e,
                             new LogEntry("event", "read_error"),
                             new LogEntry("id", id));
@@ -528,6 +527,16 @@ class ConnectionEventLoop {
             requestReadTimeoutTask = timeoutQueue.schedule(() -> runConnectionTask("request_timeout_error", this::onRequestReadTimeout), timeout);
         }
 
+        private boolean shouldRecordReadFailure(Throwable throwable) {
+            return requestDataInFlight() || !isRemoteClose(throwable);
+        }
+
+        private boolean requestDataInFlight() {
+            return requestReadTimeoutBodyPhase
+                    || byteTokenizer.size() > 0
+                    || byteTokenizer.totalBytesAdded() > requestReadTimeoutTokenizerMark;
+        }
+
         private void onResponseWriteIdleTimeout() {
             if (logger.failureEnabled()) {
                 logger.logFailure(
@@ -612,6 +621,36 @@ class ConnectionEventLoop {
 
     int numConnections() {
         return connectionCount.get();
+    }
+
+    private static boolean isRemoteClose(@Nullable Throwable throwable) {
+        Throwable current = throwable;
+
+        while (current != null) {
+            if (current instanceof ClosedChannelException)
+                return true;
+            if (current instanceof EOFException)
+                return true;
+            if (current instanceof IOException) {
+                String message = current.getMessage();
+
+                if (message != null) {
+                    String normalized = message.toLowerCase(Locale.ROOT);
+
+                    if (normalized.contains("broken pipe")
+                            || normalized.contains("connection reset")
+                            || normalized.contains("connection aborted")
+                            || normalized.contains("connection reset by peer")
+                            || normalized.contains("software caused connection abort")
+                            || normalized.contains("socket closed"))
+                        return true;
+                }
+            }
+
+            current = current.getCause();
+        }
+
+        return false;
     }
 
     void start() {
