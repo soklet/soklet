@@ -20,7 +20,7 @@ Soklet codes like a library, not a framework.
 
 The Java web ecosystem is missing an HTTP server solution that is dependency-free but offers support for [Server-Sent Events (SSE)](/docs/server-sent-events) and [Model Context Protocol (MCP)](/docs/mcp) along with hooks for dependency injection and annotation-based request handling. Soklet aims to fill this void.
 
-Soklet provides the plumbing to build "transactional" REST APIs as well as agentic systems that stream results with [HTTP response streaming](https://www.soklet.com/docs/response-writing#streaming-responses) or [SSE](https://www.soklet.com/docs/server-sent-events), and expose tools, prompts, and resources via [MCP](https://www.soklet.com/docs/mcp).
+Soklet provides the plumbing to build "transactional" REST APIs as well as agentic systems that vend results via [HTTP response streaming](https://www.soklet.com/docs/response-writing#streaming-responses) or [SSE](https://www.soklet.com/docs/server-sent-events), and expose tools, prompts, and resources via [MCP](https://www.soklet.com/docs/mcp).
 It does not make technology choices on your behalf (but [an example of how to build a full-featured API is available](https://www.soklet.com/docs/toystore-app)). It does not natively support [Reactive Programming](https://en.wikipedia.org/wiki/Reactive_programming) or similar methodologies. It _does_ give you the foundation to build your system, your way.
 
 Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/docs/licensing), proudly powering production systems since 2015.
