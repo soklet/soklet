@@ -870,7 +870,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		}
 
 		try {
-			connectionExecutorService.submit(() -> processConnection(connection));
+			connectionExecutorService.execute(() -> processConnection(connection));
 		} catch (RejectedExecutionException e) {
 			recordTransportFailure(MetricsCollector.TransportFailureReason.TASK_ERROR, e, "task_error");
 			closeLiveConnection(connection, StreamTerminationReason.SERVER_STOPPING, e, true);
@@ -920,11 +920,15 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		requireNonNull(connection);
 		requireNonNull(payload);
 
+		ReentrantLock outputLock = connection.outputLock();
 		performWriteWithTimeout(connection.socket(), () -> {
-			synchronized (connection.outputLock()) {
+			outputLock.lock();
+			try {
 				OutputStream outputStream = connection.socket().getOutputStream();
 				outputStream.write(payload);
 				outputStream.flush();
+			} finally {
+				outputLock.unlock();
 			}
 		});
 	}
@@ -2316,7 +2320,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			@NonNull AtomicReference<@Nullable Throwable> terminationThrowable,
 			@NonNull AtomicBoolean notifyRuntimeOnClose,
 			@NonNull AtomicReference<@Nullable Thread> processingThread,
-			@NonNull Object outputLock
+			@NonNull ReentrantLock outputLock
 	) {
 		private McpLiveConnection(@NonNull Socket socket,
 															@NonNull Request request,
@@ -2325,7 +2329,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 															@NonNull BlockingQueue<@NonNull WriteQueueElement> writeQueue,
 															@NonNull AtomicBoolean slotReserved) {
 			this(socket, request, sessionId, establishedAt, writeQueue, slotReserved, new AtomicBoolean(false), new AtomicReference<>(),
-					new AtomicReference<>(), new AtomicBoolean(true), new AtomicReference<>(), new Object());
+					new AtomicReference<>(), new AtomicBoolean(true), new AtomicReference<>(), new ReentrantLock());
 		}
 
 		private McpLiveConnection {

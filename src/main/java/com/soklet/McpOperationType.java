@@ -22,6 +22,7 @@ package com.soklet;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum McpOperationType {
+	UNKNOWN,
 	INITIALIZE,
 	NOTIFICATIONS_INITIALIZED,
 	PING,

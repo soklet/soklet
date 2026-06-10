@@ -63,8 +63,11 @@ Pull requests and pushes run deterministic corpus replay with:
 mvn -B -ntp -f fuzz/pom.xml test
 ```
 
-The scheduled/manual nightly job restores the latest generated Jazzer corpus,
-runs coverage-guided fuzzing, uploads artifacts, and saves a new corpus cache
-under a run-specific key. The key rotates on every run so nightly exploration can
-compound over time; restore keys keep it seeded from the newest available corpus
-for the branch.
+The scheduled/manual nightly job runs as a matrix with one Maven invocation per
+`@FuzzTest` method. Jazzer's JUnit integration runs only one coverage-guided
+fuzz test per JVM when `JAZZER_FUZZ=1`, so each target needs its own matrix slot.
+Each slot restores the latest generated Jazzer corpus, runs coverage-guided
+fuzzing, uploads artifacts, and saves a target-specific corpus cache under a
+run-specific key. The key rotates on every run so nightly exploration can
+compound over time; restore keys keep each target seeded from the newest
+available corpus for the branch.

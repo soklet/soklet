@@ -84,7 +84,7 @@ jobs:
   static-analysis:
     name: Static Analysis (JDK 21)
     # Error Prone requires JDK 21+ to run and lags the newest JDKs, so this gate pins JDK 21 while
-    # the build's release target stays 17. NullAway runs as an advisory WARN ratchet (it does not
+    # the build's release target stays 17. NullAway runs as advisory WARN visibility (it does not
     # fail the build); the gate fails only on Error Prone's default-ERROR checks. Opinionated style
     # checks are disabled in the static-analysis Maven profile.
     if: github.event_name != 'schedule'
@@ -125,9 +125,33 @@ jobs:
         run: mvn -B -ntp -Pspotbugs -DskipTests compile spotbugs:check
 
   fuzz-nightly:
-    name: Nightly Fuzzing (JDK 25)
+    name: Nightly Fuzzing (JDK 25, ${{ matrix.target_id }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    strategy:
+      # Jazzer/JUnit can run only one @FuzzTest per JVM when JAZZER_FUZZ=1.
+      # Keep each target in its own Maven invocation so every parser gets a nightly slot.
+      fail-fast: false
+      matrix:
+        include:
+          - target_id: mcp-json-parse
+            test_selector: McpJsonCodecFuzzTest#parseArbitraryBytesOnlyRejectsWithIllegalArgumentException
+          - target_id: mcp-json-round-trip
+            test_selector: McpJsonCodecFuzzTest#parseSerializeParseRoundTripsStructurally
+          - target_id: request-parser
+            test_selector: RequestParserFuzzTest#parseIncrementalRequestOnlyRejectsWithDeclaredExceptions
+          - target_id: multipart-parser
+            test_selector: DefaultMultipartParserFuzzTest#extractMultipartFieldsOnlyRejectsWithExpectedExceptions
+          - target_id: http-date
+            test_selector: HttpDateFuzzTest#fromHeaderValueNeverThrows
+          - target_id: parameterized-header-value
+            test_selector: ParameterizedHeaderValueFuzzTest#builderOnlyRejectsWithIllegalArgumentException
+          - target_id: query-format
+            test_selector: QueryFormatFuzzTest#extractQueryParametersOnlyRejectsWithIllegalRequestException
+          - target_id: response-cookie
+            test_selector: ResponseCookieFuzzTest#fromSetCookieHeaderRepresentationOnlyRejectsWithIllegalArgumentException
+          - target_id: trace-context
+            test_selector: TraceContextFuzzTest#fromHeaderValuesNeverThrows
     steps:
       - name: Check out
         uses: actions/checkout@v6
@@ -143,19 +167,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: fuzz/.cifuzz-corpus
-          key: jazzer-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
+          key: jazzer-${{ runner.os }}-${{ github.ref_name }}-${{ matrix.target_id }}-${{ github.run_id }}
           restore-keys: |
+            jazzer-${{ runner.os }}-${{ github.ref_name }}-${{ matrix.target_id }}-
             jazzer-${{ runner.os }}-${{ github.ref_name }}-
             jazzer-${{ runner.os }}-
 
       - name: Run fuzz targets
-        run: JAZZER_FUZZ=1 mvn -B -ntp -f fuzz/pom.xml -Djazzer.max_duration=5m test
+        run: JAZZER_FUZZ=1 mvn -B -ntp -f fuzz/pom.xml -Dtest="${{ matrix.test_selector }}" -Djazzer.max_duration=5m test
 
       - name: Upload fuzz artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: jazzer-${{ github.run_id }}
+          name: jazzer-${{ matrix.target_id }}-${{ github.run_id }}
           if-no-files-found: ignore
           path: |
             fuzz/.cifuzz-corpus

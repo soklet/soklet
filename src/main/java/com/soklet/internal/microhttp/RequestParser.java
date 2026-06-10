@@ -418,6 +418,9 @@ class RequestParser {
         if (sizeToken.isEmpty()) {
             throw new MalformedRequestException("invalid chunk size");
         }
+        if (sizeToken.charAt(0) == '+' || sizeToken.charAt(0) == '-') {
+            throw new MalformedRequestException("invalid chunk size");
+        }
 
         try {
             long parsedChunkSize = Long.parseLong(sizeToken, RADIX_HEX);
@@ -461,14 +464,21 @@ class RequestParser {
     }
 
     private boolean parseChunkTrailer() {
-        int length = tokenizer.nextLength(CRLF);
-        if (length < 0) {
+        int start = tokenizer.rawPosition();
+        int end = tokenizer.indexOf(CRLF);
+        if (end < 0) {
             return false;
         }
-        if (length == 0) { // blank line indicates end of trailers
+        if (end == start) { // blank line indicates end of trailers
+            tokenizer.advanceTo(end + CRLF.length);
             body = chunks == null ? EMPTY_BODY : chunks.merge(maxRequestSize);
             state = State.DONE;
         } else {
+            if (isObsFoldLine(start, end)) {
+                throw new MalformedRequestException("header folding is not supported");
+            }
+            parseHeaderLine(start, end);
+            tokenizer.advanceTo(end + CRLF.length);
             state = State.CHUNK_TRAILER;
         }
         return true;

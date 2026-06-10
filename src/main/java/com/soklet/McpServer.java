@@ -360,7 +360,13 @@ public interface McpServer extends AutoCloseable {
 		}
 
 		/**
-		 * Sets the handler concurrency level.
+		 * Sets the handler concurrency level for MCP JSON-RPC request handling.
+		 * <p>
+		 * On runtimes with virtual threads, established MCP live {@code GET} streams are
+		 * processed on a virtual-thread-per-stream executor and are not limited by this
+		 * value. On runtimes without virtual threads, the live-stream processor uses the
+		 * bounded fallback executor and this value also bounds active live-stream
+		 * processing.
 		 *
 		 * @param requestHandlerConcurrency the handler concurrency
 		 * @return this builder
@@ -372,7 +378,7 @@ public interface McpServer extends AutoCloseable {
 		}
 
 		/**
-		 * Sets the handler queue capacity.
+		 * Sets the handler queue capacity for MCP JSON-RPC request handling.
 		 *
 		 * @param requestHandlerQueueCapacity the handler queue capacity
 		 * @return this builder
@@ -448,6 +454,10 @@ public interface McpServer extends AutoCloseable {
 
 		/**
 		 * Sets the concurrent connection limit for the MCP server.
+		 * <p>
+		 * A value of {@code 0} disables Soklet's MCP live-stream connection cap entirely.
+		 * Use {@code 0} only when an external proxy, load balancer, operating-system limit,
+		 * or custom admission policy provides the intended production cap.
 		 *
 		 * @param concurrentConnectionLimit the concurrent connection limit
 		 * @return this builder
@@ -460,6 +470,10 @@ public interface McpServer extends AutoCloseable {
 
 		/**
 		 * Sets the outbound queue capacity for live MCP streams.
+		 * <p>
+		 * This controls each established stream's outbound message queue. On runtimes
+		 * without virtual threads, the same value is also used by the bounded fallback
+		 * executor for queued live-stream processing tasks.
 		 *
 		 * @param connectionQueueCapacity the outbound queue capacity
 		 * @return this builder

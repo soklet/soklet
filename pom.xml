@@ -242,7 +242,7 @@
              legacy AnnotatedPackages mode (the code carries explicit @NonNull/@Nullable everywhere, and
              JSpecify mode is still experimental), treating com.soklet as non-null-by-default and honoring
              the existing @Nullable markers. Error Prone's default-ERROR checks and selected high-signal
-             WARNING checks are enforced; NullAway runs at WARN as an advisory ratchet while the existing
+             WARNING checks are enforced; NullAway runs at WARN for advisory visibility while the existing
              inventory is burned down. Vendored Spring sources are excluded, but Soklet-owned internals such
              as microhttp remain in scope. -->
         <profile>

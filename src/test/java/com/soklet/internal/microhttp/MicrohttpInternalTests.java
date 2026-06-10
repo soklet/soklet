@@ -195,6 +195,12 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void chunkSizeWithLeadingPlusIsMalformed() {
+		Assertions.assertThrows(MalformedRequestException.class, () ->
+				RequestParser.parseChunkSizeToken("+5", Long.MAX_VALUE));
+	}
+
+	@Test
 	public void chunkDataTerminatorRejectsBytesBeforeCrLf() {
 		ByteTokenizer tokenizer = new ByteTokenizer();
 		byte[] request = ascii("POST / HTTP/1.1\r\n"
@@ -204,6 +210,24 @@ public class MicrohttpInternalTests {
 				+ "3\r\n"
 				+ "abcx\r\n"
 				+ "0\r\n"
+				+ "\r\n");
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
+
+		Assertions.assertThrows(MalformedRequestException.class, parser::parse);
+	}
+
+	@Test
+	public void chunkTrailerRejectsMalformedHeaderLine() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("POST / HTTP/1.1\r\n"
+				+ "Host: localhost\r\n"
+				+ "Transfer-Encoding: chunked\r\n"
+				+ "\r\n"
+				+ "3\r\n"
+				+ "abc\r\n"
+				+ "0\r\n"
+				+ "GARBAGE\r\n"
 				+ "\r\n");
 		add(tokenizer, request);
 		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
@@ -515,6 +539,44 @@ public class MicrohttpInternalTests {
 			waitForSocketClose(socket);
 
 			Assertions.assertTrue(logger.containsFailureEvent("request_timeout"), logger.events().toString());
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void pipelinedMalformedChunkAfterResponseReturnsBadRequest() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofSeconds(2))
+				.withRequestBodyTimeout(Duration.ofSeconds(2))
+				.withConcurrency(1)
+				.build();
+		RecordingLogger logger = new RecordingLogger();
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) ->
+				callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong"))));
+
+		eventLoop.start();
+
+		try {
+			String response = sendRequestAndReadResponse(eventLoop.getPort(), "GET /ok HTTP/1.1\r\n"
+					+ "Host: localhost\r\n"
+					+ "\r\n"
+					+ "POST /bad HTTP/1.1\r\n"
+					+ "Host: localhost\r\n"
+					+ "Transfer-Encoding: chunked\r\n"
+					+ "\r\n"
+					+ "3\r\n"
+					+ "abcx\r\n"
+					+ "0\r\n"
+					+ "\r\n");
+
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
+			Assertions.assertTrue(response.contains("\r\n\r\npongHTTP/1.1 400 Bad Request"), response);
+			Assertions.assertTrue(logger.containsFailureEvent("malformed_request"), logger.events().toString());
+			Assertions.assertFalse(logger.containsFailureEvent("write_error"), logger.events().toString());
 		} finally {
 			eventLoop.stop();
 			eventLoop.join();

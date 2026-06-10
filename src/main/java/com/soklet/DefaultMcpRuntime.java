@@ -201,8 +201,8 @@ final class DefaultMcpRuntime {
 			return jsonRpcErrorResponse(request, transport.requestId(), transport.error());
 		}
 
-		if (parsedRequest.operationType() == null)
-			return methodNotFoundResponse(request, parsedRequest.requestId());
+		if (parsedRequest.operationType() == McpOperationType.UNKNOWN && parsedRequest.requestIdPresent())
+			return methodNotFoundResponse(request, parsedRequest.requestId(), parsedRequest.requestIdPresent());
 
 		Optional<McpStoredSession> storedSession = Optional.empty();
 		String sessionId = request.getHeader("MCP-Session-Id").orElse(null);
@@ -365,7 +365,7 @@ final class DefaultMcpRuntime {
 						request.getHttpMethod(),
 						resolvedEndpoint.endpointClass(),
 						Optional.of(parsedRequest.method()),
-						Optional.ofNullable(parsedRequest.operationType()),
+						Optional.of(parsedRequest.operationType()),
 						Optional.ofNullable(parsedRequest.requestId()),
 						Optional.ofNullable(request.getHeader("MCP-Session-Id").orElse(null))
 				));
@@ -455,6 +455,7 @@ final class DefaultMcpRuntime {
 		requireNonNull(requestContext);
 
 		return switch (parsedRequest.operationType()) {
+			case UNKNOWN -> handleUnknownMethod(request, mcpServer, parsedRequest, storedSession);
 			case INITIALIZE -> handleInitialize(request, mcpServer, resolvedEndpoint, endpointPathParameters, parsedRequest);
 			case NOTIFICATIONS_INITIALIZED ->
 					handleInitializedNotification(request, mcpServer, parsedRequest, storedSession.orElseThrow(), requestContext);
@@ -473,8 +474,32 @@ final class DefaultMcpRuntime {
 					handleResourceTemplatesList(request, resolvedEndpoint, parsedRequest, storedSession.orElseThrow(), requestContext);
 			case RESOURCES_READ ->
 					handleResourceRead(request, resolvedEndpoint, endpointPathParameters, parsedRequest, storedSession.orElseThrow(), requestContext);
-			default -> methodNotFoundResponse(request, parsedRequest.requestId());
 		};
+	}
+
+	@NonNull
+	private HttpRequestResult handleUnknownMethod(@NonNull Request request,
+																							 @NonNull McpServer mcpServer,
+																							 @NonNull ParsedJsonRpcRequest parsedRequest,
+																							 @NonNull Optional<McpStoredSession> storedSession) {
+		requireNonNull(request);
+		requireNonNull(mcpServer);
+		requireNonNull(parsedRequest);
+		requireNonNull(storedSession);
+
+		if (parsedRequest.requestIdPresent())
+			return methodNotFoundResponse(request, parsedRequest.requestId(), true);
+
+		if (storedSession.isPresent()) {
+			HttpRequestResult gateResult = ensureSessionReady(request, storedSession.get(), parsedRequest.requestId());
+
+			if (gateResult != null)
+				return gateResult;
+
+			touchSession(mcpServer, storedSession.get());
+		}
+
+		return emptyAcceptedResponse(request);
 	}
 
 	@NonNull
@@ -1910,9 +1935,10 @@ final class DefaultMcpRuntime {
 		if (method == null || method.isBlank())
 			throw new JsonRpcErrorTransport(null, McpJsonRpcError.fromCodeAndMessage(-32600, "Invalid Request"));
 
-		McpJsonRpcRequestId requestId = requestIdFromValue(requestObject.get("id").orElse(null));
+		Optional<McpValue> requestIdValue = requestObject.get("id");
+		McpJsonRpcRequestId requestId = requestIdFromValue(requestIdValue.orElse(null));
 		McpObject params = optionalObject(requestObject, "params").orElse(EMPTY_OBJECT);
-		return new ParsedJsonRpcRequest(method, operationTypeForMethod(method).orElse(null), params, requestId);
+		return new ParsedJsonRpcRequest(method, operationTypeForMethod(method).orElse(McpOperationType.UNKNOWN), params, requestId, requestIdValue.isPresent());
 	}
 
 	@Nullable
@@ -1996,10 +2022,11 @@ final class DefaultMcpRuntime {
 
 	@NonNull
 	private HttpRequestResult methodNotFoundResponse(@NonNull Request request,
-																									 @Nullable McpJsonRpcRequestId requestId) {
+																									 @Nullable McpJsonRpcRequestId requestId,
+																									 boolean requestIdPresent) {
 		requireNonNull(request);
 
-		if (requestId == null)
+		if (!requestIdPresent)
 			return emptyAcceptedResponse(request);
 
 		return jsonRpcErrorResponse(request, requestId, McpJsonRpcError.fromCodeAndMessage(-32601, "Method not found"));
@@ -3085,12 +3112,14 @@ final class DefaultMcpRuntime {
 
 	private record ParsedJsonRpcRequest(
 			@NonNull String method,
-			@Nullable McpOperationType operationType,
+			@NonNull McpOperationType operationType,
 			@NonNull McpObject params,
-			@Nullable McpJsonRpcRequestId requestId
+			@Nullable McpJsonRpcRequestId requestId,
+			boolean requestIdPresent
 	) {
 		private ParsedJsonRpcRequest {
 			requireNonNull(method);
+			requireNonNull(operationType);
 			requireNonNull(params);
 		}
 	}

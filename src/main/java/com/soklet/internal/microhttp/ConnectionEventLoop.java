@@ -411,32 +411,7 @@ class ConnectionEventLoop {
                     }
                     failSafeClose();
                 } else { // persistent connection
-                    if (requestParser.parse()) { // subsequent request in buffer
-                        if (byteTokenizer.position() > options.maxRequestSize()) {
-                            if (logger.failureEnabled()) {
-                                logger.logFailure(
-                                        new LogEntry("event", "exceed_request_max_close"),
-                                        new LogEntry("id", id),
-                                        new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
-                            }
-                            respondToRequestTooLarge();
-                            return;
-                        }
-                        if (logger.enabled()) {
-                            logger.log(
-                                    new LogEntry("event", "pipeline_request"),
-                                    new LogEntry("id", id),
-                                    new LogEntry("request_bytes", Integer.toString(byteTokenizer.remaining())));
-                        }
-                        onParseRequest();
-                    } else { // switch back to read mode
-                        scheduleRequestReadTimeoutForCurrentParserState();
-                        if (!selectionKey.isValid()) {
-                            failSafeClose();
-                            return;
-                        }
-                        selectionKey.interestOps(SelectionKey.OP_READ);
-                    }
+                    parseBufferedRequestAfterResponse();
                 }
             } else { // response not fully written, switch to or remain in write mode
                 if (!selectionKey.isValid()) {
@@ -456,6 +431,52 @@ class ConnectionEventLoop {
                         new LogEntry("id", id),
                         new LogEntry("num_bytes", Long.toString(numBytes)));
                 }
+            }
+        }
+
+        private void parseBufferedRequestAfterResponse() {
+            try {
+                if (requestParser.parse()) { // subsequent request in buffer
+                    if (byteTokenizer.position() > options.maxRequestSize()) {
+                        if (logger.failureEnabled()) {
+                            logger.logFailure(
+                                    new LogEntry("event", "exceed_request_max_close"),
+                                    new LogEntry("id", id),
+                                    new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
+                        }
+                        respondToRequestTooLarge();
+                        return;
+                    }
+                    if (logger.enabled()) {
+                        logger.log(
+                                new LogEntry("event", "pipeline_request"),
+                                new LogEntry("id", id),
+                                new LogEntry("request_bytes", Integer.toString(byteTokenizer.remaining())));
+                    }
+                    onParseRequest();
+                } else { // switch back to read mode
+                    scheduleRequestReadTimeoutForCurrentParserState();
+                    if (!selectionKey.isValid()) {
+                        failSafeClose();
+                        return;
+                    }
+                    selectionKey.interestOps(SelectionKey.OP_READ);
+                }
+            } catch (RequestTooLargeException e) {
+                if (logger.failureEnabled()) {
+                    logger.logFailure(
+                            new LogEntry("event", "exceed_request_max_close"),
+                            new LogEntry("id", id),
+                            new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
+                }
+                respondToRequestTooLarge();
+            } catch (MalformedRequestException e) {
+                if (logger.failureEnabled()) {
+                    logger.logFailure(e,
+                            new LogEntry("event", "malformed_request"),
+                            new LogEntry("id", id));
+                }
+                respondToMalformedRequest();
             }
         }
 
@@ -604,9 +625,13 @@ class ConnectionEventLoop {
     private void run() {
         try {
             doStart();
-        } catch (IOException e) {
-            if (logger.failureEnabled()) {
-                logger.logFailure(e, new LogEntry("event", "sub_event_loop_terminate"));
+        } catch (Throwable throwable) {
+            try {
+                if (logger.failureEnabled()) {
+                    logger.logFailure(throwable, new LogEntry("event", "sub_event_loop_terminate"));
+                }
+            } catch (Throwable ignored) {
+                // No safe fallback sink is available from the connection-event-loop thread.
             }
             stop.set(true); // stop the world on critical error
         } finally {

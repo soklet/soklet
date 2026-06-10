@@ -199,7 +199,31 @@ public class McpRuntimeTests {
 
 	@Test
 	public void unknownNotificationIsAcceptedWithoutJsonRpcError() {
-		Soklet.runSimulator(configuration(), simulator -> {
+		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
+		AtomicReference<Optional<McpOperationType>> unknownAdmissionOperationType = new AtomicReference<>();
+		McpRequestAdmissionPolicy admissionPolicy = new McpRequestAdmissionPolicy() {
+			@NonNull
+			@Override
+			public Optional<Response> checkRequest(@NonNull McpAdmissionContext context) {
+				if ("notifications/unknown".equals(context.getJsonRpcMethod().orElse(null)))
+					unknownAdmissionOperationType.set(context.getOperationType());
+
+				return Optional.empty();
+			}
+		};
+
+		Soklet.runSimulator(configuration(lifecycleObserver, MetricsCollector.disabledInstance(), null, null, admissionPolicy), simulator -> {
+			McpRequestResult.ResponseCompleted missingSessionResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "method":"notifications/unknown",
+							  "params":{}
+							}
+							""", Map.of()));
+
+			Assertions.assertEquals(Integer.valueOf(400), missingSessionResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+
 			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator, "/tenants/acme/mcp");
 
 			McpRequestResult.ResponseCompleted notificationResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
@@ -213,6 +237,9 @@ public class McpRuntimeTests {
 
 			Assertions.assertEquals(Integer.valueOf(202), notificationResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
 			Assertions.assertNull(notificationResult.getHttpRequestResult().getMarshaledResponse().bodyBytesOrNull());
+			Assertions.assertTrue(lifecycleObserver.startedMethods.contains("notifications/unknown"));
+			Assertions.assertEquals(McpRequestOutcome.SUCCESS_NOTIFICATION, lifecycleObserver.outcomesByMethod.get("notifications/unknown"));
+			Assertions.assertEquals(Optional.of(McpOperationType.UNKNOWN), unknownAdmissionOperationType.get());
 
 			McpRequestResult.ResponseCompleted requestResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
 					post("/tenants/acme/mcp", """
@@ -230,6 +257,23 @@ public class McpRuntimeTests {
 			McpObject error = (McpObject) body.get("error").orElseThrow();
 			Assertions.assertEquals("-32601", ((McpNumber) error.get("code").orElseThrow()).value().toPlainString());
 			Assertions.assertEquals("Method not found", ((McpString) error.get("message").orElseThrow()).value());
+
+			McpRequestResult.ResponseCompleted nullIdRequestResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":null,
+							  "method":"notifications/unknown",
+							  "params":{}
+							}
+							""", Map.of()));
+
+			Assertions.assertEquals(Integer.valueOf(200), nullIdRequestResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			McpObject nullIdBody = jsonBody(nullIdRequestResult);
+			Assertions.assertSame(McpNull.INSTANCE, nullIdBody.get("id").orElseThrow());
+			McpObject nullIdError = (McpObject) nullIdBody.get("error").orElseThrow();
+			Assertions.assertEquals("-32601", ((McpNumber) nullIdError.get("code").orElseThrow()).value().toPlainString());
+			Assertions.assertEquals("Method not found", ((McpString) nullIdError.get("message").orElseThrow()).value());
 		});
 	}
 
