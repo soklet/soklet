@@ -93,8 +93,8 @@ public class RealtimeTransportSoakTests {
 				sleep(PROFILE.sseInterStreamPause());
 			});
 
-			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.sseStreamsPerClient(), result.completed());
 			Assertions.assertTrue(result.failures().isEmpty(), () -> "Unexpected SSE churn failures: " + result.failures());
+			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.sseStreamsPerClient(), result.completed());
 			assertGaugeReturnsToZero("active SSE streams", () -> activeSseStreams(metricsCollector), PROFILE.settleTimeout());
 			SoakResourceSnapshot finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
 					"concurrent SSE churn",
@@ -157,8 +157,8 @@ public class RealtimeTransportSoakTests {
 				sessionIds.add(initializeMcpSession(port, requestId));
 			});
 
-			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.mcpSessionsPerClient(), createResult.completed());
 			Assertions.assertTrue(createResult.failures().isEmpty(), () -> "Unexpected MCP session-create failures: " + createResult.failures());
+			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.mcpSessionsPerClient(), createResult.completed());
 			assertGaugeEquals("active abandoned MCP sessions",
 					PROFILE.concurrentClients() * PROFILE.mcpSessionsPerClient(),
 					() -> activeMcpSessions(metricsCollector),
@@ -171,8 +171,8 @@ public class RealtimeTransportSoakTests {
 				triggerSessionIds.add(initializeMcpSession(port, requestId));
 			});
 
-			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.mcpSessionsPerClient(), sweepTriggerResult.completed());
 			Assertions.assertTrue(sweepTriggerResult.failures().isEmpty(), () -> "Unexpected MCP sweep-trigger failures: " + sweepTriggerResult.failures());
+			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.mcpSessionsPerClient(), sweepTriggerResult.completed());
 			DefaultMcpSessionStore sessionStore = (DefaultMcpSessionStore) mcpServer.getSessionStore();
 			Assertions.assertEquals(0, sessionIds.stream()
 					.filter(sessionStore::containsSessionId)
@@ -188,8 +188,8 @@ public class RealtimeTransportSoakTests {
 				deleteMcpSession(port, sessionId);
 			});
 
-			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.mcpSessionsPerClient(), deleteResult.completed());
 			Assertions.assertTrue(deleteResult.failures().isEmpty(), () -> "Unexpected MCP trigger-session delete failures: " + deleteResult.failures());
+			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.mcpSessionsPerClient(), deleteResult.completed());
 			assertGaugeReturnsToZero("active MCP sessions", () -> activeMcpSessions(metricsCollector), PROFILE.settleTimeout());
 			Assertions.assertEquals(Long.valueOf(0L), activeMcpSseStreams(metricsCollector));
 			SoakResourceSnapshot finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
@@ -365,11 +365,22 @@ public class RealtimeTransportSoakTests {
 							throw new AssertionError("Timed out waiting for start signal");
 
 						for (int iteration = 0; iteration < iterationsPerClient; iteration++) {
-							operation.run(clientIndex, iteration);
-							completed.incrementAndGet();
+							try {
+								operation.run(clientIndex, iteration);
+								completed.incrementAndGet();
+							} catch (Throwable throwable) {
+								failures.add("client=%d iteration=%d %s: %s".formatted(
+										clientIndex,
+										iteration,
+										throwable.getClass().getSimpleName(),
+										throwable.getMessage()));
+							}
 						}
 					} catch (Throwable throwable) {
-						failures.add(throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+						failures.add("client=%d setup %s: %s".formatted(
+								clientIndex,
+								throwable.getClass().getSimpleName(),
+								throwable.getMessage()));
 					}
 				});
 			}

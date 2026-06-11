@@ -70,8 +70,8 @@ public class HttpSoakTests {
 				assertOkResponse(port);
 			});
 
-			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.cleanRequestsPerClient(), result.completed());
 			Assertions.assertTrue(result.failures().isEmpty(), () -> "Unexpected clean churn failures: " + result.failures());
+			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.cleanRequestsPerClient(), result.completed());
 			assertActiveRequestsReturnToZero(metricsCollector, PROFILE.settleTimeout());
 			SoakResourceSnapshot finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
 					"concurrent HTTP churn",
@@ -122,8 +122,8 @@ public class HttpSoakTests {
 				}
 			});
 
-			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.abortIterationsPerClient(), result.completed());
 			Assertions.assertTrue(result.failures().isEmpty(), () -> "Unexpected abort churn failures: " + result.failures());
+			Assertions.assertEquals(PROFILE.concurrentClients() * PROFILE.abortIterationsPerClient(), result.completed());
 			assertActiveRequestsReturnToZero(metricsCollector, PROFILE.settleTimeout());
 			SoakResourceSnapshot finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
 					"HTTP abort churn",
@@ -187,11 +187,22 @@ public class HttpSoakTests {
 							throw new AssertionError("Timed out waiting for start signal");
 
 						for (int iteration = 0; iteration < iterationsPerClient; iteration++) {
-							operation.run(clientIndex, iteration);
-							completed.incrementAndGet();
+							try {
+								operation.run(clientIndex, iteration);
+								completed.incrementAndGet();
+							} catch (Throwable throwable) {
+								failures.add("client=%d iteration=%d %s: %s".formatted(
+										clientIndex,
+										iteration,
+										throwable.getClass().getSimpleName(),
+										throwable.getMessage()));
+							}
 						}
 					} catch (Throwable throwable) {
-						failures.add(throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+						failures.add("client=%d setup %s: %s".formatted(
+								clientIndex,
+								throwable.getClass().getSimpleName(),
+								throwable.getMessage()));
 					}
 				});
 			}
@@ -225,19 +236,22 @@ public class HttpSoakTests {
 	}
 
 	private static void connectAndClose(int port) throws Exception {
-		try (Socket ignored = connectWithRetry("127.0.0.1", port, 2_000)) {
+		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+			socket.setSoLinger(true, 0);
 			// Open and close without sending bytes.
 		}
 	}
 
 	private static void writePartialHeadersAndClose(int port) throws Exception {
 		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+			socket.setSoLinger(true, 0);
 			writeAscii(socket, "GET /health HTTP/1.1\r\nHost: 127.0.0.1:" + port);
 		}
 	}
 
 	private static void closeBeforeReadingLargeResponse(int port) throws Exception {
 		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+			socket.setSoLinger(true, 0);
 			writeAscii(socket, """
 					GET /large HTTP/1.1\r
 					Host: 127.0.0.1:%s\r
