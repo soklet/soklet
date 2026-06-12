@@ -24,7 +24,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
@@ -36,9 +38,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 import static com.soklet.TestSupport.findFreePort;
 import static com.soklet.TestSupport.readAll;
@@ -222,6 +228,90 @@ public class HttpServerLifecycleTests {
 	}
 
 	@Test
+	public void enterKeyShutdownTriggerRequiresInteractiveConsole() throws Exception {
+		Soklet.KeypressManager.reset();
+		Soklet.KeypressManager.interactiveConsoleAvailableOverride(false);
+		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
+		AtomicReference<Throwable> awaitFailure = new AtomicReference<>();
+
+		try (Soklet app = Soklet.fromConfig(lifecycleTestConfig(lifecycleObserver))) {
+			app.start();
+			Thread awaitThread = awaitShutdownOnBackgroundThread(app, awaitFailure);
+
+			try {
+				Assertions.assertTrue(lifecycleObserver.awaitConfigurationUnsupported(Duration.ofSeconds(2)),
+						"Expected ENTER_KEY to be reported as unsupported without an interactive console");
+				Assertions.assertTrue(app.isStarted(), "ENTER_KEY should be ignored when no interactive console exists");
+			} finally {
+				app.stop();
+				joinAwaitThread(awaitThread);
+			}
+		} finally {
+			Soklet.KeypressManager.reset();
+		}
+
+		Assertions.assertNull(awaitFailure.get());
+	}
+
+	@Test
+	public void enterKeyShutdownTriggerTreatsStdinEofAsUnsupported() throws Exception {
+		InputStream originalIn = System.in;
+		Soklet.KeypressManager.reset();
+		Soklet.KeypressManager.interactiveConsoleAvailableOverride(true);
+		System.setIn(new ByteArrayInputStream(new byte[0]));
+		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
+		AtomicReference<Throwable> awaitFailure = new AtomicReference<>();
+
+		try (Soklet app = Soklet.fromConfig(lifecycleTestConfig(lifecycleObserver))) {
+			app.start();
+			Thread awaitThread = awaitShutdownOnBackgroundThread(app, awaitFailure);
+
+			try {
+				Assertions.assertTrue(lifecycleObserver.awaitConfigurationUnsupported(Duration.ofSeconds(2)),
+						"Expected EOF on stdin to be reported as unsupported");
+				assertEventually(() -> !Soklet.KeypressManager.isListenerStarted(), Duration.ofSeconds(2),
+						"Expected ENTER_KEY listener flag to reset after stdin EOF");
+				Assertions.assertTrue(app.isStarted(), "stdin EOF must not stop Soklet");
+			} finally {
+				app.stop();
+				joinAwaitThread(awaitThread);
+			}
+		} finally {
+			System.setIn(originalIn);
+			Soklet.KeypressManager.reset();
+		}
+
+		Assertions.assertNull(awaitFailure.get());
+	}
+
+	@Test
+	public void enterKeyShutdownTriggerStopsOnNewlineAndResetsListener() throws Exception {
+		InputStream originalIn = System.in;
+		Soklet.KeypressManager.reset();
+		Soklet.KeypressManager.interactiveConsoleAvailableOverride(true);
+		System.setIn(new ByteArrayInputStream("\n".getBytes(StandardCharsets.UTF_8)));
+		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
+		AtomicReference<Throwable> awaitFailure = new AtomicReference<>();
+
+		try (Soklet app = Soklet.fromConfig(lifecycleTestConfig(lifecycleObserver))) {
+			app.start();
+			Thread awaitThread = awaitShutdownOnBackgroundThread(app, awaitFailure);
+
+			assertEventually(() -> !app.isStarted(), Duration.ofSeconds(2),
+					"Expected newline on stdin to stop Soklet");
+			joinAwaitThread(awaitThread);
+			assertEventually(() -> !Soklet.KeypressManager.isListenerStarted(), Duration.ofSeconds(2),
+					"Expected ENTER_KEY listener flag to reset after newline shutdown");
+			Assertions.assertFalse(lifecycleObserver.hasConfigurationUnsupported());
+		} finally {
+			System.setIn(originalIn);
+			Soklet.KeypressManager.reset();
+		}
+
+		Assertions.assertNull(awaitFailure.get());
+	}
+
+	@Test
 	public void transportLoggerEmitsLogEventAndMetric() {
 		List<LogEvent> logEvents = new ArrayList<>();
 		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
@@ -309,5 +399,80 @@ public class HttpServerLifecycleTests {
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
 		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
+	}
+
+	private static final class RecordingLifecycle extends QuietLifecycle {
+		private final List<LogEvent> logEvents;
+		private final CountDownLatch configurationUnsupportedLatch;
+
+		private RecordingLifecycle() {
+			this.logEvents = new CopyOnWriteArrayList<>();
+			this.configurationUnsupportedLatch = new CountDownLatch(1);
+		}
+
+		@Override
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+			this.logEvents.add(logEvent);
+
+			if (logEvent.getLogEventType() == LogEventType.CONFIGURATION_UNSUPPORTED)
+				this.configurationUnsupportedLatch.countDown();
+		}
+
+		private boolean awaitConfigurationUnsupported(@NonNull Duration timeout) throws InterruptedException {
+			return this.configurationUnsupportedLatch.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
+		}
+
+		private boolean hasConfigurationUnsupported() {
+			return this.logEvents.stream()
+					.anyMatch(logEvent -> logEvent.getLogEventType() == LogEventType.CONFIGURATION_UNSUPPORTED);
+		}
+	}
+
+	private static SokletConfig lifecycleTestConfig(@NonNull LifecycleObserver lifecycleObserver) throws IOException {
+		return SokletConfig.withHttpServer(HttpServer.withPort(findFreePort())
+						.requestHeaderTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HealthResource.class)))
+				.lifecycleObserver(lifecycleObserver)
+				.build();
+	}
+
+	private static Thread awaitShutdownOnBackgroundThread(@NonNull Soklet soklet,
+																												@NonNull AtomicReference<Throwable> awaitFailure) {
+		Thread awaitThread = new Thread(() -> {
+			try {
+				soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
+			} catch (Throwable t) {
+				awaitFailure.set(t);
+			}
+		}, "soklet-await-shutdown-test");
+		awaitThread.start();
+		return awaitThread;
+	}
+
+	private static void joinAwaitThread(@NonNull Thread awaitThread) throws InterruptedException {
+		awaitThread.join(2000);
+
+		if (awaitThread.isAlive()) {
+			awaitThread.interrupt();
+			awaitThread.join(1000);
+		}
+
+		Assertions.assertFalse(awaitThread.isAlive(), "awaitShutdown test thread did not finish");
+	}
+
+	private static void assertEventually(@NonNull BooleanSupplier condition,
+																			 @NonNull Duration timeout,
+																			 @NonNull String message) throws InterruptedException {
+		long deadline = System.nanoTime() + timeout.toNanos();
+
+		while (System.nanoTime() < deadline) {
+			if (condition.getAsBoolean())
+				return;
+
+			Thread.sleep(10);
+		}
+
+		Assertions.assertTrue(condition.getAsBoolean(), message);
 	}
 }

@@ -609,15 +609,18 @@ public final class Soklet implements AutoCloseable {
 	 * Handles "awaitShutdown" for {@link ShutdownTrigger#ENTER_KEY} by listening to stdin - all Soklet instances are terminated on keypress.
 	 */
 	@ThreadSafe
-	private static final class KeypressManager {
+	static final class KeypressManager {
 		@NonNull
 		private static final Set<@NonNull Soklet> SOKLET_REGISTRY;
 		@NonNull
 		private static final AtomicBoolean LISTENER_STARTED;
+		@NonNull
+		private static final AtomicReference<@Nullable Boolean> INTERACTIVE_CONSOLE_AVAILABLE_OVERRIDE;
 
 		static {
 			SOKLET_REGISTRY = new CopyOnWriteArraySet<>();
 			LISTENER_STARTED = new AtomicBoolean(false);
+			INTERACTIVE_CONSOLE_AVAILABLE_OVERRIDE = new AtomicReference<>();
 		}
 
 		/**
@@ -644,6 +647,20 @@ public final class Soklet implements AutoCloseable {
 			return true;
 		}
 
+		static void interactiveConsoleAvailableOverride(@Nullable Boolean interactiveConsoleAvailableOverride) {
+			INTERACTIVE_CONSOLE_AVAILABLE_OVERRIDE.set(interactiveConsoleAvailableOverride);
+		}
+
+		static boolean isListenerStarted() {
+			return LISTENER_STARTED.get();
+		}
+
+		synchronized static void reset() {
+			SOKLET_REGISTRY.clear();
+			LISTENER_STARTED.set(false);
+			INTERACTIVE_CONSOLE_AVAILABLE_OVERRIDE.set(null);
+		}
+
 		synchronized static void unregister(@NonNull Soklet soklet) {
 			SOKLET_REGISTRY.remove(soklet);
 			// We intentionally keep the listener alive; it's daemon and cheap.
@@ -651,40 +668,62 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		/**
-		 * Heuristic: if System.in is present and calling available() doesn't throw,
-		 * treat it as readable. Works even in IDEs where System.console() is null.
+		 * ENTER_KEY shutdown is interactive-console-only. In noninteractive containers, stdin may be
+		 * open but wired to EOF (for example, /dev/null); treating that as usable would stop the server immediately.
 		 */
 		@NonNull
 		private static Boolean canReadFromStdin() {
 			if (System.in == null)
 				return false;
 
-			try {
-				// available() >= 0 means stream is open; 0 means no buffered data (that’s fine).
-				return System.in.available() >= 0;
-			} catch (IOException e) {
-				return false;
-			}
+			Boolean interactiveConsoleAvailableOverride = INTERACTIVE_CONSOLE_AVAILABLE_OVERRIDE.get();
+
+			if (interactiveConsoleAvailableOverride != null)
+				return interactiveConsoleAvailableOverride;
+
+			return System.console() != null;
 		}
 
 		/**
-		 * Single blocking read on stdin. On any line (or EOF), stop all registered servers.
+		 * Single blocking read on stdin. On any line, stop all registered servers. EOF means stdin is
+		 * unusable for interactive shutdown and must not stop the process.
 		 */
 		private static void runLoop() {
-			try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
-				// Blocks until newline or EOF; EOF (null) happens with /dev/null or closed pipe.
-				bufferedReader.readLine();
+			try {
+				BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+				String line = bufferedReader.readLine();
+
+				if (line == null) {
+					logEnterKeyUnsupported("Ignoring request for ENTER_KEY shutdown - stdin reached EOF before an enter keypress");
+					return;
+				}
+
 				stopAllSoklets();
 			} catch (Throwable ignored) {
-				// If stdin is closed mid-run, just exit quietly.
+				logEnterKeyUnsupported("Ignoring request for ENTER_KEY shutdown - stdin became unusable before an enter keypress");
+			} finally {
+				LISTENER_STARTED.set(false);
 			}
 		}
 
 		synchronized private static void stopAllSoklets() {
-			// Either a line or EOF → stop everything that’s currently registered.
 			for (Soklet soklet : SOKLET_REGISTRY) {
 				try {
 					soklet.stop();
+				} catch (Throwable ignored) {
+					// Nothing to do
+				}
+			}
+		}
+
+		private static void logEnterKeyUnsupported(@NonNull String message) {
+			requireNonNull(message);
+
+			LogEvent logEvent = LogEvent.with(LogEventType.CONFIGURATION_UNSUPPORTED, message).build();
+
+			for (Soklet soklet : SOKLET_REGISTRY) {
+				try {
+					soklet.getSokletConfig().getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
 				} catch (Throwable ignored) {
 					// Nothing to do
 				}
