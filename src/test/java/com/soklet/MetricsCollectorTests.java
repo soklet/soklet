@@ -47,6 +47,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -142,6 +143,29 @@ public class MetricsCollectorTests {
 		assertEquals(0L, resetSnapshot.getHttpConnectionsRejected());
 		assertTrue(resetSnapshot.getTransportFailures().values().stream().allMatch(value -> value == 0L));
 		assertEquals(0L, resetSnapshot.getActiveRequests());
+	}
+
+	@Test
+	public void requestSubstitutionRemovesAllInFlightRequestState() {
+		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
+		ResourceMethod resourceMethod = resourceMethodFor("/widgets/{id}", HttpMethod.POST, "createWidget", false);
+		Request request = Request.withPath(HttpMethod.POST, "/widgets/123")
+				.body(new byte[]{1, 2, 3})
+				.build();
+		Request substitutedRequest = request.copy()
+				.headers(Map.of("X-Substituted", Set.of("true")))
+				.finish();
+		MarshaledResponse response = MarshaledResponse.withStatusCode(201)
+				.body(new byte[]{9, 8})
+				.build();
+
+		collector.didStartRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod);
+		collector.willWriteResponse(ServerType.STANDARD_HTTP, substitutedRequest, resourceMethod, response);
+		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP, substitutedRequest, resourceMethod, response, Duration.ofMillis(5), List.of());
+
+		assertEquals(0L, collector.getActiveRequests());
+		assertEquals(0L, collector.getRequestsInFlightByIdentityCount());
+		assertEquals(0L, collector.getRequestsInFlightByIdCount());
 	}
 
 	@Test

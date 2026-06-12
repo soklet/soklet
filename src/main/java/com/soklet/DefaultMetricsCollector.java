@@ -945,6 +945,14 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return this.activeRequests.sum();
 	}
 
+	long getRequestsInFlightByIdentityCount() {
+		return this.requestsInFlightByIdentity.size();
+	}
+
+	long getRequestsInFlightByIdCount() {
+		return this.requestsInFlightById.size();
+	}
+
 	long getActiveSseStreams() {
 		return this.activeSseStreams.sum();
 	}
@@ -1934,11 +1942,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private void removeRequestState(@NonNull Request request) {
 		requireNonNull(request);
 
-		RequestState state = requestStateFor(request);
+		IdentityKey<Request> currentIdentityKey = new IdentityKey<>(request);
+		RequestState state = this.requestsInFlightByIdentity.get(currentIdentityKey);
+
+		if (state == null)
+			state = this.requestsInFlightById.get(request.getId());
 
 		if (state == null)
 			return;
 
+		this.requestsInFlightByIdentity.remove(currentIdentityKey, state);
 		this.requestsInFlightByIdentity.remove(state.getIdentityKey(), state);
 		this.requestsInFlightById.remove(state.getRequestId(), state);
 	}
