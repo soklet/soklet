@@ -914,6 +914,7 @@ public class McpServerLifecycleTests {
 	@Test
 	public void startedDefaultMcpServerEnforcesConcurrentConnectionLimitForGetStreams() throws Exception {
 		int mcpPort = findFreePort();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
 						.concurrentConnectionLimit(1)
@@ -922,6 +923,7 @@ public class McpServerLifecycleTests {
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
+				.metricsCollector(metricsCollector)
 				.build();
 
 		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
@@ -941,7 +943,12 @@ public class McpServerLifecycleTests {
 				String secondHandshake = readUntil(secondSocket.getInputStream(), "\r\n\r\n", 8192);
 				Assertions.assertNotNull(secondHandshake);
 				Assertions.assertTrue(secondHandshake.startsWith("HTTP/1.1 503"));
+				Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams(),
+						"Rejected GET stream must not remain active");
 			}
+
+			soklet.stop();
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams());
 		}
 	}
 

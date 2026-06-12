@@ -622,21 +622,22 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 				try {
 					if (!reserveConnectionSlot(connectionSlotReserved)) {
+						terminateRuntimeStreamIfPresent(request, StreamTerminationReason.SESSION_TERMINATED, null);
 						writeMarshaledResponse(socket, request, serviceUnavailableResponse(request), true);
 						return;
-						}
+					}
 
-						liveConnection = registerLiveConnection(socket, request, connectionSlotReserved);
+					liveConnection = registerLiveConnection(socket, request, connectionSlotReserved);
 
-						if (!sessionAllowsLiveGetStream(liveConnection.sessionId())) {
-							liveConnection.terminationReason().compareAndSet(null, StreamTerminationReason.SESSION_TERMINATED);
-							finishConnection(liveConnection, null);
-							return;
-						}
+					if (!sessionAllowsLiveGetStream(liveConnection.sessionId())) {
+						liveConnection.terminationReason().compareAndSet(null, StreamTerminationReason.SESSION_TERMINATED);
+						finishConnection(liveConnection, null);
+						return;
+					}
 
-						writeAcceptedEventStreamResponse(socket, request, requestResult.getMarshaledResponse());
-						markConnectionEstablished(liveConnection);
-						startConnectionProcessor(liveConnection);
+					writeAcceptedEventStreamResponse(socket, request, requestResult.getMarshaledResponse());
+					markConnectionEstablished(liveConnection);
+					startConnectionProcessor(liveConnection);
 					handedOffToStreamProcessor = true;
 					return;
 				} catch (Throwable throwable) {
@@ -645,13 +646,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 						removeConnection(liveConnection);
 					}
 
-					DefaultMcpRuntime runtime = this.mcpRuntime;
-					String sessionId = request.getHeader("MCP-Session-Id").orElse(null);
-
-					if (runtime != null && sessionId != null)
-						runtime.handleTerminatedStream(request, sessionId,
-								isRemoteClose(throwable) ? StreamTerminationReason.CLIENT_DISCONNECTED : StreamTerminationReason.WRITE_FAILED,
-								throwable);
+					terminateRuntimeStreamIfPresent(request,
+							isRemoteClose(throwable) ? StreamTerminationReason.CLIENT_DISCONNECTED : StreamTerminationReason.WRITE_FAILED,
+							throwable);
 
 					if (throwable instanceof IOException ioException)
 						throw ioException;
@@ -2160,6 +2157,19 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			return;
 
 		this.activeConnectionCount.updateAndGet(current -> Math.max(0, current - 1));
+	}
+
+	private void terminateRuntimeStreamIfPresent(@NonNull Request request,
+																							@NonNull StreamTerminationReason terminationReason,
+																							@Nullable Throwable throwable) {
+		requireNonNull(request);
+		requireNonNull(terminationReason);
+
+		DefaultMcpRuntime runtime = this.mcpRuntime;
+		String sessionId = request.getHeader("MCP-Session-Id").orElse(null);
+
+		if (runtime != null && sessionId != null)
+			runtime.handleTerminatedStream(request, sessionId, terminationReason, throwable);
 	}
 
 	private static boolean isRemoteClose(@Nullable Throwable throwable) {
