@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -926,6 +927,15 @@ final class DefaultSseServer implements SseServer {
 			if (getRequestHandler().isEmpty())
 				throw new IllegalStateException(format("No %s was registered for %s", RequestHandler.class, getClass()));
 
+			ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+			this.serverSocketChannel = serverSocketChannel;
+
+			try {
+				serverSocketChannel.bind(new InetSocketAddress(getHost(), getPort()));
+			} catch (BindException e) {
+				throw new IllegalStateException(format("Soklet was unable to start the SSE server - port %d is already in use.", getPort()), e);
+			}
+
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
 			this.requestHandlerTimeoutScheduler = new TimeoutScheduler(runnable -> new Thread(runnable, "sse-request-handler-timeout"));
 			this.requestReaderExecutorService = getRequestReaderExecutorServiceSupplier().get();
@@ -934,6 +944,12 @@ final class DefaultSseServer implements SseServer {
 			this.started = true; // set before thread starts to avoid early exit races
 			this.eventLoopThread = new Thread(this::startInternal, "sse-event-loop");
 			this.eventLoopThread.start();
+		} catch (RuntimeException e) {
+			cleanupAfterFailedStart();
+			throw e;
+		} catch (IOException e) {
+			cleanupAfterFailedStart();
+			throw new IllegalStateException("Unable to start SSE server", e);
 		} finally {
 			getLock().unlock();
 		}
@@ -1049,17 +1065,12 @@ final class DefaultSseServer implements SseServer {
 		if (!isStarted() || isStopping())
 			return;
 
-		ServerSocketChannel serverSocketChannel;
-		boolean bindSucceeded = false;
+		ServerSocketChannel serverSocketChannel = this.serverSocketChannel;
+
+		if (serverSocketChannel == null)
+			return;
 
 		try {
-			serverSocketChannel = ServerSocketChannel.open();
-			serverSocketChannel.bind(new InetSocketAddress(getHost(), getPort()));
-
-			bindSucceeded = true;
-
-			this.serverSocketChannel = serverSocketChannel;
-
 			ExecutorService executorService = getRequestHandlerExecutorService().orElse(null);
 
 			if (executorService == null || executorService.isShutdown() || isStopping())
@@ -1067,7 +1078,7 @@ final class DefaultSseServer implements SseServer {
 				return;
 
 			while (!getStopPoisonPill().get()) {
-				SocketChannel clientSocketChannel = this.serverSocketChannel.accept();
+				SocketChannel clientSocketChannel = serverSocketChannel.accept();
 				handleAcceptedSocketChannel(clientSocketChannel, executorService);
 			}
 		} catch (ClosedChannelException ignored) {
@@ -1089,9 +1100,6 @@ final class DefaultSseServer implements SseServer {
 				}
 			}
 
-			// If the socket was never bound, ensure a correct stop
-			if (!bindSucceeded)
-				stop();
 		}
 	}
 
@@ -3490,6 +3498,41 @@ final class DefaultSseServer implements SseServer {
 		} finally {
 			getLock().unlock();
 		}
+	}
+
+	private void cleanupAfterFailedStart() {
+		ServerSocketChannel serverSocketChannelSnapshot = this.serverSocketChannel;
+
+		if (serverSocketChannelSnapshot != null) {
+			try {
+				serverSocketChannelSnapshot.close();
+			} catch (IOException ignored) {
+				// Nothing to do
+			}
+		}
+
+		if (this.requestHandlerExecutorService != null)
+			this.requestHandlerExecutorService.shutdownNow();
+
+		if (this.requestHandlerTimeoutScheduler != null)
+			this.requestHandlerTimeoutScheduler.shutdownNow();
+
+		if (this.requestReaderExecutorService != null)
+			this.requestReaderExecutorService.shutdownNow();
+
+		if (this.connectionExecutorService != null)
+			this.connectionExecutorService.shutdownNow();
+
+		this.serverSocketChannel = null;
+		this.eventLoopThread = null;
+		this.requestHandlerExecutorService = null;
+		this.requestHandlerTimeoutScheduler = null;
+		this.requestReaderExecutorService = null;
+		this.connectionExecutorService = null;
+		this.started = false;
+		this.stopping = false;
+		this.activeConnectionCount.set(0);
+		getStopPoisonPill().set(false);
 	}
 
 	private void awaitPoolTermination(@Nullable ExecutorService executorService,

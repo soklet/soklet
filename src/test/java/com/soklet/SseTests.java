@@ -40,6 +40,7 @@ import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketException;
@@ -491,6 +492,55 @@ public class SseTests {
 				MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
 		Assertions.assertTrue(logEvents.stream().anyMatch(logEvent ->
 				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sse_startPortInUseFailsSynchronouslyAndRollsBackSoklet() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+
+		try (ServerSocket occupiedSocket = new ServerSocket()) {
+			occupiedSocket.setReuseAddress(true);
+			occupiedSocket.bind(new InetSocketAddress("127.0.0.1", ssePort));
+
+			HttpServer httpServer = HttpServer.withPort(httpPort)
+					.host("127.0.0.1")
+					.build();
+			SseServer sseServer = SseServer.withPort(ssePort)
+					.host("127.0.0.1")
+					.build();
+			DefaultHttpServer internalHttpServer = (DefaultHttpServer) httpServer;
+			DefaultSseServer internalSseServer = (DefaultSseServer) sseServer;
+			RecordingStartupLifecycle lifecycleObserver = new RecordingStartupLifecycle();
+			SokletConfig sokletConfig = SokletConfig.withHttpServer(httpServer)
+					.sseServer(sseServer)
+					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
+					.lifecycleObserver(lifecycleObserver)
+					.build();
+
+			try (Soklet app = Soklet.fromConfig(sokletConfig)) {
+				IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, app::start);
+				Assertions.assertTrue(exception.getMessage().contains("SSE server"));
+				Assertions.assertFalse(app.isStarted());
+			}
+
+			Assertions.assertFalse(httpServer.isStarted());
+			Assertions.assertFalse(sseServer.isStarted());
+			Assertions.assertTrue(internalHttpServer.getEventLoop().isEmpty());
+			Assertions.assertTrue(internalHttpServer.getRequestHandlerExecutorService().isEmpty());
+			Assertions.assertTrue(internalSseServer.getEventLoopThread().isEmpty());
+			Assertions.assertTrue(internalSseServer.getRequestHandlerExecutorService().isEmpty());
+			Assertions.assertTrue(internalSseServer.getRequestHandlerTimeoutScheduler().isEmpty());
+			Assertions.assertTrue(internalSseServer.getRequestReaderExecutorService().isEmpty());
+			Assertions.assertTrue(internalSseServer.getConnectionExecutorService().isEmpty());
+			Assertions.assertEquals(1, lifecycleObserver.didStartHttpServer.get());
+			Assertions.assertEquals(1, lifecycleObserver.didFailToStartSseServer.get());
+			Assertions.assertEquals(1, lifecycleObserver.didStopHttpServer.get());
+			Assertions.assertEquals(0, lifecycleObserver.didStartSseServer.get());
+			Assertions.assertEquals(0, lifecycleObserver.didStartSoklet.get());
+			Assertions.assertEquals(1, lifecycleObserver.didFailToStartSoklet.get());
+		}
 	}
 
 	@Test
@@ -2524,6 +2574,47 @@ public class SseTests {
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
 		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
+	}
+
+	private static final class RecordingStartupLifecycle extends QuietLifecycle {
+		private final AtomicInteger didStartSoklet = new AtomicInteger();
+		private final AtomicInteger didFailToStartSoklet = new AtomicInteger();
+		private final AtomicInteger didStartHttpServer = new AtomicInteger();
+		private final AtomicInteger didStopHttpServer = new AtomicInteger();
+		private final AtomicInteger didStartSseServer = new AtomicInteger();
+		private final AtomicInteger didFailToStartSseServer = new AtomicInteger();
+
+		@Override
+		public void didStartSoklet(@NonNull Soklet soklet) {
+			this.didStartSoklet.incrementAndGet();
+		}
+
+		@Override
+		public void didFailToStartSoklet(@NonNull Soklet soklet,
+																		 @NonNull Throwable throwable) {
+			this.didFailToStartSoklet.incrementAndGet();
+		}
+
+		@Override
+		public void didStartHttpServer(@NonNull HttpServer httpServer) {
+			this.didStartHttpServer.incrementAndGet();
+		}
+
+		@Override
+		public void didStopHttpServer(@NonNull HttpServer httpServer) {
+			this.didStopHttpServer.incrementAndGet();
+		}
+
+		@Override
+		public void didStartSseServer(@NonNull SseServer sseServer) {
+			this.didStartSseServer.incrementAndGet();
+		}
+
+		@Override
+		public void didFailToStartSseServer(@NonNull SseServer sseServer,
+																				@NonNull Throwable throwable) {
+			this.didFailToStartSseServer.incrementAndGet();
+		}
 	}
 
 	private static final class RecordingExecutorService extends AbstractExecutorService {
