@@ -80,8 +80,9 @@ public class HttpSoakTests {
 					PROFILE.resourceTolerance());
 			SoakReport.recordPassedScenario(
 					"concurrent HTTP churn",
-					"clients=%d, requestsPerClient=%d, serverConcurrency=%d"
-							.formatted(PROFILE.concurrentClients(), PROFILE.cleanRequestsPerClient(), PROFILE.serverConcurrency()),
+					"clients=%d, requestsPerClient=%d, serverConcurrency=%d, socketPendingConnectionLimit=%d"
+							.formatted(PROFILE.concurrentClients(), PROFILE.cleanRequestsPerClient(), PROFILE.serverConcurrency(),
+									PROFILE.socketPendingConnectionLimit()),
 					Duration.ofNanos(System.nanoTime() - startedAt),
 					baseline,
 					finalSnapshot,
@@ -132,8 +133,9 @@ public class HttpSoakTests {
 					PROFILE.resourceTolerance());
 			SoakReport.recordPassedScenario(
 					"HTTP abort churn",
-					"clients=%d, abortIterationsPerClient=%d, abortModes=connect-close/partial-headers/close-before-read, serverConcurrency=%d"
-							.formatted(PROFILE.concurrentClients(), PROFILE.abortIterationsPerClient(), PROFILE.serverConcurrency()),
+					"clients=%d, abortIterationsPerClient=%d, abortModes=connect-close/partial-headers/close-before-read, serverConcurrency=%d, socketPendingConnectionLimit=%d, abortConnectTimeoutMillis=%d"
+							.formatted(PROFILE.concurrentClients(), PROFILE.abortIterationsPerClient(), PROFILE.serverConcurrency(),
+									PROFILE.socketPendingConnectionLimit(), PROFILE.abortConnectTimeoutMillis()),
 					Duration.ofNanos(System.nanoTime() - startedAt),
 					baseline,
 					finalSnapshot,
@@ -150,6 +152,7 @@ public class HttpSoakTests {
 	private static HttpServer httpServer(int port, int concurrency) {
 		return HttpServer.withPort(port)
 				.concurrency(concurrency)
+				.socketPendingConnectionLimit(PROFILE.socketPendingConnectionLimit())
 				.requestHeaderTimeout(Duration.ofSeconds(2))
 				.responseWriteIdleTimeout(Duration.ofSeconds(2))
 				.shutdownTimeout(Duration.ofSeconds(3))
@@ -236,21 +239,21 @@ public class HttpSoakTests {
 	}
 
 	private static void connectAndClose(int port) throws Exception {
-		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+		try (Socket socket = connectWithRetry("127.0.0.1", port, PROFILE.abortConnectTimeoutMillis())) {
 			socket.setSoLinger(true, 0);
 			// Open and close without sending bytes.
 		}
 	}
 
 	private static void writePartialHeadersAndClose(int port) throws Exception {
-		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+		try (Socket socket = connectWithRetry("127.0.0.1", port, PROFILE.abortConnectTimeoutMillis())) {
 			socket.setSoLinger(true, 0);
 			writeAscii(socket, "GET /health HTTP/1.1\r\nHost: 127.0.0.1:" + port);
 		}
 	}
 
 	private static void closeBeforeReadingLargeResponse(int port) throws Exception {
-		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+		try (Socket socket = connectWithRetry("127.0.0.1", port, PROFILE.abortConnectTimeoutMillis())) {
 			socket.setSoLinger(true, 0);
 			writeAscii(socket, """
 					GET /large HTTP/1.1\r
@@ -383,6 +386,8 @@ public class HttpSoakTests {
 														 int cleanRequestsPerClient,
 														 int abortIterationsPerClient,
 														 int serverConcurrency,
+														 int socketPendingConnectionLimit,
+														 int abortConnectTimeoutMillis,
 														 @NonNull Duration runTimeout,
 														 @NonNull Duration settleTimeout,
 														 SoakResourceSnapshot.ResourceTolerance resourceTolerance) {
@@ -396,6 +401,8 @@ public class HttpSoakTests {
 						250,
 						150,
 						8,
+						1_024,
+						10_000,
 						Duration.ofSeconds(90),
 						Duration.ofSeconds(15),
 						new SoakResourceSnapshot.ResourceTolerance(8L, 64L * 1024L * 1024L, 32));
@@ -406,6 +413,8 @@ public class HttpSoakTests {
 					20,
 					12,
 					2,
+					128,
+					5_000,
 					Duration.ofSeconds(20),
 					Duration.ofSeconds(5),
 					new SoakResourceSnapshot.ResourceTolerance(4L, 32L * 1024L * 1024L, 12));
