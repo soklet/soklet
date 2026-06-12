@@ -4,5 +4,7 @@
 /fuzz/target/
 /fuzz/.cifuzz-corpus/
 /fuzz/src/test/resources/**/crash-*
+/soak/target/
+/soak/reports/
 .idea
 soklet.iml

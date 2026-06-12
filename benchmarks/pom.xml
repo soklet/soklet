@@ -6,7 +6,7 @@
 
     <groupId>com.soklet</groupId>
     <artifactId>soklet-benchmarks</artifactId>
-    <version>3.3.0</version>
+    <version>3.3.1-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Soklet Benchmarks</name>

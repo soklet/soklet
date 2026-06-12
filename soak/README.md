@@ -28,7 +28,9 @@ soak/target/soak-report.md
 
 The report includes the run mode, JVM/OS/process metadata, one section per scenario, workload parameters, elapsed time, baseline and final resource snapshots, resource deltas, tolerances, completed operation counts, and final active gauges.
 
-Surefire still writes its normal test output to `soak/target/surefire-reports/`. The custom soak report is the human-readable artifact to attach to release notes or manual soak evidence.
+Surefire still writes its normal test output to `soak/target/surefire-reports/`. The custom soak report is the human-readable artifact to attach to release notes or manual soak evidence. Generated reports and target output are intentionally gitignored.
+
+Tracked historical soak evidence lives in [`MANUAL_SOAKS.md`](MANUAL_SOAKS.md).
 
 To write the report somewhere else, set `SOKLET_SOAK_REPORT`:
 

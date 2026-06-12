@@ -5,6 +5,11 @@
     </picture>
 </a>
 
+[![Maven Central](https://img.shields.io/maven-central/v/com.soklet/soklet.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/com.soklet/soklet)
+[![CI](https://github.com/soklet/soklet/actions/workflows/ci.yml/badge.svg)](https://github.com/soklet/soklet/actions/workflows/ci.yml)
+[![Javadoc](https://javadoc.io/badge2/com.soklet/soklet/javadoc.svg)](https://javadoc.soklet.com)
+[![Changelog](https://img.shields.io/badge/changelog-view-blue)](CHANGELOG.md)
+
 ### What Is It?
 
 A small [HTTP/1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs, broadcasting [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events), and providing [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) functionality.<br/><br/>
