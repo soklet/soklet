@@ -70,6 +70,7 @@ class ConnectionEventLoop {
     private final Handler handler;
     private final AtomicLong connectionCounter;
     private final AtomicBoolean stop;
+    private final AtomicBoolean draining;
 
     private final Scheduler timeoutQueue;
     private final Queue<Runnable> taskQueue;
@@ -83,12 +84,14 @@ class ConnectionEventLoop {
             Logger logger,
             Handler handler,
             AtomicLong connectionCounter,
-            AtomicBoolean stop) throws IOException {
+            AtomicBoolean stop,
+            AtomicBoolean draining) throws IOException {
         this.options = options;
         this.logger = logger;
         this.handler = handler;
         this.connectionCounter = connectionCounter;
         this.stop = stop;
+        this.draining = draining;
 
         connectionCount = new AtomicInteger();
         timeoutQueue = new Scheduler();
@@ -132,6 +135,7 @@ class ConnectionEventLoop {
         boolean httpOneDotZero;
         boolean keepAlive;
         boolean closeAfterResponse;
+        boolean requestInFlight;
         final AtomicBoolean closed;
 
         private Connection(SocketChannel socketChannel, SelectionKey selectionKey, @Nullable InetSocketAddress remoteAddress) throws IOException {
@@ -162,6 +166,11 @@ class ConnectionEventLoop {
         }
 
         private void onReadable() {
+            if (draining.get()) {
+                failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
+                return;
+            }
+
             try {
                 doOnReadable();
             } catch (RequestTooLargeException e) {
@@ -267,6 +276,7 @@ class ConnectionEventLoop {
             closeAfterResponse = true;
             byteTokenizer.compact();
             requestParser.reset();
+            requestInFlight = true;
             handler.handle(tooLargeRequest, this::onResponse);
         }
 
@@ -300,6 +310,7 @@ class ConnectionEventLoop {
             applyConnectionPolicy(request);
             byteTokenizer.compact();
             requestParser.reset();
+            requestInFlight = true;
             handler.handle(request, this::onResponse);
         }
 
@@ -322,7 +333,15 @@ class ConnectionEventLoop {
                         List.of(new Header(HEADER_CONNECTION, CLOSE)), new byte[0]);
                 closeAfterResponse = true;
             }
+            if (closed.get()) {
+                microhttpResponse.closeStreamingBody(StreamTerminationReason.SERVER_STOPPING, null);
+                return;
+            }
+            requestInFlight = false;
             if (hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
+                closeAfterResponse = true;
+            }
+            if (draining.get()) {
                 closeAfterResponse = true;
             }
             responseWriteIdleTimeoutEnabled = !microhttpResponse.streaming()
@@ -331,6 +350,9 @@ class ConnectionEventLoop {
             List<Header> headers = new ArrayList<>();
             if (httpOneDotZero && keepAlive && !closeAfterResponse) {
                 headers.add(new Header(HEADER_CONNECTION, KEEP_ALIVE));
+            }
+            if (closeAfterResponse && !hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
+                headers.add(new Header(HEADER_CONNECTION, CLOSE));
             }
             if (microhttpResponse.streaming()) {
                 if (!microhttpResponse.hasHeader(HEADER_TRANSFER_ENCODING)) {
@@ -434,6 +456,11 @@ class ConnectionEventLoop {
         }
 
         private void parseBufferedRequestAfterResponse() {
+            if (draining.get()) {
+                failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
+                return;
+            }
+
             try {
                 if (requestParser.parse()) { // subsequent request in buffer
                     if (byteTokenizer.position() > options.maxRequestSize()) {
@@ -486,6 +513,7 @@ class ConnectionEventLoop {
         private void failSafeClose(@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable cause) {
             if (!closed.compareAndSet(false, true))
                 return;
+            requestInFlight = false;
             if (requestReadTimeoutTask != null) {
                 requestReadTimeoutTask.cancel();
             }
@@ -579,6 +607,18 @@ class ConnectionEventLoop {
             }
         }
 
+        private void beginDrain() {
+            if (closed.get())
+                return;
+
+            if (requestInFlight || writableSource != null) {
+                closeAfterResponse = true;
+                return;
+            }
+
+            failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
+        }
+
         private void applyConnectionPolicy(MicrohttpRequest request) {
             closeAfterResponse = false;
             httpOneDotZero = request.version().equalsIgnoreCase(HTTP_1_0);
@@ -657,8 +697,24 @@ class ConnectionEventLoop {
         thread.start();
     }
 
+    void wakeup() {
+        selector.wakeup();
+    }
+
     void join() throws InterruptedException {
         thread.join();
+    }
+
+    void beginDrain() {
+        taskQueue.add(() -> {
+            for (SelectionKey selKey : selector.keys()) {
+                Object attachment = selKey.attachment();
+                if (attachment instanceof Connection connection) {
+                    connection.beginDrain();
+                }
+            }
+        });
+        selector.wakeup();
     }
 
     private void run() {
@@ -736,6 +792,11 @@ class ConnectionEventLoop {
     }
 
     private void doRegister(SocketChannel socketChannel) throws IOException {
+        if (stop.get() || draining.get()) {
+            CloseUtils.closeQuietly(socketChannel);
+            return;
+        }
+
         socketChannel.configureBlocking(false);
         SelectionKey selectionKey = socketChannel.register(selector, SelectionKey.OP_READ);
         SocketAddress socketAddress = socketChannel.getRemoteAddress();

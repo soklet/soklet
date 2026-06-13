@@ -649,18 +649,26 @@ final class DefaultHttpServer implements HttpServer {
 		getLock().lock();
 
 		try {
-			if (getEventLoop().isEmpty())
+			EventLoop eventLoop = getEventLoop().orElse(null);
+
+			if (eventLoop == null)
 				return;
 
+			boolean interrupted = false;
+
 			try {
-				getEventLoop().get().stop();
+				eventLoop.stopAccepting();
+				eventLoop.beginDrain();
+				eventLoop.joinAcceptLoop();
+			} catch (InterruptedException e) {
+				interrupted = true;
 			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server event loop")
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to stop HTTP server accept loop")
 						.throwable(e)
 						.build());
 			}
 
-			boolean interrupted = false;
+			final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
 
 			try {
 				ExecutorService requestHandlerExecutorService = getRequestHandlerExecutorService().orElse(null);
@@ -669,11 +677,8 @@ final class DefaultHttpServer implements HttpServer {
 					// Start graceful shutdown (no new tasks)
 					requestHandlerExecutorService.shutdown();
 
-					// Single wall-clock budget for the whole server shutdown
-					final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
-
 					// First: wait gracefully up to the remaining budget
-					long remMillis = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+					long remMillis = remainingMillis(deadlineNanos);
 					boolean done = remMillis == 0L || requestHandlerExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
 
 					if (!done) {
@@ -681,9 +686,18 @@ final class DefaultHttpServer implements HttpServer {
 						requestHandlerExecutorService.shutdownNow();
 
 						// Small best-effort wait with whatever time remains
-						remMillis = Math.max(100L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+						remMillis = Math.max(1L, remainingMillis(deadlineNanos));
 						requestHandlerExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
 					}
+				}
+
+				try {
+					eventLoop.awaitConnectionsDrained(Duration.ofMillis(remainingMillis(deadlineNanos)));
+				} catch (InterruptedException e) {
+					interrupted = true;
+				} finally {
+					eventLoop.stopConnections();
+					eventLoop.joinConnectionLoops();
 				}
 
 				ExecutorService streamingExecutorService = getStreamingExecutorService().orElse(null);
@@ -691,13 +705,12 @@ final class DefaultHttpServer implements HttpServer {
 				if (streamingExecutorService != null) {
 					streamingExecutorService.shutdown();
 
-					final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
-					long remMillis = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+					long remMillis = remainingMillis(deadlineNanos);
 					boolean done = remMillis == 0L || streamingExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
 
 					if (!done) {
 						streamingExecutorService.shutdownNow();
-						remMillis = Math.max(100L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+						remMillis = Math.max(1L, remainingMillis(deadlineNanos));
 						streamingExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
 					}
 				}
@@ -712,7 +725,7 @@ final class DefaultHttpServer implements HttpServer {
 
 				if (requestHandlerTimeoutScheduler != null) {
 					requestHandlerTimeoutScheduler.shutdown();
-					long remMillis = Math.max(0L, getShutdownTimeout().toMillis());
+					long remMillis = remainingMillis(deadlineNanos);
 					requestHandlerTimeoutScheduler.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
 					requestHandlerTimeoutScheduler.shutdownNow();
 				}
@@ -720,7 +733,7 @@ final class DefaultHttpServer implements HttpServer {
 				interrupted = true;
 			} catch (Exception e) {
 				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
-								"Unable to shut down server request handler executor service")
+								"Unable to shut down HTTP server resources")
 						.throwable(e)
 						.build());
 			} finally {
@@ -736,6 +749,10 @@ final class DefaultHttpServer implements HttpServer {
 
 			getLock().unlock();
 		}
+	}
+
+	private long remainingMillis(long deadlineNanos) {
+		return Math.max(0L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
 	}
 
 	@NonNull

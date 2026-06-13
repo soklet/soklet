@@ -29,7 +29,9 @@ public class EventLoop {
     private final ConnectionListener connectionListener;
 
     private final Selector selector;
-    private final AtomicBoolean stop;
+    private final AtomicBoolean stopAccepting;
+    private final AtomicBoolean stopConnections;
+    private final AtomicBoolean draining;
     private final ServerSocketChannel serverSocketChannel;
     private final List<ConnectionEventLoop> connectionEventLoops;
     private final Thread thread;
@@ -57,12 +59,14 @@ public class EventLoop {
         this.connectionListener = connectionListener == null ? NoopConnectionListener.instance() : connectionListener;
 
         selector = Selector.open();
-        stop = new AtomicBoolean();
+        stopAccepting = new AtomicBoolean();
+        stopConnections = new AtomicBoolean();
+        draining = new AtomicBoolean();
 
         AtomicLong connectionCounter = new AtomicLong();
         connectionEventLoops = new ArrayList<>();
         for (int i = 0; i < options.concurrency(); i++) {
-            connectionEventLoops.add(new ConnectionEventLoop(options, logger, handler, connectionCounter, stop));
+            connectionEventLoops.add(new ConnectionEventLoop(options, logger, handler, connectionCounter, stopConnections, draining));
         }
 
         thread = new Thread(this::run, "event-loop");
@@ -103,7 +107,9 @@ public class EventLoop {
             } catch (Throwable ignored) {
                 // No safe fallback sink is available from the accept-loop thread.
             }
-            stop.set(true); // stop the world on critical error
+            stopAccepting.set(true);
+            stopConnections.set(true); // stop the world on critical error
+            connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
         } finally {
             CloseUtils.closeQuietly(selector);
             CloseUtils.closeQuietly(serverSocketChannel);
@@ -111,12 +117,16 @@ public class EventLoop {
     }
 
     private void doRun() throws IOException {
-        while (!stop.get()) {
+        while (!stopAccepting.get() && !stopConnections.get()) {
             selector.select(options.resolution().toMillis());
             Set<SelectionKey> selectedKeys = selector.selectedKeys();
             Iterator<SelectionKey> it = selectedKeys.iterator();
             while (it.hasNext()) {
                 SelectionKey selKey = it.next();
+                if (stopAccepting.get() || stopConnections.get()) {
+                    it.remove();
+                    break;
+                }
                 if (selKey.isAcceptable()) {
                     acceptReadyConnection();
                 }
@@ -130,6 +140,10 @@ public class EventLoop {
     }
 
     boolean acceptReadyConnection(SocketAcceptor socketAcceptor) throws IOException {
+        if (stopAccepting.get() || stopConnections.get()) {
+            return false;
+        }
+
         SocketChannel socketChannel = null;
         InetSocketAddress remoteAddress = null;
 
@@ -167,7 +181,7 @@ public class EventLoop {
             connectionEventLoop.register(socketChannel);
             return true;
         } catch (IOException e) {
-            if (stop.get() || !serverSocketChannel.isOpen()) {
+            if (stopAccepting.get() || stopConnections.get() || !serverSocketChannel.isOpen()) {
                 throw e;
             }
 
@@ -204,22 +218,67 @@ public class EventLoop {
     }
 
     public void stop() {
-        stop.set(true);
+        stopAccepting.set(true);
+        stopConnections.set(true);
+        selector.wakeup();
+        connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
+    }
+
+    public void stopAccepting() {
+        stopAccepting.set(true);
+        selector.wakeup();
+    }
+
+    public void beginDrain() {
+        draining.set(true);
+        connectionEventLoops.forEach(ConnectionEventLoop::beginDrain);
+    }
+
+    public void stopConnections() {
+        stopConnections.set(true);
+        connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
     }
 
     public boolean isRunning() {
-        return thread.isAlive() && !stop.get();
+        return thread.isAlive() && !stopAccepting.get() && !stopConnections.get();
+    }
+
+    public boolean isAccepting() {
+        return thread.isAlive() && !stopAccepting.get() && !stopConnections.get();
     }
 
     boolean isStopped() {
-        return stop.get();
+        return stopAccepting.get() || stopConnections.get();
     }
 
     public void join() throws InterruptedException {
+        joinAcceptLoop();
+        joinConnectionLoops();
+    }
+
+    public void joinAcceptLoop() throws InterruptedException {
         thread.join();
+    }
+
+    public void joinConnectionLoops() throws InterruptedException {
         for (ConnectionEventLoop connectionEventLoop : connectionEventLoops) {
             connectionEventLoop.join();
         }
+    }
+
+    public boolean awaitConnectionsDrained(Duration timeout) throws InterruptedException {
+        long deadlineNanos = System.nanoTime() + Math.max(0L, timeout.toNanos());
+
+        while (totalConnections() > 0) {
+            long remainingNanos = deadlineNanos - System.nanoTime();
+
+            if (remainingNanos <= 0L)
+                return false;
+
+            Thread.sleep(Math.min(10L, Math.max(1L, remainingNanos / 1_000_000L)));
+        }
+
+        return true;
     }
 
     private void logAcceptLoopFailure(IOException e) {
@@ -239,7 +298,9 @@ public class EventLoop {
             Thread.sleep(ACCEPT_FAILURE_BACKOFF.toMillis());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            stop.set(true);
+            stopAccepting.set(true);
+            stopConnections.set(true);
+            connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
         }
     }
 }

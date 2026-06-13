@@ -26,12 +26,15 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -47,6 +50,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
+import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
 import static com.soklet.TestSupport.readAll;
 
@@ -164,6 +168,124 @@ public class HttpServerLifecycleTests {
 		httpServer.stop();
 		Assertions.assertTrue(internal.getEventLoop().isEmpty());
 		Assertions.assertTrue(internal.getRequestHandlerExecutorService().isEmpty());
+	}
+
+	@Test
+	public void stopDrainsInFlightHttpResponseBeforeClosingConnection() throws Exception {
+		int port = findFreePort();
+		CountDownLatch handlerStarted = new CountDownLatch(1);
+		CountDownLatch releaseHandler = new CountDownLatch(1);
+		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.host("127.0.0.1")
+				.shutdownTimeout(Duration.ofSeconds(3))
+				.build();
+		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		httpServer.initialize(cfg, (request, consumer) -> {
+			handlerStarted.countDown();
+			try {
+				if (!releaseHandler.await(2, TimeUnit.SECONDS))
+					throw new AssertionError("Timed out waiting to release handler");
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return;
+			}
+
+			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.body("done".getBytes(StandardCharsets.UTF_8))
+					.build();
+			consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
+		});
+
+		httpServer.start();
+
+		try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
+			socket.setSoTimeout(4000);
+			OutputStream outputStream = socket.getOutputStream();
+			outputStream.write(("""
+					GET /slow HTTP/1.1\r
+					Host: localhost\r
+					Connection: keep-alive\r
+					\r
+					""").getBytes(StandardCharsets.ISO_8859_1));
+			outputStream.flush();
+
+			Assertions.assertTrue(handlerStarted.await(2, TimeUnit.SECONDS), "Expected request handler to start");
+
+			EventLoop eventLoop = ((DefaultHttpServer) httpServer).getEventLoop().orElseThrow();
+			Thread stopThread = new Thread(() -> {
+				try {
+					httpServer.stop();
+				} catch (Throwable t) {
+					stopFailure.set(t);
+				}
+			}, "http-graceful-stop-test");
+			stopThread.start();
+
+			assertEventually(() -> !eventLoop.isAccepting(), Duration.ofSeconds(2),
+					"Expected HTTP accept loop to stop before handler response is released");
+
+			releaseHandler.countDown();
+
+			String response = new String(readAll(socket.getInputStream()), StandardCharsets.ISO_8859_1);
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
+			Assertions.assertTrue(response.contains("Connection: close\r\n"), response);
+			Assertions.assertTrue(response.endsWith("\r\n\r\ndone"), response);
+
+			stopThread.join(3000);
+			Assertions.assertFalse(stopThread.isAlive(), "HTTP stop did not complete after response drain");
+			if (stopFailure.get() != null)
+				throw new AssertionError("HTTP stop failed", stopFailure.get());
+		} finally {
+			httpServer.stop();
+		}
+	}
+
+	@Test
+	public void stopClosesIdleHttpKeepAliveConnections() throws Exception {
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.host("127.0.0.1")
+				.shutdownTimeout(Duration.ofSeconds(3))
+				.build();
+		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		httpServer.initialize(cfg, (request, consumer) -> {
+			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
+					.body("ok".getBytes(StandardCharsets.UTF_8))
+					.build();
+			consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
+		});
+
+		httpServer.start();
+
+		try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
+			socket.setSoTimeout(4000);
+			OutputStream outputStream = socket.getOutputStream();
+			InputStream inputStream = socket.getInputStream();
+			outputStream.write(("""
+					GET /health HTTP/1.1\r
+					Host: localhost\r
+					Connection: keep-alive\r
+					\r
+					""").getBytes(StandardCharsets.ISO_8859_1));
+			outputStream.flush();
+
+			String response = readUntil(inputStream, "ok", 8192);
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
+			Assertions.assertTrue(response.endsWith("ok"), response);
+
+			httpServer.stop();
+
+			Assertions.assertEquals(-1, inputStream.read(), "Idle keep-alive connection should close on stop");
+		} finally {
+			httpServer.stop();
+		}
 	}
 
 	@Test
@@ -489,6 +611,35 @@ public class HttpServerLifecycleTests {
 		}
 
 		Assertions.assertFalse(awaitThread.isAlive(), "awaitShutdown test thread did not finish");
+	}
+
+	@NonNull
+	private static String readUntil(@NonNull InputStream inputStream,
+																	@NonNull String delimiter,
+																	int maxBytes) throws IOException {
+		byte[] delimiterBytes = delimiter.getBytes(StandardCharsets.ISO_8859_1);
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		int matched = 0;
+
+		while (output.size() < maxBytes) {
+			int value = inputStream.read();
+
+			if (value < 0)
+				break;
+
+			output.write(value);
+
+			if ((byte) value == delimiterBytes[matched]) {
+				matched++;
+
+				if (matched == delimiterBytes.length)
+					break;
+			} else {
+				matched = (byte) value == delimiterBytes[0] ? 1 : 0;
+			}
+		}
+
+		return output.toString(StandardCharsets.ISO_8859_1);
 	}
 
 	private static void assertEventually(@NonNull BooleanSupplier condition,
