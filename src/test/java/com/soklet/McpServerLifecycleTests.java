@@ -83,6 +83,22 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void defaultMcpServerWriteTimeoutProtectsSlowStreamsAndCanBeDisabled() throws Exception {
+		DefaultMcpServer defaultServer = (DefaultMcpServer) McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		DefaultMcpServer disabledServer = (DefaultMcpServer) McpServer.withPort(0)
+				.writeTimeout(Duration.ZERO)
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		Field writeTimeoutField = DefaultMcpServer.class.getDeclaredField("writeTimeout");
+		writeTimeoutField.setAccessible(true);
+
+		Assertions.assertEquals(Duration.ofSeconds(30), writeTimeoutField.get(defaultServer));
+		Assertions.assertEquals(Duration.ZERO, writeTimeoutField.get(disabledServer));
+	}
+
+	@Test
 	public void mcpOnlyConfigDoesNotRequireHttpResourceMethodsAndStartsConfiguredMcpServer() throws Exception {
 		FakeMcpServer fakeMcpServer = new FakeMcpServer();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(fakeMcpServer)

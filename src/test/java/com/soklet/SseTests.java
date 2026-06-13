@@ -344,6 +344,17 @@ public class SseTests {
 		Assertions.assertEquals(0, disabledServer.getConcurrentConnectionLimit());
 	}
 
+	@Test
+	public void defaultWriteTimeoutProtectsSlowSseStreamsAndCanBeDisabled() {
+		DefaultSseServer defaultServer = (DefaultSseServer) SseServer.withPort(0).build();
+		DefaultSseServer disabledServer = (DefaultSseServer) SseServer.withPort(0)
+				.writeTimeout(Duration.ZERO)
+				.build();
+
+		Assertions.assertEquals(Duration.ofSeconds(30), defaultServer.getWriteTimeout());
+		Assertions.assertEquals(Duration.ZERO, disabledServer.getWriteTimeout());
+	}
+
 	@ThreadSafe
 	protected static class SseEventResource {
 		@NonNull

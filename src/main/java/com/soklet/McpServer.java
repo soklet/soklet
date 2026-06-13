@@ -497,9 +497,12 @@ public interface McpServer extends AutoCloseable {
 		}
 
 		/**
-		 * Sets the transport write timeout.
+		 * Sets the transport write timeout for established MCP event streams.
+		 * <p>
+		 * If this value is not specified, Soklet uses the server default. Use
+		 * {@link Duration#ZERO} to disable MCP event-stream write timeouts.
 		 *
-		 * @param writeTimeout the write timeout
+		 * @param writeTimeout the write timeout, or {@code null} for the default
 		 * @return this builder
 		 */
 		@NonNull

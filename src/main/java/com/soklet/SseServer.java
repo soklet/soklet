@@ -274,6 +274,15 @@ public interface SseServer extends AutoCloseable {
 			return this;
 		}
 
+		/**
+		 * Sets the transport write timeout for established SSE streams.
+		 * <p>
+		 * If this value is not specified, Soklet uses the server default. Use
+		 * {@link Duration#ZERO} to disable SSE stream write timeouts.
+		 *
+		 * @param writeTimeout the write timeout, or {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder writeTimeout(@Nullable Duration writeTimeout) {
 			this.writeTimeout = writeTimeout;

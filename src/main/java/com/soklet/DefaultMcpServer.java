@@ -123,7 +123,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
 		DEFAULT_CONNECTION_QUEUE_CAPACITY = 128;
 		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
-		DEFAULT_WRITE_TIMEOUT = Duration.ZERO;
+		DEFAULT_WRITE_TIMEOUT = Duration.ofSeconds(30);
 		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
 		HEARTBEAT_BYTES = ":\n\n".getBytes(StandardCharsets.UTF_8);
 	}

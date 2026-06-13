@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.3.1-SNAPSHOT (Unreleased)
+
+### Behavior Changes
+
+- SSE and MCP event streams now default to a 30 second write timeout so stalled stream readers are disconnected by default. Set `SseServer.Builder.writeTimeout(Duration.ZERO)` or `McpServer.Builder.writeTimeout(Duration.ZERO)` to disable stream write timeouts.
+
 ## 3.3.0 (2026-06-10)
 
 ### Behavior Changes
