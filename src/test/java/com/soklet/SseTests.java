@@ -37,6 +37,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
@@ -2251,6 +2252,58 @@ public class SseTests {
 						MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR)));
 		Assertions.assertTrue(logEvents.stream().anyMatch(logEvent ->
 				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE));
+	}
+
+	@Test
+	public void sseHandshakeTaskClearsHandlerThreadReferenceAfterTaskReturns() throws Exception {
+		ExecutorService requestReaderExecutorService = Executors.newSingleThreadExecutor();
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		server.initialize(sokletConfig, (request, requestResultConsumer) -> { /* no-op */ });
+
+		Field requestReaderExecutorServiceField = DefaultSseServer.class.getDeclaredField("requestReaderExecutorService");
+		requestReaderExecutorServiceField.setAccessible(true);
+		requestReaderExecutorServiceField.set(server, requestReaderExecutorService);
+
+		Class<?> handshakeContextClass = Class.forName("com.soklet.DefaultSseServer$HandshakeContext");
+		Constructor<?> constructor = handshakeContextClass.getDeclaredConstructor(InetSocketAddress.class);
+		constructor.setAccessible(true);
+		Object handshakeContext = constructor.newInstance((InetSocketAddress) null);
+
+		Method method = DefaultSseServer.class.getDeclaredMethod("handleClientSocketChannel",
+				SocketChannel.class,
+				handshakeContextClass);
+		method.setAccessible(true);
+
+		Field handlerThreadRefField = handshakeContextClass.getDeclaredField("handlerThreadRef");
+		handlerThreadRefField.setAccessible(true);
+
+		try (ServerSocketChannel serverSocketChannel = ServerSocketChannel.open()) {
+			serverSocketChannel.bind(new InetSocketAddress("127.0.0.1", 0));
+
+			try (SocketChannel clientSocketChannel = SocketChannel.open(serverSocketChannel.getLocalAddress());
+					 SocketChannel acceptedSocketChannel = serverSocketChannel.accept()) {
+				ByteBuffer request = ByteBuffer.wrap(("""
+						GET /sse-timeout HTTP/1.1\r
+						Host: 127.0.0.1\r
+						Accept: text/event-stream\r
+						Connection: close\r
+						\r
+						""").getBytes(StandardCharsets.ISO_8859_1));
+
+				while (request.hasRemaining())
+					clientSocketChannel.write(request);
+
+				method.invoke(server, acceptedSocketChannel, handshakeContext);
+
+				AtomicReference<?> handlerThreadRef = (AtomicReference<?>) handlerThreadRefField.get(handshakeContext);
+				Assertions.assertNull(handlerThreadRef.get(), "SSE handshake task should clear its handler thread reference");
+			}
+		} finally {
+			requestReaderExecutorService.shutdownNow();
+		}
 	}
 
 	@Test

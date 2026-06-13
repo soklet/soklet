@@ -1729,6 +1729,7 @@ final class DefaultSseServer implements SseServer {
 			if (t instanceof InterruptedException)
 				Thread.currentThread().interrupt();
 		} finally {
+			handshakeContext.handlerThreadRef.compareAndSet(Thread.currentThread(), null);
 			cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 
 			if (!connectionProcessingStarted) {

@@ -483,127 +483,131 @@ final class DefaultHttpServer implements HttpServer {
 
 				try {
 					requestHandlerExecutorServiceReference.submit(() -> {
-						if (responseWritten.get())
-							return;
-
-						handlerThreadRef.set(Thread.currentThread());
-
-						RequestHandler requestHandler = getRequestHandler().orElse(null);
-
-						if (requestHandler == null)
-							return;
-
-						Request request = null;
-
 						try {
-							notifyWillReadRequest(remoteAddress, requestTarget);
+							if (responseWritten.get())
+								return;
 
-							// Normalize body
-							byte[] body = microhttpRequest.body();
+							handlerThreadRef.set(Thread.currentThread());
 
-							if (body != null && body.length == 0)
-								body = null;
+							RequestHandler requestHandler = getRequestHandler().orElse(null);
 
-							boolean contentTooLarge = microhttpRequest.contentTooLarge();
+							if (requestHandler == null)
+								return;
 
-							HttpMethod httpMethod;
+							Request request = null;
 
 							try {
-								String normalizedMethod = trimAggressivelyToEmpty(microhttpRequest.method()).toUpperCase(ENGLISH);
+								notifyWillReadRequest(remoteAddress, requestTarget);
 
-								if (normalizedMethod.equals("PRI"))
-									throw new IllegalRequestException("HTTP/2.0 Connection Preface specified, but Soklet only supports HTTP/1.1");
+								// Normalize body
+								byte[] body = microhttpRequest.body();
 
-								httpMethod = HttpMethod.valueOf(normalizedMethod);
-							} catch (IllegalArgumentException e) {
-								throw new IllegalRequestException(format("Unsupported HTTP method specified: '%s'", microhttpRequest.method()));
-							}
+								if (body != null && body.length == 0)
+									body = null;
 
-							request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
-									.multipartParser(getMultipartParser())
-									.idGenerator(getIdGenerator())
-									.microhttpHeaders(microhttpRequest.headers())
-									.body(body)
-									.remoteAddress(microhttpRequest.remoteAddress())
-									.contentTooLarge(contentTooLarge)
-									.build();
+								boolean contentTooLarge = microhttpRequest.contentTooLarge();
 
-							notifyDidReadRequest(remoteAddress, requestTarget);
+								HttpMethod httpMethod;
 
-							Request requestForResponse = request;
-
-							requestHandler.handleRequest(requestForResponse, (requestResult -> {
 								try {
-									MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestForResponse,
-											requestResult.getResourceMethod().orElse(null),
-											requestResult.getMarshaledResponse());
-									if (responseWritten.compareAndSet(false, true)) {
-										cancelTimeout(timeoutFutureRef.getAndSet(null));
-										try {
-											microHttpCallback.accept(microhttpResponse);
-										} catch (Throwable t) {
-											safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
-													.throwable(t)
-													.build());
+									String normalizedMethod = trimAggressivelyToEmpty(microhttpRequest.method()).toUpperCase(ENGLISH);
+
+									if (normalizedMethod.equals("PRI"))
+										throw new IllegalRequestException("HTTP/2.0 Connection Preface specified, but Soklet only supports HTTP/1.1");
+
+									httpMethod = HttpMethod.valueOf(normalizedMethod);
+								} catch (IllegalArgumentException e) {
+									throw new IllegalRequestException(format("Unsupported HTTP method specified: '%s'", microhttpRequest.method()));
+								}
+
+								request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
+										.multipartParser(getMultipartParser())
+										.idGenerator(getIdGenerator())
+										.microhttpHeaders(microhttpRequest.headers())
+										.body(body)
+										.remoteAddress(microhttpRequest.remoteAddress())
+										.contentTooLarge(contentTooLarge)
+										.build();
+
+								notifyDidReadRequest(remoteAddress, requestTarget);
+
+								Request requestForResponse = request;
+
+								requestHandler.handleRequest(requestForResponse, (requestResult -> {
+									try {
+										MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestForResponse,
+												requestResult.getResourceMethod().orElse(null),
+												requestResult.getMarshaledResponse());
+										if (responseWritten.compareAndSet(false, true)) {
+											cancelTimeout(timeoutFutureRef.getAndSet(null));
+											try {
+												microHttpCallback.accept(microhttpResponse);
+											} catch (Throwable t) {
+												safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
+														.throwable(t)
+														.build());
+											}
+										}
+									} catch (Throwable t) {
+										safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
+												.throwable(t)
+												.build());
+
+										if (responseWritten.compareAndSet(false, true)) {
+											cancelTimeout(timeoutFutureRef.getAndSet(null));
+											try {
+												microHttpCallback.accept(provideMicrohttpFailsafeResponse(500, microhttpRequest, t));
+											} catch (Throwable t2) {
+												safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+														.throwable(t2)
+														.build());
+											}
 										}
 									}
-								} catch (Throwable t) {
-									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
+								}));
+							} catch (Throwable t) {
+								Integer failsafeStatusCode = 500;
+								RequestReadFailureReason failureReason = RequestReadFailureReason.INTERNAL_ERROR;
+
+								if (t instanceof IllegalRequestException) {
+									failsafeStatusCode = 400;
+									failureReason = RequestReadFailureReason.UNPARSEABLE_REQUEST;
+									String message = t.getMessage() == null ? t.getClass().getName() : t.getMessage();
+									safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, message)
 											.throwable(t)
 											.build());
-
-									if (responseWritten.compareAndSet(false, true)) {
-										cancelTimeout(timeoutFutureRef.getAndSet(null));
-										try {
-											microHttpCallback.accept(provideMicrohttpFailsafeResponse(500, microhttpRequest, t));
-										} catch (Throwable t2) {
-											safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
-													.throwable(t2)
-													.build());
-										}
-									}
-								}
-							}));
-						} catch (Throwable t) {
-							Integer failsafeStatusCode = 500;
-							RequestReadFailureReason failureReason = RequestReadFailureReason.INTERNAL_ERROR;
-
-							if (t instanceof IllegalRequestException) {
-								failsafeStatusCode = 400;
-								failureReason = RequestReadFailureReason.UNPARSEABLE_REQUEST;
-								String message = t.getMessage() == null ? t.getClass().getName() : t.getMessage();
-								safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, message)
-										.throwable(t)
-										.build());
-							} else if (t instanceof URISyntaxException) {
-								failsafeStatusCode = 400;
-								failureReason = RequestReadFailureReason.UNPARSEABLE_REQUEST;
-								safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, format("Unable to parse request URI: %s", microhttpRequest.uri()))
-										.throwable(t)
-										.build());
-							} else {
-								safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
-										.throwable(t)
-										.build());
-							}
-
-							if (request == null) {
-								notifyDidFailToReadRequest(microhttpRequest.remoteAddress(),
-										microhttpRequest.uri(),
-										failureReason,
-										t);
-							}
-
-							if (responseWritten.compareAndSet(false, true)) {
-								cancelTimeout(timeoutFutureRef.getAndSet(null));
-								try {
-									microHttpCallback.accept(provideMicrohttpFailsafeResponse(failsafeStatusCode, microhttpRequest, t));
-								} catch (Throwable t2) {
-									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
-											.throwable(t2)
+								} else if (t instanceof URISyntaxException) {
+									failsafeStatusCode = 400;
+									failureReason = RequestReadFailureReason.UNPARSEABLE_REQUEST;
+									safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, format("Unable to parse request URI: %s", microhttpRequest.uri()))
+											.throwable(t)
+											.build());
+								} else {
+									safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An unexpected error occurred during request handling")
+											.throwable(t)
 											.build());
 								}
+
+								if (request == null) {
+									notifyDidFailToReadRequest(microhttpRequest.remoteAddress(),
+											microhttpRequest.uri(),
+											failureReason,
+											t);
+								}
+
+								if (responseWritten.compareAndSet(false, true)) {
+									cancelTimeout(timeoutFutureRef.getAndSet(null));
+									try {
+										microHttpCallback.accept(provideMicrohttpFailsafeResponse(failsafeStatusCode, microhttpRequest, t));
+									} catch (Throwable t2) {
+										safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
+												.throwable(t2)
+												.build());
+									}
+								}
 							}
+						} finally {
+							handlerThreadRef.compareAndSet(Thread.currentThread(), null);
 						}
 					});
 

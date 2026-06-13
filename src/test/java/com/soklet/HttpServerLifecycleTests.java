@@ -46,7 +46,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
@@ -285,6 +287,66 @@ public class HttpServerLifecycleTests {
 			Assertions.assertEquals(-1, inputStream.read(), "Idle keep-alive connection should close on stop");
 		} finally {
 			httpServer.stop();
+		}
+	}
+
+	@Test
+	public void requestHandlerTimeoutDoesNotInterruptReusedHandlerThreadAfterTaskReturns() throws Exception {
+		int port = findFreePort();
+		ExecutorService executorService = Executors.newSingleThreadExecutor();
+		CountDownLatch handlerReturned = new CountDownLatch(1);
+		CountDownLatch sentinelStarted = new CountDownLatch(1);
+		CountDownLatch releaseSentinel = new CountDownLatch(1);
+		AtomicBoolean sentinelInterrupted = new AtomicBoolean(false);
+		HttpServer httpServer = HttpServer.withPort(port)
+				.host("127.0.0.1")
+				.requestHandlerTimeout(Duration.ofMillis(500))
+				.requestHandlerExecutorServiceSupplier(() -> executorService)
+				.build();
+		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		httpServer.initialize(cfg, (request, consumer) -> handlerReturned.countDown());
+
+		try {
+			httpServer.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
+				socket.setSoTimeout(3000);
+				OutputStream outputStream = socket.getOutputStream();
+				outputStream.write(("""
+						GET /timeout HTTP/1.1\r
+						Host: localhost\r
+						Connection: close\r
+						\r
+						""").getBytes(StandardCharsets.ISO_8859_1));
+				outputStream.flush();
+
+				Assertions.assertTrue(handlerReturned.await(2, TimeUnit.SECONDS), "Expected request handler to return");
+				Future<?> sentinel = executorService.submit(() -> {
+					sentinelStarted.countDown();
+					try {
+						releaseSentinel.await(2, TimeUnit.SECONDS);
+					} catch (InterruptedException e) {
+						sentinelInterrupted.set(true);
+						Thread.currentThread().interrupt();
+					}
+				});
+
+				Assertions.assertTrue(sentinelStarted.await(2, TimeUnit.SECONDS), "Expected sentinel task to start");
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response, "Expected timeout response");
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 503"), response);
+
+				releaseSentinel.countDown();
+				sentinel.get(2, TimeUnit.SECONDS);
+				Assertions.assertFalse(sentinelInterrupted.get(), "Stale timeout task interrupted a reused handler thread");
+			}
+		} finally {
+			releaseSentinel.countDown();
+			httpServer.stop();
+			executorService.shutdownNow();
 		}
 	}
 
