@@ -198,6 +198,8 @@ public interface McpServer extends AutoCloseable {
 		@Nullable
 		Integer maximumHeaderCount;
 		@Nullable
+		Integer maximumHeadersSizeInBytes;
+		@Nullable
 		Integer maximumRequestTargetLengthInBytes;
 		@Nullable
 		Integer requestReadBufferSizeInBytes;
@@ -404,8 +406,9 @@ public interface McpServer extends AutoCloseable {
 		/**
 		 * Sets the maximum accepted MCP request size in bytes.
 		 * <p>
-		 * The MCP transport rejects a header section larger than this limit and rejects
-		 * requests whose declared body size is larger than this limit.
+		 * The MCP transport rejects requests whose declared body size is larger than
+		 * this limit. Header-section size is governed by
+		 * {@link #maximumHeadersSizeInBytes(Integer)}.
 		 *
 		 * @param maximumRequestSizeInBytes the maximum request size, or {@code null} for the default
 		 * @return this builder
@@ -425,6 +428,21 @@ public interface McpServer extends AutoCloseable {
 		@NonNull
 		public Builder maximumHeaderCount(@Nullable Integer maximumHeaderCount) {
 			this.maximumHeaderCount = maximumHeaderCount;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum accepted MCP HTTP header-section size in bytes.
+		 * <p>
+		 * This limit applies to the header bytes after the request line, including
+		 * header-field line endings and the terminating blank line.
+		 *
+		 * @param maximumHeadersSizeInBytes the maximum headers size, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumHeadersSizeInBytes(@Nullable Integer maximumHeadersSizeInBytes) {
+			this.maximumHeadersSizeInBytes = maximumHeadersSizeInBytes;
 			return this;
 		}
 

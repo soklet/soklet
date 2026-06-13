@@ -93,6 +93,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_HEADER_COUNT;
 	@NonNull
+	private static final Integer DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES;
+	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 	@NonNull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
@@ -118,6 +120,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER = 16;
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024 * 10;
 		DEFAULT_MAXIMUM_HEADER_COUNT = 100;
+		DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES = 64 * 1_024;
 		DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES = 8_192;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
 		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
@@ -160,6 +163,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	private final Integer maximumRequestSizeInBytes;
 	@NonNull
 	private final Integer maximumHeaderCount;
+	@NonNull
+	private final Integer maximumHeadersSizeInBytes;
 	@NonNull
 	private final Integer maximumRequestTargetLengthInBytes;
 	@NonNull
@@ -227,6 +232,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 		this.maximumHeaderCount = builder.maximumHeaderCount != null ? builder.maximumHeaderCount : DEFAULT_MAXIMUM_HEADER_COUNT;
+		this.maximumHeadersSizeInBytes = builder.maximumHeadersSizeInBytes != null ? builder.maximumHeadersSizeInBytes : DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES;
 		this.maximumRequestTargetLengthInBytes = builder.maximumRequestTargetLengthInBytes != null ? builder.maximumRequestTargetLengthInBytes : DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : DEFAULT_CONCURRENT_CONNECTION_LIMIT;
@@ -264,6 +270,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 		if (this.maximumHeaderCount < 1)
 			throw new IllegalArgumentException("Maximum header count must be > 0");
+
+		if (this.maximumHeadersSizeInBytes < 1)
+			throw new IllegalArgumentException("Maximum headers size must be > 0");
 
 		if (this.maximumRequestTargetLengthInBytes < 1)
 			throw new IllegalArgumentException("Maximum request target length must be > 0");
@@ -1067,6 +1076,10 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 			byte[] accumulated = headerBytes.toByteArray();
 			headerEndIndex = endOfHeaders(accumulated);
+			int headerMeasurementEndIndex = headerEndIndex == -1 ? accumulated.length : headerEndIndex;
+
+			if (headerSectionLengthInBytes(accumulated, headerMeasurementEndIndex) > this.maximumHeadersSizeInBytes)
+				throw new RequestTooLargeException();
 
 			if (headerEndIndex != -1)
 				bodyPrefixLength = accumulated.length - headerEndIndex;
@@ -1289,6 +1302,29 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		for (int i = 0; i < bytes.length - 1; i++) {
 			if (bytes[i] == '\n' && bytes[i + 1] == '\n')
 				return i + 2;
+		}
+
+		return -1;
+	}
+
+	private int headerSectionLengthInBytes(byte @NonNull [] bytes,
+																				 int endExclusive) {
+		requireNonNull(bytes);
+
+		int requestLineEndIndex = requestLineEndIndex(bytes, endExclusive);
+		if (requestLineEndIndex == -1)
+			return 0;
+
+		return endExclusive - requestLineEndIndex;
+	}
+
+	private int requestLineEndIndex(byte @NonNull [] bytes,
+																	int endExclusive) {
+		requireNonNull(bytes);
+
+		for (int i = 0; i < endExclusive; i++) {
+			if (bytes[i] == '\n')
+				return i + 1;
 		}
 
 		return -1;

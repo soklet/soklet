@@ -145,7 +145,7 @@ class ConnectionEventLoop {
             id = Long.toString(connectionCounter.getAndIncrement());
             this.remoteAddress = remoteAddress;
             requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestSize(),
-                    options.maxHeaderCount(), options.maxRequestTargetLength());
+                    options.maxHeaderCount(), options.maxHeadersSize(), options.maxRequestTargetLength());
             scheduleRequestReadTimeoutForCurrentParserState();
             closed = new AtomicBoolean(false);
         }

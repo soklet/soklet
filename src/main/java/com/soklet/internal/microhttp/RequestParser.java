@@ -49,6 +49,7 @@ class RequestParser {
     private final @Nullable InetSocketAddress remoteAddress;
     private final int maxRequestSize;
     private final int maxHeaderCount;
+    private final int maxHeadersSize;
     private final int maxRequestTargetLength;
 
     private State state = State.METHOD;
@@ -62,6 +63,7 @@ class RequestParser {
     @Nullable
     private String hostHeaderValue;
     private boolean expectHeaderPresent;
+    private int headersStartPosition;
     private int chunkSize;
     private long chunkBodySize;
     @Nullable
@@ -94,11 +96,23 @@ class RequestParser {
                   int maxRequestSize,
                   int maxHeaderCount,
                   int maxRequestTargetLength) {
+        this(tokenizer, remoteAddress, maxRequestSize, maxHeaderCount, Integer.MAX_VALUE, maxRequestTargetLength);
+    }
+
+    RequestParser(ByteTokenizer tokenizer,
+                  @Nullable InetSocketAddress remoteAddress,
+                  int maxRequestSize,
+                  int maxHeaderCount,
+                  int maxHeadersSize,
+                  int maxRequestTargetLength) {
         if (maxRequestSize < 1) {
             throw new IllegalArgumentException("Maximum request size must be > 0");
         }
         if (maxHeaderCount < 1) {
             throw new IllegalArgumentException("Maximum header count must be > 0");
+        }
+        if (maxHeadersSize < 1) {
+            throw new IllegalArgumentException("Maximum headers size must be > 0");
         }
         if (maxRequestTargetLength < 1) {
             throw new IllegalArgumentException("Maximum request target length must be > 0");
@@ -107,6 +121,7 @@ class RequestParser {
         this.remoteAddress = remoteAddress;
         this.maxRequestSize = maxRequestSize;
         this.maxHeaderCount = maxHeaderCount;
+        this.maxHeadersSize = maxHeadersSize;
         this.maxRequestTargetLength = maxRequestTargetLength;
         reset();
     }
@@ -146,6 +161,7 @@ class RequestParser {
         hostHeaderCount = 0;
         hostHeaderValue = null;
         expectHeaderPresent = false;
+        headersStartPosition = -1;
         chunkSize = 0;
         chunkBodySize = 0L;
         chunks = null;
@@ -215,6 +231,7 @@ class RequestParser {
         if (!version.equalsIgnoreCase("HTTP/1.0") && !version.equalsIgnoreCase("HTTP/1.1")) {
             throw new MalformedRequestException("unsupported http version");
         }
+        headersStartPosition = tokenizer.rawPosition();
         state = State.HEADER;
         return true;
     }
@@ -223,8 +240,11 @@ class RequestParser {
         int start = tokenizer.rawPosition();
         int end = tokenizer.indexOf(CRLF);
         if (end < 0) {
+            rejectHeadersTooLarge(start + tokenizer.remaining());
             return false;
         }
+
+        rejectHeadersTooLarge(end + CRLF.length);
 
         if (end == start) { // CR-LF on own line, end of headers
             tokenizer.advanceTo(end + CRLF.length);
@@ -273,6 +293,12 @@ class RequestParser {
         }
 
         return true;
+    }
+
+    private void rejectHeadersTooLarge(int endExclusive) {
+        if (headersStartPosition >= 0 && endExclusive - headersStartPosition > maxHeadersSize) {
+            throw new RequestTooLargeException();
+        }
     }
 
     private Header parseHeaderLine(int start, int end) {

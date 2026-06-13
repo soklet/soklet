@@ -838,6 +838,39 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void startedDefaultMcpServerRejectsTooLargeHeadersWith413() throws Exception {
+		int mcpPort = findFreePort();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.maximumHeadersSizeInBytes(19)
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeRawRequest(socket, """
+						POST /mcp HTTP/1.1\r
+						Host: 127.0.0.1:%d\r
+						X-Test: abc\r
+						Content-Length: 2\r
+						\r
+						{}
+						""".formatted(mcpPort));
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 413"));
+			}
+		}
+	}
+
+	@Test
 	public void startedDefaultMcpServerRejectsTooLongRequestTargetWith400() throws Exception {
 		int mcpPort = findFreePort();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)

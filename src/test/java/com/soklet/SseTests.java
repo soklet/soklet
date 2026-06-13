@@ -2098,6 +2098,20 @@ public class SseTests {
 	}
 
 	@Test
+	public void sseHandshakeParserRejectsTooLargeHeaderSection() {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.maximumHeadersSizeInBytes(19)
+				.build();
+
+		Assertions.assertThrows(IllegalRequestException.class, () -> server.parseRequest("""
+				GET /sse HTTP/1.1\r
+				Host: localhost\r
+				X-Test: abc\r
+				\r
+				""", null));
+	}
+
+	@Test
 	public void sseHandshakeParserRejectsTooLongRequestTarget() {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
 				.maximumRequestTargetLengthInBytes(4)

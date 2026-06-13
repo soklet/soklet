@@ -206,6 +206,8 @@ public interface SseServer extends AutoCloseable {
 		@Nullable
 		Integer maximumHeaderCount;
 		@Nullable
+		Integer maximumHeadersSizeInBytes;
+		@Nullable
 		Integer maximumRequestTargetLengthInBytes;
 		@Nullable
 		Integer requestReadBufferSizeInBytes;
@@ -326,6 +328,21 @@ public interface SseServer extends AutoCloseable {
 		@NonNull
 		public Builder maximumHeaderCount(@Nullable Integer maximumHeaderCount) {
 			this.maximumHeaderCount = maximumHeaderCount;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum accepted SSE handshake header-section size in bytes.
+		 * <p>
+		 * This limit applies to the header bytes after the request line, including
+		 * header-field line endings and the terminating blank line.
+		 *
+		 * @param maximumHeadersSizeInBytes the maximum headers size, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder maximumHeadersSizeInBytes(@Nullable Integer maximumHeadersSizeInBytes) {
+			this.maximumHeadersSizeInBytes = maximumHeadersSizeInBytes;
 			return this;
 		}
 

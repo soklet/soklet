@@ -98,6 +98,8 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_HEADER_COUNT;
 	@NonNull
+	private static final Integer DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES;
+	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 	@NonNull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
@@ -130,6 +132,7 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024 * 10;
 		DEFAULT_MAXIMUM_HEADER_COUNT = 100;
+		DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES = 64 * 1_024;
 		DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES = 8_192;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
@@ -169,6 +172,8 @@ final class DefaultHttpServer implements HttpServer {
 	private final Integer maximumRequestSizeInBytes;
 	@NonNull
 	private final Integer maximumHeaderCount;
+	@NonNull
+	private final Integer maximumHeadersSizeInBytes;
 	@NonNull
 	private final Integer maximumRequestTargetLengthInBytes;
 	@NonNull
@@ -222,6 +227,7 @@ final class DefaultHttpServer implements HttpServer {
 		this.concurrency = builder.concurrency != null ? builder.concurrency : DEFAULT_CONCURRENCY;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 		this.maximumHeaderCount = builder.maximumHeaderCount != null ? builder.maximumHeaderCount : DEFAULT_MAXIMUM_HEADER_COUNT;
+		this.maximumHeadersSizeInBytes = builder.maximumHeadersSizeInBytes != null ? builder.maximumHeadersSizeInBytes : DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES;
 		this.maximumRequestTargetLengthInBytes = builder.maximumRequestTargetLengthInBytes != null ? builder.maximumRequestTargetLengthInBytes : DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.requestHeaderTimeout = builder.requestHeaderTimeout != null ? builder.requestHeaderTimeout : DEFAULT_REQUEST_HEADER_TIMEOUT;
@@ -258,6 +264,9 @@ final class DefaultHttpServer implements HttpServer {
 
 		if (this.maximumHeaderCount < 1)
 			throw new IllegalArgumentException("Maximum header count must be > 0");
+
+		if (this.maximumHeadersSizeInBytes < 1)
+			throw new IllegalArgumentException("Maximum headers size must be > 0");
 
 		if (this.maximumRequestTargetLengthInBytes < 1)
 			throw new IllegalArgumentException("Maximum request target length must be > 0");
@@ -390,6 +399,7 @@ final class DefaultHttpServer implements HttpServer {
 					.withReadBufferSize(getRequestReadBufferSizeInBytes())
 					.withMaxRequestSize(getMaximumRequestSizeInBytes())
 					.withMaxHeaderCount(getMaximumHeaderCount())
+					.withMaxHeadersSize(getMaximumHeadersSizeInBytes())
 					.withMaxRequestTargetLength(getMaximumRequestTargetLengthInBytes())
 					.withAcceptLength(getSocketPendingConnectionLimit())
 					.withMaxConnections(getConcurrentConnectionLimit())
@@ -1505,6 +1515,11 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	protected Integer getMaximumHeaderCount() {
 		return this.maximumHeaderCount;
+	}
+
+	@NonNull
+	protected Integer getMaximumHeadersSizeInBytes() {
+		return this.maximumHeadersSizeInBytes;
 	}
 
 	@NonNull

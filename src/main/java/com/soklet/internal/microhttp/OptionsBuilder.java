@@ -20,6 +20,7 @@ public class OptionsBuilder {
     private int acceptLength;
     private int maxRequestSize;
     private int maxHeaderCount;
+    private int maxHeadersSize;
     private int maxRequestTargetLength;
     private int maxConnections;
     private int concurrency;
@@ -37,6 +38,7 @@ public class OptionsBuilder {
         this.acceptLength = 0;
         this.maxRequestSize = 1_024 * 1_024;
         this.maxHeaderCount = 100;
+        this.maxHeadersSize = 64 * 1_024;
         this.maxRequestTargetLength = 8_192;
         this.maxConnections = 0;
         this.concurrency = Runtime.getRuntime().availableProcessors();
@@ -59,6 +61,7 @@ public class OptionsBuilder {
             this.acceptLength,
             this.maxRequestSize,
             this.maxHeaderCount,
+            this.maxHeadersSize,
             this.maxRequestTargetLength,
             this.maxConnections,
             this.concurrency);
@@ -121,6 +124,11 @@ public class OptionsBuilder {
 
     public OptionsBuilder withMaxHeaderCount(int maxHeaderCount) {
         this.maxHeaderCount = maxHeaderCount;
+        return this;
+    }
+
+    public OptionsBuilder withMaxHeadersSize(int maxHeadersSize) {
+        this.maxHeadersSize = maxHeadersSize;
         return this;
     }
 

@@ -224,6 +224,28 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void parserRejectsTooLargeHeaderSection() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("GET / HTTP/1.1\r\nHost: localhost\r\nX-Test: abc\r\n\r\n");
+
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 19, 1024);
+
+		Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+	}
+
+	@Test
+	public void parserRejectsIncompleteHeaderLineThatExceedsHeaderSectionLimit() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("GET / HTTP/1.1\r\nHost: localhost\r\nX-Test: abc");
+
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 19, 1024);
+
+		Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+	}
+
+	@Test
 	public void parserRejectsTooLongRequestTarget() {
 		ByteTokenizer tokenizer = new ByteTokenizer();
 		byte[] request = ascii("GET /too-long HTTP/1.1\r\nHost: localhost\r\n\r\n");

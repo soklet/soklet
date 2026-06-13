@@ -25,6 +25,19 @@ public class DefaultHttpServerTests {
 	}
 
 	@Test
+	public void maximumHeadersSizeDefaultsCanBeCustomizedAndMustBePositive() {
+		DefaultHttpServer defaultServer = (DefaultHttpServer) HttpServer.withPort(0).build();
+		DefaultHttpServer customServer = (DefaultHttpServer) HttpServer.withPort(0)
+				.maximumHeadersSizeInBytes(1_024)
+				.build();
+
+		Assertions.assertEquals(64 * 1_024, defaultServer.getMaximumHeadersSizeInBytes());
+		Assertions.assertEquals(1_024, customServer.getMaximumHeadersSizeInBytes());
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				HttpServer.withPort(0).maximumHeadersSizeInBytes(0).build());
+	}
+
+	@Test
 	public void headersFromMicrohttpRequestPreservesNormalizedHeaderBehavior() {
 		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0).build();
 		MicrohttpRequest microhttpRequest = new MicrohttpRequest(

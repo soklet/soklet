@@ -109,6 +109,8 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_HEADER_COUNT;
 	@NonNull
+	private static final Integer DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES;
+	@NonNull
 	private static final Integer DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 	@NonNull
 	private static final Integer DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
@@ -160,6 +162,7 @@ final class DefaultSseServer implements SseServer {
 		DEFAULT_WRITE_TIMEOUT = Duration.ofSeconds(30);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 64 * 1_024;
 		DEFAULT_MAXIMUM_HEADER_COUNT = 100;
+		DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES = 64 * 1_024;
 		DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES = 8_192;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
 		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
@@ -256,6 +259,8 @@ final class DefaultSseServer implements SseServer {
 	private final Integer maximumRequestSizeInBytes;
 	@NonNull
 	private final Integer maximumHeaderCount;
+	@NonNull
+	private final Integer maximumHeadersSizeInBytes;
 	@NonNull
 	private final Integer maximumRequestTargetLengthInBytes;
 	@NonNull
@@ -726,6 +731,7 @@ final class DefaultSseServer implements SseServer {
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
 		this.maximumRequestSizeInBytes = builder.maximumRequestSizeInBytes != null ? builder.maximumRequestSizeInBytes : DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
 		this.maximumHeaderCount = builder.maximumHeaderCount != null ? builder.maximumHeaderCount : DEFAULT_MAXIMUM_HEADER_COUNT;
+		this.maximumHeadersSizeInBytes = builder.maximumHeadersSizeInBytes != null ? builder.maximumHeadersSizeInBytes : DEFAULT_MAXIMUM_HEADERS_SIZE_IN_BYTES;
 		this.maximumRequestTargetLengthInBytes = builder.maximumRequestTargetLengthInBytes != null ? builder.maximumRequestTargetLengthInBytes : DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES;
 		this.requestReadBufferSizeInBytes = builder.requestReadBufferSizeInBytes != null ? builder.requestReadBufferSizeInBytes : DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES;
 		this.verifyConnectionOnceEstablished = builder.verifyConnectionOnceEstablished != null ? builder.verifyConnectionOnceEstablished : DEFAULT_VERIFY_CONNECTION_ONCE_ESTABLISHED;
@@ -747,6 +753,9 @@ final class DefaultSseServer implements SseServer {
 
 		if (this.maximumHeaderCount <= 0)
 			throw new IllegalArgumentException("Maximum header count must be > 0");
+
+		if (this.maximumHeadersSizeInBytes <= 0)
+			throw new IllegalArgumentException("Maximum headers size must be > 0");
 
 		if (this.maximumRequestTargetLengthInBytes <= 0)
 			throw new IllegalArgumentException("Maximum request target length must be > 0");
@@ -2848,6 +2857,8 @@ final class DefaultSseServer implements SseServer {
 		if (rawRequest == null)
 			throw new IllegalRequestException("Server-Sent Event HTTP request has no data");
 
+		rejectHeadersTooLarge(rawRequest);
+
 		// Example request structure:
 		//
 		// GET /testing?one=two HTTP/1.1
@@ -3041,6 +3052,17 @@ final class DefaultSseServer implements SseServer {
 		return lines;
 	}
 
+	private void rejectHeadersTooLarge(@NonNull String rawRequest) {
+		requireNonNull(rawRequest);
+
+		int end = endOfHeaders(rawRequest);
+		if (end == -1)
+			end = rawRequest.length();
+
+		if (headerSectionLengthInBytes(rawRequest, end) > getMaximumHeadersSizeInBytes())
+			throw new IllegalRequestException(format("Server-Sent Event request headers exceed maximum length of %d bytes", getMaximumHeadersSizeInBytes()));
+	}
+
 	protected void validateNoRequestBodyHeaders(@NonNull Request request) {
 		requireNonNull(request);
 
@@ -3169,19 +3191,14 @@ final class DefaultSseServer implements SseServer {
 					// Check if the headers are complete (CRLFCRLF preferred, else LFLF)
 					// IMPORTANT: we may have read beyond the header terminator in the same read(),
 					// so truncate to exactly the end of headers.
-					int end = -1;
-					int crlf = requestBuilder.indexOf("\r\n\r\n");
-
-					if (crlf != -1) {
-						end = crlf + 4;
-					} else {
-						int lf = requestBuilder.indexOf("\n\n");
-						if (lf != -1) end = lf + 2;
-					}
+					int end = endOfHeaders(requestBuilder);
 
 					if (end != -1) {
+						rejectHeadersTooLarge(requestBuilder, end);
 						requestBuilder.setLength(end);
 						headersComplete = true;
+					} else {
+						rejectHeadersTooLarge(requestBuilder, requestBuilder.length());
 					}
 				}
 
@@ -3241,6 +3258,85 @@ final class DefaultSseServer implements SseServer {
 			return requestReadTimeoutException.requestMadeProgress();
 
 		return true;
+	}
+
+	private void rejectHeadersTooLarge(@NonNull CharSequence rawRequest,
+																		 int endExclusive) throws IOException {
+		requireNonNull(rawRequest);
+
+		if (headerSectionLengthInBytes(rawRequest, endExclusive) <= getMaximumHeadersSizeInBytes())
+			return;
+
+		String partialRawRequest = rawRequest.subSequence(0, endExclusive).toString();
+		Request tooLargeRequest = parseTooLargeRequestForRawRequest(partialRawRequest).orElse(null);
+
+		if (tooLargeRequest == null)
+			throw new IOException(format("Request headers are too large (exceeded %d bytes) but we do not have enough data available to know its path", getMaximumHeadersSizeInBytes()));
+
+		throw new RequestTooLargeIOException(format("Request headers too large (exceeded %d bytes)", getMaximumHeadersSizeInBytes()), tooLargeRequest);
+	}
+
+	private static int endOfHeaders(@NonNull CharSequence rawRequest) {
+		requireNonNull(rawRequest);
+
+		int crlf = indexOf(rawRequest, "\r\n\r\n");
+		if (crlf != -1)
+			return crlf + 4;
+
+		int lf = indexOf(rawRequest, "\n\n");
+		return lf == -1 ? -1 : lf + 2;
+	}
+
+	private static int headerSectionLengthInBytes(@NonNull CharSequence rawRequest,
+																								int endExclusive) {
+		requireNonNull(rawRequest);
+
+		int requestLineEndIndex = requestLineEndIndex(rawRequest, endExclusive);
+		if (requestLineEndIndex == -1)
+			return 0;
+
+		return endExclusive - requestLineEndIndex;
+	}
+
+	private static int requestLineEndIndex(@NonNull CharSequence rawRequest,
+																				 int endExclusive) {
+		requireNonNull(rawRequest);
+
+		for (int i = 0; i < endExclusive; i++) {
+			char c = rawRequest.charAt(i);
+			if (c == '\n')
+				return i + 1;
+			if (c == '\r') {
+				if (i + 1 < endExclusive && rawRequest.charAt(i + 1) == '\n')
+					return i + 2;
+
+				return i + 1;
+			}
+		}
+
+		return -1;
+	}
+
+	private static int indexOf(@NonNull CharSequence rawRequest,
+														 @NonNull String needle) {
+		requireNonNull(rawRequest);
+		requireNonNull(needle);
+
+		int max = rawRequest.length() - needle.length();
+		for (int i = 0; i <= max; i++) {
+			boolean matches = true;
+			for (int j = 0; j < needle.length(); j++) {
+				if (rawRequest.charAt(i + j) != needle.charAt(j)) {
+					matches = false;
+					break;
+				}
+			}
+
+			if (matches)
+				return i;
+		}
+
+		return -1;
 	}
 
 	/**
@@ -4312,6 +4408,11 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	protected Integer getMaximumHeaderCount() {
 		return this.maximumHeaderCount;
+	}
+
+	@NonNull
+	protected Integer getMaximumHeadersSizeInBytes() {
+		return this.maximumHeadersSizeInBytes;
 	}
 
 	@NonNull
