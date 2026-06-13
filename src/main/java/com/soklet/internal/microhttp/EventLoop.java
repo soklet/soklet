@@ -170,9 +170,7 @@ public class EventLoop {
                             new LogEntry("max_connections", Integer.toString(options.maxConnections())));
                 }
                 connectionListener.didFailToAcceptConnection(remoteAddress);
-                if (socketChannel != null) {
-                    CloseUtils.closeQuietly(socketChannel);
-                }
+                CloseUtils.closeQuietly(socketChannel);
                 return false;
             }
 
@@ -186,9 +184,6 @@ public class EventLoop {
             }
 
             connectionListener.didFailToAcceptConnection(remoteAddress, e);
-            if (socketChannel != null) {
-                CloseUtils.closeQuietly(socketChannel);
-            }
             logAcceptLoopFailure(e);
             backoffAfterAcceptFailure();
             return false;

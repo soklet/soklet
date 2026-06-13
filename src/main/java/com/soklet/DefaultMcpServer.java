@@ -840,8 +840,10 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 		byte[] payload = McpEventStreamPayloads.fromMessage(message);
 
-		for (int i = connections.size() - 1; i >= 0; i--) {
-			McpLiveConnection connection = connections.get(i);
+		List<McpLiveConnection> newestConnections = new ArrayList<>(connections);
+		newestConnections.sort((left, right) -> right.establishedAt().compareTo(left.establishedAt()));
+
+		for (McpLiveConnection connection : newestConnections) {
 
 			if (connection.closing().get())
 				continue;

@@ -619,6 +619,7 @@ public class McpServerLifecycleTests {
 	@Test
 	public void startedDefaultMcpServerRoutesInternalSessionMessagesToMostRecentLiveGetStream() throws Exception {
 		int mcpPort = findFreePort();
+		CountingMcpLifecycle lifecycleObserver = new CountingMcpLifecycle(2);
 		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(mcpPort)
 				.host("127.0.0.1")
 				.heartbeatInterval(Duration.ofSeconds(5))
@@ -626,7 +627,7 @@ public class McpServerLifecycleTests {
 				.build();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(defaultMcpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecycleObserver(new QuietLifecycle())
+				.lifecycleObserver(lifecycleObserver)
 				.build();
 
 		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
@@ -644,6 +645,8 @@ public class McpServerLifecycleTests {
 
 				writeMcpGet(secondSocket, mcpPort, sessionId);
 				Assertions.assertNotNull(readUntil(secondSocket.getInputStream(), "\r\n\r\n", 8192));
+				Assertions.assertTrue(lifecycleObserver.awaitEstablishedStreams(2, TimeUnit.SECONDS),
+						"Expected both live MCP GET streams to be established before publishing");
 
 				Assertions.assertTrue(defaultMcpServer.publishSessionMessage(sessionId, internalSessionNotification("latest")));
 
