@@ -808,7 +808,7 @@ final class DefaultMcpRuntime {
 		validateArgumentsAgainstSchema(arguments, schemaForToolBinding(toolBinding));
 		touchSession(getMcpServer(), storedSession);
 
-		DefaultMcpProgressReporter progressReporter = progressReporter(parsedRequest);
+		DefaultMcpProgressReporter progressReporter = progressReporter(parsedRequest, storedSession.sessionId());
 		DefaultMcpToolCallContext toolCallContext = new DefaultMcpToolCallContext(requestContext, Optional.ofNullable(progressReporter));
 		McpToolResult toolResult;
 
@@ -2728,8 +2728,10 @@ final class DefaultMcpRuntime {
 	}
 
 	@Nullable
-	private DefaultMcpProgressReporter progressReporter(@NonNull ParsedJsonRpcRequest parsedRequest) throws JsonRpcErrorTransport {
+	private DefaultMcpProgressReporter progressReporter(@NonNull ParsedJsonRpcRequest parsedRequest,
+																											@NonNull String sessionId) throws JsonRpcErrorTransport {
 		requireNonNull(parsedRequest);
+		requireNonNull(sessionId);
 
 		McpObject meta = optionalObject(parsedRequest.params(), "_meta").orElse(null);
 
@@ -2737,7 +2739,13 @@ final class DefaultMcpRuntime {
 			return null;
 
 		McpProgressToken progressToken = optionalProgressToken(meta, "progressToken").orElse(null);
-		return progressToken == null ? null : new DefaultMcpProgressReporter(progressToken);
+		return progressToken == null ? null : new DefaultMcpProgressReporter(progressToken, sessionId, sessionMessagePublisher());
+	}
+
+	@Nullable
+	private InternalMcpSessionMessagePublisher sessionMessagePublisher() {
+		McpServer mcpServer = getMcpServer();
+		return mcpServer instanceof InternalMcpSessionMessagePublisher publisher ? publisher : null;
 	}
 
 	@NonNull
@@ -3036,17 +3044,29 @@ final class DefaultMcpRuntime {
 		@NonNull
 		private final McpProgressToken progressToken;
 		@NonNull
+		private final String sessionId;
+		@Nullable
+		private final InternalMcpSessionMessagePublisher sessionMessagePublisher;
+		@NonNull
 		private final List<@NonNull McpObject> messages;
 		@Nullable
 		private BigDecimal lastProgress;
 		@NonNull
+		private DeliveryMode deliveryMode;
+		@NonNull
 		private Boolean completed;
 
-		private DefaultMcpProgressReporter(@NonNull McpProgressToken progressToken) {
+		private DefaultMcpProgressReporter(@NonNull McpProgressToken progressToken,
+																			 @NonNull String sessionId,
+																			 @Nullable InternalMcpSessionMessagePublisher sessionMessagePublisher) {
 			requireNonNull(progressToken);
+			requireNonNull(sessionId);
 			this.progressToken = progressToken;
+			this.sessionId = sessionId;
+			this.sessionMessagePublisher = sessionMessagePublisher;
 			this.messages = new ArrayList<>();
 			this.lastProgress = null;
+			this.deliveryMode = DeliveryMode.UNDECIDED;
 			this.completed = false;
 		}
 
@@ -3078,12 +3098,40 @@ final class DefaultMcpRuntime {
 			if (message != null)
 				params.put("message", new McpString(message));
 
-			this.messages.add(new McpObject(Map.of(
+			McpObject progressMessage = new McpObject(Map.of(
 					"jsonrpc", new McpString("2.0"),
 					"method", new McpString("notifications/progress"),
 					"params", new McpObject(params)
-			)));
+			));
+
+			deliverProgressMessage(progressMessage);
 			this.lastProgress = progress;
+		}
+
+		private void deliverProgressMessage(@NonNull McpObject progressMessage) {
+			requireNonNull(progressMessage);
+
+			if (this.deliveryMode == DeliveryMode.POST_RESPONSE) {
+				this.messages.add(progressMessage);
+				return;
+			}
+
+			if (publishSessionMessage(progressMessage)) {
+				this.deliveryMode = DeliveryMode.LIVE_GET_STREAM;
+				return;
+			}
+
+			this.deliveryMode = DeliveryMode.POST_RESPONSE;
+			this.messages.add(progressMessage);
+		}
+
+		private boolean publishSessionMessage(@NonNull McpObject progressMessage) {
+			requireNonNull(progressMessage);
+
+			if (this.sessionMessagePublisher == null)
+				return false;
+
+			return this.sessionMessagePublisher.publishSessionMessage(this.sessionId, progressMessage);
 		}
 
 		@NonNull
@@ -3098,6 +3146,12 @@ final class DefaultMcpRuntime {
 
 		private synchronized void markCompleted() {
 			this.completed = true;
+		}
+
+		private enum DeliveryMode {
+			UNDECIDED,
+			LIVE_GET_STREAM,
+			POST_RESPONSE
 		}
 	}
 

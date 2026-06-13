@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.annotation.McpServerEndpoint;
+import com.soklet.annotation.McpTool;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -654,6 +655,53 @@ public class McpServerLifecycleTests {
 				Assertions.assertNotNull(messageFrame);
 				Assertions.assertEquals("latest", sessionNotificationValue(messageFrame));
 				Assertions.assertThrows(java.net.SocketTimeoutException.class, () -> firstSocket.getInputStream().read());
+			}
+		}
+	}
+
+	@Test
+	public void startedDefaultMcpServerPublishesToolProgressToLiveGetStreamBeforeCompletion() throws Exception {
+		int mcpPort = findFreePort();
+		SlowProgressMcpEndpoint.reset();
+		CountingMcpLifecycle lifecycleObserver = new CountingMcpLifecycle(1);
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
+						.host("127.0.0.1")
+						.heartbeatInterval(Duration.ofSeconds(5))
+						.handlerResolver(McpHandlerResolver.fromClasses(Set.of(SlowProgressMcpEndpoint.class)))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+			String sessionId = initializedSessionId(mcpPort);
+
+			try (Socket getSocket = connectWithRetry("127.0.0.1", mcpPort, 2000);
+					 Socket postSocket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				getSocket.setSoTimeout(2000);
+				postSocket.setSoTimeout(2000);
+				writeMcpGet(getSocket, mcpPort, sessionId);
+				Assertions.assertNotNull(readUntil(getSocket.getInputStream(), "\r\n\r\n", 8192));
+				Assertions.assertTrue(lifecycleObserver.awaitEstablishedStreams(2, TimeUnit.SECONDS),
+						"Expected live MCP GET stream to be established before publishing progress");
+
+				writeMcpProgressToolCall(postSocket, mcpPort, sessionId);
+
+				String progressFrame = readUntil(getSocket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(progressFrame);
+				McpObject progressPayload = framePayload(progressFrame);
+				Assertions.assertEquals("notifications/progress", ((McpString) progressPayload.get("method").orElseThrow()).value());
+				McpObject params = (McpObject) progressPayload.get("params").orElseThrow();
+				Assertions.assertEquals("live-token", ((McpString) params.get("progressToken").orElseThrow()).value());
+				Assertions.assertEquals("started", ((McpString) params.get("message").orElseThrow()).value());
+				Assertions.assertTrue(SlowProgressMcpEndpoint.progressReported.get().await(1, TimeUnit.SECONDS));
+
+				SlowProgressMcpEndpoint.allowCompletion.get().countDown();
+				String postResponse = readUntil(postSocket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(postResponse);
+				Assertions.assertTrue(postResponse.startsWith("HTTP/1.1 200"));
+				Assertions.assertTrue(postResponse.toLowerCase(Locale.ENGLISH).contains("content-type: application/json"));
 			}
 		}
 	}
@@ -1325,6 +1373,31 @@ public class McpServerLifecycleTests {
 	@McpServerEndpoint(path = "/mcp", name = "example", version = "1.0.0")
 	public static class ExampleMcpEndpoint implements McpEndpoint {}
 
+	@McpServerEndpoint(path = "/mcp", name = "slow-progress", version = "1.0.0")
+	public static class SlowProgressMcpEndpoint implements McpEndpoint {
+		private static final AtomicReference<CountDownLatch> progressReported = new AtomicReference<>(new CountDownLatch(1));
+		private static final AtomicReference<CountDownLatch> allowCompletion = new AtomicReference<>(new CountDownLatch(1));
+
+		private static void reset() {
+			progressReported.set(new CountDownLatch(1));
+			allowCompletion.set(new CountDownLatch(1));
+		}
+
+		@McpTool(name = "slow_progress", description = "Reports progress before completing.")
+		public McpToolResult slowProgress(@NonNull McpToolCallContext context) throws Exception {
+			McpProgressReporter progressReporter = context.getProgressReporter().orElseThrow();
+			progressReporter.reportProgress(new java.math.BigDecimal("1"), new java.math.BigDecimal("2"), "started");
+			progressReported.get().countDown();
+
+			if (!allowCompletion.get().await(2, TimeUnit.SECONDS))
+				throw new IllegalStateException("Timed out waiting for test completion signal");
+
+			return McpToolResult.builder()
+					.content(McpTextContent.fromText("complete"))
+					.build();
+		}
+	}
+
 	@McpServerEndpoint(path = "/slow-mcp", name = "slow", version = "1.0.0")
 	public static class SlowInitializeMcpEndpoint implements McpEndpoint {
 		private static final AtomicBoolean initializeInterrupted = new AtomicBoolean(false);
@@ -1651,6 +1724,36 @@ public class McpServerLifecycleTests {
 		socket.getOutputStream().flush();
 	}
 
+	private static void writeMcpProgressToolCall(Socket socket, int port, String sessionId) throws IOException {
+		String body = """
+				{
+				  "jsonrpc":"2.0",
+				  "id":"progress-request",
+				  "method":"tools/call",
+				  "params":{
+				    "name":"slow_progress",
+				    "arguments":{},
+				    "_meta":{
+				      "progressToken":"live-token"
+				    }
+				  }
+				}
+				""";
+		byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+		String request = "POST /mcp HTTP/1.1\r\n"
+				+ "Host: 127.0.0.1:" + port + "\r\n"
+				+ "Content-Type: application/json\r\n"
+				+ "Accept: application/json, text/event-stream\r\n"
+				+ "MCP-Session-Id: " + sessionId + "\r\n"
+				+ "MCP-Protocol-Version: 2025-11-25\r\n"
+				+ "Content-Length: " + bodyBytes.length + "\r\n"
+				+ "Connection: close\r\n"
+				+ "\r\n";
+		socket.getOutputStream().write(request.getBytes(StandardCharsets.UTF_8));
+		socket.getOutputStream().write(bodyBytes);
+		socket.getOutputStream().flush();
+	}
+
 	private static void writeRawRequest(Socket socket, String request) throws IOException {
 		socket.getOutputStream().write(request.getBytes(StandardCharsets.UTF_8));
 		socket.getOutputStream().flush();
@@ -1716,10 +1819,14 @@ public class McpServerLifecycleTests {
 	}
 
 	private static String sessionNotificationValue(String frame) {
-		Assertions.assertTrue(frame.startsWith("data: "));
-		McpObject payload = (McpObject) McpJsonCodec.parse(frame.substring("data: ".length(), frame.length() - 2).getBytes(StandardCharsets.UTF_8));
+		McpObject payload = framePayload(frame);
 		McpObject params = (McpObject) payload.get("params").orElseThrow();
 		return ((McpString) params.get("value").orElseThrow()).value();
+	}
+
+	private static McpObject framePayload(String frame) {
+		Assertions.assertTrue(frame.startsWith("data: "));
+		return (McpObject) McpJsonCodec.parse(frame.substring("data: ".length(), frame.length() - 2).getBytes(StandardCharsets.UTF_8));
 	}
 
 	private static class QuietLifecycle implements LifecycleObserver {

@@ -1051,6 +1051,55 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void toolCallWithProgressTokenPublishesProgressToActiveGetStream() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
+			McpRequestResult.StreamOpened liveStream = (McpRequestResult.StreamOpened) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.GET, "/tenants/acme/mcp")
+							.headers(Map.of(
+									"MCP-Session-Id", sessionHeaders.get("MCP-Session-Id"),
+									"MCP-Protocol-Version", sessionHeaders.get("MCP-Protocol-Version"),
+									"Accept", Set.of("text/event-stream")
+							))
+							.build());
+			List<McpObject> liveMessages = new ArrayList<>();
+			liveStream.registerMessageConsumer(liveMessages::add);
+
+			McpRequestResult requestResult = simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "id":"req-36-live",
+							  "method":"tools/call",
+							  "params":{
+							    "name":"zz_progress",
+							    "arguments":{},
+							    "_meta":{
+							      "progressToken":"progress-live"
+							    }
+							  }
+							}
+							""", sessionHeaders));
+
+			Assertions.assertInstanceOf(McpRequestResult.ResponseCompleted.class, requestResult);
+			McpRequestResult.ResponseCompleted responseCompleted = (McpRequestResult.ResponseCompleted) requestResult;
+			Assertions.assertEquals(Integer.valueOf(200), responseCompleted.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(2, liveMessages.size());
+			Assertions.assertEquals("notifications/progress", ((McpString) liveMessages.get(0).get("method").orElseThrow()).value());
+			McpObject firstParams = (McpObject) liveMessages.get(0).get("params").orElseThrow();
+			Assertions.assertEquals("progress-live", ((McpString) firstParams.get("progressToken").orElseThrow()).value());
+			Assertions.assertEquals("warming", ((McpString) firstParams.get("message").orElseThrow()).value());
+
+			McpObject body = jsonBody(responseCompleted);
+			McpObject result = (McpObject) body.get("result").orElseThrow();
+			McpArray content = (McpArray) result.get("content").orElseThrow();
+			Assertions.assertEquals("progress:true:acme",
+					((McpString) ((McpObject) content.values().get(0)).get("text").orElseThrow()).value());
+			Assertions.assertFalse(liveStream.isClosed());
+		});
+	}
+
+	@Test
 	public void progressReporterFailsFastAfterRequestCompletion() {
 		CatalogEndpoint.capturedProgressReporter.set(null);
 
