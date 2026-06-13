@@ -29,4 +29,15 @@ public interface ConnectionListener {
      * @param remoteAddress best-effort remote address, or {@code null} if unavailable
      */
     void didFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress);
+
+    /**
+     * Called when a connection fails to be accepted.
+     *
+     * @param remoteAddress best-effort remote address, or {@code null} if unavailable
+     * @param throwable     the failure, or {@code null} if unavailable
+     */
+    default void didFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress,
+                                           @Nullable Throwable throwable) {
+        didFailToAcceptConnection(remoteAddress);
+    }
 }

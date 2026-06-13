@@ -412,6 +412,12 @@ final class DefaultHttpServer implements HttpServer {
 				public void didFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.MAX_CONNECTIONS, null);
 				}
+
+				@Override
+				public void didFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress,
+																							@Nullable Throwable throwable) {
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
+				}
 			};
 
 			Handler handler = ((microhttpRequest, microHttpCallback) -> {
@@ -643,7 +649,7 @@ final class DefaultHttpServer implements HttpServer {
 		getLock().lock();
 
 		try {
-			if (!isStarted())
+			if (getEventLoop().isEmpty())
 				return;
 
 			try {
@@ -801,7 +807,8 @@ final class DefaultHttpServer implements HttpServer {
 		getLock().lock();
 
 		try {
-			return getEventLoop().isPresent();
+			EventLoop eventLoop = getEventLoop().orElse(null);
+			return eventLoop != null && eventLoop.isRunning();
 		} finally {
 			getLock().unlock();
 		}
@@ -914,6 +921,8 @@ final class DefaultHttpServer implements HttpServer {
 			case "timeout_task_error" -> MetricsCollector.TransportFailureReason.TIMEOUT_TASK_ERROR;
 			case "selection_key_error" -> MetricsCollector.TransportFailureReason.SELECTION_KEY_ERROR;
 			case "register_error" -> MetricsCollector.TransportFailureReason.REGISTER_ERROR;
+			case "accept_loop_error" -> MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR;
+			case "connection_setup_error" -> MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR;
 			case "event_loop_terminate", "sub_event_loop_terminate" -> MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED;
 			default -> MetricsCollector.TransportFailureReason.UNKNOWN;
 		};

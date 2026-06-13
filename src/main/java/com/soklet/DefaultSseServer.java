@@ -91,6 +91,8 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class DefaultSseServer implements SseServer {
 	@NonNull
+	private static final Duration ACCEPT_FAILURE_BACKOFF;
+	@NonNull
 	private static final String DEFAULT_HOST;
 	@NonNull
 	private static final Duration DEFAULT_REQUEST_HEADER_TIMEOUT;
@@ -149,6 +151,7 @@ final class DefaultSseServer implements SseServer {
 	private static final DefaultSseConnection.@NonNull PreSerializedPayload HEARTBEAT_PRE_SERIALIZED_COMMENT;
 
 	static {
+		ACCEPT_FAILURE_BACKOFF = Duration.ofMillis(50);
 		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_REQUEST_HEADER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
@@ -1070,6 +1073,8 @@ final class DefaultSseServer implements SseServer {
 		if (serverSocketChannel == null)
 			return;
 
+		boolean unexpectedTermination = false;
+
 		try {
 			ExecutorService executorService = getRequestHandlerExecutorService().orElse(null);
 
@@ -1078,15 +1083,29 @@ final class DefaultSseServer implements SseServer {
 				return;
 
 			while (!getStopPoisonPill().get()) {
-				SocketChannel clientSocketChannel = serverSocketChannel.accept();
-				handleAcceptedSocketChannel(clientSocketChannel, executorService);
+				try {
+					SocketChannel clientSocketChannel = serverSocketChannel.accept();
+
+					if (clientSocketChannel == null)
+						continue;
+
+					handleAcceptedSocketChannel(clientSocketChannel, executorService);
+				} catch (IOException e) {
+					if (getStopPoisonPill().get() || isStopping())
+						break;
+
+					if (!serverSocketChannel.isOpen()) {
+						unexpectedTermination = true;
+						recordTransportFailure(MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED,
+								e, "event_loop_terminate");
+						break;
+					}
+
+					handleAcceptLoopIOException(e);
+				} catch (RuntimeException e) {
+					handleAcceptLoopRuntimeException(e);
+				}
 			}
-		} catch (ClosedChannelException ignored) {
-			// expected during shutdown
-		} catch (IOException e) {
-			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
-					"SSE event loop encountered an IO error").throwable(e).build());
-			recordTransportFailure(MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, e, "accept_loop_error");
 		} finally {
 			// Close the server socket if we opened it
 			ServerSocketChannel serverSocketChannelToClose = this.serverSocketChannel;
@@ -1100,6 +1119,39 @@ final class DefaultSseServer implements SseServer {
 				}
 			}
 
+			if (unexpectedTermination)
+				stop();
+		}
+	}
+
+	private void handleAcceptLoopIOException(@NonNull IOException e) {
+		requireNonNull(e);
+
+		notifyDidFailToAcceptConnection(null, ConnectionRejectionReason.INTERNAL_ERROR, e);
+		safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+				"SSE event loop encountered an IO error").throwable(e).build());
+		recordTransportFailure(MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, e, "accept_loop_error");
+		backoffAfterAcceptFailure();
+	}
+
+	private void handleAcceptLoopRuntimeException(@NonNull RuntimeException e) {
+		requireNonNull(e);
+
+		notifyDidFailToAcceptConnection(null, ConnectionRejectionReason.INTERNAL_ERROR, e);
+		safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+						"SSE event loop encountered an unexpected error")
+				.throwable(e)
+				.build());
+		recordTransportFailure(MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, e, "connection_setup_error");
+		backoffAfterAcceptFailure();
+	}
+
+	private void backoffAfterAcceptFailure() {
+		try {
+			Thread.sleep(ACCEPT_FAILURE_BACKOFF.toMillis());
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			getStopPoisonPill().set(true);
 		}
 	}
 

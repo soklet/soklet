@@ -8,6 +8,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * request parsing, and request dispatching.
  */
 public class EventLoop {
+    private static final Duration ACCEPT_FAILURE_BACKOFF = Duration.ofMillis(50);
 
     private final Options options;
     private final Logger logger;
@@ -31,6 +33,11 @@ public class EventLoop {
     private final ServerSocketChannel serverSocketChannel;
     private final List<ConnectionEventLoop> connectionEventLoops;
     private final Thread thread;
+
+    @FunctionalInterface
+    interface SocketAcceptor {
+        SocketChannel accept() throws IOException;
+    }
 
     public EventLoop(Handler handler) throws IOException {
         this(Options.builder().build(), NoopLogger.instance(), handler, NoopConnectionListener.instance());
@@ -111,38 +118,74 @@ public class EventLoop {
             while (it.hasNext()) {
                 SelectionKey selKey = it.next();
                 if (selKey.isAcceptable()) {
-                    SocketChannel socketChannel = serverSocketChannel.accept();
-                    if (socketChannel == null) {
-                        it.remove();
-                        continue;
-                    }
-                    InetSocketAddress remoteAddress = null;
-                    try {
-                        SocketAddress socketAddress = socketChannel.getRemoteAddress();
-                        if (socketAddress instanceof InetSocketAddress) {
-                            remoteAddress = (InetSocketAddress) socketAddress;
-                        }
-                    } catch (IOException ignored) {
-                        // Best effort
-                    }
-                    connectionListener.willAcceptConnection(remoteAddress);
-                    if (options.maxConnections() > 0 && totalConnections() >= options.maxConnections()) {
-                        if (logger.enabled()) {
-                            logger.log(
-                                    new LogEntry("event", "accept_reject_max_connections"),
-                                    new LogEntry("max_connections", Integer.toString(options.maxConnections())));
-                        }
-                        connectionListener.didFailToAcceptConnection(remoteAddress);
-                        CloseUtils.closeQuietly(socketChannel);
-                        it.remove();
-                        continue;
-                    }
-                    connectionListener.didAcceptConnection(remoteAddress);
-                    ConnectionEventLoop connectionEventLoop = leastConnections();
-                    connectionEventLoop.register(socketChannel);
+                    acceptReadyConnection();
                 }
                 it.remove();
             }
+        }
+    }
+
+    boolean acceptReadyConnection() throws IOException {
+        return acceptReadyConnection(serverSocketChannel::accept);
+    }
+
+    boolean acceptReadyConnection(SocketAcceptor socketAcceptor) throws IOException {
+        SocketChannel socketChannel = null;
+        InetSocketAddress remoteAddress = null;
+
+        try {
+            socketChannel = socketAcceptor.accept();
+            if (socketChannel == null) {
+                return false;
+            }
+
+            try {
+                SocketAddress socketAddress = socketChannel.getRemoteAddress();
+                if (socketAddress instanceof InetSocketAddress) {
+                    remoteAddress = (InetSocketAddress) socketAddress;
+                }
+            } catch (IOException ignored) {
+                // Best effort
+            }
+
+            connectionListener.willAcceptConnection(remoteAddress);
+            if (options.maxConnections() > 0 && totalConnections() >= options.maxConnections()) {
+                if (logger.enabled()) {
+                    logger.log(
+                            new LogEntry("event", "accept_reject_max_connections"),
+                            new LogEntry("max_connections", Integer.toString(options.maxConnections())));
+                }
+                connectionListener.didFailToAcceptConnection(remoteAddress);
+                if (socketChannel != null) {
+                    CloseUtils.closeQuietly(socketChannel);
+                }
+                return false;
+            }
+
+            connectionListener.didAcceptConnection(remoteAddress);
+            ConnectionEventLoop connectionEventLoop = leastConnections();
+            connectionEventLoop.register(socketChannel);
+            return true;
+        } catch (IOException e) {
+            if (stop.get() || !serverSocketChannel.isOpen()) {
+                throw e;
+            }
+
+            connectionListener.didFailToAcceptConnection(remoteAddress, e);
+            if (socketChannel != null) {
+                CloseUtils.closeQuietly(socketChannel);
+            }
+            logAcceptLoopFailure(e);
+            backoffAfterAcceptFailure();
+            return false;
+        } catch (RuntimeException e) {
+            connectionListener.didFailToAcceptConnection(remoteAddress, e);
+            if (socketChannel != null) {
+                CloseUtils.closeQuietly(socketChannel);
+            }
+            logConnectionSetupFailure(e);
+            backoffAfterAcceptFailure();
+            return false;
         }
     }
 
@@ -164,10 +207,39 @@ public class EventLoop {
         stop.set(true);
     }
 
+    public boolean isRunning() {
+        return thread.isAlive() && !stop.get();
+    }
+
+    boolean isStopped() {
+        return stop.get();
+    }
+
     public void join() throws InterruptedException {
         thread.join();
         for (ConnectionEventLoop connectionEventLoop : connectionEventLoops) {
             connectionEventLoop.join();
+        }
+    }
+
+    private void logAcceptLoopFailure(IOException e) {
+        if (logger.failureEnabled()) {
+            logger.logFailure(e, new LogEntry("event", "accept_loop_error"));
+        }
+    }
+
+    private void logConnectionSetupFailure(RuntimeException e) {
+        if (logger.failureEnabled()) {
+            logger.logFailure(e, new LogEntry("event", "connection_setup_error"));
+        }
+    }
+
+    private void backoffAfterAcceptFailure() {
+        try {
+            Thread.sleep(ACCEPT_FAILURE_BACKOFF.toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            stop.set(true);
         }
     }
 }

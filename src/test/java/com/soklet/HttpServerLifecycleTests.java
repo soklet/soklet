@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.annotation.GET;
+import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.LogEntry;
 import com.soklet.internal.microhttp.Logger;
 import org.jspecify.annotations.NonNull;
@@ -134,6 +135,35 @@ public class HttpServerLifecycleTests {
 			Assertions.assertTrue(internal.getEventLoop().isEmpty());
 			Assertions.assertTrue(internal.getRequestHandlerExecutorService().isEmpty());
 		}
+	}
+
+	@Test
+	public void isStartedReflectsTerminatedHttpEventLoopAndStopStillCleansUp() throws Exception {
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.host("127.0.0.1")
+				.build();
+		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		httpServer.initialize(cfg, (request, consumer) -> {
+			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type", Set.of("text/plain")))
+					.body("ok".getBytes(StandardCharsets.UTF_8))
+					.build();
+			consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
+		});
+
+		httpServer.start();
+		DefaultHttpServer internal = (DefaultHttpServer) httpServer;
+		EventLoop eventLoop = internal.getEventLoop().orElseThrow();
+		eventLoop.stop();
+
+		Assertions.assertFalse(httpServer.isStarted());
+
+		httpServer.stop();
+		Assertions.assertTrue(internal.getEventLoop().isEmpty());
+		Assertions.assertTrue(internal.getRequestHandlerExecutorService().isEmpty());
 	}
 
 	@Test

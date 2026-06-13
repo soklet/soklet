@@ -47,6 +47,7 @@ import java.net.SocketException;
 import java.net.SocketOption;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.nio.charset.StandardCharsets;
@@ -2228,6 +2229,51 @@ public class SseTests {
 	}
 
 	@Test
+	public void sseAcceptLoopContinuesAfterTransientAcceptIOException() throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		List<LogEvent> logEvents = new ArrayList<>();
+		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						logEvents.add(logEvent);
+					}
+				})
+				.metricsCollector(metricsCollector)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
+				.build();
+		server.initialize(sokletConfig, (request, requestResultConsumer) -> { /* no-op */ });
+		ExecutorService executorService = Executors.newSingleThreadExecutor();
+		TransientAcceptFailureServerSocketChannel serverSocketChannel =
+				new TransientAcceptFailureServerSocketChannel(() -> server.getStopPoisonPill().set(true));
+		Field startedField = DefaultSseServer.class.getDeclaredField("started");
+		Field serverSocketChannelField = DefaultSseServer.class.getDeclaredField("serverSocketChannel");
+		Field requestHandlerExecutorServiceField = DefaultSseServer.class.getDeclaredField("requestHandlerExecutorService");
+		startedField.setAccessible(true);
+		serverSocketChannelField.setAccessible(true);
+		requestHandlerExecutorServiceField.setAccessible(true);
+
+		try {
+			startedField.set(server, true);
+			serverSocketChannelField.set(server, serverSocketChannel);
+			requestHandlerExecutorServiceField.set(server, executorService);
+			server.startInternal();
+		} finally {
+			server.stop();
+			executorService.shutdownNow();
+		}
+
+		Assertions.assertEquals(2, serverSocketChannel.getAcceptCalls(),
+				"Expected SSE accept loop to continue after the first transient accept failure");
+		Assertions.assertTrue(serverSocketChannel.isClosed());
+		Assertions.assertEquals(1L, transportFailureCount(metricsCollector, ServerType.SSE,
+				MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR));
+		Assertions.assertTrue(logEvents.stream().anyMatch(logEvent ->
+				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());
+	}
+
+	@Test
 	public void writeMarshaledResponseToChannel_handlesPartialWrites() throws Exception {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
 		ResponseCookie cookie = ResponseCookie.with("session", "abc").path("/").build();
@@ -2264,6 +2310,80 @@ public class SseTests {
 		Assertions.assertTrue(setCookie.contains("session=abc"), "Missing Set-Cookie header");
 
 		Assertions.assertEquals("payload", parts[1]);
+	}
+
+	private static final class TransientAcceptFailureServerSocketChannel extends ServerSocketChannel {
+		private final Runnable beforeSecondFailure;
+		private final AtomicInteger acceptCalls;
+		private final AtomicBoolean closed;
+
+		private TransientAcceptFailureServerSocketChannel(@NonNull Runnable beforeSecondFailure) {
+			super(SelectorProvider.provider());
+			this.beforeSecondFailure = requireNonNull(beforeSecondFailure);
+			this.acceptCalls = new AtomicInteger();
+			this.closed = new AtomicBoolean(false);
+		}
+
+		@Override
+		public SocketChannel accept() throws IOException {
+			int call = this.acceptCalls.incrementAndGet();
+
+			if (call == 1)
+				throw new IOException("transient accept failure");
+
+			this.beforeSecondFailure.run();
+			throw new IOException("stop requested");
+		}
+
+		int getAcceptCalls() {
+			return this.acceptCalls.get();
+		}
+
+		boolean isClosed() {
+			return this.closed.get();
+		}
+
+		@Override
+		public ServerSocketChannel bind(SocketAddress local,
+																		int backlog) {
+			return this;
+		}
+
+		@Override
+		public <T> ServerSocketChannel setOption(SocketOption<T> name,
+																						 T value) {
+			return this;
+		}
+
+		@Override
+		public <T> T getOption(SocketOption<T> name) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public Set<SocketOption<?>> supportedOptions() {
+			return Set.of();
+		}
+
+		@Override
+		public ServerSocket socket() {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public SocketAddress getLocalAddress() {
+			return null;
+		}
+
+		@Override
+		protected void implCloseSelectableChannel() {
+			this.closed.set(true);
+		}
+
+		@Override
+		protected void implConfigureBlocking(boolean block) {
+			// no-op
+		}
 	}
 
 	private static class PartialWriteSocketChannel extends SocketChannel {

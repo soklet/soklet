@@ -121,6 +121,87 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void eventLoopAcceptIOExceptionIsRecordedWithoutStoppingLoop() throws Exception {
+		List<String> failureEvents = new ArrayList<>();
+		List<Throwable> failures = new ArrayList<>();
+		int[] acceptFailures = {0};
+		IOException acceptFailure = new IOException("transient accept failure");
+		Logger logger = new Logger() {
+			@Override
+			public boolean enabled() {
+				return false;
+			}
+
+			@Override
+			public boolean failureEnabled() {
+				return true;
+			}
+
+			@Override
+			public void log(LogEntry... entries) {
+				// Trace logging is disabled for this test.
+			}
+
+			@Override
+			public void log(Exception e, LogEntry... entries) {
+				// Trace logging is disabled for this test.
+			}
+
+			@Override
+			public void logFailure(Exception e, LogEntry... entries) {
+				failures.add(e);
+				for (LogEntry entry : entries) {
+					if ("event".equals(entry.key()))
+						failureEvents.add(entry.value());
+				}
+			}
+		};
+		ConnectionListener connectionListener = new ConnectionListener() {
+			@Override
+			public void willAcceptConnection(InetSocketAddress remoteAddress) {
+				// No-op
+			}
+
+			@Override
+			public void didAcceptConnection(InetSocketAddress remoteAddress) {
+				// No-op
+			}
+
+			@Override
+			public void didFailToAcceptConnection(InetSocketAddress remoteAddress) {
+				// No-op
+			}
+
+			@Override
+			public void didFailToAcceptConnection(InetSocketAddress remoteAddress,
+																						Throwable throwable) {
+				acceptFailures[0]++;
+				Assertions.assertSame(acceptFailure, throwable);
+			}
+		};
+		EventLoop eventLoop = new EventLoop(Options.builder()
+				.withHost("127.0.0.1")
+				.withPort(0)
+				.withConcurrency(1)
+				.withResolution(Duration.ofMillis(10))
+				.build(), logger, (request, callback) -> {}, connectionListener);
+
+		try {
+			Assertions.assertFalse(eventLoop.acceptReadyConnection(() -> {
+				throw acceptFailure;
+			}));
+			Assertions.assertFalse(eventLoop.isStopped());
+			Assertions.assertEquals(1, acceptFailures[0]);
+			Assertions.assertEquals(List.of("accept_loop_error"), failureEvents);
+			Assertions.assertEquals(List.of(acceptFailure), failures);
+		} finally {
+			eventLoop.start();
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
 	public void parserRejectsObsFoldHeaderLines() {
 		ByteTokenizer tokenizer = new ByteTokenizer();
 		byte[] request = ascii("GET / HTTP/1.1\r\nHost: localhost\r\n X-Folded: nope\r\n\r\n");
