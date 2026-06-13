@@ -62,6 +62,24 @@ public class TimeoutSchedulerTests {
 	}
 
 	@Test
+	public void throwingTaskDoesNotStopScheduler() throws Exception {
+		TimeoutScheduler scheduler = newScheduler();
+
+		try {
+			CountDownLatch laterTaskRan = new CountDownLatch(1);
+
+			scheduler.schedule(() -> {
+				throw new RuntimeException("boom");
+			}, Duration.ofMillis(20));
+			scheduler.schedule(laterTaskRan::countDown, Duration.ofMillis(40));
+
+			assertTrue(laterTaskRan.await(1L, TimeUnit.SECONDS), "Later task should still run");
+		} finally {
+			scheduler.shutdownNow();
+		}
+	}
+
+	@Test
 	public void shutdownRejectsNewTasks() throws Exception {
 		TimeoutScheduler scheduler = newScheduler();
 

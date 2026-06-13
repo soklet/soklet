@@ -175,7 +175,17 @@ final class TimeoutScheduler {
 
 		for (ScheduledTask expiredTask : expiredTasks)
 			if (!expiredTask.isCancelled())
-				expiredTask.task.run();
+				runTask(expiredTask);
+	}
+
+	private void runTask(@NonNull ScheduledTask scheduledTask) {
+		requireNonNull(scheduledTask);
+
+		try {
+			scheduledTask.task.run();
+		} catch (Throwable ignored) {
+			// Timeout callbacks are best-effort cancellation hooks; keep the scheduler alive for later deadlines.
+		}
 	}
 
 	@NonNull
