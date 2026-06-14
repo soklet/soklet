@@ -165,6 +165,8 @@ public interface HttpServer extends AutoCloseable {
 		@Nullable
 		Duration responseWriteIdleTimeout;
 		@Nullable
+		ResponseGzipPolicy responseGzipPolicy;
+		@Nullable
 		Duration requestHandlerTimeout;
 		@Nullable
 		Integer requestHandlerConcurrency;
@@ -272,6 +274,24 @@ public interface HttpServer extends AutoCloseable {
 		@NonNull
 		public Builder responseWriteIdleTimeout(@Nullable Duration responseWriteIdleTimeout) {
 			this.responseWriteIdleTimeout = responseWriteIdleTimeout;
+			return this;
+		}
+
+		/**
+		 * Sets the policy used by the standard HTTP server to decide whether eligible finalized
+		 * in-memory responses should be gzipped.
+		 * <p>
+		 * Soklet invokes this policy only after its own HTTP protocol checks pass. For example,
+		 * {@code Accept-Encoding} must permit {@code gzip}, and Soklet will skip streaming, file,
+		 * range, already-encoded, transfer-encoded, bodyless, and otherwise ineligible responses.
+		 * If this value is not specified, response gzip is disabled.
+		 *
+		 * @param responseGzipPolicy the response gzip policy to use, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder responseGzipPolicy(@Nullable ResponseGzipPolicy responseGzipPolicy) {
+			this.responseGzipPolicy = responseGzipPolicy;
 			return this;
 		}
 

@@ -33,11 +33,13 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -67,6 +69,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.zip.GZIPOutputStream;
 
 import static com.soklet.Utilities.emptyByteArray;
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
@@ -89,6 +92,8 @@ final class DefaultHttpServer implements HttpServer {
 	private static final Duration DEFAULT_REQUEST_BODY_TIMEOUT;
 	@NonNull
 	private static final Duration DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT;
+	@NonNull
+	private static final ResponseGzipPolicy DEFAULT_RESPONSE_GZIP_POLICY;
 	@NonNull
 	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
 	@NonNull
@@ -128,6 +133,7 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_REQUEST_HEADER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_BODY_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT = Duration.ofSeconds(60);
+		DEFAULT_RESPONSE_GZIP_POLICY = ResponseGzipPolicy.disabledInstance();
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024 * 10;
@@ -158,6 +164,8 @@ final class DefaultHttpServer implements HttpServer {
 	private final Duration requestBodyTimeout;
 	@NonNull
 	private final Duration responseWriteIdleTimeout;
+	@NonNull
+	private final ResponseGzipPolicy responseGzipPolicy;
 	@NonNull
 	private final Duration requestHandlerTimeout;
 	@NonNull
@@ -233,6 +241,7 @@ final class DefaultHttpServer implements HttpServer {
 		this.requestHeaderTimeout = builder.requestHeaderTimeout != null ? builder.requestHeaderTimeout : DEFAULT_REQUEST_HEADER_TIMEOUT;
 		this.requestBodyTimeout = builder.requestBodyTimeout != null ? builder.requestBodyTimeout : DEFAULT_REQUEST_BODY_TIMEOUT;
 		this.responseWriteIdleTimeout = builder.responseWriteIdleTimeout != null ? builder.responseWriteIdleTimeout : DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT;
+		this.responseGzipPolicy = builder.responseGzipPolicy != null ? builder.responseGzipPolicy : DEFAULT_RESPONSE_GZIP_POLICY;
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
@@ -1067,7 +1076,7 @@ final class DefaultHttpServer implements HttpServer {
 			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, emptyByteArray());
 
 		if (body instanceof MarshaledResponseBody.Bytes bytes)
-			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, bytes.getBytes());
+			return bytesResponse(request, marshaledResponse, reasonPhrase, headers, bytes.getBytes());
 
 		if (body instanceof MarshaledResponseBody.File file)
 			return MicrohttpResponse.withFileBody(
@@ -1089,13 +1098,198 @@ final class DefaultHttpServer implements HttpServer {
 					fileChannel.getCloseOnComplete());
 
 		if (body instanceof MarshaledResponseBody.ByteBuffer byteBuffer)
-			return MicrohttpResponse.withByteBufferBody(
-					marshaledResponse.getStatusCode(),
-					reasonPhrase,
-					headers,
-					byteBuffer.getBuffer());
+			return byteBufferResponse(request, marshaledResponse, reasonPhrase, headers, byteBuffer.getBuffer());
 
 		throw new IllegalStateException(format("Unsupported marshaled response body type: %s", body.getClass().getName()));
+	}
+
+	@NonNull
+	private MicrohttpResponse bytesResponse(@Nullable Request request,
+																					@NonNull MarshaledResponse marshaledResponse,
+																					@NonNull String reasonPhrase,
+																					@NonNull List<@NonNull Header> headers,
+																					byte @NonNull [] bytes) {
+		requireNonNull(marshaledResponse);
+		requireNonNull(reasonPhrase);
+		requireNonNull(headers);
+		requireNonNull(bytes);
+
+		if (!shouldGzipResponse(request, marshaledResponse, headers, bytes.length))
+			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, bytes);
+
+		return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, gzipHeaders(headers), gzip(bytes));
+	}
+
+	@NonNull
+	private MicrohttpResponse byteBufferResponse(@Nullable Request request,
+																							 @NonNull MarshaledResponse marshaledResponse,
+																							 @NonNull String reasonPhrase,
+																							 @NonNull List<@NonNull Header> headers,
+																							 @NonNull ByteBuffer byteBuffer) {
+		requireNonNull(marshaledResponse);
+		requireNonNull(reasonPhrase);
+		requireNonNull(headers);
+		requireNonNull(byteBuffer);
+
+		if (!shouldGzipResponse(request, marshaledResponse, headers, byteBuffer.remaining()))
+			return MicrohttpResponse.withByteBufferBody(marshaledResponse.getStatusCode(), reasonPhrase, headers, byteBuffer);
+
+		return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, gzipHeaders(headers), gzip(byteBufferBytes(byteBuffer)));
+	}
+
+	@NonNull
+	private Boolean shouldGzipResponse(@Nullable Request request,
+																		 @NonNull MarshaledResponse marshaledResponse,
+																		 @NonNull List<@NonNull Header> headers,
+																		 @NonNull Integer bodyLength) {
+		requireNonNull(marshaledResponse);
+		requireNonNull(headers);
+		requireNonNull(bodyLength);
+
+		if (request == null)
+			return false;
+
+		if (bodyLength == 0)
+			return false;
+
+		if (!statusAllowsResponseGzip(marshaledResponse.getStatusCode()))
+			return false;
+
+		if (hasHeader(headers, "Content-Encoding")
+				|| hasHeader(headers, "Content-Range")
+				|| hasHeader(headers, "Transfer-Encoding"))
+			return false;
+
+		if (!requestAcceptsGzip(request))
+			return false;
+
+		return requireNonNull(getResponseGzipPolicy().shouldGzip(request, marshaledResponse),
+				"Response gzip policy must not return null.");
+	}
+
+	@NonNull
+	private Boolean statusAllowsResponseGzip(@NonNull Integer statusCode) {
+		requireNonNull(statusCode);
+		return statusCode >= 200 && statusCode != 204 && statusCode != 206 && statusCode != 304;
+	}
+
+	@NonNull
+	private Boolean requestAcceptsGzip(@NonNull Request request) {
+		requireNonNull(request);
+		Set<String> acceptEncodingValues = request.getHeaderValues("Accept-Encoding").orElse(Set.of());
+		Integer gzipQ = null;
+		Integer wildcardQ = null;
+
+		for (String value : acceptEncodingValues) {
+			for (String part : value.split(",", -1)) {
+				EncodingPreference encodingPreference = EncodingPreference.fromHeaderValue(part).orElse(null);
+
+				if (encodingPreference == null)
+					continue;
+
+				if ("gzip".equals(encodingPreference.coding()))
+					gzipQ = Math.max(gzipQ == null ? 0 : gzipQ, encodingPreference.q());
+				else if ("*".equals(encodingPreference.coding()))
+					wildcardQ = Math.max(wildcardQ == null ? 0 : wildcardQ, encodingPreference.q());
+			}
+		}
+
+		if (gzipQ != null)
+			return gzipQ > 0;
+
+		return wildcardQ != null && wildcardQ > 0;
+	}
+
+	@NonNull
+	private List<@NonNull Header> gzipHeaders(@NonNull List<@NonNull Header> headers) {
+		requireNonNull(headers);
+		List<Header> gzipHeaders = new ArrayList<>(headers.size() + 2);
+		boolean varyIncludesAcceptEncoding = hasHeaderToken(headers, "Vary", "Accept-Encoding");
+		boolean varyUpdated = false;
+
+		for (Header header : headers) {
+			if (header.name().equalsIgnoreCase("Content-Length"))
+				continue;
+
+			if (!varyIncludesAcceptEncoding && !varyUpdated && header.name().equalsIgnoreCase("Vary")) {
+				String value = Utilities.trimAggressivelyToNull(header.value());
+				gzipHeaders.add(new Header(header.name(), value == null
+						? "Accept-Encoding"
+						: value + ", Accept-Encoding"));
+				varyUpdated = true;
+			} else {
+				gzipHeaders.add(header);
+			}
+		}
+
+		if (!varyIncludesAcceptEncoding && !varyUpdated)
+			gzipHeaders.add(new Header("Vary", "Accept-Encoding"));
+
+		gzipHeaders.add(new Header("Content-Encoding", "gzip"));
+		gzipHeaders.sort(Comparator.comparing(Header::name));
+		return gzipHeaders;
+	}
+
+	private byte @NonNull [] gzip(byte @NonNull [] bytes) {
+		requireNonNull(bytes);
+
+		try {
+			ByteArrayOutputStream outputStream = new ByteArrayOutputStream(Math.max(32, bytes.length / 2));
+			try (GZIPOutputStream gzipOutputStream = new GZIPOutputStream(outputStream)) {
+				gzipOutputStream.write(bytes);
+			}
+			return outputStream.toByteArray();
+		} catch (IOException e) {
+			throw new UncheckedIOException("Unable to gzip response body.", e);
+		}
+	}
+
+	private byte @NonNull [] byteBufferBytes(@NonNull ByteBuffer byteBuffer) {
+		requireNonNull(byteBuffer);
+		ByteBuffer source = byteBuffer.asReadOnlyBuffer();
+		byte[] bytes = new byte[source.remaining()];
+		source.get(bytes);
+		return bytes;
+	}
+
+	@NonNull
+	private Boolean hasHeader(@NonNull List<@NonNull Header> headers,
+														@NonNull String name) {
+		requireNonNull(headers);
+		requireNonNull(name);
+
+		for (Header header : headers) {
+			if (header.name().equalsIgnoreCase(name))
+				return true;
+		}
+
+		return false;
+	}
+
+	@NonNull
+	private Boolean hasHeaderToken(@NonNull List<@NonNull Header> headers,
+																 @NonNull String name,
+																 @NonNull String token) {
+		requireNonNull(headers);
+		requireNonNull(name);
+		requireNonNull(token);
+
+		for (Header header : headers) {
+			if (!header.name().equalsIgnoreCase(name))
+				continue;
+
+			String value = header.value();
+
+			if (value == null)
+				continue;
+
+			for (String part : value.split(",", -1)) {
+				if (token.equalsIgnoreCase(part.trim()))
+					return true;
+			}
+		}
+
+		return false;
 	}
 
 	@NonNull
@@ -1467,8 +1661,77 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
+	protected ResponseGzipPolicy getResponseGzipPolicy() {
+		return this.responseGzipPolicy;
+	}
+
+	@NonNull
 	protected Duration getRequestHandlerTimeout() {
 		return this.requestHandlerTimeout;
+	}
+
+	private record EncodingPreference(@NonNull String coding,
+																		@NonNull Integer q) {
+		private EncodingPreference {
+			requireNonNull(coding);
+			requireNonNull(q);
+		}
+
+		@NonNull
+		private static Optional<EncodingPreference> fromHeaderValue(@Nullable String headerValue) {
+			String trimmed = Utilities.trimAggressivelyToNull(headerValue);
+
+			if (trimmed == null)
+				return Optional.empty();
+
+			String[] parts = trimmed.split(";", -1);
+			String coding = Utilities.trimAggressivelyToNull(parts[0]);
+
+			if (coding == null)
+				return Optional.empty();
+
+			Integer q = 1000;
+
+			for (int i = 1; i < parts.length; i++) {
+				String part = Utilities.trimAggressivelyToNull(parts[i]);
+
+				if (part == null)
+					continue;
+
+				int equalsIndex = part.indexOf('=');
+
+				if (equalsIndex <= 0)
+					continue;
+
+				String name = Utilities.trimAggressivelyToNull(part.substring(0, equalsIndex));
+
+				if (!"q".equalsIgnoreCase(name))
+					continue;
+
+				q = parseQ(part.substring(equalsIndex + 1));
+			}
+
+			return Optional.of(new EncodingPreference(coding.toLowerCase(ENGLISH), q));
+		}
+
+		@NonNull
+		private static Integer parseQ(@Nullable String value) {
+			String trimmed = Utilities.trimAggressivelyToNull(value);
+
+			if (trimmed == null)
+				return 0;
+
+			try {
+				double parsed = Double.parseDouble(trimmed);
+
+				if (Double.isNaN(parsed) || parsed < 0.0D || parsed > 1.0D)
+					return 0;
+
+				return (int) Math.round(parsed * 1000.0D);
+			} catch (NumberFormatException e) {
+				return 0;
+			}
+		}
 	}
 
 	@NonNull

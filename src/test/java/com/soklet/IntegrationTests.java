@@ -54,6 +54,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
 
 import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
@@ -148,6 +149,16 @@ public class IntegrationTests {
 
 	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port).requestHeaderTimeout(Duration.ofSeconds(5)).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		Soklet app = Soklet.fromConfig(cfg);
+		app.start();
+		return app;
+	}
+
+	private static Soklet startApp(HttpServer httpServer, Set<Class<?>> resourceClasses) {
+		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
@@ -721,6 +732,26 @@ public class IntegrationTests {
 					.build();
 		}
 
+		@GET("/vary-large")
+		public MarshaledResponse varyLarge() {
+			return MarshaledResponse.withStatusCode(200)
+					.headers(Map.of(
+							"Content-Type", Set.of("text/plain; charset=UTF-8"),
+							"Vary", Set.of("Origin")))
+					.body(LARGE_RESPONSE_BODY)
+					.build();
+		}
+
+		@GET("/encoded")
+		public MarshaledResponse encoded() {
+			return MarshaledResponse.withStatusCode(200)
+					.headers(Map.of(
+							"Content-Encoding", Set.of("br"),
+							"Content-Type", Set.of("application/octet-stream")))
+					.body(LARGE_RESPONSE_BODY)
+					.build();
+		}
+
 		@GET("/q")
 		public String echoQuery(@NonNull @QueryParameter String q) {return q;}
 
@@ -762,7 +793,7 @@ public class IntegrationTests {
 
 			return MarshaledResponse.withStatusCode(200)
 					.body(buffer)
-					.headers(Map.of("Content-Type", Set.of("application/octet-stream")))
+					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
 					.build();
 		}
 	}
@@ -921,6 +952,245 @@ public class IntegrationTests {
 				Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
 				Assertions.assertEquals("hello", new String(second.body(), StandardCharsets.UTF_8));
 			}
+		}
+	}
+
+	@Test
+	public void responseGzip_compressesEligibleByteArrayResponse() throws Exception {
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+				.build();
+
+		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(5000);
+			out.write((
+					"GET /vary-large HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Accept-Encoding: br;q=1, gzip;q=0.8\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+			Assertions.assertEquals("gzip", response.headers().get("content-encoding"));
+			Assertions.assertEquals("Origin, Accept-Encoding", response.headers().get("vary"));
+			Assertions.assertEquals(Integer.toString(response.body().length), response.headers().get("content-length"));
+			Assertions.assertTrue(response.body().length < LARGE_RESPONSE_BODY.length);
+			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, gunzip(response.body()));
+		}
+	}
+
+	@Test
+	public void responseGzip_isDisabledByDefault() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(Echo2Resource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(5000);
+			out.write((
+					"GET /vary-large HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Accept-Encoding: gzip\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+			Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+			Assertions.assertEquals(Integer.toString(LARGE_RESPONSE_BODY.length), response.headers().get("content-length"));
+			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
+		}
+	}
+
+	@Test
+	public void responseGzip_honorsMinimumBodySize() throws Exception {
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(LARGE_RESPONSE_BODY.length + 1))
+				.build();
+
+		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(5000);
+			out.write((
+					"GET /vary-large HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Accept-Encoding: gzip\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+			Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
+		}
+	}
+
+	@Test
+	public void responseGzip_defaultPolicySkipsBinaryContentTypes() throws Exception {
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+				.build();
+
+		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(5000);
+			out.write((
+					"GET /large HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Accept-Encoding: gzip\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+			Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+			Assertions.assertEquals(Integer.toString(LARGE_RESPONSE_BODY.length), response.headers().get("content-length"));
+			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
+		}
+	}
+
+	@Test
+	public void responseGzip_honorsAcceptEncodingQValues() throws Exception {
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+				.build();
+
+		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(5000);
+			out.write((
+					"GET /vary-large HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Accept-Encoding: *;q=1, gzip;q=0\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+			Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
+		}
+	}
+
+	@Test
+	public void responseGzip_skipsAlreadyEncodedResponses() throws Exception {
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.responseGzipPolicy((request, response) -> true)
+				.build();
+
+		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(5000);
+			out.write((
+					"GET /encoded HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Accept-Encoding: gzip\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+			Assertions.assertEquals("br", response.headers().get("content-encoding"));
+			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
+		}
+	}
+
+	@Test
+	public void responseGzip_compressesEligibleByteBufferResponse() throws Exception {
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+				.build();
+
+		try (Soklet app = startApp(httpServer, Set.of(ByteBufferResource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(5000);
+			out.write((
+					"GET /byte-buffer HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Accept-Encoding: gzip\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+			Assertions.assertEquals("gzip", response.headers().get("content-encoding"));
+			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, gunzip(response.body()));
+		}
+	}
+
+	@Test
+	public void responseGzip_skipsFileResponses(@TempDir Path tempDir) throws Exception {
+		byte[] fileBytes = largeResponseBody();
+		fileResponsePath = tempDir.resolve("payload.bin");
+		Files.write(fileResponsePath, fileBytes);
+
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.responseGzipPolicy((request, response) -> true)
+				.build();
+
+		try (Soklet app = startApp(httpServer, Set.of(FileResource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(5000);
+			out.write((
+					"GET /file HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Accept-Encoding: gzip\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+			Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+			Assertions.assertEquals(Integer.toString(fileBytes.length), response.headers().get("content-length"));
+			Assertions.assertArrayEquals(fileBytes, response.body());
+		} finally {
+			fileResponsePath = null;
 		}
 	}
 
@@ -1367,5 +1637,11 @@ public class IntegrationTests {
 		for (int i = 0; i < bytes.length; i++)
 			bytes[i] = (byte) ('a' + (i % 26));
 		return bytes;
+	}
+
+	private static byte[] gunzip(byte[] bytes) throws IOException {
+		try (GZIPInputStream inputStream = new GZIPInputStream(new java.io.ByteArrayInputStream(bytes))) {
+			return readAll(inputStream);
+		}
 	}
 }
