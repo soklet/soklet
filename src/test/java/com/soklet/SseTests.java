@@ -47,6 +47,7 @@ import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketOption;
 import java.net.SocketTimeoutException;
+import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -939,6 +940,112 @@ public class SseTests {
 			boolean sawEof = waitForEof(socket, 6000);
 			socket.close();
 			Assertions.assertTrue(sawEof, "Connection did not close after server stop");
+		}
+	}
+
+	@Test
+	@Timeout(value = 20, unit = SECONDS)
+	public void sseStopDrainsQueuedEventsBeforeClosingConnection() throws Exception {
+		int httpPort = findFreePort();
+		int ssePort = findFreePort();
+		BackpressureLifecycle lifecycle = new BackpressureLifecycle();
+		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+
+		SseServer sse = SseServer.withPort(ssePort)
+				.host("127.0.0.1")
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.shutdownTimeout(Duration.ofSeconds(5))
+				.build();
+
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
+				.sseServer(sse)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
+				.lifecycleObserver(lifecycle)
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(6000);
+
+				writeHttpGet(socket, "/tests/drain", ssePort);
+				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				Assertions.assertNotNull(hdr);
+
+				SseBroadcaster broadcaster = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/drain")).get();
+				awaitClientConnection(broadcaster, 2000);
+
+				broadcaster.broadcastEvent(SseEvent.withEvent("drain").id("1").data("one").build());
+				Assertions.assertTrue(lifecycle.awaitWriteStarted(5, SECONDS), "First event write did not start");
+
+				broadcaster.broadcastEvent(SseEvent.withEvent("drain").id("2").data("two").build());
+
+				Thread stopThread = new Thread(() -> {
+					try {
+						app.stop();
+					} catch (Throwable t) {
+						stopFailure.set(t);
+					}
+				}, "sse-stop-drain-test");
+				stopThread.start();
+
+				awaitNoGlobalConnections((DefaultSseServer) sse, 2000);
+				lifecycle.releaseWriter();
+
+				InputStream inputStream = socket.getInputStream();
+				String firstEvent = readNextEventBlock(inputStream, 4096);
+				String secondEvent = readNextEventBlock(inputStream, 4096);
+
+				Assertions.assertNotNull(firstEvent, "First queued event was not delivered");
+				Assertions.assertNotNull(secondEvent, "Second queued event was not delivered before stop closed the connection");
+				Assertions.assertTrue(firstEvent.contains("id: 1"), firstEvent);
+				Assertions.assertTrue(firstEvent.contains("data: one"), firstEvent);
+				Assertions.assertTrue(secondEvent.contains("id: 2"), secondEvent);
+				Assertions.assertTrue(secondEvent.contains("data: two"), secondEvent);
+				Assertions.assertTrue(waitForEof(socket, 6000), "Connection did not close after draining queued events");
+
+				stopThread.join(6000);
+				Assertions.assertFalse(stopThread.isAlive(), "SSE stop did not complete");
+				if (stopFailure.get() != null)
+					throw new AssertionError("SSE stop failed", stopFailure.get());
+				Assertions.assertTrue(lifecycle.awaitTermination(5, SECONDS), "Termination not observed");
+				Assertions.assertEquals(StreamTerminationReason.SERVER_STOPPING, lifecycle.getReason());
+			}
+		} finally {
+			lifecycle.releaseWriter();
+		}
+	}
+
+	@Test
+	@Timeout(value = 15, unit = SECONDS)
+	public void sseServerCanRestartOnSamePort() throws Exception {
+		int port = findFreePort();
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(port)
+				.host("127.0.0.1")
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.build();
+		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		server.initialize(sokletConfig, (request, requestResultConsumer) -> { /* no-op */ });
+
+		try {
+			server.start();
+			assertReuseAddressEnabled(server);
+			try (Socket ignored = connectWithRetry("127.0.0.1", port, 2000)) {
+				// Establish one real connection before stop so the restart path exercises socket cleanup.
+			}
+			server.stop();
+
+			server.start();
+			assertReuseAddressEnabled(server);
+			try (Socket ignored = connectWithRetry("127.0.0.1", port, 2000)) {
+				// A successful connect proves the second bind is live on the same port.
+			}
+		} finally {
+			server.stop();
 		}
 	}
 
@@ -2920,6 +3027,20 @@ public class SseTests {
 		return null;
 	}
 
+	private static String readNextEventBlock(InputStream inputStream, int maxBytes) throws IOException {
+		for (int i = 0; i < 8; i++) {
+			String block = readUntil(inputStream, "\n\n", maxBytes);
+
+			if (block == null)
+				return null;
+
+			if (block.contains("id: ") || block.contains("event: ") || block.contains("data: "))
+				return block;
+		}
+
+		return null;
+	}
+
 	private static void awaitClientConnection(SseBroadcaster broadcaster, long timeoutMs) throws InterruptedException {
 		long deadline = System.currentTimeMillis() + timeoutMs;
 		while (System.currentTimeMillis() < deadline) {
@@ -2928,6 +3049,24 @@ public class SseTests {
 			Thread.sleep(10);
 		}
 		throw new IllegalStateException("SSE connection not registered in time");
+	}
+
+	private static void awaitNoGlobalConnections(DefaultSseServer server, long timeoutMs) throws InterruptedException {
+		long deadline = System.currentTimeMillis() + timeoutMs;
+		while (System.currentTimeMillis() < deadline) {
+			if (server.getGlobalConnections().isEmpty())
+				return;
+			Thread.sleep(10);
+		}
+		throw new IllegalStateException("SSE connections were not unregistered in time");
+	}
+
+	private static void assertReuseAddressEnabled(DefaultSseServer server) throws Exception {
+		Field serverSocketChannelField = DefaultSseServer.class.getDeclaredField("serverSocketChannel");
+		serverSocketChannelField.setAccessible(true);
+		ServerSocketChannel serverSocketChannel = (ServerSocketChannel) serverSocketChannelField.get(server);
+		Assertions.assertNotNull(serverSocketChannel, "SSE server socket channel should be available after start");
+		Assertions.assertEquals(Boolean.TRUE, serverSocketChannel.getOption(StandardSocketOptions.SO_REUSEADDR));
 	}
 
 	private static boolean waitForEof(Socket socket, int timeoutMs) throws IOException {

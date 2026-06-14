@@ -37,6 +37,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
+import java.net.StandardSocketOptions;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -943,6 +944,7 @@ final class DefaultSseServer implements SseServer {
 			this.serverSocketChannel = serverSocketChannel;
 
 			try {
+				serverSocketChannel.setOption(StandardSocketOptions.SO_REUSEADDR, true);
 				serverSocketChannel.bind(new InetSocketAddress(getHost(), getPort()));
 			} catch (BindException e) {
 				throw new IllegalStateException(format("Soklet was unable to start the SSE server - port %d is already in use.", getPort()), e);
@@ -3540,23 +3542,6 @@ final class DefaultSseServer implements SseServer {
 			}
 		}
 
-		// Ensure nothing slipped through the cracks
-		for (DefaultSseConnection connection : connectionsSnapshot) {
-			try {
-				connection.getClosing().compareAndSet(false, true);
-
-				DefaultSseBroadcaster b = getGlobalConnections().get(connection);
-				if (b != null) b.unregisterSseConnection(connection, true);
-
-				connection.getSocketChannel().close();
-			} catch (Throwable ignored) {
-				// Nothing to do
-			}
-		}
-
-		// Clear global connections map for sanity (though it should be empty by this point)
-		getGlobalConnections().clear();
-
 		// Begin graceful executor shutdown so already-queued callbacks and writes can drain.
 		if (requestHandlerExecutorServiceSnapshot != null)
 			requestHandlerExecutorServiceSnapshot.shutdown();
@@ -3603,6 +3588,8 @@ final class DefaultSseServer implements SseServer {
 			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Exception while awaiting SSE shutdown").throwable(e).build());
 		}
 
+		forceCloseConnections(connectionsSnapshot);
+
 		// Escalate for any stragglers using remaining time
 		hardenJoin(eventLoopThreadSnapshot, remainingMillis(deadlineNanos));
 
@@ -3647,6 +3634,27 @@ final class DefaultSseServer implements SseServer {
 		} finally {
 			getLock().unlock();
 		}
+	}
+
+	private void forceCloseConnections(@NonNull List<@NonNull DefaultSseConnection> connections) {
+		requireNonNull(connections);
+
+		for (DefaultSseConnection connection : connections) {
+			try {
+				connection.getClosing().compareAndSet(false, true);
+
+				DefaultSseBroadcaster broadcaster = getGlobalConnections().get(connection);
+				if (broadcaster != null)
+					broadcaster.unregisterSseConnection(connection, true);
+
+				connection.getSocketChannel().close();
+			} catch (Throwable ignored) {
+				// Nothing to do
+			}
+		}
+
+		// Clear global connections map for sanity (though it should be empty by this point).
+		getGlobalConnections().clear();
 	}
 
 	private void cleanupAfterFailedStart() {
