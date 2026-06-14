@@ -1474,12 +1474,28 @@ public final class Soklet implements AutoCloseable {
 		if (normalizedHeaderNames.contains("content-length") || normalizedHeaderNames.contains("transfer-encoding"))
 			return marshaledResponse;
 
+		if (shouldOmitAutomaticContentLength(request, marshaledResponse))
+			return marshaledResponse;
+
 		// If Content-Length is not specified, specify as the number of bytes in the body
 		return marshaledResponse.copy()
 				.headers((mutableHeaders) -> {
 					String contentLengthHeaderValue = String.valueOf(marshaledResponse.getBodyLength());
 					mutableHeaders.put("Content-Length", Set.of(contentLengthHeaderValue));
 				}).finish();
+	}
+
+	private boolean shouldOmitAutomaticContentLength(@NonNull Request request,
+																									 @NonNull MarshaledResponse marshaledResponse) {
+		requireNonNull(request);
+		requireNonNull(marshaledResponse);
+
+		int statusCode = marshaledResponse.getStatusCode();
+
+		if ((statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 304)
+			return true;
+
+		return request.getHttpMethod() == HttpMethod.HEAD && marshaledResponse.getBodyLength() == 0L;
 	}
 
 	@NonNull

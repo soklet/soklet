@@ -100,6 +100,37 @@ public class StreamingResponseTests {
 	}
 
 	@Test
+	public void streaming_head_response_does_not_advertise_synthetic_content_length() throws Exception {
+		int port = findFreePort();
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.requestHeaderTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+				socket.setSoTimeout(2_000);
+				writeRawRequest(socket, """
+						HEAD /writer HTTP/1.1\r
+						Host: localhost\r
+						Connection: close\r
+						\r
+						""");
+
+				String responseHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 8_192);
+
+				Assertions.assertNotNull(responseHeaders);
+				Assertions.assertTrue(responseHeaders.startsWith("HTTP/1.1 200 OK"), responseHeaders);
+				Assertions.assertFalse(responseHeaders.contains("Content-Length:"), responseHeaders);
+				Assertions.assertFalse(responseHeaders.contains("Transfer-Encoding:"), responseHeaders);
+			}
+		}
+	}
+
+	@Test
 	public void streaming_response_context_exposes_originating_request_over_http() throws Exception {
 		int port = findFreePort();
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port)

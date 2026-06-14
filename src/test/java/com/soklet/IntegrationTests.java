@@ -114,6 +114,16 @@ public class IntegrationTests {
 					))
 					.build();
 		}
+
+		@GET("/no-content")
+		public Response noContent() {
+			return Response.fromStatusCode(204);
+		}
+
+		@GET("/not-modified")
+		public Response notModified() {
+			return Response.fromStatusCode(304);
+		}
 	}
 
 	private static class QuietLifecycle implements LifecycleObserver {
@@ -214,6 +224,52 @@ public class IntegrationTests {
 					// Since we don't need the body, just stop here.  If we do need the body later, read content-length bytes
 				}
 			}
+		}
+	}
+
+	@Test
+	public void noContentResponseDoesNotAdvertiseSyntheticContentLength() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(EchoResource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(2000);
+			out.write(("""
+					GET /no-content HTTP/1.1\r
+					Host: 127.0.0.1\r
+					Connection: close\r
+					\r
+					""").getBytes(StandardCharsets.ISO_8859_1));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 204"), response.statusLine());
+			Assertions.assertFalse(response.headers().containsKey("content-length"), response.headers().toString());
+			Assertions.assertEquals(0, response.body().length);
+		}
+	}
+
+	@Test
+	public void notModifiedResponseDoesNotAdvertiseSyntheticContentLength() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(EchoResource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(2000);
+			out.write(("""
+					GET /not-modified HTTP/1.1\r
+					Host: 127.0.0.1\r
+					Connection: close\r
+					\r
+					""").getBytes(StandardCharsets.ISO_8859_1));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 304"), response.statusLine());
+			Assertions.assertFalse(response.headers().containsKey("content-length"), response.headers().toString());
+			Assertions.assertEquals(0, response.body().length);
 		}
 	}
 

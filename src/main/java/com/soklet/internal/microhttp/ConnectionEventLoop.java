@@ -133,6 +133,7 @@ class ConnectionEventLoop {
         long requestReadTimeoutTokenizerMark;
         boolean responseWriteIdleTimeoutEnabled;
         boolean httpOneDotZero;
+        boolean headRequest;
         boolean keepAlive;
         boolean closeAfterResponse;
         boolean requestInFlight;
@@ -358,7 +359,7 @@ class ConnectionEventLoop {
                 if (!microhttpResponse.hasHeader(HEADER_TRANSFER_ENCODING)) {
                     headers.add(new Header(HEADER_TRANSFER_ENCODING, CHUNKED));
                 }
-            } else if (!microhttpResponse.hasHeader(HEADER_CONTENT_LENGTH)) {
+            } else if (shouldAddContentLength(microhttpResponse)) {
                 headers.add(new Header(HEADER_CONTENT_LENGTH, Long.toString(microhttpResponse.bodyLength())));
             }
             byte[] serializedHead = microhttpResponse.serializeHead(version, headers);
@@ -622,6 +623,7 @@ class ConnectionEventLoop {
         private void applyConnectionPolicy(MicrohttpRequest request) {
             closeAfterResponse = false;
             httpOneDotZero = request.version().equalsIgnoreCase(HTTP_1_0);
+            headRequest = "HEAD".equalsIgnoreCase(request.method());
 
             boolean hasClose = hasHeaderToken(request.headers(), HEADER_CONNECTION, CLOSE);
             boolean hasKeepAlive = hasHeaderToken(request.headers(), HEADER_CONNECTION, KEEP_ALIVE);
@@ -635,6 +637,22 @@ class ConnectionEventLoop {
             } else {
                 keepAlive = true;
             }
+        }
+
+        private boolean shouldAddContentLength(MicrohttpResponse microhttpResponse) {
+            if (microhttpResponse.hasHeader(HEADER_CONTENT_LENGTH)) {
+                return false;
+            }
+
+            if (mustNotSendContentLength(microhttpResponse.status())) {
+                return false;
+            }
+
+            return !headRequest || microhttpResponse.bodyLength() > 0L;
+        }
+
+        private boolean mustNotSendContentLength(int status) {
+            return (status >= 100 && status < 200) || status == 204 || status == 304;
         }
 
         private boolean hasHeaderToken(@Nullable List<Header> headers, String headerName, String token) {

@@ -14,6 +14,7 @@
 - MCP tool progress notifications now publish immediately to the session's active same-node GET stream when one exists, instead of always buffering progress until the tool call completes. The existing progress-upgraded POST event-stream response remains the fallback when no live GET stream is available.
 - Timeout scheduler callbacks are now isolated so one failing timeout task cannot terminate the scheduler worker and silently disable later timeouts.
 - HTTP request-handler and SSE handshake timeout tasks no longer retain stale handler-thread references after the handler task returns, preventing late timeouts from interrupting unrelated work on a reused executor thread.
+- Standard HTTP responses no longer synthesize `Content-Length: 0` for `1xx`, `204`, `304`, or empty `HEAD` responses where no length was explicitly set.
 
 ## 3.3.0 (2026-06-10)
 
