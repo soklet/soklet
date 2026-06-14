@@ -116,6 +116,12 @@ class ConnectionEventLoop {
         static final byte[] BAD_REQUEST_RESPONSE =
                 "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
                         .getBytes(StandardCharsets.US_ASCII);
+        static final byte[] EXPECTATION_FAILED_RESPONSE =
+                "HTTP/1.1 417 Expectation Failed\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+                        .getBytes(StandardCharsets.US_ASCII);
+        static final byte[] CONTINUE_RESPONSE =
+                "HTTP/1.1 100 Continue\r\n\r\n"
+                        .getBytes(StandardCharsets.US_ASCII);
 
         final SocketChannel socketChannel;
         final SelectionKey selectionKey;
@@ -125,6 +131,8 @@ class ConnectionEventLoop {
         RequestParser requestParser;
         @Nullable
         WritableSource writableSource;
+        @Nullable
+        ByteBuffer continueResponseBuffer;
         @Nullable
         Cancellable requestReadTimeoutTask;
         @Nullable
@@ -182,6 +190,13 @@ class ConnectionEventLoop {
                             new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
                 }
                 respondToRequestTooLarge();
+            } catch (ExpectationFailedException e) {
+                if (logger.failureEnabled()) {
+                    logger.logFailure(e,
+                            new LogEntry("event", "expectation_failed"),
+                            new LogEntry("id", id));
+                }
+                respondToExpectationFailed();
             } catch (MalformedRequestException e) {
                 if (logger.failureEnabled()) {
                     logger.logFailure(e,
@@ -239,7 +254,6 @@ class ConnectionEventLoop {
                 }
                 onParseRequest();
             } else {
-                scheduleRequestReadTimeoutForCurrentParserState();
                 if (byteTokenizer.size() > options.maxRequestSize()) {
                     if (logger.failureEnabled()) {
                         logger.logFailure(
@@ -249,6 +263,8 @@ class ConnectionEventLoop {
                     }
 
                     respondToRequestTooLarge();
+                } else {
+                    onPartialRequestParsed();
                 }
             }
         }
@@ -282,6 +298,14 @@ class ConnectionEventLoop {
         }
 
         private void respondToMalformedRequest() {
+            respondWithRawError(BAD_REQUEST_RESPONSE);
+        }
+
+        private void respondToExpectationFailed() {
+            respondWithRawError(EXPECTATION_FAILED_RESPONSE);
+        }
+
+        private void respondWithRawError(byte[] response) {
             if (selectionKey.isValid() && selectionKey.interestOps() != 0) {
                 selectionKey.interestOps(0);
             }
@@ -291,7 +315,7 @@ class ConnectionEventLoop {
             }
             cancelResponseWriteIdleTimeout();
             closeAfterResponse = true;
-            writableSource = new ByteBufferWritableSource(ByteBuffer.wrap(BAD_REQUEST_RESPONSE));
+            writableSource = new ByteBufferWritableSource(ByteBuffer.wrap(response));
             try {
                 doOnWritable();
             } catch (IOException e) {
@@ -378,7 +402,11 @@ class ConnectionEventLoop {
 
         private void onWritable() {
             try {
-                doOnWritable();
+                if (continueResponseBuffer == null) {
+                    doOnWritable();
+                } else {
+                    doOnWritableContinueResponse();
+                }
             } catch (IOException | RuntimeException e) {
                 if (logger.failureEnabled()) {
                     logger.logFailure(e,
@@ -456,6 +484,55 @@ class ConnectionEventLoop {
             }
         }
 
+        private void onPartialRequestParsed() {
+            scheduleRequestReadTimeoutForCurrentParserState();
+
+            if (requestParser.consumeContinueExpectation()) {
+                continueResponseBuffer = ByteBuffer.wrap(CONTINUE_RESPONSE);
+                try {
+                    doOnWritableContinueResponse();
+                } catch (IOException e) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(e,
+                                new LogEntry("event", "write_error"),
+                                new LogEntry("id", id));
+                    }
+                    failSafeClose();
+                }
+                return;
+            }
+
+            if (!selectionKey.isValid()) {
+                failSafeClose();
+                return;
+            }
+            selectionKey.interestOps(SelectionKey.OP_READ);
+        }
+
+        private void doOnWritableContinueResponse() throws IOException {
+            ByteBuffer activeContinueResponseBuffer = continueResponseBuffer;
+            if (activeContinueResponseBuffer == null) {
+                return;
+            }
+
+            socketChannel.write(activeContinueResponseBuffer);
+            if (activeContinueResponseBuffer.hasRemaining()) {
+                if (!selectionKey.isValid()) {
+                    failSafeClose();
+                    return;
+                }
+                selectionKey.interestOps(SelectionKey.OP_WRITE);
+                return;
+            }
+
+            continueResponseBuffer = null;
+            if (!selectionKey.isValid()) {
+                failSafeClose();
+                return;
+            }
+            selectionKey.interestOps(SelectionKey.OP_READ);
+        }
+
         private void parseBufferedRequestAfterResponse() {
             if (draining.get()) {
                 failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
@@ -482,12 +559,7 @@ class ConnectionEventLoop {
                     }
                     onParseRequest();
                 } else { // switch back to read mode
-                    scheduleRequestReadTimeoutForCurrentParserState();
-                    if (!selectionKey.isValid()) {
-                        failSafeClose();
-                        return;
-                    }
-                    selectionKey.interestOps(SelectionKey.OP_READ);
+                    onPartialRequestParsed();
                 }
             } catch (RequestTooLargeException e) {
                 if (logger.failureEnabled()) {
@@ -497,6 +569,13 @@ class ConnectionEventLoop {
                             new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
                 }
                 respondToRequestTooLarge();
+            } catch (ExpectationFailedException e) {
+                if (logger.failureEnabled()) {
+                    logger.logFailure(e,
+                            new LogEntry("event", "expectation_failed"),
+                            new LogEntry("id", id));
+                }
+                respondToExpectationFailed();
             } catch (MalformedRequestException e) {
                 if (logger.failureEnabled()) {
                     logger.logFailure(e,
@@ -531,6 +610,7 @@ class ConnectionEventLoop {
                 }
                 writableSource = null;
             }
+            continueResponseBuffer = null;
             selectionKey.cancel();
             CloseUtils.closeQuietly(socketChannel);
             connectionCount.decrementAndGet();

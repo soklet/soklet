@@ -420,7 +420,7 @@ public class IntegrationTests {
 	}
 
 	@Test
-	public void malformedRequest_expect100Continue_returns400() throws Exception {
+	public void expect100Continue_sendsInterimResponseThenReadsBody() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
 						.requestHeaderTimeout(Duration.ofSeconds(5))
@@ -434,7 +434,8 @@ public class IntegrationTests {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				socket.setSoTimeout(3000);
-				String request = "POST /hello HTTP/1.1\r\n"
+				InputStream in = socket.getInputStream();
+				String request = "POST /body HTTP/1.1\r\n"
 						+ "Host: 127.0.0.1\r\n"
 						+ "Expect: 100-continue\r\n"
 						+ "Content-Length: 5\r\n"
@@ -442,8 +443,83 @@ public class IntegrationTests {
 				out.write(request.getBytes(StandardCharsets.ISO_8859_1));
 				out.flush();
 
+				RawResponse interimResponse = readResponse(in);
+				Assertions.assertTrue(interimResponse.statusLine().startsWith("HTTP/1.1 100"), "Expected 100 Continue");
+				Assertions.assertEquals(0, interimResponse.body().length);
+
+				out.write("hello".getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), "Expected 200 after request body");
+				Assertions.assertEquals("hello", new String(response.body(), StandardCharsets.UTF_8));
+			}
+		}
+	}
+
+	@Test
+	public void expect100ContinueWithChunkedBody_sendsInterimResponseThenReadsBody() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.requestHeaderTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream()) {
+				socket.setSoTimeout(3000);
+				InputStream in = socket.getInputStream();
+				String request = "POST /body HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1\r\n"
+						+ "Expect: 100-continue\r\n"
+						+ "Transfer-Encoding: chunked\r\n"
+						+ "\r\n";
+				out.write(request.getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse interimResponse = readResponse(in);
+				Assertions.assertTrue(interimResponse.statusLine().startsWith("HTTP/1.1 100"), "Expected 100 Continue");
+				Assertions.assertEquals(0, interimResponse.body().length);
+
+				out.write("5\r\nhello\r\n0\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), "Expected 200 after chunked request body");
+				Assertions.assertEquals("hello", new String(response.body(), StandardCharsets.UTF_8));
+			}
+		}
+	}
+
+	@Test
+	public void unsupportedExpectHeader_returns417() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.requestHeaderTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream()) {
+				socket.setSoTimeout(3000);
+				String request = "POST /body HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1\r\n"
+						+ "Expect: wait\r\n"
+						+ "Content-Length: 5\r\n"
+						+ "\r\n";
+				out.write(request.getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
 				RawResponse response = readResponse(socket.getInputStream());
-				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for Expect: 100-continue");
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 417"), "Expected 417 for unsupported Expect header");
 				Assertions.assertEquals("close", response.headers().get("connection"));
 			}
 		}

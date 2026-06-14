@@ -121,6 +121,36 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void parserExposesContinueExpectationWhenWaitingForBody() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] headers = ascii("POST / HTTP/1.1\r\nHost: localhost\r\nExpect: 100-continue\r\nContent-Length: 5\r\n\r\n");
+
+		add(tokenizer, headers);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
+
+		Assertions.assertFalse(parser.parse());
+		Assertions.assertTrue(parser.readingBody());
+		Assertions.assertTrue(parser.consumeContinueExpectation());
+		Assertions.assertFalse(parser.consumeContinueExpectation());
+
+		add(tokenizer, ascii("hello"));
+
+		Assertions.assertTrue(parser.parse());
+		Assertions.assertEquals("hello", new String(parser.request().body(), StandardCharsets.US_ASCII));
+	}
+
+	@Test
+	public void parserRejectsUnsupportedExpectation() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("POST / HTTP/1.1\r\nHost: localhost\r\nExpect: 100-continue, wait\r\nContent-Length: 5\r\n\r\n");
+
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
+
+		Assertions.assertThrows(ExpectationFailedException.class, parser::parse);
+	}
+
+	@Test
 	public void eventLoopAcceptIOExceptionIsRecordedWithoutStoppingLoop() throws Exception {
 		List<String> failureEvents = new ArrayList<>();
 		List<Throwable> failures = new ArrayList<>();

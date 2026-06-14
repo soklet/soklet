@@ -62,7 +62,9 @@ class RequestParser {
     private int hostHeaderCount;
     @Nullable
     private String hostHeaderValue;
-    private boolean expectHeaderPresent;
+    private boolean continueExpectationRequested;
+    private boolean continueExpectationAcknowledged;
+    private boolean unsupportedExpectationPresent;
     private int headersStartPosition;
     private int chunkSize;
     private long chunkBodySize;
@@ -160,7 +162,9 @@ class RequestParser {
         transferEncodings = null;
         hostHeaderCount = 0;
         hostHeaderValue = null;
-        expectHeaderPresent = false;
+        continueExpectationRequested = false;
+        continueExpectationAcknowledged = false;
+        unsupportedExpectationPresent = false;
         headersStartPosition = -1;
         chunkSize = 0;
         chunkBodySize = 0L;
@@ -249,7 +253,7 @@ class RequestParser {
         if (end == start) { // CR-LF on own line, end of headers
             tokenizer.advanceTo(end + CRLF.length);
             validateHostHeaderIfRequired();
-            rejectExpectHeaderIfPresent();
+            rejectUnsupportedExpectationIfPresent();
 
             if (transferEncodingHeaderPresent && (transferEncodings == null || transferEncodings.isEmpty())) {
                 throw new MalformedRequestException("invalid transfer-encoding header value");
@@ -399,9 +403,18 @@ class RequestParser {
         }
     }
 
-    private void rejectExpectHeaderIfPresent() {
-        if (expectHeaderPresent) {
-            throw new MalformedRequestException("unsupported expect header");
+    boolean consumeContinueExpectation() {
+        if (!continueExpectationRequested || continueExpectationAcknowledged || !readingBody()) {
+            return false;
+        }
+
+        continueExpectationAcknowledged = true;
+        return true;
+    }
+
+    private void rejectUnsupportedExpectationIfPresent() {
+        if (unsupportedExpectationPresent) {
+            throw new ExpectationFailedException("unsupported expect header");
         }
     }
 
@@ -531,7 +544,26 @@ class RequestParser {
                 hostHeaderValue = header.value();
             }
         } else if (header.name().equalsIgnoreCase(HEADER_EXPECT)) {
-            expectHeaderPresent = true;
+            observeExpectHeader(header);
+        }
+    }
+
+    private void observeExpectHeader(Header header) {
+        String value = header.value();
+        if (value == null) {
+            unsupportedExpectationPresent = true;
+            return;
+        }
+
+        for (String part : value.split(",", -1)) {
+            String expectation = part.trim();
+            if (expectation.isEmpty()) {
+                unsupportedExpectationPresent = true;
+            } else if ("100-continue".equalsIgnoreCase(expectation)) {
+                continueExpectationRequested = true;
+            } else {
+                unsupportedExpectationPresent = true;
+            }
         }
     }
 

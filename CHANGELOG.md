@@ -10,6 +10,7 @@
 ### Fixes
 
 - Standard HTTP shutdown now stops accepting new connections, closes idle keep-alives, and lets already-dispatched handlers flush their responses before force-closing remaining connections at `shutdownTimeout`. Responses produced during drain include `Connection: close`.
+- Standard HTTP now supports `Expect: 100-continue` for fixed-length and chunked request bodies by sending an interim `100 Continue` response before reading the body. Unsupported expectations now return `417 Expectation Failed` instead of being treated as malformed requests.
 - MCP internal session messages now route to the newest live GET stream by stream registration time, so out-of-order stream header completion cannot make an older stream receive new session messages.
 - MCP tool progress notifications now publish immediately to the session's active same-node GET stream when one exists, instead of always buffering progress until the tool call completes. The existing progress-upgraded POST event-stream response remains the fallback when no live GET stream is available.
 - Timeout scheduler callbacks are now isolated so one failing timeout task cannot terminate the scheduler worker and silently disable later timeouts.
