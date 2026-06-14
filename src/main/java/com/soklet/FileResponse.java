@@ -74,6 +74,8 @@ final class FileResponse {
 	@Nullable
 	private final String contentType;
 	@Nullable
+	private final String contentEncoding;
+	@Nullable
 	private final EntityTag entityTag;
 	@Nullable
 	private final Instant lastModified;
@@ -97,6 +99,7 @@ final class FileResponse {
 
 		this.path = builder.path;
 		this.contentType = builder.contentType;
+		this.contentEncoding = builder.contentEncoding;
 		this.entityTag = builder.entityTag;
 		this.lastModified = builder.lastModified;
 		this.cacheControl = builder.cacheControl;
@@ -155,6 +158,11 @@ final class FileResponse {
 	@Nullable
 	private String getContentType() {
 		return this.contentType;
+	}
+
+	@Nullable
+	private String getContentEncoding() {
+		return this.contentEncoding;
 	}
 
 	@NonNull
@@ -308,15 +316,18 @@ final class FileResponse {
 	@NonNull
 	private Map<@NonNull String, @NonNull Set<@NonNull String>> headers(
 			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> protocolHeaders,
-			@NonNull Boolean includeContentType) {
+			@NonNull Boolean includeRepresentationHeaders) {
 		requireNonNull(protocolHeaders);
-		requireNonNull(includeContentType);
+		requireNonNull(includeRepresentationHeaders);
 
 		Map<String, Set<String>> headers = new LinkedCaseInsensitiveMap<>();
 		headers.putAll(getHeaders());
 
-		if (includeContentType && getContentType() != null)
+		if (includeRepresentationHeaders && getContentType() != null)
 			headers.put("Content-Type", Set.of(getContentType()));
+
+		if (includeRepresentationHeaders && getContentEncoding() != null)
+			headers.put("Content-Encoding", Set.of(getContentEncoding()));
 
 		getCacheControl().ifPresent(cacheControl -> headers.put("Cache-Control", Set.of(cacheControl)));
 		getEntityTag().ifPresent(entityTag -> headers.put("ETag", Set.of(entityTag.toHeaderValue())));
@@ -519,6 +530,8 @@ final class FileResponse {
 		@Nullable
 		private String contentType;
 		@Nullable
+		private String contentEncoding;
+		@Nullable
 		private EntityTag entityTag;
 		@Nullable
 		private Instant lastModified;
@@ -539,6 +552,12 @@ final class FileResponse {
 		@NonNull
 		Builder contentType(@Nullable String contentType) {
 			this.contentType = Utilities.trimAggressivelyToNull(contentType);
+			return this;
+		}
+
+		@NonNull
+		Builder contentEncoding(@Nullable String contentEncoding) {
+			this.contentEncoding = Utilities.trimAggressivelyToNull(contentEncoding);
 			return this;
 		}
 

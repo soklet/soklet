@@ -136,6 +136,7 @@ public class StaticFilesTests {
 
 		MarshaledResponse fullResponse = MarshaledResponse.withFile(file, Request.fromPath(HttpMethod.GET, "/example.txt"))
 				.contentType("text/plain; charset=UTF-8")
+				.contentEncoding("gzip")
 				.entityTag(entityTag)
 				.lastModified(lastModified)
 				.cacheControl("public, max-age=60")
@@ -143,6 +144,7 @@ public class StaticFilesTests {
 
 		Assertions.assertEquals(200, fullResponse.getStatusCode());
 		Assertions.assertEquals(Set.of("text/plain; charset=UTF-8"), fullResponse.getHeaders().get("Content-Type"));
+		Assertions.assertEquals(Set.of("gzip"), fullResponse.getHeaders().get("Content-Encoding"));
 		Assertions.assertEquals(Set.of("\"v1\""), fullResponse.getHeaders().get("ETag"));
 		Assertions.assertEquals(Set.of("Mon, 04 May 2026 01:02:03 GMT"), fullResponse.getHeaders().get("Last-Modified"));
 		Assertions.assertEquals(Set.of("bytes"), fullResponse.getHeaders().get("Accept-Ranges"));
@@ -155,15 +157,29 @@ public class StaticFilesTests {
 				.build();
 		MarshaledResponse rangeResponse = MarshaledResponse.withFile(file, rangeRequest)
 				.contentType("text/plain; charset=UTF-8")
+				.contentEncoding("gzip")
 				.entityTag(entityTag)
 				.lastModified(lastModified)
 				.cacheControl("public, max-age=60")
 				.build();
 		Assertions.assertEquals(206, rangeResponse.getStatusCode());
+		Assertions.assertEquals(Set.of("gzip"), rangeResponse.getHeaders().get("Content-Encoding"));
 		Assertions.assertEquals(Set.of("bytes 2-4/6"), rangeResponse.getHeaders().get("Content-Range"));
 		MarshaledResponseBody.File rangeBody = (MarshaledResponseBody.File) rangeResponse.getBody().orElseThrow();
 		Assertions.assertEquals(Long.valueOf(2), rangeBody.getOffset());
 		Assertions.assertEquals(Long.valueOf(3), rangeBody.getCount());
+	}
+
+	@Test
+	public void marshaledFileResponseRejectsContentEncodingHeaderConflict(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("example.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+
+		IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class, () ->
+				MarshaledResponse.withFile(file, Request.fromPath(HttpMethod.GET, "/example.txt"))
+						.headers(Map.of("Content-Encoding", Set.of("gzip")))
+						.build());
+		Assertions.assertTrue(exception.getMessage().contains("Header 'Content-Encoding' is controlled by file responses"));
 	}
 
 	@Test

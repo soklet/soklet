@@ -540,6 +540,12 @@ public final class MarshaledResponse {
 		}
 
 		@NonNull
+		public FileBuilder contentEncoding(@Nullable String contentEncoding) {
+			this.builder.contentEncoding(contentEncoding);
+			return this;
+		}
+
+		@NonNull
 		public FileBuilder entityTag(@Nullable EntityTag entityTag) {
 			this.builder.entityTag(entityTag);
 			return this;

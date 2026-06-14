@@ -502,7 +502,7 @@ public MarshaledResponse exampleImage() {
 }
 ```
 
-`MarshaledResponse` supports known-length byte-array, file, file-channel, and `ByteBuffer` bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory. For safe static roots, use [`StaticFiles`](https://www.soklet.com/docs/static-files) instead of hand-rolled path joins; it handles root containment, validators, optional content-hash ETags, access policy, single byte ranges, MIME defaults, and `GET`/`HEAD` behavior.
+`MarshaledResponse` supports known-length byte-array, file, file-channel, and `ByteBuffer` bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory. If you already selected a trusted file and want file-response semantics like validators and byte ranges, use `MarshaledResponse.withFile(...)`; its builder can set `Content-Type`, `Content-Encoding`, cache headers, validators, and range behavior. For safe static roots, use [`StaticFiles`](https://www.soklet.com/docs/static-files) instead of hand-rolled path joins; it handles root containment, validators, optional content-hash ETags, access policy, single byte ranges, MIME defaults, and `GET`/`HEAD` behavior.
 
 ##### Streaming Responses
 
