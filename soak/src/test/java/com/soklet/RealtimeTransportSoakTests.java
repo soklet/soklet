@@ -132,7 +132,9 @@ public class RealtimeTransportSoakTests {
 				.requestBodyTimeout(Duration.ofSeconds(2))
 				.requestHandlerTimeout(Duration.ofSeconds(3))
 				.concurrentConnectionLimit(PROFILE.mcpConcurrentConnectionLimit())
-				.sessionStore(McpSessionStore.fromInMemory(PROFILE.mcpSessionIdleTimeout()))
+				.sessionStore(McpSessionStore.builder()
+						.idleTimeout(PROFILE.mcpSessionIdleTimeout())
+						.build())
 				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(SoakMcpEndpoint.class)))
 				.shutdownTimeout(Duration.ofSeconds(3))
 				.build();
