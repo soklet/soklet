@@ -459,6 +459,8 @@ final class DefaultMcpRuntime {
 			case INITIALIZE -> handleInitialize(request, mcpServer, resolvedEndpoint, endpointPathParameters, parsedRequest);
 			case NOTIFICATIONS_INITIALIZED ->
 					handleInitializedNotification(request, mcpServer, parsedRequest, storedSession.orElseThrow(), requestContext);
+			case NOTIFICATIONS_CANCELLED ->
+					handleCancelledNotification(request, mcpServer, parsedRequest, storedSession.orElseThrow());
 			case PING -> handlePing(request, mcpServer, parsedRequest, storedSession.orElse(null));
 			case TOOLS_LIST ->
 					handleToolsList(request, resolvedEndpoint, parsedRequest, storedSession.orElseThrow(), requestContext);
@@ -667,6 +669,28 @@ final class DefaultMcpRuntime {
 
 		if (!mcpServer.getSessionStore().replace(storedSession, updatedSession))
 			return jsonRpcErrorResponse(request, parsedRequest.requestId(), McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error"));
+
+		return parsedRequest.requestId() == null
+				? emptyAcceptedResponse(request)
+				: jsonRpcSuccessResponse(request, parsedRequest.requestId(), EMPTY_OBJECT, Map.of());
+	}
+
+	@NonNull
+	private HttpRequestResult handleCancelledNotification(@NonNull Request request,
+																												@NonNull McpServer mcpServer,
+																												@NonNull ParsedJsonRpcRequest parsedRequest,
+																												@NonNull McpStoredSession storedSession) {
+		requireNonNull(request);
+		requireNonNull(mcpServer);
+		requireNonNull(parsedRequest);
+		requireNonNull(storedSession);
+
+		HttpRequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
+
+		if (gateResult != null)
+			return gateResult;
+
+		touchSession(mcpServer, storedSession);
 
 		return parsedRequest.requestId() == null
 				? emptyAcceptedResponse(request)
@@ -1960,6 +1984,7 @@ final class DefaultMcpRuntime {
 		return switch (method) {
 			case "initialize" -> Optional.of(McpOperationType.INITIALIZE);
 			case "notifications/initialized" -> Optional.of(McpOperationType.NOTIFICATIONS_INITIALIZED);
+			case "notifications/cancelled" -> Optional.of(McpOperationType.NOTIFICATIONS_CANCELLED);
 			case "ping" -> Optional.of(McpOperationType.PING);
 			case "tools/list" -> Optional.of(McpOperationType.TOOLS_LIST);
 			case "tools/call" -> Optional.of(McpOperationType.TOOLS_CALL);

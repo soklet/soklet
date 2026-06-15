@@ -278,6 +278,74 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void cancelledNotificationIsAcceptedAsKnownNotification() {
+		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
+		AtomicReference<Optional<McpOperationType>> cancelledAdmissionOperationType = new AtomicReference<>();
+		McpRequestAdmissionPolicy admissionPolicy = new McpRequestAdmissionPolicy() {
+			@NonNull
+			@Override
+			public Optional<Response> checkRequest(@NonNull McpAdmissionContext context) {
+				if ("notifications/cancelled".equals(context.getJsonRpcMethod().orElse(null)))
+					cancelledAdmissionOperationType.set(context.getOperationType());
+
+				return Optional.empty();
+			}
+		};
+
+		Soklet.runSimulator(configuration(lifecycleObserver, MetricsCollector.disabledInstance(), null, null, admissionPolicy), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator, "/tenants/acme/mcp");
+
+			McpRequestResult.ResponseCompleted notificationResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "method":"notifications/cancelled",
+							  "params":{
+							    "requestId":"req-active",
+							    "reason":"client moved on"
+							  }
+							}
+							""", sessionHeaders));
+
+			Assertions.assertEquals(Integer.valueOf(202), notificationResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertNull(notificationResult.getHttpRequestResult().getMarshaledResponse().bodyBytesOrNull());
+		});
+
+		Assertions.assertTrue(lifecycleObserver.startedMethods.contains("notifications/cancelled"));
+		Assertions.assertEquals(McpRequestOutcome.SUCCESS_NOTIFICATION, lifecycleObserver.outcomesByMethod.get("notifications/cancelled"));
+		Assertions.assertEquals(Optional.of(McpOperationType.NOTIFICATIONS_CANCELLED), cancelledAdmissionOperationType.get());
+	}
+
+	@Test
+	public void cancelledNotificationRequiresInitializedNotification() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
+			String sessionId = headerValue(initializeResult, "MCP-Session-Id");
+
+			McpRequestResult.ResponseCompleted notificationResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "method":"notifications/cancelled",
+							  "params":{
+							    "requestId":"req-active"
+							  }
+							}
+							""", Map.of(
+							"MCP-Session-Id", Set.of(sessionId),
+							"MCP-Protocol-Version", Set.of("2025-11-25")
+					)));
+
+			Assertions.assertEquals(Integer.valueOf(200), notificationResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			McpObject body = jsonBody(notificationResult);
+			McpObject error = (McpObject) body.get("error").orElseThrow();
+			Assertions.assertEquals("-32600", ((McpNumber) error.get("code").orElseThrow()).value().toPlainString());
+			Assertions.assertEquals("Session has not received notifications/initialized yet", ((McpString) error.get("message").orElseThrow()).value());
+		});
+	}
+
+	@Test
 	public void rejectsInvalidSessionIdsBeforeLookup() {
 		Soklet.runSimulator(configuration(), simulator -> {
 			for (String sessionId : List.of("bad session", "a".repeat(129))) {
