@@ -1,25 +1,38 @@
 # Changelog
 
-## 3.3.1-SNAPSHOT (Unreleased)
+## 3.4.0-SNAPSHOT (Unreleased)
+
+### Breaking Changes
+
+- MCP session creation is now owned by `McpSessionStore`. Custom stores must implement `create(Request, Class<? extends McpEndpoint>)`, generate valid `MCP-Session-Id` values themselves, and make admission decisions atomically with persistence. `McpServer.Builder.sessionIdGenerator(...)`, `McpServer.Builder.concurrentSessionLimit(...)`, and the old `McpSessionStore.fromInMemory(Duration)` shortcut were removed; use `McpSessionStore.builder()` for the default in-memory store.
 
 ### Features
 
-- Added `ConditionalRequests` for dynamic-resource HTTP conditionals. Applications can now evaluate `If-Match`, `If-None-Match`, `If-Modified-Since`, and `If-Unmodified-Since` against application-supplied `EntityTag` and `Last-Modified` validators, returning bodyless `304 Not Modified` or `412 Precondition Failed` responses when preconditions short-circuit.
-- Added `EffectiveClientIpResolver` for deriving a trusted client IP from the raw socket peer plus `Forwarded: for=` or `X-Forwarded-For` headers. It reuses `EffectiveOriginResolver.TrustPolicy`, supports trusted proxy predicates or IP allowlists, prefers standardized `Forwarded` values, accepts only IP literals, and falls back to the socket peer when forwarded headers are untrusted or unavailable.
+- Added `ConditionalRequests` for dynamic-resource HTTP conditionals. Applications can now evaluate `If-Match`, `If-None-Match`, `If-Modified-Since`, and `If-Unmodified-Since` against application-supplied `EntityTag` and `Last-Modified` validators, use `validatorHeaders(...)` for successful responses, and return bodyless `304 Not Modified` or `412 Precondition Failed` responses when preconditions short-circuit.
+- Added `EffectiveClientIpResolver` for deriving a trusted client IP from the raw socket peer plus trusted `Forwarded: for=` or `X-Forwarded-For` headers. It reuses `EffectiveOriginResolver.TrustPolicy`, supports trusted proxy predicates or IP allowlists, prefers standardized `Forwarded` values, accepts only IP literals, and falls back to the socket peer when forwarded headers are untrusted or unavailable.
 - MCP now recognizes `notifications/cancelled` as a framework-managed JSON-RPC notification. Soklet validates the session, exposes `McpOperationType.NOTIFICATIONS_CANCELLED` to MCP admission/interceptor/lifecycle/metrics hooks, accepts the notification without a response body, and leaves cooperative handler cancellation for future application-facing API work.
 - Standard HTTP responses can now opt into dynamic gzip compression for eligible finalized in-memory byte-array and `ByteBuffer` responses with `HttpServer.Builder.responseGzipPolicy(...)`. Compression is negotiated with `Accept-Encoding`, updates `Vary: Accept-Encoding`, skips already-encoded, range, streaming, and file responses, and includes `ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(...)` for common text-like response media types.
+- Standard HTTP now supports `Expect: 100-continue` for fixed-length and chunked request bodies by sending an interim `100 Continue` response before reading the body. Unsupported expectations now return `417 Expectation Failed` instead of being treated as malformed requests.
+- `MarshaledResponse.withFile(...).contentEncoding(...)` now provides a dedicated way to set `Content-Encoding` for already-compressed file responses while preserving file-response validators and range behavior.
 
 ### Behavior Changes
 
-- MCP session creation is now owned by `McpSessionStore`. The default in-memory store has `McpSessionStore.builder()` options for idle timeout, session ID generation, and a default `8_192` active-session cap; reaching that cap rejects new `initialize` requests with HTTP 503 before creating session state. `McpServer.Builder.sessionIdGenerator(...)` and `McpServer.Builder.concurrentSessionLimit(...)` were removed so custom/distributed stores can generate IDs and enforce caps atomically with persistence.
+- The default in-memory MCP session store now has `McpSessionStore.builder()` options for idle timeout, session ID generation, and a default `8_192` active-session cap. Reaching that cap rejects new `initialize` requests with HTTP 503 before endpoint initialization runs.
 - SSE and MCP event streams now default to a 30 second write timeout so stalled stream readers are disconnected by default. Set `SseServer.Builder.writeTimeout(Duration.ZERO)` or `McpServer.Builder.writeTimeout(Duration.ZERO)` to disable stream write timeouts.
 - Standard HTTP, SSE handshakes, and MCP transport requests now enforce a separate 64 KB `maximumHeadersSizeInBytes` default in addition to header-count, request-target, and total request-size limits. Use `HttpServer.Builder.maximumHeadersSizeInBytes(...)`, `SseServer.Builder.maximumHeadersSizeInBytes(...)`, or `McpServer.Builder.maximumHeadersSizeInBytes(...)` to tune it.
+- `ShutdownTrigger.ENTER_KEY` is now interactive-console-only. In noninteractive environments, including container stdin EOF, Soklet logs that the trigger is unsupported and keeps running instead of stopping unexpectedly.
+
+### Packaging
+
+- Added `Automatic-Module-Name: com.soklet` to the core JAR manifest for stable JPMS module naming.
 
 ### Fixes
 
 - Standard HTTP shutdown now stops accepting new connections, closes idle keep-alives, and lets already-dispatched handlers flush their responses before force-closing remaining connections at `shutdownTimeout`. Responses produced during drain include `Connection: close`.
-- Standard HTTP now supports `Expect: 100-continue` for fixed-length and chunked request bodies by sending an interim `100 Continue` response before reading the body. Unsupported expectations now return `417 Expectation Failed` instead of being treated as malformed requests.
-- `MarshaledResponse.withFile(...).contentEncoding(...)` now provides a dedicated way to set `Content-Encoding` for already-compressed file responses while preserving file-response validators and range behavior.
+- HTTP and SSE accept-loop failures are now contained and surfaced instead of silently leaving dead or partially started servers behind.
+- SSE startup bind failures now participate in normal start failure rollback semantics.
+- `DefaultMetricsCollector` no longer leaks in-flight request state when a `RequestInterceptor` substitutes the `Request`.
+- MCP GET stream rejection paths no longer leak active stream or session-pinning state.
 - MCP internal session messages now route to the newest live GET stream by stream registration time, so out-of-order stream header completion cannot make an older stream receive new session messages.
 - MCP tool progress notifications now publish immediately to the session's active same-node GET stream when one exists, instead of always buffering progress until the tool call completes. The existing progress-upgraded POST event-stream response remains the fallback when no live GET stream is available.
 - Timeout scheduler callbacks are now isolated so one failing timeout task cannot terminate the scheduler worker and silently disable later timeouts.
