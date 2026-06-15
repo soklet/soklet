@@ -84,6 +84,16 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void defaultMcpSessionStoreConcurrentSessionLimitCanBeDisabledAndRejectsInvalidValues() {
+		Assertions.assertDoesNotThrow(() -> McpSessionStore.builder()
+				.concurrentSessionLimit(0)
+				.build());
+		Assertions.assertThrows(IllegalArgumentException.class, () -> McpSessionStore.builder()
+				.concurrentSessionLimit(-1)
+				.build());
+	}
+
+	@Test
 	public void defaultMcpServerWriteTimeoutProtectsSlowStreamsAndCanBeDisabled() throws Exception {
 		DefaultMcpServer defaultServer = (DefaultMcpServer) McpServer.withPort(0)
 				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
@@ -187,12 +197,11 @@ public class McpServerLifecycleTests {
 
 		Assertions.assertSame(handlerResolver, mcpServer.getHandlerResolver());
 		Assertions.assertNotNull(mcpServer.getRequestAdmissionPolicy());
-			Assertions.assertNotNull(mcpServer.getRequestInterceptor());
-			Assertions.assertNotNull(mcpServer.getResponseMarshaler());
-			Assertions.assertNotNull(mcpServer.getCorsAuthorizer());
-			Assertions.assertNotNull(mcpServer.getSessionStore());
-			Assertions.assertNotNull(mcpServer.getSessionIdGenerator());
-		}
+		Assertions.assertNotNull(mcpServer.getRequestInterceptor());
+		Assertions.assertNotNull(mcpServer.getResponseMarshaler());
+		Assertions.assertNotNull(mcpServer.getCorsAuthorizer());
+		Assertions.assertNotNull(mcpServer.getSessionStore());
+	}
 
 	@Test
 	public void startedDefaultMcpServerServesCorsPreflightForWhitelistedOrigin() throws Exception {
@@ -1428,18 +1437,16 @@ public class McpServerLifecycleTests {
 	private static class FakeMcpServer implements McpServer {
 		private final AtomicBoolean initialized;
 		private final AtomicBoolean started;
-			private final AtomicBoolean stopped;
-			private final McpSessionStore sessionStore;
-			private final IdGenerator<String> sessionIdGenerator;
+		private final AtomicBoolean stopped;
+		private final McpSessionStore sessionStore;
 		private SokletConfig sokletConfig;
 		private RequestHandler requestHandler;
 
 		private FakeMcpServer() {
 			this.initialized = new AtomicBoolean();
-				this.started = new AtomicBoolean();
-				this.stopped = new AtomicBoolean();
-				this.sessionStore = McpSessionStore.fromInMemory();
-				this.sessionIdGenerator = IdGenerator.defaultSessionInstance();
+			this.started = new AtomicBoolean();
+			this.stopped = new AtomicBoolean();
+			this.sessionStore = McpSessionStore.fromInMemory();
 		}
 
 		@Override
@@ -1502,12 +1509,6 @@ public class McpServerLifecycleTests {
 		public McpSessionStore getSessionStore() {
 			return this.sessionStore;
 		}
-
-			@NonNull
-			@Override
-			public IdGenerator<String> getSessionIdGenerator() {
-				return this.sessionIdGenerator;
-			}
 
 		@NonNull
 		protected AtomicBoolean getInitialized() {

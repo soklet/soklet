@@ -148,8 +148,6 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@NonNull
 	private final McpSessionStore sessionStore;
 	@NonNull
-	private final IdGenerator<String> sessionIdGenerator;
-	@NonNull
 	private final Duration requestHeaderTimeout;
 	@NonNull
 	private final Duration requestBodyTimeout;
@@ -224,7 +222,6 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.responseMarshaler = builder.responseMarshaler != null ? builder.responseMarshaler : McpResponseMarshaler.defaultInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : McpCorsAuthorizer.nonBrowserClientsOnlyInstance();
 		this.sessionStore = builder.sessionStore != null ? builder.sessionStore : McpSessionStore.fromInMemory();
-		this.sessionIdGenerator = builder.sessionIdGenerator != null ? builder.sessionIdGenerator : IdGenerator.defaultSessionInstance();
 		this.port = builder.port;
 		this.host = builder.host != null ? builder.host : DEFAULT_HOST;
 		this.requestHeaderTimeout = builder.requestHeaderTimeout != null ? builder.requestHeaderTimeout : DEFAULT_REQUEST_HEADER_TIMEOUT;
@@ -510,12 +507,6 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@Override
 	public McpSessionStore getSessionStore() {
 		return this.sessionStore;
-	}
-
-	@NonNull
-	@Override
-	public IdGenerator<String> getSessionIdGenerator() {
-		return this.sessionIdGenerator;
 	}
 
 	void terminateStreamsForSession(@NonNull String sessionId) {

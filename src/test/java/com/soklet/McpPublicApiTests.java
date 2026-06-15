@@ -182,21 +182,12 @@ public class McpPublicApiTests {
 
 	@Test
 	public void sessionStoreCreateFindAndReplaceFollowCasSemantics() {
-		McpSessionStore sessionStore = McpSessionStore.fromInMemory(Duration.ZERO);
-		McpStoredSession created = new McpStoredSession(
-				"session-1",
-				TestEndpoint.class,
-				Instant.now(),
-				Instant.now(),
-				false,
-				false,
-				null,
-				null,
-				null,
-				McpSessionContext.fromBlankSlate(),
-				null,
-				0L
-		);
+		McpSessionStore sessionStore = McpSessionStore.builder()
+				.idleTimeout(Duration.ZERO)
+				.sessionIdGenerator(request -> "session-1")
+				.build();
+		McpStoredSession created = sessionStore.create(Request.fromPath(HttpMethod.POST, "/mcp"), TestEndpoint.class)
+				.orElseThrow();
 		McpStoredSession updated = new McpStoredSession(
 				"session-1",
 				TestEndpoint.class,
@@ -211,8 +202,6 @@ public class McpPublicApiTests {
 				null,
 				1L
 		);
-
-		sessionStore.create(created);
 
 		assertEquals(created, sessionStore.findBySessionId("session-1").orElseThrow());
 		assertTrue(sessionStore.replace(created, updated));
@@ -237,19 +226,25 @@ public class McpPublicApiTests {
 				0L
 		);
 
-		DefaultMcpSessionStore expiringStore = (DefaultMcpSessionStore) McpSessionStore.fromInMemory(Duration.ofMinutes(1));
+		DefaultMcpSessionStore expiringStore = (DefaultMcpSessionStore) McpSessionStore.builder()
+				.idleTimeout(Duration.ofMinutes(1))
+				.build();
 		expiringStore.create(staleSession);
 		assertTrue(expiringStore.findBySessionId("stale").isEmpty());
 		assertFalse(expiringStore.containsSessionId("stale"));
 
-		McpSessionStore nonExpiringStore = McpSessionStore.fromInMemory(Duration.ZERO);
+		DefaultMcpSessionStore nonExpiringStore = (DefaultMcpSessionStore) McpSessionStore.builder()
+				.idleTimeout(Duration.ZERO)
+				.build();
 		nonExpiringStore.create(staleSession);
 		assertTrue(nonExpiringStore.findBySessionId("stale").isPresent());
 	}
 
 	@Test
 	public void defaultInMemorySessionStoreReplaceDoesNotRemoveExpiredSession() {
-		DefaultMcpSessionStore sessionStore = (DefaultMcpSessionStore) McpSessionStore.fromInMemory(Duration.ofMinutes(1));
+		DefaultMcpSessionStore sessionStore = (DefaultMcpSessionStore) McpSessionStore.builder()
+				.idleTimeout(Duration.ofMinutes(1))
+				.build();
 		McpStoredSession staleSession = new McpStoredSession(
 				"stale",
 				TestEndpoint.class,
@@ -289,7 +284,9 @@ public class McpPublicApiTests {
 
 	@Test
 	public void defaultInMemorySessionStoreSweepsExpiredSessionsDuringSubsequentWrites() {
-		DefaultMcpSessionStore sessionStore = (DefaultMcpSessionStore) McpSessionStore.fromInMemory(Duration.ofMillis(50));
+		DefaultMcpSessionStore sessionStore = (DefaultMcpSessionStore) McpSessionStore.builder()
+				.idleTimeout(Duration.ofMillis(50))
+				.build();
 		McpStoredSession staleSession = new McpStoredSession(
 				"stale",
 				TestEndpoint.class,

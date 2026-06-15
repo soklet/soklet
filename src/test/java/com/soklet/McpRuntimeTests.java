@@ -100,7 +100,9 @@ public class McpRuntimeTests {
 		McpHandlerResolver handlerResolver = McpHandlerResolver.fromClasses(Set.of(CatalogEndpoint.class));
 		SokletConfig config = SokletConfig.withMcpServer(McpServer.withPort(0)
 						.handlerResolver(handlerResolver)
-						.sessionIdGenerator(request -> "node/a+b=c")
+						.sessionStore(McpSessionStore.builder()
+								.sessionIdGenerator(request -> "node/a+b=c")
+								.build())
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(LifecycleObserver.defaultInstance())
@@ -112,6 +114,70 @@ public class McpRuntimeTests {
 					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
 
 			Assertions.assertEquals("node/a+b=c", headerValue(requestResult, "MCP-Session-Id"));
+		});
+	}
+
+	@Test
+	public void initializeRejectsWhenInMemorySessionStoreLimitIsReached() {
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+
+		Soklet.runSimulator(configuration(
+				LifecycleObserver.defaultInstance(),
+				metricsCollector,
+				null,
+				null,
+				null,
+				1), simulator -> {
+			McpRequestResult.ResponseCompleted firstInitializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
+			String firstSessionId = headerValue(firstInitializeResult, "MCP-Session-Id");
+
+			McpRequestResult.ResponseCompleted rejectedInitializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-2"), Map.of()));
+
+			Assertions.assertEquals(Integer.valueOf(503), rejectedInitializeResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertFalse(rejectedInitializeResult.getHttpRequestResult().getMarshaledResponse().getHeaders().containsKey("MCP-Session-Id"));
+			Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
+
+			McpRequestResult.ResponseCompleted deleteResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					Request.withPath(HttpMethod.DELETE, "/tenants/acme/mcp")
+							.headers(Map.of(
+									"MCP-Session-Id", Set.of(firstSessionId),
+									"MCP-Protocol-Version", Set.of("2025-11-25")
+							))
+							.build());
+
+			Assertions.assertEquals(Integer.valueOf(204), deleteResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
+
+			McpRequestResult.ResponseCompleted thirdInitializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-3"), Map.of()));
+
+			Assertions.assertEquals(Integer.valueOf(200), thirdInitializeResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertFalse(headerValue(thirdInitializeResult, "MCP-Session-Id").isBlank());
+			Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
+		});
+	}
+
+	@Test
+	public void inMemorySessionStoreConcurrentSessionLimitZeroDisablesInitializeCap() {
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+
+		Soklet.runSimulator(configuration(
+				LifecycleObserver.defaultInstance(),
+				metricsCollector,
+				null,
+				null,
+				null,
+				0), simulator -> {
+			McpRequestResult.ResponseCompleted firstInitializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
+			McpRequestResult.ResponseCompleted secondInitializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-2"), Map.of()));
+
+			Assertions.assertEquals(Integer.valueOf(200), firstInitializeResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(Integer.valueOf(200), secondInitializeResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertEquals(2L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
 		});
 	}
 
@@ -369,7 +435,7 @@ public class McpRuntimeTests {
 
 	@Test
 	public void initializedNotificationRejectsSessionsThatHaveNotCompletedInitialization() {
-		McpSessionStore sessionStore = McpSessionStore.fromInMemory();
+		DefaultMcpSessionStore sessionStore = (DefaultMcpSessionStore) McpSessionStore.fromInMemory();
 		Instant now = Instant.now();
 		String sessionId = "session-not-initialized";
 		sessionStore.create(new McpStoredSession(
@@ -1352,7 +1418,7 @@ public class McpRuntimeTests {
 
 		Soklet.runSimulator(configuration(lifecycleObserver,
 				metricsCollector,
-				McpSessionStore.fromInMemory(Duration.ofMillis(50))), simulator -> {
+				McpSessionStore.builder().idleTimeout(Duration.ofMillis(50)).build()), simulator -> {
 			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator);
 
 			McpRequestResult.StreamOpened streamOpened = (McpRequestResult.StreamOpened) simulator.performMcpRequest(
@@ -1404,7 +1470,7 @@ public class McpRuntimeTests {
 
 		Soklet.runSimulator(configuration(lifecycleObserver,
 				metricsCollector,
-				McpSessionStore.fromInMemory(Duration.ofMillis(50))), simulator -> {
+				McpSessionStore.builder().idleTimeout(Duration.ofMillis(50)).build()), simulator -> {
 			initializedSessionHeaders(simulator);
 
 			Assertions.assertEquals(1L, metricsCollector.snapshot().orElseThrow().getActiveMcpSessions());
@@ -1638,6 +1704,15 @@ public class McpRuntimeTests {
 																								 McpSessionStore sessionStore,
 																								 McpCorsAuthorizer corsAuthorizer,
 																								 McpRequestAdmissionPolicy admissionPolicy) {
+		return configuration(lifecycleObserver, metricsCollector, sessionStore, corsAuthorizer, admissionPolicy, null);
+	}
+
+	private static SokletConfig configuration(LifecycleObserver lifecycleObserver,
+																								 MetricsCollector metricsCollector,
+																								 McpSessionStore sessionStore,
+																								 McpCorsAuthorizer corsAuthorizer,
+																								 McpRequestAdmissionPolicy admissionPolicy,
+																								 Integer concurrentSessionLimit) {
 		McpHandlerResolver handlerResolver = McpHandlerResolver.fromClasses(Set.of(CatalogEndpoint.class))
 				.withTool(new ProgrammaticEchoToolHandler(), CatalogEndpoint.class)
 				.withPrompt(new ProgrammaticCatalogPromptHandler(), CatalogEndpoint.class)
@@ -1648,6 +1723,10 @@ public class McpRuntimeTests {
 
 		if (sessionStore != null)
 			mcpServerBuilder.sessionStore(sessionStore);
+		else if (concurrentSessionLimit != null)
+			mcpServerBuilder.sessionStore(McpSessionStore.builder()
+					.concurrentSessionLimit(concurrentSessionLimit)
+					.build());
 
 		if (corsAuthorizer != null)
 			mcpServerBuilder.corsAuthorizer(corsAuthorizer);

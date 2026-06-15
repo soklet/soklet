@@ -17,7 +17,9 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.time.Instant;
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
 import static java.time.Duration.ZERO;
@@ -42,11 +45,26 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public interface McpSessionStore {
 	/**
-	 * Persists a newly-created session.
+	 * Creates and admits a new session for the given request and endpoint class.
+	 * <p>
+	 * Implementations are responsible for generating a valid MCP session ID and
+	 * enforcing their own concurrency limits atomically with persistence. Returning
+	 * {@link Optional#empty()} declines admission before session state is created
+	 * (for example, when a concurrent-session limit is reached).
+	 * <p>
+	 * Returned sessions must be new, uninitialized, unterminated sessions for
+	 * {@code endpointClass}. Soklet will complete initialization with
+	 * {@link #replace(McpStoredSession, McpStoredSession)} after the endpoint's
+	 * {@link McpEndpoint#initialize(McpInitializationContext, McpSessionContext)}
+	 * callback succeeds.
 	 *
-	 * @param session the session to create
+	 * @param request the initialize request
+	 * @param endpointClass the MCP endpoint class that will own the session
+	 * @return the newly-created stored session, or empty if the store declined admission
 	 */
-	void create(@NonNull McpStoredSession session);
+	@NonNull
+	Optional<McpStoredSession> create(@NonNull Request request,
+																		@NonNull Class<? extends McpEndpoint> endpointClass);
 
 	/**
 	 * Loads a session by ID.
@@ -76,70 +94,225 @@ public interface McpSessionStore {
 	void deleteBySessionId(@NonNull String sessionId);
 
 	/**
+	 * Acquires a builder for Soklet's default in-memory MCP session store.
+	 *
+	 * @return a new MCP session store builder
+	 */
+	@NonNull
+	static Builder builder() {
+		return new Builder();
+	}
+
+	/**
+	 * Acquires Soklet's default in-memory MCP session store.
+	 *
+	 * @return a new in-memory session store
+	 */
+	@NonNull
+	static McpSessionStore fromDefaults() {
+		return builder().build();
+	}
+
+	/**
 	 * Acquires the default in-memory session store using Soklet's default idle timeout.
 	 * <p>
-	 * Expired sessions are reclaimed opportunistically during lookup and subsequent create activity; exact deletion timing is therefore best-effort rather than timer-driven.
+	 * Expired sessions are reclaimed opportunistically during lookup and subsequent
+	 * session-creation activity; exact deletion timing is therefore best-effort
+	 * rather than timer-driven.
 	 *
 	 * @return a new in-memory session store
 	 */
 	@NonNull
 	static McpSessionStore fromInMemory() {
-		return new DefaultMcpSessionStore(ofHours(24));
+		return fromDefaults();
 	}
 
 	/**
-	 * Acquires the default in-memory session store using a caller-supplied idle timeout.
-	 * <p>
-	 * Expired sessions are reclaimed opportunistically during lookup and subsequent create activity; exact deletion timing is therefore best-effort rather than timer-driven.
-	 *
-	 * @param idleTimeout the idle timeout, or {@code Duration.ZERO} to disable idle expiry
-	 * @return a new in-memory session store
+	 * Builder for Soklet's default in-memory MCP session store.
 	 */
-	@NonNull
-	static McpSessionStore fromInMemory(@NonNull Duration idleTimeout) {
-		requireNonNull(idleTimeout);
+	@NotThreadSafe
+	final class Builder {
+		@Nullable
+		Duration idleTimeout;
+		@Nullable
+		IdGenerator<String> sessionIdGenerator;
+		@Nullable
+		Integer concurrentSessionLimit;
 
-		if (idleTimeout.isNegative())
-			throw new IllegalArgumentException("Idle timeout must not be negative.");
+		private Builder() {}
 
-		return new DefaultMcpSessionStore(idleTimeout);
+		/**
+		 * Sets the idle timeout, or {@link Duration#ZERO} to disable idle expiry.
+		 *
+		 * @param idleTimeout the idle timeout, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder idleTimeout(@Nullable Duration idleTimeout) {
+			this.idleTimeout = idleTimeout;
+			return this;
+		}
+
+		/**
+		 * Sets the generator used for newly-created MCP session IDs.
+		 * <p>
+		 * Custom generators must return globally unique, cryptographically strong,
+		 * visible-ASCII IDs suitable for {@code MCP-Session-Id} header values.
+		 *
+		 * @param sessionIdGenerator the session ID generator, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder sessionIdGenerator(@Nullable IdGenerator<String> sessionIdGenerator) {
+			this.sessionIdGenerator = sessionIdGenerator;
+			return this;
+		}
+
+		/**
+		 * Sets the concurrent MCP session limit.
+		 * <p>
+		 * A value of {@code 0} disables the in-memory store's session cap.
+		 *
+		 * @param concurrentSessionLimit the concurrent MCP session limit, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder concurrentSessionLimit(@Nullable Integer concurrentSessionLimit) {
+			this.concurrentSessionLimit = concurrentSessionLimit;
+			return this;
+		}
+
+		/**
+		 * Builds the MCP session store.
+		 *
+		 * @return the built MCP session store
+		 */
+		@NonNull
+		public McpSessionStore build() {
+			return new DefaultMcpSessionStore(this);
+		}
 	}
 }
 
 final class DefaultMcpSessionStore implements McpSessionStore {
 	@NonNull
+	private static final Duration DEFAULT_IDLE_TIMEOUT;
+	@NonNull
 	private static final Duration DEFAULT_SWEEP_INTERVAL;
+	@NonNull
+	private static final Integer DEFAULT_CONCURRENT_SESSION_LIMIT;
 	@NonNull
 	private final Duration idleTimeout;
 	@NonNull
+	private final IdGenerator<String> sessionIdGenerator;
+	@NonNull
+	private final Integer concurrentSessionLimit;
+	@NonNull
 	private final ConcurrentMap<String, McpStoredSession> sessions;
+	@NonNull
+	private final ConcurrentMap<String, Boolean> activeLimitedSessionIds;
+	@NonNull
+	private final AtomicInteger activeLimitedSessionCount;
 	@NonNull
 	private volatile Predicate<String> pinnedSessionPredicate;
 	@NonNull
 	private volatile Instant lastSweepAt;
 
 	static {
+		DEFAULT_IDLE_TIMEOUT = ofHours(24);
 		DEFAULT_SWEEP_INTERVAL = ofMinutes(1);
+		DEFAULT_CONCURRENT_SESSION_LIMIT = 8_192;
 	}
 
-	DefaultMcpSessionStore(@NonNull Duration idleTimeout) {
-		requireNonNull(idleTimeout);
-		this.idleTimeout = idleTimeout;
+	DefaultMcpSessionStore(McpSessionStore.@NonNull Builder builder) {
+		requireNonNull(builder);
+		this.idleTimeout = builder.idleTimeout != null ? builder.idleTimeout : DEFAULT_IDLE_TIMEOUT;
+		this.sessionIdGenerator = builder.sessionIdGenerator != null ? builder.sessionIdGenerator : IdGenerator.defaultSessionInstance();
+		this.concurrentSessionLimit = builder.concurrentSessionLimit != null ? builder.concurrentSessionLimit : DEFAULT_CONCURRENT_SESSION_LIMIT;
 		this.sessions = new ConcurrentHashMap<>();
+		this.activeLimitedSessionIds = new ConcurrentHashMap<>();
+		this.activeLimitedSessionCount = new AtomicInteger(0);
 		this.pinnedSessionPredicate = sessionId -> false;
 		this.lastSweepAt = Instant.EPOCH;
+
+		if (this.idleTimeout.isNegative())
+			throw new IllegalArgumentException("Idle timeout must not be negative.");
+
+		if (this.concurrentSessionLimit < 0)
+			throw new IllegalArgumentException("Concurrent session limit must be >= 0");
 	}
 
+	@NonNull
 	@Override
-	public void create(@NonNull McpStoredSession session) {
-		requireNonNull(session);
-		// Direct store users still get opportunistic reclamation; runtime-managed stores observe returned sessions first.
+	public Optional<McpStoredSession> create(@NonNull Request request,
+																					 @NonNull Class<? extends McpEndpoint> endpointClass) {
+		requireNonNull(request);
+		requireNonNull(endpointClass);
 		takeExpiredSessionsIfSweepDue();
 
-		McpStoredSession previous = this.sessions.putIfAbsent(session.sessionId(), session);
+		if (!reserveSessionSlot())
+			return Optional.empty();
 
-		if (previous != null)
-			throw new IllegalStateException("Session with ID '%s' already exists".formatted(session.sessionId()));
+		String sessionId = this.sessionIdGenerator.generateId(request);
+
+		if (!DefaultMcpRuntime.isValidMcpSessionId(sessionId)) {
+			releaseReservedSessionSlot();
+			throw new IllegalStateException("MCP session ID generator produced an invalid session ID.");
+		}
+
+		takeExpiredSession(sessionId);
+
+		Instant now = Instant.now();
+		McpStoredSession session = new McpStoredSession(
+				sessionId,
+				endpointClass,
+				now,
+				now,
+				false,
+				false,
+				null,
+				null,
+				null,
+				McpSessionContext.fromBlankSlate(),
+				null,
+				0L
+		);
+
+		try {
+			put(session);
+		} catch (Throwable throwable) {
+			releaseReservedSessionSlot();
+			throw throwable;
+		}
+
+		this.activeLimitedSessionIds.put(sessionId, Boolean.TRUE);
+		return Optional.of(session);
+	}
+
+	void create(@NonNull McpStoredSession session) {
+		requireNonNull(session);
+		takeExpiredSessionsIfSweepDue();
+
+		boolean slotReserved = false;
+
+		if (session.terminatedAt() == null) {
+			if (!reserveSessionSlot())
+				throw new IllegalStateException("MCP session limit reached.");
+
+			slotReserved = true;
+		}
+
+		try {
+			put(session);
+		} catch (Throwable throwable) {
+			if (slotReserved)
+				releaseReservedSessionSlot();
+
+			throw throwable;
+		}
+
+		if (slotReserved)
+			this.activeLimitedSessionIds.put(session.sessionId(), Boolean.TRUE);
 	}
 
 	@NonNull
@@ -153,7 +326,9 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 			return Optional.empty();
 
 		if (isExpired(storedSession)) {
-			this.sessions.remove(sessionId, storedSession);
+			if (this.sessions.remove(sessionId, storedSession))
+				releaseSessionSlot(sessionId);
+
 			return Optional.empty();
 		}
 
@@ -176,13 +351,20 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 		if (isExpired(expected))
 			return false;
 
-		return this.sessions.replace(expected.sessionId(), expected, updated);
+		boolean replaced = this.sessions.replace(expected.sessionId(), expected, updated);
+
+		if (replaced && expected.terminatedAt() == null && updated.terminatedAt() != null)
+			releaseSessionSlot(updated.sessionId());
+
+		return replaced;
 	}
 
 	@Override
 	public void deleteBySessionId(@NonNull String sessionId) {
 		requireNonNull(sessionId);
-		this.sessions.remove(sessionId);
+
+		if (this.sessions.remove(sessionId) != null)
+			releaseSessionSlot(sessionId);
 	}
 
 	void pinnedSessionPredicate(@NonNull Predicate<String> pinnedSessionPredicate) {
@@ -204,9 +386,11 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 		if (storedSession == null || !isExpired(storedSession))
 			return Optional.empty();
 
-		return this.sessions.remove(sessionId, storedSession)
-				? Optional.of(storedSession)
-				: Optional.empty();
+		if (!this.sessions.remove(sessionId, storedSession))
+			return Optional.empty();
+
+		releaseSessionSlot(sessionId);
+		return Optional.of(storedSession);
 	}
 
 	@NonNull
@@ -227,11 +411,56 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 		for (var entry : this.sessions.entrySet()) {
 			McpStoredSession storedSession = entry.getValue();
 
-			if (isExpired(storedSession) && this.sessions.remove(entry.getKey(), storedSession))
+			if (isExpired(storedSession) && this.sessions.remove(entry.getKey(), storedSession)) {
 				expiredSessions.add(storedSession);
+				releaseSessionSlot(entry.getKey());
+			}
 		}
 
 		return expiredSessions;
+	}
+
+	private void put(@NonNull McpStoredSession session) {
+		requireNonNull(session);
+
+		McpStoredSession previous = this.sessions.putIfAbsent(session.sessionId(), session);
+
+		if (previous != null)
+			throw new IllegalStateException("Session with ID '%s' already exists".formatted(session.sessionId()));
+	}
+
+	private boolean reserveSessionSlot() {
+		if (this.concurrentSessionLimit == 0)
+			return true;
+
+		while (true) {
+			int current = this.activeLimitedSessionCount.get();
+
+			if (current >= this.concurrentSessionLimit)
+				return false;
+
+			if (this.activeLimitedSessionCount.compareAndSet(current, current + 1))
+				return true;
+		}
+	}
+
+	private void releaseSessionSlot(@NonNull String sessionId) {
+		requireNonNull(sessionId);
+
+		if (this.activeLimitedSessionIds.remove(sessionId) != null)
+			releaseReservedSessionSlot();
+	}
+
+	private void releaseReservedSessionSlot() {
+		while (true) {
+			int current = this.activeLimitedSessionCount.get();
+
+			if (current <= 0)
+				return;
+
+			if (this.activeLimitedSessionCount.compareAndSet(current, current - 1))
+				return;
+		}
 	}
 
 	private boolean isExpired(@NonNull McpStoredSession storedSession) {

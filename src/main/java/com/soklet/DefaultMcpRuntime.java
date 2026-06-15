@@ -90,7 +90,7 @@ final class DefaultMcpRuntime {
 		this.mcpStreamsBySessionId = new ConcurrentHashMap<>();
 	}
 
-	private static boolean isValidMcpSessionId(@Nullable String sessionId) {
+	static boolean isValidMcpSessionId(@Nullable String sessionId) {
 		if (sessionId == null || sessionId.isEmpty() || sessionId.length() > MAX_MCP_SESSION_ID_LENGTH)
 			return false;
 
@@ -530,42 +530,36 @@ final class DefaultMcpRuntime {
 		McpClientCapabilities clientCapabilities = new McpClientCapabilities(capabilitiesValue);
 		McpClientInfo clientInfo = clientInfoValue == null ? null : new McpClientInfo(requiredString(clientInfoValue, "name"),
 				optionalString(clientInfoValue, "version").orElse(null));
-		String sessionId = mcpServer.getSessionIdGenerator().generateId(request);
-
-		if (!isValidMcpSessionId(sessionId))
-			throw new IllegalStateException("MCP session ID generator produced an invalid session ID.");
-
-		Instant now = Instant.now();
-		McpStoredSession initialSession = new McpStoredSession(
-				sessionId,
-				resolvedEndpoint.endpointClass(),
-				now,
-				now,
-				false,
-				false,
-				null,
-				null,
-				null,
-				McpSessionContext.fromBlankSlate(),
-				null,
-				0L
-		);
-
 		observeIdleExpiredSessionsIfDue(mcpServer);
-		mcpServer.getSessionStore().create(initialSession);
+
+		McpStoredSession initialSession = mcpServer.getSessionStore()
+				.create(request, resolvedEndpoint.endpointClass())
+				.orElse(null);
+
+		if (initialSession == null)
+			return plainTextResponse(request, 503, "MCP session limit reached.");
+
+		String sessionId = initialSession.sessionId();
+
+		if (!isValidInitialSession(initialSession, resolvedEndpoint.endpointClass())) {
+			mcpServer.getSessionStore().deleteBySessionId(sessionId);
+			throw new IllegalStateException("MCP session store produced an invalid initial session.");
+		}
+
 		observeSessionCreated(request, resolvedEndpoint.endpointClass(), sessionId);
 
-		McpEndpoint endpoint = endpointInstance(resolvedEndpoint.endpointClass());
-		DefaultMcpInitializationContext initializationContext = new DefaultMcpInitializationContext(
-				request,
-				protocolVersion,
-				clientCapabilities,
-				Optional.ofNullable(clientInfo),
-				endpointPathParameters,
-				getSoklet().getSokletConfig().getValueConverterRegistry()
-		);
+		McpEndpoint endpoint = null;
 
 		try {
+			endpoint = endpointInstance(resolvedEndpoint.endpointClass());
+			DefaultMcpInitializationContext initializationContext = new DefaultMcpInitializationContext(
+					request,
+					protocolVersion,
+					clientCapabilities,
+					Optional.ofNullable(clientInfo),
+					endpointPathParameters,
+					getSoklet().getSokletConfig().getValueConverterRegistry()
+			);
 			McpSessionContext sessionContext = endpoint.initialize(initializationContext, McpSessionContext.fromBlankSlate());
 			McpNegotiatedCapabilities negotiatedCapabilities = negotiatedCapabilitiesFor(resolvedEndpoint);
 			McpStoredSession updatedSession = new McpStoredSession(
@@ -592,18 +586,22 @@ final class DefaultMcpRuntime {
 			McpJsonRpcError error;
 
 			try {
-				error = endpoint.handleError(unwrapInvocationThrowable(throwable),
-						new DefaultMcpRequestContext(
-								request,
-								resolvedEndpoint.endpointClass(),
-								parsedRequest.method(),
-								parsedRequest.operationType(),
-								Optional.ofNullable(parsedRequest.requestId()),
-								Optional.of(sessionId),
-								Optional.of(protocolVersion),
-								Optional.empty(),
-								Optional.of(McpSessionContext.fromBlankSlate())
-						));
+				if (endpoint == null) {
+					error = McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error");
+				} else {
+					error = endpoint.handleError(unwrapInvocationThrowable(throwable),
+							new DefaultMcpRequestContext(
+									request,
+									resolvedEndpoint.endpointClass(),
+									parsedRequest.method(),
+									parsedRequest.operationType(),
+									Optional.ofNullable(parsedRequest.requestId()),
+									Optional.of(sessionId),
+									Optional.of(protocolVersion),
+									Optional.empty(),
+									Optional.of(McpSessionContext.fromBlankSlate())
+							));
+				}
 			} catch (Throwable handleErrorThrowable) {
 				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
 								format("An exception occurred while invoking %s::handleError during MCP initialization", McpEndpoint.class.getSimpleName()))
@@ -1328,6 +1326,21 @@ final class DefaultMcpRuntime {
 					McpSessionTerminationReason.IDLE_TIMEOUT,
 					null);
 		}
+	}
+
+	private boolean isValidInitialSession(@NonNull McpStoredSession storedSession,
+																				@NonNull Class<? extends McpEndpoint> endpointClass) {
+		requireNonNull(storedSession);
+		requireNonNull(endpointClass);
+
+		return isValidMcpSessionId(storedSession.sessionId())
+				&& storedSession.endpointClass().equals(endpointClass)
+				&& !storedSession.initialized()
+				&& !storedSession.initializedNotificationReceived()
+				&& storedSession.protocolVersion() == null
+				&& storedSession.clientCapabilities() == null
+				&& storedSession.negotiatedCapabilities() == null
+				&& storedSession.terminatedAt() == null;
 	}
 
 	@NonNull

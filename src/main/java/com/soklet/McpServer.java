@@ -108,14 +108,6 @@ public interface McpServer extends AutoCloseable {
 	@NonNull
 	McpSessionStore getSessionStore();
 
-	/**
-	 * Provides the generator used for MCP session IDs.
-	 *
-	 * @return the session ID generator
-	 */
-	@NonNull
-	IdGenerator<String> getSessionIdGenerator();
-
 	@Override
 	default void close() throws Exception {
 		stop();
@@ -213,8 +205,6 @@ public interface McpServer extends AutoCloseable {
 		Duration writeTimeout;
 		@Nullable
 		Duration heartbeatInterval;
-		@Nullable
-		IdGenerator<String> sessionIdGenerator;
 
 		private Builder(@NonNull Integer port) {
 			requireNonNull(port);
@@ -538,21 +528,6 @@ public interface McpServer extends AutoCloseable {
 		@NonNull
 		public Builder heartbeatInterval(@Nullable Duration heartbeatInterval) {
 			this.heartbeatInterval = heartbeatInterval;
-			return this;
-		}
-
-		/**
-		 * Sets the generator used for MCP session IDs.
-		 * <p>
-		 * Custom generators must return globally unique, cryptographically strong,
-		 * visible-ASCII IDs suitable for {@code MCP-Session-Id} header values.
-		 *
-		 * @param sessionIdGenerator the session ID generator
-		 * @return this builder
-		 */
-		@NonNull
-		public Builder sessionIdGenerator(@Nullable IdGenerator<String> sessionIdGenerator) {
-			this.sessionIdGenerator = sessionIdGenerator;
 			return this;
 		}
 

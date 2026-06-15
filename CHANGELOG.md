@@ -11,6 +11,7 @@
 
 ### Behavior Changes
 
+- MCP session creation is now owned by `McpSessionStore`. The default in-memory store has `McpSessionStore.builder()` options for idle timeout, session ID generation, and a default `8_192` active-session cap; reaching that cap rejects new `initialize` requests with HTTP 503 before creating session state. `McpServer.Builder.sessionIdGenerator(...)` and `McpServer.Builder.concurrentSessionLimit(...)` were removed so custom/distributed stores can generate IDs and enforce caps atomically with persistence.
 - SSE and MCP event streams now default to a 30 second write timeout so stalled stream readers are disconnected by default. Set `SseServer.Builder.writeTimeout(Duration.ZERO)` or `McpServer.Builder.writeTimeout(Duration.ZERO)` to disable stream write timeouts.
 - Standard HTTP, SSE handshakes, and MCP transport requests now enforce a separate 64 KB `maximumHeadersSizeInBytes` default in addition to header-count, request-target, and total request-size limits. Use `HttpServer.Builder.maximumHeadersSizeInBytes(...)`, `SseServer.Builder.maximumHeadersSizeInBytes(...)`, or `McpServer.Builder.maximumHeadersSizeInBytes(...)` to tune it.
 
