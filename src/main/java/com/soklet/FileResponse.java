@@ -29,11 +29,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -51,8 +49,6 @@ import static java.util.Objects.requireNonNull;
 final class FileResponse {
 	@NonNull
 	private static final Set<@NonNull String> CONTROLLED_HEADER_NAMES;
-	@NonNull
-	private static final Integer MAX_ENTITY_TAG_CONDITION_COUNT;
 
 	static {
 		CONTROLLED_HEADER_NAMES = Set.of(
@@ -66,7 +62,6 @@ final class FileResponse {
 				"last-modified",
 				"transfer-encoding"
 		);
-		MAX_ENTITY_TAG_CONDITION_COUNT = 256;
 	}
 
 	@NonNull
@@ -172,7 +167,7 @@ final class FileResponse {
 
 	@NonNull
 	private Optional<Instant> getLastModified() {
-		return Optional.ofNullable(this.lastModified).map(FileResponse::truncateToSeconds);
+		return Optional.ofNullable(this.lastModified).map(ConditionalRequestEvaluator::truncateToSeconds);
 	}
 
 	@NonNull
@@ -215,35 +210,18 @@ final class FileResponse {
 	@NonNull
 	private PreconditionResult evaluatePreconditions(@NonNull RequestContext requestContext) {
 		requireNonNull(requestContext);
-		EntityTag entityTag = getEntityTag().orElse(null);
-		Instant lastModified = getLastModified().orElse(null);
-		EntityTagCondition ifMatch = entityTagConditionFor(requestContext.ifMatchHeaderValue()).orElse(null);
+		ConditionalRequestEvaluator.PreconditionOutcome preconditionOutcome = ConditionalRequestEvaluator.evaluate(
+				requestContext.toConditionalRequestContext(),
+				getEntityTag().orElse(null),
+				getLastModified().orElse(null),
+				true
+		);
 
-		if (ifMatch != null) {
-			if (!ifMatch.matchesStrong(entityTag, true))
-				return PreconditionResult.PRECONDITION_FAILED;
-		} else {
-			Instant ifUnmodifiedSince = HttpDate.fromHeaderValue(requestContext.ifUnmodifiedSinceHeaderValue()).orElse(null);
-
-			if (ifUnmodifiedSince != null && lastModified != null && lastModified.isAfter(truncateToSeconds(ifUnmodifiedSince)))
-				return PreconditionResult.PRECONDITION_FAILED;
-		}
-
-		EntityTagCondition ifNoneMatch = entityTagConditionFor(requestContext.ifNoneMatchHeaderValue()).orElse(null);
-
-		if (ifNoneMatch != null) {
-			if (ifNoneMatch.matchesWeak(entityTag, true))
-				return requestContext.httpMethod() == HttpMethod.GET || requestContext.httpMethod() == HttpMethod.HEAD
-						? PreconditionResult.NOT_MODIFIED
-						: PreconditionResult.PRECONDITION_FAILED;
-		} else if (requestContext.httpMethod() == HttpMethod.GET || requestContext.httpMethod() == HttpMethod.HEAD) {
-			Instant ifModifiedSince = HttpDate.fromHeaderValue(requestContext.ifModifiedSinceHeaderValue()).orElse(null);
-
-			if (ifModifiedSince != null && lastModified != null && !lastModified.isAfter(truncateToSeconds(ifModifiedSince)))
-				return PreconditionResult.NOT_MODIFIED;
-		}
-
-		return PreconditionResult.CONTINUE;
+		return switch (preconditionOutcome) {
+			case CONTINUE -> PreconditionResult.CONTINUE;
+			case NOT_MODIFIED -> PreconditionResult.NOT_MODIFIED;
+			case PRECONDITION_FAILED -> PreconditionResult.PRECONDITION_FAILED;
+		};
 	}
 
 	@NonNull
@@ -279,7 +257,7 @@ final class FileResponse {
 		Instant ifRangeDate = HttpDate.fromHeaderValue(ifRange).orElse(null);
 		Instant lastModified = getLastModified().orElse(null);
 
-		return ifRangeDate != null && lastModified != null && truncateToSeconds(ifRangeDate).equals(lastModified);
+		return ifRangeDate != null && lastModified != null && ConditionalRequestEvaluator.truncateToSeconds(ifRangeDate).equals(lastModified);
 	}
 
 	@NonNull
@@ -338,90 +316,6 @@ final class FileResponse {
 	}
 
 	@NonNull
-	private static Optional<EntityTagCondition> entityTagConditionFor(@Nullable String headerValue) {
-		String trimmed = Utilities.trimAggressivelyToNull(headerValue);
-
-		if (trimmed == null)
-			return Optional.empty();
-
-		if ("*".equals(trimmed))
-			return Optional.of(EntityTagCondition.wildcardCondition());
-
-		List<EntityTag> entityTags = new ArrayList<>();
-		List<String> parts = commaSeparatedValues(trimmed).orElse(null);
-
-		if (parts == null || parts.isEmpty() || parts.size() > MAX_ENTITY_TAG_CONDITION_COUNT)
-			return Optional.empty();
-
-		for (String part : parts) {
-			EntityTag entityTag = EntityTag.fromHeaderValue(part).orElse(null);
-
-			if (entityTag == null)
-				return Optional.empty();
-
-			entityTags.add(entityTag);
-		}
-
-		return Optional.of(EntityTagCondition.fromEntityTags(entityTags));
-	}
-
-	@NonNull
-	private static Optional<String> headerValueFor(@NonNull Request request,
-																								 @NonNull String headerName) {
-		requireNonNull(request);
-		requireNonNull(headerName);
-
-		return request.getHeaderValues(headerName)
-				.map(values -> values.size() == 1 ? values.iterator().next() : String.join(",", values));
-	}
-
-	@NonNull
-	private static Optional<List<@NonNull String>> commaSeparatedValues(@NonNull String value) {
-		requireNonNull(value);
-
-		List<String> values = new ArrayList<>();
-		StringBuilder current = new StringBuilder(value.length());
-		boolean inQuotes = false;
-
-		for (int i = 0; i < value.length(); i++) {
-			char c = value.charAt(i);
-
-			if (c == '"')
-				inQuotes = !inQuotes;
-
-			if (c == ',' && !inQuotes) {
-				String element = Utilities.trimAggressivelyToNull(current.toString());
-
-				if (element == null)
-					return Optional.empty();
-
-				values.add(element);
-				current.setLength(0);
-				continue;
-			}
-
-			current.append(c);
-		}
-
-		if (inQuotes)
-			return Optional.empty();
-
-		String element = Utilities.trimAggressivelyToNull(current.toString());
-
-		if (element == null)
-			return Optional.empty();
-
-		values.add(element);
-		return Optional.of(values);
-	}
-
-	@NonNull
-	private static Instant truncateToSeconds(@NonNull Instant instant) {
-		requireNonNull(instant);
-		return Instant.ofEpochSecond(instant.getEpochSecond());
-	}
-
-	@NonNull
 	private static Map<@NonNull String, @NonNull Set<@NonNull String>> copyHeaders(
 			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 		requireNonNull(headers);
@@ -455,48 +349,6 @@ final class FileResponse {
 		PRECONDITION_FAILED
 	}
 
-	private record EntityTagCondition(@NonNull Boolean wildcard,
-																		@NonNull List<@NonNull EntityTag> entityTags) {
-		@NonNull
-		static EntityTagCondition wildcardCondition() {
-			return new EntityTagCondition(true, List.of());
-		}
-
-		@NonNull
-		static EntityTagCondition fromEntityTags(@NonNull List<@NonNull EntityTag> entityTags) {
-			requireNonNull(entityTags);
-			return new EntityTagCondition(false, List.copyOf(entityTags));
-		}
-
-		@NonNull
-		Boolean matchesStrong(@Nullable EntityTag entityTag,
-													@NonNull Boolean representationExists) {
-			requireNonNull(representationExists);
-
-			if (wildcard())
-				return representationExists;
-
-			if (entityTag == null)
-				return false;
-
-			return entityTags().stream().anyMatch(candidate -> candidate.stronglyMatches(entityTag));
-		}
-
-		@NonNull
-		Boolean matchesWeak(@Nullable EntityTag entityTag,
-											 @NonNull Boolean representationExists) {
-			requireNonNull(representationExists);
-
-			if (wildcard())
-				return representationExists;
-
-			if (entityTag == null)
-				return false;
-
-			return entityTags().stream().anyMatch(candidate -> candidate.weaklyMatches(entityTag));
-		}
-	}
-
 	record RequestContext(@NonNull HttpMethod httpMethod,
 												@Nullable String rangeHeaderValue,
 												@Nullable String ifRangeHeaderValue,
@@ -513,12 +365,22 @@ final class FileResponse {
 			requireNonNull(request);
 			return new RequestContext(
 					request.getHttpMethod(),
-					headerValueFor(request, "Range").orElse(null),
-					headerValueFor(request, "If-Range").orElse(null),
-					headerValueFor(request, "If-Match").orElse(null),
-					headerValueFor(request, "If-Unmodified-Since").orElse(null),
-					headerValueFor(request, "If-None-Match").orElse(null),
-					headerValueFor(request, "If-Modified-Since").orElse(null)
+					ConditionalRequestEvaluator.headerValueFor(request, "Range").orElse(null),
+					ConditionalRequestEvaluator.headerValueFor(request, "If-Range").orElse(null),
+					ConditionalRequestEvaluator.headerValueFor(request, "If-Match").orElse(null),
+					ConditionalRequestEvaluator.headerValueFor(request, "If-Unmodified-Since").orElse(null),
+					ConditionalRequestEvaluator.headerValueFor(request, "If-None-Match").orElse(null),
+					ConditionalRequestEvaluator.headerValueFor(request, "If-Modified-Since").orElse(null)
+			);
+		}
+
+		ConditionalRequestEvaluator.RequestContext toConditionalRequestContext() {
+			return new ConditionalRequestEvaluator.RequestContext(
+					httpMethod(),
+					ifMatchHeaderValue(),
+					ifUnmodifiedSinceHeaderValue(),
+					ifNoneMatchHeaderValue(),
+					ifModifiedSinceHeaderValue()
 			);
 		}
 	}
