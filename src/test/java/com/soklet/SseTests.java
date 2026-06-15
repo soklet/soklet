@@ -786,16 +786,20 @@ public class SseTests {
 	public void sse_broadcastMany_underBackpressure_eitherDeliversOrCloses() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
+		BackpressureLifecycle lifecycle = new BackpressureLifecycle();
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.connectionQueueCapacity(1)
+				.heartbeatInterval(Duration.ofSeconds(30))
+				.verifyConnectionOnceEstablished(false)
 				.build();
 
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
-				.lifecycleObserver(new QuietLifecycle())
+				.lifecycleObserver(lifecycle)
 				.build();
 
 		try (Soklet app = Soklet.fromConfig(cfg)) {
@@ -810,41 +814,22 @@ public class SseTests {
 				Assertions.assertNotNull(hdr);
 
 				SseBroadcaster b = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/backpressure")).get();
+				awaitClientConnection(b, 2000);
 
-				final int N = 1500;
-				for (int i = 0; i < N; i++) {
-					b.broadcastEvent(SseEvent.withEvent("bp").id(String.valueOf(i)).data("x").build());
+				try {
+					// First event blocks in willWriteSseEvent, leaving the one-slot queue available for overflow.
+					b.broadcastEvent(SseEvent.withEvent("bp").id("1").data("a").build());
+					Assertions.assertTrue(lifecycle.awaitWriteStarted(5, SECONDS), "Write did not start in time");
+
+					b.broadcastEvent(SseEvent.withEvent("bp").id("2").data("b").build());
+					b.broadcastEvent(SseEvent.withEvent("bp").id("3").data("c").build());
+
+					Assertions.assertTrue(lifecycle.awaitTermination(10, SECONDS), "Termination not observed");
+					Assertions.assertEquals(StreamTerminationReason.BACKPRESSURE, lifecycle.getReason());
+				} finally {
+					lifecycle.releaseWriter();
 				}
-
-				long deadline = System.currentTimeMillis() + 12000;
-				boolean sawLast = false;
-				boolean sawClosure = false;
-
-				InputStream in = socket.getInputStream();
-				while (System.currentTimeMillis() < deadline) {
-					try {
-						String block = readUntil(in, "\n\n", 4096);
-
-						if (block == null) { // indicates EOF/closed or timeout-ish behavior
-							sawClosure = true;
-							break;
-						}
-						String idLine = block.lines().filter(l -> l.startsWith("id: ")).reduce((a, b2) -> b2).orElse(null);
-						if (idLine != null && idLine.trim().equals("id: " + (N - 1))) {
-							sawLast = true;
-							break;
-						}
-					} catch (SocketTimeoutException e) {
-						// keep looping until deadline
-					} catch (EOFException e) {
-						sawClosure = true;
-						break;
-					}
-				}
-
-				// New contract: either we kept up and saw the last event OR the server proactively closed us due to backpressure
-				Assertions.assertTrue(sawLast || sawClosure,
-						"Expected either to observe the last id OR have the connection closed due to backpressure");
+				Assertions.assertTrue(waitForEof(socket, 6000), "Connection did not close after backpressure");
 			}
 		}
 	}
