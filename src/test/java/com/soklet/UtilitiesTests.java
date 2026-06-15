@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.EffectiveOriginResolver.TrustPolicy;
 import com.soklet.exception.IllegalRequestException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -245,6 +246,144 @@ public class UtilitiesTests {
 		assertEquals(Optional.of("https://api.example.com:8443"),
 				EffectiveOriginResolver.withHeaders(headers, EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
 						.allowOriginFallback(true)
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_respectsTrustPolicy() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"X-Forwarded-For", Set.of("198.51.100.10")
+		);
+		InetSocketAddress remoteAddress = remoteAddress("203.0.113.10");
+
+		assertEquals(Optional.of(address("203.0.113.10")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_NONE)
+						.remoteAddress(remoteAddress)
+						.resolve());
+
+		assertEquals(Optional.of(address("203.0.113.10")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(remoteAddress)
+						.trustedProxyAddresses(Set.of(address("203.0.113.11")))
+						.resolve());
+
+		assertEquals(Optional.of(address("198.51.100.10")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(remoteAddress)
+						.trustedProxyAddresses(Set.of(address("203.0.113.10")))
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_requiresAllowlistForAllowlistPolicy() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"X-Forwarded-For", Set.of("198.51.100.10")
+		);
+
+		assertThrows(IllegalStateException.class, () ->
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(remoteAddress("203.0.113.10"))
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_usesRightmostUntrustedForwardedForAddress() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"X-Forwarded-For", Set.of("198.51.100.10, 10.0.0.2, 10.0.0.3")
+		);
+
+		assertEquals(Optional.of(address("198.51.100.10")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(remoteAddress("10.0.0.4"))
+						.trustedProxyAddresses(Set.of(
+								address("10.0.0.2"),
+								address("10.0.0.3"),
+								address("10.0.0.4")))
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_doesNotTrustSpoofedLeftmostForwardedForAddress() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"X-Forwarded-For", Set.of("198.51.100.10, 203.0.113.99, 10.0.0.2")
+		);
+
+		assertEquals(Optional.of(address("203.0.113.99")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(remoteAddress("10.0.0.3"))
+						.trustedProxyAddresses(Set.of(
+								address("10.0.0.2"),
+								address("10.0.0.3")))
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_returnsLeftmostAddressWhenAllForwardedForAddressesAreTrusted() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"X-Forwarded-For", Set.of("10.0.0.1, 10.0.0.2")
+		);
+
+		assertEquals(Optional.of(address("10.0.0.1")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(remoteAddress("10.0.0.3"))
+						.trustedProxyAddresses(Set.of(
+								address("10.0.0.1"),
+								address("10.0.0.2"),
+								address("10.0.0.3")))
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_prefersForwardedForOverXForwardedFor() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"Forwarded", Set.of("for=198.51.100.20; proto=https; host=example.com"),
+				"X-Forwarded-For", Set.of("198.51.100.30")
+		);
+
+		assertEquals(Optional.of(address("198.51.100.20")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_ALL)
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_parsesQuotedBracketedIpv6ForwardedForWithPort() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"Forwarded", Set.of("for=\"[2001:db8::1]:8443\"; proto=https; host=example.com")
+		);
+
+		assertEquals(Optional.of(address("2001:db8::1")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_ALL)
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_skipsUnknownObfuscatedAndMalformedValues() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"X-Forwarded-For", Set.of("unknown, _hidden, not-a-host, 198.51.100.40:1234")
+		);
+
+		assertEquals(Optional.of(address("198.51.100.40")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_ALL)
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_trustAllUsesLeftmostForwardedForAddress() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"X-Forwarded-For", Set.of("198.51.100.11, 203.0.113.11")
+		);
+
+		assertEquals(Optional.of(address("198.51.100.11")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_ALL)
+						.remoteAddress(remoteAddress("10.0.0.10"))
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_fallsBackToRemoteAddress() throws Exception {
+		assertEquals(Optional.of(address("203.0.113.50")),
+				EffectiveClientIpResolver.withHeaders(Map.of(), TrustPolicy.TRUST_ALL)
+						.remoteAddress(remoteAddress("203.0.113.50"))
 						.resolve());
 	}
 
@@ -846,6 +985,14 @@ public class UtilitiesTests {
 				headers,
 				EffectiveOriginResolver.TrustPolicy.TRUST_ALL
 		).resolve();
+	}
+
+	private static InetAddress address(String address) throws Exception {
+		return InetAddress.getByName(address);
+	}
+
+	private static InetSocketAddress remoteAddress(String address) throws Exception {
+		return new InetSocketAddress(address(address), 1234);
 	}
 
 	// --- header parsing helpers ---

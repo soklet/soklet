@@ -4,6 +4,7 @@
 
 ### Features
 
+- Added `EffectiveClientIpResolver` for deriving a trusted client IP from the raw socket peer plus `Forwarded: for=` or `X-Forwarded-For` headers. It reuses `EffectiveOriginResolver.TrustPolicy`, supports trusted proxy predicates or IP allowlists, prefers standardized `Forwarded` values, accepts only IP literals, and falls back to the socket peer when forwarded headers are untrusted or unavailable.
 - Standard HTTP responses can now opt into dynamic gzip compression for eligible finalized in-memory byte-array and `ByteBuffer` responses with `HttpServer.Builder.responseGzipPolicy(...)`. Compression is negotiated with `Accept-Encoding`, updates `Vary: Accept-Encoding`, skips already-encoded, range, streaming, and file responses, and includes `ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(...)` for common text-like response media types.
 
 ### Behavior Changes

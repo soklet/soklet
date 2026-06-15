@@ -100,6 +100,20 @@ public class IntegrationTests {
 					.orElse("none");
 		}
 
+		@GET("/effective-client-ip")
+		public String effectiveClientIp(@NonNull Request request) {
+			return EffectiveClientIpResolver.withRequest(request, EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST)
+					.trustedProxyPredicate(remoteAddress -> {
+						if (remoteAddress == null || remoteAddress.getAddress() == null)
+							return false;
+
+						return remoteAddress.getAddress().isLoopbackAddress();
+					})
+					.resolve()
+					.map(address -> address.getHostAddress())
+					.orElse("none");
+		}
+
 		@POST("/body")
 		public String body(@NonNull @RequestBody String body) {
 			return body;
@@ -176,6 +190,21 @@ public class IntegrationTests {
 			Assertions.assertEquals(200, c.getResponseCode());
 			String body = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
 			Assertions.assertEquals("0af7651916cd43dd8448eb211c80319c", body);
+		}
+	}
+
+	@Test
+	public void effectiveClientIpResolutionUsesTrustedLoopbackProxy() throws Exception {
+		int port = findFreePort();
+		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+			URL url = new URL("http://127.0.0.1:" + port + "/effective-client-ip");
+			HttpURLConnection c = open("GET", url, Map.of(
+					"Accept", "text/plain",
+					"X-Forwarded-For", "198.51.100.77, 127.0.0.1"
+			));
+			Assertions.assertEquals(200, c.getResponseCode());
+			String body = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
+			Assertions.assertEquals("198.51.100.77", body);
 		}
 	}
 

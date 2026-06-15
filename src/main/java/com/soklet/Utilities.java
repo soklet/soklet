@@ -29,9 +29,12 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
+import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
@@ -53,6 +56,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -1331,6 +1335,54 @@ public final class Utilities {
 		return Optional.empty();
 	}
 
+	/**
+	 * Best-effort attempt to determine a client's effective IP address by examining request headers.
+	 * <p>
+	 * The socket peer is always used as the fallback. Forwarded headers are only used when permitted by
+	 * {@link EffectiveOriginResolver.TrustPolicy}. When using
+	 * {@link EffectiveOriginResolver.TrustPolicy#TRUST_PROXY_ALLOWLIST}, you must provide a trusted proxy predicate or allowlist.
+	 * If the remote address is missing or not trusted, forwarded headers are ignored.
+	 *
+	 * @param effectiveClientIpResolver request headers and trust settings
+	 * @return the effective client IP address, or {@link Optional#empty()} if it could not be determined
+	 */
+	@NonNull
+	static Optional<InetAddress> extractEffectiveClientIp(@NonNull EffectiveClientIpResolver effectiveClientIpResolver) {
+		requireNonNull(effectiveClientIpResolver);
+		requireNonNull(effectiveClientIpResolver.getHeaders());
+		requireNonNull(effectiveClientIpResolver.getTrustPolicy());
+
+		if (effectiveClientIpResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST
+				&& effectiveClientIpResolver.getTrustedProxyPredicate() == null) {
+			throw new IllegalStateException(format("%s policy requires a trusted proxy predicate or allowlist.",
+					EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST));
+		}
+
+		InetSocketAddress remoteAddress = effectiveClientIpResolver.getRemoteAddress();
+		InetAddress remoteInetAddress = remoteAddress == null ? null : remoteAddress.getAddress();
+
+		if (!shouldTrustForwardedHeaders(effectiveClientIpResolver))
+			return Optional.ofNullable(remoteInetAddress);
+
+		List<InetAddress> forwardedForAddresses = forwardedForAddresses(effectiveClientIpResolver.getHeaders());
+		Optional<InetAddress> effectiveClientIp = effectiveClientIpResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_ALL
+				? leftmostAddress(forwardedForAddresses)
+				: firstUntrustedAddressFromRight(forwardedForAddresses, effectiveClientIpResolver.getTrustedProxyPredicate());
+
+		if (effectiveClientIp.isPresent())
+			return effectiveClientIp;
+
+		List<InetAddress> xForwardedForAddresses = xForwardedForAddresses(effectiveClientIpResolver.getHeaders());
+		effectiveClientIp = effectiveClientIpResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_ALL
+				? leftmostAddress(xForwardedForAddresses)
+				: firstUntrustedAddressFromRight(xForwardedForAddresses, effectiveClientIpResolver.getTrustedProxyPredicate());
+
+		if (effectiveClientIp.isPresent())
+			return effectiveClientIp;
+
+		return Optional.ofNullable(remoteInetAddress);
+	}
+
 	private static boolean shouldTrustForwardedHeaders(@NonNull EffectiveOriginResolver effectiveOriginResolver) {
 		if (effectiveOriginResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_ALL)
 			return true;
@@ -1345,6 +1397,265 @@ public final class Utilities {
 			return false;
 
 		return trustedProxyPredicate.test(remoteAddress);
+	}
+
+	private static boolean shouldTrustForwardedHeaders(@NonNull EffectiveClientIpResolver effectiveClientIpResolver) {
+		if (effectiveClientIpResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_ALL)
+			return true;
+
+		if (effectiveClientIpResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_NONE)
+			return false;
+
+		var remoteAddress = effectiveClientIpResolver.getRemoteAddress();
+		var trustedProxyPredicate = effectiveClientIpResolver.getTrustedProxyPredicate();
+
+		if (remoteAddress == null || trustedProxyPredicate == null)
+			return false;
+
+		return trustedProxyPredicate.test(remoteAddress);
+	}
+
+	@NonNull
+	private static Optional<InetAddress> leftmostAddress(@NonNull List<@NonNull InetAddress> addresses) {
+		requireNonNull(addresses);
+		return addresses.isEmpty() ? Optional.empty() : Optional.of(addresses.get(0));
+	}
+
+	@NonNull
+	private static Optional<InetAddress> firstUntrustedAddressFromRight(@NonNull List<@NonNull InetAddress> addresses,
+																																		 @Nullable Predicate<InetSocketAddress> trustedProxyPredicate) {
+		requireNonNull(addresses);
+
+		if (trustedProxyPredicate == null)
+			return Optional.empty();
+
+		InetAddress leftmostAddress = null;
+
+		for (int i = addresses.size() - 1; i >= 0; i--) {
+			InetAddress address = addresses.get(i);
+			leftmostAddress = address;
+
+			if (!trustedProxyPredicate.test(new InetSocketAddress(address, 0)))
+				return Optional.of(address);
+		}
+
+		return Optional.ofNullable(leftmostAddress);
+	}
+
+	@NonNull
+	private static List<@NonNull InetAddress> forwardedForAddresses(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		requireNonNull(headers);
+		Set<String> forwardedHeaders = headers.get("Forwarded");
+
+		if (forwardedHeaders == null || forwardedHeaders.isEmpty())
+			return List.of();
+
+		List<InetAddress> addresses = new ArrayList<>();
+
+		for (String forwardedHeader : forwardedHeaders) {
+			String trimmed = trimAggressivelyToNull(forwardedHeader);
+			if (trimmed == null)
+				continue;
+
+			for (String forwardedEntry : splitCommaAware(trimmed)) {
+				String entry = trimAggressivelyToNull(forwardedEntry);
+				if (entry == null)
+					continue;
+
+				for (String forwardedHeaderFieldComponent : splitSemicolonAware(entry)) {
+					forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
+					if (forwardedHeaderFieldComponent == null)
+						continue;
+
+					String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("="), 2);
+					if (forwardedHeaderFieldNameAndValue.length != 2)
+						continue;
+
+					String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
+					String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
+					if (name == null || value == null || !"for".equalsIgnoreCase(name))
+						continue;
+
+					parseForwardedIpLiteral(value).ifPresent(addresses::add);
+					break;
+				}
+			}
+		}
+
+		return addresses.isEmpty() ? List.of() : Collections.unmodifiableList(addresses);
+	}
+
+	@NonNull
+	private static List<@NonNull InetAddress> xForwardedForAddresses(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
+		requireNonNull(headers);
+		Set<String> xForwardedForHeaders = headers.get("X-Forwarded-For");
+
+		if (xForwardedForHeaders == null || xForwardedForHeaders.isEmpty())
+			return List.of();
+
+		List<InetAddress> addresses = new ArrayList<>();
+
+		for (String xForwardedForHeader : xForwardedForHeaders) {
+			String trimmed = trimAggressivelyToNull(xForwardedForHeader);
+			if (trimmed == null)
+				continue;
+
+			for (String part : splitCommaAware(trimmed))
+				parseForwardedIpLiteral(part).ifPresent(addresses::add);
+		}
+
+		return addresses.isEmpty() ? List.of() : Collections.unmodifiableList(addresses);
+	}
+
+	@NonNull
+	private static Optional<InetAddress> parseForwardedIpLiteral(@Nullable String value) {
+		String trimmed = trimAggressivelyToNull(value);
+
+		if (trimmed == null)
+			return Optional.empty();
+
+		trimmed = trimAggressivelyToNull(stripOptionalQuotes(trimmed));
+
+		if (trimmed == null || "unknown".equalsIgnoreCase(trimmed) || trimmed.startsWith("_"))
+			return Optional.empty();
+
+		if (trimmed.startsWith("[")) {
+			int closeIndex = trimmed.indexOf(']');
+
+			if (closeIndex <= 1)
+				return Optional.empty();
+
+			String suffix = trimmed.substring(closeIndex + 1);
+
+			if (!suffix.isEmpty()) {
+				if (!suffix.startsWith(":") || !isValidPort(suffix.substring(1)))
+					return Optional.empty();
+			}
+
+			return parseIpLiteral(trimmed.substring(1, closeIndex));
+		}
+
+		int colonCount = countOccurrences(trimmed, ':');
+
+		if (colonCount == 1 && trimmed.contains(".")) {
+			int colonIndex = trimmed.indexOf(':');
+			String addressPart = trimmed.substring(0, colonIndex);
+			String portPart = trimmed.substring(colonIndex + 1);
+
+			if (isValidPort(portPart))
+				return parseIpv4Literal(addressPart);
+
+			return Optional.empty();
+		}
+
+		return parseIpLiteral(trimmed);
+	}
+
+	@NonNull
+	private static Optional<InetAddress> parseIpLiteral(@Nullable String value) {
+		String trimmed = trimAggressivelyToNull(value);
+
+		if (trimmed == null)
+			return Optional.empty();
+
+		Optional<InetAddress> ipv4Address = parseIpv4Literal(trimmed);
+
+		if (ipv4Address.isPresent())
+			return ipv4Address;
+
+		return parseIpv6Literal(trimmed);
+	}
+
+	@NonNull
+	private static Optional<InetAddress> parseIpv4Literal(@Nullable String value) {
+		String trimmed = trimAggressivelyToNull(value);
+
+		if (trimmed == null)
+			return Optional.empty();
+
+		String[] parts = trimmed.split(Pattern.quote("."), -1);
+
+		if (parts.length != 4)
+			return Optional.empty();
+
+		byte[] bytes = new byte[4];
+
+		for (int i = 0; i < parts.length; i++) {
+			String part = parts[i];
+
+			if (part.isEmpty() || part.length() > 3)
+				return Optional.empty();
+
+			if (part.length() > 1 && part.startsWith("0"))
+				return Optional.empty();
+
+			for (int j = 0; j < part.length(); j++) {
+				if (!Character.isDigit(part.charAt(j)))
+					return Optional.empty();
+			}
+
+			int octet;
+			try {
+				octet = Integer.parseInt(part, 10);
+			} catch (NumberFormatException e) {
+				return Optional.empty();
+			}
+
+			if (octet < 0 || octet > 255)
+				return Optional.empty();
+
+			bytes[i] = (byte) octet;
+		}
+
+		try {
+			return Optional.of(InetAddress.getByAddress(bytes));
+		} catch (UnknownHostException e) {
+			return Optional.empty();
+		}
+	}
+
+	@NonNull
+	private static Optional<InetAddress> parseIpv6Literal(@Nullable String value) {
+		String trimmed = trimAggressivelyToNull(value);
+
+		if (trimmed == null || !trimmed.contains(":"))
+			return Optional.empty();
+
+		if (trimmed.indexOf('[') >= 0 || trimmed.indexOf(']') >= 0 || trimmed.indexOf('"') >= 0 || trimmed.indexOf('%') >= 0)
+			return Optional.empty();
+
+		try {
+			return Optional.of(InetAddress.getByName(trimmed));
+		} catch (Exception e) {
+			return Optional.empty();
+		}
+	}
+
+	private static boolean isValidPort(@Nullable String value) {
+		String trimmed = trimAggressivelyToNull(value);
+
+		if (trimmed == null)
+			return false;
+
+		try {
+			int port = Integer.parseInt(trimmed, 10);
+			return port >= 1 && port <= 65535;
+		} catch (NumberFormatException e) {
+			return false;
+		}
+	}
+
+	private static int countOccurrences(@NonNull String value,
+																			char character) {
+		requireNonNull(value);
+		int count = 0;
+
+		for (int i = 0; i < value.length(); i++) {
+			if (value.charAt(i) == character)
+				count++;
+		}
+
+		return count;
 	}
 
 	/**
