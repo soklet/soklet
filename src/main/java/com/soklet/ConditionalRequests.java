@@ -126,6 +126,28 @@ public final class ConditionalRequests {
 		return validatorHeadersFor(entityTag, lastModified == null ? null : ConditionalRequestEvaluator.truncateToSeconds(lastModified));
 	}
 
+	/**
+	 * Builds validator headers plus endpoint-specific metadata headers.
+	 * <p>
+	 * {@code extraHeaders} are intended for response metadata such as {@code Cache-Control} or {@code Vary}; validator
+	 * and body-framing headers are rejected because they are controlled by this helper.
+	 *
+	 * @param entityTag    the current representation's entity tag, or {@code null} if unavailable
+	 * @param lastModified the current representation's last-modified instant, or {@code null} if unavailable
+	 * @param extraHeaders endpoint-specific metadata headers to include with the validators
+	 * @return immutable combined headers
+	 */
+	@NonNull
+	public static Map<@NonNull String, @NonNull Set<@NonNull String>> validatorHeaders(@Nullable EntityTag entityTag,
+																																										 @Nullable Instant lastModified,
+																																										 @Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> extraHeaders) {
+		return responseHeaders(
+				entityTag,
+				lastModified == null ? null : ConditionalRequestEvaluator.truncateToSeconds(lastModified),
+				copyExtraHeaders(extraHeaders)
+		);
+	}
+
 	@NonNull
 	private static Response bodylessResponse(@NonNull Integer statusCode,
 																					 @Nullable EntityTag entityTag,

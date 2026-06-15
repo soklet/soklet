@@ -19,12 +19,14 @@ package com.soklet;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
+import com.soklet.annotation.PUT;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -234,6 +236,48 @@ public class RequestHandlingRegressionTests {
 		});
 	}
 
+	@Test
+	public void conditionalRequestsWorkFromResourceMethods() {
+		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConditionalResource.class)))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
+				})
+				.build();
+
+		Soklet.runSimulator(configuration, simulator -> {
+			HttpRequestResult cacheHitResult = simulator.performHttpRequest(
+					Request.withPath(HttpMethod.GET, "/conditional")
+							.headers(Map.of("If-None-Match", Set.of("W/\"account-7\"")))
+							.build());
+			assertEquals(Integer.valueOf(304), cacheHitResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertTrue(cacheHitResult.getMarshaledResponse().getBody().isEmpty());
+			assertEquals(Set.of("\"account-7\""), cacheHitResult.getMarshaledResponse().getHeaders().get("ETag"));
+			assertEquals(Set.of("private, max-age=60"), cacheHitResult.getMarshaledResponse().getHeaders().get("Cache-Control"));
+
+			HttpRequestResult normalGetResult = simulator.performHttpRequest(
+					Request.withPath(HttpMethod.GET, "/conditional").build());
+			assertEquals(Integer.valueOf(200), normalGetResult.getMarshaledResponse().getStatusCode());
+			assertEquals(Set.of("\"account-7\""), normalGetResult.getMarshaledResponse().getHeaders().get("ETag"));
+			assertEquals(Set.of("private, max-age=60"), normalGetResult.getMarshaledResponse().getHeaders().get("Cache-Control"));
+			assertEquals("account", normalGetResult.getResponse().orElseThrow().getBody().orElseThrow());
+
+			HttpRequestResult failedUpdateResult = simulator.performHttpRequest(
+					Request.withPath(HttpMethod.PUT, "/conditional")
+							.headers(Map.of("If-Match", Set.of("\"account-6\"")))
+							.build());
+			assertEquals(Integer.valueOf(412), failedUpdateResult.getMarshaledResponse().getStatusCode());
+			Assertions.assertTrue(failedUpdateResult.getMarshaledResponse().getBody().isEmpty());
+
+			HttpRequestResult successfulUpdateResult = simulator.performHttpRequest(
+					Request.withPath(HttpMethod.PUT, "/conditional")
+							.headers(Map.of("If-Match", Set.of("\"account-7\"")))
+							.build());
+			assertEquals(Integer.valueOf(204), successfulUpdateResult.getMarshaledResponse().getStatusCode());
+		});
+	}
+
 	@ThreadSafe
 	public static class WrappedRequestResource {
 		@GET("/greet")
@@ -276,6 +320,30 @@ public class RequestHandlingRegressionTests {
 		@GET("/items/special")
 		public String getSpecialItem() {
 			return "special";
+		}
+	}
+
+	@ThreadSafe
+	public static class ConditionalResource {
+		private static final EntityTag ENTITY_TAG = EntityTag.fromStrongValue("account-7");
+		private static final Instant LAST_MODIFIED = Instant.parse("2026-05-04T01:02:03Z");
+		private static final Map<String, Set<String>> CACHE_HEADERS = Map.of(
+				"Cache-Control", Set.of("private, max-age=60")
+		);
+
+		@GET("/conditional")
+		public Response get(@NonNull Request request) {
+			return ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, CACHE_HEADERS)
+					.orElseGet(() -> Response.withStatusCode(200)
+							.headers(ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, CACHE_HEADERS))
+							.body("account")
+							.build());
+		}
+
+		@PUT("/conditional")
+		public Response update(@NonNull Request request) {
+			return ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED)
+					.orElseGet(() -> Response.fromStatusCode(204));
 		}
 	}
 }

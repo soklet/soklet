@@ -47,6 +47,38 @@ public class ConditionalRequestsTests {
 	}
 
 	@Test
+	public void validatorHeadersCanIncludeExtraMetadataHeaders() {
+		Map<String, Set<String>> headers = ConditionalRequests.validatorHeaders(
+				ENTITY_TAG,
+				LAST_MODIFIED,
+				Map.of(
+						"Cache-Control", Set.of("private, max-age=60"),
+						"Vary", Set.of("Accept-Language")
+				)
+		);
+
+		Assertions.assertEquals(Set.of("\"v1\""), headers.get("ETag"));
+		Assertions.assertEquals(Set.of(LAST_MODIFIED_HEADER_VALUE), headers.get("Last-Modified"));
+		Assertions.assertEquals(Set.of("private, max-age=60"), headers.get("Cache-Control"));
+		Assertions.assertEquals(Set.of("Accept-Language"), headers.get("Vary"));
+		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.put("X-Test", Set.of("value")));
+	}
+
+	@Test
+	public void validatorHeadersRejectControlledExtraHeaderNames() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("eTaG", Set.of("\"bad\""))));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Last-Modified", Set.of(LAST_MODIFIED_HEADER_VALUE))));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Type", Set.of("application/json"))));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Length", Set.of("0"))));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Transfer-Encoding", Set.of("chunked"))));
+	}
+
+	@Test
 	public void ifNoneMatchWeakMatchForGetReturnsNotModified() {
 		Request request = request(HttpMethod.GET, Map.of(
 				"If-None-Match", Set.of("W/\"v1\"")
@@ -194,6 +226,8 @@ public class ConditionalRequestsTests {
 
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("eTaG", Set.of("\"bad\""))));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("Last-Modified", Set.of(LAST_MODIFIED_HEADER_VALUE))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Type", Set.of("application/json"))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
