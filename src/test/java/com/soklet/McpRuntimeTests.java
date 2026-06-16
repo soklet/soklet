@@ -35,6 +35,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 @ThreadSafe
@@ -344,15 +346,15 @@ public class McpRuntimeTests {
 	}
 
 	@Test
-	public void cancelledNotificationIsAcceptedAsKnownNotification() {
+	public void canceledNotificationIsAcceptedAsKnownNotification() {
 		RecordingLifecycleObserver lifecycleObserver = new RecordingLifecycleObserver();
-		AtomicReference<Optional<McpOperationType>> cancelledAdmissionOperationType = new AtomicReference<>();
+		AtomicReference<Optional<McpOperationType>> canceledAdmissionOperationType = new AtomicReference<>();
 		McpRequestAdmissionPolicy admissionPolicy = new McpRequestAdmissionPolicy() {
 			@NonNull
 			@Override
 			public Optional<Response> checkRequest(@NonNull McpAdmissionContext context) {
 				if ("notifications/cancelled".equals(context.getJsonRpcMethod().orElse(null)))
-					cancelledAdmissionOperationType.set(context.getOperationType());
+					canceledAdmissionOperationType.set(context.getOperationType());
 
 				return Optional.empty();
 			}
@@ -379,11 +381,84 @@ public class McpRuntimeTests {
 
 		Assertions.assertTrue(lifecycleObserver.startedMethods.contains("notifications/cancelled"));
 		Assertions.assertEquals(McpRequestOutcome.SUCCESS_NOTIFICATION, lifecycleObserver.outcomesByMethod.get("notifications/cancelled"));
-		Assertions.assertEquals(Optional.of(McpOperationType.NOTIFICATIONS_CANCELLED), cancelledAdmissionOperationType.get());
+		Assertions.assertEquals(Optional.of(McpOperationType.NOTIFICATIONS_CANCELED), canceledAdmissionOperationType.get());
 	}
 
 	@Test
-	public void cancelledNotificationRequiresInitializedNotification() {
+	public void canceledNotificationCancelsMatchingInFlightRequestToken() throws Exception {
+		CountDownLatch toolStarted = new CountDownLatch(1);
+		CountDownLatch cancelationObserved = new CountDownLatch(1);
+		CatalogEndpoint.cancelableToolStarted.set(toolStarted);
+		CatalogEndpoint.cancelableToolObservedCancelation.set(cancelationObserved);
+
+		try {
+			Soklet.runSimulator(configuration(), simulator -> {
+				Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator, "/tenants/acme/mcp");
+				AtomicReference<McpRequestResult.ResponseCompleted> toolResult = new AtomicReference<>();
+				AtomicReference<Throwable> toolFailure = new AtomicReference<>();
+				Thread toolThread = new Thread(() -> {
+					try {
+						toolResult.set((McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+								post("/tenants/acme/mcp", """
+										{
+										  "jsonrpc":"2.0",
+										  "id":"req-cancelable",
+										  "method":"tools/call",
+										  "params":{
+										    "name":"zz_cancelable",
+										    "arguments":{}
+										  }
+										}
+										""", sessionHeaders)));
+					} catch (Throwable throwable) {
+						toolFailure.set(throwable);
+					}
+				});
+
+				toolThread.start();
+
+				try {
+					Assertions.assertTrue(toolStarted.await(2, TimeUnit.SECONDS), "Expected tool handler to start");
+
+					McpRequestResult.ResponseCompleted notificationResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+							post("/tenants/acme/mcp", """
+									{
+									  "jsonrpc":"2.0",
+									  "method":"notifications/cancelled",
+									  "params":{
+									    "requestId":"req-cancelable",
+									    "reason":"client moved on"
+									  }
+									}
+									""", sessionHeaders));
+
+					Assertions.assertEquals(Integer.valueOf(202), notificationResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+					Assertions.assertTrue(cancelationObserved.await(2, TimeUnit.SECONDS), "Expected tool handler to observe cancelation");
+					toolThread.join(TimeUnit.SECONDS.toMillis(2));
+					Assertions.assertFalse(toolThread.isAlive(), "Expected canceled tool handler to finish");
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					Assertions.fail(e);
+				}
+
+				if (toolFailure.get() != null)
+					Assertions.fail(toolFailure.get());
+
+				Assertions.assertNotNull(toolResult.get(), "Expected completed tool result");
+				McpObject body = jsonBody(toolResult.get());
+				McpObject result = (McpObject) body.get("result").orElseThrow();
+				McpArray content = (McpArray) result.get("content").orElseThrow();
+				McpObject firstContent = (McpObject) content.values().get(0);
+				Assertions.assertEquals("canceled:client moved on", ((McpString) firstContent.get("text").orElseThrow()).value());
+			});
+		} finally {
+			CatalogEndpoint.cancelableToolStarted.set(null);
+			CatalogEndpoint.cancelableToolObservedCancelation.set(null);
+		}
+	}
+
+	@Test
+	public void canceledNotificationRequiresInitializedNotification() {
 		Soklet.runSimulator(configuration(), simulator -> {
 			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
 					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
@@ -1890,6 +1965,8 @@ public class McpRuntimeTests {
 	public static class CatalogEndpoint implements McpEndpoint {
 		private static final AtomicReference<McpProgressReporter> capturedProgressReporter = new AtomicReference<>();
 		private static final AtomicReference<TraceContext> capturedTraceContext = new AtomicReference<>();
+		private static final AtomicReference<CountDownLatch> cancelableToolStarted = new AtomicReference<>();
+		private static final AtomicReference<CountDownLatch> cancelableToolObservedCancelation = new AtomicReference<>();
 
 		@Override
 		public McpSessionContext initialize(McpInitializationContext context,
@@ -1935,6 +2012,40 @@ public class McpRuntimeTests {
 			return McpToolResult.builder()
 					.content(McpTextContent.fromText("progress:%s:%s".formatted(progressReporter.isPresent(),
 							sessionContext.get("tenantId", String.class).orElseThrow())))
+					.build();
+		}
+
+		@McpTool(name = "zz_cancelable", description = "Waits until canceled.")
+		public McpToolResult cancelable(McpCancelationToken cancelationToken) {
+			CountDownLatch started = cancelableToolStarted.get();
+
+			if (started != null)
+				started.countDown();
+
+			long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+
+			while (!cancelationToken.isCancelationRequested() && System.nanoTime() < deadlineNanos) {
+				try {
+					Thread.sleep(10);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					break;
+				}
+			}
+
+			if (cancelationToken.isCancelationRequested()) {
+				CountDownLatch observedCancelation = cancelableToolObservedCancelation.get();
+
+				if (observedCancelation != null)
+					observedCancelation.countDown();
+
+				return McpToolResult.builder()
+						.content(McpTextContent.fromText("canceled:%s".formatted(cancelationToken.getReason().orElse(""))))
+						.build();
+			}
+
+			return McpToolResult.builder()
+					.content(McpTextContent.fromText("not-canceled"))
 					.build();
 		}
 

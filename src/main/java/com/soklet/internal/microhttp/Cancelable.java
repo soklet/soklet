@@ -1,9 +1,9 @@
 package com.soklet.internal.microhttp;
 
 /**
- * Task handle returned by {@link Scheduler} that facilitates task cancellation.
+ * Task handle returned by {@link Scheduler} that facilitates task cancelation.
  */
-interface Cancellable {
+interface Cancelable {
 
     /**
      * Cancel scheduled task.

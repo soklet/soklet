@@ -93,6 +93,17 @@ public interface McpRequestContext {
 	Optional<McpNegotiatedCapabilities> getNegotiatedCapabilities();
 
 	/**
+	 * Provides the cooperative cancelation token for this MCP request.
+	 * <p>
+	 * The token becomes canceled when the client sends {@code notifications/cancelled}
+	 * for this request's JSON-RPC ID while the request is still in flight.
+	 *
+	 * @return the cancelation token
+	 */
+	@NonNull
+	McpCancelationToken getCancelationToken();
+
+	/**
 	 * Provides the current session context for the request's session.
 	 *
 	 * @return the session context, if available

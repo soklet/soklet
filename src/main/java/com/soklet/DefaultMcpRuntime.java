@@ -59,6 +59,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static com.soklet.Utilities.extractContentTypeFromHeaderValue;
@@ -83,11 +85,14 @@ final class DefaultMcpRuntime {
 	private final Soklet soklet;
 	@NonNull
 	private final ConcurrentHashMap<@NonNull String, @NonNull CopyOnWriteArrayList<@NonNull McpStreamState>> mcpStreamsBySessionId;
+	@NonNull
+	private final ConcurrentHashMap<@NonNull McpCancelationKey, @NonNull CopyOnWriteArrayList<@NonNull DefaultMcpCancelationToken>> mcpCancelationTokensByRequest;
 
 	DefaultMcpRuntime(@NonNull Soklet soklet) {
 		requireNonNull(soklet);
 		this.soklet = soklet;
 		this.mcpStreamsBySessionId = new ConcurrentHashMap<>();
+		this.mcpCancelationTokensByRequest = new ConcurrentHashMap<>();
 	}
 
 	static boolean isValidMcpSessionId(@Nullable String sessionId) {
@@ -235,6 +240,7 @@ final class DefaultMcpRuntime {
 		}
 
 		Map<String, String> endpointPathParameters = resolvedEndpoint.endpointPathDeclaration().extractPlaceholders(request.getResourcePath());
+		DefaultMcpCancelationToken cancelationToken = cancelationTokenFor(sessionId, parsedRequest.requestId());
 		DefaultMcpRequestContext requestContext = new DefaultMcpRequestContext(
 				request,
 				resolvedEndpoint.endpointClass(),
@@ -244,6 +250,7 @@ final class DefaultMcpRuntime {
 				Optional.ofNullable(sessionId),
 				Optional.ofNullable(protocolVersionHeader),
 				storedSession.map(McpStoredSession::negotiatedCapabilities),
+				cancelationToken,
 				storedSession.map(McpStoredSession::sessionContext)
 		);
 		Optional<McpStoredSession> finalStoredSession = storedSession;
@@ -263,6 +270,8 @@ final class DefaultMcpRuntime {
 					transport.error());
 		} catch (Throwable throwable) {
 			return jsonRpcErrorResponse(request, parsedRequest.requestId(), McpJsonRpcError.fromCodeAndMessage(-32603, "Internal error"));
+		} finally {
+			unregisterCancelationToken(sessionId, parsedRequest.requestId(), cancelationToken);
 		}
 	}
 
@@ -459,8 +468,8 @@ final class DefaultMcpRuntime {
 			case INITIALIZE -> handleInitialize(request, mcpServer, resolvedEndpoint, endpointPathParameters, parsedRequest);
 			case NOTIFICATIONS_INITIALIZED ->
 					handleInitializedNotification(request, mcpServer, parsedRequest, storedSession.orElseThrow(), requestContext);
-			case NOTIFICATIONS_CANCELLED ->
-					handleCancelledNotification(request, mcpServer, parsedRequest, storedSession.orElseThrow());
+			case NOTIFICATIONS_CANCELED ->
+					handleCanceledNotification(request, mcpServer, parsedRequest, storedSession.orElseThrow());
 			case PING -> handlePing(request, mcpServer, parsedRequest, storedSession.orElse(null));
 			case TOOLS_LIST ->
 					handleToolsList(request, resolvedEndpoint, parsedRequest, storedSession.orElseThrow(), requestContext);
@@ -599,6 +608,7 @@ final class DefaultMcpRuntime {
 									Optional.of(sessionId),
 									Optional.of(protocolVersion),
 									Optional.empty(),
+									DefaultMcpCancelationToken.disabledInstance(),
 									Optional.of(McpSessionContext.fromBlankSlate())
 							));
 				}
@@ -674,10 +684,10 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private HttpRequestResult handleCancelledNotification(@NonNull Request request,
+	private HttpRequestResult handleCanceledNotification(@NonNull Request request,
 																												@NonNull McpServer mcpServer,
 																												@NonNull ParsedJsonRpcRequest parsedRequest,
-																												@NonNull McpStoredSession storedSession) {
+																												@NonNull McpStoredSession storedSession) throws JsonRpcErrorTransport {
 		requireNonNull(request);
 		requireNonNull(mcpServer);
 		requireNonNull(parsedRequest);
@@ -687,6 +697,11 @@ final class DefaultMcpRuntime {
 
 		if (gateResult != null)
 			return gateResult;
+
+		McpJsonRpcRequestId canceledRequestId = cancelationRequestId(parsedRequest.params()).orElse(null);
+
+		if (canceledRequestId != null)
+			cancelMcpRequest(storedSession.sessionId(), canceledRequestId, optionalString(parsedRequest.params(), "reason").orElse(null));
 
 		touchSession(mcpServer, storedSession);
 
@@ -1344,6 +1359,52 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
+	private DefaultMcpCancelationToken cancelationTokenFor(@Nullable String sessionId,
+																													@Nullable McpJsonRpcRequestId requestId) {
+		if (sessionId == null || requestId == null)
+			return DefaultMcpCancelationToken.disabledInstance();
+
+		McpCancelationKey key = new McpCancelationKey(sessionId, requestId);
+		DefaultMcpCancelationToken cancelationToken = new DefaultMcpCancelationToken(true);
+		this.mcpCancelationTokensByRequest.computeIfAbsent(key, ignored -> new CopyOnWriteArrayList<>()).add(cancelationToken);
+		return cancelationToken;
+	}
+
+	private void unregisterCancelationToken(@Nullable String sessionId,
+																					 @Nullable McpJsonRpcRequestId requestId,
+																					 @NonNull DefaultMcpCancelationToken cancelationToken) {
+		requireNonNull(cancelationToken);
+
+		if (sessionId == null || requestId == null || !cancelationToken.active())
+			return;
+
+		McpCancelationKey key = new McpCancelationKey(sessionId, requestId);
+		CopyOnWriteArrayList<DefaultMcpCancelationToken> cancelationTokens = this.mcpCancelationTokensByRequest.get(key);
+
+		if (cancelationTokens == null)
+			return;
+
+		cancelationTokens.remove(cancelationToken);
+
+		if (cancelationTokens.isEmpty())
+			this.mcpCancelationTokensByRequest.remove(key, cancelationTokens);
+	}
+
+	private void cancelMcpRequest(@NonNull String sessionId,
+																@NonNull McpJsonRpcRequestId requestId,
+																@Nullable String reason) {
+		requireNonNull(sessionId);
+		requireNonNull(requestId);
+		CopyOnWriteArrayList<DefaultMcpCancelationToken> cancelationTokens = this.mcpCancelationTokensByRequest.get(new McpCancelationKey(sessionId, requestId));
+
+		if (cancelationTokens == null)
+			return;
+
+		for (DefaultMcpCancelationToken cancelationToken : cancelationTokens)
+			cancelationToken.cancel(reason);
+	}
+
+	@NonNull
 	private McpListResourcesResult invokeResourcesListBinding(@NonNull ResolvedEndpoint resolvedEndpoint,
 																														@NonNull ResourceListBinding resourceListBinding,
 																														@NonNull Map<String, String> endpointPathParameters,
@@ -1543,6 +1604,9 @@ final class DefaultMcpRuntime {
 		if (McpRequestContext.class.equals(parameter.getType()))
 			return listResourcesContext.requestContext();
 
+		if (McpCancelationToken.class.equals(parameter.getType()))
+			return listResourcesContext.requestContext().getCancelationToken();
+
 		if (McpSessionContext.class.equals(parameter.getType()))
 			return sessionContext;
 
@@ -1568,6 +1632,9 @@ final class DefaultMcpRuntime {
 
 		if (McpRequestContext.class.equals(parameter.getType()))
 			return toolCallContext.getRequestContext();
+
+		if (McpCancelationToken.class.equals(parameter.getType()))
+			return toolCallContext.getRequestContext().getCancelationToken();
 
 		if (McpSessionContext.class.equals(parameter.getType()))
 			return sessionContext;
@@ -1612,6 +1679,9 @@ final class DefaultMcpRuntime {
 		if (McpRequestContext.class.equals(parameter.getType()))
 			return requestContext;
 
+		if (McpCancelationToken.class.equals(parameter.getType()))
+			return requestContext.getCancelationToken();
+
 		if (McpSessionContext.class.equals(parameter.getType()))
 			return sessionContext;
 
@@ -1652,6 +1722,9 @@ final class DefaultMcpRuntime {
 
 		if (McpRequestContext.class.equals(parameter.getType()))
 			return requestContext;
+
+		if (McpCancelationToken.class.equals(parameter.getType()))
+			return requestContext.getCancelationToken();
 
 		if (McpSessionContext.class.equals(parameter.getType()))
 			return sessionContext;
@@ -1991,13 +2064,19 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
+	private Optional<McpJsonRpcRequestId> cancelationRequestId(@NonNull McpObject params) throws JsonRpcErrorTransport {
+		requireNonNull(params);
+		return Optional.ofNullable(requestIdFromValue(params.get("requestId").orElse(null)));
+	}
+
+	@NonNull
 	private Optional<McpOperationType> operationTypeForMethod(@NonNull String method) {
 		requireNonNull(method);
 
 		return switch (method) {
 			case "initialize" -> Optional.of(McpOperationType.INITIALIZE);
 			case "notifications/initialized" -> Optional.of(McpOperationType.NOTIFICATIONS_INITIALIZED);
-			case "notifications/cancelled" -> Optional.of(McpOperationType.NOTIFICATIONS_CANCELLED);
+			case "notifications/cancelled" -> Optional.of(McpOperationType.NOTIFICATIONS_CANCELED);
 			case "ping" -> Optional.of(McpOperationType.PING);
 			case "tools/list" -> Optional.of(McpOperationType.TOOLS_LIST);
 			case "tools/call" -> Optional.of(McpOperationType.TOOLS_CALL);
@@ -3461,6 +3540,7 @@ final class DefaultMcpRuntime {
 			@NonNull Optional<String> sessionId,
 			@NonNull Optional<String> protocolVersion,
 			@NonNull Optional<McpNegotiatedCapabilities> negotiatedCapabilities,
+			@NonNull McpCancelationToken cancelationToken,
 			@NonNull Optional<McpSessionContext> sessionContext
 	) implements McpRequestContext {
 		private DefaultMcpRequestContext {
@@ -3472,6 +3552,7 @@ final class DefaultMcpRuntime {
 			requireNonNull(sessionId);
 			requireNonNull(protocolVersion);
 			requireNonNull(negotiatedCapabilities);
+			requireNonNull(cancelationToken);
 			requireNonNull(sessionContext);
 		}
 
@@ -3525,8 +3606,76 @@ final class DefaultMcpRuntime {
 
 		@NonNull
 		@Override
+		public McpCancelationToken getCancelationToken() {
+			return this.cancelationToken;
+		}
+
+		@NonNull
+		@Override
 		public Optional<McpSessionContext> getSessionContext() {
 			return this.sessionContext;
+		}
+	}
+
+	private record McpCancelationKey(
+			@NonNull String sessionId,
+			@NonNull McpJsonRpcRequestId requestId
+	) {
+		private McpCancelationKey {
+			requireNonNull(sessionId);
+			requireNonNull(requestId);
+		}
+	}
+
+	private static final class DefaultMcpCancelationToken implements McpCancelationToken {
+		@NonNull
+		private static final DefaultMcpCancelationToken DISABLED_INSTANCE;
+		@NonNull
+		private final Boolean active;
+		@NonNull
+		private final AtomicBoolean cancelationRequested;
+		@NonNull
+		private final AtomicReference<String> reason;
+
+		static {
+			DISABLED_INSTANCE = new DefaultMcpCancelationToken(false);
+		}
+
+		private DefaultMcpCancelationToken(@NonNull Boolean active) {
+			requireNonNull(active);
+			this.active = active;
+			this.cancelationRequested = new AtomicBoolean(false);
+			this.reason = new AtomicReference<>();
+		}
+
+		@NonNull
+		static DefaultMcpCancelationToken disabledInstance() {
+			return DISABLED_INSTANCE;
+		}
+
+		@NonNull
+		Boolean active() {
+			return this.active;
+		}
+
+		void cancel(@Nullable String reason) {
+			if (!active())
+				return;
+
+			this.reason.set(reason);
+			this.cancelationRequested.set(true);
+		}
+
+		@NonNull
+		@Override
+		public Boolean isCancelationRequested() {
+			return this.cancelationRequested.get();
+		}
+
+		@NonNull
+		@Override
+		public Optional<String> getReason() {
+			return Optional.ofNullable(this.reason.get());
 		}
 	}
 

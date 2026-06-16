@@ -45,7 +45,7 @@ public class TimeoutSchedulerTests {
 	}
 
 	@Test
-	public void cancelledTaskDoesNotRun() throws Exception {
+	public void canceledTaskDoesNotRun() throws Exception {
 		TimeoutScheduler scheduler = newScheduler();
 
 		try {
@@ -55,7 +55,7 @@ public class TimeoutSchedulerTests {
 			scheduledTask.cancel();
 			Thread.sleep(100L);
 
-			assertFalse(ran.get(), "Cancelled task should not run");
+			assertFalse(ran.get(), "Canceled task should not run");
 		} finally {
 			scheduler.shutdownNow();
 		}

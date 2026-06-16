@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Small hashed-wheel timeout scheduler for request handling deadlines.
  * <p>
- * Scheduling and cancellation are O(1), and assigned cancelled tasks are removed from their bucket immediately.
+ * Scheduling and cancelation are O(1), and assigned canceled tasks are removed from their bucket immediately.
  */
 @ThreadSafe
 final class TimeoutScheduler {
@@ -166,7 +166,7 @@ final class TimeoutScheduler {
 		ScheduledTask scheduledTask;
 
 		while ((scheduledTask = this.pendingTasks.poll()) != null)
-			if (!scheduledTask.isCancelled())
+			if (!scheduledTask.isCanceled())
 				bucketFor(scheduledTask.deadlineTick).add(scheduledTask);
 	}
 
@@ -174,7 +174,7 @@ final class TimeoutScheduler {
 		List<ScheduledTask> expiredTasks = bucketFor(tick).expire(tick);
 
 		for (ScheduledTask expiredTask : expiredTasks)
-			if (!expiredTask.isCancelled())
+			if (!expiredTask.isCanceled())
 				runTask(expiredTask);
 	}
 
@@ -184,7 +184,7 @@ final class TimeoutScheduler {
 		try {
 			scheduledTask.task.run();
 		} catch (Throwable ignored) {
-			// Timeout callbacks are best-effort cancellation hooks; keep the scheduler alive for later deadlines.
+			// Timeout callbacks are best-effort cancelation hooks; keep the scheduler alive for later deadlines.
 		}
 	}
 
@@ -225,7 +225,7 @@ final class TimeoutScheduler {
 		@NonNull
 		private final Runnable task;
 		private final long deadlineTick;
-		private final AtomicBoolean cancelled;
+		private final AtomicBoolean canceled;
 		@Nullable
 		private volatile Bucket bucket;
 		@Nullable
@@ -238,11 +238,11 @@ final class TimeoutScheduler {
 			requireNonNull(task);
 			this.task = task;
 			this.deadlineTick = deadlineTick;
-			this.cancelled = new AtomicBoolean(false);
+			this.canceled = new AtomicBoolean(false);
 		}
 
 		void cancel() {
-			if (!this.cancelled.compareAndSet(false, true))
+			if (!this.canceled.compareAndSet(false, true))
 				return;
 
 			Bucket bucket = this.bucket;
@@ -251,8 +251,8 @@ final class TimeoutScheduler {
 				bucket.remove(this);
 		}
 
-		private boolean isCancelled() {
-			return this.cancelled.get();
+		private boolean isCanceled() {
+			return this.canceled.get();
 		}
 	}
 
@@ -270,7 +270,7 @@ final class TimeoutScheduler {
 			requireNonNull(scheduledTask);
 			this.lock.lock();
 			try {
-				if (scheduledTask.isCancelled())
+				if (scheduledTask.isCanceled())
 					return;
 
 				scheduledTask.bucket = this;
@@ -296,7 +296,7 @@ final class TimeoutScheduler {
 				while (scheduledTask != null) {
 					ScheduledTask next = scheduledTask.next;
 
-					if (scheduledTask.isCancelled()) {
+					if (scheduledTask.isCanceled()) {
 						unlink(scheduledTask);
 					} else if (scheduledTask.deadlineTick <= tick) {
 						unlink(scheduledTask);

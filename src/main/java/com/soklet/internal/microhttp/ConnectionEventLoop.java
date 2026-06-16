@@ -134,9 +134,9 @@ class ConnectionEventLoop {
         @Nullable
         ByteBuffer continueResponseBuffer;
         @Nullable
-        Cancellable requestReadTimeoutTask;
+        Cancelable requestReadTimeoutTask;
         @Nullable
-        Cancellable responseWriteIdleTimeoutTask;
+        Cancelable responseWriteIdleTimeoutTask;
         boolean requestReadTimeoutBodyPhase;
         long requestReadTimeoutTokenizerMark;
         boolean responseWriteIdleTimeoutEnabled;

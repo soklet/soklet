@@ -721,10 +721,10 @@ running MCP endpoint code or mutating session/stream state. The default
 you explicitly allow the origin.
 
 Soklet's MCP v1 support is intentionally conservative: single-request JSON-RPC only, framework-managed
-`initialize`, `notifications/initialized`, `notifications/cancelled`, and `ping`, framework-generated
-`tools/list` / `prompts/list` / `resources/templates/list` responses without cursor pagination, and
-application-backed pagination only for `resources/list`. JSON-RPC batch arrays, cooperative cancellation
-hooks for in-flight handlers, and resumable SSE event IDs remain deferred.
+`initialize`, `notifications/initialized`, `notifications/cancelled`, and `ping`, cooperative
+in-flight request cancelation through `McpCancelationToken`, framework-generated `tools/list` /
+`prompts/list` / `resources/templates/list` responses without cursor pagination, and application-backed
+pagination only for `resources/list`. JSON-RPC batch arrays and resumable SSE event IDs remain deferred.
 
 MCP test via the [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html)
 (see [`McpRequestResult`](https://javadoc.soklet.com/com/soklet/McpRequestResult.html)):
