@@ -47,7 +47,7 @@ final class DefaultResponseGzipPolicy implements ResponseGzipPolicy {
 		requireNonNull(request);
 		requireNonNull(response);
 
-		return response.getBodyLength() >= getMinimumBodySizeInBytes()
+		return effectiveBodyLength(request, response) >= getMinimumBodySizeInBytes()
 				&& hasCompressibleContentType(response);
 	}
 
@@ -71,6 +71,32 @@ final class DefaultResponseGzipPolicy implements ResponseGzipPolicy {
 		}
 
 		return false;
+	}
+
+	@NonNull
+	private Long effectiveBodyLength(@NonNull Request request,
+																	 @NonNull MarshaledResponse response) {
+		requireNonNull(request);
+		requireNonNull(response);
+
+		Long bodyLength = response.getBodyLength();
+
+		if (bodyLength > 0 || request.getHttpMethod() != HttpMethod.HEAD)
+			return bodyLength;
+
+		for (Entry<String, Set<String>> entry : response.getHeaders().entrySet()) {
+			if (!"Content-Length".equalsIgnoreCase(entry.getKey()) || entry.getValue().size() != 1)
+				continue;
+
+			try {
+				Long contentLength = Long.valueOf(entry.getValue().iterator().next());
+				return contentLength < 0 ? 0L : contentLength;
+			} catch (NumberFormatException ignored) {
+				return 0L;
+			}
+		}
+
+		return 0L;
 	}
 
 	@NonNull

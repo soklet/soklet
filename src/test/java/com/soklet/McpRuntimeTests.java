@@ -468,6 +468,7 @@ public class McpRuntimeTests {
 					post("/tenants/acme/mcp", """
 							{
 							  "jsonrpc":"2.0",
+							  "id":"req-cancel",
 							  "method":"notifications/cancelled",
 							  "params":{
 							    "requestId":"req-active"
@@ -483,6 +484,53 @@ public class McpRuntimeTests {
 			McpObject error = (McpObject) body.get("error").orElseThrow();
 			Assertions.assertEquals("-32600", ((McpNumber) error.get("code").orElseThrow()).value().toPlainString());
 			Assertions.assertEquals("Session has not received notifications/initialized yet", ((McpString) error.get("message").orElseThrow()).value());
+		});
+	}
+
+	@Test
+	public void canceledNotificationWithoutIdDoesNotWriteErrorWhenSessionIsNotReady() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			McpRequestResult.ResponseCompleted initializeResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-1"), Map.of()));
+			String sessionId = headerValue(initializeResult, "MCP-Session-Id");
+
+			McpRequestResult.ResponseCompleted notificationResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "method":"notifications/cancelled",
+							  "params":{
+							    "requestId":"req-active"
+							  }
+							}
+							""", Map.of(
+							"MCP-Session-Id", Set.of(sessionId),
+							"MCP-Protocol-Version", Set.of("2025-11-25")
+					)));
+
+			Assertions.assertEquals(Integer.valueOf(202), notificationResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertNull(notificationResult.getHttpRequestResult().getMarshaledResponse().bodyBytesOrNull());
+		});
+	}
+
+	@Test
+	public void canceledNotificationWithoutIdIgnoresMalformedCanceledRequestId() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			Map<String, Set<String>> sessionHeaders = initializedSessionHeaders(simulator, "/tenants/acme/mcp");
+
+			McpRequestResult.ResponseCompleted notificationResult = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", """
+							{
+							  "jsonrpc":"2.0",
+							  "method":"notifications/cancelled",
+							  "params":{
+							    "requestId":{}
+							  }
+							}
+							""", sessionHeaders));
+
+			Assertions.assertEquals(Integer.valueOf(202), notificationResult.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+			Assertions.assertNull(notificationResult.getHttpRequestResult().getMarshaledResponse().bodyBytesOrNull());
 		});
 	}
 

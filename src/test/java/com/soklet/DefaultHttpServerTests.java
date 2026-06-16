@@ -89,13 +89,16 @@ public class DefaultHttpServerTests {
 				.headers(Map.of("Accept-Encoding", Set.of("br;q=1, gzip;q=0.8")))
 				.build();
 		MarshaledResponse marshaledResponse = MarshaledResponse.withStatusCode(200)
-				.headers(Map.of("Content-Type", Set.of("text/plain")))
+				.headers(Map.of(
+						"Content-Type", Set.of("text/plain"),
+						"ETag", Set.of("\"v1\"")))
 				.body(body)
 				.build();
 
 		MicrohttpResponse microhttpResponse = server.toMicrohttpResponse(request, null, marshaledResponse);
 
 		Assertions.assertTrue(microhttpResponse.hasHeader("Content-Encoding"));
+		Assertions.assertEquals("W/\"v1\"", headerValue(microhttpResponse, "ETag"));
 		Assertions.assertArrayEquals(body, gunzip(microhttpResponse.body()));
 	}
 
@@ -131,5 +134,13 @@ public class DefaultHttpServerTests {
 		try (GZIPInputStream inputStream = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
 			return readAll(inputStream);
 		}
+	}
+
+	private static String headerValue(MicrohttpResponse response, String name) {
+		return response.headers().stream()
+				.filter(header -> header.name().equalsIgnoreCase(name))
+				.map(Header::value)
+				.findFirst()
+				.orElse(null);
 	}
 }

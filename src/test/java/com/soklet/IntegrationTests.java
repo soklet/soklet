@@ -1017,6 +1017,37 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void responseGzip_headAdvertisesCompressedRepresentationWithoutBody() throws Exception {
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.responseGzipPolicy(ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(1_024))
+				.build();
+
+		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
+				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(5000);
+			out.write((
+					"HEAD /vary-large HTTP/1.1\r\n" +
+							"Host: 127.0.0.1\r\n" +
+							"Accept-Encoding: gzip\r\n" +
+							"Connection: close\r\n" +
+							"\r\n"
+			).getBytes(StandardCharsets.UTF_8));
+			out.flush();
+
+			RawResponse response = readResponse(in);
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+			Assertions.assertEquals("gzip", response.headers().get("content-encoding"));
+			Assertions.assertEquals("Origin, Accept-Encoding", response.headers().get("vary"));
+			Assertions.assertFalse(response.headers().containsKey("content-length"));
+			Assertions.assertEquals(0, response.body().length);
+		}
+	}
+
+	@Test
 	public void responseGzip_isDisabledByDefault() throws Exception {
 		int port = findFreePort();
 		try (Soklet app = startApp(port, Set.of(Echo2Resource.class));

@@ -685,9 +685,9 @@ final class DefaultMcpRuntime {
 
 	@NonNull
 	private HttpRequestResult handleCanceledNotification(@NonNull Request request,
-																												@NonNull McpServer mcpServer,
-																												@NonNull ParsedJsonRpcRequest parsedRequest,
-																												@NonNull McpStoredSession storedSession) throws JsonRpcErrorTransport {
+																													@NonNull McpServer mcpServer,
+																													@NonNull ParsedJsonRpcRequest parsedRequest,
+																													@NonNull McpStoredSession storedSession) throws JsonRpcErrorTransport {
 		requireNonNull(request);
 		requireNonNull(mcpServer);
 		requireNonNull(parsedRequest);
@@ -695,10 +695,10 @@ final class DefaultMcpRuntime {
 
 		HttpRequestResult gateResult = ensureSessionReady(request, storedSession, parsedRequest.requestId());
 
-		if (gateResult != null)
+		if (gateResult != null && parsedRequest.requestIdPresent())
 			return gateResult;
 
-		McpJsonRpcRequestId canceledRequestId = cancelationRequestId(parsedRequest.params()).orElse(null);
+		McpJsonRpcRequestId canceledRequestId = cancelationRequestId(parsedRequest.params(), parsedRequest.requestIdPresent()).orElse(null);
 
 		if (canceledRequestId != null)
 			cancelMcpRequest(storedSession.sessionId(), canceledRequestId, optionalString(parsedRequest.params(), "reason").orElse(null));
@@ -2064,9 +2064,18 @@ final class DefaultMcpRuntime {
 	}
 
 	@NonNull
-	private Optional<McpJsonRpcRequestId> cancelationRequestId(@NonNull McpObject params) throws JsonRpcErrorTransport {
+	private Optional<McpJsonRpcRequestId> cancelationRequestId(@NonNull McpObject params,
+																														 @NonNull Boolean mayRespondWithError) throws JsonRpcErrorTransport {
 		requireNonNull(params);
-		return Optional.ofNullable(requestIdFromValue(params.get("requestId").orElse(null)));
+		requireNonNull(mayRespondWithError);
+		try {
+			return Optional.ofNullable(requestIdFromValue(params.get("requestId").orElse(null)));
+		} catch (JsonRpcErrorTransport e) {
+			if (mayRespondWithError)
+				throw e;
+
+			return Optional.empty();
+		}
 	}
 
 	@NonNull

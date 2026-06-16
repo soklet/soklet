@@ -1072,8 +1072,12 @@ final class DefaultHttpServer implements HttpServer {
 
 		MarshaledResponseBody body = marshaledResponse.getBody().orElse(null);
 
-		if (body == null)
+		if (body == null) {
+			if (shouldGzipResponse(request, marshaledResponse, headers, 0))
+				return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, gzipHeaders(headers), emptyByteArray());
+
 			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, emptyByteArray());
+		}
 
 		if (body instanceof MarshaledResponseBody.Bytes bytes)
 			return bytesResponse(request, marshaledResponse, reasonPhrase, headers, bytes.getBytes());
@@ -1149,7 +1153,7 @@ final class DefaultHttpServer implements HttpServer {
 		if (request == null)
 			return false;
 
-		if (bodyLength == 0)
+		if (effectiveBodyLengthForResponseGzip(request, headers, bodyLength) == 0)
 			return false;
 
 		if (!statusAllowsResponseGzip(marshaledResponse.getStatusCode()))
@@ -1217,6 +1221,8 @@ final class DefaultHttpServer implements HttpServer {
 						? "Accept-Encoding"
 						: value + ", Accept-Encoding"));
 				varyUpdated = true;
+			} else if (header.name().equalsIgnoreCase("ETag")) {
+				gzipHeaders.add(new Header(header.name(), weakEntityTagHeaderValue(header.value())));
 			} else {
 				gzipHeaders.add(header);
 			}
@@ -1228,6 +1234,43 @@ final class DefaultHttpServer implements HttpServer {
 		gzipHeaders.add(new Header("Content-Encoding", "gzip"));
 		gzipHeaders.sort(Comparator.comparing(Header::name));
 		return gzipHeaders;
+	}
+
+	@NonNull
+	private Integer effectiveBodyLengthForResponseGzip(@NonNull Request request,
+																									 @NonNull List<@NonNull Header> headers,
+																									 @NonNull Integer bodyLength) {
+		requireNonNull(request);
+		requireNonNull(headers);
+		requireNonNull(bodyLength);
+
+		if (bodyLength > 0 || request.getHttpMethod() != HttpMethod.HEAD)
+			return bodyLength;
+
+		for (Header header : headers) {
+			if (!header.name().equalsIgnoreCase("Content-Length"))
+				continue;
+
+			try {
+				Integer contentLength = Integer.valueOf(header.value());
+				return contentLength < 0 ? 0 : contentLength;
+			} catch (NumberFormatException ignored) {
+				return 0;
+			}
+		}
+
+		return 0;
+	}
+
+	@NonNull
+	private String weakEntityTagHeaderValue(@NonNull String headerValue) {
+		requireNonNull(headerValue);
+		EntityTag entityTag = EntityTag.fromHeaderValue(headerValue).orElse(null);
+
+		if (entityTag == null || entityTag.isWeak())
+			return headerValue;
+
+		return EntityTag.fromWeakValue(entityTag.getValue()).toHeaderValue();
 	}
 
 	private byte @NonNull [] gzip(byte @NonNull [] bytes) {

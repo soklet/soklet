@@ -404,6 +404,10 @@ class RequestParser {
     }
 
     boolean consumeContinueExpectation() {
+        if (version == null || !version.equalsIgnoreCase("HTTP/1.1")) {
+            return false;
+        }
+
         if (!continueExpectationRequested || continueExpectationAcknowledged || !readingBody()) {
             return false;
         }

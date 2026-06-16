@@ -363,6 +363,10 @@ class ConnectionEventLoop {
                 return;
             }
             requestInFlight = false;
+            if (mustNotSendBody(microhttpResponse.status())) {
+                microhttpResponse.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
+                microhttpResponse = microhttpResponse.withoutBody();
+            }
             if (hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
                 closeAfterResponse = true;
             }
@@ -724,14 +728,14 @@ class ConnectionEventLoop {
                 return false;
             }
 
-            if (mustNotSendContentLength(microhttpResponse.status())) {
+            if (mustNotSendBody(microhttpResponse.status())) {
                 return false;
             }
 
             return !headRequest || microhttpResponse.bodyLength() > 0L;
         }
 
-        private boolean mustNotSendContentLength(int status) {
+        private boolean mustNotSendBody(int status) {
             return (status >= 100 && status < 200) || status == 204 || status == 304;
         }
 

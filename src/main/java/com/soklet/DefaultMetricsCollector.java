@@ -76,6 +76,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	private final ConcurrentHashMap<IdentityKey<Request>, RequestState> requestsInFlightByIdentity;
 	private final ConcurrentHashMap<Object, RequestState> requestsInFlightById;
+	private final ThreadLocal<RequestState> requestStateByThread;
 	private final ConcurrentLruMap<RequestReadFailureKey, LongAdder> httpRequestReadFailuresByReason;
 	private final ConcurrentLruMap<RequestRejectionKey, LongAdder> httpRequestRejectionsByReason;
 	private final ConcurrentLruMap<RequestReadFailureKey, LongAdder> sseRequestReadFailuresByReason;
@@ -129,6 +130,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private DefaultMetricsCollector() {
 		this.requestsInFlightByIdentity = new ConcurrentHashMap<>();
 		this.requestsInFlightById = new ConcurrentHashMap<>();
+		this.requestStateByThread = new ThreadLocal<>();
 		this.httpRequestReadFailuresByReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.httpRequestRejectionsByReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.sseRequestReadFailuresByReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
@@ -310,6 +312,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				routeContext.getRouteType(), routeContext.getRoute());
 		this.requestsInFlightByIdentity.put(state.getIdentityKey(), state);
 		this.requestsInFlightById.put(state.getRequestId(), state);
+		this.requestStateByThread.set(state);
 
 		long requestBodyBytes = request.getBody()
 				.map(body -> (long) body.length)
@@ -1158,6 +1161,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.mcpConnectionsRejected.reset();
 		this.requestsInFlightByIdentity.clear();
 		this.requestsInFlightById.clear();
+		this.requestStateByThread.remove();
 		this.sseConnectionsByIdentity.clear();
 		resetCounterMap(this.transportFailuresByServerTypeAndReason);
 		resetCounterMap(this.httpRequestReadFailuresByReason);
@@ -1936,6 +1940,15 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				return existingState;
 		}
 
+		if (state == null) {
+			state = this.requestStateByThread.get();
+			if (state != null) {
+				RequestState existingState = this.requestsInFlightByIdentity.putIfAbsent(identityKey, state);
+				if (existingState != null)
+					return existingState;
+			}
+		}
+
 		return state;
 	}
 
@@ -1949,11 +1962,17 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			state = this.requestsInFlightById.get(request.getId());
 
 		if (state == null)
+			state = this.requestStateByThread.get();
+
+		if (state == null) {
+			this.requestStateByThread.remove();
 			return;
+		}
 
 		this.requestsInFlightByIdentity.remove(currentIdentityKey, state);
 		this.requestsInFlightByIdentity.remove(state.getIdentityKey(), state);
 		this.requestsInFlightById.remove(state.getRequestId(), state);
+		this.requestStateByThread.remove();
 	}
 
 }

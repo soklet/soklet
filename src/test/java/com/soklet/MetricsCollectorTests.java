@@ -169,6 +169,29 @@ public class MetricsCollectorTests {
 	}
 
 	@Test
+	public void requestReplacementWithNewIdRemovesAllInFlightRequestState() {
+		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
+		ResourceMethod resourceMethod = resourceMethodFor("/widgets/{id}", HttpMethod.POST, "createWidget", false);
+		Request request = Request.withPath(HttpMethod.POST, "/widgets/123")
+				.body(new byte[]{1, 2, 3})
+				.build();
+		Request replacementRequest = Request.withPath(HttpMethod.POST, "/widgets/123")
+				.headers(Map.of("X-Replaced", Set.of("true")))
+				.build();
+		MarshaledResponse response = MarshaledResponse.withStatusCode(201)
+				.body(new byte[]{9, 8})
+				.build();
+
+		collector.didStartRequestHandling(ServerType.STANDARD_HTTP, request, resourceMethod);
+		collector.willWriteResponse(ServerType.STANDARD_HTTP, replacementRequest, resourceMethod, response);
+		collector.didFinishRequestHandling(ServerType.STANDARD_HTTP, replacementRequest, resourceMethod, response, Duration.ofMillis(5), List.of());
+
+		assertEquals(0L, collector.getActiveRequests());
+		assertEquals(0L, collector.getRequestsInFlightByIdentityCount());
+		assertEquals(0L, collector.getRequestsInFlightByIdCount());
+	}
+
+	@Test
 	public void snapshotTextRespectsSseConfiguration() {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		MetricsCollector.SnapshotTextOptions prometheusOptions = MetricsCollector.SnapshotTextOptions

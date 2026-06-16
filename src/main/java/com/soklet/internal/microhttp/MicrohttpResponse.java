@@ -114,6 +114,10 @@ public final class MicrohttpResponse {
         return new MicrohttpResponse(status, reason, headers, bodyLength, bodySourceFactory, body, streaming);
     }
 
+    MicrohttpResponse withoutBody() {
+        return new MicrohttpResponse(status, reason, headers, new byte[0]);
+    }
+
     public boolean streaming() {
         return streaming;
     }

@@ -140,6 +140,24 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void parserDoesNotExposeContinueExpectationForHttpOneDotZero() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] headers = ascii("POST / HTTP/1.0\r\nExpect: 100-continue\r\nContent-Length: 5\r\n\r\n");
+
+		add(tokenizer, headers);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
+
+		Assertions.assertFalse(parser.parse());
+		Assertions.assertTrue(parser.readingBody());
+		Assertions.assertFalse(parser.consumeContinueExpectation());
+
+		add(tokenizer, ascii("hello"));
+
+		Assertions.assertTrue(parser.parse());
+		Assertions.assertEquals("hello", new String(parser.request().body(), StandardCharsets.US_ASCII));
+	}
+
+	@Test
 	public void parserRejectsUnsupportedExpectation() {
 		ByteTokenizer tokenizer = new ByteTokenizer();
 		byte[] request = ascii("POST / HTTP/1.1\r\nHost: localhost\r\nExpect: 100-continue, wait\r\nContent-Length: 5\r\n\r\n");
@@ -785,6 +803,46 @@ public class MicrohttpInternalTests {
 			Assertions.assertTrue(response.contains("\r\n\r\npongHTTP/1.1 400 Bad Request"), response);
 			Assertions.assertTrue(logger.containsFailureEvent("malformed_request"), logger.events().toString());
 			Assertions.assertFalse(logger.containsFailureEvent("write_error"), logger.events().toString());
+		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void bodylessStatusSuppressesBodyBeforeNextPipelinedResponse() throws Exception {
+		Options options = OptionsBuilder.newBuilder()
+				.withPort(0)
+				.withResolution(Duration.ofMillis(10))
+				.withRequestHeaderTimeout(Duration.ofSeconds(2))
+				.withRequestBodyTimeout(Duration.ofSeconds(2))
+				.withConcurrency(1)
+				.build();
+		RecordingLogger logger = new RecordingLogger();
+		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) -> {
+			if ("/bodyless".equals(request.uri())) {
+				callback.accept(new MicrohttpResponse(204, "No Content", List.of(), ascii("must-not-write")));
+				return;
+			}
+
+			callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("pong")));
+		});
+
+		eventLoop.start();
+
+		try {
+			String response = sendRequestAndReadResponse(eventLoop.getPort(), "GET /bodyless HTTP/1.1\r\n"
+					+ "Host: localhost\r\n"
+					+ "\r\n"
+					+ "GET /ok HTTP/1.1\r\n"
+					+ "Host: localhost\r\n"
+					+ "Connection: close\r\n"
+					+ "\r\n");
+
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 204 No Content"), response);
+			Assertions.assertTrue(response.contains("\r\n\r\nHTTP/1.1 200 OK"), response);
+			Assertions.assertFalse(response.contains("must-not-write"), response);
+			Assertions.assertTrue(response.endsWith("pong"), response);
 		} finally {
 			eventLoop.stop();
 			eventLoop.join();
