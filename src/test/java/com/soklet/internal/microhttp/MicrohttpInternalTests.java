@@ -821,7 +821,10 @@ public class MicrohttpInternalTests {
 		RecordingLogger logger = new RecordingLogger();
 		EventLoop eventLoop = new EventLoop(options, logger, (request, callback) -> {
 			if ("/bodyless".equals(request.uri())) {
-				callback.accept(new MicrohttpResponse(204, "No Content", List.of(), ascii("must-not-write")));
+				callback.accept(new MicrohttpResponse(204, "No Content", List.of(
+						new Header("Content-Length", "14"),
+						new Header("Transfer-Encoding", "chunked"),
+						new Header("X-Test", "yes")), ascii("must-not-write")));
 				return;
 			}
 
@@ -840,6 +843,10 @@ public class MicrohttpInternalTests {
 					+ "\r\n");
 
 			Assertions.assertTrue(response.startsWith("HTTP/1.1 204 No Content"), response);
+			String firstHead = response.substring(0, response.indexOf("\r\n\r\n"));
+			Assertions.assertFalse(firstHead.contains("Content-Length"), firstHead);
+			Assertions.assertFalse(firstHead.contains("Transfer-Encoding"), firstHead);
+			Assertions.assertTrue(firstHead.contains("X-Test: yes"), firstHead);
 			Assertions.assertTrue(response.contains("\r\n\r\nHTTP/1.1 200 OK"), response);
 			Assertions.assertFalse(response.contains("must-not-write"), response);
 			Assertions.assertTrue(response.endsWith("pong"), response);

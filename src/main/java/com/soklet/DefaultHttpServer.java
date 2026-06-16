@@ -1153,7 +1153,7 @@ final class DefaultHttpServer implements HttpServer {
 		if (request == null)
 			return false;
 
-		if (effectiveBodyLengthForResponseGzip(request, headers, bodyLength) == 0)
+		if (effectiveBodyLengthForResponseGzip(request, marshaledResponse, headers, bodyLength) == 0)
 			return false;
 
 		if (!statusAllowsResponseGzip(marshaledResponse.getStatusCode()))
@@ -1238,14 +1238,19 @@ final class DefaultHttpServer implements HttpServer {
 
 	@NonNull
 	private Integer effectiveBodyLengthForResponseGzip(@NonNull Request request,
+																									 @NonNull MarshaledResponse marshaledResponse,
 																									 @NonNull List<@NonNull Header> headers,
 																									 @NonNull Integer bodyLength) {
 		requireNonNull(request);
+		requireNonNull(marshaledResponse);
 		requireNonNull(headers);
 		requireNonNull(bodyLength);
 
 		if (bodyLength > 0 || request.getHttpMethod() != HttpMethod.HEAD)
 			return bodyLength;
+
+		if (!marshaledResponse.isHeadResponseGzipCandidate())
+			return 0;
 
 		for (Header header : headers) {
 			if (!header.name().equalsIgnoreCase("Content-Length"))

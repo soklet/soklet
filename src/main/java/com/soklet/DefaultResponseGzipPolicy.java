@@ -84,6 +84,9 @@ final class DefaultResponseGzipPolicy implements ResponseGzipPolicy {
 		if (bodyLength > 0 || request.getHttpMethod() != HttpMethod.HEAD)
 			return bodyLength;
 
+		if (!response.isHeadResponseGzipCandidate())
+			return 0L;
+
 		for (Entry<String, Set<String>> entry : response.getHeaders().entrySet()) {
 			if (!"Content-Length".equalsIgnoreCase(entry.getKey()) || entry.getValue().size() != 1)
 				continue;

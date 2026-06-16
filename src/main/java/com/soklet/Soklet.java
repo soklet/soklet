@@ -554,7 +554,7 @@ public final class Soklet implements AutoCloseable {
 	 * <strong>Notes regarding {@link ShutdownTrigger#ENTER_KEY}:</strong>
 	 * <ul>
 	 *   <li>It will invoke {@link #stop()} on <i>all</i> Soklet instances, as stdin is process-wide</li>
-	 *   <li>It is only supported for environments with an interactive TTY and will be ignored if none exists (e.g. running in a Docker container) - Soklet will detect this and fire {@link LifecycleObserver#didReceiveLogEvent(LogEvent)} with an event of type {@link LogEventType#CONFIGURATION_UNSUPPORTED}</li>
+	 *   <li>It requires usable standard input. If stdin is unavailable or reaches EOF before a keypress (e.g. running in a Docker container), Soklet will fire {@link LifecycleObserver#didReceiveLogEvent(LogEvent)} with an event of type {@link LogEventType#CONFIGURATION_UNSUPPORTED} and keep running</li>
 	 * </ul>
 	 *
 	 * @param shutdownTriggers additional trigger[s] which signal that shutdown should occur, e.g. {@link ShutdownTrigger#ENTER_KEY} for "enter key pressed"
@@ -573,7 +573,7 @@ public final class Soklet implements AutoCloseable {
 				if (!registeredEnterKeyShutdownTrigger) {
 					LogEvent logEvent = LogEvent.with(
 							LogEventType.CONFIGURATION_UNSUPPORTED,
-							format("Ignoring request for %s.%s - it is unsupported in this environment (no interactive TTY detected)", ShutdownTrigger.class.getSimpleName(), ShutdownTrigger.ENTER_KEY.name())
+							format("Ignoring request for %s.%s - it is unsupported in this environment (stdin is unavailable)", ShutdownTrigger.class.getSimpleName(), ShutdownTrigger.ENTER_KEY.name())
 					).build();
 
 					getSokletConfig().getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
@@ -631,7 +631,7 @@ public final class Soklet implements AutoCloseable {
 		synchronized static Boolean register(@NonNull Soklet soklet) {
 			requireNonNull(soklet);
 
-			// If stdin is not readable (e.g., container with no TTY), don't start a listener.
+				// If stdin is unavailable, don't start a listener.
 			if (!canReadFromStdin())
 				return false;
 
@@ -668,8 +668,8 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		/**
-		 * ENTER_KEY shutdown is interactive-console-only. In noninteractive containers, stdin may be
-		 * open but wired to EOF (for example, /dev/null); treating that as usable would stop the server immediately.
+		 * ENTER_KEY shutdown only requires readable stdin. Environments such as IntelliJ often provide stdin without
+		 * a {@link System#console()}; EOF is handled by the listener without stopping the server.
 		 */
 		@NonNull
 		private static Boolean canReadFromStdin() {
@@ -681,8 +681,8 @@ public final class Soklet implements AutoCloseable {
 			if (interactiveConsoleAvailableOverride != null)
 				return interactiveConsoleAvailableOverride;
 
-			return System.console() != null;
-		}
+				return true;
+			}
 
 		/**
 		 * Single blocking read on stdin. On any line, stop all registered servers. EOF means stdin is

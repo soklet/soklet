@@ -365,7 +365,7 @@ class ConnectionEventLoop {
             requestInFlight = false;
             if (mustNotSendBody(microhttpResponse.status())) {
                 microhttpResponse.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
-                microhttpResponse = microhttpResponse.withoutBody();
+                microhttpResponse = microhttpResponse.withoutBodyOrFramingHeaders();
             }
             if (hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
                 closeAfterResponse = true;

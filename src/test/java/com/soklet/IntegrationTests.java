@@ -1255,6 +1255,31 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void responseGzip_headDoesNotAdvertiseGzipForFileResponses(@TempDir Path tempDir) throws Exception {
+		byte[] fileBytes = largeResponseBody();
+		fileResponsePath = tempDir.resolve("payload.bin");
+		Files.write(fileResponsePath, fileBytes);
+
+		int port = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5))
+				.responseGzipPolicy((request, response) -> true)
+				.build();
+
+		try (Soklet app = startApp(httpServer, Set.of(FileResource.class))) {
+			URL url = new URL("http://127.0.0.1:" + port + "/file");
+			HttpURLConnection connection = open("HEAD", url, Map.of("Accept-Encoding", "gzip"));
+
+			Assertions.assertEquals(200, connection.getResponseCode());
+			Assertions.assertNull(connection.getHeaderField("Content-Encoding"));
+			Assertions.assertEquals(Integer.toString(fileBytes.length), connection.getHeaderField("Content-Length"));
+			Assertions.assertEquals(0, readAll(connection.getInputStream()).length);
+		} finally {
+			fileResponsePath = null;
+		}
+	}
+
+	@Test
 	public void fileResponse_keepsPersistentConnectionUsableForPipelinedRequest(@TempDir Path tempDir) throws Exception {
 		byte[] fileBytes = largeResponseBody();
 		fileResponsePath = tempDir.resolve("payload.bin");

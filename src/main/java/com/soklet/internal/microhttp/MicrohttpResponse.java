@@ -118,6 +118,13 @@ public final class MicrohttpResponse {
         return new MicrohttpResponse(status, reason, headers, new byte[0]);
     }
 
+    MicrohttpResponse withoutBodyOrFramingHeaders() {
+        return new MicrohttpResponse(status, reason, headers.stream()
+                .filter(header -> !header.name().equalsIgnoreCase("Content-Length"))
+                .filter(header -> !header.name().equalsIgnoreCase("Transfer-Encoding"))
+                .toList(), new byte[0]);
+    }
+
     public boolean streaming() {
         return streaming;
     }

@@ -442,7 +442,7 @@ public class HttpServerLifecycleTests {
 	}
 
 	@Test
-	public void enterKeyShutdownTriggerRequiresInteractiveConsole() throws Exception {
+	public void enterKeyShutdownTriggerCanBeDisabledWhenStdinIsUnavailable() throws Exception {
 		Soklet.KeypressManager.reset();
 		Soklet.KeypressManager.interactiveConsoleAvailableOverride(false);
 		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
@@ -452,11 +452,11 @@ public class HttpServerLifecycleTests {
 			app.start();
 			Thread awaitThread = awaitShutdownOnBackgroundThread(app, awaitFailure);
 
-			try {
-				Assertions.assertTrue(lifecycleObserver.awaitConfigurationUnsupported(Duration.ofSeconds(2)),
-						"Expected ENTER_KEY to be reported as unsupported without an interactive console");
-				Assertions.assertTrue(app.isStarted(), "ENTER_KEY should be ignored when no interactive console exists");
-			} finally {
+				try {
+					Assertions.assertTrue(lifecycleObserver.awaitConfigurationUnsupported(Duration.ofSeconds(2)),
+							"Expected ENTER_KEY to be reported as unsupported without stdin");
+					Assertions.assertTrue(app.isStarted(), "ENTER_KEY should be ignored when stdin is unavailable");
+				} finally {
 				app.stop();
 				joinAwaitThread(awaitThread);
 			}
@@ -471,7 +471,6 @@ public class HttpServerLifecycleTests {
 	public void enterKeyShutdownTriggerTreatsStdinEofAsUnsupported() throws Exception {
 		InputStream originalIn = System.in;
 		Soklet.KeypressManager.reset();
-		Soklet.KeypressManager.interactiveConsoleAvailableOverride(true);
 		System.setIn(new ByteArrayInputStream(new byte[0]));
 		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
 		AtomicReference<Throwable> awaitFailure = new AtomicReference<>();
@@ -502,7 +501,6 @@ public class HttpServerLifecycleTests {
 	public void enterKeyShutdownTriggerStopsOnNewlineAndResetsListener() throws Exception {
 		InputStream originalIn = System.in;
 		Soklet.KeypressManager.reset();
-		Soklet.KeypressManager.interactiveConsoleAvailableOverride(true);
 		System.setIn(new ByteArrayInputStream("\n".getBytes(StandardCharsets.UTF_8)));
 		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
 		AtomicReference<Throwable> awaitFailure = new AtomicReference<>();

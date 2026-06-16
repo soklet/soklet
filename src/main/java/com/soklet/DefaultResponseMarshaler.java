@@ -362,9 +362,14 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		if (headHandler != null) {
 			marshaledResponse = headHandler.handle(request, getMethodMarshaledResponse);
 		} else {
+			Boolean headResponseGzipCandidate = getMethodMarshaledResponse.getBody()
+					.map(body -> body instanceof MarshaledResponseBody.Bytes
+							|| body instanceof MarshaledResponseBody.ByteBuffer)
+					.orElse(false);
 			MarshaledResponse.Copier responseCopier = getMethodMarshaledResponse.copy()
 					.withoutBody()
 					.withoutStream()
+					.headResponseGzipCandidate(headResponseGzipCandidate)
 					.cookies(getMethodMarshaledResponse.getCookies());
 
 			if (getMethodMarshaledResponse.isStreaming()) {

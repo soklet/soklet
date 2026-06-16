@@ -20,7 +20,7 @@
 - The default in-memory MCP session store now has `McpSessionStore.builder()` options for idle timeout, session ID generation, and a default `8_192` active-session cap. Reaching that cap rejects new `initialize` requests with HTTP 503 before endpoint initialization runs.
 - SSE and MCP event streams now default to a 30 second write timeout so stalled stream readers are disconnected by default. Set `SseServer.Builder.writeTimeout(Duration.ZERO)` or `McpServer.Builder.writeTimeout(Duration.ZERO)` to disable stream write timeouts.
 - Standard HTTP, SSE handshakes, and MCP transport requests now enforce a separate 64 KB `maximumHeadersSizeInBytes` default in addition to header-count, request-target, and total request-size limits. Use `HttpServer.Builder.maximumHeadersSizeInBytes(...)`, `SseServer.Builder.maximumHeadersSizeInBytes(...)`, or `McpServer.Builder.maximumHeadersSizeInBytes(...)` to tune it.
-- `ShutdownTrigger.ENTER_KEY` is now interactive-console-only. In noninteractive environments, including container stdin EOF, Soklet logs that the trigger is unsupported and keeps running instead of stopping unexpectedly.
+- `ShutdownTrigger.ENTER_KEY` now treats stdin EOF as unsupported instead of stopping servers unexpectedly. IDE consoles such as IntelliJ are supported even when `System.console()` is unavailable.
 
 ### Packaging
 
