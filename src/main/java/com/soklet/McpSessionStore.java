@@ -244,8 +244,8 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 
 	@NonNull
 	@Override
-	public Optional<McpStoredSession> create(@NonNull Request request,
-																					 @NonNull Class<? extends McpEndpoint> endpointClass) {
+	public synchronized Optional<McpStoredSession> create(@NonNull Request request,
+																												@NonNull Class<? extends McpEndpoint> endpointClass) {
 		requireNonNull(request);
 		requireNonNull(endpointClass);
 		takeExpiredSessionsIfSweepDue();
@@ -289,7 +289,7 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 		return Optional.of(session);
 	}
 
-	void create(@NonNull McpStoredSession session) {
+	synchronized void create(@NonNull McpStoredSession session) {
 		requireNonNull(session);
 		takeExpiredSessionsIfSweepDue();
 
@@ -317,7 +317,7 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 
 	@NonNull
 	@Override
-	public Optional<McpStoredSession> findBySessionId(@NonNull String sessionId) {
+	public synchronized Optional<McpStoredSession> findBySessionId(@NonNull String sessionId) {
 		requireNonNull(sessionId);
 
 		McpStoredSession storedSession = this.sessions.get(sessionId);
@@ -337,8 +337,8 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 
 	@NonNull
 	@Override
-	public Boolean replace(@NonNull McpStoredSession expected,
-												 @NonNull McpStoredSession updated) {
+	public synchronized Boolean replace(@NonNull McpStoredSession expected,
+																			 @NonNull McpStoredSession updated) {
 		requireNonNull(expected);
 		requireNonNull(updated);
 
@@ -360,25 +360,25 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 	}
 
 	@Override
-	public void deleteBySessionId(@NonNull String sessionId) {
+	public synchronized void deleteBySessionId(@NonNull String sessionId) {
 		requireNonNull(sessionId);
 
 		if (this.sessions.remove(sessionId) != null)
 			releaseSessionSlot(sessionId);
 	}
 
-	void pinnedSessionPredicate(@NonNull Predicate<String> pinnedSessionPredicate) {
+	synchronized void pinnedSessionPredicate(@NonNull Predicate<String> pinnedSessionPredicate) {
 		requireNonNull(pinnedSessionPredicate);
 		this.pinnedSessionPredicate = pinnedSessionPredicate;
 	}
 
-	boolean containsSessionId(@NonNull String sessionId) {
+	synchronized boolean containsSessionId(@NonNull String sessionId) {
 		requireNonNull(sessionId);
 		return this.sessions.containsKey(sessionId);
 	}
 
 	@NonNull
-	Optional<McpStoredSession> takeExpiredSession(@NonNull String sessionId) {
+	synchronized Optional<McpStoredSession> takeExpiredSession(@NonNull String sessionId) {
 		requireNonNull(sessionId);
 
 		McpStoredSession storedSession = this.sessions.get(sessionId);
@@ -394,7 +394,7 @@ final class DefaultMcpSessionStore implements McpSessionStore {
 	}
 
 	@NonNull
-	List<McpStoredSession> takeExpiredSessionsIfSweepDue() {
+	synchronized List<McpStoredSession> takeExpiredSessionsIfSweepDue() {
 		if (ZERO.equals(this.idleTimeout))
 			return List.of();
 

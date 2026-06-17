@@ -140,6 +140,8 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE;
 	@NonNull
+	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_431_RESPONSE;
+	@NonNull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE;
 	@NonNull
 	private static final ResourcePathDeclaration NO_MATCH_SENTINEL;
@@ -178,6 +180,7 @@ final class DefaultSseServer implements SseServer {
 
 		// Cache off a special failsafe response
 		FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_400);
+		FAILSAFE_HANDSHAKE_HTTP_431_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_431);
 		FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_408);
 		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_500);
 		FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503);
@@ -1384,6 +1387,32 @@ final class DefaultSseServer implements SseServer {
 
 				String rawRequest = readRequest(clientSocketChannel);
 				request = parseRequest(rawRequest, remoteAddress);
+			} catch (RequestHeadersTooLargeIOException e) {
+				if (handshakeResponseWritten.get()) {
+					closeSocketChannel(clientSocketChannel, channelLock);
+					return;
+				}
+
+				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_REJECTED, e);
+
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.UNPARSEABLE_REQUEST, e);
+
+				recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE, e, "exceed_request_headers_max_close");
+
+				if (handshakeResponseWritten.compareAndSet(false, true)) {
+					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
+					try {
+						synchronized (channelLock) {
+							writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_431_RESPONSE);
+						}
+					} catch (Throwable t) {
+						// best effort
+					}
+				}
+
+				closeSocketChannel(clientSocketChannel, channelLock);
+				return;
 			} catch (RequestTooLargeIOException e) {
 				if (handshakeResponseWritten.get()) {
 					closeSocketChannel(clientSocketChannel, channelLock);
@@ -2852,7 +2881,7 @@ final class DefaultSseServer implements SseServer {
 
 	@NonNull
 	protected Request parseRequest(@NonNull String rawRequest,
-																 @Nullable InetSocketAddress remoteAddress) {
+																 @Nullable InetSocketAddress remoteAddress) throws RequestHeadersTooLargeIOException {
 		requireNonNull(rawRequest);
 
 		rawRequest = trimAggressivelyToNull(rawRequest);
@@ -2945,7 +2974,7 @@ final class DefaultSseServer implements SseServer {
 				throw new IllegalRequestException("Header folding is not supported for Server-Sent Event requests");
 
 			if (++headerCount > getMaximumHeaderCount())
-				throw new IllegalRequestException(format("Too many Server-Sent Event request headers. Maximum allowed is %d", getMaximumHeaderCount()));
+				throw new RequestHeadersTooLargeIOException(format("Too many Server-Sent Event request headers. Maximum allowed is %d", getMaximumHeaderCount()));
 
 			// Header line
 			int indexOfFirstColon = rawLine.indexOf(':');
@@ -3055,7 +3084,7 @@ final class DefaultSseServer implements SseServer {
 		return lines;
 	}
 
-	private void rejectHeadersTooLarge(@NonNull String rawRequest) {
+	private void rejectHeadersTooLarge(@NonNull String rawRequest) throws RequestHeadersTooLargeIOException {
 		requireNonNull(rawRequest);
 
 		int end = endOfHeaders(rawRequest);
@@ -3063,7 +3092,7 @@ final class DefaultSseServer implements SseServer {
 			end = rawRequest.length();
 
 		if (headerSectionLengthInBytes(rawRequest, end) > getMaximumHeadersSizeInBytes())
-			throw new IllegalRequestException(format("Server-Sent Event request headers exceed maximum length of %d bytes", getMaximumHeadersSizeInBytes()));
+			throw new RequestHeadersTooLargeIOException(format("Server-Sent Event request headers exceed maximum length of %d bytes", getMaximumHeadersSizeInBytes()));
 	}
 
 	protected void validateNoRequestBodyHeaders(@NonNull Request request) {
@@ -3270,13 +3299,7 @@ final class DefaultSseServer implements SseServer {
 		if (headerSectionLengthInBytes(rawRequest, endExclusive) <= getMaximumHeadersSizeInBytes())
 			return;
 
-		String partialRawRequest = rawRequest.subSequence(0, endExclusive).toString();
-		Request tooLargeRequest = parseTooLargeRequestForRawRequest(partialRawRequest).orElse(null);
-
-		if (tooLargeRequest == null)
-			throw new IOException(format("Request headers are too large (exceeded %d bytes) but we do not have enough data available to know its path", getMaximumHeadersSizeInBytes()));
-
-		throw new RequestTooLargeIOException(format("Request headers too large (exceeded %d bytes)", getMaximumHeadersSizeInBytes()), tooLargeRequest);
+		throw new RequestHeadersTooLargeIOException(format("Request headers too large (exceeded %d bytes)", getMaximumHeadersSizeInBytes()));
 	}
 
 	private static int endOfHeaders(@NonNull CharSequence rawRequest) {
@@ -3470,6 +3493,15 @@ final class DefaultSseServer implements SseServer {
 
 		public boolean requestMadeProgress() {
 			return this.requestMadeProgress;
+		}
+	}
+
+	@NotThreadSafe
+	protected static class RequestHeadersTooLargeIOException extends IOException {
+		private static final long serialVersionUID = 1L;
+
+		public RequestHeadersTooLargeIOException(@Nullable String message) {
+			super(message);
 		}
 	}
 

@@ -68,6 +68,7 @@ class RequestParser {
     private int headersStartPosition;
     private int chunkSize;
     private long chunkBodySize;
+    private int chunkTrailersStartPosition;
     @Nullable
     private ByteMerger chunks;
 
@@ -168,6 +169,7 @@ class RequestParser {
         headersStartPosition = -1;
         chunkSize = 0;
         chunkBodySize = 0L;
+        chunkTrailersStartPosition = -1;
         chunks = null;
         method = null;
         uri = null;
@@ -219,7 +221,7 @@ class RequestParser {
             return false;
         }
         if (token.length() > maxRequestTargetLength) {
-            throw new RequestTooLargeException();
+            throw requestTooLarge(RequestTooLargeException.Reason.CONTENT);
         }
         uri = token;
         state = State.VERSION;
@@ -275,7 +277,7 @@ class RequestParser {
                 }
             } else {
                 if (contentLengthHeader > maxRequestSize) {
-                    throw new RequestTooLargeException();
+                    throw requestTooLarge(RequestTooLargeException.Reason.CONTENT);
                 }
                 this.contentLength = Math.toIntExact(contentLengthHeader);
                 state = State.BODY;
@@ -288,7 +290,7 @@ class RequestParser {
             headers = parsedHeaders;
 
             if (parsedHeaders.size() >= maxHeaderCount) {
-                throw new RequestTooLargeException();
+                throw requestTooLarge(RequestTooLargeException.Reason.HEADERS);
             }
             Header header = parseHeaderLine(start, end);
             tokenizer.advanceTo(end + CRLF.length);
@@ -301,8 +303,12 @@ class RequestParser {
 
     private void rejectHeadersTooLarge(int endExclusive) {
         if (headersStartPosition >= 0 && endExclusive - headersStartPosition > maxHeadersSize) {
-            throw new RequestTooLargeException();
+            throw requestTooLarge(RequestTooLargeException.Reason.HEADERS);
         }
+    }
+
+    private RequestTooLargeException requestTooLarge(RequestTooLargeException.Reason reason) {
+        return new RequestTooLargeException(reason);
     }
 
     private Header parseHeaderLine(int start, int end) {
@@ -450,10 +456,13 @@ class RequestParser {
         if (chunkSize < 0) {
             throw new MalformedRequestException("invalid chunk size");
         }
-        state = chunkSize == 0
-                ? State.CHUNK_TRAILER
-                : State.CHUNK_DATA;
         tokenizer.advanceTo(end + CRLF.length);
+        if (chunkSize == 0) {
+            chunkTrailersStartPosition = tokenizer.rawPosition();
+            state = State.CHUNK_TRAILER;
+        } else {
+            state = State.CHUNK_DATA;
+        }
         return true;
     }
 
@@ -468,7 +477,7 @@ class RequestParser {
         try {
             long parsedChunkSize = Long.parseLong(sizeToken, RADIX_HEX);
             if (parsedChunkSize > maxRequestSize) {
-                throw new RequestTooLargeException();
+                throw new RequestTooLargeException(RequestTooLargeException.Reason.CONTENT);
             }
             return Math.toIntExact(parsedChunkSize);
         } catch (NumberFormatException | ArithmeticException e) {
@@ -483,7 +492,7 @@ class RequestParser {
         }
         long newChunkBodySize = chunkBodySize + token.length;
         if (newChunkBodySize > maxRequestSize) {
-            throw new RequestTooLargeException();
+            throw requestTooLarge(RequestTooLargeException.Reason.CONTENT);
         }
         chunkBodySize = newChunkBodySize;
         if (chunks == null) {
@@ -510,8 +519,10 @@ class RequestParser {
         int start = tokenizer.rawPosition();
         int end = tokenizer.indexOf(CRLF);
         if (end < 0) {
+            rejectChunkTrailersTooLarge(start + tokenizer.remaining());
             return false;
         }
+        rejectChunkTrailersTooLarge(end + CRLF.length);
         if (end == start) { // blank line indicates end of trailers
             tokenizer.advanceTo(end + CRLF.length);
             body = chunks == null ? EMPTY_BODY : chunks.merge(maxRequestSize);
@@ -525,6 +536,12 @@ class RequestParser {
             state = State.CHUNK_TRAILER;
         }
         return true;
+    }
+
+    private void rejectChunkTrailersTooLarge(int endExclusive) {
+        if (chunkTrailersStartPosition >= 0 && endExclusive - chunkTrailersStartPosition > maxHeadersSize) {
+            throw requestTooLarge(RequestTooLargeException.Reason.HEADERS);
+        }
     }
 
     private boolean parseBody() {

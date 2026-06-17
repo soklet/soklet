@@ -114,10 +114,6 @@ public final class MicrohttpResponse {
         return new MicrohttpResponse(status, reason, headers, bodyLength, bodySourceFactory, body, streaming);
     }
 
-    MicrohttpResponse withoutBody() {
-        return new MicrohttpResponse(status, reason, headers, new byte[0]);
-    }
-
     MicrohttpResponse withoutBodyOrFramingHeaders() {
         return new MicrohttpResponse(status, reason, headers.stream()
                 .filter(header -> !header.name().equalsIgnoreCase("Content-Length"))

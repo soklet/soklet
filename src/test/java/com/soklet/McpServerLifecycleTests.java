@@ -862,7 +862,7 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
-	public void startedDefaultMcpServerRejectsTooManyHeadersWith400() throws Exception {
+	public void startedDefaultMcpServerRejectsTooManyHeadersWith431() throws Exception {
 		int mcpPort = findFreePort();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
@@ -889,13 +889,13 @@ public class McpServerLifecycleTests {
 
 				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
 				Assertions.assertNotNull(response);
-				Assertions.assertTrue(response.startsWith("HTTP/1.1 400"));
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 431"));
 			}
 		}
 	}
 
 	@Test
-	public void startedDefaultMcpServerRejectsTooLargeHeadersWith413() throws Exception {
+	public void startedDefaultMcpServerRejectsTooLargeHeadersWith431() throws Exception {
 		int mcpPort = findFreePort();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(McpServer.withPort(mcpPort)
 						.host("127.0.0.1")
@@ -922,7 +922,7 @@ public class McpServerLifecycleTests {
 
 				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
 				Assertions.assertNotNull(response);
-				Assertions.assertTrue(response.startsWith("HTTP/1.1 413"));
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 431"));
 			}
 		}
 	}

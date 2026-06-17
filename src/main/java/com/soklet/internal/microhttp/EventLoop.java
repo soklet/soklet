@@ -144,15 +144,27 @@ public class EventLoop {
             return false;
         }
 
-        SocketChannel socketChannel = null;
         InetSocketAddress remoteAddress = null;
+        SocketChannel socketChannel;
 
         try {
             socketChannel = socketAcceptor.accept();
-            if (socketChannel == null) {
-                return false;
+        } catch (IOException e) {
+            if (stopAccepting.get() || stopConnections.get() || !serverSocketChannel.isOpen()) {
+                throw e;
             }
 
+            connectionListener.didFailToAcceptConnection(null, e);
+            logAcceptLoopFailure(e);
+            backoffAfterAcceptFailure();
+            return false;
+        }
+
+        if (socketChannel == null) {
+            return false;
+        }
+
+        try {
             try {
                 SocketAddress socketAddress = socketChannel.getRemoteAddress();
                 if (socketAddress instanceof InetSocketAddress) {
@@ -178,20 +190,9 @@ public class EventLoop {
             ConnectionEventLoop connectionEventLoop = leastConnections();
             connectionEventLoop.register(socketChannel);
             return true;
-        } catch (IOException e) {
-            if (stopAccepting.get() || stopConnections.get() || !serverSocketChannel.isOpen()) {
-                throw e;
-            }
-
-            connectionListener.didFailToAcceptConnection(remoteAddress, e);
-            logAcceptLoopFailure(e);
-            backoffAfterAcceptFailure();
-            return false;
         } catch (RuntimeException e) {
             connectionListener.didFailToAcceptConnection(remoteAddress, e);
-            if (socketChannel != null) {
-                CloseUtils.closeQuietly(socketChannel);
-            }
+            CloseUtils.closeQuietly(socketChannel);
             logConnectionSetupFailure(e);
             backoffAfterAcceptFailure();
             return false;

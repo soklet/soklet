@@ -289,6 +289,9 @@ final class DefaultHttpServer implements HttpServer {
 		if (this.responseWriteIdleTimeout.isNegative())
 			throw new IllegalArgumentException("Response write idle timeout must be >= 0");
 
+		if (this.shutdownTimeout.isNegative())
+			throw new IllegalArgumentException("Shutdown timeout must be >= 0");
+
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "request-handler-";
 			int threadPoolSize = getRequestHandlerConcurrency();
@@ -474,7 +477,7 @@ final class DefaultHttpServer implements HttpServer {
 							return;
 
 						Thread handlerThread = handlerThreadRef.get();
-						if (handlerThread != null)
+						if (handlerThread != null && handlerThreadRef.compareAndSet(handlerThread, null))
 							handlerThread.interrupt();
 
 						try {

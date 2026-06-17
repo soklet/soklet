@@ -39,6 +39,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -49,6 +50,7 @@ import java.net.SocketOption;
 import java.net.SocketTimeoutException;
 import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
@@ -63,6 +65,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -1000,6 +1003,107 @@ public class SseTests {
 			}
 		} finally {
 			lifecycle.releaseWriter();
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void sseWriteTimeoutClosesConnectionAndRecordsTransportFailure() throws Exception {
+		WriteTimeoutLifecycle lifecycle = new WriteTimeoutLifecycle();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		ResourceMethodResolver resourceMethodResolver = ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class));
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.writeTimeout(Duration.ofMillis(50))
+				.heartbeatInterval(Duration.ofSeconds(30))
+				.verifyConnectionOnceEstablished(false)
+				.build();
+		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
+				.lifecycleObserver(lifecycle)
+				.metricsCollector(metricsCollector)
+				.resourceMethodResolver(resourceMethodResolver)
+				.build();
+		server.initialize(sokletConfig, (request, requestResultConsumer) -> { /* no-op */ });
+		TimeoutScheduler timeoutScheduler = new TimeoutScheduler(runnable -> new Thread(runnable, "sse-write-timeout-test"));
+		Field schedulerField = DefaultSseServer.class.getDeclaredField("requestHandlerTimeoutScheduler");
+		schedulerField.setAccessible(true);
+		schedulerField.set(server, timeoutScheduler);
+
+		Request request = Request.fromPath(HttpMethod.GET, "/sse/write-timeout");
+		ResourceMethod resourceMethod = resourceMethodResolver.resourceMethodForRequest(request, ServerType.SSE).orElseThrow();
+		BlockingWriteSocketChannel socketChannel = new BlockingWriteSocketChannel();
+
+		Class<?> connectionClass = Class.forName("com.soklet.DefaultSseServer$DefaultSseConnection");
+		Constructor<?> connectionConstructor = connectionClass.getDeclaredConstructor(
+				Request.class,
+				ResourceMethod.class,
+				Object.class,
+				Integer.class,
+				SocketChannel.class);
+		connectionConstructor.setAccessible(true);
+		Object connection = connectionConstructor.newInstance(request, resourceMethod, null, 4, socketChannel);
+
+		Method registerMethod = DefaultSseServer.class.getDeclaredMethod(
+				"registerConnectionWithBroadcaster",
+				ResourcePath.class,
+				ResourceMethod.class,
+				connectionClass);
+		registerMethod.setAccessible(true);
+		Object broadcaster = registerMethod.invoke(server, request.getResourcePath(), resourceMethod, connection);
+
+		Method preSerializeMethod = DefaultSseServer.class.getDeclaredMethod("preSerializeSseEvent", SseEvent.class);
+		preSerializeMethod.setAccessible(true);
+		Object preSerializedPayload = preSerializeMethod.invoke(null,
+				SseEvent.withEvent("write-timeout").id("1").data("payload").build());
+		Class<?> preSerializedPayloadClass = Class.forName("com.soklet.DefaultSseServer$DefaultSseConnection$PreSerializedPayload");
+		Class<?> writeQueueElementClass = Class.forName("com.soklet.DefaultSseServer$DefaultSseConnection$WriteQueueElement");
+		Method withPreSerializedPayloadMethod = writeQueueElementClass.getDeclaredMethod(
+				"withPreSerializedPayload",
+				preSerializedPayloadClass,
+				long.class);
+		withPreSerializedPayloadMethod.setAccessible(true);
+		Object writeQueueElement = withPreSerializedPayloadMethod.invoke(null, preSerializedPayload, System.nanoTime());
+		Method getWriteQueueMethod = connectionClass.getDeclaredMethod("getWriteQueue");
+		getWriteQueueMethod.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		BlockingQueue<Object> writeQueue = (BlockingQueue<Object>) getWriteQueueMethod.invoke(connection);
+		Assertions.assertTrue(writeQueue.offer(writeQueueElement));
+
+		Class<?> broadcasterClass = Class.forName("com.soklet.DefaultSseServer$DefaultSseBroadcaster");
+		Class<?> registrationClass = Class.forName("com.soklet.DefaultSseServer$ClientSocketChannelRegistration");
+		Constructor<?> registrationConstructor = registrationClass.getDeclaredConstructor(connectionClass, broadcasterClass);
+		registrationConstructor.setAccessible(true);
+		Object registration = registrationConstructor.newInstance(connection, broadcaster);
+		Method processMethod = DefaultSseServer.class.getDeclaredMethod("processEstablishedConnection", registrationClass, Object.class);
+		processMethod.setAccessible(true);
+		AtomicReference<Throwable> processingFailure = new AtomicReference<>();
+		Thread processingThread = new Thread(() -> {
+			try {
+				processMethod.invoke(server, registration, new Object());
+			} catch (InvocationTargetException e) {
+				processingFailure.set(e.getCause());
+			} catch (Throwable t) {
+				processingFailure.set(t);
+			}
+		}, "sse-write-timeout-processing-test");
+
+		try {
+			processingThread.start();
+
+			Assertions.assertTrue(socketChannel.awaitWriteStarted(2, SECONDS), "SSE writer did not attempt to write");
+			Assertions.assertTrue(lifecycle.awaitTermination(5, SECONDS), "SSE connection did not terminate after write timeout");
+			processingThread.join(2000);
+
+			Assertions.assertFalse(processingThread.isAlive(), "SSE connection processing did not exit");
+			Assertions.assertNull(processingFailure.get());
+			Assertions.assertTrue(socketChannel.awaitClosed(1, SECONDS), "SSE write timeout did not close the channel");
+			Assertions.assertEquals(StreamTerminationReason.WRITE_FAILED, lifecycle.getReason());
+			Assertions.assertEquals(Long.valueOf(1L), metricsCollector.snapshot().orElseThrow().getTransportFailures()
+					.get(new MetricsCollector.TransportFailureKey(
+							ServerType.SSE,
+							MetricsCollector.TransportFailureReason.WRITE_TIMEOUT)));
+		} finally {
+			timeoutScheduler.shutdownNow();
+			socketChannel.close();
 		}
 	}
 
@@ -2182,7 +2286,7 @@ public class SseTests {
 				.maximumHeaderCount(1)
 				.build();
 
-		Assertions.assertThrows(IllegalRequestException.class, () -> server.parseRequest("""
+		Assertions.assertThrows(DefaultSseServer.RequestHeadersTooLargeIOException.class, () -> server.parseRequest("""
 				GET /sse HTTP/1.1\r
 				Host: localhost\r
 				X-Test: abc\r
@@ -2196,12 +2300,70 @@ public class SseTests {
 				.maximumHeadersSizeInBytes(19)
 				.build();
 
-		Assertions.assertThrows(IllegalRequestException.class, () -> server.parseRequest("""
+		Assertions.assertThrows(DefaultSseServer.RequestHeadersTooLargeIOException.class, () -> server.parseRequest("""
 				GET /sse HTTP/1.1\r
 				Host: localhost\r
 				X-Test: abc\r
 				\r
 				""", null));
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void startedDefaultSseServerRejectsTooManyHeadersWith431() throws Exception {
+		int ssePort = findFreePort();
+		SokletConfig config = SokletConfig.withSseServer(SseServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.maximumHeaderCount(1)
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(3000);
+				socket.getOutputStream().write(("GET /sse HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1:" + ssePort + "\r\n"
+						+ "Accept: text/event-stream\r\n"
+						+ "\r\n").getBytes(StandardCharsets.UTF_8));
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 431"));
+			}
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void startedDefaultSseServerRejectsTooLargeHeadersWith431() throws Exception {
+		int ssePort = findFreePort();
+		SokletConfig config = SokletConfig.withSseServer(SseServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.maximumHeadersSizeInBytes(19)
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(3000);
+				socket.getOutputStream().write(("GET /sse HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1:" + ssePort + "\r\n"
+						+ "Accept: text/event-stream\r\n"
+						+ "\r\n").getBytes(StandardCharsets.UTF_8));
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 431"));
+			}
+		}
 	}
 
 	@Test
@@ -2677,6 +2839,44 @@ public class SseTests {
 		}
 	}
 
+	private static final class BlockingWriteSocketChannel extends PartialWriteSocketChannel {
+		private final CountDownLatch writeStarted;
+		private final CountDownLatch closed;
+
+		private BlockingWriteSocketChannel() {
+			super(1);
+			this.writeStarted = new CountDownLatch(1);
+			this.closed = new CountDownLatch(1);
+		}
+
+		@Override
+		public int write(ByteBuffer src) throws IOException {
+			this.writeStarted.countDown();
+
+			try {
+				this.closed.await(5, SECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new IOException("Interrupted while waiting for write timeout", e);
+			}
+
+			throw new ClosedChannelException();
+		}
+
+		boolean awaitWriteStarted(long timeout, TimeUnit unit) throws InterruptedException {
+			return this.writeStarted.await(timeout, unit);
+		}
+
+		boolean awaitClosed(long timeout, TimeUnit unit) throws InterruptedException {
+			return this.closed.await(timeout, unit);
+		}
+
+		@Override
+		protected void implCloseSelectableChannel() {
+			this.closed.countDown();
+		}
+	}
+
 	private static final class SetupFailingSocketChannel extends PartialWriteSocketChannel {
 		private final AtomicBoolean closed;
 		private final Socket socket;
@@ -2704,6 +2904,34 @@ public class SseTests {
 		@Override
 		protected void implCloseSelectableChannel() {
 			this.closed.set(true);
+		}
+	}
+
+	private static class WriteTimeoutLifecycle implements LifecycleObserver {
+		private final CountDownLatch terminatedLatch;
+		private final AtomicReference<StreamTerminationReason> reason;
+
+		private WriteTimeoutLifecycle() {
+			this.terminatedLatch = new CountDownLatch(1);
+			this.reason = new AtomicReference<>();
+		}
+
+		@Override
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
+
+		@Override
+		public void didTerminateSseConnection(@NonNull SseConnection sseConnection,
+																											@NonNull StreamTermination termination) {
+			this.reason.compareAndSet(null, termination.getReason());
+			this.terminatedLatch.countDown();
+		}
+
+		boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+			return this.terminatedLatch.await(timeout, unit);
+		}
+
+		StreamTerminationReason getReason() {
+			return this.reason.get();
 		}
 	}
 

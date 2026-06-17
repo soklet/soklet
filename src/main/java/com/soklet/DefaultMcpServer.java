@@ -665,7 +665,10 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		} catch (RequestTooLargeException e) {
 			notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_REJECTED, e);
 			recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE, e, "exceed_request_max_close");
-			writePlainTextResponse(socket, 413, "Request entity too large");
+			if (e.reason() == RequestTooLargeException.Reason.HEADERS)
+				writePlainTextResponse(socket, 431, "Request header fields too large");
+			else
+				writePlainTextResponse(socket, 413, "Request entity too large");
 		} catch (SocketTimeoutException e) {
 			if (request == null && !requestReadTimeoutMadeProgress(e))
 				return;
@@ -1063,14 +1066,14 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			headerBytes.write(buffer, 0, bytesRead);
 
 			if (headerBytes.size() > this.maximumRequestSizeInBytes)
-				throw new RequestTooLargeException();
+				throw new RequestTooLargeException(RequestTooLargeException.Reason.CONTENT);
 
 			byte[] accumulated = headerBytes.toByteArray();
 			headerEndIndex = endOfHeaders(accumulated);
 			int headerMeasurementEndIndex = headerEndIndex == -1 ? accumulated.length : headerEndIndex;
 
 			if (headerSectionLengthInBytes(accumulated, headerMeasurementEndIndex) > this.maximumHeadersSizeInBytes)
-				throw new RequestTooLargeException();
+				throw new RequestTooLargeException(RequestTooLargeException.Reason.HEADERS);
 
 			if (headerEndIndex != -1)
 				bodyPrefixLength = accumulated.length - headerEndIndex;
@@ -1159,7 +1162,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	}
 
 	@NonNull
-	private ParsedStartLineAndHeaders parseStartLineAndHeaders(@NonNull String headerSection) {
+	private ParsedStartLineAndHeaders parseStartLineAndHeaders(@NonNull String headerSection) throws RequestTooLargeException {
 		requireNonNull(headerSection);
 
 		List<String> lines = splitRequestLines(headerSection);
@@ -1209,7 +1212,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				throw new IllegalRequestException("Header folding is not supported for MCP requests");
 
 			if (++headerCount > this.maximumHeaderCount)
-				throw new IllegalRequestException(format("Too many MCP request headers. Maximum allowed is %d", this.maximumHeaderCount));
+				throw new RequestTooLargeException(RequestTooLargeException.Reason.HEADERS);
 
 			int firstColonIndex = rawLine.indexOf(':');
 
@@ -2422,7 +2425,24 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		}
 	}
 
-	private static final class RequestTooLargeException extends IOException {}
+	private static final class RequestTooLargeException extends IOException {
+		private enum Reason {
+			CONTENT,
+			HEADERS
+		}
+
+		@NonNull
+		private final Reason reason;
+
+		private RequestTooLargeException(@NonNull Reason reason) {
+			this.reason = requireNonNull(reason);
+		}
+
+		@NonNull
+		private Reason reason() {
+			return this.reason;
+		}
+	}
 
 	private static final class RequestReadTimeoutException extends SocketTimeoutException {
 		private static final long serialVersionUID = 1L;

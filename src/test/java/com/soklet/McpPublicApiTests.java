@@ -26,9 +26,16 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -325,6 +332,52 @@ public class McpPublicApiTests {
 
 		assertFalse(sessionStore.containsSessionId("stale"));
 		assertTrue(sessionStore.containsSessionId("fresh"));
+	}
+
+	@Test
+	public void defaultInMemorySessionStoreEnforcesConcurrentSessionLimitAtomically() throws Exception {
+		Integer concurrentSessionLimit = 8;
+		Integer attemptCount = 64;
+		AtomicInteger generatedIdCount = new AtomicInteger();
+		McpSessionStore sessionStore = McpSessionStore.builder()
+				.idleTimeout(Duration.ZERO)
+				.concurrentSessionLimit(concurrentSessionLimit)
+				.sessionIdGenerator(request -> "session-" + generatedIdCount.incrementAndGet())
+				.build();
+		ExecutorService executorService = Executors.newFixedThreadPool(16);
+		CountDownLatch start = new CountDownLatch(1);
+		List<Future<Optional<McpStoredSession>>> futures = new ArrayList<>();
+
+		try {
+			for (int i = 0; i < attemptCount; ++i) {
+				futures.add(executorService.submit(() -> {
+					start.await();
+					return sessionStore.create(Request.fromPath(HttpMethod.POST, "/mcp"), TestEndpoint.class);
+				}));
+			}
+
+			start.countDown();
+
+			List<McpStoredSession> createdSessions = new ArrayList<>();
+
+			for (Future<Optional<McpStoredSession>> future : futures)
+				future.get(5, TimeUnit.SECONDS).ifPresent(createdSessions::add);
+
+			assertEquals(concurrentSessionLimit.intValue(), createdSessions.size());
+			assertEquals(concurrentSessionLimit.longValue(), createdSessions.stream()
+					.map(McpStoredSession::sessionId)
+					.distinct()
+					.count());
+			assertTrue(sessionStore.create(Request.fromPath(HttpMethod.POST, "/mcp"), TestEndpoint.class).isEmpty());
+
+			for (McpStoredSession createdSession : createdSessions)
+				sessionStore.deleteBySessionId(createdSession.sessionId());
+
+			assertTrue(sessionStore.create(Request.fromPath(HttpMethod.POST, "/mcp"), TestEndpoint.class).isPresent());
+		} finally {
+			executorService.shutdownNow();
+			assertTrue(executorService.awaitTermination(5, TimeUnit.SECONDS));
+		}
 	}
 
 	@Test

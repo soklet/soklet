@@ -183,10 +183,38 @@ public class ConditionalRequestsTests {
 	}
 
 	@Test
-	public void malformedConditionalHeadersAreIgnored() {
+	public void malformedDateConditionalHeadersAreIgnored() {
 		Request request = request(HttpMethod.GET, Map.of(
-				"If-Match", Set.of("\"unterminated"),
 				"If-Modified-Since", Set.of("not a date")
+		));
+
+		Assertions.assertEquals(Optional.empty(), ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED));
+	}
+
+	@Test
+	public void malformedIfMatchFailsClosed() {
+		Request request = request(HttpMethod.PUT, Map.of(
+				"If-Match", Set.of("\"unterminated"),
+				"If-Unmodified-Since", Set.of("Mon, 04 May 2026 01:02:04 GMT")
+		));
+
+		Assertions.assertEquals(412, ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED).orElseThrow().getStatusCode());
+	}
+
+	@Test
+	public void malformedIfNoneMatchFailsClosedForUnsafeMethods() {
+		Request request = request(HttpMethod.PUT, Map.of(
+				"If-None-Match", Set.of("\"unterminated")
+		));
+
+		Assertions.assertEquals(412, ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED).orElseThrow().getStatusCode());
+	}
+
+	@Test
+	public void malformedIfNoneMatchForGetSuppressesDateConditionals() {
+		Request request = request(HttpMethod.GET, Map.of(
+				"If-None-Match", Set.of("\"unterminated"),
+				"If-Modified-Since", Set.of("Mon, 04 May 2026 01:02:04 GMT")
 		));
 
 		Assertions.assertEquals(Optional.empty(), ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED));
@@ -207,7 +235,7 @@ public class ConditionalRequestsTests {
 	}
 
 	@Test
-	public void oversizedEntityTagListsAreIgnored() {
+	public void oversizedEntityTagListsAreIgnoredForGetCacheValidation() {
 		String headerValue = IntStream.rangeClosed(0, 256)
 				.mapToObj(index -> "\"v" + index + "\"")
 				.collect(Collectors.joining(","));
@@ -216,6 +244,22 @@ public class ConditionalRequestsTests {
 		));
 
 		Assertions.assertEquals(Optional.empty(), ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED));
+	}
+
+	@Test
+	public void oversizedEntityTagListsFailClosedForUnsafePreconditions() {
+		String headerValue = IntStream.rangeClosed(0, 256)
+				.mapToObj(index -> "\"v" + index + "\"")
+				.collect(Collectors.joining(","));
+		Request ifMatchRequest = request(HttpMethod.PUT, Map.of(
+				"If-Match", Set.of(headerValue)
+		));
+		Request ifNoneMatchRequest = request(HttpMethod.PUT, Map.of(
+				"If-None-Match", Set.of(headerValue)
+		));
+
+		Assertions.assertEquals(412, ConditionalRequests.responseFor(ifMatchRequest, ENTITY_TAG, LAST_MODIFIED).orElseThrow().getStatusCode());
+		Assertions.assertEquals(412, ConditionalRequests.responseFor(ifNoneMatchRequest, ENTITY_TAG, LAST_MODIFIED).orElseThrow().getStatusCode());
 	}
 
 	@Test

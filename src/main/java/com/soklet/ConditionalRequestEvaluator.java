@@ -47,11 +47,14 @@ final class ConditionalRequestEvaluator {
 																			boolean representationExists) {
 		requireNonNull(requestContext);
 		Instant truncatedLastModified = lastModified == null ? null : truncateToSeconds(lastModified);
+		boolean ifMatchPresent = headerValuePresent(requestContext.ifMatchHeaderValue());
 		EntityTagCondition ifMatch = entityTagConditionFor(requestContext.ifMatchHeaderValue()).orElse(null);
 
 		if (ifMatch != null) {
 			if (!ifMatch.matchesStrong(entityTag, representationExists))
 				return PreconditionOutcome.PRECONDITION_FAILED;
+		} else if (ifMatchPresent) {
+			return PreconditionOutcome.PRECONDITION_FAILED;
 		} else {
 			Instant ifUnmodifiedSince = HttpDate.fromHeaderValue(requestContext.ifUnmodifiedSinceHeaderValue()).orElse(null);
 
@@ -59,14 +62,18 @@ final class ConditionalRequestEvaluator {
 				return PreconditionOutcome.PRECONDITION_FAILED;
 		}
 
+		boolean ifNoneMatchPresent = headerValuePresent(requestContext.ifNoneMatchHeaderValue());
 		EntityTagCondition ifNoneMatch = entityTagConditionFor(requestContext.ifNoneMatchHeaderValue()).orElse(null);
 
 		if (ifNoneMatch != null) {
 			if (ifNoneMatch.matchesWeak(entityTag, representationExists))
-				return requestContext.httpMethod() == HttpMethod.GET || requestContext.httpMethod() == HttpMethod.HEAD
+				return isGetOrHead(requestContext.httpMethod())
 						? PreconditionOutcome.NOT_MODIFIED
 						: PreconditionOutcome.PRECONDITION_FAILED;
-		} else if (requestContext.httpMethod() == HttpMethod.GET || requestContext.httpMethod() == HttpMethod.HEAD) {
+		} else if (ifNoneMatchPresent) {
+			if (!isGetOrHead(requestContext.httpMethod()))
+				return PreconditionOutcome.PRECONDITION_FAILED;
+		} else if (isGetOrHead(requestContext.httpMethod())) {
 			Instant ifModifiedSince = HttpDate.fromHeaderValue(requestContext.ifModifiedSinceHeaderValue()).orElse(null);
 
 			if (ifModifiedSince != null && truncatedLastModified != null && !truncatedLastModified.isAfter(truncateToSeconds(ifModifiedSince)))
@@ -74,6 +81,15 @@ final class ConditionalRequestEvaluator {
 		}
 
 		return PreconditionOutcome.CONTINUE;
+	}
+
+	private static boolean isGetOrHead(@NonNull HttpMethod httpMethod) {
+		requireNonNull(httpMethod);
+		return httpMethod == HttpMethod.GET || httpMethod == HttpMethod.HEAD;
+	}
+
+	private static boolean headerValuePresent(@Nullable String headerValue) {
+		return Utilities.trimAggressivelyToNull(headerValue) != null;
 	}
 
 	@NonNull

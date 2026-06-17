@@ -119,6 +119,9 @@ class ConnectionEventLoop {
         static final byte[] EXPECTATION_FAILED_RESPONSE =
                 "HTTP/1.1 417 Expectation Failed\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
                         .getBytes(StandardCharsets.US_ASCII);
+        static final byte[] REQUEST_HEADER_FIELDS_TOO_LARGE_RESPONSE =
+                "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+                        .getBytes(StandardCharsets.US_ASCII);
         static final byte[] CONTINUE_RESPONSE =
                 "HTTP/1.1 100 Continue\r\n\r\n"
                         .getBytes(StandardCharsets.US_ASCII);
@@ -189,7 +192,7 @@ class ConnectionEventLoop {
                             new LogEntry("id", id),
                             new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
                 }
-                respondToRequestTooLarge();
+                respondToRequestTooLarge(e);
             } catch (ExpectationFailedException e) {
                 if (logger.failureEnabled()) {
                     logger.logFailure(e,
@@ -243,7 +246,7 @@ class ConnectionEventLoop {
                                 new LogEntry("id", id),
                                 new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
                     }
-                    respondToRequestTooLarge();
+                    respondToRequestTooLarge(RequestTooLargeException.Reason.CONTENT);
                     return;
                 }
                 if (logger.enabled()) {
@@ -262,14 +265,23 @@ class ConnectionEventLoop {
                                 new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
                     }
 
-                    respondToRequestTooLarge();
+                    respondToRequestTooLarge(RequestTooLargeException.Reason.CONTENT);
                 } else {
                     onPartialRequestParsed();
                 }
             }
         }
 
-        private void respondToRequestTooLarge() {
+        private void respondToRequestTooLarge(RequestTooLargeException exception) {
+            respondToRequestTooLarge(exception.reason());
+        }
+
+        private void respondToRequestTooLarge(RequestTooLargeException.Reason reason) {
+            if (reason == RequestTooLargeException.Reason.HEADERS) {
+                respondWithRawError(REQUEST_HEADER_FIELDS_TOO_LARGE_RESPONSE);
+                return;
+            }
+
             if (selectionKey.isValid() && selectionKey.interestOps() != 0) {
                 selectionKey.interestOps(0);
             }
@@ -552,7 +564,7 @@ class ConnectionEventLoop {
                                     new LogEntry("id", id),
                                     new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
                         }
-                        respondToRequestTooLarge();
+                        respondToRequestTooLarge(RequestTooLargeException.Reason.CONTENT);
                         return;
                     }
                     if (logger.enabled()) {
@@ -572,7 +584,7 @@ class ConnectionEventLoop {
                             new LogEntry("id", id),
                             new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
                 }
-                respondToRequestTooLarge();
+                respondToRequestTooLarge(e);
             } catch (ExpectationFailedException e) {
                 if (logger.failureEnabled()) {
                     logger.logFailure(e,

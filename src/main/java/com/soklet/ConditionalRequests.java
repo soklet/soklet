@@ -41,6 +41,10 @@ import static java.util.Objects.requireNonNull;
  * When a request precondition requires an immediate response, {@link #responseFor(Request, EntityTag, Instant)}
  * returns a bodyless {@link Response} with status {@code 304 Not Modified} or {@code 412 Precondition Failed}.
  * Otherwise it returns {@link Optional#empty()} and the application should build its normal response.
+ * <p>
+ * Malformed entity-tag preconditions fail closed when they protect writes: malformed {@code If-Match} returns
+ * {@code 412 Precondition Failed}, and malformed {@code If-None-Match} does the same for non-{@code GET}/{@code HEAD}
+ * requests. Malformed {@code If-None-Match} on {@code GET} and {@code HEAD} is treated as a cache miss.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

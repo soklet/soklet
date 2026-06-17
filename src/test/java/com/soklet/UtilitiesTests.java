@@ -346,6 +346,18 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void effectiveClientIpFromHeaders_fallsBackToXForwardedForWhenForwardedForIsInvalid() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"Forwarded", Set.of("for=unknown; proto=https; host=example.com, for=_hidden"),
+				"X-Forwarded-For", Set.of("198.51.100.30")
+		);
+
+		assertEquals(Optional.of(address("198.51.100.30")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_ALL)
+						.resolve());
+	}
+
+	@Test
 	public void effectiveClientIpFromHeaders_parsesQuotedBracketedIpv6ForwardedForWithPort() throws Exception {
 		Map<String, Set<String>> headers = Map.of(
 				"Forwarded", Set.of("for=\"[2001:db8::1]:8443\"; proto=https; host=example.com")
@@ -368,6 +380,23 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void effectiveClientIpFromHeaders_combinesRepeatedForwardedForHeaderValuesBeforeTrustWalk() throws Exception {
+		Set<String> forwardedForHeaders = new LinkedHashSet<>();
+		forwardedForHeaders.add("198.51.100.10");
+		forwardedForHeaders.add("10.0.0.2, 10.0.0.3");
+		Map<String, Set<String>> headers = Map.of("X-Forwarded-For", forwardedForHeaders);
+
+		assertEquals(Optional.of(address("198.51.100.10")),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(remoteAddress("10.0.0.4"))
+						.trustedProxyAddresses(Set.of(
+								address("10.0.0.2"),
+								address("10.0.0.3"),
+								address("10.0.0.4")))
+						.resolve());
+	}
+
+	@Test
 	public void effectiveClientIpFromHeaders_trustAllUsesLeftmostForwardedForAddress() throws Exception {
 		Map<String, Set<String>> headers = Map.of(
 				"X-Forwarded-For", Set.of("198.51.100.11, 203.0.113.11")
@@ -384,6 +413,19 @@ public class UtilitiesTests {
 		assertEquals(Optional.of(address("203.0.113.50")),
 				EffectiveClientIpResolver.withHeaders(Map.of(), TrustPolicy.TRUST_ALL)
 						.remoteAddress(remoteAddress("203.0.113.50"))
+						.resolve());
+	}
+
+	@Test
+	public void effectiveClientIpFromHeaders_unresolvedRemoteAddressDoesNotTrustForwardedHeaders() throws Exception {
+		Map<String, Set<String>> headers = Map.of(
+				"X-Forwarded-For", Set.of("198.51.100.10")
+		);
+
+		assertEquals(Optional.empty(),
+				EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(InetSocketAddress.createUnresolved("proxy.example", 1234))
+						.trustedProxyAddresses(Set.of(address("203.0.113.10")))
 						.resolve());
 	}
 

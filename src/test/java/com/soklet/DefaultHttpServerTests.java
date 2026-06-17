@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,6 +42,13 @@ public class DefaultHttpServerTests {
 		Assertions.assertEquals(1_024, customServer.getMaximumHeadersSizeInBytes());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				HttpServer.withPort(0).maximumHeadersSizeInBytes(0).build());
+	}
+
+	@Test
+	public void shutdownTimeoutMustNotBeNegative() {
+		Assertions.assertDoesNotThrow(() -> HttpServer.withPort(0).shutdownTimeout(Duration.ZERO).build());
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				HttpServer.withPort(0).shutdownTimeout(Duration.ofMillis(-1)).build());
 	}
 
 	@Test

@@ -1430,7 +1430,7 @@ public class IntegrationTests {
 	}
 
 	@Test
-	public void headerCountOverLimit_returns413() throws Exception {
+	public void headerCountOverLimit_returns431() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
 						.maximumHeaderCount(1)
@@ -1456,13 +1456,13 @@ public class IntegrationTests {
 				out.flush();
 
 				RawResponse response = readResponse(in);
-				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"));
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 431"));
 			}
 		}
 	}
 
 	@Test
-	public void headersSizeOverLimit_returns413() throws Exception {
+	public void headersSizeOverLimit_returns431() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
 						.maximumHeadersSizeInBytes(19)
@@ -1488,7 +1488,7 @@ public class IntegrationTests {
 				out.flush();
 
 				RawResponse response = readResponse(in);
-				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"));
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 431"));
 			}
 		}
 	}

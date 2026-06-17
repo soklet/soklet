@@ -268,7 +268,8 @@ public class MicrohttpInternalTests {
 		add(tokenizer, request);
 		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 1, 1024);
 
-		Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+		RequestTooLargeException exception = Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+		Assertions.assertEquals(RequestTooLargeException.Reason.HEADERS, exception.reason());
 	}
 
 	@Test
@@ -279,7 +280,8 @@ public class MicrohttpInternalTests {
 		add(tokenizer, request);
 		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 19, 1024);
 
-		Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+		RequestTooLargeException exception = Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+		Assertions.assertEquals(RequestTooLargeException.Reason.HEADERS, exception.reason());
 	}
 
 	@Test
@@ -290,7 +292,8 @@ public class MicrohttpInternalTests {
 		add(tokenizer, request);
 		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 19, 1024);
 
-		Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+		RequestTooLargeException exception = Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+		Assertions.assertEquals(RequestTooLargeException.Reason.HEADERS, exception.reason());
 	}
 
 	@Test
@@ -301,7 +304,8 @@ public class MicrohttpInternalTests {
 		add(tokenizer, request);
 		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 4);
 
-		Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+		RequestTooLargeException exception = Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+		Assertions.assertEquals(RequestTooLargeException.Reason.CONTENT, exception.reason());
 	}
 
 	@Test
@@ -384,6 +388,43 @@ public class MicrohttpInternalTests {
 		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
 
 		Assertions.assertThrows(MalformedRequestException.class, parser::parse);
+	}
+
+	@Test
+	public void chunkTrailerSectionOverLimitIsHeadersTooLarge() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("POST / HTTP/1.1\r\n"
+				+ "Host: a\r\n"
+				+ "Transfer-Encoding: chunked\r\n"
+				+ "\r\n"
+				+ "3\r\n"
+				+ "abc\r\n"
+				+ "0\r\n"
+				+ "X-Trailer: abcdefghijklmnopqrstuvwxyz0123456789\r\n"
+				+ "\r\n");
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 40, 1024);
+
+		RequestTooLargeException exception = Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+		Assertions.assertEquals(RequestTooLargeException.Reason.HEADERS, exception.reason());
+	}
+
+	@Test
+	public void incompleteChunkTrailerSectionOverLimitIsHeadersTooLarge() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] request = ascii("POST / HTTP/1.1\r\n"
+				+ "Host: a\r\n"
+				+ "Transfer-Encoding: chunked\r\n"
+				+ "\r\n"
+				+ "3\r\n"
+				+ "abc\r\n"
+				+ "0\r\n"
+				+ "X-Trailer: abcdefghijklmnopqrstuvwxyz0123456789");
+		add(tokenizer, request);
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 40, 1024);
+
+		RequestTooLargeException exception = Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
+		Assertions.assertEquals(RequestTooLargeException.Reason.HEADERS, exception.reason());
 	}
 
 	@Test
