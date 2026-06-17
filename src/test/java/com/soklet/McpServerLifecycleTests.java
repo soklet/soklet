@@ -1379,6 +1379,72 @@ public class McpServerLifecycleTests {
 						MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR)));
 	}
 
+	@Test
+	public void mcpAcceptLoopCleansUpAfterUnexpectedTermination() throws Exception {
+		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		RecordingExecutorService requestHandlerExecutorService = new RecordingExecutorService();
+		RecordingExecutorService connectionExecutorService = new RecordingExecutorService();
+		TimeoutScheduler requestHandlerTimeoutScheduler =
+				new TimeoutScheduler(runnable -> new Thread(runnable, "mcp-fatal-accept-loop-test-timeout"));
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(new FakeMcpServer())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(metricsCollector)
+				.build();
+		server.initialize(sokletConfig, (request, requestResultConsumer) -> {});
+
+		Field startedField = DefaultMcpServer.class.getDeclaredField("started");
+		Field serverSocketField = DefaultMcpServer.class.getDeclaredField("serverSocket");
+		Field requestHandlerExecutorServiceField = DefaultMcpServer.class.getDeclaredField("requestHandlerExecutorService");
+		Field requestHandlerTimeoutSchedulerField = DefaultMcpServer.class.getDeclaredField("requestHandlerTimeoutScheduler");
+		Field connectionExecutorServiceField = DefaultMcpServer.class.getDeclaredField("connectionExecutorService");
+		Method acceptLoopMethod = DefaultMcpServer.class.getDeclaredMethod("acceptLoop");
+		startedField.setAccessible(true);
+		serverSocketField.setAccessible(true);
+		requestHandlerExecutorServiceField.setAccessible(true);
+		requestHandlerTimeoutSchedulerField.setAccessible(true);
+		connectionExecutorServiceField.setAccessible(true);
+		acceptLoopMethod.setAccessible(true);
+
+		try {
+			startedField.set(server, true);
+			serverSocketField.set(server, new FatalAcceptServerSocket());
+			requestHandlerExecutorServiceField.set(server, requestHandlerExecutorService);
+			requestHandlerTimeoutSchedulerField.set(server, requestHandlerTimeoutScheduler);
+			connectionExecutorServiceField.set(server, connectionExecutorService);
+
+			Assertions.assertDoesNotThrow(() -> {
+				try {
+					acceptLoopMethod.invoke(server);
+				} catch (InvocationTargetException e) {
+					Throwable cause = e.getCause();
+					if (cause instanceof RuntimeException runtimeException)
+						throw runtimeException;
+					if (cause instanceof Error error)
+						throw error;
+					throw new RuntimeException(cause);
+				}
+			});
+
+			Assertions.assertFalse(server.isStarted());
+			Assertions.assertTrue(requestHandlerExecutorService.isShutdown());
+			Assertions.assertTrue(requestHandlerTimeoutScheduler.isShutdown());
+			Assertions.assertTrue(connectionExecutorService.isShutdown());
+			Assertions.assertTrue(lifecycleObserver.getEvents().contains("didFailToAcceptConnection:MCP:INTERNAL_ERROR"));
+			Assertions.assertEquals(1L, transportFailureCount(metricsCollector, ServerType.MCP,
+					MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED));
+		} finally {
+			server.stop();
+			requestHandlerTimeoutScheduler.shutdownNow();
+			requestHandlerExecutorService.shutdownNow();
+			connectionExecutorService.shutdownNow();
+		}
+	}
+
 	@McpServerEndpoint(path = "/mcp", name = "example", version = "1.0.0")
 	public static class ExampleMcpEndpoint implements McpEndpoint {}
 
@@ -2108,6 +2174,17 @@ public class McpServerLifecycleTests {
 		@Override
 		public void setKeepAlive(boolean on) {
 			throw new IllegalStateException("boom");
+		}
+	}
+
+	private static final class FatalAcceptServerSocket extends java.net.ServerSocket {
+		private FatalAcceptServerSocket() throws IOException {
+			super();
+		}
+
+		@Override
+		public Socket accept() {
+			throw new AssertionError("fatal accept failure");
 		}
 	}
 

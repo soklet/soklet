@@ -2606,6 +2606,73 @@ public class SseTests {
 	}
 
 	@Test
+	public void sseAcceptLoopCleansUpAfterUnexpectedTermination() throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		List<String> lifecycleEvents = new CopyOnWriteArrayList<>();
+		RecordingExecutorService requestHandlerExecutorService = new RecordingExecutorService();
+		RecordingExecutorService requestReaderExecutorService = new RecordingExecutorService();
+		RecordingExecutorService connectionExecutorService = new RecordingExecutorService();
+		TimeoutScheduler requestHandlerTimeoutScheduler =
+				new TimeoutScheduler(runnable -> new Thread(runnable, "sse-fatal-accept-loop-test-timeout"));
+		FatalAcceptFailureServerSocketChannel serverSocketChannel = new FatalAcceptFailureServerSocketChannel();
+		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override
+					public void didFailToAcceptConnection(@NonNull ServerType serverType,
+																								@Nullable InetSocketAddress remoteAddress,
+																								@NonNull ConnectionRejectionReason reason,
+																								@Nullable Throwable throwable) {
+						lifecycleEvents.add("didFailToAcceptConnection:" + serverType + ":" + reason);
+					}
+				})
+				.metricsCollector(metricsCollector)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class)))
+				.build();
+		server.initialize(sokletConfig, (request, requestResultConsumer) -> { /* no-op */ });
+		Field startedField = DefaultSseServer.class.getDeclaredField("started");
+		Field serverSocketChannelField = DefaultSseServer.class.getDeclaredField("serverSocketChannel");
+		Field requestHandlerExecutorServiceField = DefaultSseServer.class.getDeclaredField("requestHandlerExecutorService");
+		Field requestHandlerTimeoutSchedulerField = DefaultSseServer.class.getDeclaredField("requestHandlerTimeoutScheduler");
+		Field requestReaderExecutorServiceField = DefaultSseServer.class.getDeclaredField("requestReaderExecutorService");
+		Field connectionExecutorServiceField = DefaultSseServer.class.getDeclaredField("connectionExecutorService");
+		startedField.setAccessible(true);
+		serverSocketChannelField.setAccessible(true);
+		requestHandlerExecutorServiceField.setAccessible(true);
+		requestHandlerTimeoutSchedulerField.setAccessible(true);
+		requestReaderExecutorServiceField.setAccessible(true);
+		connectionExecutorServiceField.setAccessible(true);
+
+		try {
+			startedField.set(server, true);
+			serverSocketChannelField.set(server, serverSocketChannel);
+			requestHandlerExecutorServiceField.set(server, requestHandlerExecutorService);
+			requestHandlerTimeoutSchedulerField.set(server, requestHandlerTimeoutScheduler);
+			requestReaderExecutorServiceField.set(server, requestReaderExecutorService);
+			connectionExecutorServiceField.set(server, connectionExecutorService);
+
+			server.startInternal();
+
+			Assertions.assertFalse(server.isStarted());
+			Assertions.assertTrue(serverSocketChannel.isClosed());
+			Assertions.assertTrue(requestHandlerExecutorService.isShutdown());
+			Assertions.assertTrue(requestHandlerTimeoutScheduler.isShutdown());
+			Assertions.assertTrue(requestReaderExecutorService.isShutdown());
+			Assertions.assertTrue(connectionExecutorService.isShutdown());
+			Assertions.assertTrue(lifecycleEvents.contains("didFailToAcceptConnection:SSE:INTERNAL_ERROR"),
+					lifecycleEvents.toString());
+			Assertions.assertEquals(1L, transportFailureCount(metricsCollector, ServerType.SSE,
+					MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED));
+		} finally {
+			server.stop();
+			requestHandlerTimeoutScheduler.shutdownNow();
+			requestHandlerExecutorService.shutdownNow();
+			requestReaderExecutorService.shutdownNow();
+			connectionExecutorService.shutdownNow();
+		}
+	}
+
+	@Test
 	public void writeMarshaledResponseToChannel_handlesPartialWrites() throws Exception {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
 		ResponseCookie cookie = ResponseCookie.with("session", "abc").path("/").build();
@@ -2669,6 +2736,66 @@ public class SseTests {
 
 		int getAcceptCalls() {
 			return this.acceptCalls.get();
+		}
+
+		boolean isClosed() {
+			return this.closed.get();
+		}
+
+		@Override
+		public ServerSocketChannel bind(SocketAddress local,
+																		int backlog) {
+			return this;
+		}
+
+		@Override
+		public <T> ServerSocketChannel setOption(SocketOption<T> name,
+																						 T value) {
+			return this;
+		}
+
+		@Override
+		public <T> T getOption(SocketOption<T> name) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public Set<SocketOption<?>> supportedOptions() {
+			return Set.of();
+		}
+
+		@Override
+		public ServerSocket socket() {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public SocketAddress getLocalAddress() {
+			return null;
+		}
+
+		@Override
+		protected void implCloseSelectableChannel() {
+			this.closed.set(true);
+		}
+
+		@Override
+		protected void implConfigureBlocking(boolean block) {
+			// no-op
+		}
+	}
+
+	private static final class FatalAcceptFailureServerSocketChannel extends ServerSocketChannel {
+		private final AtomicBoolean closed;
+
+		private FatalAcceptFailureServerSocketChannel() {
+			super(SelectorProvider.provider());
+			this.closed = new AtomicBoolean(false);
+		}
+
+		@Override
+		public SocketChannel accept() {
+			throw new AssertionError("fatal accept failure");
 		}
 
 		boolean isClosed() {

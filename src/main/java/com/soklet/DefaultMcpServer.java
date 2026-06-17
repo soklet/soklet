@@ -570,6 +570,13 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 						.throwable(e)
 						.build());
 				recordTransportFailure(MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, e, "connection_setup_error");
+			} catch (Throwable t) {
+				if (this.stopPoisonPill.get() || this.stopping)
+					break;
+
+				closeQuietly(socket);
+				cleanupAfterUnexpectedAcceptLoopTermination(t);
+				break;
 			}
 		}
 	}
@@ -1554,6 +1561,82 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.acceptThread = null;
 		this.started = false;
 		this.stopping = false;
+	}
+
+	private void cleanupAfterUnexpectedAcceptLoopTermination(@NonNull Throwable throwable) {
+		requireNonNull(throwable);
+
+		ServerSocket serverSocketSnapshot;
+		ExecutorService requestHandlerExecutorServiceSnapshot;
+		TimeoutScheduler requestHandlerTimeoutSchedulerSnapshot;
+		ExecutorService connectionExecutorServiceSnapshot;
+		List<McpLiveConnection> liveConnectionsSnapshot = new ArrayList<>();
+		boolean cleanupRequired = false;
+
+		getLock().lock();
+
+		try {
+			if (this.started) {
+				cleanupRequired = true;
+				this.stopping = true;
+				this.stopPoisonPill.set(true);
+				serverSocketSnapshot = this.serverSocket;
+				requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
+				requestHandlerTimeoutSchedulerSnapshot = this.requestHandlerTimeoutScheduler;
+				connectionExecutorServiceSnapshot = this.connectionExecutorService;
+
+				for (CopyOnWriteArrayList<McpLiveConnection> connections : new ArrayList<>(this.liveConnectionsBySessionId.values()))
+					liveConnectionsSnapshot.addAll(connections);
+
+				this.acceptThread = null;
+				this.serverSocket = null;
+				this.requestHandlerExecutorService = null;
+				this.requestHandlerTimeoutScheduler = null;
+				this.connectionExecutorService = null;
+				this.started = false;
+			} else {
+				serverSocketSnapshot = null;
+				requestHandlerExecutorServiceSnapshot = null;
+				requestHandlerTimeoutSchedulerSnapshot = null;
+				connectionExecutorServiceSnapshot = null;
+			}
+		} finally {
+			getLock().unlock();
+		}
+
+		if (!cleanupRequired)
+			return;
+
+		try {
+			notifyDidFailToAcceptConnection(null, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
+			safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop terminated unexpectedly")
+					.throwable(throwable)
+					.build());
+			recordTransportFailure(MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED, throwable, "event_loop_terminate");
+			closeQuietly(serverSocketSnapshot);
+
+			for (McpLiveConnection connection : liveConnectionsSnapshot)
+				closeLiveConnection(connection, StreamTerminationReason.INTERNAL_ERROR, throwable, true);
+
+			this.liveConnectionsBySessionId.clear();
+			shutdownNowIfNeeded(requestHandlerExecutorServiceSnapshot);
+
+			if (requestHandlerTimeoutSchedulerSnapshot != null)
+				requestHandlerTimeoutSchedulerSnapshot.shutdownNow();
+
+			shutdownNowIfNeeded(connectionExecutorServiceSnapshot);
+			this.activeConnectionCount.set(0);
+		} finally {
+			ReentrantLock lock = getLock();
+			lock.lock();
+
+			try {
+				this.stopping = false;
+				this.stopPoisonPill.set(false);
+			} finally {
+				lock.unlock();
+			}
+		}
 	}
 
 	private void awaitPoolTermination(@Nullable ExecutorService executorService,

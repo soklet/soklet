@@ -1,5 +1,6 @@
 package com.soklet;
 
+import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.Header;
 import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
@@ -8,13 +9,22 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
+import java.nio.channels.Selector;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 import java.util.zip.GZIPInputStream;
 
 import static com.soklet.TestSupport.readAll;
@@ -138,6 +148,69 @@ public class DefaultHttpServerTests {
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.get("X-Trace-Id").add("def456"));
 	}
 
+	@Test
+	public void httpServerCleansUpAfterUnexpectedEventLoopTermination() throws Exception {
+		RecordingExecutorService requestHandlerExecutorService = new RecordingExecutorService();
+		RecordingExecutorService streamingExecutorService = new RecordingExecutorService();
+		CountDownLatch acceptFailureLatch = new CountDownLatch(1);
+		CopyOnWriteArrayList<LogEvent> logEvents = new CopyOnWriteArrayList<>();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0)
+				.host("127.0.0.1")
+				.requestHandlerExecutorServiceSupplier(() -> requestHandlerExecutorService)
+				.streamingExecutorServiceSupplier(() -> streamingExecutorService)
+				.build();
+		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(metricsCollector)
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(LogEvent logEvent) {
+						logEvents.add(logEvent);
+					}
+
+					@Override
+					public void didFailToAcceptConnection(ServerType serverType,
+																								InetSocketAddress remoteAddress,
+																								ConnectionRejectionReason reason,
+																								Throwable throwable) {
+						if (serverType == ServerType.STANDARD_HTTP && reason == ConnectionRejectionReason.INTERNAL_ERROR)
+							acceptFailureLatch.countDown();
+					}
+				})
+				.build();
+		server.initialize(sokletConfig, (request, requestResultConsumer) -> {});
+
+		try {
+			server.start();
+
+			EventLoop eventLoop = server.getEventLoop().orElseThrow();
+			Field selectorField = EventLoop.class.getDeclaredField("selector");
+			selectorField.setAccessible(true);
+			((Selector) selectorField.get(eventLoop)).close();
+
+			waitUntil(() -> !server.isStarted()
+					&& requestHandlerExecutorService.isShutdown()
+					&& streamingExecutorService.isShutdown()
+					&& acceptFailureLatch.getCount() == 0, 2000);
+
+			Assertions.assertFalse(server.isStarted());
+			Assertions.assertTrue(requestHandlerExecutorService.isShutdown());
+			Assertions.assertTrue(streamingExecutorService.isShutdown());
+			Assertions.assertTrue(acceptFailureLatch.await(2, TimeUnit.SECONDS));
+			Assertions.assertEquals(Long.valueOf(1L), metricsCollector.snapshot().orElseThrow().getTransportFailures()
+					.get(new MetricsCollector.TransportFailureKey(
+							ServerType.STANDARD_HTTP,
+							MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED)));
+			Assertions.assertTrue(logEvents.stream().anyMatch(logEvent ->
+					logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());
+		} finally {
+			server.stop();
+			requestHandlerExecutorService.shutdownNow();
+			streamingExecutorService.shutdownNow();
+		}
+	}
+
 	private static byte[] gunzip(byte[] bytes) throws IOException {
 		try (GZIPInputStream inputStream = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
 			return readAll(inputStream);
@@ -150,5 +223,54 @@ public class DefaultHttpServerTests {
 				.map(Header::value)
 				.findFirst()
 				.orElse(null);
+	}
+
+	private static void waitUntil(BooleanSupplier condition, long timeoutMillis) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+
+		while (System.nanoTime() < deadline) {
+			if (condition.getAsBoolean())
+				return;
+
+			Thread.sleep(10);
+		}
+
+		Assertions.fail("Timed out waiting for condition");
+	}
+
+	private static final class RecordingExecutorService extends AbstractExecutorService {
+		private final AtomicBoolean shutdown = new AtomicBoolean(false);
+
+		@Override
+		public void shutdown() {
+			this.shutdown.set(true);
+		}
+
+		@Override
+		public List<Runnable> shutdownNow() {
+			this.shutdown.set(true);
+			return List.of();
+		}
+
+		@Override
+		public boolean isShutdown() {
+			return this.shutdown.get();
+		}
+
+		@Override
+		public boolean isTerminated() {
+			return this.shutdown.get();
+		}
+
+		@Override
+		public boolean awaitTermination(long timeout,
+																		TimeUnit unit) {
+			return true;
+		}
+
+		@Override
+		public void execute(Runnable command) {
+			command.run();
+		}
 	}
 }

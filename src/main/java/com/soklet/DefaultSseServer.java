@@ -1087,7 +1087,7 @@ final class DefaultSseServer implements SseServer {
 		if (serverSocketChannel == null)
 			return;
 
-		boolean unexpectedTermination = false;
+		Throwable unexpectedTermination = null;
 
 		try {
 			ExecutorService executorService = getRequestHandlerExecutorService().orElse(null);
@@ -1109,15 +1109,19 @@ final class DefaultSseServer implements SseServer {
 						break;
 
 					if (!serverSocketChannel.isOpen()) {
-						unexpectedTermination = true;
-						recordTransportFailure(MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED,
-								e, "event_loop_terminate");
+						unexpectedTermination = e;
 						break;
 					}
 
 					handleAcceptLoopIOException(e);
 				} catch (RuntimeException e) {
 					handleAcceptLoopRuntimeException(e);
+				} catch (Throwable t) {
+					if (getStopPoisonPill().get() || isStopping())
+						break;
+
+					unexpectedTermination = t;
+					break;
 				}
 			}
 		} finally {
@@ -1133,8 +1137,8 @@ final class DefaultSseServer implements SseServer {
 				}
 			}
 
-			if (unexpectedTermination)
-				stop();
+			if (unexpectedTermination != null)
+				cleanupAfterUnexpectedEventLoopTermination(unexpectedTermination);
 		}
 	}
 
@@ -3722,6 +3726,97 @@ final class DefaultSseServer implements SseServer {
 		this.stopping = false;
 		this.activeConnectionCount.set(0);
 		getStopPoisonPill().set(false);
+	}
+
+	private void cleanupAfterUnexpectedEventLoopTermination(@NonNull Throwable throwable) {
+		requireNonNull(throwable);
+
+		ExecutorService requestHandlerExecutorServiceSnapshot;
+		TimeoutScheduler requestHandlerTimeoutSchedulerSnapshot;
+		ExecutorService requestReaderExecutorServiceSnapshot;
+		ExecutorService connectionExecutorServiceSnapshot;
+		ServerSocketChannel serverSocketChannelSnapshot;
+		List<DefaultSseConnection> connectionsSnapshot;
+		boolean cleanupRequired = false;
+
+		getLock().lock();
+
+		try {
+			if (this.started) {
+				cleanupRequired = true;
+				this.stopping = true;
+				getStopPoisonPill().set(true);
+				requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
+				requestHandlerTimeoutSchedulerSnapshot = this.requestHandlerTimeoutScheduler;
+				requestReaderExecutorServiceSnapshot = this.requestReaderExecutorService;
+				connectionExecutorServiceSnapshot = this.connectionExecutorService;
+				serverSocketChannelSnapshot = this.serverSocketChannel;
+				connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
+				this.started = false;
+				this.eventLoopThread = null;
+				this.serverSocketChannel = null;
+				this.requestHandlerExecutorService = null;
+				this.requestHandlerTimeoutScheduler = null;
+				this.requestReaderExecutorService = null;
+				this.connectionExecutorService = null;
+			} else {
+				requestHandlerExecutorServiceSnapshot = null;
+				requestHandlerTimeoutSchedulerSnapshot = null;
+				requestReaderExecutorServiceSnapshot = null;
+				connectionExecutorServiceSnapshot = null;
+				serverSocketChannelSnapshot = null;
+				connectionsSnapshot = List.of();
+			}
+		} finally {
+			getLock().unlock();
+		}
+
+		if (!cleanupRequired)
+			return;
+
+		try {
+			notifyDidFailToAcceptConnection(null, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+							"SSE event loop terminated unexpectedly")
+					.throwable(throwable)
+					.build());
+			recordTransportFailure(MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED,
+					throwable, "event_loop_terminate");
+
+			if (serverSocketChannelSnapshot != null) {
+				try {
+					serverSocketChannelSnapshot.close();
+				} catch (IOException ignored) {
+					// Nothing to do
+				}
+			}
+
+			for (DefaultSseConnection connection : connectionsSnapshot)
+				connection.setTerminationReason(StreamTerminationReason.INTERNAL_ERROR);
+
+			forceCloseConnections(connectionsSnapshot);
+			shutdownNowIfNeeded(requestHandlerExecutorServiceSnapshot);
+
+			if (requestHandlerTimeoutSchedulerSnapshot != null)
+				requestHandlerTimeoutSchedulerSnapshot.shutdownNow();
+
+			shutdownNowIfNeeded(requestReaderExecutorServiceSnapshot);
+			shutdownNowIfNeeded(connectionExecutorServiceSnapshot);
+		} finally {
+			ReentrantLock lock = getLock();
+			lock.lock();
+
+			try {
+				this.stopping = false;
+				this.getBroadcastersByResourcePath().clear();
+				this.getIdleBroadcastersByResourcePath().clear();
+				this.getResourcePathDeclarationsByResourcePathCache().clear();
+				this.activeConnectionCount.set(0);
+				getStopPoisonPill().set(false);
+			} finally {
+				lock.unlock();
+			}
+		}
 	}
 
 	private void awaitPoolTermination(@Nullable ExecutorService executorService,

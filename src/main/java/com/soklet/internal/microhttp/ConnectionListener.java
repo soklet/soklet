@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.net.InetSocketAddress;
@@ -39,5 +40,14 @@ public interface ConnectionListener {
     default void didFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress,
                                            @Nullable Throwable throwable) {
         didFailToAcceptConnection(remoteAddress);
+    }
+
+    /**
+     * Called when the event loop terminates unexpectedly.
+     *
+     * @param throwable the failure
+     */
+    default void didTerminateEventLoop(@NonNull Throwable throwable) {
+        // No-op
     }
 }

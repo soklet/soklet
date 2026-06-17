@@ -440,6 +440,13 @@ final class DefaultHttpServer implements HttpServer {
 																							@Nullable Throwable throwable) {
 					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
 				}
+
+				@Override
+				public void didTerminateEventLoop(@NonNull Throwable throwable) {
+					Thread cleanupThread = new Thread(() ->
+							cleanupAfterUnexpectedEventLoopTermination(throwable), "http-event-loop-cleanup");
+					cleanupThread.start();
+				}
 			};
 
 			Handler handler = ((microhttpRequest, microHttpCallback) -> {
@@ -653,8 +660,8 @@ final class DefaultHttpServer implements HttpServer {
 
 			try {
 				eventLoop = new EventLoop(options, logger, handler, connectionListener);
-				eventLoop.start();
 				this.eventLoop = eventLoop;
+				eventLoop.start();
 			} catch (BindException e) {
 				cleanupFailedStart(eventLoop);
 				throw new UncheckedIOException(format("Soklet was unable to start the HTTP server - port %d is already in use.", options.port()), e);
@@ -1965,6 +1972,69 @@ final class DefaultHttpServer implements HttpServer {
 		this.streamingExecutorService = null;
 		this.streamingTimeoutExecutorService = null;
 		this.requestHandlerTimeoutScheduler = null;
+	}
+
+	private void cleanupAfterUnexpectedEventLoopTermination(@NonNull Throwable throwable) {
+		requireNonNull(throwable);
+
+		EventLoop eventLoop;
+		ExecutorService requestHandlerExecutorService;
+		ExecutorService streamingExecutorService;
+		ScheduledExecutorService streamingTimeoutExecutorService;
+		TimeoutScheduler requestHandlerTimeoutScheduler;
+		boolean cleanupRequired = false;
+		ReentrantLock lock = getLock();
+
+		lock.lock();
+
+		try {
+			eventLoop = this.eventLoop;
+
+			if (eventLoop != null) {
+				cleanupRequired = true;
+				this.eventLoop = null;
+				requestHandlerExecutorService = this.requestHandlerExecutorService;
+				streamingExecutorService = this.streamingExecutorService;
+				streamingTimeoutExecutorService = this.streamingTimeoutExecutorService;
+				requestHandlerTimeoutScheduler = this.requestHandlerTimeoutScheduler;
+				this.requestHandlerExecutorService = null;
+				this.streamingExecutorService = null;
+				this.streamingTimeoutExecutorService = null;
+				this.requestHandlerTimeoutScheduler = null;
+			} else {
+				requestHandlerExecutorService = null;
+				streamingExecutorService = null;
+				streamingTimeoutExecutorService = null;
+				requestHandlerTimeoutScheduler = null;
+			}
+		} finally {
+			lock.unlock();
+		}
+
+		if (!cleanupRequired)
+			return;
+
+		notifyDidFailToAcceptConnection(null, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
+
+		try {
+			eventLoop.stopConnections();
+		} catch (Exception e) {
+			safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down HTTP server event loop after unexpected termination")
+					.throwable(e)
+					.build());
+		}
+
+		shutdownNowIfNeeded(requestHandlerExecutorService);
+		shutdownNowIfNeeded(streamingExecutorService);
+		shutdownNowIfNeeded(streamingTimeoutExecutorService);
+
+		if (requestHandlerTimeoutScheduler != null)
+			requestHandlerTimeoutScheduler.shutdownNow();
+	}
+
+	private void shutdownNowIfNeeded(@Nullable ExecutorService executorService) {
+		if (executorService != null && !executorService.isTerminated())
+			executorService.shutdownNow();
 	}
 
 	@ThreadSafe
