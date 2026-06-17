@@ -77,7 +77,7 @@ JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>3.3.0</version>
+  <version>3.4.0</version>
 </dependency>
 ```
 
@@ -89,17 +89,17 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.soklet:soklet:3.3.0'
+  implementation 'com.soklet:soklet:3.4.0'
 }
 ```
 
 #### Direct Download
 
-If you don't use Maven or Gradle, you can drop [soklet-3.3.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.3.0/soklet-3.3.0.jar) directly into your project. No other dependencies are required.
+If you don't use Maven or Gradle, you can drop [soklet-3.4.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.4.0/soklet-3.4.0.jar) directly into your project. No other dependencies are required.
 
 ### Code Sample
 
-Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-3.3.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.3.0/soklet-3.3.0.jar) and the JDK. There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
+Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-3.4.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.4.0/soklet-3.4.0.jar) and the JDK. There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
 
 Soklet systems can be structurally as simple as a "hello world" app.
 
@@ -166,13 +166,13 @@ This example requires JDK 17+ to be installed on your machine ([or see this exam
 #### Build
 
 ```shell
-javac -parameters -cp soklet-3.3.0.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
+javac -parameters -cp soklet-3.4.0.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
 ```
 
 #### Run
 
 ```shell
-java -cp soklet-3.3.0.jar:build com/soklet/example/App
+java -cp soklet-3.4.0.jar:build com/soklet/example/App
 ```
 
 #### Test
@@ -502,11 +502,11 @@ public MarshaledResponse exampleImage() {
 }
 ```
 
-`MarshaledResponse` supports known-length byte-array, file, file-channel, and `ByteBuffer` bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory. If you already selected a trusted file and want file-response semantics like validators and byte ranges, use `MarshaledResponse.withFile(...)`; its builder can set `Content-Type`, `Content-Encoding`, cache headers, validators, and range behavior. For safe static roots, use [`StaticFiles`](https://www.soklet.com/docs/static-files) instead of hand-rolled path joins; it handles root containment, validators, optional content-hash ETags, access policy, single byte ranges, MIME defaults, and `GET`/`HEAD` behavior. Standard HTTP can also opt into gzip compression for finalized in-memory byte-array and `ByteBuffer` responses with `HttpServer.Builder.responseGzipPolicy(...)`, including `ResponseGzipPolicy.fromDefaultsWithMinimumBodySizeInBytes(...)` for common text-like response media types.
+[`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) supports known-length byte-array, file, file-channel, and [`ByteBuffer`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/nio/ByteBuffer.html) bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory. If you already selected a trusted file and want file-response semantics like validators and byte ranges, use [`MarshaledResponse::withFile`](<https://javadoc.soklet.com/com/soklet/MarshaledResponse.html#withFile(java.nio.file.Path,com.soklet.Request)>); its builder can set `Content-Type`, `Content-Encoding`, cache headers, validators, and range behavior. For safe static roots, use [`StaticFiles`](https://javadoc.soklet.com/com/soklet/StaticFiles.html) instead of hand-rolled path joins; it handles root containment, validators, optional content-hash ETags, access policy, single byte ranges, MIME defaults, and `GET`/`HEAD` behavior. Standard HTTP can also opt into gzip compression for finalized in-memory byte-array and [`ByteBuffer`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/nio/ByteBuffer.html) responses with [`HttpServer.Builder::responseGzipPolicy`](<https://javadoc.soklet.com/com/soklet/HttpServer.Builder.html#responseGzipPolicy(com.soklet.ResponseGzipPolicy)>), including [`ResponseGzipPolicy::fromDefaultsWithMinimumBodySizeInBytes`](<https://javadoc.soklet.com/com/soklet/ResponseGzipPolicy.html#fromDefaultsWithMinimumBodySizeInBytes(java.lang.Integer)>) for common text-like response media types.
 
 ##### Streaming Responses
 
-`MarshaledResponse` also supports streaming response bodies when the final byte length is not known up front. Streaming is intentionally a marshaled-response feature, like file-backed output: the resource method is taking direct control of what Soklet writes to the HTTP response.
+[`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) also supports streaming response bodies when the final byte length is not known up front. Streaming is intentionally a marshaled-response feature, like file-backed output: the resource method is taking direct control of what Soklet writes to the HTTP response.
 
 ```java
 @GET("/tokens")
@@ -529,7 +529,7 @@ public MarshaledResponse tokens(TokenService tokenService) {
 }
 ```
 
-Streaming responses use HTTP/1.1 chunked transfer encoding. Soklet owns `Transfer-Encoding`, rejects caller-supplied `Content-Length`, and gives the producer a `StreamingResponseContext` so upstream work can be canceled when the client disconnects, the server shuts down, or a streaming timeout fires. That context also exposes the originating `Request`, so producers can use `Request#getId()` for correlation without ambient thread-local state.
+Streaming responses use HTTP/1.1 chunked transfer encoding. Soklet owns `Transfer-Encoding`, rejects caller-supplied `Content-Length`, and gives the producer a [`StreamingResponseContext`](https://javadoc.soklet.com/com/soklet/StreamingResponseContext.html) so upstream work can be canceled when the client disconnects, the server shuts down, or a streaming timeout fires. That context also exposes the originating [`Request`](https://javadoc.soklet.com/com/soklet/Request.html), so producers can use [`Request::getId`](<https://javadoc.soklet.com/com/soklet/Request.html#getId()>) for correlation without ambient thread-local state.
 
 Redirects (via [`Response`](https://javadoc.soklet.com/com/soklet/Response.html)):
 
@@ -607,7 +607,7 @@ SokletConfig config = SokletConfig.withHttpServer(
 ```
 
 If your application only exposes SSE event source methods, you can omit the regular
-HTTP server and start with `SokletConfig.withSseServer(...)` instead.
+HTTP server and start with [`SokletConfig::withSseServer`](<https://javadoc.soklet.com/com/soklet/SokletConfig.html#withSseServer(com.soklet.SseServer)>) instead.
 
 SSE test via the [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html)
 (see [`SseRequestResult`](https://javadoc.soklet.com/com/soklet/SseRequestResult.html)):
@@ -714,7 +714,7 @@ SokletConfig config = SokletConfig.withMcpServer(
 That enables `OPTIONS` preflight handling plus `Access-Control-*` response headers on MCP
 `POST` / `GET` / `DELETE` responses for the configured origins. It also authorizes MCP
 transport requests that carry an `Origin` header; if `Origin` is present and the configured
-`McpCorsAuthorizer` does not authorize it, Soklet rejects the request with HTTP 403 before
+[`McpCorsAuthorizer`](https://javadoc.soklet.com/com/soklet/McpCorsAuthorizer.html) does not authorize it, Soklet rejects the request with HTTP 403 before
 running MCP endpoint code or mutating session/stream state. The default
 `nonBrowserClientsOnlyInstance()` remains conservative: non-browser clients that omit
 `Origin` work normally, while browser-originated MCP transport requests are rejected unless
@@ -722,7 +722,7 @@ you explicitly allow the origin.
 
 Soklet's MCP v1 support is intentionally conservative: single-request JSON-RPC only, framework-managed
 `initialize`, `notifications/initialized`, `notifications/cancelled`, and `ping`, cooperative
-in-flight request cancelation through `McpCancelationToken`, framework-generated `tools/list` /
+in-flight request cancelation through [`McpCancelationToken`](https://javadoc.soklet.com/com/soklet/McpCancelationToken.html), framework-generated `tools/list` /
 `prompts/list` / `resources/templates/list` responses without cursor pagination, and application-backed
 pagination only for `resources/list`. JSON-RPC batch arrays and resumable SSE event IDs remain deferred.
 
