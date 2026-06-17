@@ -110,6 +110,62 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void mcpHardenJoinReturnsImmediatelyForCurrentThread() throws Exception {
+		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		Method hardenJoinMethod = DefaultMcpServer.class.getDeclaredMethod("hardenJoin", Thread.class, long.class);
+		hardenJoinMethod.setAccessible(true);
+
+		Assertions.assertTimeout(Duration.ofMillis(100), () ->
+				hardenJoinMethod.invoke(server, Thread.currentThread(), 5_000L));
+	}
+
+	@Test
+	public void staleMcpAcceptLoopCleanupDoesNotClobberRestartedServer() throws Exception {
+		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		RecordingExecutorService requestHandlerExecutorService = new RecordingExecutorService();
+		RecordingExecutorService connectionExecutorService = new RecordingExecutorService();
+		TimeoutScheduler requestHandlerTimeoutScheduler =
+				new TimeoutScheduler(runnable -> new Thread(runnable, "mcp-stale-cleanup-test-timeout"));
+		Field startedField = DefaultMcpServer.class.getDeclaredField("started");
+		Field lifecycleGenerationField = DefaultMcpServer.class.getDeclaredField("lifecycleGeneration");
+		Field requestHandlerExecutorServiceField = DefaultMcpServer.class.getDeclaredField("requestHandlerExecutorService");
+		Field requestHandlerTimeoutSchedulerField = DefaultMcpServer.class.getDeclaredField("requestHandlerTimeoutScheduler");
+		Field connectionExecutorServiceField = DefaultMcpServer.class.getDeclaredField("connectionExecutorService");
+		Method cleanupMethod = DefaultMcpServer.class.getDeclaredMethod(
+				"cleanupAfterUnexpectedAcceptLoopTermination", Throwable.class, long.class);
+		startedField.setAccessible(true);
+		lifecycleGenerationField.setAccessible(true);
+		requestHandlerExecutorServiceField.setAccessible(true);
+		requestHandlerTimeoutSchedulerField.setAccessible(true);
+		connectionExecutorServiceField.setAccessible(true);
+		cleanupMethod.setAccessible(true);
+
+		try {
+			startedField.set(server, true);
+			lifecycleGenerationField.set(server, 2L);
+			requestHandlerExecutorServiceField.set(server, requestHandlerExecutorService);
+			requestHandlerTimeoutSchedulerField.set(server, requestHandlerTimeoutScheduler);
+			connectionExecutorServiceField.set(server, connectionExecutorService);
+
+			cleanupMethod.invoke(server, new AssertionError("stale accept loop"), 1L);
+
+			Assertions.assertTrue(server.isStarted());
+			Assertions.assertFalse(requestHandlerExecutorService.isShutdown());
+			Assertions.assertFalse(requestHandlerTimeoutScheduler.isShutdown());
+			Assertions.assertFalse(connectionExecutorService.isShutdown());
+		} finally {
+			server.stop();
+			requestHandlerTimeoutScheduler.shutdownNow();
+			requestHandlerExecutorService.shutdownNow();
+			connectionExecutorService.shutdownNow();
+		}
+	}
+
+	@Test
 	public void mcpOnlyConfigDoesNotRequireHttpResourceMethodsAndStartsConfiguredMcpServer() throws Exception {
 		FakeMcpServer fakeMcpServer = new FakeMcpServer();
 		SokletConfig sokletConfig = SokletConfig.withMcpServer(fakeMcpServer)
@@ -1351,7 +1407,7 @@ public class McpServerLifecycleTests {
 
 		Field stopPoisonPillField = DefaultMcpServer.class.getDeclaredField("stopPoisonPill");
 		Field serverSocketField = DefaultMcpServer.class.getDeclaredField("serverSocket");
-		Method acceptLoopMethod = DefaultMcpServer.class.getDeclaredMethod("acceptLoop");
+		Method acceptLoopMethod = DefaultMcpServer.class.getDeclaredMethod("acceptLoop", long.class);
 		stopPoisonPillField.setAccessible(true);
 		serverSocketField.setAccessible(true);
 		acceptLoopMethod.setAccessible(true);
@@ -1361,7 +1417,7 @@ public class McpServerLifecycleTests {
 
 		Assertions.assertDoesNotThrow(() -> {
 			try {
-				acceptLoopMethod.invoke(server);
+				acceptLoopMethod.invoke(server, 0L);
 			} catch (InvocationTargetException e) {
 				Throwable cause = e.getCause();
 				if (cause instanceof RuntimeException runtimeException)
@@ -1402,7 +1458,7 @@ public class McpServerLifecycleTests {
 		Field requestHandlerExecutorServiceField = DefaultMcpServer.class.getDeclaredField("requestHandlerExecutorService");
 		Field requestHandlerTimeoutSchedulerField = DefaultMcpServer.class.getDeclaredField("requestHandlerTimeoutScheduler");
 		Field connectionExecutorServiceField = DefaultMcpServer.class.getDeclaredField("connectionExecutorService");
-		Method acceptLoopMethod = DefaultMcpServer.class.getDeclaredMethod("acceptLoop");
+		Method acceptLoopMethod = DefaultMcpServer.class.getDeclaredMethod("acceptLoop", long.class);
 		startedField.setAccessible(true);
 		serverSocketField.setAccessible(true);
 		requestHandlerExecutorServiceField.setAccessible(true);
@@ -1419,7 +1475,7 @@ public class McpServerLifecycleTests {
 
 			Assertions.assertDoesNotThrow(() -> {
 				try {
-					acceptLoopMethod.invoke(server);
+					acceptLoopMethod.invoke(server, 0L);
 				} catch (InvocationTargetException e) {
 					Throwable cause = e.getCause();
 					if (cause instanceof RuntimeException runtimeException)

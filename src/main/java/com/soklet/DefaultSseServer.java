@@ -311,6 +311,7 @@ final class DefaultSseServer implements SseServer {
 	private Thread eventLoopThread;
 	@Nullable
 	private volatile ServerSocketChannel serverSocketChannel;
+	private long lifecycleGeneration;
 	// Does not need to be concurrent because it's calculated just once at initialization time and is never modified after
 	@NonNull
 	private volatile Map<@NonNull ResourcePathDeclaration, @NonNull ResourceMethod> resourceMethodsByResourcePathDeclaration;
@@ -958,8 +959,16 @@ final class DefaultSseServer implements SseServer {
 			this.requestReaderExecutorService = getRequestReaderExecutorServiceSupplier().get();
 			this.connectionExecutorService = getConnectionExecutorServiceSupplier().get();
 			this.stopping = false;
+			getStopPoisonPill().set(false);
+			getGlobalConnections().clear();
+			getBroadcastersByResourcePath().clear();
+			getIdleBroadcastersByResourcePath().clear();
+			getResourcePathDeclarationsByResourcePathCache().clear();
+			this.activeConnectionCount.set(0);
+			this.lifecycleGeneration++;
+			long lifecycleGeneration = this.lifecycleGeneration;
 			this.started = true; // set before thread starts to avoid early exit races
-			this.eventLoopThread = new Thread(this::startInternal, "sse-event-loop");
+			this.eventLoopThread = new Thread(() -> startInternal(lifecycleGeneration), "sse-event-loop");
 			this.eventLoopThread.start();
 		} catch (RuntimeException e) {
 			cleanupAfterFailedStart();
@@ -1079,6 +1088,10 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	protected void startInternal() {
+		startInternal(this.lifecycleGeneration);
+	}
+
+	private void startInternal(long lifecycleGeneration) {
 		if (!isStarted() || isStopping())
 			return;
 
@@ -1138,7 +1151,7 @@ final class DefaultSseServer implements SseServer {
 			}
 
 			if (unexpectedTermination != null)
-				cleanupAfterUnexpectedEventLoopTermination(unexpectedTermination);
+				cleanupAfterUnexpectedEventLoopTermination(unexpectedTermination, lifecycleGeneration);
 		}
 	}
 
@@ -3534,6 +3547,7 @@ final class DefaultSseServer implements SseServer {
 		ExecutorService requestReaderExecutorServiceSnapshot;
 		ExecutorService connectionExecutorServiceSnapshot;
 		ServerSocketChannel serverSocketChannelSnapshot;
+		long lifecycleGenerationSnapshot;
 		boolean interrupted = false;
 
 		getLock().lock();
@@ -3544,6 +3558,7 @@ final class DefaultSseServer implements SseServer {
 			this.stopping = true;
 			getStopPoisonPill().set(true);
 
+			lifecycleGenerationSnapshot = this.lifecycleGeneration;
 			eventLoopThreadSnapshot = this.eventLoopThread;
 			requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
 			requestHandlerTimeoutSchedulerSnapshot = this.requestHandlerTimeoutScheduler;
@@ -3651,19 +3666,21 @@ final class DefaultSseServer implements SseServer {
 
 		getLock().lock();
 		try {
-			this.started = false;
-			this.stopping = false; // allow future restarts
-			this.eventLoopThread = null;
-			this.serverSocketChannel = null;
-			this.requestHandlerExecutorService = null;
-			this.requestHandlerTimeoutScheduler = null;
-			this.requestReaderExecutorService = null;
-			this.connectionExecutorService = null;
-			this.getBroadcastersByResourcePath().clear();
-			this.getIdleBroadcastersByResourcePath().clear();
-			this.getResourcePathDeclarationsByResourcePathCache().clear();
-			this.activeConnectionCount.set(0);
-			getStopPoisonPill().set(false);
+			if (this.lifecycleGeneration == lifecycleGenerationSnapshot) {
+				this.started = false;
+				this.stopping = false; // allow future restarts
+				this.eventLoopThread = null;
+				this.serverSocketChannel = null;
+				this.requestHandlerExecutorService = null;
+				this.requestHandlerTimeoutScheduler = null;
+				this.requestReaderExecutorService = null;
+				this.connectionExecutorService = null;
+				this.getBroadcastersByResourcePath().clear();
+				this.getIdleBroadcastersByResourcePath().clear();
+				this.getResourcePathDeclarationsByResourcePathCache().clear();
+				this.activeConnectionCount.set(0);
+				getStopPoisonPill().set(false);
+			}
 
 			if (interrupted)
 				Thread.currentThread().interrupt();
@@ -3728,7 +3745,8 @@ final class DefaultSseServer implements SseServer {
 		getStopPoisonPill().set(false);
 	}
 
-	private void cleanupAfterUnexpectedEventLoopTermination(@NonNull Throwable throwable) {
+	private void cleanupAfterUnexpectedEventLoopTermination(@NonNull Throwable throwable,
+																												 long lifecycleGeneration) {
 		requireNonNull(throwable);
 
 		ExecutorService requestHandlerExecutorServiceSnapshot;
@@ -3742,7 +3760,7 @@ final class DefaultSseServer implements SseServer {
 		getLock().lock();
 
 		try {
-			if (this.started) {
+			if (this.started && this.lifecycleGeneration == lifecycleGeneration) {
 				cleanupRequired = true;
 				this.stopping = true;
 				getStopPoisonPill().set(true);
@@ -3807,12 +3825,14 @@ final class DefaultSseServer implements SseServer {
 			lock.lock();
 
 			try {
-				this.stopping = false;
-				this.getBroadcastersByResourcePath().clear();
-				this.getIdleBroadcastersByResourcePath().clear();
-				this.getResourcePathDeclarationsByResourcePathCache().clear();
-				this.activeConnectionCount.set(0);
-				getStopPoisonPill().set(false);
+				if (this.lifecycleGeneration == lifecycleGeneration) {
+					this.stopping = false;
+					this.getBroadcastersByResourcePath().clear();
+					this.getIdleBroadcastersByResourcePath().clear();
+					this.getResourcePathDeclarationsByResourcePathCache().clear();
+					this.activeConnectionCount.set(0);
+					getStopPoisonPill().set(false);
+				}
 			} finally {
 				lock.unlock();
 			}

@@ -209,6 +209,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	private volatile Boolean started;
 	@NonNull
 	private volatile Boolean stopping;
+	private long lifecycleGeneration;
 
 	DefaultMcpServer(McpServer.Builder builder) {
 		requireNonNull(builder);
@@ -338,9 +339,13 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			this.connectionExecutorService = this.connectionExecutorServiceSupplier.get();
 			this.stopPoisonPill.set(false);
 			this.stopping = false;
+			this.liveConnectionsBySessionId.clear();
+			this.activeConnectionCount.set(0);
+			this.lifecycleGeneration++;
+			long lifecycleGeneration = this.lifecycleGeneration;
 			this.started = true;
 
-			Thread acceptThread = new Thread(this::acceptLoop, "mcp-accept-loop");
+			Thread acceptThread = new Thread(() -> acceptLoop(lifecycleGeneration), "mcp-accept-loop");
 			this.acceptThread = acceptThread;
 			acceptThread.start();
 		} catch (RuntimeException e) {
@@ -361,6 +366,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		ExecutorService requestHandlerExecutorServiceSnapshot;
 		TimeoutScheduler requestHandlerTimeoutSchedulerSnapshot;
 		ExecutorService connectionExecutorServiceSnapshot;
+		long lifecycleGenerationSnapshot;
 
 		getLock().lock();
 
@@ -370,6 +376,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 			this.stopping = true;
 			this.stopPoisonPill.set(true);
+			lifecycleGenerationSnapshot = this.lifecycleGeneration;
 			acceptThreadSnapshot = this.acceptThread;
 			serverSocketSnapshot = this.serverSocket;
 			requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
@@ -445,13 +452,15 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			getLock().lock();
 
 			try {
-				this.acceptThread = null;
-				this.serverSocket = null;
-				this.requestHandlerExecutorService = null;
-				this.requestHandlerTimeoutScheduler = null;
-				this.connectionExecutorService = null;
-				this.started = false;
-				this.stopping = false;
+				if (this.lifecycleGeneration == lifecycleGenerationSnapshot) {
+					this.acceptThread = null;
+					this.serverSocket = null;
+					this.requestHandlerExecutorService = null;
+					this.requestHandlerTimeoutScheduler = null;
+					this.connectionExecutorService = null;
+					this.started = false;
+					this.stopping = false;
+				}
 			} finally {
 				getLock().unlock();
 			}
@@ -521,7 +530,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			closeLiveConnection(connection, StreamTerminationReason.SESSION_TERMINATED, null, false);
 	}
 
-	private void acceptLoop() {
+	private void acceptLoop(long lifecycleGeneration) {
 		ServerSocket serverSocket = this.serverSocket;
 
 		if (serverSocket == null)
@@ -575,7 +584,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 					break;
 
 				closeQuietly(socket);
-				cleanupAfterUnexpectedAcceptLoopTermination(t);
+				cleanupAfterUnexpectedAcceptLoopTermination(t, lifecycleGeneration);
 				break;
 			}
 		}
@@ -1563,7 +1572,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		this.stopping = false;
 	}
 
-	private void cleanupAfterUnexpectedAcceptLoopTermination(@NonNull Throwable throwable) {
+	private void cleanupAfterUnexpectedAcceptLoopTermination(@NonNull Throwable throwable,
+																													long lifecycleGeneration) {
 		requireNonNull(throwable);
 
 		ServerSocket serverSocketSnapshot;
@@ -1576,7 +1586,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		getLock().lock();
 
 		try {
-			if (this.started) {
+			if (this.started && this.lifecycleGeneration == lifecycleGeneration) {
 				cleanupRequired = true;
 				this.stopping = true;
 				this.stopPoisonPill.set(true);
@@ -1631,8 +1641,10 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			lock.lock();
 
 			try {
-				this.stopping = false;
-				this.stopPoisonPill.set(false);
+				if (this.lifecycleGeneration == lifecycleGeneration) {
+					this.stopping = false;
+					this.stopPoisonPill.set(false);
+				}
 			} finally {
 				lock.unlock();
 			}
@@ -1722,7 +1734,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 	private void hardenJoin(@Nullable Thread thread,
 													long timeoutMillis) {
-		if (thread == null)
+		if (thread == null || thread == Thread.currentThread())
 			return;
 
 		try {

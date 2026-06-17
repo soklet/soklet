@@ -47,7 +47,8 @@ public interface ConnectionListener {
      *
      * @param throwable the failure
      */
-    default void didTerminateEventLoop(@NonNull Throwable throwable) {
+    default void didTerminateEventLoop(@NonNull EventLoop eventLoop,
+                                       @NonNull Throwable throwable) {
         // No-op
     }
 }

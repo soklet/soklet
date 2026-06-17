@@ -442,9 +442,10 @@ final class DefaultHttpServer implements HttpServer {
 				}
 
 				@Override
-				public void didTerminateEventLoop(@NonNull Throwable throwable) {
+				public void didTerminateEventLoop(@NonNull EventLoop eventLoop,
+																					@NonNull Throwable throwable) {
 					Thread cleanupThread = new Thread(() ->
-							cleanupAfterUnexpectedEventLoopTermination(throwable), "http-event-loop-cleanup");
+							cleanupAfterUnexpectedEventLoopTermination(eventLoop, throwable), "http-event-loop-cleanup");
 					cleanupThread.start();
 				}
 			};
@@ -1974,10 +1975,11 @@ final class DefaultHttpServer implements HttpServer {
 		this.requestHandlerTimeoutScheduler = null;
 	}
 
-	private void cleanupAfterUnexpectedEventLoopTermination(@NonNull Throwable throwable) {
+	private void cleanupAfterUnexpectedEventLoopTermination(@NonNull EventLoop terminatedEventLoop,
+																													@NonNull Throwable throwable) {
+		requireNonNull(terminatedEventLoop);
 		requireNonNull(throwable);
 
-		EventLoop eventLoop;
 		ExecutorService requestHandlerExecutorService;
 		ExecutorService streamingExecutorService;
 		ScheduledExecutorService streamingTimeoutExecutorService;
@@ -1988,9 +1990,7 @@ final class DefaultHttpServer implements HttpServer {
 		lock.lock();
 
 		try {
-			eventLoop = this.eventLoop;
-
-			if (eventLoop != null) {
+			if (this.eventLoop == terminatedEventLoop) {
 				cleanupRequired = true;
 				this.eventLoop = null;
 				requestHandlerExecutorService = this.requestHandlerExecutorService;
@@ -2017,7 +2017,7 @@ final class DefaultHttpServer implements HttpServer {
 		notifyDidFailToAcceptConnection(null, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
 
 		try {
-			eventLoop.stopConnections();
+			terminatedEventLoop.stopConnections();
 		} catch (Exception e) {
 			safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down HTTP server event loop after unexpected termination")
 					.throwable(e)

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.nio.channels.Selector;
 import java.time.Duration;
@@ -24,6 +25,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.zip.GZIPInputStream;
 
@@ -208,6 +210,57 @@ public class DefaultHttpServerTests {
 			server.stop();
 			requestHandlerExecutorService.shutdownNow();
 			streamingExecutorService.shutdownNow();
+		}
+	}
+
+	@Test
+	public void staleHttpEventLoopCleanupDoesNotClobberRestartedServer() throws Exception {
+		RecordingExecutorService firstRequestHandlerExecutorService = new RecordingExecutorService();
+		RecordingExecutorService secondRequestHandlerExecutorService = new RecordingExecutorService();
+		RecordingExecutorService firstStreamingExecutorService = new RecordingExecutorService();
+		RecordingExecutorService secondStreamingExecutorService = new RecordingExecutorService();
+		AtomicInteger requestHandlerExecutorServiceIndex = new AtomicInteger();
+		AtomicInteger streamingExecutorServiceIndex = new AtomicInteger();
+		RecordingExecutorService[] requestHandlerExecutorServices = {
+				firstRequestHandlerExecutorService,
+				secondRequestHandlerExecutorService
+		};
+		RecordingExecutorService[] streamingExecutorServices = {
+				firstStreamingExecutorService,
+				secondStreamingExecutorService
+		};
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0)
+				.host("127.0.0.1")
+				.requestHandlerExecutorServiceSupplier(() ->
+						requestHandlerExecutorServices[requestHandlerExecutorServiceIndex.getAndIncrement()])
+				.streamingExecutorServiceSupplier(() ->
+						streamingExecutorServices[streamingExecutorServiceIndex.getAndIncrement()])
+				.build();
+		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new LifecycleObserver() {})
+				.build();
+		Method cleanupMethod = DefaultHttpServer.class.getDeclaredMethod(
+				"cleanupAfterUnexpectedEventLoopTermination", EventLoop.class, Throwable.class);
+		cleanupMethod.setAccessible(true);
+		server.initialize(sokletConfig, (request, requestResultConsumer) -> {});
+
+		try {
+			server.start();
+			EventLoop staleEventLoop = server.getEventLoop().orElseThrow();
+			server.stop();
+
+			server.start();
+			EventLoop restartedEventLoop = server.getEventLoop().orElseThrow();
+
+			cleanupMethod.invoke(server, staleEventLoop, new AssertionError("stale event loop"));
+
+			Assertions.assertTrue(server.isStarted());
+			Assertions.assertSame(restartedEventLoop, server.getEventLoop().orElseThrow());
+			Assertions.assertFalse(secondRequestHandlerExecutorService.isShutdown());
+			Assertions.assertFalse(secondStreamingExecutorService.isShutdown());
+		} finally {
+			server.stop();
 		}
 	}
 

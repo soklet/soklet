@@ -111,7 +111,7 @@ public class EventLoop {
             stopConnections.set(true); // stop the world on critical error
             connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
             try {
-                connectionListener.didTerminateEventLoop(throwable);
+                connectionListener.didTerminateEventLoop(this, throwable);
             } catch (Throwable ignored) {
                 // No safe fallback sink is available from the accept-loop thread.
             }

@@ -2673,6 +2673,54 @@ public class SseTests {
 	}
 
 	@Test
+	public void staleSseAcceptLoopCleanupDoesNotClobberRestartedServer() throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		RecordingExecutorService requestHandlerExecutorService = new RecordingExecutorService();
+		RecordingExecutorService requestReaderExecutorService = new RecordingExecutorService();
+		RecordingExecutorService connectionExecutorService = new RecordingExecutorService();
+		TimeoutScheduler requestHandlerTimeoutScheduler =
+				new TimeoutScheduler(runnable -> new Thread(runnable, "sse-stale-cleanup-test-timeout"));
+		Field startedField = DefaultSseServer.class.getDeclaredField("started");
+		Field lifecycleGenerationField = DefaultSseServer.class.getDeclaredField("lifecycleGeneration");
+		Field requestHandlerExecutorServiceField = DefaultSseServer.class.getDeclaredField("requestHandlerExecutorService");
+		Field requestHandlerTimeoutSchedulerField = DefaultSseServer.class.getDeclaredField("requestHandlerTimeoutScheduler");
+		Field requestReaderExecutorServiceField = DefaultSseServer.class.getDeclaredField("requestReaderExecutorService");
+		Field connectionExecutorServiceField = DefaultSseServer.class.getDeclaredField("connectionExecutorService");
+		Method cleanupMethod = DefaultSseServer.class.getDeclaredMethod(
+				"cleanupAfterUnexpectedEventLoopTermination", Throwable.class, long.class);
+		startedField.setAccessible(true);
+		lifecycleGenerationField.setAccessible(true);
+		requestHandlerExecutorServiceField.setAccessible(true);
+		requestHandlerTimeoutSchedulerField.setAccessible(true);
+		requestReaderExecutorServiceField.setAccessible(true);
+		connectionExecutorServiceField.setAccessible(true);
+		cleanupMethod.setAccessible(true);
+
+		try {
+			startedField.set(server, true);
+			lifecycleGenerationField.set(server, 2L);
+			requestHandlerExecutorServiceField.set(server, requestHandlerExecutorService);
+			requestHandlerTimeoutSchedulerField.set(server, requestHandlerTimeoutScheduler);
+			requestReaderExecutorServiceField.set(server, requestReaderExecutorService);
+			connectionExecutorServiceField.set(server, connectionExecutorService);
+
+			cleanupMethod.invoke(server, new AssertionError("stale accept loop"), 1L);
+
+			Assertions.assertTrue(server.isStarted());
+			Assertions.assertFalse(requestHandlerExecutorService.isShutdown());
+			Assertions.assertFalse(requestHandlerTimeoutScheduler.isShutdown());
+			Assertions.assertFalse(requestReaderExecutorService.isShutdown());
+			Assertions.assertFalse(connectionExecutorService.isShutdown());
+		} finally {
+			server.stop();
+			requestHandlerTimeoutScheduler.shutdownNow();
+			requestHandlerExecutorService.shutdownNow();
+			requestReaderExecutorService.shutdownNow();
+			connectionExecutorService.shutdownNow();
+		}
+	}
+
+	@Test
 	public void writeMarshaledResponseToChannel_handlesPartialWrites() throws Exception {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
 		ResponseCookie cookie = ResponseCookie.with("session", "abc").path("/").build();
