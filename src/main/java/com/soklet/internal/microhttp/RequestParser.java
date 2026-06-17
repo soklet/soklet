@@ -221,7 +221,7 @@ class RequestParser {
             return false;
         }
         if (token.length() > maxRequestTargetLength) {
-            throw requestTooLarge(RequestTooLargeException.Reason.CONTENT);
+            throw requestTooLarge(RequestTooLargeException.Reason.URI_TOO_LONG);
         }
         uri = token;
         state = State.VERSION;

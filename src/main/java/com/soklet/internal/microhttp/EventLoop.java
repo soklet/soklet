@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class EventLoop {
     private static final Duration ACCEPT_FAILURE_BACKOFF = Duration.ofMillis(50);
+    private static final Duration ACCEPT_FAILURE_BACKOFF_MAX = Duration.ofSeconds(1);
 
     private final Options options;
     private final Logger logger;
@@ -35,6 +36,10 @@ public class EventLoop {
     private final ServerSocketChannel serverSocketChannel;
     private final List<ConnectionEventLoop> connectionEventLoops;
     private final Thread thread;
+
+    // Tracks a run of back-to-back accept() failures so the loop can escalate its backoff and
+    // coalesce its logging instead of storming. Touched on the accept-loop thread; AtomicLong for safe publication.
+    private final AtomicLong consecutiveAcceptFailures = new AtomicLong();
 
     @FunctionalInterface
     interface SocketAcceptor {
@@ -159,11 +164,12 @@ public class EventLoop {
                 throw e;
             }
 
-            connectionListener.didFailToAcceptConnection(null, e);
-            logAcceptLoopFailure(e);
-            backoffAfterAcceptFailure();
+            handleAcceptFailure(e);
             return false;
         }
+
+        // accept() returned without throwing, so the accept path is healthy again
+        noteAcceptRecovery();
 
         if (socketChannel == null) {
             return false;
@@ -282,10 +288,38 @@ public class EventLoop {
         return true;
     }
 
-    private void logAcceptLoopFailure(IOException e) {
-        if (logger.failureEnabled()) {
-            logger.logFailure(e, new LogEntry("event", "accept_loop_error"));
+    private void handleAcceptFailure(IOException e) {
+        long failures = consecutiveAcceptFailures.incrementAndGet();
+        connectionListener.didFailToAcceptConnection(null, e);
+
+        // Coalesce log volume during a sustained failure (e.g. file-descriptor exhaustion):
+        // log the first failure and then only at exponentially-spaced milestones.
+        if (logger.failureEnabled() && isPowerOfTwo(failures)) {
+            logger.logFailure(e,
+                    new LogEntry("event", "accept_loop_error"),
+                    new LogEntry("consecutive_failures", Long.toString(failures)));
         }
+
+        backoffAfterAcceptFailure(failures);
+    }
+
+    private void noteAcceptRecovery() {
+        if (consecutiveAcceptFailures.get() == 0) {
+            return;
+        }
+
+        long recoveredAfter = consecutiveAcceptFailures.getAndSet(0);
+
+        if (logger.enabled()) {
+            logger.log(
+                    new LogEntry("event", "accept_loop_recovered"),
+                    new LogEntry("failures", Long.toString(recoveredAfter)));
+        }
+    }
+
+    // Visible for testing.
+    static boolean isPowerOfTwo(long value) {
+        return value > 0 && (value & (value - 1)) == 0;
     }
 
     private void logConnectionSetupFailure(RuntimeException e) {
@@ -294,9 +328,27 @@ public class EventLoop {
         }
     }
 
+    // Escalating backoff: a persistent accept() failure (e.g. EMFILE) would otherwise spin the
+    // accept loop ~20x/sec. Double the delay per consecutive failure up to a 1s ceiling.
+    private void backoffAfterAcceptFailure(long consecutiveFailures) {
+        sleepBeforeRetry(acceptBackoffMillis(consecutiveFailures));
+    }
+
+    // Visible for testing.
+    static long acceptBackoffMillis(long consecutiveFailures) {
+        long base = ACCEPT_FAILURE_BACKOFF.toMillis();
+        long max = ACCEPT_FAILURE_BACKOFF_MAX.toMillis();
+        int shift = (int) Math.min(Math.max(0L, consecutiveFailures - 1L), 20L);
+        return Math.min(max, base << shift);
+    }
+
     private void backoffAfterAcceptFailure() {
+        sleepBeforeRetry(ACCEPT_FAILURE_BACKOFF.toMillis());
+    }
+
+    private void sleepBeforeRetry(long millis) {
         try {
-            Thread.sleep(ACCEPT_FAILURE_BACKOFF.toMillis());
+            Thread.sleep(millis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             stopAccepting.set(true);

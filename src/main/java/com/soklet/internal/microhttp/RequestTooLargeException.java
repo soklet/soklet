@@ -3,7 +3,8 @@ package com.soklet.internal.microhttp;
 class RequestTooLargeException extends RuntimeException {
     enum Reason {
         CONTENT,
-        HEADERS
+        HEADERS,
+        URI_TOO_LONG
     }
 
     private final Reason reason;

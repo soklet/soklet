@@ -75,6 +75,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -93,6 +94,8 @@ import static java.util.Objects.requireNonNull;
 final class DefaultSseServer implements SseServer {
 	@NonNull
 	private static final Duration ACCEPT_FAILURE_BACKOFF;
+	@NonNull
+	private static final Duration ACCEPT_FAILURE_BACKOFF_MAX;
 	@NonNull
 	private static final String DEFAULT_HOST;
 	@NonNull
@@ -140,6 +143,8 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE;
 	@NonNull
+	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_414_RESPONSE;
+	@NonNull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_431_RESPONSE;
 	@NonNull
 	private static final byte[] FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE;
@@ -157,6 +162,7 @@ final class DefaultSseServer implements SseServer {
 
 	static {
 		ACCEPT_FAILURE_BACKOFF = Duration.ofMillis(50);
+		ACCEPT_FAILURE_BACKOFF_MAX = Duration.ofSeconds(1);
 		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_REQUEST_HEADER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
@@ -180,6 +186,7 @@ final class DefaultSseServer implements SseServer {
 
 		// Cache off a special failsafe response
 		FAILSAFE_HANDSHAKE_HTTP_400_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_400);
+		FAILSAFE_HANDSHAKE_HTTP_414_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_414);
 		FAILSAFE_HANDSHAKE_HTTP_431_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_431);
 		FAILSAFE_HANDSHAKE_HTTP_408_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_408);
 		FAILSAFE_HANDSHAKE_HTTP_500_RESPONSE = createFailsafeHandshakeHttpResponse(StatusCode.HTTP_500);
@@ -312,6 +319,9 @@ final class DefaultSseServer implements SseServer {
 	@Nullable
 	private volatile ServerSocketChannel serverSocketChannel;
 	private long lifecycleGeneration;
+	// Tracks back-to-back accept() failures so the loop escalates backoff and coalesces logging
+	// instead of storming. Touched on the sse-event-loop thread; AtomicLong for safe publication on restart.
+	private final AtomicLong consecutiveAcceptFailures = new AtomicLong();
 	// Does not need to be concurrent because it's calculated just once at initialization time and is never modified after
 	@NonNull
 	private volatile Map<@NonNull ResourcePathDeclaration, @NonNull ResourceMethod> resourceMethodsByResourcePathDeclaration;
@@ -965,6 +975,7 @@ final class DefaultSseServer implements SseServer {
 			getIdleBroadcastersByResourcePath().clear();
 			getResourcePathDeclarationsByResourcePathCache().clear();
 			this.activeConnectionCount.set(0);
+			this.consecutiveAcceptFailures.set(0);
 			this.lifecycleGeneration++;
 			long lifecycleGeneration = this.lifecycleGeneration;
 			this.started = true; // set before thread starts to avoid early exit races
@@ -1113,6 +1124,9 @@ final class DefaultSseServer implements SseServer {
 				try {
 					SocketChannel clientSocketChannel = serverSocketChannel.accept();
 
+					// accept() returned without throwing, so the accept path is healthy again
+					noteAcceptRecovery();
+
 					if (clientSocketChannel == null)
 						continue;
 
@@ -1158,11 +1172,17 @@ final class DefaultSseServer implements SseServer {
 	private void handleAcceptLoopIOException(@NonNull IOException e) {
 		requireNonNull(e);
 
+		long failures = this.consecutiveAcceptFailures.incrementAndGet();
 		notifyDidFailToAcceptConnection(null, ConnectionRejectionReason.INTERNAL_ERROR, e);
-		safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
-				"SSE event loop encountered an IO error").throwable(e).build());
+
+		// Coalesce log volume during a sustained failure (e.g. file-descriptor exhaustion):
+		// log the first failure and then only at exponentially-spaced milestones.
+		if (isPowerOfTwo(failures))
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+					"SSE event loop encountered an IO error").throwable(e).build());
+
 		recordTransportFailure(MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, e, "accept_loop_error");
-		backoffAfterAcceptFailure();
+		backoffAfterAcceptFailure(failures);
 	}
 
 	private void handleAcceptLoopRuntimeException(@NonNull RuntimeException e) {
@@ -1177,13 +1197,34 @@ final class DefaultSseServer implements SseServer {
 		backoffAfterAcceptFailure();
 	}
 
+	// Escalating backoff: a persistent accept() failure (e.g. EMFILE) would otherwise spin the
+	// accept loop ~20x/sec. Double the delay per consecutive failure up to a 1s ceiling.
+	private void backoffAfterAcceptFailure(long consecutiveFailures) {
+		long base = ACCEPT_FAILURE_BACKOFF.toMillis();
+		long max = ACCEPT_FAILURE_BACKOFF_MAX.toMillis();
+		int shift = (int) Math.min(Math.max(0L, consecutiveFailures - 1L), 20L);
+		sleepBeforeAcceptRetry(Math.min(max, base << shift));
+	}
+
 	private void backoffAfterAcceptFailure() {
+		sleepBeforeAcceptRetry(ACCEPT_FAILURE_BACKOFF.toMillis());
+	}
+
+	private void sleepBeforeAcceptRetry(long millis) {
 		try {
-			Thread.sleep(ACCEPT_FAILURE_BACKOFF.toMillis());
+			Thread.sleep(millis);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			getStopPoisonPill().set(true);
 		}
+	}
+
+	private void noteAcceptRecovery() {
+		this.consecutiveAcceptFailures.set(0);
+	}
+
+	private static boolean isPowerOfTwo(long value) {
+		return value > 0 && (value & (value - 1)) == 0;
 	}
 
 	private void handleAcceptedSocketChannel(@NonNull SocketChannel clientSocketChannel,
@@ -1422,6 +1463,32 @@ final class DefaultSseServer implements SseServer {
 					try {
 						synchronized (channelLock) {
 							writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_431_RESPONSE);
+						}
+					} catch (Throwable t) {
+						// best effort
+					}
+				}
+
+				closeSocketChannel(clientSocketChannel, channelLock);
+				return;
+			} catch (RequestTargetTooLongIOException e) {
+				if (handshakeResponseWritten.get()) {
+					closeSocketChannel(clientSocketChannel, channelLock);
+					return;
+				}
+
+				notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_REJECTED, e);
+
+				if (acceptanceFinalized.compareAndSet(false, true))
+					notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.UNPARSEABLE_REQUEST, e);
+
+				recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE, e, "exceed_request_target_max_close");
+
+				if (handshakeResponseWritten.compareAndSet(false, true)) {
+					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
+					try {
+						synchronized (channelLock) {
+							writeFully(clientSocketChannel, FAILSAFE_HANDSHAKE_HTTP_414_RESPONSE);
 						}
 					} catch (Throwable t) {
 						// best effort
@@ -2898,7 +2965,8 @@ final class DefaultSseServer implements SseServer {
 
 	@NonNull
 	protected Request parseRequest(@NonNull String rawRequest,
-																 @Nullable InetSocketAddress remoteAddress) throws RequestHeadersTooLargeIOException {
+																 @Nullable InetSocketAddress remoteAddress)
+			throws RequestHeadersTooLargeIOException, RequestTargetTooLongIOException {
 		requireNonNull(rawRequest);
 
 		rawRequest = trimAggressivelyToNull(rawRequest);
@@ -2965,7 +3033,7 @@ final class DefaultSseServer implements SseServer {
 				requireAsciiToken(rawVersion, "HTTP version");
 
 				if (rawUrl.length() > getMaximumRequestTargetLengthInBytes())
-					throw new IllegalRequestException(format("Request target exceeds maximum length of %d bytes", getMaximumRequestTargetLengthInBytes()));
+					throw new RequestTargetTooLongIOException(format("Request target exceeds maximum length of %d bytes", getMaximumRequestTargetLengthInBytes()));
 
 				if (!"HTTP/1.1".equalsIgnoreCase(rawVersion))
 					throw new IllegalRequestException(format("Unsupported HTTP version '%s' for Server-Sent Event requests", rawVersion));
@@ -3518,6 +3586,15 @@ final class DefaultSseServer implements SseServer {
 		private static final long serialVersionUID = 1L;
 
 		public RequestHeadersTooLargeIOException(@Nullable String message) {
+			super(message);
+		}
+	}
+
+	@NotThreadSafe
+	protected static class RequestTargetTooLongIOException extends IOException {
+		private static final long serialVersionUID = 1L;
+
+		public RequestTargetTooLongIOException(@Nullable String message) {
 			super(message);
 		}
 	}

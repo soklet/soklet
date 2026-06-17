@@ -2367,12 +2367,41 @@ public class SseTests {
 	}
 
 	@Test
+	@Timeout(value = 10, unit = SECONDS)
+	public void startedDefaultSseServerRejectsTooLongRequestTargetWith414() throws Exception {
+		int ssePort = findFreePort();
+		SokletConfig config = SokletConfig.withSseServer(SseServer.withPort(ssePort)
+						.host("127.0.0.1")
+						.maximumRequestTargetLengthInBytes(4)
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			soklet.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+				socket.setSoTimeout(3000);
+				socket.getOutputStream().write(("GET /too-long HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1:" + ssePort + "\r\n"
+						+ "Accept: text/event-stream\r\n"
+						+ "\r\n").getBytes(StandardCharsets.UTF_8));
+
+				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(response);
+				Assertions.assertTrue(response.startsWith("HTTP/1.1 414"));
+			}
+		}
+	}
+
+	@Test
 	public void sseHandshakeParserRejectsTooLongRequestTarget() {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
 				.maximumRequestTargetLengthInBytes(4)
 				.build();
 
-		Assertions.assertThrows(IllegalRequestException.class, () -> server.parseRequest("""
+		Assertions.assertThrows(DefaultSseServer.RequestTargetTooLongIOException.class, () -> server.parseRequest("""
 				GET /too-long HTTP/1.1\r
 				Host: localhost\r
 				\r

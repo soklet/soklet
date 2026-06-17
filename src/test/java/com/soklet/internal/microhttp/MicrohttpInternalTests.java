@@ -250,6 +250,121 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void acceptBackoffEscalatesAndLoggingCoalesces() throws Exception {
+		// Escalation schedule: doubles per consecutive failure, capped at 1s.
+		Assertions.assertEquals(50L, EventLoop.acceptBackoffMillis(1));
+		Assertions.assertEquals(100L, EventLoop.acceptBackoffMillis(2));
+		Assertions.assertEquals(200L, EventLoop.acceptBackoffMillis(3));
+		Assertions.assertEquals(400L, EventLoop.acceptBackoffMillis(4));
+		Assertions.assertEquals(800L, EventLoop.acceptBackoffMillis(5));
+		Assertions.assertEquals(1000L, EventLoop.acceptBackoffMillis(6));
+		Assertions.assertEquals(1000L, EventLoop.acceptBackoffMillis(7));
+		Assertions.assertEquals(1000L, EventLoop.acceptBackoffMillis(1_000));
+
+		// Logging coalesces to power-of-two milestones.
+		Assertions.assertTrue(EventLoop.isPowerOfTwo(1));
+		Assertions.assertTrue(EventLoop.isPowerOfTwo(2));
+		Assertions.assertTrue(EventLoop.isPowerOfTwo(4));
+		Assertions.assertTrue(EventLoop.isPowerOfTwo(8));
+		Assertions.assertFalse(EventLoop.isPowerOfTwo(3));
+		Assertions.assertFalse(EventLoop.isPowerOfTwo(5));
+		Assertions.assertFalse(EventLoop.isPowerOfTwo(6));
+		Assertions.assertFalse(EventLoop.isPowerOfTwo(7));
+		Assertions.assertFalse(EventLoop.isPowerOfTwo(0));
+
+		// Behavioral: repeated accept() failures keep the loop alive, fire the per-failure callback
+		// every time, but log only at milestones, and reset after a recovery.
+		List<String> failureEvents = new ArrayList<>();
+		int[] acceptFailures = {0};
+		IOException acceptFailure = new IOException("transient accept failure");
+		Logger logger = new Logger() {
+			@Override
+			public boolean enabled() {
+				return false;
+			}
+
+			@Override
+			public boolean failureEnabled() {
+				return true;
+			}
+
+			@Override
+			public void log(LogEntry... entries) {
+				// Trace logging is disabled for this test.
+			}
+
+			@Override
+			public void log(Exception e, LogEntry... entries) {
+				// Trace logging is disabled for this test.
+			}
+
+			@Override
+			public void logFailure(Exception e, LogEntry... entries) {
+				for (LogEntry entry : entries) {
+					if ("event".equals(entry.key()))
+						failureEvents.add(entry.value());
+				}
+			}
+		};
+		ConnectionListener connectionListener = new ConnectionListener() {
+			@Override
+			public void willAcceptConnection(InetSocketAddress remoteAddress) {
+				// No-op
+			}
+
+			@Override
+			public void didAcceptConnection(InetSocketAddress remoteAddress) {
+				// No-op
+			}
+
+			@Override
+			public void didFailToAcceptConnection(InetSocketAddress remoteAddress) {
+				// No-op
+			}
+
+			@Override
+			public void didFailToAcceptConnection(InetSocketAddress remoteAddress,
+																						Throwable throwable) {
+				acceptFailures[0]++;
+			}
+		};
+		EventLoop eventLoop = new EventLoop(Options.builder()
+				.withHost("127.0.0.1")
+				.withPort(0)
+				.withConcurrency(1)
+				.withResolution(Duration.ofMillis(10))
+				.build(), logger, (request, callback) -> {}, connectionListener);
+
+		try {
+			// Three consecutive accept() failures.
+			for (int i = 0; i < 3; i++)
+				Assertions.assertFalse(eventLoop.acceptReadyConnection(() -> {
+					throw acceptFailure;
+				}));
+
+			Assertions.assertEquals(3, acceptFailures[0]);
+			// Logged only at counts 1 and 2 (3 is not a power of two).
+			Assertions.assertEquals(List.of("accept_loop_error", "accept_loop_error"), failureEvents);
+
+			// A non-throwing accept() (no pending connection) marks recovery and resets the run.
+			Assertions.assertFalse(eventLoop.acceptReadyConnection(() -> null));
+
+			// The next failure is treated as the first again, so it logs.
+			Assertions.assertFalse(eventLoop.acceptReadyConnection(() -> {
+				throw acceptFailure;
+			}));
+
+			Assertions.assertEquals(4, acceptFailures[0]);
+			Assertions.assertEquals(3, failureEvents.size());
+			Assertions.assertFalse(eventLoop.isStopped());
+		} finally {
+			eventLoop.start();
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
 	public void parserRejectsObsFoldHeaderLines() {
 		ByteTokenizer tokenizer = new ByteTokenizer();
 		byte[] request = ascii("GET / HTTP/1.1\r\nHost: localhost\r\n X-Folded: nope\r\n\r\n");
@@ -305,7 +420,7 @@ public class MicrohttpInternalTests {
 		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024, 100, 4);
 
 		RequestTooLargeException exception = Assertions.assertThrows(RequestTooLargeException.class, parser::parse);
-		Assertions.assertEquals(RequestTooLargeException.Reason.CONTENT, exception.reason());
+		Assertions.assertEquals(RequestTooLargeException.Reason.URI_TOO_LONG, exception.reason());
 	}
 
 	@Test

@@ -122,6 +122,9 @@ class ConnectionEventLoop {
         static final byte[] REQUEST_HEADER_FIELDS_TOO_LARGE_RESPONSE =
                 "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
                         .getBytes(StandardCharsets.US_ASCII);
+        static final byte[] REQUEST_URI_TOO_LONG_RESPONSE =
+                "HTTP/1.1 414 URI Too Long\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+                        .getBytes(StandardCharsets.US_ASCII);
         static final byte[] CONTINUE_RESPONSE =
                 "HTTP/1.1 100 Continue\r\n\r\n"
                         .getBytes(StandardCharsets.US_ASCII);
@@ -279,6 +282,11 @@ class ConnectionEventLoop {
         private void respondToRequestTooLarge(RequestTooLargeException.Reason reason) {
             if (reason == RequestTooLargeException.Reason.HEADERS) {
                 respondWithRawError(REQUEST_HEADER_FIELDS_TOO_LARGE_RESPONSE);
+                return;
+            }
+
+            if (reason == RequestTooLargeException.Reason.URI_TOO_LONG) {
+                respondWithRawError(REQUEST_URI_TOO_LONG_RESPONSE);
                 return;
             }
 

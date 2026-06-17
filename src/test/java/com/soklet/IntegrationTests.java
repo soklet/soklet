@@ -1494,6 +1494,37 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void requestTargetOverLimit_returns414() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
+						.maximumRequestTargetLengthInBytes(16)
+						.requestHeaderTimeout(Duration.ofSeconds(5))
+						.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(4000);
+				out.write((
+						"GET /this-request-target-is-far-too-long HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 414"), response.statusLine());
+			}
+		}
+	}
+
+	@Test
 	public void requestBodyTimeout_closesSlowBodyConnection() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)

@@ -61,6 +61,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -78,6 +79,10 @@ import static java.util.Objects.requireNonNull;
 final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePublisher {
 	@NonNull
 	private static final String DEFAULT_HOST;
+	@NonNull
+	private static final Duration ACCEPT_FAILURE_BACKOFF = Duration.ofMillis(50);
+	@NonNull
+	private static final Duration ACCEPT_FAILURE_BACKOFF_MAX = Duration.ofSeconds(1);
 	@NonNull
 	private static final Duration DEFAULT_REQUEST_HEADER_TIMEOUT;
 	@NonNull
@@ -210,6 +215,9 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@NonNull
 	private volatile Boolean stopping;
 	private long lifecycleGeneration;
+	// Tracks back-to-back accept-loop failures so the loop escalates backoff and coalesces logging
+	// instead of storming. Touched on the mcp-accept-loop thread; AtomicLong for safe publication on restart.
+	private final AtomicLong consecutiveAcceptFailures = new AtomicLong();
 
 	DefaultMcpServer(McpServer.Builder builder) {
 		requireNonNull(builder);
@@ -341,6 +349,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 			this.stopping = false;
 			this.liveConnectionsBySessionId.clear();
 			this.activeConnectionCount.set(0);
+			this.consecutiveAcceptFailures.set(0);
 			this.lifecycleGeneration++;
 			long lifecycleGeneration = this.lifecycleGeneration;
 			this.started = true;
@@ -549,36 +558,30 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				socket.setSoTimeout(Math.toIntExact(Math.max(1L, this.requestHeaderTimeout.toMillis())));
 				notifyDidAcceptConnection(remoteAddress);
 				submitRequest(socket, remoteAddress);
+
+				// A full iteration succeeded, so the accept path is healthy again
+				noteAcceptRecovery();
 			} catch (SocketException e) {
 				if (this.stopPoisonPill.get())
 					break;
 
-				notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
-				closeQuietly(socket);
-				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an IO error")
-						.throwable(e)
-						.build());
-				recordTransportFailure(MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, e, "accept_loop_error");
+				handleAcceptLoopFailure(e, socket, remoteAddress,
+						"MCP accept loop encountered an IO error",
+						MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, "accept_loop_error");
 			} catch (IOException e) {
 				if (this.stopPoisonPill.get())
 					break;
 
-				notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
-				closeQuietly(socket);
-				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an IO error")
-						.throwable(e)
-						.build());
-				recordTransportFailure(MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, e, "accept_loop_error");
+				handleAcceptLoopFailure(e, socket, remoteAddress,
+						"MCP accept loop encountered an IO error",
+						MetricsCollector.TransportFailureReason.ACCEPT_LOOP_ERROR, "accept_loop_error");
 			} catch (RuntimeException e) {
 				if (this.stopPoisonPill.get())
 					break;
 
-				notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
-				closeQuietly(socket);
-				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "MCP accept loop encountered an unexpected error")
-						.throwable(e)
-						.build());
-				recordTransportFailure(MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, e, "connection_setup_error");
+				handleAcceptLoopFailure(e, socket, remoteAddress,
+						"MCP accept loop encountered an unexpected error",
+						MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, "connection_setup_error");
 			} catch (Throwable t) {
 				if (this.stopPoisonPill.get() || this.stopping)
 					break;
@@ -588,6 +591,50 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				break;
 			}
 		}
+	}
+
+	private void handleAcceptLoopFailure(@NonNull Throwable throwable,
+																			 @Nullable Socket socket,
+																			 @Nullable InetSocketAddress remoteAddress,
+																			 @NonNull String logMessage,
+																			 MetricsCollector.@NonNull TransportFailureReason reason,
+																			 @NonNull String detail) {
+		long failures = this.consecutiveAcceptFailures.incrementAndGet();
+		notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
+		closeQuietly(socket);
+
+		// Coalesce log volume during a sustained failure (e.g. file-descriptor exhaustion):
+		// log the first failure and then only at exponentially-spaced milestones.
+		if (isPowerOfTwo(failures))
+			safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, logMessage)
+					.throwable(throwable)
+					.build());
+
+		recordTransportFailure(reason, throwable, detail);
+		backoffAfterAcceptFailure(failures);
+	}
+
+	// Escalating backoff: a persistent accept-loop failure (e.g. EMFILE) would otherwise spin the
+	// accept loop with no delay at all. Double the delay per consecutive failure up to a 1s ceiling.
+	private void backoffAfterAcceptFailure(long consecutiveFailures) {
+		long base = ACCEPT_FAILURE_BACKOFF.toMillis();
+		long max = ACCEPT_FAILURE_BACKOFF_MAX.toMillis();
+		int shift = (int) Math.min(Math.max(0L, consecutiveFailures - 1L), 20L);
+
+		try {
+			Thread.sleep(Math.min(max, base << shift));
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			this.stopPoisonPill.set(true);
+		}
+	}
+
+	private void noteAcceptRecovery() {
+		this.consecutiveAcceptFailures.set(0);
+	}
+
+	private static boolean isPowerOfTwo(long value) {
+		return value > 0 && (value & (value - 1)) == 0;
 	}
 
 	private void submitRequest(@NonNull Socket socket,
@@ -680,9 +727,16 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				request.getHeader("MCP-Session-Id").ifPresent(this::terminateStreamsForSession);
 		} catch (RequestTooLargeException e) {
 			notifyDidFailToReadRequest(remoteAddress, null, RequestReadFailureReason.REQUEST_READ_REJECTED, e);
-			recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE, e, "exceed_request_max_close");
+			String event = switch (e.reason()) {
+				case HEADERS -> "exceed_request_headers_max_close";
+				case URI_TOO_LONG -> "exceed_request_target_max_close";
+				case CONTENT -> "exceed_request_max_close";
+			};
+			recordTransportFailure(MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE, e, event);
 			if (e.reason() == RequestTooLargeException.Reason.HEADERS)
 				writePlainTextResponse(socket, 431, "Request header fields too large");
+			else if (e.reason() == RequestTooLargeException.Reason.URI_TOO_LONG)
+				writePlainTextResponse(socket, 414, "URI too long");
 			else
 				writePlainTextResponse(socket, 413, "Request entity too large");
 		} catch (SocketTimeoutException e) {
@@ -1206,7 +1260,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 				requireAsciiToken(components[2], "HTTP version");
 
 				if (components[1].length() > this.maximumRequestTargetLengthInBytes)
-					throw new IllegalRequestException(format("Request target exceeds maximum length of %d bytes", this.maximumRequestTargetLengthInBytes));
+					throw new RequestTooLargeException(RequestTooLargeException.Reason.URI_TOO_LONG);
 
 				if (!"HTTP/1.1".equalsIgnoreCase(components[2]))
 					throw new IllegalRequestException(format("Unsupported HTTP version '%s' for MCP requests", components[2]));
@@ -2523,7 +2577,8 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	private static final class RequestTooLargeException extends IOException {
 		private enum Reason {
 			CONTENT,
-			HEADERS
+			HEADERS,
+			URI_TOO_LONG
 		}
 
 		@NonNull
