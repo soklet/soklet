@@ -481,6 +481,11 @@ public final class StaticFiles {
 	private record ResolvedFile(@NonNull Path path,
 															@NonNull BasicFileAttributes attributes) {}
 
+	/**
+	 * Builder for {@link StaticFiles} instances.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
 	@NotThreadSafe
 	public static final class Builder {
 		@NonNull
@@ -509,6 +514,16 @@ public final class StaticFiles {
 			this.root = root;
 		}
 
+		/**
+		 * Sets the index file names to try when a request path resolves to a directory.
+		 * <p>
+		 * Names are tried in list order. Each name must be a single file name, not a path; blank
+		 * names, {@code .}, {@code ..}, path separators, control characters, Windows drive paths, and
+		 * UNC-style paths are rejected when the builder is built.
+		 *
+		 * @param indexFileNames the index file names, or {@code null} for no index files
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder indexFileNames(@Nullable List<@NonNull String> indexFileNames) {
 			this.indexFileNames = indexFileNames;
@@ -533,6 +548,14 @@ public final class StaticFiles {
 			return this;
 		}
 
+		/**
+		 * Sets the resolver used to produce {@code ETag} values.
+		 * <p>
+		 * Passing {@code null} restores the default weak metadata-based resolver.
+		 *
+		 * @param entityTagResolver the resolver to use, or {@code null} to restore the default resolver
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder entityTagResolver(@Nullable EntityTagResolver entityTagResolver) {
 			this.entityTagResolver = entityTagResolver;
@@ -556,42 +579,98 @@ public final class StaticFiles {
 			return this;
 		}
 
+		/**
+		 * Sets the resolver used to produce {@code Last-Modified} values.
+		 * <p>
+		 * Passing {@code null} restores the default resolver, which uses the file attributes read for
+		 * the response.
+		 *
+		 * @param lastModifiedResolver the resolver to use, or {@code null} to restore the default resolver
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder lastModifiedResolver(@Nullable LastModifiedResolver lastModifiedResolver) {
 			this.lastModifiedResolver = lastModifiedResolver;
 			return this;
 		}
 
+		/**
+		 * Sets the resolver used to produce {@code Cache-Control} values.
+		 * <p>
+		 * Passing {@code null} restores the disabled resolver, which omits {@code Cache-Control}.
+		 *
+		 * @param cacheControlResolver the resolver to use, or {@code null} to omit {@code Cache-Control}
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder cacheControlResolver(@Nullable CacheControlResolver cacheControlResolver) {
 			this.cacheControlResolver = cacheControlResolver;
 			return this;
 		}
 
+		/**
+		 * Sets the resolver used to produce extra response headers.
+		 * <p>
+		 * Passing {@code null} restores the disabled resolver, which emits no extra headers.
+		 *
+		 * @param headersResolver the resolver to use, or {@code null} to omit extra headers
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder headersResolver(@Nullable HeadersResolver headersResolver) {
 			this.headersResolver = headersResolver;
 			return this;
 		}
 
+		/**
+		 * Sets the resolver used to decide whether byte range requests are honored.
+		 * <p>
+		 * Passing {@code null} restores the default resolver, which enables range requests.
+		 *
+		 * @param rangeRequestsResolver the resolver to use, or {@code null} to enable range requests
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder rangeRequestsResolver(@Nullable RangeRequestsResolver rangeRequestsResolver) {
 			this.rangeRequestsResolver = rangeRequestsResolver;
 			return this;
 		}
 
+		/**
+		 * Sets whether symbolic links are followed while resolving static-file paths.
+		 * <p>
+		 * Passing {@code null} restores the default of {@code false}. When disabled, any symbolic-link
+		 * component under the static root causes the candidate path to be hidden.
+		 *
+		 * @param followSymlinks {@code true} to follow symlinks, {@code false} to reject them, or
+		 * {@code null} for the default
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder followSymlinks(@Nullable Boolean followSymlinks) {
 			this.followSymlinks = followSymlinks;
 			return this;
 		}
 
+		/**
+		 * Builds the static-file helper.
+		 * <p>
+		 * The configured root is resolved to a real path and validated as a directory when this method
+		 * is called.
+		 *
+		 * @return the configured static-file helper
+		 */
 		@NonNull
 		public StaticFiles build() {
 			return new StaticFiles(this);
 		}
 	}
 
+	/**
+	 * Resolves {@code ETag} values for static-file responses.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
 	@FunctionalInterface
 	public interface EntityTagResolver {
 		/**
@@ -610,6 +689,11 @@ public final class StaticFiles {
 			return DefaultEntityTagResolver.defaultInstance();
 		}
 
+		/**
+		 * Returns a resolver that omits {@code ETag}.
+		 *
+		 * @return the disabled entity-tag resolver
+		 */
 		@NonNull
 		static EntityTagResolver disabledInstance() {
 			return DisabledEntityTagResolver.defaultInstance();
@@ -667,8 +751,18 @@ public final class StaticFiles {
 		HIDE
 	}
 
+	/**
+	 * Resolves whether a resolved static file should be served, denied, or hidden.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
 	@FunctionalInterface
 	public interface AccessResolver {
+		/**
+		 * Returns a resolver that allows all resolved static files.
+		 *
+		 * @return the allow-all access resolver
+		 */
 		@NonNull
 		static AccessResolver allowAllInstance() {
 			return AllowAllAccessResolver.defaultInstance();
@@ -691,13 +785,28 @@ public final class StaticFiles {
 										 @NonNull BasicFileAttributes attributes);
 	}
 
+	/**
+	 * Resolves {@code Last-Modified} values for static-file responses.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
 	@FunctionalInterface
 	public interface LastModifiedResolver {
+		/**
+		 * Returns a resolver that emits the file's last-modified timestamp from its attributes.
+		 *
+		 * @return the attribute-based last-modified resolver
+		 */
 		@NonNull
 		static LastModifiedResolver fromAttributes() {
 			return DefaultLastModifiedResolver.defaultInstance();
 		}
 
+		/**
+		 * Returns a resolver that omits {@code Last-Modified}.
+		 *
+		 * @return the disabled last-modified resolver
+		 */
 		@NonNull
 		static LastModifiedResolver disabledInstance() {
 			return DisabledLastModifiedResolver.defaultInstance();
@@ -718,8 +827,19 @@ public final class StaticFiles {
 																			@NonNull BasicFileAttributes attributes);
 	}
 
+	/**
+	 * Resolves {@code Cache-Control} values for static-file responses.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
 	@FunctionalInterface
 	public interface CacheControlResolver {
+		/**
+		 * Returns a resolver that always emits the supplied {@code Cache-Control} value.
+		 *
+		 * @param cacheControl the cache-control value to emit
+		 * @return the constant cache-control resolver
+		 */
 		@NonNull
 		static CacheControlResolver fromValue(@NonNull String cacheControl) {
 			requireNonNull(cacheControl);
@@ -731,6 +851,11 @@ public final class StaticFiles {
 			return (path, attributes) -> Optional.of(normalizedCacheControl);
 		}
 
+		/**
+		 * Returns a resolver that omits {@code Cache-Control}.
+		 *
+		 * @return the disabled cache-control resolver
+		 */
 		@NonNull
 		static CacheControlResolver disabledInstance() {
 			return DisabledCacheControlResolver.defaultInstance();
@@ -751,8 +876,21 @@ public final class StaticFiles {
 																		 @NonNull BasicFileAttributes attributes);
 	}
 
+	/**
+	 * Resolves extra response headers for static-file responses.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
 	@FunctionalInterface
 	public interface HeadersResolver {
+		/**
+		 * Returns a resolver that always emits the supplied headers.
+		 * <p>
+		 * The header map and nested value sets are defensively copied.
+		 *
+		 * @param headers the headers to emit
+		 * @return the constant headers resolver
+		 */
 		@NonNull
 		static HeadersResolver fromHeaders(@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers) {
 			requireNonNull(headers);
@@ -760,6 +898,11 @@ public final class StaticFiles {
 			return (path, attributes) -> copiedHeaders;
 		}
 
+		/**
+		 * Returns a resolver that emits no extra headers.
+		 *
+		 * @return the disabled headers resolver
+		 */
 		@NonNull
 		static HeadersResolver disabledInstance() {
 			return DisabledHeadersResolver.defaultInstance();
@@ -780,13 +923,28 @@ public final class StaticFiles {
 																																	 @NonNull BasicFileAttributes attributes);
 	}
 
+	/**
+	 * Resolves whether byte range requests are honored for static-file responses.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
 	@FunctionalInterface
 	public interface RangeRequestsResolver {
+		/**
+		 * Returns a resolver that enables byte range requests.
+		 *
+		 * @return the range-request-enabled resolver
+		 */
 		@NonNull
 		static RangeRequestsResolver enabledInstance() {
 			return EnabledRangeRequestsResolver.defaultInstance();
 		}
 
+		/**
+		 * Returns a resolver that disables byte range requests.
+		 *
+		 * @return the range-request-disabled resolver
+		 */
 		@NonNull
 		static RangeRequestsResolver disabledInstance() {
 			return DisabledRangeRequestsResolver.defaultInstance();
