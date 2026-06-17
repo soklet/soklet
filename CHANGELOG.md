@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.4.0-SNAPSHOT (Unreleased)
+## 3.4.0
 
 ### Breaking Changes
 
