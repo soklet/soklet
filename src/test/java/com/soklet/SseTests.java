@@ -1432,29 +1432,27 @@ public class SseTests {
 				socket3.setSoTimeout(8000);
 				writeHttpGet(socket3, "/sse/queue-limit", ssePort);
 
+				String h3 = readHandshake(socket3);
+				Assertions.assertNotNull(h3, "No handshake response on socket3");
+				Assertions.assertTrue(h3.startsWith("HTTP/1.1 503"), "Expected third handshake to be rejected due to queue capacity");
+
 				BlockingRejectHandshakeResource.release();
 
-				ExecutorService readerPool = Executors.newFixedThreadPool(3);
+				ExecutorService readerPool = Executors.newFixedThreadPool(2);
 				try {
 					final Socket socket1Final = socket1;
 					final Socket socket2Final = socket2;
-					final Socket socket3Final = socket3;
 					Future<String> f1 = readerPool.submit(() -> readHandshake(socket1Final));
 					Future<String> f2 = readerPool.submit(() -> readHandshake(socket2Final));
-					Future<String> f3 = readerPool.submit(() -> readHandshake(socket3Final));
 
 					String h1 = f1.get(8, SECONDS);
 					String h2 = f2.get(8, SECONDS);
-					String h3 = f3.get(8, SECONDS);
 
 					Assertions.assertNotNull(h1, "No handshake response on socket1");
 					Assertions.assertNotNull(h2, "No handshake response on socket2");
-					Assertions.assertNotNull(h3, "No handshake response on socket3");
 
-					long rejectedCount = Stream.of(h1, h2, h3).filter(header -> header.startsWith("HTTP/1.1 403")).count();
-					long busyCount = Stream.of(h1, h2, h3).filter(header -> header.startsWith("HTTP/1.1 503")).count();
+					long rejectedCount = Stream.of(h1, h2).filter(header -> header.startsWith("HTTP/1.1 403")).count();
 					Assertions.assertEquals(2, rejectedCount, "Expected two rejected handshakes");
-					Assertions.assertEquals(1, busyCount, "Expected one rejected handshake due to queue capacity");
 				} finally {
 					readerPool.shutdownNow();
 				}
