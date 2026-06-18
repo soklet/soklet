@@ -17,10 +17,12 @@
 package com.soklet.internal.microhttp;
 
 import com.code_intelligence.jazzer.junit.FuzzTest;
+import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Fuzz targets for the incremental HTTP/1.1 request parser.
@@ -49,10 +51,21 @@ public class RequestParserFuzzTest {
 
 			try {
 				feedIncrementally(tokenizer, parser, requestBytes, splitStrategy);
-			} catch (MalformedRequestException | RequestTooLargeException expected) {
-				// Invalid or oversized requests are expected. Other RuntimeExceptions and Errors are fuzz findings.
+			} catch (ExpectationFailedException | MalformedRequestException | RequestTooLargeException expected) {
+				// Invalid, oversized, and unsupported-expectation requests are expected.
+				// Other RuntimeExceptions and Errors are fuzz findings.
 			}
 		}
+	}
+
+	@Test
+	public void parseIncrementalRequestOnlyRejectsWithDeclaredExceptionsAllowsUnsupportedExpectation() {
+		byte[] requestBytes = ("PT /ck HTTP/1.1\r\n"
+				+ "Host: xa:0\r\n"
+				+ "Expect:\r\n"
+				+ "\r\n"
+				+ "1G").getBytes(StandardCharsets.US_ASCII);
+		parseIncrementalRequestOnlyRejectsWithDeclaredExceptions(requestBytes);
 	}
 
 	private static void feedIncrementally(ByteTokenizer tokenizer,
