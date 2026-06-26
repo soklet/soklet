@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.4.1-SNAPSHOT
+
+### Fixes
+
+- Hardened multipart header parsing so malformed RFC 2047 Base64 encoded-word values are treated as literal text instead of escaping as unexpected runtime exceptions.
+
 ## 3.4.0
 
 ### Breaking Changes

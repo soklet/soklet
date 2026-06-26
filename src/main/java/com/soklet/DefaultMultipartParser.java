@@ -2350,6 +2350,10 @@ final class DefaultMultipartParser implements MultipartParser {
 				// get the decoded byte data and convert into a string.
 				final var decodedData = out.toByteArray();
 				return new String(decodedData, javaCharset(charset));
+			} catch (final IllegalArgumentException e) {
+				final var parseException = new ParseException("Invalid RFC 2047 Base64 encoded-word: " + word, encodingPos + 1);
+				parseException.initCause(e);
+				throw parseException;
 			} catch (final IOException e) {
 				throw new UnsupportedEncodingException("Invalid RFC 2047 encoding");
 			}

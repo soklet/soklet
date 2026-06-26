@@ -49,6 +49,17 @@ public class MultipartEdgeCaseTests {
 		return multipartBody("----AaB03x");
 	}
 
+	private static byte[] multipartBodyWithContentDisposition(String boundary,
+																														String contentDisposition) {
+		String body = ""
+				+ "--" + boundary + "\r\n"
+				+ "Content-Disposition: " + contentDisposition + "\r\n"
+				+ "\r\n"
+				+ "1\r\n"
+				+ "--" + boundary + "--\r\n";
+		return body.getBytes(StandardCharsets.US_ASCII);
+	}
+
 	@Test
 	public void multipartFieldWithNameAllowsAbsentData() {
 		MultipartField field = MultipartField.withName("field").build();
@@ -226,6 +237,22 @@ public class MultipartEdgeCaseTests {
 		IllegalRequestBodyException exception = Assertions.assertThrows(IllegalRequestBodyException.class,
 				() -> parser.extractMultipartFields(request));
 		Assertions.assertTrue(exception.getMessage().contains("Maximum allowed is 1000"));
+	}
+
+	@Test
+	public void malformed_mime_encoded_multipart_parameter_is_kept_as_literal_text() {
+		String boundary = "----AaB03x-malformed-mime";
+		String malformedName = "=?utf-8?B?A?=";
+		DefaultMultipartParser parser = (DefaultMultipartParser) DefaultMultipartParser.defaultInstance();
+
+		Request request = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
+				.body(multipartBodyWithContentDisposition(boundary, "form-data; name=\"" + malformedName + "\""))
+				.build();
+
+		Map<String, Set<MultipartField>> fields = parser.extractMultipartFields(request);
+		Assertions.assertEquals(Set.of(malformedName), fields.keySet());
+		Assertions.assertEquals("1", fields.get(malformedName).iterator().next().getDataAsString().orElseThrow());
 	}
 
 	public static class UploadResource {
