@@ -67,6 +67,12 @@ public interface RequestInterceptor {
 	 * <p>
 	 * You must call {@code responseWriter.accept(...)} exactly once before returning to send a response.
 	 * If you do not, Soklet logs the error and returns a 500 response.
+	 * <p>
+	 * This contract is synchronous: perform all request processing — including the
+	 * {@code responseWriter.accept(...)} call — on the thread that invoked this method, before returning.
+	 * Do not offload the {@code responseGenerator} or {@code responseWriter} invocations to another thread:
+	 * Soklet's request lifecycle bookkeeping (for example, metrics correlation and timeout handling)
+	 * is thread-affine to the request-handler thread.
 	 *
 	 * @param serverType                the server type that received the request
 	 * @param request                   the request that was received

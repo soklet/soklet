@@ -9,10 +9,12 @@ on:
     - cron: '23 8 * * *'
   workflow_dispatch:
 
-# Cancel superseded runs on the same ref to save time and reduce noise.
+# Cancel superseded push/PR runs on the same ref to save time and reduce noise — but never
+# cancel scheduled runs: a push landing mid-soak would otherwise kill the multi-hour nightly
+# soak/fuzz jobs before their final resource-delta assertions execute.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'schedule' && 'nightly' || 'ci' }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   test:

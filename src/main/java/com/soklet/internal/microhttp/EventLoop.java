@@ -1,5 +1,7 @@
 package com.soklet.internal.microhttp;
 
+import com.soklet.internal.util.AcceptLoopBackoff;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -22,9 +24,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * request parsing, and request dispatching.
  */
 public class EventLoop {
-    private static final Duration ACCEPT_FAILURE_BACKOFF = Duration.ofMillis(50);
-    private static final Duration ACCEPT_FAILURE_BACKOFF_MAX = Duration.ofSeconds(1);
-
     private final Options options;
     private final Logger logger;
     private final ConnectionListener connectionListener;
@@ -168,10 +167,9 @@ public class EventLoop {
             return false;
         }
 
-        // accept() returned without throwing, so the accept path is healthy again
-        noteAcceptRecovery();
-
         if (socketChannel == null) {
+            // accept() returned without throwing (no pending connection), so the accept path is healthy again
+            noteAcceptRecovery();
             return false;
         }
 
@@ -194,18 +192,21 @@ public class EventLoop {
                 }
                 connectionListener.didFailToAcceptConnection(remoteAddress);
                 CloseUtils.closeQuietly(socketChannel);
+                // An intentional admission decision, not accept-path ill health
+                noteAcceptRecovery();
                 return false;
             }
 
             connectionListener.didAcceptConnection(remoteAddress);
             ConnectionEventLoop connectionEventLoop = leastConnections();
             connectionEventLoop.register(socketChannel);
+            // The full accept iteration succeeded, so the accept path is healthy again
+            noteAcceptRecovery();
             return true;
         } catch (RuntimeException e) {
             connectionListener.didFailToAcceptConnection(remoteAddress, e);
             CloseUtils.closeQuietly(socketChannel);
-            logConnectionSetupFailure(e);
-            backoffAfterAcceptFailure();
+            handleConnectionSetupFailure(e);
             return false;
         }
     }
@@ -294,9 +295,23 @@ public class EventLoop {
 
         // Coalesce log volume during a sustained failure (e.g. file-descriptor exhaustion):
         // log the first failure and then only at exponentially-spaced milestones.
-        if (logger.failureEnabled() && isPowerOfTwo(failures)) {
+        if (logger.failureEnabled() && AcceptLoopBackoff.shouldLogFailure(failures)) {
             logger.logFailure(e,
                     new LogEntry("event", "accept_loop_error"),
+                    new LogEntry("consecutive_failures", Long.toString(failures)));
+        }
+
+        backoffAfterAcceptFailure(failures);
+    }
+
+    private void handleConnectionSetupFailure(RuntimeException e) {
+        long failures = consecutiveAcceptFailures.incrementAndGet();
+
+        // Coalesce log volume during a sustained failure (e.g. a connection listener that throws
+        // on every accept): log the first failure and then only at exponentially-spaced milestones.
+        if (logger.failureEnabled() && AcceptLoopBackoff.shouldLogFailure(failures)) {
+            logger.logFailure(e,
+                    new LogEntry("event", "connection_setup_error"),
                     new LogEntry("consecutive_failures", Long.toString(failures)));
         }
 
@@ -317,40 +332,18 @@ public class EventLoop {
         }
     }
 
-    // Visible for testing.
-    static boolean isPowerOfTwo(long value) {
-        return value > 0 && (value & (value - 1)) == 0;
-    }
-
-    private void logConnectionSetupFailure(RuntimeException e) {
-        if (logger.failureEnabled()) {
-            logger.logFailure(e, new LogEntry("event", "connection_setup_error"));
-        }
-    }
-
     // Escalating backoff: a persistent accept() failure (e.g. EMFILE) would otherwise spin the
     // accept loop ~20x/sec. Double the delay per consecutive failure up to a 1s ceiling.
     private void backoffAfterAcceptFailure(long consecutiveFailures) {
-        sleepBeforeRetry(acceptBackoffMillis(consecutiveFailures));
+        sleepBeforeRetry(AcceptLoopBackoff.backoffMillis(consecutiveFailures));
     }
 
     // Visible for testing.
-    static long acceptBackoffMillis(long consecutiveFailures) {
-        long base = ACCEPT_FAILURE_BACKOFF.toMillis();
-        long max = ACCEPT_FAILURE_BACKOFF_MAX.toMillis();
-        int shift = (int) Math.min(Math.max(0L, consecutiveFailures - 1L), 20L);
-        return Math.min(max, base << shift);
-    }
+    void sleepBeforeRetry(long millis) {
+        boolean interrupted = AcceptLoopBackoff.sleepBeforeRetry(millis,
+                () -> stopAccepting.get() || stopConnections.get());
 
-    private void backoffAfterAcceptFailure() {
-        sleepBeforeRetry(ACCEPT_FAILURE_BACKOFF.toMillis());
-    }
-
-    private void sleepBeforeRetry(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        if (interrupted) {
             stopAccepting.set(true);
             stopConnections.set(true);
             connectionEventLoops.forEach(ConnectionEventLoop::wakeup);

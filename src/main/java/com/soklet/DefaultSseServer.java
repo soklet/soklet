@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.annotation.SseEventSource;
 import com.soklet.exception.IllegalRequestException;
+import com.soklet.internal.util.AcceptLoopBackoff;
 import com.soklet.internal.util.ConcurrentLruMap;
 import com.soklet.internal.util.HostHeaderValidator;
 import com.soklet.MetricsCollector.SseEventDropReason;
@@ -93,10 +94,6 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class DefaultSseServer implements SseServer {
 	@NonNull
-	private static final Duration ACCEPT_FAILURE_BACKOFF;
-	@NonNull
-	private static final Duration ACCEPT_FAILURE_BACKOFF_MAX;
-	@NonNull
 	private static final String DEFAULT_HOST;
 	@NonNull
 	private static final Duration DEFAULT_REQUEST_HEADER_TIMEOUT;
@@ -161,8 +158,6 @@ final class DefaultSseServer implements SseServer {
 	private static final DefaultSseConnection.@NonNull PreSerializedPayload HEARTBEAT_PRE_SERIALIZED_COMMENT;
 
 	static {
-		ACCEPT_FAILURE_BACKOFF = Duration.ofMillis(50);
-		ACCEPT_FAILURE_BACKOFF_MAX = Duration.ofSeconds(1);
 		DEFAULT_HOST = "0.0.0.0";
 		DEFAULT_REQUEST_HEADER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
@@ -1177,7 +1172,7 @@ final class DefaultSseServer implements SseServer {
 
 		// Coalesce log volume during a sustained failure (e.g. file-descriptor exhaustion):
 		// log the first failure and then only at exponentially-spaced milestones.
-		if (isPowerOfTwo(failures))
+		if (AcceptLoopBackoff.shouldLogFailure(failures))
 			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
 					"SSE event loop encountered an IO error").throwable(e).build());
 
@@ -1188,43 +1183,38 @@ final class DefaultSseServer implements SseServer {
 	private void handleAcceptLoopRuntimeException(@NonNull RuntimeException e) {
 		requireNonNull(e);
 
+		long failures = this.consecutiveAcceptFailures.incrementAndGet();
 		notifyDidFailToAcceptConnection(null, ConnectionRejectionReason.INTERNAL_ERROR, e);
-		safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
-						"SSE event loop encountered an unexpected error")
-				.throwable(e)
-				.build());
+
+		// Coalesce log volume during a sustained failure:
+		// log the first failure and then only at exponentially-spaced milestones.
+		if (AcceptLoopBackoff.shouldLogFailure(failures))
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+							"SSE event loop encountered an unexpected error")
+					.throwable(e)
+					.build());
+
 		recordTransportFailure(MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, e, "connection_setup_error");
-		backoffAfterAcceptFailure();
+		backoffAfterAcceptFailure(failures);
 	}
 
 	// Escalating backoff: a persistent accept() failure (e.g. EMFILE) would otherwise spin the
 	// accept loop ~20x/sec. Double the delay per consecutive failure up to a 1s ceiling.
 	private void backoffAfterAcceptFailure(long consecutiveFailures) {
-		long base = ACCEPT_FAILURE_BACKOFF.toMillis();
-		long max = ACCEPT_FAILURE_BACKOFF_MAX.toMillis();
-		int shift = (int) Math.min(Math.max(0L, consecutiveFailures - 1L), 20L);
-		sleepBeforeAcceptRetry(Math.min(max, base << shift));
+		sleepBeforeAcceptRetry(AcceptLoopBackoff.backoffMillis(consecutiveFailures));
 	}
 
-	private void backoffAfterAcceptFailure() {
-		sleepBeforeAcceptRetry(ACCEPT_FAILURE_BACKOFF.toMillis());
-	}
+	// Visible for testing.
+	void sleepBeforeAcceptRetry(long millis) {
+		boolean interrupted = AcceptLoopBackoff.sleepBeforeRetry(millis,
+				() -> getStopPoisonPill().get() || isStopping());
 
-	private void sleepBeforeAcceptRetry(long millis) {
-		try {
-			Thread.sleep(millis);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
+		if (interrupted)
 			getStopPoisonPill().set(true);
-		}
 	}
 
 	private void noteAcceptRecovery() {
 		this.consecutiveAcceptFailures.set(0);
-	}
-
-	private static boolean isPowerOfTwo(long value) {
-		return value > 0 && (value & (value - 1)) == 0;
 	}
 
 	private void handleAcceptedSocketChannel(@NonNull SocketChannel clientSocketChannel,

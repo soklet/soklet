@@ -251,26 +251,8 @@ public class MicrohttpInternalTests {
 
 	@Test
 	public void acceptBackoffEscalatesAndLoggingCoalesces() throws Exception {
-		// Escalation schedule: doubles per consecutive failure, capped at 1s.
-		Assertions.assertEquals(50L, EventLoop.acceptBackoffMillis(1));
-		Assertions.assertEquals(100L, EventLoop.acceptBackoffMillis(2));
-		Assertions.assertEquals(200L, EventLoop.acceptBackoffMillis(3));
-		Assertions.assertEquals(400L, EventLoop.acceptBackoffMillis(4));
-		Assertions.assertEquals(800L, EventLoop.acceptBackoffMillis(5));
-		Assertions.assertEquals(1000L, EventLoop.acceptBackoffMillis(6));
-		Assertions.assertEquals(1000L, EventLoop.acceptBackoffMillis(7));
-		Assertions.assertEquals(1000L, EventLoop.acceptBackoffMillis(1_000));
-
-		// Logging coalesces to power-of-two milestones.
-		Assertions.assertTrue(EventLoop.isPowerOfTwo(1));
-		Assertions.assertTrue(EventLoop.isPowerOfTwo(2));
-		Assertions.assertTrue(EventLoop.isPowerOfTwo(4));
-		Assertions.assertTrue(EventLoop.isPowerOfTwo(8));
-		Assertions.assertFalse(EventLoop.isPowerOfTwo(3));
-		Assertions.assertFalse(EventLoop.isPowerOfTwo(5));
-		Assertions.assertFalse(EventLoop.isPowerOfTwo(6));
-		Assertions.assertFalse(EventLoop.isPowerOfTwo(7));
-		Assertions.assertFalse(EventLoop.isPowerOfTwo(0));
+		// The escalation schedule and power-of-two coalescing predicate are unit-tested in
+		// com.soklet.internal.util.AcceptLoopBackoffTests; this test covers EventLoop's wiring.
 
 		// Behavioral: repeated accept() failures keep the loop alive, fire the per-failure callback
 		// every time, but log only at milestones, and reset after a recovery.
@@ -360,6 +342,152 @@ public class MicrohttpInternalTests {
 		} finally {
 			eventLoop.start();
 			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void connectionSetupFailuresEscalateAndCoalesce() throws Exception {
+		// A connection listener that throws on every accepted connection (e.g. a buggy user
+		// callback) drives the RuntimeException path, which shares the escalating backoff and
+		// power-of-two log coalescing with the accept() IOException path.
+		List<String> failureEvents = new ArrayList<>();
+		int[] setupFailures = {0};
+		RuntimeException setupFailure = new RuntimeException("listener failure");
+		Logger logger = new Logger() {
+			@Override
+			public boolean enabled() {
+				return false;
+			}
+
+			@Override
+			public boolean failureEnabled() {
+				return true;
+			}
+
+			@Override
+			public void log(LogEntry... entries) {
+				// Trace logging is disabled for this test.
+			}
+
+			@Override
+			public void log(Exception e, LogEntry... entries) {
+				// Trace logging is disabled for this test.
+			}
+
+			@Override
+			public void logFailure(Exception e, LogEntry... entries) {
+				for (LogEntry entry : entries) {
+					if ("event".equals(entry.key()))
+						failureEvents.add(entry.value());
+				}
+			}
+		};
+		ConnectionListener connectionListener = new ConnectionListener() {
+			@Override
+			public void willAcceptConnection(InetSocketAddress remoteAddress) {
+				throw setupFailure;
+			}
+
+			@Override
+			public void didAcceptConnection(InetSocketAddress remoteAddress) {
+				// No-op
+			}
+
+			@Override
+			public void didFailToAcceptConnection(InetSocketAddress remoteAddress) {
+				// No-op
+			}
+
+			@Override
+			public void didFailToAcceptConnection(InetSocketAddress remoteAddress,
+																						Throwable throwable) {
+				setupFailures[0]++;
+			}
+		};
+		EventLoop eventLoop = new EventLoop(Options.builder()
+				.withHost("127.0.0.1")
+				.withPort(0)
+				.withConcurrency(1)
+				.withResolution(Duration.ofMillis(10))
+				.build(), logger, (request, callback) -> {}, connectionListener);
+
+		List<SocketChannel> acceptedChannels = new ArrayList<>();
+
+		try {
+			// Three consecutive setup failures on successfully-accepted connections.
+			for (int i = 0; i < 3; i++)
+				Assertions.assertFalse(eventLoop.acceptReadyConnection(() -> {
+					SocketChannel socketChannel = SocketChannel.open();
+					acceptedChannels.add(socketChannel);
+					return socketChannel;
+				}));
+
+			Assertions.assertEquals(3, setupFailures[0]);
+			// Logged only at counts 1 and 2 (3 is not a power of two).
+			Assertions.assertEquals(List.of("connection_setup_error", "connection_setup_error"), failureEvents);
+
+			// The failure path must close each accepted channel.
+			for (SocketChannel acceptedChannel : acceptedChannels)
+				Assertions.assertFalse(acceptedChannel.isOpen());
+
+			// A non-throwing accept() (no pending connection) marks recovery and resets the run.
+			Assertions.assertFalse(eventLoop.acceptReadyConnection(() -> null));
+
+			// The next failure is treated as the first again, so it logs.
+			Assertions.assertFalse(eventLoop.acceptReadyConnection(() -> {
+				SocketChannel socketChannel = SocketChannel.open();
+				acceptedChannels.add(socketChannel);
+				return socketChannel;
+			}));
+
+			Assertions.assertEquals(4, setupFailures[0]);
+			Assertions.assertEquals(3, failureEvents.size());
+			Assertions.assertFalse(eventLoop.isStopped());
+		} finally {
+			for (SocketChannel acceptedChannel : acceptedChannels)
+				if (acceptedChannel.isOpen())
+					acceptedChannel.close();
+
+			eventLoop.start();
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void stopEndsInFlightBackoffSleepPromptly() throws Exception {
+		// An in-flight backoff sleep (up to 1s during a sustained accept failure) must observe
+		// stop() promptly instead of running to completion and delaying shutdown.
+		EventLoop eventLoop = new EventLoop(Options.builder()
+				.withHost("127.0.0.1")
+				.withPort(0)
+				.withConcurrency(1)
+				.withResolution(Duration.ofMillis(10))
+				.build(), NoopLogger.instance(), (request, callback) -> {}, NoopConnectionListener.instance());
+
+		try {
+			CountDownLatch sleeperStarted = new CountDownLatch(1);
+			Thread sleeper = new Thread(() -> {
+				sleeperStarted.countDown();
+				eventLoop.sleepBeforeRetry(10_000L);
+			});
+
+			sleeper.start();
+			Assertions.assertTrue(sleeperStarted.await(5, TimeUnit.SECONDS));
+			// Give the sleeper a moment to actually enter its backoff sleep.
+			Thread.sleep(100L);
+
+			long stopNanos = System.nanoTime();
+			eventLoop.stop();
+			sleeper.join(5_000L);
+			long elapsedMillis = (System.nanoTime() - stopNanos) / 1_000_000L;
+
+			Assertions.assertFalse(sleeper.isAlive(), "Backoff sleep should have ended after stop()");
+			Assertions.assertTrue(elapsedMillis < 2_000L,
+					"Expected prompt exit from backoff sleep after stop(), took " + elapsedMillis + "ms");
+		} finally {
+			eventLoop.start();
 			eventLoop.join();
 		}
 	}

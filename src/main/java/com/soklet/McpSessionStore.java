@@ -143,6 +143,13 @@ public interface McpSessionStore {
 
 		/**
 		 * Sets the idle timeout, or {@link Duration#ZERO} to disable idle expiry.
+		 * <p>
+		 * <strong>Warning:</strong> with idle expiry disabled, sessions only release their slots via
+		 * explicit termination or {@link McpSessionStore#deleteBySessionId(String)}. If you also
+		 * configure a finite {@link #concurrentSessionLimit(Integer)}, abandoned sessions (e.g. clients
+		 * that disappear without terminating) will occupy slots indefinitely and can eventually block
+		 * all new session admission. Ensure your application enforces session lifecycle cleanup, or
+		 * keep a nonzero idle timeout.
 		 *
 		 * @param idleTimeout the idle timeout, or {@code null} for the default
 		 * @return this builder

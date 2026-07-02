@@ -484,6 +484,11 @@ final class DefaultHttpServer implements HttpServer {
 						if (!responseWritten.compareAndSet(false, true))
 							return;
 
+						// The CAS makes the interrupt mutually exclusive with the handler's own finally-clear:
+						// whichever side wins the CAS owns the thread reference. A benign sliver remains where
+						// the handler completes between our CAS and the interrupt() call below — interrupting a
+						// completed handler is acceptable because the timeout response has already been claimed
+						// via responseWritten above. Intentional; do not "fix" by rechecking after the CAS.
 						Thread handlerThread = handlerThreadRef.get();
 						if (handlerThread != null && handlerThreadRef.compareAndSet(handlerThread, null))
 							handlerThread.interrupt();

@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.exception.IllegalRequestException;
+import com.soklet.internal.util.AcceptLoopBackoff;
 import com.soklet.internal.util.HostHeaderValidator;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -79,10 +80,6 @@ import static java.util.Objects.requireNonNull;
 final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePublisher {
 	@NonNull
 	private static final String DEFAULT_HOST;
-	@NonNull
-	private static final Duration ACCEPT_FAILURE_BACKOFF = Duration.ofMillis(50);
-	@NonNull
-	private static final Duration ACCEPT_FAILURE_BACKOFF_MAX = Duration.ofSeconds(1);
 	@NonNull
 	private static final Duration DEFAULT_REQUEST_HEADER_TIMEOUT;
 	@NonNull
@@ -605,7 +602,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 		// Coalesce log volume during a sustained failure (e.g. file-descriptor exhaustion):
 		// log the first failure and then only at exponentially-spaced milestones.
-		if (isPowerOfTwo(failures))
+		if (AcceptLoopBackoff.shouldLogFailure(failures))
 			safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, logMessage)
 					.throwable(throwable)
 					.build());
@@ -617,24 +614,20 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	// Escalating backoff: a persistent accept-loop failure (e.g. EMFILE) would otherwise spin the
 	// accept loop with no delay at all. Double the delay per consecutive failure up to a 1s ceiling.
 	private void backoffAfterAcceptFailure(long consecutiveFailures) {
-		long base = ACCEPT_FAILURE_BACKOFF.toMillis();
-		long max = ACCEPT_FAILURE_BACKOFF_MAX.toMillis();
-		int shift = (int) Math.min(Math.max(0L, consecutiveFailures - 1L), 20L);
+		sleepBeforeAcceptRetry(AcceptLoopBackoff.backoffMillis(consecutiveFailures));
+	}
 
-		try {
-			Thread.sleep(Math.min(max, base << shift));
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
+	// Visible for testing.
+	void sleepBeforeAcceptRetry(long millis) {
+		boolean interrupted = AcceptLoopBackoff.sleepBeforeRetry(millis,
+				() -> this.stopPoisonPill.get() || Boolean.TRUE.equals(this.stopping));
+
+		if (interrupted)
 			this.stopPoisonPill.set(true);
-		}
 	}
 
 	private void noteAcceptRecovery() {
 		this.consecutiveAcceptFailures.set(0);
-	}
-
-	private static boolean isPowerOfTwo(long value) {
-		return value > 0 && (value & (value - 1)) == 0;
 	}
 
 	private void submitRequest(@NonNull Socket socket,
