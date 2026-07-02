@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # Soklet has zero runtime dependencies; these watch build/test tooling only.
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: maven
+    directory: "/benchmarks"
+    schedule:
+      interval: weekly
+  - package-ecosystem: maven
+    directory: "/soak"
+    schedule:
+      interval: weekly
+  - package-ecosystem: maven
+    directory: "/fuzz"
+    schedule:
+      interval: weekly
+    ignore:
+      # Jazzer pins its JUnit/JUnit Platform stack; see fuzz/pom.xml for why these stay aligned.
+      - dependency-name: "org.junit.jupiter:*"
+      - dependency-name: "org.junit.platform:*"
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
