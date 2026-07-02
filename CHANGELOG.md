@@ -6,7 +6,7 @@
 
 - Hardened multipart header parsing so malformed RFC 2047 Base64 encoded-word values are treated as literal text instead of escaping as unexpected runtime exceptions.
 - Accept-loop retry backoff sleeps (up to 1 second during a sustained accept failure such as file-descriptor exhaustion) now observe `stop()` within ~50ms across standard HTTP, SSE, and MCP servers, instead of delaying shutdown by up to the full backoff delay.
-- Standard HTTP and SSE connection-setup failures (e.g. a connection listener that throws on every accepted connection) now use the same escalating retry backoff and coalesced logging as accept-loop I/O failures, instead of a fixed 50ms delay with per-iteration logging. The escalating backoff schedule is now shared across all three servers.
+- Standard HTTP connection-setup failures (e.g. a connection listener that throws on every accepted connection) now use the same escalating retry backoff and coalesced logging as accept-loop I/O failures, instead of a fixed 50ms delay with per-iteration logging. SSE runtime failures escaping the accept iteration itself now do the same; SSE per-connection setup failures continue to be handled per-connection (logged, recorded, and the connection closed) without delaying the accept loop. The escalating backoff schedule is now shared across all three servers.
 
 ### Documentation
 
