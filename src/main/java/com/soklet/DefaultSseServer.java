@@ -308,7 +308,7 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private volatile Boolean started;
 	@NonNull
-	private volatile Boolean stopping;
+	private volatile Boolean stopping = false;
 	@Nullable
 	private Thread eventLoopThread;
 	@Nullable

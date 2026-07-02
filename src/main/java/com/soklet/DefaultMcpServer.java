@@ -210,7 +210,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 	@NonNull
 	private volatile Boolean started;
 	@NonNull
-	private volatile Boolean stopping;
+	private volatile Boolean stopping = false;
 	private long lifecycleGeneration;
 	// Tracks back-to-back accept-loop failures so the loop escalates backoff and coalesces logging
 	// instead of storming. Touched on the mcp-accept-loop thread; AtomicLong for safe publication on restart.
