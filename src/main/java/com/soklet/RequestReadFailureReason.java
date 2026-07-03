@@ -35,6 +35,12 @@ public enum RequestReadFailureReason {
 	 */
 	REQUEST_READ_REJECTED,
 	/**
+	 * The request body could not be transparently decompressed per the configured
+	 * {@link RequestDecompressionPolicy} — an unsupported {@code Content-Encoding} (415), undecodable
+	 * content (400), or a decompression size/ratio limit violation (413).
+	 */
+	REQUEST_BODY_DECOMPRESSION_FAILED,
+	/**
 	 * An unexpected internal error occurred while reading or parsing the request.
 	 */
 	INTERNAL_ERROR

@@ -119,6 +119,14 @@ public class IntegrationTests {
 			return body;
 		}
 
+		// Reports body metadata as the handler observes it (for request-decompression header-rewrite assertions)
+		@POST("/body-meta")
+		public String bodyMeta(@NonNull Request request) {
+			return request.getHeader("Content-Encoding").orElse("none") + "|"
+					+ request.getHeader("Content-Length").orElse("none") + "|"
+					+ request.getBody().map(bytes -> bytes.length).orElse(0);
+		}
+
 		@GET("/multivalued-headers")
 		public Response multivaluedHeaders(@NonNull Request request) {
 			return Response.withStatusCode(200)
@@ -1522,6 +1530,246 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 414"), response.statusLine());
 			}
 		}
+	}
+
+	@Test
+	public void gzipRequestBody_decompressedWhenPolicyEnabled() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			byte[] compressed = gzipBytes("hello gzip".getBytes(StandardCharsets.UTF_8));
+			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: gzip\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
+			Assertions.assertEquals("hello gzip", new String(response.body(), StandardCharsets.UTF_8));
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_headersRewrittenForHandler() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			byte[] uncompressed = "hello gzip".getBytes(StandardCharsets.UTF_8);
+			byte[] compressed = gzipBytes(uncompressed);
+			RawResponse response = postRawBody(port, "/body-meta", compressed, "Content-Encoding: gzip\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
+			// Content-Encoding stripped; Content-Length and body length reflect the decompressed size
+			Assertions.assertEquals("none|" + uncompressed.length + "|" + uncompressed.length,
+					new String(response.body(), StandardCharsets.UTF_8));
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_passedThroughWhenPolicyDisabled() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, null); // default: disabled
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			byte[] compressed = gzipBytes("hello gzip".getBytes(StandardCharsets.UTF_8));
+			RawResponse response = postRawBody(port, "/body-meta", compressed, "Content-Encoding: gzip\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
+			// Untouched: handler sees the original Content-Encoding and the compressed byte count
+			Assertions.assertEquals("gzip|" + compressed.length + "|" + compressed.length,
+					new String(response.body(), StandardCharsets.UTF_8));
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_identityCodingPassesThrough() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			RawResponse response = postRawBody(port, "/body", "plain".getBytes(StandardCharsets.UTF_8),
+					"Content-Encoding: identity\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
+			Assertions.assertEquals("plain", new String(response.body(), StandardCharsets.UTF_8));
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_unsupportedCodingReturns415() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			RawResponse response = postRawBody(port, "/body", "whatever".getBytes(StandardCharsets.UTF_8),
+					"Content-Encoding: br\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 415"), response.statusLine());
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_malformedGzipReturns400() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			RawResponse response = postRawBody(port, "/body", "this is not gzip".getBytes(StandardCharsets.UTF_8),
+					"Content-Encoding: gzip\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), response.statusLine());
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_absoluteLimitReturns413() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.builder()
+				.maximumDecompressedBodySizeInBytes(16)
+				.build());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			byte[] compressed = gzipBytes(new byte[1_000]);
+			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: gzip\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"), response.statusLine());
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_chunkedTransferDechunkedAndDecompressed() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			byte[] uncompressed = "hello chunked gzip".getBytes(StandardCharsets.UTF_8);
+			byte[] compressed = gzipBytes(uncompressed);
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(4000);
+				String head = "POST /body-meta HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1\r\n"
+						+ "Content-Encoding: gzip\r\n"
+						+ "Transfer-Encoding: chunked\r\n"
+						+ "\r\n";
+				out.write(head.getBytes(StandardCharsets.ISO_8859_1));
+				// Single chunk carrying the whole compressed body, then the terminal chunk
+				out.write(Integer.toHexString(compressed.length).getBytes(StandardCharsets.ISO_8859_1));
+				out.write("\r\n".getBytes(StandardCharsets.ISO_8859_1));
+				out.write(compressed);
+				out.write("\r\n0\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
+				// Neither Content-Encoding nor a stale framing header should survive; Content-Length reflects
+				// the decompressed size (the handler reports Content-Encoding|Content-Length|bodyLength)
+				Assertions.assertEquals("none|" + uncompressed.length + "|" + uncompressed.length,
+						new String(response.body(), StandardCharsets.UTF_8));
+			}
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_multipleCodingsReturn415() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			byte[] compressed = gzipBytes("hello".getBytes(StandardCharsets.UTF_8));
+			// RFC 9110 permits coding chains, but the opt-in policy supports single gzip/x-gzip only
+			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: identity, gzip\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 415"), response.statusLine());
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_multiLineContentEncodingHeadersCombine() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			byte[] compressed = gzipBytes("hello".getBytes(StandardCharsets.UTF_8));
+			// Two Content-Encoding header lines are semantically a coding chain -> 415 under the single-coding policy
+			RawResponse response = postRawBody(port, "/body", compressed,
+					"Content-Encoding: gzip\r\nContent-Encoding: gzip\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 415"), response.statusLine());
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_ratioLimitReturns413() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.builder()
+				.maximumCompressionRatio(1)
+				.build());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			// ~100KB of zeros compresses to a few hundred bytes: expansion far beyond ratio 1 + 8KB allowance
+			byte[] compressed = gzipBytes(new byte[100_000]);
+			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: gzip\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"), response.statusLine());
+		}
+	}
+
+	@NonNull
+	private static SokletConfig decompressionConfig(int port,
+																									@org.jspecify.annotations.Nullable RequestDecompressionPolicy policy) {
+		HttpServer.Builder httpServerBuilder = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5));
+
+		if (policy != null)
+			httpServerBuilder.requestDecompressionPolicy(policy);
+
+		return SokletConfig.withHttpServer(httpServerBuilder.build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+	}
+
+	@NonNull
+	private static RawResponse postRawBody(int port,
+																				 @NonNull String path,
+																				 byte @NonNull [] body,
+																				 @NonNull String extraHeaders) throws Exception {
+		try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+				 OutputStream out = socket.getOutputStream();
+				 InputStream in = socket.getInputStream()) {
+			socket.setSoTimeout(4000);
+			String head = "POST " + path + " HTTP/1.1\r\n"
+					+ "Host: 127.0.0.1\r\n"
+					+ extraHeaders
+					+ "Content-Length: " + body.length + "\r\n"
+					+ "\r\n";
+			out.write(head.getBytes(StandardCharsets.ISO_8859_1));
+			out.write(body);
+			out.flush();
+
+			return readResponse(in);
+		}
+	}
+
+	@NonNull
+	private static byte[] gzipBytes(byte @NonNull [] input) throws Exception {
+		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+		try (java.util.zip.GZIPOutputStream gzipOutputStream = new java.util.zip.GZIPOutputStream(outputStream)) {
+			gzipOutputStream.write(input);
+		}
+		return outputStream.toByteArray();
 	}
 
 	@Test

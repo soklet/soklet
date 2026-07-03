@@ -167,6 +167,8 @@ public interface HttpServer extends AutoCloseable {
 		@Nullable
 		ResponseGzipPolicy responseGzipPolicy;
 		@Nullable
+		RequestDecompressionPolicy requestDecompressionPolicy;
+		@Nullable
 		Duration requestHandlerTimeout;
 		@Nullable
 		Integer requestHandlerConcurrency;
@@ -292,6 +294,23 @@ public interface HttpServer extends AutoCloseable {
 		@NonNull
 		public Builder responseGzipPolicy(@Nullable ResponseGzipPolicy responseGzipPolicy) {
 			this.responseGzipPolicy = responseGzipPolicy;
+			return this;
+		}
+
+		/**
+		 * Sets the policy used by the standard HTTP server to decide whether and how gzip-compressed
+		 * request bodies are transparently decompressed before request handling.
+		 * <p>
+		 * If this value is not specified, request decompression is disabled and request bodies are passed
+		 * to handlers exactly as received. See {@link RequestDecompressionPolicy} for enabled-mode behavior,
+		 * including decompression-bomb limits and rejection status codes.
+		 *
+		 * @param requestDecompressionPolicy the request decompression policy to use, or {@code null} for the default
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder requestDecompressionPolicy(@Nullable RequestDecompressionPolicy requestDecompressionPolicy) {
+			this.requestDecompressionPolicy = requestDecompressionPolicy;
 			return this;
 		}
 

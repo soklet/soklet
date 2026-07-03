@@ -33,6 +33,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -69,6 +70,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 import static com.soklet.Utilities.emptyByteArray;
@@ -94,6 +96,8 @@ final class DefaultHttpServer implements HttpServer {
 	private static final Duration DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT;
 	@NonNull
 	private static final ResponseGzipPolicy DEFAULT_RESPONSE_GZIP_POLICY;
+	@NonNull
+	private static final RequestDecompressionPolicy DEFAULT_REQUEST_DECOMPRESSION_POLICY;
 	@NonNull
 	private static final Duration DEFAULT_REQUEST_HANDLER_TIMEOUT;
 	@NonNull
@@ -134,6 +138,7 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_REQUEST_BODY_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_RESPONSE_GZIP_POLICY = ResponseGzipPolicy.disabledInstance();
+		DEFAULT_REQUEST_DECOMPRESSION_POLICY = RequestDecompressionPolicy.disabledInstance();
 		DEFAULT_REQUEST_HANDLER_TIMEOUT = Duration.ofSeconds(60);
 		DEFAULT_SOCKET_SELECT_TIMEOUT = Duration.ofMillis(100);
 		DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES = 1_024 * 1_024 * 10;
@@ -166,6 +171,8 @@ final class DefaultHttpServer implements HttpServer {
 	private final Duration responseWriteIdleTimeout;
 	@NonNull
 	private final ResponseGzipPolicy responseGzipPolicy;
+	@NonNull
+	private final RequestDecompressionPolicy requestDecompressionPolicy;
 	@NonNull
 	private final Duration requestHandlerTimeout;
 	@NonNull
@@ -242,6 +249,7 @@ final class DefaultHttpServer implements HttpServer {
 		this.requestBodyTimeout = builder.requestBodyTimeout != null ? builder.requestBodyTimeout : DEFAULT_REQUEST_BODY_TIMEOUT;
 		this.responseWriteIdleTimeout = builder.responseWriteIdleTimeout != null ? builder.responseWriteIdleTimeout : DEFAULT_RESPONSE_WRITE_IDLE_TIMEOUT;
 		this.responseGzipPolicy = builder.responseGzipPolicy != null ? builder.responseGzipPolicy : DEFAULT_RESPONSE_GZIP_POLICY;
+		this.requestDecompressionPolicy = builder.requestDecompressionPolicy != null ? builder.requestDecompressionPolicy : DEFAULT_REQUEST_DECOMPRESSION_POLICY;
 		this.requestHandlerTimeout = builder.requestHandlerTimeout != null ? builder.requestHandlerTimeout : DEFAULT_REQUEST_HANDLER_TIMEOUT;
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
@@ -530,6 +538,16 @@ final class DefaultHttpServer implements HttpServer {
 								if (body != null && body.length == 0)
 									body = null;
 
+								// Transparently decompress the body if the (opt-in) policy applies.
+								// Throws RequestBodyDecompressionException (mapped to 415/400/413 below) on failure.
+								List<Header> requestHeaders = microhttpRequest.headers();
+								DecompressedRequestBody decompressedRequestBody = maybeDecompressRequestBody(requestHeaders, body);
+
+								if (decompressedRequestBody != null) {
+									body = decompressedRequestBody.body();
+									requestHeaders = decompressedRequestBody.adjustedHeaders();
+								}
+
 								boolean contentTooLarge = microhttpRequest.contentTooLarge();
 
 								HttpMethod httpMethod;
@@ -548,7 +566,7 @@ final class DefaultHttpServer implements HttpServer {
 								request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
 										.multipartParser(getMultipartParser())
 										.idGenerator(getIdGenerator())
-										.microhttpHeaders(microhttpRequest.headers())
+										.microhttpHeaders(requestHeaders)
 										.body(body)
 										.remoteAddress(microhttpRequest.remoteAddress())
 										.contentTooLarge(contentTooLarge)
@@ -605,6 +623,13 @@ final class DefaultHttpServer implements HttpServer {
 									failsafeStatusCode = 400;
 									failureReason = RequestReadFailureReason.UNPARSEABLE_REQUEST;
 									safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, format("Unable to parse request URI: %s", microhttpRequest.uri()))
+											.throwable(t)
+											.build());
+								} else if (t instanceof RequestBodyDecompressionException requestBodyDecompressionException) {
+									failsafeStatusCode = requestBodyDecompressionException.getReason().getStatusCode();
+									failureReason = RequestReadFailureReason.REQUEST_BODY_DECOMPRESSION_FAILED;
+									String message = t.getMessage() == null ? t.getClass().getName() : t.getMessage();
+									safelyLog(LogEvent.with(LogEventType.SERVER_UNPARSEABLE_REQUEST, message)
 											.throwable(t)
 											.build());
 								} else {
@@ -1308,6 +1333,156 @@ final class DefaultHttpServer implements HttpServer {
 		}
 	}
 
+	/**
+	 * Applies the (opt-in) request decompression policy to an incoming request body.
+	 *
+	 * @return the decompressed body plus adjusted headers, or {@code null} if no decompression applies
+	 * @throws RequestBodyDecompressionException if the request must be rejected (415/400/413)
+	 */
+	@Nullable
+	private DecompressedRequestBody maybeDecompressRequestBody(@NonNull List<@NonNull Header> headers,
+																														 byte @Nullable [] body) {
+		requireNonNull(headers);
+
+		RequestDecompressionPolicy requestDecompressionPolicy = getRequestDecompressionPolicy();
+
+		if (!requestDecompressionPolicy.isEnabled())
+			return null;
+
+		List<String> contentEncodings = contentEncodingTokens(headers);
+
+		if (contentEncodings.isEmpty())
+			return null;
+
+		// "identity" is a no-op coding
+		if (contentEncodings.size() == 1 && "identity".equals(contentEncodings.get(0)))
+			return null;
+
+		boolean singleGzipCoding = contentEncodings.size() == 1
+				&& ("gzip".equals(contentEncodings.get(0)) || "x-gzip".equals(contentEncodings.get(0)));
+
+		if (!singleGzipCoding)
+			throw new RequestBodyDecompressionException(RequestBodyDecompressionException.Reason.UNSUPPORTED_CONTENT_ENCODING,
+					format("Unsupported request Content-Encoding: '%s'", String.join(", ", contentEncodings)));
+
+		// A Content-Encoding header with no body to decode: pass through unchanged
+		if (body == null)
+			return null;
+
+		long maximumDecompressedBodySizeInBytes = requestDecompressionPolicy.getMaximumDecompressedBodySizeInBytes()
+				.map(Integer::longValue)
+				.orElse(getMaximumRequestSizeInBytes().longValue());
+
+		byte[] decompressedBody = gunzipRequestBody(body, maximumDecompressedBodySizeInBytes,
+				requestDecompressionPolicy.getMaximumCompressionRatio().longValue());
+
+		return new DecompressedRequestBody(decompressedBody, headersForDecompressedBody(headers, decompressedBody.length));
+	}
+
+	/**
+	 * All {@code Content-Encoding} coding tokens across header lines and comma-separated values,
+	 * trimmed and lowercased.
+	 */
+	@NonNull
+	private List<@NonNull String> contentEncodingTokens(@NonNull List<@NonNull Header> headers) {
+		requireNonNull(headers);
+
+		List<String> tokens = new ArrayList<>(2);
+
+		for (Header header : headers) {
+			if (!header.name().equalsIgnoreCase("Content-Encoding"))
+				continue;
+
+			String value = header.value();
+
+			if (value == null)
+				continue;
+
+			for (String token : value.split(",", -1)) {
+				String normalized = token.trim().toLowerCase(ENGLISH);
+
+				if (!normalized.isEmpty())
+					tokens.add(normalized);
+			}
+		}
+
+		return tokens;
+	}
+
+	/**
+	 * Rewrites headers after transparent decompression so handlers observe a self-consistent request:
+	 * {@code Content-Encoding} is removed, any original {@code Content-Length} is replaced with the
+	 * decompressed size, and {@code Transfer-Encoding} is removed (wire framing was already resolved,
+	 * and a fully-buffered decompressed body must not carry both framing headers).
+	 */
+	@NonNull
+	private List<@NonNull Header> headersForDecompressedBody(@NonNull List<@NonNull Header> headers,
+																													 int decompressedBodyLength) {
+		requireNonNull(headers);
+
+		List<Header> adjustedHeaders = new ArrayList<>(headers.size() + 1);
+
+		for (Header header : headers) {
+			if (header.name().equalsIgnoreCase("Content-Encoding")
+					|| header.name().equalsIgnoreCase("Content-Length")
+					|| header.name().equalsIgnoreCase("Transfer-Encoding"))
+				continue;
+
+			adjustedHeaders.add(header);
+		}
+
+		adjustedHeaders.add(new Header("Content-Length", Integer.toString(decompressedBodyLength)));
+		return adjustedHeaders;
+	}
+
+	/**
+	 * Gunzips a request body with decompression-bomb guards: decompression aborts as soon as the output
+	 * exceeds {@code maximumDecompressedSizeInBytes} or {@code (compressed size × maximumCompressionRatio) + 8 KB}.
+	 * <p>
+	 * Package-private for testing.
+	 *
+	 * @throws RequestBodyDecompressionException on malformed gzip content (400) or a limit violation (413)
+	 */
+	static byte @NonNull [] gunzipRequestBody(byte @NonNull [] compressedBody,
+																						long maximumDecompressedSizeInBytes,
+																						long maximumCompressionRatio) {
+		requireNonNull(compressedBody);
+
+		// The additive allowance keeps legitimately small compressed bodies from tripping the ratio check
+		long ratioAllowanceInBytes = maximumCompressionRatio * (long) compressedBody.length + 8_192L;
+		ByteArrayOutputStream outputStream = new ByteArrayOutputStream(Math.min(Math.max(32, compressedBody.length * 4), 65_536));
+		byte[] buffer = new byte[8_192];
+		long totalDecompressedBytes = 0L;
+
+		try (GZIPInputStream gzipInputStream = new GZIPInputStream(new ByteArrayInputStream(compressedBody))) {
+			int bytesRead;
+
+			while ((bytesRead = gzipInputStream.read(buffer)) != -1) {
+				totalDecompressedBytes += bytesRead;
+
+				if (totalDecompressedBytes > maximumDecompressedSizeInBytes)
+					throw new RequestBodyDecompressionException(RequestBodyDecompressionException.Reason.DECOMPRESSED_CONTENT_TOO_LARGE,
+							format("Decompressed request body exceeds the %d-byte limit", maximumDecompressedSizeInBytes));
+
+				if (totalDecompressedBytes > ratioAllowanceInBytes)
+					throw new RequestBodyDecompressionException(RequestBodyDecompressionException.Reason.DECOMPRESSED_CONTENT_TOO_LARGE,
+							format("Decompressed request body exceeds the %d:1 compression ratio limit", maximumCompressionRatio));
+
+				outputStream.write(buffer, 0, bytesRead);
+			}
+		} catch (IOException e) {
+			throw new RequestBodyDecompressionException(RequestBodyDecompressionException.Reason.MALFORMED_CONTENT,
+					"Request body could not be decompressed as gzip", e);
+		}
+
+		return outputStream.toByteArray();
+	}
+
+	private record DecompressedRequestBody(
+			byte @NonNull [] body,
+			@NonNull List<@NonNull Header> adjustedHeaders
+	) {}
+
 	private byte @NonNull [] byteBufferBytes(@NonNull ByteBuffer byteBuffer) {
 		requireNonNull(byteBuffer);
 		ByteBuffer source = byteBuffer.asReadOnlyBuffer();
@@ -1727,6 +1902,11 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	protected ResponseGzipPolicy getResponseGzipPolicy() {
 		return this.responseGzipPolicy;
+	}
+
+	@NonNull
+	protected RequestDecompressionPolicy getRequestDecompressionPolicy() {
+		return this.requestDecompressionPolicy;
 	}
 
 	@NonNull

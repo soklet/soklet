@@ -4,6 +4,7 @@
 
 ### Features
 
+- Standard HTTP requests can now opt into transparent gzip request-body decompression with `HttpServer.Builder.requestDecompressionPolicy(...)` per RFC 9110 §8.4. When enabled, single-coding `Content-Encoding: gzip`/`x-gzip` bodies are decompressed before request handling (with `Content-Encoding`/`Transfer-Encoding` removed and `Content-Length` updated so handlers observe a self-consistent request); unsupported codings — including multi-coding chains — are rejected with `415 Unsupported Media Type` (RFC 9110 §15.5.16), undecodable bodies with `400 Bad Request`, and decompression-bomb protection rejects bodies exceeding a configurable absolute size (default: the server's `maximumRequestSizeInBytes`) or compression ratio (default `100:1`) with `413 Content Too Large`. Failures surface to `LifecycleObserver` consumers as the new `RequestReadFailureReason.REQUEST_BODY_DECOMPRESSION_FAILED`. Decompression remains disabled by default; the SSE and MCP servers are unaffected.
 - Added `Request.getMediaRanges()` for parsed `Accept` header content negotiation input. Returns an ordered list of the new `MediaRange` type (type/subtype, `q` weight, media-type parameters) sorted by weight then specificity per RFC 9110 §12.5.1, with lenient handling of malformed media ranges. `MediaRange.fromHeaderRepresentation(...)` and `Utilities.extractMediaRangesFromAcceptHeaderValue(...)` are available for standalone parsing.
 
 ### Fixes
