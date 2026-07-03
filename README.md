@@ -314,6 +314,8 @@ public void example(Request request /* param name is arbitrary */) {
   Optional<Cors> cors = request.getCors();
   // Ordered locales via Accept-Language parsing
   List<Locale> locales = request.getLocales();
+  // Ordered media ranges via Accept parsing; empty means no Accept preference
+  List<MediaRange> mediaRanges = request.getMediaRanges();
   // Charset as specified by "Content-Type" header, if available
   Optional<Charset> charset = request.getCharset();
   // Content type component of "Content-Type" header, if available

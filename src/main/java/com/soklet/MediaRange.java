@@ -23,6 +23,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -81,8 +82,9 @@ public final class MediaRange {
 	 * <a href="https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.1">RFC 9110, Section 12.5.1</a>.
 	 * <p>
 	 * Parsing is lenient: a malformed representation yields {@link Optional#empty()} rather than an exception.
-	 * A representation is considered malformed if it lacks a {@code type/subtype} structure, pairs a wildcard
-	 * type with a concrete subtype (e.g. {@code *&#47;html}), or carries an unparseable {@code q} value.
+	 * A representation is considered malformed if it lacks a {@code type/subtype} structure, uses invalid
+	 * HTTP tokens for the type, subtype, or parameter names, pairs a wildcard type with a concrete subtype
+	 * (e.g. {@code *&#47;html}), or carries an unparseable {@code q} value.
 	 * Quality values outside {@code [0, 1]} are clamped. If multiple {@code q} parameters are present, all but
 	 * the first are ignored. Quoted parameter values have their surrounding quotes removed and quoted-pair
 	 * escape sequences (e.g. {@code \"}) unescaped.
@@ -100,8 +102,12 @@ public final class MediaRange {
 		if (normalized.isEmpty())
 			return Optional.empty();
 
-		String[] segments = normalized.split(";", -1);
-		String[] typeAndSubtype = segments[0].trim().toLowerCase(Locale.ROOT).split("/", 2);
+		List<String> segments = Utilities.splitSemicolonAware(normalized);
+
+		if (segments.isEmpty())
+			return Optional.empty();
+
+		String[] typeAndSubtype = segments.get(0).trim().toLowerCase(Locale.ROOT).split("/", 2);
 
 		if (typeAndSubtype.length != 2)
 			return Optional.empty();
@@ -109,7 +115,7 @@ public final class MediaRange {
 		String type = typeAndSubtype[0].trim();
 		String subtype = typeAndSubtype[1].trim();
 
-		if (type.isEmpty() || subtype.isEmpty())
+		if (!isToken(type) || !isToken(subtype))
 			return Optional.empty();
 
 		// A wildcard type with a concrete subtype (e.g. "*/html") is not a valid media range
@@ -120,8 +126,8 @@ public final class MediaRange {
 		Map<String, String> parameters = new LinkedHashMap<>();
 		boolean qualityEncountered = false;
 
-		for (int i = 1; i < segments.length; i++) {
-			String segment = segments[i].trim();
+		for (int i = 1; i < segments.size(); i++) {
+			String segment = segments.get(i).trim();
 			int equalsIndex = segment.indexOf('=');
 
 			if (equalsIndex == -1)
@@ -129,6 +135,9 @@ public final class MediaRange {
 
 			String name = segment.substring(0, equalsIndex).trim().toLowerCase(Locale.ROOT);
 			String value = unquote(segment.substring(equalsIndex + 1).trim());
+
+			if (!isToken(name))
+				return Optional.empty();
 
 			if ("q".equals(name)) {
 				// RFC 9110: if multiple "q" parameters are present, all but the first are ignored
@@ -148,6 +157,54 @@ public final class MediaRange {
 		}
 
 		return Optional.of(new MediaRange(type, subtype, quality, parameters));
+	}
+
+	private static boolean isToken(@NonNull String string) {
+		requireNonNull(string);
+
+		if (string.isEmpty())
+			return false;
+
+		for (int i = 0; i < string.length(); i++) {
+			char ch = string.charAt(i);
+
+			if (!isTchar(ch))
+				return false;
+		}
+
+		return true;
+	}
+
+	private static boolean isTchar(char ch) {
+		if (ch >= '0' && ch <= '9')
+			return true;
+
+		if (ch >= 'A' && ch <= 'Z')
+			return true;
+
+		if (ch >= 'a' && ch <= 'z')
+			return true;
+
+		switch (ch) {
+			case '!':
+			case '#':
+			case '$':
+			case '%':
+			case '&':
+			case '\'':
+			case '*':
+			case '+':
+			case '-':
+			case '.':
+			case '^':
+			case '_':
+			case '`':
+			case '|':
+			case '~':
+				return true;
+			default:
+				return false;
+		}
 	}
 
 	@NonNull

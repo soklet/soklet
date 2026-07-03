@@ -1010,13 +1010,12 @@ public final class Utilities {
 	/**
 	 * Parses an {@code Accept} header value into a best-effort ordered list of {@link MediaRange}s.
 	 * <p>
-	 * Media ranges are ordered by descending {@code q} weight, then by descending specificity
-	 * (a concrete {@code type/subtype} outranks {@code type/*}, which outranks {@code *}{@code /*});
-	 * when both are equal, original header order is preserved (the sort is stable). See
+	 * Media ranges are ordered by descending {@code q} weight, then by descending specificity:
+	 * a concrete {@code type/subtype} outranks {@code type/*}, which outranks {@code *}{@code /*};
+	 * within the same wildcard specificity, ranges with more media-type parameters outrank ranges with fewer.
+	 * When both are equal, original header order is preserved (the sort is stable). See
 	 * <a href="https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.1">RFC 9110, Section 12.5.1</a>.
-	 * Note that specificity here considers wildcards only — media-type parameter counts do not affect
-	 * ordering (full parameter-aware precedence is a content-negotiation concern, which this parse-only
-	 * method deliberately does not implement). Malformed media ranges are skipped.
+	 * Malformed media ranges are skipped.
 	 *
 	 * @param acceptHeaderValue the raw header value (must be non-{@code null})
 	 * @return media ranges in descending preference order; empty if none could be resolved
@@ -1037,13 +1036,14 @@ public final class Utilities {
 		// Stable sort: q weight descending, then specificity descending; original order breaks ties
 		mediaRanges.sort(Comparator
 				.comparing(MediaRange::getQuality, Comparator.reverseOrder())
-				.thenComparing(Utilities::mediaRangeSpecificity, Comparator.reverseOrder()));
+				.thenComparing(Utilities::mediaRangeWildcardSpecificity, Comparator.reverseOrder())
+				.thenComparing(Utilities::mediaRangeParameterSpecificity, Comparator.reverseOrder()));
 
 		return Collections.unmodifiableList(mediaRanges);
 	}
 
 	@NonNull
-	private static Integer mediaRangeSpecificity(@NonNull MediaRange mediaRange) {
+	private static Integer mediaRangeWildcardSpecificity(@NonNull MediaRange mediaRange) {
 		requireNonNull(mediaRange);
 
 		if (mediaRange.isWildcardType())
@@ -1053,6 +1053,12 @@ public final class Utilities {
 			return 1;
 
 		return 2;
+	}
+
+	@NonNull
+	private static Integer mediaRangeParameterSpecificity(@NonNull MediaRange mediaRange) {
+		requireNonNull(mediaRange);
+		return mediaRange.getParameters().size();
 	}
 
 	@Nullable
@@ -2249,7 +2255,7 @@ public final class Utilities {
 	 * Header parsing helper: split on semicolons that are not inside a quoted-string; supports \" escapes inside quotes.
 	 */
 	@NonNull
-	private static List<String> splitSemicolonAware(@NonNull String string) {
+	static List<String> splitSemicolonAware(@NonNull String string) {
 		requireNonNull(string);
 
 		List<String> out = new ArrayList<>(4);

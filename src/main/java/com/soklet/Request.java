@@ -935,7 +935,7 @@ public final class Request {
 
 	/**
 	 * {@link MediaRange} information for this request as specified by {@code Accept} header value[s], ordered by
-	 * {@code q} weight and specificity as defined by
+	 * {@code q} weight and specificity (including media-type parameters) as defined by
 	 * <a href="https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.1">RFC 9110, Section 12.5.1</a>.
 	 * <p>
 	 * This method will lazily parse {@code Accept} header values into an ordered {@link List} of {@link MediaRange}

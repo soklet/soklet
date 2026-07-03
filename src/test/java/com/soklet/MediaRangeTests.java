@@ -106,6 +106,22 @@ public class MediaRangeTests {
 	}
 
 	@Test
+	public void preservesQuotedSemicolonsInParameterValues() {
+		MediaRange mediaRange = MediaRange.fromHeaderRepresentation("text/html;note=\"a;b\";q=0.7").orElseThrow();
+
+		Assertions.assertEquals("a;b", mediaRange.getParameters().get("note"));
+		Assertions.assertEquals(0, new BigDecimal("0.7").compareTo(mediaRange.getQuality()));
+	}
+
+	@Test
+	public void rejectsInvalidTypeSubtypeAndParameterNameTokens() {
+		Assertions.assertTrue(MediaRange.fromHeaderRepresentation("text/html/json").isEmpty());
+		Assertions.assertTrue(MediaRange.fromHeaderRepresentation("te xt/html").isEmpty());
+		Assertions.assertTrue(MediaRange.fromHeaderRepresentation("text/h@tml").isEmpty());
+		Assertions.assertTrue(MediaRange.fromHeaderRepresentation("text/html;bad name=value").isEmpty());
+	}
+
+	@Test
 	public void clampsOutOfRangeQuality() {
 		Assertions.assertEquals(0, BigDecimal.ONE.compareTo(
 				MediaRange.fromHeaderRepresentation("text/html;q=5").orElseThrow().getQuality()));
@@ -133,6 +149,21 @@ public class MediaRangeTests {
 
 		// text/html (q=1) first; at q=0.5 the concrete application/json outranks text/*; */* (q=0.1) last
 		Assertions.assertEquals(List.of("text/html", "application/json", "text/*", "*/*"), ordered);
+	}
+
+	@Test
+	public void extractOrdersEqualQualityByParameterSpecificity() {
+		List<MediaRange> mediaRanges = Utilities.extractMediaRangesFromAcceptHeaderValue(
+				"text/html, text/html;level=1, text/html;level=1;profile=compact");
+
+		List<Map<String, String>> orderedParameters = mediaRanges.stream()
+				.map(MediaRange::getParameters)
+				.toList();
+
+		Assertions.assertEquals(List.of(
+				Map.of("level", "1", "profile", "compact"),
+				Map.of("level", "1"),
+				Map.of()), orderedParameters);
 	}
 
 	@Test
