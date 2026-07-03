@@ -552,10 +552,11 @@ public Response exampleRedirect() {
 Soklet ships with an embedded HTTP/1.1 [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html), a dedicated
 [`SseServer`](https://javadoc.soklet.com/com/soklet/SseServer.html), and a dedicated
 [`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
-These builders let you configure host, read/write/handler timeouts, handler concurrency/queueing, request size limits, and connection caps; you
+These builders let you configure host, read/write/handler timeouts, handler concurrency/queueing, request size limits, request decompression, and connection caps; you
 can also plug in custom request/session [`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html),
 [`McpSessionStore`](https://javadoc.soklet.com/com/soklet/McpSessionStore.html), and
 [`MultipartParser`](https://javadoc.soklet.com/com/soklet/MultipartParser.html) instances.
+Standard HTTP request-body decompression is disabled by default; enable [`HttpServer.Builder::requestDecompressionPolicy`](<https://javadoc.soklet.com/com/soklet/HttpServer.Builder.html#requestDecompressionPolicy(com.soklet.RequestDecompressionPolicy)>) with [`RequestDecompressionPolicy::fromDefaults`](<https://javadoc.soklet.com/com/soklet/RequestDecompressionPolicy.html#fromDefaults()>) or a custom policy to accept single-coding `Content-Encoding: gzip`/`x-gzip` request bodies with decompression-bomb limits.
 Configure MCP session ID generation and session caps on the default [`McpSessionStore`](https://javadoc.soklet.com/com/soklet/McpSessionStore.html) builder, or let a custom store own those policies.
 Provide the configured servers via [`SokletConfig`](https://javadoc.soklet.com/com/soklet/SokletConfig.html) and see the
 [Server Configuration](https://www.soklet.com/docs/server-configuration) docs for the full option matrix.

@@ -37,7 +37,9 @@ public enum RequestReadFailureReason {
 	/**
 	 * The request body could not be transparently decompressed per the configured
 	 * {@link RequestDecompressionPolicy} — an unsupported {@code Content-Encoding} (415), undecodable
-	 * content (400), or a decompression size/ratio limit violation (413).
+	 * content (400), or another decompression failure before a valid {@link Request} could be built.
+	 * Decompression size/ratio limit violations for otherwise-parseable requests use the normal
+	 * content-too-large request path instead.
 	 */
 	REQUEST_BODY_DECOMPRESSION_FAILED,
 	/**

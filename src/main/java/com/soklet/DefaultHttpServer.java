@@ -538,17 +538,27 @@ final class DefaultHttpServer implements HttpServer {
 								if (body != null && body.length == 0)
 									body = null;
 
-								// Transparently decompress the body if the (opt-in) policy applies.
-								// Throws RequestBodyDecompressionException (mapped to 415/400/413 below) on failure.
 								List<Header> requestHeaders = microhttpRequest.headers();
-								DecompressedRequestBody decompressedRequestBody = maybeDecompressRequestBody(requestHeaders, body);
-
-								if (decompressedRequestBody != null) {
-									body = decompressedRequestBody.body();
-									requestHeaders = decompressedRequestBody.adjustedHeaders();
-								}
-
 								boolean contentTooLarge = microhttpRequest.contentTooLarge();
+
+								// Transparently decompress the body if the (opt-in) policy applies.
+								// Size/ratio violations use Soklet's normal content-too-large response path.
+								if (!contentTooLarge) {
+									try {
+										DecompressedRequestBody decompressedRequestBody = maybeDecompressRequestBody(requestHeaders, body);
+
+										if (decompressedRequestBody != null) {
+											body = decompressedRequestBody.body();
+											requestHeaders = decompressedRequestBody.adjustedHeaders();
+										}
+									} catch (RequestBodyDecompressionException e) {
+										if (e.getReason() != RequestBodyDecompressionException.Reason.DECOMPRESSED_CONTENT_TOO_LARGE)
+											throw e;
+
+										contentTooLarge = true;
+										body = null;
+									}
+								}
 
 								HttpMethod httpMethod;
 

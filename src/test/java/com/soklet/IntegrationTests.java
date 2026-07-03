@@ -1642,6 +1642,30 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void gzipRequestBody_absoluteLimitUsesContentTooLargeHandler() throws Exception {
+		int port = findFreePort();
+		ResponseMarshaler responseMarshaler = ResponseMarshaler.builder()
+				.contentTooLargeHandler((request, resourceMethod) -> MarshaledResponse.withStatusCode(413)
+						.headers(Map.of("Content-Type", Set.of("text/plain")))
+						.body(("custom|" + request.isContentTooLarge() + "|" + request.getBody().isEmpty())
+								.getBytes(StandardCharsets.UTF_8))
+						.build())
+				.build();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.builder()
+				.maximumDecompressedBodySizeInBytes(16)
+				.build(), responseMarshaler);
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+			byte[] compressed = gzipBytes(new byte[1_000]);
+			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: gzip\r\n");
+
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"), response.statusLine());
+			Assertions.assertEquals("custom|true|true", new String(response.body(), StandardCharsets.UTF_8));
+		}
+	}
+
+	@Test
 	public void gzipRequestBody_chunkedTransferDechunkedAndDecompressed() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
@@ -1729,16 +1753,27 @@ public class IntegrationTests {
 	@NonNull
 	private static SokletConfig decompressionConfig(int port,
 																									@org.jspecify.annotations.Nullable RequestDecompressionPolicy policy) {
+		return decompressionConfig(port, policy, null);
+	}
+
+	@NonNull
+	private static SokletConfig decompressionConfig(int port,
+																									@org.jspecify.annotations.Nullable RequestDecompressionPolicy policy,
+																									@org.jspecify.annotations.Nullable ResponseMarshaler responseMarshaler) {
 		HttpServer.Builder httpServerBuilder = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5));
 
 		if (policy != null)
 			httpServerBuilder.requestDecompressionPolicy(policy);
 
-		return SokletConfig.withHttpServer(httpServerBuilder.build())
+		SokletConfig.Builder sokletConfigBuilder = SokletConfig.withHttpServer(httpServerBuilder.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
-				.lifecycleObserver(new QuietLifecycle())
-				.build();
+				.lifecycleObserver(new QuietLifecycle());
+
+		if (responseMarshaler != null)
+			sokletConfigBuilder.responseMarshaler(responseMarshaler);
+
+		return sokletConfigBuilder.build();
 	}
 
 	@NonNull

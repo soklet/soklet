@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 
@@ -46,9 +47,11 @@ import static java.lang.String.format;
  * <li>A request whose body cannot be decompressed is rejected with {@code 400 Bad Request}.</li>
  * <li>A request whose decompressed body exceeds {@link #getMaximumDecompressedBodySizeInBytes()} (or, when
  * unset, the server's {@code maximumRequestSizeInBytes}) or expands beyond
- * {@link #getMaximumCompressionRatio()} is rejected with {@code 413 Content Too Large}. These limits guard
- * against decompression bombs; decompression aborts as soon as a limit is exceeded.</li>
- * <li>{@code Content-Encoding: identity} and requests without a body are passed through unchanged.</li>
+ * {@link #getMaximumCompressionRatio()} is rejected through the normal {@code 413 Content Too Large}
+ * marshaling path. These limits guard against decompression bombs; decompression aborts as soon as a
+ * limit is exceeded.</li>
+ * <li>{@code Content-Encoding: identity}, requests without {@code Content-Encoding}, and bodyless
+ * {@code gzip}/{@code x-gzip} requests are passed through unchanged.</li>
  * </ul>
  * <p>
  * This applies to the standard HTTP server only. The SSE and MCP servers do not decompress request bodies,
@@ -165,7 +168,7 @@ public final class RequestDecompressionPolicy {
 	/**
 	 * Builder for enabled {@link RequestDecompressionPolicy} instances.
 	 */
-	@ThreadSafe
+	@NotThreadSafe
 	public static final class Builder {
 		@Nullable
 		private Integer maximumDecompressedBodySizeInBytes;
