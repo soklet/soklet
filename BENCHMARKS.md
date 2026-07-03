@@ -82,6 +82,34 @@ Useful properties:
 - `soklet.e2e.metrics`: `true` to include the default metrics collector; defaults to `false`
 - `soklet.e2e.output`: JSON output path; defaults to `target/e2e-results.json`
 
+## Startup And Memory Footprint Run
+
+Measure cold-start latency and settled memory footprint for a minimal one-route Soklet HTTP application:
+
+```shell
+$ java -cp target/soklet-benchmarks.jar com.soklet.StartupAndMemoryBenchmark
+```
+
+Each iteration forks a fresh JVM — no JIT or class-data carryover between iterations (the JIT itself remains active; it is not suppressed) — starts the server, serves a real `GET /ping` over a loopback socket, then idles while the parent samples its resident set size from the OS. The harness reports mean ± sample stddev with min/max over all iterations and writes JSON to `target/startup-results.json` by default.
+
+Measured per iteration:
+
+- `startedMillis`: JVM start to `Soklet#start()` returning, via `RuntimeMXBean#getUptime()` (JVM-internal time; OS process fork/exec cost before JVM initialization is not included)
+- `firstResponseMillis`: JVM start to the first HTTP response fully read off a real socket
+- `usedHeapBytes`: used heap after startup and serving one `GET /ping` request, following two `System.gc()` passes (approximate by nature; includes any live request-serving infrastructure)
+- `rssBytes`: median resident set size sampled via `ps -o rss=` over the settle window — the median is robust against a transient GC spike mid-window (macOS/Linux; reported as unavailable elsewhere)
+- `threadCount`: live JVM threads at rest
+
+Useful properties:
+
+- `soklet.startup.iterations`: cold-JVM iterations; defaults to `5`
+- `soklet.startup.settleMillis`: idle window for RSS sampling per iteration; defaults to `1000`
+- `soklet.startup.metrics`: `true` to include the default metrics collector in the child; defaults to `false`
+- `soklet.startup.childJvmArgs`: extra JVM arguments for the child (e.g. `-Xmx64m`), space-separated; arguments containing embedded spaces are not supported
+- `soklet.startup.output`: JSON output path; defaults to `target/startup-results.json`
+
+Caveats: RSS includes the whole JVM (heap, metaspace, code cache, GC structures, thread stacks), so it is the honest "what does ops see" number and is expected to dwarf used heap. Post-GC heap measurement is a convention, not an exact science. Cold-start numbers are deliberately unwarmed; do not compare them against steady-state throughput runs.
+
 ## Scope
 
 Current benchmarks cover:
@@ -92,6 +120,7 @@ Current benchmarks cover:
 - `MarshaledResponse` conversion to the embedded HTTP response representation for static and dynamic byte-array, cookie, file, file-channel, and byte-buffer bodies
 - Server-Sent Event event/comment formatting, UTF-8 payload serialization, and comment fan-out serialization strategy
 - end-to-end embedded HTTP handling over loopback for small plaintext, JSON, and POST JSON requests
+- cold-JVM startup latency (to started and to first response served) and settled memory footprint (post-GC heap, OS-level RSS, thread count) for a minimal application
 
 The JMH benchmarks can support claims about internal hot-path timing and allocation behavior. The end-to-end loopback benchmark can support claims about whole-process embedded HTTP behavior on one machine: request parsing, Soklet routing, handler invocation, response marshaling, event-loop scheduling, and socket I/O.
 
@@ -107,5 +136,6 @@ When sharing benchmark results, include:
 - exact benchmark command
 - JMH JSON output, when reporting JMH results
 - end-to-end JSON output, when reporting HTTP loopback results
+- startup JSON output, when reporting startup/memory results
 
 Prefer allocation and relative before/after changes over broad claims like "Soklet is fast." Whole-server throughput claims should cite the end-to-end benchmark scenario, server settings, client count, and latency percentiles.
