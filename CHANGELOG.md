@@ -2,6 +2,10 @@
 
 ## 3.5.0-SNAPSHOT
 
+### Features
+
+- Added `Request.getMediaRanges()` for parsed `Accept` header content negotiation input. Returns an ordered list of the new `MediaRange` type (type/subtype, `q` weight, media-type parameters) sorted by weight then specificity per RFC 9110 §12.5.1, with lenient handling of malformed media ranges. `MediaRange.fromHeaderRepresentation(...)` and `Utilities.extractMediaRangesFromAcceptHeaderValue(...)` are available for standalone parsing.
+
 ### Fixes
 
 - Hardened multipart header parsing so malformed RFC 2047 Base64 encoded-word values are treated as literal text instead of escaping as unexpected runtime exceptions.

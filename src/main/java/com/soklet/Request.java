@@ -130,6 +130,8 @@ public final class Request {
 	@Nullable
 	private volatile List<@NonNull LanguageRange> languageRanges = null;
 	@Nullable
+	private volatile List<@NonNull MediaRange> mediaRanges = null;
+	@Nullable
 	private volatile Map<@NonNull String, @NonNull Set<@NonNull String>> cookies = null;
 	@Nullable
 	private volatile Map<@NonNull String, @NonNull Set<@NonNull MultipartField>> multipartFields = null;
@@ -922,6 +924,63 @@ public final class Request {
 					}
 
 					this.languageRanges = result;
+				}
+			} finally {
+				getLock().unlock();
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * {@link MediaRange} information for this request as specified by {@code Accept} header value[s], ordered by
+	 * {@code q} weight and specificity as defined by
+	 * <a href="https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.1">RFC 9110, Section 12.5.1</a>.
+	 * <p>
+	 * This method will lazily parse {@code Accept} header values into an ordered {@link List} of {@link MediaRange}
+	 * when first invoked.  This representation is then cached and re-used for subsequent invocations.
+	 * Multiple {@code Accept} header lines are joined in their original request order, and malformed media
+	 * ranges are skipped.
+	 * <p>
+	 * This method is threadsafe.
+	 * <p>
+	 * Note: an empty list means the client expressed no {@code Accept} preference — per
+	 * <a href="https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.1">RFC 9110</a> that implies any
+	 * media type is acceptable, not that none are.
+	 *
+	 * @return media range information for this request in descending preference order, or the empty list if none was specified
+	 */
+	@NonNull
+	public List<@NonNull MediaRange> getMediaRanges() {
+		// Lazily instantiate our parsed media ranges using double-checked locking
+		List<MediaRange> result = this.mediaRanges;
+
+		if (result == null) {
+			getLock().lock();
+			try {
+				result = this.mediaRanges;
+
+				if (result == null) {
+					Set<String> acceptHeaderValues = getHeaderValues("Accept").orElse(null);
+
+					if (acceptHeaderValues != null && !acceptHeaderValues.isEmpty()) {
+						// Support data spread across multiple header lines, which spec allows
+						String acceptHeaderValue = acceptHeaderValues.stream()
+								.filter(value -> trimAggressivelyToEmpty(value).length() > 0)
+								.collect(Collectors.joining(","));
+
+						try {
+							result = Utilities.extractMediaRangesFromAcceptHeaderValue(acceptHeaderValue);
+						} catch (Exception ignored) {
+							// Malformed Accept header; ignore it
+							result = List.of();
+						}
+					} else {
+						result = List.of();
+					}
+
+					this.mediaRanges = result;
 				}
 			} finally {
 				getLock().unlock();

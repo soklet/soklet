@@ -43,6 +43,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1004,6 +1005,54 @@ public final class Utilities {
 		} catch (Exception ignored) {
 			return List.of();
 		}
+	}
+
+	/**
+	 * Parses an {@code Accept} header value into a best-effort ordered list of {@link MediaRange}s.
+	 * <p>
+	 * Media ranges are ordered by descending {@code q} weight, then by descending specificity
+	 * (a concrete {@code type/subtype} outranks {@code type/*}, which outranks {@code *}{@code /*});
+	 * when both are equal, original header order is preserved (the sort is stable). See
+	 * <a href="https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.1">RFC 9110, Section 12.5.1</a>.
+	 * Note that specificity here considers wildcards only — media-type parameter counts do not affect
+	 * ordering (full parameter-aware precedence is a content-negotiation concern, which this parse-only
+	 * method deliberately does not implement). Malformed media ranges are skipped.
+	 *
+	 * @param acceptHeaderValue the raw header value (must be non-{@code null})
+	 * @return media ranges in descending preference order; empty if none could be resolved
+	 */
+	@NonNull
+	public static List<@NonNull MediaRange> extractMediaRangesFromAcceptHeaderValue(@NonNull String acceptHeaderValue) {
+		requireNonNull(acceptHeaderValue);
+
+		List<MediaRange> mediaRanges = new ArrayList<>(4);
+
+		for (String fragment : splitCommaAware(acceptHeaderValue)) {
+			MediaRange mediaRange = MediaRange.fromHeaderRepresentation(fragment).orElse(null);
+
+			if (mediaRange != null)
+				mediaRanges.add(mediaRange);
+		}
+
+		// Stable sort: q weight descending, then specificity descending; original order breaks ties
+		mediaRanges.sort(Comparator
+				.comparing(MediaRange::getQuality, Comparator.reverseOrder())
+				.thenComparing(Utilities::mediaRangeSpecificity, Comparator.reverseOrder()));
+
+		return Collections.unmodifiableList(mediaRanges);
+	}
+
+	@NonNull
+	private static Integer mediaRangeSpecificity(@NonNull MediaRange mediaRange) {
+		requireNonNull(mediaRange);
+
+		if (mediaRange.isWildcardType())
+			return 0;
+
+		if (mediaRange.isWildcardSubtype())
+			return 1;
+
+		return 2;
 	}
 
 	@Nullable

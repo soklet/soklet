@@ -518,6 +518,42 @@ public class SokletTests {
 		Assertions.assertTrue(ranges.contains("fr-ca") || ranges.contains("fr-CA"));
 	}
 
+	@Test
+	public void multipleHeaderLinesAreMergedForMediaRanges() {
+		Map<String, Set<String>> headers = new LinkedHashMap<>();
+		headers.put("Accept", new LinkedHashSet<>(List.of(
+				"text/html;q=0.5",
+				"application/json"
+		)));
+
+		Request req = Request.withPath(HttpMethod.GET, "/").headers(headers).build();
+
+		List<String> subtypes = req.getMediaRanges().stream()
+				.map(MediaRange::getSubtype)
+				.toList();
+
+		// Both lines must be merged, and the q=1 json entry must outrank the q=0.5 html entry
+		Assertions.assertEquals(List.of("json", "html"), subtypes);
+	}
+
+	@Test
+	public void absentAcceptHeaderYieldsNoMediaRanges() {
+		Request req = Request.withPath(HttpMethod.GET, "/").build();
+
+		Assertions.assertTrue(req.getMediaRanges().isEmpty(),
+				"No Accept header should produce an empty media range list");
+	}
+
+	@Test
+	public void mediaRangesAreCachedAfterFirstInvocation() {
+		Map<String, Set<String>> headers = Map.of("Accept", Set.of("text/html, application/json;q=0.2"));
+
+		Request req = Request.withPath(HttpMethod.GET, "/").headers(headers).build();
+
+		Assertions.assertSame(req.getMediaRanges(), req.getMediaRanges(),
+				"Parsed media ranges should be cached and re-used");
+	}
+
 	static class SimulatorDecodingResource {
 		@GET("/widgets/{id}")
 		public Response echo(@PathParameter String id) {
