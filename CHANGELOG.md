@@ -18,6 +18,10 @@
 - `McpSessionStore.Builder.idleTimeout(...)` now documents that disabling idle expiry with a finite concurrent-session limit requires explicit session lifecycle cleanup to avoid exhausting session slots.
 - `RequestInterceptor.interceptRequest(...)` now documents its synchronous, same-thread contract explicitly.
 
+### Tooling
+
+- Added startup/memory benchmarking support for local measurement and future managed-runner release baselines. This release does not publish public comparative benchmark numbers.
+
 ## 3.4.0
 
 ### Breaking Changes

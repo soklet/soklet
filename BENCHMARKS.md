@@ -139,21 +139,11 @@ When sharing benchmark results, include:
 - end-to-end JSON output, when reporting HTTP loopback results
 - startup JSON output, when reporting startup/memory results
 
-For release evidence, archive the raw JSON files under `docs/benchmarks/<version>/`:
-
-```text
-docs/benchmarks/3.5.0/
-  jmh-results.json
-  e2e-results.json
-  startup-results.json
-  README.md
-```
-
-The per-version `README.md` should record the environment and commands, then report relative changes against the previous release on the same hardware and JDK:
+For local regression tracking, keep the raw JSON files with a short note that records the environment, commands, and commit SHAs:
 
 ```text
 Baseline: v3.4.0 (ba8ed98)
-Candidate: v3.5.0 (<sha>)
+Candidate: <sha>
 Java: <vendor> <version>
 OS/CPU: <os>, <cpu>
 
@@ -163,3 +153,9 @@ Startup: started <ms> (<+/- percent>), first response <ms> (<+/- percent>), RSS 
 ```
 
 Prefer allocation and relative before/after changes over broad performance claims. Only compare numbers produced on the same machine, operating system, JDK, and benchmark command. Whole-server throughput claims should cite the end-to-end benchmark scenario, server settings, client count, and latency percentiles.
+
+## Public Release Baselines
+
+Public release baselines should be produced only from a stable managed runner, such as a dedicated EC2 instance type with a pinned AMI, JDK, JVM flags, benchmark commands, and machine-quieting procedure. Ad hoc laptop numbers are useful for local regression checks, but should not be published as release evidence.
+
+Soklet 3.5.0 adds benchmark harnesses for local measurement and future release baselines. It does not publish public comparative benchmark numbers.
