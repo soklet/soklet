@@ -492,7 +492,26 @@ public final class EndToEndHttpBenchmark {
 	}
 
 	private static String escape(String value) {
-		return value.replace("\\", "\\\\").replace("\"", "\\\"");
+		StringBuilder escaped = new StringBuilder(value.length());
+		for (int i = 0; i < value.length(); i++) {
+			char c = value.charAt(i);
+			switch (c) {
+				case '"' -> escaped.append("\\\"");
+				case '\\' -> escaped.append("\\\\");
+				case '\b' -> escaped.append("\\b");
+				case '\f' -> escaped.append("\\f");
+				case '\n' -> escaped.append("\\n");
+				case '\r' -> escaped.append("\\r");
+				case '\t' -> escaped.append("\\t");
+				default -> {
+					if (c < 0x20)
+						escaped.append(String.format(Locale.ROOT, "\\u%04x", (int) c));
+					else
+						escaped.append(c);
+				}
+			}
+		}
+		return escaped.toString();
 	}
 
 	private static byte[] ascii(String value) {

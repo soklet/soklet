@@ -131,6 +131,7 @@ Loopback benchmarks do not prove internet-facing latency, TLS overhead, load bal
 When sharing benchmark results, include:
 
 - commit SHA
+- baseline commit SHA, when reporting a before/after comparison
 - Java vendor and version
 - OS and CPU
 - exact benchmark command
@@ -138,4 +139,27 @@ When sharing benchmark results, include:
 - end-to-end JSON output, when reporting HTTP loopback results
 - startup JSON output, when reporting startup/memory results
 
-Prefer allocation and relative before/after changes over broad claims like "Soklet is fast." Whole-server throughput claims should cite the end-to-end benchmark scenario, server settings, client count, and latency percentiles.
+For release evidence, archive the raw JSON files under `docs/benchmarks/<version>/`:
+
+```text
+docs/benchmarks/3.5.0/
+  jmh-results.json
+  e2e-results.json
+  startup-results.json
+  README.md
+```
+
+The per-version `README.md` should record the environment and commands, then report relative changes against the previous release on the same hardware and JDK:
+
+```text
+Baseline: v3.4.0 (ba8ed98)
+Candidate: v3.5.0 (<sha>)
+Java: <vendor> <version>
+OS/CPU: <os>, <cpu>
+
+JMH: <scenario> <score> (<+/- percent vs baseline>), allocation <B/op> (<+/- percent>)
+E2E: <scenario>, <clients> clients, throughput <rps> (<+/- percent>), p99 <nanos> (<+/- percent>)
+Startup: started <ms> (<+/- percent>), first response <ms> (<+/- percent>), RSS <MB> (<+/- percent>)
+```
+
+Prefer allocation and relative before/after changes over broad claims like "Soklet is fast." Only compare numbers produced on the same machine, operating system, JDK, and benchmark command. Whole-server throughput claims should cite the end-to-end benchmark scenario, server settings, client count, and latency percentiles.
