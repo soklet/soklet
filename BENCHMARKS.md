@@ -162,4 +162,4 @@ E2E: <scenario>, <clients> clients, throughput <rps> (<+/- percent>), p99 <nanos
 Startup: started <ms> (<+/- percent>), first response <ms> (<+/- percent>), RSS <MB> (<+/- percent>)
 ```
 
-Prefer allocation and relative before/after changes over broad claims like "Soklet is fast." Only compare numbers produced on the same machine, operating system, JDK, and benchmark command. Whole-server throughput claims should cite the end-to-end benchmark scenario, server settings, client count, and latency percentiles.
+Prefer allocation and relative before/after changes over broad performance claims. Only compare numbers produced on the same machine, operating system, JDK, and benchmark command. Whole-server throughput claims should cite the end-to-end benchmark scenario, server settings, client count, and latency percentiles.
