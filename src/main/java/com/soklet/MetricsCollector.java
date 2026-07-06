@@ -1184,6 +1184,9 @@ public interface MetricsCollector {
 
 		/**
 		 * Returns HTTP request body size histograms keyed by server route.
+		 * <p>
+		 * Sizes reflect the body as handlers observe it: with request decompression enabled (see
+		 * {@link RequestDecompressionPolicy}), that is the decompressed size, not the wire-compressed size.
 		 *
 		 * @return HTTP request body size histograms
 		 */

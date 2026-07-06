@@ -20,7 +20,7 @@
 
 ### Tooling
 
-- Added startup/memory benchmarking support for local measurement and future managed-runner release baselines. This release does not publish public comparative benchmark numbers.
+- Added startup/memory benchmarking support for local measurement and future managed-runner release baselines. This release does not publish public benchmark numbers.
 
 ## 3.4.0
 

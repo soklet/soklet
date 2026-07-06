@@ -127,6 +127,13 @@ public class IntegrationTests {
 					+ request.getBody().map(bytes -> bytes.length).orElse(0);
 		}
 
+		// Echoes a named multipart field (for decompression x multipart seam assertions)
+		@POST("/multipart-echo")
+		public String multipartEcho(@NonNull Request request) {
+			return request.getMultipartFields().keySet().stream().sorted().reduce((a, b) -> a + "," + b).orElse("none")
+					+ "|" + request.getMultipartField("test").flatMap(MultipartField::getDataAsString).orElse("none");
+		}
+
 		@GET("/multivalued-headers")
 		public Response multivaluedHeaders(@NonNull Request request) {
 			return Response.withStatusCode(200)
@@ -1699,6 +1706,33 @@ public class IntegrationTests {
 				Assertions.assertEquals("none|" + uncompressed.length + "|" + uncompressed.length,
 						new String(response.body(), StandardCharsets.UTF_8));
 			}
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_multipartBodyDecompressedBeforeParsing() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			String boundary = "sokletBoundary";
+			String multipartBody = "--" + boundary + "\r\n"
+					+ "Content-Disposition: form-data; name=\"test\"\r\n"
+					+ "\r\n"
+					+ "data\r\n"
+					+ "--" + boundary + "--\r\n";
+			byte[] compressed = gzipBytes(multipartBody.getBytes(StandardCharsets.UTF_8));
+
+			RawResponse response = postRawBody(port, "/multipart-echo", compressed,
+					"Content-Encoding: gzip\r\n"
+							+ "Content-Type: multipart/form-data; boundary=" + boundary + "\r\n");
+
+			// The decompressed body must parse as multipart: Content-Type survives the header rewrite
+			// while Content-Encoding/Content-Length are replaced to describe the decompressed bytes
+			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
+			Assertions.assertEquals("test|data", new String(response.body(), StandardCharsets.UTF_8));
 		}
 	}
 

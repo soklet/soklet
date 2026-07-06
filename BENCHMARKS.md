@@ -158,4 +158,4 @@ Prefer allocation and relative before/after changes over broad performance claim
 
 Public release baselines should be produced only from a stable managed runner, such as a dedicated EC2 instance type with a pinned AMI, JDK, JVM flags, benchmark commands, and machine-quieting procedure. Ad hoc laptop numbers are useful for local regression checks, but should not be published as release evidence.
 
-Soklet 3.5.0 adds benchmark harnesses for local measurement and future release baselines. It does not publish public comparative benchmark numbers.
+Soklet 3.5.0 adds benchmark harnesses for local measurement and future release baselines. It does not publish public benchmark numbers.
