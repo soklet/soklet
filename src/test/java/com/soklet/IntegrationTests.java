@@ -1710,6 +1710,90 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void gzipRequestBody_expectContinueChunkedMalformedGzipReturns400() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(4000);
+				String head = "POST /body HTTP/1.1\r\n"
+						+ "Host: 127.0.0.1\r\n"
+						+ "Expect: 100-continue\r\n"
+						+ "Transfer-Encoding: chunked\r\n"
+						+ "Content-Encoding: gzip\r\n"
+						+ "\r\n";
+				out.write(head.getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse interimResponse = readResponse(in);
+				Assertions.assertTrue(interimResponse.statusLine().startsWith("HTTP/1.1 100"), "Expected 100 Continue");
+				Assertions.assertEquals(0, interimResponse.body().length);
+
+				// Chunked body that is not valid gzip: decompression must fail with a single 400 AFTER the interim 100
+				String garbage = "this is not gzip";
+				out.write((Integer.toHexString(garbage.length()) + "\r\n" + garbage + "\r\n0\r\n\r\n")
+						.getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), response.statusLine());
+			}
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_bodilessUnsupportedCodingReturns415() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(4000);
+				// An unsupported coding is rejected even with no body: the Content-Encoding claim itself is unsupported
+				out.write(("GET /hello HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Encoding: br\r\n\r\n")
+						.getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 415"), response.statusLine());
+			}
+		}
+	}
+
+	@Test
+	public void gzipRequestBody_bodilessGzipCodingPassesThrough() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(4000);
+				// A gzip coding with no body passes through unchanged (documented lenient posture)
+				out.write(("GET /hello HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Encoding: gzip\r\n\r\n")
+						.getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
+				Assertions.assertEquals("hello world", new String(response.body(), StandardCharsets.UTF_8));
+			}
+		}
+	}
+
+	@Test
 	public void gzipRequestBody_multipartBodyDecompressedBeforeParsing() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
