@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.5.0-SNAPSHOT
+## 3.5.0 (2026-07-10)
 
 ### Features
 
