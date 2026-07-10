@@ -1187,6 +1187,8 @@ public interface MetricsCollector {
 		 * <p>
 		 * Sizes reflect the body as handlers observe it: with request decompression enabled (see
 		 * {@link RequestDecompressionPolicy}), that is the decompressed size, not the wire-compressed size.
+		 * Custom collectors that require the encoded payload size can use
+		 * {@link Request#getEncodedBodySizeInBytes()} from request lifecycle callbacks.
 		 *
 		 * @return HTTP request body size histograms
 		 */

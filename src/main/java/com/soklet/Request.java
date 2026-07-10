@@ -114,6 +114,8 @@ public final class Request {
 	private final CorsPreflight corsPreflight;
 	private final byte @Nullable [] body;
 	@NonNull
+	private final Integer encodedBodySizeInBytes;
+	@NonNull
 	private final Boolean multipart;
 	@NonNull
 	private final Boolean contentTooLarge;
@@ -235,6 +237,7 @@ public final class Request {
 		Object builderId;
 		HttpMethod builderHttpMethod;
 		byte[] builderBody;
+		Integer builderEncodedBodySizeInBytes;
 		MultipartParser builderMultipartParser;
 		Boolean builderContentTooLarge;
 		RequestHeaders builderHeaders;
@@ -248,6 +251,7 @@ public final class Request {
 			builderId = activePathBuilder.id;
 			builderHttpMethod = activePathBuilder.httpMethod;
 			builderBody = activePathBuilder.body;
+			builderEncodedBodySizeInBytes = activePathBuilder.encodedBodySizeInBytes;
 			builderMultipartParser = activePathBuilder.multipartParser;
 			builderContentTooLarge = activePathBuilder.contentTooLarge;
 			builderHeaders = new MapRequestHeaders(activePathBuilder.headers);
@@ -260,6 +264,7 @@ public final class Request {
 			builderId = activeRawBuilder.id;
 			builderHttpMethod = activeRawBuilder.httpMethod;
 			builderBody = activeRawBuilder.body;
+			builderEncodedBodySizeInBytes = activeRawBuilder.encodedBodySizeInBytes;
 			builderMultipartParser = activeRawBuilder.multipartParser;
 			builderContentTooLarge = activeRawBuilder.contentTooLarge;
 			builderHeaders = activeRawBuilder.requestHeaders();
@@ -392,6 +397,12 @@ public final class Request {
 
 		// It's illegal to specify a body if the request is marked "content too large"
 		this.body = this.contentTooLarge ? null : builderBody;
+		this.encodedBodySizeInBytes = builderEncodedBodySizeInBytes == null
+				? (builderBody == null ? 0 : builderBody.length)
+				: builderEncodedBodySizeInBytes;
+
+		if (this.encodedBodySizeInBytes < 0)
+			throw new IllegalArgumentException("Encoded body size must be >= 0");
 
 		// Last step of ctor: generate an ID (if necessary) using this fully-constructed Request
 		this.id = builderId == null ? this.idGenerator.generateId(this) : builderId;
@@ -742,7 +753,28 @@ public final class Request {
 	}
 
 	/**
-	 * The raw bytes of the request body - <strong>callers should not modify this array; it is not defensively copied for performance reasons</strong>.
+	 * The size of the request payload body before any transparent {@code Content-Encoding} decompression.
+	 * <p>
+	 * This excludes the request line, headers, and transfer framing. For example, when the standard HTTP
+	 * server transparently decompresses a gzip request body, this is the compressed payload size while
+	 * {@link #getBody()} exposes the decompressed bytes. For requests that are not transparently decompressed,
+	 * including manually constructed requests, this is the size of {@link #getBody()}.
+	 * <p>
+	 * Copies created through {@link #copy()} preserve this value even if the copy replaces the handler-visible
+	 * body, because the value describes the original inbound payload.
+	 *
+	 * @return the encoded request payload body size in bytes
+	 */
+	@NonNull
+	public Integer getEncodedBodySizeInBytes() {
+		return this.encodedBodySizeInBytes;
+	}
+
+	/**
+	 * The request body bytes exposed to handlers - <strong>callers should not modify this array; it is not defensively copied for performance reasons</strong>.
+	 * <p>
+	 * When the standard HTTP server transparently decompresses a request body, these are the decompressed
+	 * bytes. The encoded payload size remains available through {@link #getEncodedBodySizeInBytes()}.
 	 * <p>
 	 * For convenience, {@link #getBodyAsString()} is available if you expect your request body to be of type {@link String}.
 	 *
@@ -1432,6 +1464,8 @@ public final class Request {
 		private InetSocketAddress remoteAddress;
 		private byte @Nullable [] body;
 		@Nullable
+		private Integer encodedBodySizeInBytes;
+		@Nullable
 		private Boolean contentTooLarge;
 
 		RawBuilder(@NonNull HttpMethod httpMethod,
@@ -1509,6 +1543,12 @@ public final class Request {
 		}
 
 		@NonNull
+		RawBuilder encodedBodySizeInBytes(@Nullable Integer encodedBodySizeInBytes) {
+			this.encodedBodySizeInBytes = encodedBodySizeInBytes;
+			return this;
+		}
+
+		@NonNull
 		public RawBuilder contentTooLarge(@Nullable Boolean contentTooLarge) {
 			this.contentTooLarge = contentTooLarge;
 			return this;
@@ -1562,6 +1602,8 @@ public final class Request {
 		@Nullable
 		private InetSocketAddress remoteAddress;
 		private byte @Nullable [] body;
+		@Nullable
+		private Integer encodedBodySizeInBytes;
 		@Nullable
 		private Boolean contentTooLarge;
 
@@ -1652,6 +1694,12 @@ public final class Request {
 		}
 
 		@NonNull
+		PathBuilder encodedBodySizeInBytes(@Nullable Integer encodedBodySizeInBytes) {
+			this.encodedBodySizeInBytes = encodedBodySizeInBytes;
+			return this;
+		}
+
+		@NonNull
 		public PathBuilder contentTooLarge(@Nullable Boolean contentTooLarge) {
 			this.contentTooLarge = contentTooLarge;
 			return this;
@@ -1704,6 +1752,7 @@ public final class Request {
 					.queryParameters(mutableLinkedCopy(request.getQueryParameters()))
 					.headers(mutableCaseInsensitiveCopy(request.getHeaders()))
 					.body(request.body) // Direct field access to avoid array copy
+					.encodedBodySizeInBytes(request.getEncodedBodySizeInBytes())
 					.multipartParser(request.getMultipartParser())
 					.idGenerator(request.getIdGenerator())
 					.contentTooLarge(request.isContentTooLarge())

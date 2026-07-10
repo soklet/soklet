@@ -97,6 +97,20 @@ public class RequestTests {
 	}
 
 	@Test
+	public void encodedBodySizeDefaultsToBodySizeAndSurvivesBodyReplacementInCopy() {
+		Request request = Request.withPath(HttpMethod.POST, "/")
+				.body(new byte[24])
+				.build();
+		Request copy = request.copy()
+				.body(new byte[128])
+				.finish();
+
+		Assertions.assertEquals(24, request.getEncodedBodySizeInBytes());
+		Assertions.assertEquals(24, copy.getEncodedBodySizeInBytes());
+		Assertions.assertEquals(128, copy.getBody().orElseThrow().length);
+	}
+
+	@Test
 	public void publicBuilderHeadersAreCopiedAndCaseInsensitive() {
 		Map<String, Set<String>> headers = new LinkedHashMap<>();
 		headers.put("X-Trace-Id", new LinkedHashSet<>(List.of("abc123")));

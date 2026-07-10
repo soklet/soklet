@@ -534,6 +534,7 @@ final class DefaultHttpServer implements HttpServer {
 
 								// Normalize body
 								byte[] body = microhttpRequest.body();
+								int encodedBodySizeInBytes = body == null ? 0 : body.length;
 
 								if (body != null && body.length == 0)
 									body = null;
@@ -578,6 +579,7 @@ final class DefaultHttpServer implements HttpServer {
 										.idGenerator(getIdGenerator())
 										.microhttpHeaders(requestHeaders)
 										.body(body)
+										.encodedBodySizeInBytes(encodedBodySizeInBytes)
 										.remoteAddress(microhttpRequest.remoteAddress())
 										.contentTooLarge(contentTooLarge)
 										.build();

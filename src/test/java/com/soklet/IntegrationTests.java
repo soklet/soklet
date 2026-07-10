@@ -124,7 +124,8 @@ public class IntegrationTests {
 		public String bodyMeta(@NonNull Request request) {
 			return request.getHeader("Content-Encoding").orElse("none") + "|"
 					+ request.getHeader("Content-Length").orElse("none") + "|"
-					+ request.getBody().map(bytes -> bytes.length).orElse(0);
+					+ request.getBody().map(bytes -> bytes.length).orElse(0) + "|"
+					+ request.getEncodedBodySizeInBytes();
 		}
 
 		// Echoes a named multipart field (for decompression x multipart seam assertions)
@@ -1567,7 +1568,7 @@ public class IntegrationTests {
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
 			// Content-Encoding stripped; Content-Length and body length reflect the decompressed size
-			Assertions.assertEquals("none|" + uncompressed.length + "|" + uncompressed.length,
+			Assertions.assertEquals("none|" + uncompressed.length + "|" + uncompressed.length + "|" + compressed.length,
 					new String(response.body(), StandardCharsets.UTF_8));
 		}
 	}
@@ -1584,7 +1585,7 @@ public class IntegrationTests {
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
 			// Untouched: handler sees the original Content-Encoding and the compressed byte count
-			Assertions.assertEquals("gzip|" + compressed.length + "|" + compressed.length,
+			Assertions.assertEquals("gzip|" + compressed.length + "|" + compressed.length + "|" + compressed.length,
 					new String(response.body(), StandardCharsets.UTF_8));
 		}
 	}
@@ -1702,8 +1703,9 @@ public class IntegrationTests {
 				RawResponse response = readResponse(in);
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
 				// Neither Content-Encoding nor a stale framing header should survive; Content-Length reflects
-				// the decompressed size (the handler reports Content-Encoding|Content-Length|bodyLength)
-				Assertions.assertEquals("none|" + uncompressed.length + "|" + uncompressed.length,
+				// the decompressed size, while encodedBodySize retains the dechunked compressed payload length
+				// (the handler reports Content-Encoding|Content-Length|bodyLength|encodedBodySize)
+				Assertions.assertEquals("none|" + uncompressed.length + "|" + uncompressed.length + "|" + compressed.length,
 						new String(response.body(), StandardCharsets.UTF_8));
 			}
 		}

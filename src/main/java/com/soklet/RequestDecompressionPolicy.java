@@ -41,7 +41,8 @@ import static java.lang.String.format;
  * <ul>
  * <li>A request with {@code Content-Encoding: gzip} or {@code x-gzip} has its body decompressed; the
  * {@code Content-Encoding} header is removed and {@code Content-Length} is updated to the decompressed size,
- * so handlers observe a self-consistent uncompressed request.</li>
+ * so handlers observe a self-consistent uncompressed request. The original encoded payload size remains
+ * available through {@link Request#getEncodedBodySizeInBytes()} for telemetry and diagnostics.</li>
  * <li>A request with an unsupported {@code Content-Encoding} (or multiple codings) is rejected with
  * {@code 415 Unsupported Media Type}.</li>
  * <li>A request whose body cannot be decompressed is rejected with {@code 400 Bad Request}.</li>
