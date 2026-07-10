@@ -1710,6 +1710,70 @@ public class IntegrationTests {
 	}
 
 	@Test
+	public void headFailsafeResponsesOmitContentAndPreserveKeepAliveFraming() throws Exception {
+		int port = findFreePort();
+		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
+
+		try (Soklet app = Soklet.fromConfig(cfg)) {
+			app.start();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+				socket.setSoTimeout(4000);
+
+				// 1. Normal-path HEAD: headers only, hypothetical Content-Length for the GET body
+				out.write(("HEAD /hello HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+				HeadersOnlyResponse normalHead = readHeadersOnly(in);
+				Assertions.assertTrue(normalHead.statusLine().startsWith("HTTP/1.1 200"), normalHead.statusLine());
+				Assertions.assertEquals("11", normalHead.headers().get("content-length"), "Expected hypothetical GET length");
+
+				// 2. Failsafe-path HEAD (415 via unsupported Content-Encoding): RFC 9110 §9.3.2 requires
+				// NO content even though the canned failsafe would normally carry a text body
+				out.write(("HEAD /hello HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Encoding: br\r\n\r\n")
+						.getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+				HeadersOnlyResponse failsafeHead = readHeadersOnly(in);
+				Assertions.assertTrue(failsafeHead.statusLine().startsWith("HTTP/1.1 415"), failsafeHead.statusLine());
+				String failsafeContentLength = failsafeHead.headers().get("content-length");
+				Assertions.assertNotNull(failsafeContentLength, "Hypothetical Content-Length should be preserved");
+				Assertions.assertTrue(Integer.parseInt(failsafeContentLength) > 0, "Hypothetical Content-Length should be nonzero");
+
+				// 3. Pipelined GET on the same connection: if either HEAD leaked body bytes, this
+				// response would desync (the leaked bytes would be read as this status line)
+				out.write(("GET /hello HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+				RawResponse pipelinedGet = readResponse(in);
+				Assertions.assertTrue(pipelinedGet.statusLine().startsWith("HTTP/1.1 200"), pipelinedGet.statusLine());
+				Assertions.assertEquals("hello world", new String(pipelinedGet.body(), StandardCharsets.UTF_8));
+			}
+		}
+	}
+
+	private record HeadersOnlyResponse(String statusLine, Map<String, String> headers) {}
+
+	// Reads a status line + headers WITHOUT consuming body bytes (readResponse would block reading
+	// a HEAD response's hypothetical Content-Length)
+	private static HeadersOnlyResponse readHeadersOnly(InputStream in) throws IOException {
+		String statusLine = readLineCRLF(in);
+		if (statusLine == null)
+			throw new EOFException("Unexpected EOF while reading status line");
+
+		Map<String, String> headers = new LinkedHashMap<>();
+		String line;
+
+		while ((line = readLineCRLF(in)) != null && !line.isEmpty()) {
+			int idx = line.indexOf(':');
+			if (idx <= 0)
+				continue;
+			headers.put(line.substring(0, idx).trim().toLowerCase(Locale.ROOT), line.substring(idx + 1).trim());
+		}
+
+		return new HeadersOnlyResponse(statusLine, headers);
+	}
+
+	@Test
 	public void gzipRequestBody_expectContinueChunkedMalformedGzipReturns400() throws Exception {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());

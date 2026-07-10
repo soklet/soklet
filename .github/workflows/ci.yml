@@ -148,6 +148,8 @@ jobs:
             test_selector: HttpDateFuzzTest#fromHeaderValueNeverThrows
           - target_id: parameterized-header-value
             test_selector: ParameterizedHeaderValueFuzzTest#builderOnlyRejectsWithIllegalArgumentException
+          - target_id: media-range
+            test_selector: MediaRangeFuzzTest#mediaRangeParsingNeverThrows
           - target_id: query-format
             test_selector: QueryFormatFuzzTest#extractQueryParametersOnlyRejectsWithIllegalRequestException
           - target_id: response-cookie

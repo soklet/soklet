@@ -3125,27 +3125,61 @@ final class DefaultMcpRuntime {
 		if (requestedTypeAndSubtype.length != 2)
 			throw new IllegalArgumentException("Invalid media type '%s'".formatted(mediaType));
 
-		AcceptMediaRange bestMatch = null;
+		// Shared quote-aware parsing (naive comma/semicolon splitting could let a quoted parameter
+		// value manufacture a spurious media range); matching stays specificity-first, then quality
+		MediaRange bestMatch = null;
+		Integer bestSpecificity = null;
 
 		for (String acceptHeaderValue : acceptHeaderValues) {
 			if (acceptHeaderValue == null)
 				continue;
 
-			for (String fragment : acceptHeaderValue.split(",", -1)) {
-				AcceptMediaRange mediaRange = AcceptMediaRange.parse(fragment).orElse(null);
-
-				if (mediaRange == null || !mediaRange.matches(requestedTypeAndSubtype[0], requestedTypeAndSubtype[1]))
+			for (MediaRange mediaRange : Utilities.extractMediaRangesFromAcceptHeaderValue(acceptHeaderValue)) {
+				if (!mediaRangeMatches(mediaRange, requestedTypeAndSubtype[0], requestedTypeAndSubtype[1]))
 					continue;
 
+				Integer specificity = mediaRangeWildcardSpecificity(mediaRange);
+
 				if (bestMatch == null
-						|| mediaRange.specificity() > bestMatch.specificity()
-						|| (mediaRange.specificity().equals(bestMatch.specificity())
-						&& mediaRange.quality().compareTo(bestMatch.quality()) > 0))
+						|| specificity > bestSpecificity
+						|| (specificity.equals(bestSpecificity)
+						&& mediaRange.getQuality().compareTo(bestMatch.getQuality()) > 0)) {
 					bestMatch = mediaRange;
+					bestSpecificity = specificity;
+				}
 			}
 		}
 
-		return bestMatch != null && bestMatch.quality().compareTo(BigDecimal.ZERO) > 0;
+		return bestMatch != null && bestMatch.getQuality().compareTo(BigDecimal.ZERO) > 0;
+	}
+
+	private static boolean mediaRangeMatches(@NonNull MediaRange mediaRange,
+																					 @NonNull String requestedType,
+																					 @NonNull String requestedSubtype) {
+		requireNonNull(mediaRange);
+		requireNonNull(requestedType);
+		requireNonNull(requestedSubtype);
+
+		if (mediaRange.isWildcardType())
+			return true;
+
+		if (!mediaRange.getType().equals(requestedType))
+			return false;
+
+		return mediaRange.isWildcardSubtype() || mediaRange.getSubtype().equals(requestedSubtype);
+	}
+
+	@NonNull
+	private static Integer mediaRangeWildcardSpecificity(@NonNull MediaRange mediaRange) {
+		requireNonNull(mediaRange);
+
+		if (mediaRange.isWildcardType())
+			return 0;
+
+		if (mediaRange.isWildcardSubtype())
+			return 1;
+
+		return 2;
 	}
 
 	@NonNull
@@ -3301,82 +3335,6 @@ final class DefaultMcpRuntime {
 			requireNonNull(method);
 			requireNonNull(operationType);
 			requireNonNull(params);
-		}
-	}
-
-	private record AcceptMediaRange(
-			@NonNull String type,
-			@NonNull String subtype,
-			@NonNull BigDecimal quality
-	) {
-		private AcceptMediaRange {
-			requireNonNull(type);
-			requireNonNull(subtype);
-			requireNonNull(quality);
-		}
-
-		@NonNull
-		private static Optional<AcceptMediaRange> parse(@Nullable String fragment) {
-			fragment = fragment == null ? null : fragment.trim();
-
-			if (fragment == null || fragment.isBlank())
-				return Optional.empty();
-
-			String[] segments = fragment.split(";", -1);
-			String[] typeAndSubtype = segments[0].trim().toLowerCase(Locale.ROOT).split("/", 2);
-
-			if (typeAndSubtype.length != 2)
-				return Optional.empty();
-
-			BigDecimal quality = BigDecimal.ONE;
-
-			for (int i = 1; i < segments.length; i++) {
-				String segment = segments[i].trim();
-				int equalsIndex = segment.indexOf('=');
-
-				if (equalsIndex == -1)
-					continue;
-
-				String name = segment.substring(0, equalsIndex).trim();
-				String value = segment.substring(equalsIndex + 1).trim();
-
-				if (!"q".equalsIgnoreCase(name))
-					continue;
-
-				try {
-					quality = new BigDecimal(value);
-				} catch (NumberFormatException e) {
-					return Optional.empty();
-				}
-			}
-
-			return Optional.of(new AcceptMediaRange(typeAndSubtype[0], typeAndSubtype[1], quality));
-		}
-
-		@NonNull
-		private Boolean matches(@NonNull String requestedType,
-														@NonNull String requestedSubtype) {
-			requireNonNull(requestedType);
-			requireNonNull(requestedSubtype);
-
-			if ("*".equals(this.type) && "*".equals(this.subtype))
-				return true;
-
-			if (Objects.equals(this.type, requestedType) && "*".equals(this.subtype))
-				return true;
-
-			return Objects.equals(this.type, requestedType) && Objects.equals(this.subtype, requestedSubtype);
-		}
-
-		@NonNull
-		private Integer specificity() {
-			if ("*".equals(this.type) && "*".equals(this.subtype))
-				return 0;
-
-			if ("*".equals(this.subtype))
-				return 1;
-
-			return 2;
 		}
 	}
 

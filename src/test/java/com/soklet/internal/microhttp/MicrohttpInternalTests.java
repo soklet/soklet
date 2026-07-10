@@ -824,6 +824,58 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void headBodyOmissionPreservesLengthAndClosesOwnedFileChannel(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("owned.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.US_ASCII);
+		FileChannel fileChannel = FileChannel.open(file, READ);
+		MicrohttpResponse response = MicrohttpResponse.withFileChannelBody(
+				200,
+				"OK",
+				List.of(new Header("X-Test", "yes")),
+				fileChannel,
+				1L,
+				4L,
+				true);
+
+		MicrohttpResponse headResponse = response.withBodyOmittedForHead();
+
+		Assertions.assertFalse(fileChannel.isOpen());
+		Assertions.assertEquals(0L, headResponse.bodyLength());
+		Assertions.assertArrayEquals(new byte[0], headResponse.body());
+		Assertions.assertEquals(List.of("4"), headResponse.headers().stream()
+				.filter(header -> header.name().equalsIgnoreCase("Content-Length"))
+				.map(Header::value)
+				.toList());
+		Assertions.assertTrue(headResponse.headers().stream()
+				.anyMatch(header -> header.name().equals("X-Test") && header.value().equals("yes")));
+	}
+
+	@Test
+	public void headBodyOmissionLeavesBorrowedFileChannelOpen(@TempDir Path tempDir) throws IOException {
+		Path file = tempDir.resolve("borrowed.txt");
+		Files.writeString(file, "abcdef", StandardCharsets.US_ASCII);
+
+		try (FileChannel fileChannel = FileChannel.open(file, READ)) {
+			MicrohttpResponse response = MicrohttpResponse.withFileChannelBody(
+					200,
+					"OK",
+					List.of(new Header("Content-Length", "4")),
+					fileChannel,
+					1L,
+					4L,
+					false);
+
+			MicrohttpResponse headResponse = response.withBodyOmittedForHead();
+
+			Assertions.assertTrue(fileChannel.isOpen());
+			Assertions.assertEquals(List.of("4"), headResponse.headers().stream()
+					.filter(header -> header.name().equalsIgnoreCase("Content-Length"))
+					.map(Header::value)
+					.toList());
+		}
+	}
+
+	@Test
 	public void connectionEventLoopSurvivesUncheckedResponseTaskFailure() throws Exception {
 		Options options = OptionsBuilder.newBuilder()
 				.withPort(0)

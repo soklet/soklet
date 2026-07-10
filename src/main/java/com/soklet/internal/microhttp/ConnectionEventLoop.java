@@ -387,6 +387,20 @@ class ConnectionEventLoop {
                 microhttpResponse.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
                 microhttpResponse = microhttpResponse.withoutBodyOrFramingHeaders();
             }
+            // RFC 9110 §9.3.2: HEAD responses carry no content. The normal marshaling path strips
+            // HEAD bodies before reaching this layer; this guards responses that bypass it (e.g.
+            // canned failsafe responses and error-path marshaling), preserving the hypothetical
+            // Content-Length while omitting the bytes so a keep-alive client cannot desync. Raw
+            // parse-error responses are exempt: they always close the connection and may predate
+            // method parsing. headRequest is set by applyConnectionPolicy at every dispatch site.
+            if (headRequest) {
+                if (microhttpResponse.streaming()) {
+                    microhttpResponse.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
+                    microhttpResponse = microhttpResponse.withoutBodyOrFramingHeaders();
+                } else if (microhttpResponse.bodyLength() > 0) {
+                    microhttpResponse = microhttpResponse.withBodyOmittedForHead();
+                }
+            }
             if (hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
                 closeAfterResponse = true;
             }

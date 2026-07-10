@@ -1414,6 +1414,43 @@ public class McpRuntimeTests {
 	}
 
 	@Test
+	public void acceptParsingIsQuoteAwareAndHonorsExplicitZeroQuality() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			// A quoted comma must NOT be split into a spurious "application/json" range with default
+			// q=1: the client's explicit q=0 on the real range means "not acceptable" -> 406
+			McpRequestResult.ResponseCompleted quotedCommaAttack = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-70"), Map.of(
+							"Accept", Set.of("application/json;note=\"x,application/json\";q=0, text/event-stream")
+					)));
+
+			Assertions.assertEquals(Integer.valueOf(406), quotedCommaAttack.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	@Test
+	public void acceptMatchingPrefersExactOverWildcardAndSkipsMalformedRanges() {
+		Soklet.runSimulator(configuration(), simulator -> {
+			// The exact application/json;q=0 must outrank */*;q=1 for the application/json check
+			// (specificity-first matching) -> 406 despite the permissive wildcard
+			McpRequestResult.ResponseCompleted exactBeatsWildcard = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-71"), Map.of(
+							"Accept", Set.of("*/*, application/json;q=0")
+					)));
+
+			Assertions.assertEquals(Integer.valueOf(406), exactBeatsWildcard.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+
+			// Malformed ranges and duplicate q parameters are tolerated: the first q wins on the
+			// event-stream range (q=1), garbage is skipped, and both required types remain acceptable
+			McpRequestResult.ResponseCompleted lenient = (McpRequestResult.ResponseCompleted) simulator.performMcpRequest(
+					post("/tenants/acme/mcp", initializeJson("req-72"), Map.of(
+							"Accept", Set.of("garbage, application/json, text/event-stream;q=1;q=0")
+					)));
+
+			Assertions.assertEquals(Integer.valueOf(200), lenient.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	@Test
 	public void oversizedMcpRequestReturns413() {
 		Soklet.runSimulator(configuration(), simulator -> {
 			Request oversizedRequest = Request.withPath(HttpMethod.POST, "/tenants/acme/mcp")

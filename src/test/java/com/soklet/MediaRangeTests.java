@@ -43,11 +43,12 @@ public class MediaRangeTests {
 
 	@Test
 	public void parsesQualityAndParameters() {
-		MediaRange mediaRange = MediaRange.fromHeaderRepresentation("text/html;level=1;q=0.7;ext=ignored").orElseThrow();
+		MediaRange mediaRange = MediaRange.fromHeaderRepresentation("text/html;level=1;q=0.7;profile=compact").orElseThrow();
 
 		Assertions.assertEquals(0, new BigDecimal("0.7").compareTo(mediaRange.getQuality()));
-		// Media-type parameters before "q" are captured; accept-ext parameters after it are not
-		Assertions.assertEquals(Map.of("level", "1"), mediaRange.getParameters());
+		// RFC 9110: all non-"q" parameters are media-type parameters, before OR after "q"
+		// (the older RFC 7231 accept-ext grammar was removed)
+		Assertions.assertEquals(Map.of("level", "1", "profile", "compact"), mediaRange.getParameters());
 	}
 
 	@Test

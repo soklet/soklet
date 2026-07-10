@@ -8,6 +8,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -119,6 +120,30 @@ public final class MicrohttpResponse {
                 .filter(header -> !header.name().equalsIgnoreCase("Content-Length"))
                 .filter(header -> !header.name().equalsIgnoreCase("Transfer-Encoding"))
                 .toList(), new byte[0]);
+    }
+
+    // RFC 9110 §9.3.2: a response to HEAD carries no content, but SHOULD send the header fields a
+    // GET would have produced. Omit the body bytes while preserving (or synthesizing) the
+    // hypothetical Content-Length. Only meaningful for non-streaming responses.
+    MicrohttpResponse withBodyOmittedForHead() {
+        // A non-byte body source may own resources (e.g. a pre-opened FileChannel with
+        // closeOnComplete): create and close it so nothing leaks when the body goes unwritten
+        if (body == null) {
+            try (WritableSource unwrittenBodySource = bodySourceFactory.create()) {
+                // Resource release only; nothing is written
+            } catch (Exception ignored) {
+                // Best effort
+            }
+        }
+
+        List<Header> headResponseHeaders = headers;
+
+        if (!hasHeader("Content-Length")) {
+            headResponseHeaders = new ArrayList<>(headers);
+            headResponseHeaders.add(new Header("Content-Length", Long.toString(bodyLength())));
+        }
+
+        return new MicrohttpResponse(status, reason, headResponseHeaders, new byte[0]);
     }
 
     public boolean streaming() {

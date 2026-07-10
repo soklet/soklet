@@ -39,8 +39,9 @@ import static java.util.Objects.requireNonNull;
  * The {@linkplain #getType() type} and {@linkplain #getSubtype() subtype} are normalized to lowercase and either
  * may be the {@code *} wildcard (a wildcard type requires a wildcard subtype). The {@linkplain #getQuality() quality}
  * is the {@code q} weight parameter, defaulting to {@code 1} when absent and clamped to the range
- * {@code [0, 1]}. {@linkplain #getParameters() Parameters} are the media-type parameters that appear
- * <em>before</em> {@code q}; accept-ext parameters that appear after {@code q} are ignored.
+ * {@code [0, 1]}; per RFC 9110 it is recognized regardless of its position among the parameters.
+ * {@linkplain #getParameters() Parameters} are all non-{@code q} media-type parameters, whether they
+ * appear before or after {@code q} (RFC 9110 removed RFC 7231's {@code accept-ext} grammar).
  * <p>
  * See {@link Request#getMediaRanges()} for the ordered media ranges of a request's {@code Accept} header value[s].
  *
@@ -85,9 +86,10 @@ public final class MediaRange {
 	 * A representation is considered malformed if it lacks a {@code type/subtype} structure, uses invalid
 	 * HTTP tokens for the type, subtype, or parameter names, pairs a wildcard type with a concrete subtype
 	 * (e.g. {@code *&#47;html}), or carries an unparseable {@code q} value.
-	 * Quality values outside {@code [0, 1]} are clamped. If multiple {@code q} parameters are present, all but
-	 * the first are ignored. Quoted parameter values have their surrounding quotes removed and quoted-pair
-	 * escape sequences (e.g. {@code \"}) unescaped.
+	 * Quality values outside {@code [0, 1]} are clamped. The {@code q} weight parameter is recognized at any
+	 * position; if multiple {@code q} parameters are present, all but the first are ignored. All other
+	 * parameters are retained as media-type parameters. Quoted parameter values have their surrounding
+	 * quotes removed and quoted-pair escape sequences (e.g. {@code \"}) unescaped.
 	 *
 	 * @param mediaRange the media range header representation to parse, e.g. {@code text/html;q=0.7}
 	 * @return the parsed media range, or {@link Optional#empty()} if the input is missing or malformed
@@ -140,7 +142,8 @@ public final class MediaRange {
 				return Optional.empty();
 
 			if ("q".equals(name)) {
-				// RFC 9110: if multiple "q" parameters are present, all but the first are ignored
+				// RFC 9110 directs recipients to process a parameter named "q" as the weight regardless
+				// of its position; when multiple "q" parameters are present, the first wins
 				if (!qualityEncountered) {
 					try {
 						quality = clampQuality(new BigDecimal(value));
@@ -150,8 +153,9 @@ public final class MediaRange {
 
 					qualityEncountered = true;
 				}
-			} else if (!qualityEncountered && !name.isEmpty()) {
-				// Media-type parameters appear before "q"; anything after it is accept-ext, which we ignore
+			} else {
+				// RFC 9110 removed RFC 7231's accept-ext grammar: every non-"q" parameter is a
+				// media-type parameter, regardless of whether it appears before or after "q"
 				parameters.put(name, value);
 			}
 		}
@@ -311,8 +315,8 @@ public final class MediaRange {
 
 	/**
 	 * The media-type parameters of this media range (e.g. {@code level=1} in {@code text/html;level=1;q=0.7}),
-	 * with lowercase names in their original order. Excludes the {@code q} parameter and any accept-ext
-	 * parameters that follow it.
+	 * with lowercase names in their original order. Excludes only the {@code q} weight parameter; all other
+	 * parameters are included regardless of their position relative to {@code q}.
 	 *
 	 * @return an unmodifiable view of the media range's parameters, or an empty map if none were specified
 	 */

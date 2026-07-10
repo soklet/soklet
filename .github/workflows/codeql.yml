@@ -41,7 +41,7 @@ jobs:
           languages: java-kotlin
           build-mode: manual
 
-      # Manual build so CodeQL sees annotation-processor-generated sources too.
+      # Manual build keeps CodeQL on the exact Maven compilation the release uses.
       - name: Compile
         run: mvn -B -ntp -DskipTests compile
 
