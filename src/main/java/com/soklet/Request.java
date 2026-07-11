@@ -757,8 +757,11 @@ public final class Request {
 	 * <p>
 	 * This excludes the request line, headers, and transfer framing. For example, when the standard HTTP
 	 * server transparently decompresses a gzip request body, this is the compressed payload size while
-	 * {@link #getBody()} exposes the decompressed bytes. For requests that are not transparently decompressed,
-	 * including manually constructed requests, this is the size of {@link #getBody()}.
+	 * {@link #getBody()} exposes the decompressed bytes. For complete requests that are not transparently
+	 * decompressed, including manually constructed requests, this is the size of {@link #getBody()}.
+	 * <p>
+	 * If the server rejects a request before retaining its complete encoded payload, this value is {@code 0}
+	 * and {@link #isContentTooLarge()} is {@code true}.
 	 * <p>
 	 * Copies created through {@link #copy()} preserve this value even if the copy replaces the handler-visible
 	 * body, because the value describes the original inbound payload.

@@ -1655,7 +1655,8 @@ public class IntegrationTests {
 		ResponseMarshaler responseMarshaler = ResponseMarshaler.builder()
 				.contentTooLargeHandler((request, resourceMethod) -> MarshaledResponse.withStatusCode(413)
 						.headers(Map.of("Content-Type", Set.of("text/plain")))
-						.body(("custom|" + request.isContentTooLarge() + "|" + request.getBody().isEmpty())
+						.body(("custom|" + request.isContentTooLarge() + "|" + request.getBody().isEmpty() + "|"
+								+ request.getEncodedBodySizeInBytes())
 								.getBytes(StandardCharsets.UTF_8))
 						.build())
 				.build();
@@ -1669,7 +1670,8 @@ public class IntegrationTests {
 			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: gzip\r\n");
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"), response.statusLine());
-			Assertions.assertEquals("custom|true|true", new String(response.body(), StandardCharsets.UTF_8));
+			Assertions.assertEquals("custom|true|true|" + compressed.length,
+					new String(response.body(), StandardCharsets.UTF_8));
 		}
 	}
 
