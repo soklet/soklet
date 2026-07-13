@@ -29,7 +29,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.release>17</maven.compiler.release>
-        <junit.version>5.9.0</junit.version>
+        <junit.version>6.1.2</junit.version>
         <junit.platform.version>1.9.0</junit.platform.version>
         <!-- See the root pom for why this is empty before JDK 23. -->
         <surefire.unsafeMemoryAccessArg></surefire.unsafeMemoryAccessArg>
