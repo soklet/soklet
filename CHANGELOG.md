@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.5.1-SNAPSHOT
+## 3.5.1 (2026-07-13)
 
 ### Fixes
 
