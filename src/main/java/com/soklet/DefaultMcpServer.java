@@ -693,8 +693,7 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 
 					writeAcceptedEventStreamResponse(socket, request, requestResult.getMarshaledResponse());
 					markConnectionEstablished(liveConnection);
-					startConnectionProcessor(liveConnection);
-					handedOffToStreamProcessor = true;
+					handedOffToStreamProcessor = startConnectionProcessor(liveConnection);
 					return;
 				} catch (Throwable throwable) {
 					if (liveConnection != null) {
@@ -924,22 +923,34 @@ final class DefaultMcpServer implements McpServer, InternalMcpSessionMessagePubl
 		return false;
 	}
 
-	private void startConnectionProcessor(@NonNull McpLiveConnection connection) {
+	private boolean startConnectionProcessor(@NonNull McpLiveConnection connection) {
 		requireNonNull(connection);
 
 		ExecutorService connectionExecutorService = this.connectionExecutorService;
 
 		if (connectionExecutorService == null || connectionExecutorService.isShutdown()) {
-			closeLiveConnection(connection, StreamTerminationReason.SERVER_STOPPING, null, true);
-			return;
+			closeUnstartedConnection(connection, null);
+			return false;
 		}
 
 		try {
 			connectionExecutorService.execute(() -> processConnection(connection));
+			return true;
 		} catch (RejectedExecutionException e) {
 			recordTransportFailure(MetricsCollector.TransportFailureReason.TASK_ERROR, e, "task_error");
-			closeLiveConnection(connection, StreamTerminationReason.SERVER_STOPPING, e, true);
+			closeUnstartedConnection(connection, e);
+			return false;
 		}
+	}
+
+	private void closeUnstartedConnection(@NonNull McpLiveConnection connection,
+	                                      @Nullable Throwable throwable) {
+		requireNonNull(connection);
+
+		// No processor task owns cleanup yet, so complete it inline even if stop() already marked the
+		// connection as closing between registration and executor handoff.
+		closeLiveConnection(connection, StreamTerminationReason.SERVER_STOPPING, throwable, true);
+		finishConnection(connection, throwable);
 	}
 
 	private void processConnection(@NonNull McpLiveConnection connection) {

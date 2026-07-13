@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.5.1-SNAPSHOT
+
+### Fixes
+
+- Fixed an MCP shutdown race that could leave an established SSE stream registered when its connection processor could not be started.
+
 ## 3.5.0 (2026-07-13)
 
 ### Features

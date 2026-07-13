@@ -1118,6 +1118,48 @@ public class McpServerLifecycleTests {
 	}
 
 	@Test
+	public void rejectedMcpStreamProcessorTerminatesEstablishedStream() throws Exception {
+		int mcpPort = findFreePort();
+		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
+		CountingMcpLifecycle lifecycleObserver = new CountingMcpLifecycle(1);
+		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(mcpPort)
+				.host("127.0.0.1")
+				.heartbeatInterval(Duration.ofSeconds(5))
+				.handlerResolver(McpHandlerResolver.fromClasses(Set.of(ExampleMcpEndpoint.class)))
+				.build();
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(defaultMcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.metricsCollector(metricsCollector)
+				.build();
+		Field connectionExecutorServiceField = DefaultMcpServer.class.getDeclaredField("connectionExecutorService");
+		connectionExecutorServiceField.setAccessible(true);
+		ExecutorService originalConnectionExecutorService = null;
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			soklet.start();
+			String sessionId = initializedSessionId(mcpPort);
+			originalConnectionExecutorService = (ExecutorService) connectionExecutorServiceField.get(defaultMcpServer);
+			connectionExecutorServiceField.set(defaultMcpServer, new RejectingExecutorService());
+			originalConnectionExecutorService.shutdownNow();
+
+			try (Socket socket = connectWithRetry("127.0.0.1", mcpPort, 2000)) {
+				socket.setSoTimeout(2000);
+				writeMcpGet(socket, mcpPort, sessionId);
+				String handshake = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				Assertions.assertNotNull(handshake);
+				Assertions.assertTrue(handshake.startsWith("HTTP/1.1 200"));
+			}
+
+			Assertions.assertTrue(lifecycleObserver.awaitTerminatedStreams(2, TimeUnit.SECONDS));
+			Assertions.assertEquals(0L, metricsCollector.snapshot().orElseThrow().getActiveMcpSseStreams());
+		} finally {
+			if (originalConnectionExecutorService != null)
+				originalConnectionExecutorService.shutdownNow();
+		}
+	}
+
+	@Test
 	public void defaultMcpServerWriteTimeoutClosesSlowSocketWrites() throws Exception {
 		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) McpServer.withPort(0)
 				.writeTimeout(Duration.ofMillis(50))
