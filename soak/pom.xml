@@ -68,7 +68,7 @@
             <!-- Soklet's main sources (compiled here directly) reference @FormatMethod; needed to compile them. -->
             <groupId>com.google.errorprone</groupId>
             <artifactId>error_prone_annotations</artifactId>
-            <version>2.49.0</version>
+            <version>2.50.0</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>
