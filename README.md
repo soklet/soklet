@@ -584,8 +584,8 @@ public class ChatResource {
 
   @POST("/chat")
   public void postMessage(@RequestBody ChatMessage message,
-                          @NonNull SseServer sseServer) {
-   @NonNull SseBroadcaster broadcaster = sseServer
+                          SseServer sseServer) {
+    SseBroadcaster broadcaster = sseServer
       .acquireBroadcaster(ResourcePath.fromPath("/chat"))
       .orElseThrow();
 
@@ -630,12 +630,12 @@ public void sseTest() {
 
   Soklet.runSimulator(config, simulator -> {
     Request request = Request.fromPath(HttpMethod.GET, "/chat");
-   @NonNull SseRequestResult result = simulator.performSseRequest(request);
+    SseRequestResult result = simulator.performSseRequest(request);
 
     if (result instanceof SseRequestResult.HandshakeAccepted accepted) {
       accepted.registerEventConsumer(events::add);
 
-     @NonNull SseBroadcaster broadcaster = config.getSseServer().orElseThrow()
+      SseBroadcaster broadcaster = config.getSseServer().orElseThrow()
         .acquireBroadcaster(ResourcePath.fromPath("/chat")).orElseThrow();
       broadcaster.broadcastEvent(SseEvent.withEvent("message")
         .data("hello")
