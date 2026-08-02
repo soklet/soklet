@@ -55,7 +55,7 @@ import static java.lang.String.format;
  * {@code gzip}/{@code x-gzip} requests are passed through unchanged.</li>
  * </ul>
  * <p>
- * This applies to the standard HTTP server only. The SSE and MCP servers do not decompress request bodies,
+ * This applies to the standard HTTP server only. The SSE server does not decompress request bodies,
  * and the {@code Simulator} exercises handlers directly without transport-level decompression.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

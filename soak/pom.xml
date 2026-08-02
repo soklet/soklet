@@ -6,7 +6,7 @@
 
     <groupId>com.soklet</groupId>
     <artifactId>soklet-soak</artifactId>
-    <version>3.5.1</version>
+    <version>3.6.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Soklet Soak Tests</name>
@@ -20,10 +20,9 @@
         leak would actually live - is exercised, then assert that file descriptors and Soklet's
         own active-resource gauges return to baseline after load stops.
 
-        Two run modes, mirroring the fuzz module's JAZZER_FUZZ split:
-          - default (smoke): short churn that still moves enough connections/sessions to expose a
-            per-iteration leak. Fast enough to gate pull requests.
-          - SOKLET_SOAK=1 (soak): sustained, higher-volume churn for nightly runs.
+        SOKLET_SOAK_PROFILE selects one of the checked-in smoke or nightly workload
+        profiles. An omitted value defaults to smoke for local use; every CI job selects one
+        explicitly and publishes both the profile checksum and canonical settings in its report.
     -->
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

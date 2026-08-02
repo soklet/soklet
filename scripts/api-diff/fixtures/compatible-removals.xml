@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<japicmp xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" accessModifier="PROTECTED" creationTimestamp="NORMALIZED" ignoreMissingClasses="false" ignoreMissingClassesByRegularExpressions="" newJar="soklet-new.jar" newVersion="new" oldJar="soklet-old.jar" oldVersion="old" onlyBinaryIncompatibleModifications="false" onlyModifications="true" packagesExclude="n.a." packagesInclude="all" semanticVersioning="0.0.1" title="Compatible removals fixture" xsi:noNamespaceSchemaLocation="japicmp.xsd">
+    <classes>
+        <class binaryCompatible="true" changeStatus="REMOVED" fullyQualifiedName="com.soklet.McpRemovedResult" sourceCompatible="true">
+            <compatibilityChanges/>
+            <constructors>
+                <constructor binaryCompatible="true" changeStatus="REMOVED" name="McpRemovedResult" sourceCompatible="true">
+                    <compatibilityChanges/>
+                    <modifiers>
+                        <modifier changeStatus="REMOVED" newValue="n.a." oldValue="PUBLIC"/>
+                    </modifiers>
+                    <parameters/>
+                </constructor>
+            </constructors>
+            <fields>
+                <field binaryCompatible="true" changeStatus="REMOVED" name="legacyValue" sourceCompatible="true">
+                    <compatibilityChanges/>
+                    <modifiers>
+                        <modifier changeStatus="REMOVED" newValue="n.a." oldValue="PUBLIC"/>
+                    </modifiers>
+                    <type changeStatus="REMOVED" newValue="n.a." oldValue="java.lang.String"/>
+                </field>
+            </fields>
+            <methods>
+                <method binaryCompatible="true" changeStatus="REMOVED" name="getHttpRequestResult" sourceCompatible="true">
+                    <compatibilityChanges/>
+                    <modifiers>
+                        <modifier changeStatus="REMOVED" newValue="n.a." oldValue="PUBLIC"/>
+                    </modifiers>
+                    <parameters/>
+                    <returnType binaryCompatible="true" changeStatus="REMOVED" newValue="n.a." oldValue="com.soklet.HttpRequestResult" sourceCompatible="true">
+                        <compatibilityChanges/>
+                    </returnType>
+                </method>
+            </methods>
+        </class>
+        <class binaryCompatible="true" changeStatus="MODIFIED" fullyQualifiedName="com.soklet.Soklet" sourceCompatible="true">
+            <compatibilityChanges/>
+            <methods>
+                <method binaryCompatible="true" changeStatus="REMOVED" name="handleMcpRequest" sourceCompatible="true">
+                    <compatibilityChanges/>
+                    <modifiers>
+                        <modifier changeStatus="REMOVED" newValue="n.a." oldValue="PROTECTED"/>
+                    </modifiers>
+                    <parameters>
+                        <parameter binaryCompatible="true" changeStatus="UNCHANGED" sourceCompatible="true" type="com.soklet.Request"/>
+                    </parameters>
+                    <returnType binaryCompatible="true" changeStatus="REMOVED" newValue="n.a." oldValue="void" sourceCompatible="true">
+                        <compatibilityChanges/>
+                    </returnType>
+                </method>
+            </methods>
+        </class>
+    </classes>
+</japicmp>

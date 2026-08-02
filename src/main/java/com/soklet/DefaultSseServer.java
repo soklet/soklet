@@ -940,7 +940,7 @@ final class DefaultSseServer implements SseServer {
 			// Cowardly refuse to START on a runtime without virtual threads.
 			// Checked here, not in the constructor, so an SSE server can be built and carried in a
 			// SokletConfig on any supported JDK; only starting a *live* SSE server requires virtual
-			// threads (JDK 21+). This keeps HTTP/MCP-only apps and the off-network simulator usable
+			// threads (JDK 21+). This keeps HTTP-only apps and the off-network simulator usable
 			// on JDK 17-20.
 			if (!Utilities.virtualThreadsAvailable())
 				throw new IllegalStateException(format("Virtual threads are required to start %s", getClass().getSimpleName()));

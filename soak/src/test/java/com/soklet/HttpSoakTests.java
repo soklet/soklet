@@ -42,14 +42,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Longer-running HTTP resource-leak soak tests.
  * <p>
- * Default mode is a short smoke run. Set {@code SOKLET_SOAK=1} for the higher-volume nightly run.
+ * Workload settings come from the checked-in profile selected by
+ * {@code SOKLET_SOAK_PROFILE=smoke|nightly}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public class HttpSoakTests {
 	private static final byte[] LARGE_BODY = "x".repeat(256 * 1024).getBytes(StandardCharsets.UTF_8);
-	private static final SoakProfile PROFILE = SoakProfile.fromEnvironment();
+	private static final SoakProfile PROFILE = SoakProfile.fromSelectedProfile();
 
 	@Test
 	public void concurrentHttpChurnReturnsResourcesAndActiveRequestsToBaseline() throws Exception {
@@ -392,32 +393,22 @@ public class HttpSoakTests {
 														 @NonNull Duration settleTimeout,
 														 SoakResourceSnapshot.ResourceTolerance resourceTolerance) {
 		@NonNull
-		private static SoakProfile fromEnvironment() {
-			boolean soak = "1".equals(System.getenv("SOKLET_SOAK"));
-
-			if (soak) {
-				return new SoakProfile(
-						32,
-						250,
-						150,
-						8,
-						1_024,
-						10_000,
-						Duration.ofSeconds(90),
-						Duration.ofSeconds(15),
-						new SoakResourceSnapshot.ResourceTolerance(8L, 64L * 1024L * 1024L, 32));
-			}
+		private static SoakProfile fromSelectedProfile() {
+			SoakProfiles.SelectedProfile profile = SoakProfiles.selected();
 
 			return new SoakProfile(
-					4,
-					20,
-					12,
-					2,
-					128,
-					5_000,
-					Duration.ofSeconds(20),
-					Duration.ofSeconds(5),
-					new SoakResourceSnapshot.ResourceTolerance(4L, 32L * 1024L * 1024L, 12));
+					profile.integer("http.concurrentClients"),
+					profile.integer("http.cleanRequestsPerClient"),
+					profile.integer("http.abortIterationsPerClient"),
+					profile.integer("http.serverConcurrency"),
+					profile.integer("http.socketPendingConnectionLimit"),
+					profile.integer("http.abortConnectTimeoutMillis"),
+					profile.durationMillis("http.runTimeoutMillis"),
+					profile.durationMillis("http.settleTimeoutMillis"),
+					new SoakResourceSnapshot.ResourceTolerance(
+							profile.number("http.resourceTolerance.maxOpenFileDescriptorGrowth"),
+							profile.number("http.resourceTolerance.maxHeapGrowthBytes"),
+							profile.integer("http.resourceTolerance.maxLiveThreadGrowth")));
 		}
 	}
 }

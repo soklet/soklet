@@ -49,6 +49,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.soklet.Utilities.emptyByteArray;
 import static java.util.Objects.requireNonNull;
@@ -449,6 +450,40 @@ public class SokletTests {
 	}
 
 	@Test
+	public void httpOnlyMockServerInitializeStoresSokletConfig() {
+		Soklet.MockHttpServer mockHttpServer = new Soklet.MockHttpServer();
+		SokletConfig sokletConfig = SokletConfig.withHttpServer(mockHttpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		mockHttpServer.initialize(sokletConfig, (request, requestResultConsumer) -> {
+			throw new UnsupportedOperationException("unused");
+		});
+
+		assertEquals(sokletConfig, mockHttpServer.getSokletConfig().orElseThrow());
+	}
+
+	@Test
+	public void sokletRollsBackStartedHttpServerWhenLaterSseStartFails() {
+		FakeHttpServer fakeHttpServer = new FakeHttpServer();
+		FailingStartSseServer failingSseServer = new FailingStartSseServer();
+		SokletConfig sokletConfig = SokletConfig.withSseServer(failingSseServer)
+				.httpServer(fakeHttpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RequestHandlingBasicsResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
+			assertThrows(IllegalStateException.class, soklet::start);
+		}
+
+		Assertions.assertFalse(fakeHttpServer.isStarted());
+		Assertions.assertTrue(fakeHttpServer.wasStopped());
+		Assertions.assertFalse(failingSseServer.isStarted());
+	}
+
+	@Test
 	public void verifyHeaderValidation() {
 		Map<String, Set<String>> headers = new LinkedHashMap<>();
 		headers.put("X-Test", Set.of("ok\r\nInjected-Header: yes"));
@@ -737,6 +772,75 @@ public class SokletTests {
 		@SseEventSource("/sse-only")
 		public SseHandshakeResult sseOnly() {
 			return SseHandshakeResult.accept();
+		}
+	}
+
+	private static final class FakeHttpServer implements HttpServer {
+		private final AtomicBoolean started = new AtomicBoolean();
+		private final AtomicBoolean stopped = new AtomicBoolean();
+
+		@Override
+		public void start() {
+			this.started.set(true);
+		}
+
+		@Override
+		public void stop() {
+			this.stopped.set(true);
+			this.started.set(false);
+		}
+
+		@NonNull
+		@Override
+		public Boolean isStarted() {
+			return this.started.get();
+		}
+
+		@Override
+		public void initialize(@NonNull SokletConfig sokletConfig,
+									 @NonNull RequestHandler requestHandler) {
+			// No state is needed for this lifecycle regression fixture.
+		}
+
+		private boolean wasStopped() {
+			return this.stopped.get();
+		}
+	}
+
+	private static final class FailingStartSseServer implements SseServer {
+		@Override
+		public void start() {
+			throw new IllegalStateException("boom");
+		}
+
+		@Override
+		public void stop() {
+			// No-op.
+		}
+
+		@NonNull
+		@Override
+		public Boolean isStarted() {
+			return false;
+		}
+
+		@NonNull
+		@Override
+		public Optional<? extends SseBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath) {
+			return Optional.empty();
+		}
+
+		@Override
+		public void initialize(@NonNull SokletConfig sokletConfig,
+									 @NonNull RequestHandler requestHandler) {
+			// No state is needed for this lifecycle regression fixture.
+		}
+	}
+
+	private static final class QuietLifecycle implements LifecycleObserver {
+		@Override
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+			// Keep expected startup-failure logging out of test output.
 		}
 	}
 

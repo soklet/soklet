@@ -1,0 +1,2 @@
+{"id":"C:com/soklet/McpClientInfo","kind":"class","changes":[{"type":"SUPERCLASS_REMOVED","site":"class/superclass:java.lang.Record->java.lang.Object","binaryCompatible":false,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpClientInfo#version()Ljava/lang/String;","newId":"M:com/soklet/McpClientInfo#version()Ljava/lang/Object;","kind":"method","changes":[{"type":"METHOD_RETURN_TYPE_CHANGED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}

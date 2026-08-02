@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Tests for the shared accept-loop retry policy used by the HTTP, SSE, and MCP servers.
+ * Tests for the shared accept-loop retry policy used by the HTTP and SSE servers.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

@@ -104,34 +104,6 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
 	/**
-	 * Indicates {@link LifecycleObserver#didCreateMcpSession(Request, Class, String)} threw an exception.
-	 */
-	LIFECYCLE_OBSERVER_DID_CREATE_MCP_SESSION_FAILED,
-	/**
-	 * Indicates {@link LifecycleObserver#didTerminateMcpSession(Class, String, Duration, McpSessionTerminationReason, Throwable)} threw an exception.
-	 */
-	LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SESSION_FAILED,
-	/**
-	 * Indicates {@link LifecycleObserver#didStartMcpRequestHandling(Request, Class, String, String, McpJsonRpcRequestId)} threw an exception.
-	 */
-	LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
-	/**
-	 * Indicates {@link LifecycleObserver#didFinishMcpRequestHandling(Request, Class, String, String, McpJsonRpcRequestId, McpRequestOutcome, McpJsonRpcError, Duration, List)} threw an exception.
-	 */
-	LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
-	/**
-	 * Indicates {@link LifecycleObserver#didEstablishMcpSseStream(McpSseStream)} threw an exception.
-	 */
-	LIFECYCLE_OBSERVER_DID_ESTABLISH_MCP_SSE_STREAM_FAILED,
-	/**
-	 * Indicates {@link LifecycleObserver#willTerminateMcpSseStream(McpSseStream, StreamTermination)} threw an exception.
-	 */
-	LIFECYCLE_OBSERVER_WILL_TERMINATE_MCP_SSE_STREAM_FAILED,
-	/**
-	 * Indicates {@link LifecycleObserver#didTerminateMcpSseStream(McpSseStream, StreamTermination)} threw an exception.
-	 */
-	LIFECYCLE_OBSERVER_DID_TERMINATE_MCP_SSE_STREAM_FAILED,
-	/**
 	 * Indicates {@link LifecycleObserver#willEstablishSseConnection(Request, ResourceMethod)} threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_WILL_ESTABLISH_SSE_CONNECTION_FAILED,
@@ -200,7 +172,7 @@ public enum LogEventType {
 	 */
 	SERVER_INTERNAL_ERROR,
 	/**
-	 * Indicates an HTTP, SSE, or MCP transport encountered a low-level timeout, I/O error, or event-loop failure.
+	 * Indicates an HTTP or SSE transport encountered a low-level timeout, I/O error, or event-loop failure.
 	 */
 	SERVER_TRANSPORT_FAILURE,
 	/**

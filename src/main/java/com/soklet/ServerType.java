@@ -17,7 +17,7 @@
 package com.soklet;
 
 /**
- * Types of servers supported by Soklet - currently {@link #STANDARD_HTTP}, {@link #SSE}, and {@link #MCP}.
+ * Types of servers supported by Soklet - currently {@link #STANDARD_HTTP} and {@link #SSE}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -29,9 +29,5 @@ public enum ServerType {
 	/**
 	 * A Server-Sent Event server which handles SSE connections (that is, services <em>Resource Methods</em> annotated with {@link com.soklet.annotation.SseEventSource}).
 	 */
-	SSE,
-	/**
-	 * An MCP server which handles MCP transport traffic over HTTP.
-	 */
-	MCP
+	SSE
 }

@@ -19,7 +19,7 @@ package com.soklet;
 /**
  * Reasons a connection attempt was rejected by a transport server before request handling could begin.
  * <p>
- * This type is used by Soklet's regular {@link HttpServer}, {@link SseServer}, and {@link McpServer}
+ * This type is used by Soklet's regular {@link HttpServer} and {@link SseServer}
  * transports via lifecycle and metrics callbacks such as
  * {@link LifecycleObserver#didFailToAcceptConnection(ServerType, java.net.InetSocketAddress, ConnectionRejectionReason, Throwable)}
  * and

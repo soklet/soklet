@@ -1,24 +1,26 @@
 # Manual Soak Evidence
 
-This file tracks durable summaries of manual soak runs. Raw per-run reports belong under
-`soak/target/` or another ignored output directory.
+This file tracks durable summaries of manual Soklet 3.6 soak runs. Raw per-run
+reports belong under `soak/target/` or another ignored output directory. The
+repository currently has no recorded manual 3.6 run.
 
-## 2026-06-06 Two-Hour Pre-Release Run
+Pre-3.6 runs used the retired harness contract and remain available in Git
+history; they are not valid 3.6 evidence.
 
-- Started: 2026-06-06T20:26:16Z
-- Finished: 2026-06-06T22:26:22Z
-- Requested duration: 7200s
-- Actual elapsed: 7206s
-- Command per iteration: `SOKLET_SOAK=1 mvn -q -f soak/pom.xml test`
-- Iterations completed: 688
-- Result: 688/688 PASS
-- Host: lucy
-- OS: Darwin 25.5.0 arm64
-- Java: Corretto 26+35-FR
+Run and verify the checked-in nightly profile with:
 
-Final iteration highlights:
+```sh
+SOKLET_SOAK_PROFILE=nightly mvn -B -ntp -f soak/pom.xml clean test
+node scripts/verify-soak-evidence.mjs nightly
+```
 
-- MCP abandoned session churn: PASS, 64 abandoned sessions, 0 active MCP sessions, 0 active MCP SSE streams, resource deltas inside tolerance.
-- Concurrent SSE churn: PASS, 1600 completed operations, 0 active SSE streams, resource deltas inside tolerance.
-- HTTP abort churn: PASS, 4800 completed operations, 0 active requests, resource deltas inside tolerance.
-- Concurrent HTTP churn: PASS, 8000 completed operations, 0 active requests, resource deltas inside tolerance.
+A durable summary added here should record:
+
+- the exact Soklet commit SHA
+- start and finish timestamps
+- OS, architecture, and complete Java runtime identity
+- profile name and configuration SHA-256 from the report
+- scenario operation counts, elapsed times, final active gauges, resource
+  deltas, and thresholds
+- the retained location and SHA-256 of the Markdown and Surefire evidence
+- the final result

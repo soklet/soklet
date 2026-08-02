@@ -19,8 +19,8 @@
 		<Bug pattern="CT_CONSTRUCTOR_THROW"/>
 	</Match>
 
-	<!-- These format strings intentionally contain protocol CRLFs or fixed diagnostic line breaks. Replacing them
-	     with platform-dependent %n would be incorrect for HTTP/MCP wire output and noisy for multi-line diagnostics. -->
+	<!-- These format strings intentionally contain HTTP protocol CRLFs or fixed diagnostic line breaks. Replacing them
+	     with platform-dependent %n would be incorrect for wire output and noisy for multi-line diagnostics. -->
 	<Match>
 		<Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
 	</Match>
@@ -29,14 +29,6 @@
 	     methods SpotBugs does not model precisely. Keep the category live everywhere else. -->
 	<Match>
 		<Class name="com.soklet.DefaultHttpServer"/>
-		<Or>
-			<Method name="start"/>
-			<Method name="stop"/>
-		</Or>
-		<Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH"/>
-	</Match>
-	<Match>
-		<Class name="com.soklet.DefaultMcpServer"/>
 		<Or>
 			<Method name="start"/>
 			<Method name="stop"/>
@@ -66,11 +58,6 @@
 
 	<!-- Reviewed best-effort queue wakeups: close paths also close the socket and/or interrupt the processor,
 	     so blocking to force enqueue would make shutdown behavior worse. Keep the category live elsewhere. -->
-	<Match>
-		<Class name="com.soklet.DefaultMcpServer"/>
-		<Method name="closeLiveConnection"/>
-		<Bug pattern="RV_RETURN_VALUE_IGNORED_BAD_PRACTICE"/>
-	</Match>
 	<Match>
 		<Class name="com.soklet.DefaultSseServer"/>
 		<Or>

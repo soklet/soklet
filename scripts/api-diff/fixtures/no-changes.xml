@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<japicmp xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" accessModifier="PROTECTED" creationTimestamp="NORMALIZED" ignoreMissingClasses="false" ignoreMissingClassesByRegularExpressions="" newJar="soklet-3.6.0-SNAPSHOT.jar" newVersion="3.6.0-SNAPSHOT" oldJar="soklet-3.5.1.jar" oldVersion="3.5.1" onlyBinaryIncompatibleModifications="false" onlyModifications="true" packagesExclude="n.a." packagesInclude="all" semanticVersioning="0.0.1" title="Comparing source compatibility of soklet-3.6.0-SNAPSHOT.jar against soklet-3.5.1.jar" xsi:noNamespaceSchemaLocation="japicmp.xsd">
+    <classes/>
+</japicmp>

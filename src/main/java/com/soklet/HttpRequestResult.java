@@ -54,10 +54,6 @@ public final class HttpRequestResult {
 	private final ResourceMethod resourceMethod;
 	@Nullable
 	private final SseHandshakeResult sseHandshakeResult;
-	@NonNull
-	private final List<@NonNull McpObject> mcpStreamMessages;
-	@NonNull
-	private final Boolean mcpStreamClosedAfterReplay;
 
 	/**
 	 * Acquires a builder for {@link HttpRequestResult} instances.
@@ -100,8 +96,6 @@ public final class HttpRequestResult {
 		this.corsPreflightResponse = builder.corsPreflightResponse;
 		this.resourceMethod = builder.resourceMethod;
 		this.sseHandshakeResult = builder.sseHandshakeResult;
-		this.mcpStreamMessages = List.copyOf(builder.mcpStreamMessages);
-		this.mcpStreamClosedAfterReplay = builder.mcpStreamClosedAfterReplay;
 	}
 
 	@Override
@@ -147,15 +141,12 @@ public final class HttpRequestResult {
 				&& Objects.equals(getResponse(), requestResult.getResponse())
 				&& Objects.equals(getCorsPreflightResponse(), requestResult.getCorsPreflightResponse())
 				&& Objects.equals(getResourceMethod(), requestResult.getResourceMethod())
-				&& Objects.equals(getSseHandshakeResult(), requestResult.getSseHandshakeResult())
-				&& Objects.equals(getMcpStreamMessages(), requestResult.getMcpStreamMessages())
-				&& Objects.equals(isMcpStreamClosedAfterReplay(), requestResult.isMcpStreamClosedAfterReplay());
+				&& Objects.equals(getSseHandshakeResult(), requestResult.getSseHandshakeResult());
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getMarshaledResponse(), getResponse(), getCorsPreflightResponse(), getResourceMethod(), getSseHandshakeResult(),
-				getMcpStreamMessages(), isMcpStreamClosedAfterReplay());
+		return Objects.hash(getMarshaledResponse(), getResponse(), getCorsPreflightResponse(), getResourceMethod(), getSseHandshakeResult());
 	}
 
 	/**
@@ -209,16 +200,6 @@ public final class HttpRequestResult {
 		return Optional.ofNullable(this.sseHandshakeResult);
 	}
 
-	@NonNull
-	List<@NonNull McpObject> getMcpStreamMessages() {
-		return this.mcpStreamMessages;
-	}
-
-	@NonNull
-	Boolean isMcpStreamClosedAfterReplay() {
-		return this.mcpStreamClosedAfterReplay;
-	}
-
 	/**
 	 * Builder used to construct instances of {@link HttpRequestResult} via {@link HttpRequestResult#withMarshaledResponse(MarshaledResponse)}.
 	 * <p>
@@ -238,16 +219,10 @@ public final class HttpRequestResult {
 		private ResourceMethod resourceMethod;
 		@Nullable
 		private SseHandshakeResult sseHandshakeResult;
-		@NonNull
-		private List<@NonNull McpObject> mcpStreamMessages;
-		@NonNull
-		private Boolean mcpStreamClosedAfterReplay;
 
 		protected Builder(@NonNull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
 			this.marshaledResponse = marshaledResponse;
-			this.mcpStreamMessages = List.of();
-			this.mcpStreamClosedAfterReplay = false;
 		}
 
 		@NonNull
@@ -282,19 +257,6 @@ public final class HttpRequestResult {
 		}
 
 		@NonNull
-		Builder mcpStreamMessages(@Nullable List<@NonNull McpObject> mcpStreamMessages) {
-			this.mcpStreamMessages = mcpStreamMessages == null ? List.of() : List.copyOf(mcpStreamMessages);
-			return this;
-		}
-
-		@NonNull
-		Builder mcpStreamClosedAfterReplay(@NonNull Boolean mcpStreamClosedAfterReplay) {
-			requireNonNull(mcpStreamClosedAfterReplay);
-			this.mcpStreamClosedAfterReplay = mcpStreamClosedAfterReplay;
-			return this;
-		}
-
-		@NonNull
 		public HttpRequestResult build() {
 			return new HttpRequestResult(this);
 		}
@@ -319,9 +281,7 @@ public final class HttpRequestResult {
 					.response(requestResult.getResponse().orElse(null))
 					.corsPreflightResponse(requestResult.getCorsPreflightResponse().orElse(null))
 					.resourceMethod(requestResult.getResourceMethod().orElse(null))
-					.sseHandshakeResult(requestResult.getSseHandshakeResult().orElse(null))
-					.mcpStreamMessages(requestResult.getMcpStreamMessages())
-					.mcpStreamClosedAfterReplay(requestResult.isMcpStreamClosedAfterReplay());
+					.sseHandshakeResult(requestResult.getSseHandshakeResult().orElse(null));
 		}
 
 		@NonNull
@@ -352,18 +312,6 @@ public final class HttpRequestResult {
 		@NonNull
 		Copier sseHandshakeResult(@Nullable SseHandshakeResult sseHandshakeResult) {
 			this.builder.sseHandshakeResult(sseHandshakeResult);
-			return this;
-		}
-
-		@NonNull
-		Copier mcpStreamMessages(@Nullable List<@NonNull McpObject> mcpStreamMessages) {
-			this.builder.mcpStreamMessages(mcpStreamMessages);
-			return this;
-		}
-
-		@NonNull
-		Copier mcpStreamClosedAfterReplay(@NonNull Boolean mcpStreamClosedAfterReplay) {
-			this.builder.mcpStreamClosedAfterReplay(mcpStreamClosedAfterReplay);
 			return this;
 		}
 

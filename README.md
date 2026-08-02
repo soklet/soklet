@@ -12,7 +12,7 @@
 
 ### What Is It?
 
-A small [HTTP/1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs, broadcasting [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events), and providing [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) functionality.<br/><br/>
+A small [HTTP/1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs and broadcasting [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).<br/><br/>
 Zero dependencies. Dependency Injection friendly.<br/>
 Optionally powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
 
@@ -23,9 +23,9 @@ Soklet codes like a library, not a framework.
 
 ### Why?
 
-The Java web ecosystem is missing an HTTP server solution that is dependency-free but offers support for [Server-Sent Events (SSE)](/docs/server-sent-events) and [Model Context Protocol (MCP)](/docs/mcp) along with hooks for dependency injection and annotation-based request handling. Soklet aims to fill this void.
+The Java web ecosystem is missing an HTTP server solution that is dependency-free but offers support for [Server-Sent Events (SSE)](/docs/server-sent-events) along with hooks for dependency injection and annotation-based request handling. Soklet aims to fill this void.
 
-Soklet provides the plumbing to build "transactional" REST APIs as well as agentic systems that vend results via [HTTP response streaming](https://www.soklet.com/docs/response-writing#streaming-responses) or [SSE](https://www.soklet.com/docs/server-sent-events), and expose tools, prompts, and resources via [MCP](https://www.soklet.com/docs/mcp).
+Soklet provides the plumbing to build "transactional" REST APIs as well as systems that vend results via [HTTP response streaming](https://www.soklet.com/docs/response-writing#streaming-responses) or [SSE](https://www.soklet.com/docs/server-sent-events).
 It does not make technology choices on your behalf (but [an example of how to build a full-featured API is available](https://www.soklet.com/docs/toystore-app)). It does not natively support [Reactive Programming](https://en.wikipedia.org/wiki/Reactive_programming) or similar methodologies. It _does_ give you the foundation to build your system, your way.
 
 Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/docs/licensing), proudly powering production systems since 2015.
@@ -43,7 +43,6 @@ Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/do
 - Extensive support for [automated unit and integration testing](https://www.soklet.com/docs/testing)
 - Fine-grained [telemetry and metrics collection](https://www.soklet.com/docs/metrics-collection)
 - Best-in-class support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
-- First-class support for [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
 - [Servlet Integration](https://www.soklet.com/docs/servlet-integration) for legacy code
 
 ### Design Non-Goals
@@ -69,7 +68,7 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 Soklet is a single JAR, available on Maven Central.
 
-JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events) and [MCP](https://www.soklet.com/docs/mcp)).
+JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)).
 
 #### Maven
 
@@ -257,10 +256,6 @@ Annotate them with [`@GET`](https://javadoc.soklet.com/com/soklet/annotation/GET
 [`@HEAD`](https://javadoc.soklet.com/com/soklet/annotation/HEAD.html),
 [`@OPTIONS`](https://javadoc.soklet.com/com/soklet/annotation/OPTIONS.html), or
 [`@SseEventSource`](https://javadoc.soklet.com/com/soklet/annotation/SseEventSource.html) for SSE.
-MCP endpoints are declared separately with [`@McpServerEndpoint`](https://javadoc.soklet.com/com/soklet/annotation/McpServerEndpoint.html)
-and handler annotations like [`@McpTool`](https://javadoc.soklet.com/com/soklet/annotation/McpTool.html),
-[`@McpPrompt`](https://javadoc.soklet.com/com/soklet/annotation/McpPrompt.html), and
-[`@McpResource`](https://javadoc.soklet.com/com/soklet/annotation/McpResource.html).
 Soklet discovers them at compile time via the
 [`SokletProcessor`](https://javadoc.soklet.com/com/soklet/SokletProcessor.html) annotation processor, avoiding
 classpath scans at startup. See the [Request Handling](https://www.soklet.com/docs/request-handling) docs for details.
@@ -549,15 +544,12 @@ public Response exampleRedirect() {
 
 #### HTTP Server Configuration
 
-Soklet ships with an embedded HTTP/1.1 [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html), a dedicated
-[`SseServer`](https://javadoc.soklet.com/com/soklet/SseServer.html), and a dedicated
-[`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html).
+Soklet ships with an embedded HTTP/1.1 [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html) and a dedicated
+[`SseServer`](https://javadoc.soklet.com/com/soklet/SseServer.html).
 These builders let you configure host, read/write/handler timeouts, handler concurrency/queueing, request size limits, request decompression, and connection caps; you
-can also plug in custom request/session [`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html),
-[`McpSessionStore`](https://javadoc.soklet.com/com/soklet/McpSessionStore.html), and
+can also plug in custom [`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html) and
 [`MultipartParser`](https://javadoc.soklet.com/com/soklet/MultipartParser.html) instances.
 Standard HTTP request-body decompression is disabled by default; enable [`HttpServer.Builder::requestDecompressionPolicy`](<https://javadoc.soklet.com/com/soklet/HttpServer.Builder.html#requestDecompressionPolicy(com.soklet.RequestDecompressionPolicy)>) with [`RequestDecompressionPolicy::fromDefaults`](<https://javadoc.soklet.com/com/soklet/RequestDecompressionPolicy.html#fromDefaults()>) or a custom policy to accept single-coding `Content-Encoding: gzip`/`x-gzip` request bodies with decompression-bomb limits. Handlers receive the decompressed bytes through [`Request::getBody`](<https://javadoc.soklet.com/com/soklet/Request.html#getBody()>), while [`Request::getEncodedBodySizeInBytes`](<https://javadoc.soklet.com/com/soklet/Request.html#getEncodedBodySizeInBytes()>) retains the pre-decompression payload size for telemetry.
-Configure MCP session ID generation and session caps on the default [`McpSessionStore`](https://javadoc.soklet.com/com/soklet/McpSessionStore.html) builder, or let a custom store own those policies.
 Provide the configured servers via [`SokletConfig`](https://javadoc.soklet.com/com/soklet/SokletConfig.html) and see the
 [Server Configuration](https://www.soklet.com/docs/server-configuration) docs for the full option matrix.
 
@@ -646,130 +638,6 @@ public void sseTest() {
   });
 
   Assert.assertEquals("hello", events.get(0).getData().orElse(null));
-}
-```
-
-#### Model Context Protocol (MCP)
-
-MCP endpoints are declared with [`@McpServerEndpoint`](https://javadoc.soklet.com/com/soklet/annotation/McpServerEndpoint.html) and expose handlers via
-[`@McpTool`](https://javadoc.soklet.com/com/soklet/annotation/McpTool.html),
-[`@McpPrompt`](https://javadoc.soklet.com/com/soklet/annotation/McpPrompt.html), and
-[`@McpResource`](https://javadoc.soklet.com/com/soklet/annotation/McpResource.html). They are served from a dedicated
-[`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html) port, while Soklet manages MCP session lifecycle,
-JSON-RPC transport, SSE stream establishment, and simulator support.
-
-```java
-@McpServerEndpoint(
-  path = "/catalog/mcp",
-  name = "catalog",
-  version = "1.0.0",
-  title = "Catalog MCP"
-)
-public class CatalogMcpEndpoint implements McpEndpoint {
-  @Override
-  public McpSessionContext initialize(McpInitializationContext context,
-                                      McpSessionContext session) {
-    return session.with("tenantId", "acme");
-  }
-
-  @McpTool(name = "lookup_recipe", description = "Looks up a recipe.")
-  public McpToolResult lookupRecipe(@McpArgument("recipeId") String recipeId,
-                                    McpSessionContext sessionContext) {
-    String tenantId = sessionContext.get("tenantId", String.class).orElseThrow();
-
-    return McpToolResult.builder()
-      .content(McpTextContent.fromText(
-        "Recipe %s for tenant %s".formatted(recipeId, tenantId)
-      ))
-      .build();
-  }
-}
-```
-
-Wire up an MCP-only app:
-
-```java
-SokletConfig config = SokletConfig.withMcpServer(
-  McpServer.withPort(8082)
-    .handlerResolver(McpHandlerResolver.fromClasses(Set.of(CatalogMcpEndpoint.class)))
-    .build()
-).build();
-```
-
-If the same application also serves ordinary HTTP resource methods, add
-`.httpServer(HttpServer.fromPort(8080))` to the builder.
-
-Browser-based MCP clients can be enabled with
-[`McpCorsAuthorizer`](https://javadoc.soklet.com/com/soklet/McpCorsAuthorizer.html):
-
-```java
-SokletConfig config = SokletConfig.withMcpServer(
-  McpServer.withPort(8082)
-    .handlerResolver(McpHandlerResolver.fromClasses(Set.of(CatalogMcpEndpoint.class)))
-    .corsAuthorizer(McpCorsAuthorizer.fromWhitelistedOrigins(
-      Set.of("https://chat.openai.com"),
-      origin -> true
-    ))
-    .build()
-).build();
-```
-
-That enables `OPTIONS` preflight handling plus `Access-Control-*` response headers on MCP
-`POST` / `GET` / `DELETE` responses for the configured origins. It also authorizes MCP
-transport requests that carry an `Origin` header; if `Origin` is present and the configured
-[`McpCorsAuthorizer`](https://javadoc.soklet.com/com/soklet/McpCorsAuthorizer.html) does not authorize it, Soklet rejects the request with HTTP 403 before
-running MCP endpoint code or mutating session/stream state. The default
-`nonBrowserClientsOnlyInstance()` remains conservative: non-browser clients that omit
-`Origin` work normally, while browser-originated MCP transport requests are rejected unless
-you explicitly allow the origin.
-
-Soklet's MCP v1 support is intentionally conservative: single-request JSON-RPC only, framework-managed
-`initialize`, `notifications/initialized`, `notifications/cancelled`, and `ping`, cooperative
-in-flight request cancelation through [`McpCancelationToken`](https://javadoc.soklet.com/com/soklet/McpCancelationToken.html), framework-generated `tools/list` /
-`prompts/list` / `resources/templates/list` responses without cursor pagination, and application-backed
-pagination only for `resources/list`. JSON-RPC batch arrays and resumable SSE event IDs remain deferred.
-
-MCP test via the [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html)
-(see [`McpRequestResult`](https://javadoc.soklet.com/com/soklet/McpRequestResult.html)):
-
-```java
-import org.junit.Assert;
-import org.junit.Test;
-
-@Test
-public void mcpTest() {
-  SokletConfig config = SokletConfig.withMcpServer(McpServer.withPort(0)
-    .handlerResolver(McpHandlerResolver.fromClasses(Set.of(CatalogMcpEndpoint.class)))
-    .build()
-  ).build();
-
-  Soklet.runSimulator(config, simulator -> {
-    McpRequestResult initializeResult = simulator.performMcpRequest(
-      Request.withPath(HttpMethod.POST, "/catalog/mcp")
-        .headers(Map.of("Content-Type", Set.of("application/json")))
-        .body("""
-          {
-            "jsonrpc":"2.0",
-            "id":"req-1",
-            "method":"initialize",
-            "params":{
-              "protocolVersion":"2025-11-25",
-              "capabilities":{},
-              "clientInfo":{"name":"test-client","version":"1.0.0"}
-            }
-          }
-          """.getBytes(StandardCharsets.UTF_8))
-        .build()
-    );
-
-    if (!(initializeResult instanceof McpRequestResult.ResponseCompleted initializeResponse))
-      throw new IllegalStateException("Expected initialize to complete without opening a stream");
-
-    String sessionId = initializeResponse.getHttpRequestResult().getMarshaledResponse()
-      .getHeaders().get("MCP-Session-Id").iterator().next();
-
-    Assert.assertNotNull(sessionId);
-  });
 }
 ```
 

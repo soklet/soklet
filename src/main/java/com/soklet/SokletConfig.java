@@ -32,8 +32,8 @@ import static java.util.Objects.requireNonNull;
 /**
  * Defines how a Soklet system is configured.
  * <p>
- * Threadsafe instances can be acquired via one of the builder factory methods such as {@link #withHttpServer(HttpServer)},
- * {@link #withSseServer(SseServer)}, or {@link #withMcpServer(McpServer)}.
+ * Threadsafe instances can be acquired via one of the builder factory methods such as {@link #withHttpServer(HttpServer)}
+ * or {@link #withSseServer(SseServer)}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -65,8 +65,6 @@ public final class SokletConfig {
 	private final HttpServer httpServer;
 	@Nullable
 	private final SseServer sseServer;
-	@Nullable
-	private final McpServer mcpServer;
 
 	/**
 	 * Vends a configuration builder, primed with the given HTTP {@link HttpServer}.
@@ -93,18 +91,6 @@ public final class SokletConfig {
 	}
 
 	/**
-	 * Vends a configuration builder, primed with the given {@link McpServer}.
-	 *
-	 * @param mcpServer the MCP server necessary for construction
-	 * @return a builder for {@link SokletConfig} instances
-	 */
-	@NonNull
-	public static Builder withMcpServer(@NonNull McpServer mcpServer) {
-		requireNonNull(mcpServer);
-		return new Builder().mcpServer(mcpServer);
-	}
-
-	/**
 	 * Package-private - used for internal Soklet tests.
 	 */
 	@NonNull
@@ -118,11 +104,9 @@ public final class SokletConfig {
 		// Wrap servers in proxies transparently
 		HttpServerProxy httpServerProxy = builder.httpServer == null ? null : new HttpServerProxy(builder.httpServer);
 		SseServerProxy sseServerProxy = builder.sseServer == null ? null : new SseServerProxy(builder.sseServer);
-		McpServerProxy mcpServerProxy = builder.mcpServer == null ? null : new McpServerProxy(builder.mcpServer);
 
 		this.httpServer = httpServerProxy;
 		this.sseServer = sseServerProxy;
-		this.mcpServer = mcpServerProxy;
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.defaultInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.fromDefaults();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.fromValueConverterRegistry(getValueConverterRegistry());
@@ -272,16 +256,6 @@ public final class SokletConfig {
 	}
 
 	/**
-	 * The MCP server managed by Soklet, if configured.
-	 *
-	 * @return the MCP server, if configured
-	 */
-	@NonNull
-	public Optional<McpServer> getMcpServer() {
-		return Optional.ofNullable(this.mcpServer);
-	}
-
-	/**
 	 * Builder used to construct instances of {@link SokletConfig}.
 	 * <p>
 	 * Instances are created by invoking one of the static factory methods on {@link SokletConfig}.
@@ -296,8 +270,6 @@ public final class SokletConfig {
 		private HttpServer httpServer;
 		@Nullable
 		private SseServer sseServer;
-		@Nullable
-		private McpServer mcpServer;
 		@Nullable
 		private InstanceProvider instanceProvider;
 		@Nullable
@@ -332,12 +304,6 @@ public final class SokletConfig {
 		@NonNull
 		public Builder sseServer(@Nullable SseServer sseServer) {
 			this.sseServer = sseServer;
-			return this;
-		}
-
-		@NonNull
-		public Builder mcpServer(@Nullable McpServer mcpServer) {
-			this.mcpServer = mcpServer;
 			return this;
 		}
 
@@ -409,9 +375,9 @@ public final class SokletConfig {
 
 		@NonNull
 		public SokletConfig build() {
-			if (this.httpServer == null && this.sseServer == null && this.mcpServer == null)
-				throw new IllegalStateException(format("At least one of %s, %s, or %s must be configured",
-						HttpServer.class.getSimpleName(), SseServer.class.getSimpleName(), McpServer.class.getSimpleName()));
+			if (this.httpServer == null && this.sseServer == null)
+				throw new IllegalStateException(format("At least one of %s or %s must be configured",
+						HttpServer.class.getSimpleName(), SseServer.class.getSimpleName()));
 
 			return new SokletConfig(this);
 		}
@@ -457,19 +423,6 @@ public final class SokletConfig {
 			return sseServer;
 		}
 
-		/**
-		 * Unwraps an McpServer proxy to get the underlying real implementation.
-		 */
-		@NonNull
-		private static McpServer unwrapMcpServer(@NonNull McpServer mcpServer) {
-			requireNonNull(mcpServer);
-
-			if (mcpServer instanceof McpServerProxy)
-				return ((McpServerProxy) mcpServer).getRealImplementation();
-
-			return mcpServer;
-		}
-
 		Copier(@NonNull SokletConfig sokletConfig) {
 			requireNonNull(sokletConfig);
 
@@ -480,14 +433,10 @@ public final class SokletConfig {
 			SseServer realSseServer = sokletConfig.getSseServer()
 					.map(Copier::unwrapSseServer)
 					.orElse(null);
-			McpServer realMcpServer = sokletConfig.getMcpServer()
-					.map(Copier::unwrapMcpServer)
-					.orElse(null);
 
 			this.builder = new Builder()
 					.httpServer(realHttpServer)
 					.sseServer(realSseServer)
-					.mcpServer(realMcpServer)
 					.instanceProvider(sokletConfig.getInstanceProvider())
 					.valueConverterRegistry(sokletConfig.valueConverterRegistry)
 					.requestBodyMarshaler(sokletConfig.requestBodyMarshaler)
@@ -509,12 +458,6 @@ public final class SokletConfig {
 		@NonNull
 		public Copier sseServer(@Nullable SseServer sseServer) {
 			this.builder.sseServer(sseServer);
-			return this;
-		}
-
-		@NonNull
-		public Copier mcpServer(@Nullable McpServer mcpServer) {
-			this.builder.mcpServer(mcpServer);
 			return this;
 		}
 

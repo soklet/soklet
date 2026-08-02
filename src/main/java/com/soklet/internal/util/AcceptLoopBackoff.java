@@ -20,7 +20,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.function.BooleanSupplier;
 
 /**
- * Shared accept-loop retry policy for Soklet's HTTP, SSE, and MCP servers.
+ * Shared accept-loop retry policy for Soklet's HTTP and SSE servers.
  * <p>
  * A persistent accept-loop failure (e.g. file-descriptor exhaustion) would otherwise spin the
  * accept loop with little or no delay. This policy escalates the retry delay exponentially per

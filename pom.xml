@@ -4,10 +4,10 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.soklet</groupId>
     <artifactId>soklet</artifactId>
-    <version>3.5.1</version>
+    <version>3.6.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Soklet</name>
-    <description>A zero-dependency HTTP/1.1 server and routing library for Java, well-suited for building RESTful APIs, broadcasting Server-Sent Events, and serving Model Context Protocol endpoints.</description>
+    <description>A zero-dependency HTTP/1.1 server and routing library for Java, well-suited for building RESTful APIs and broadcasting Server-Sent Events.</description>
     <url>https://www.soklet.com</url>
 
     <licenses>
@@ -324,6 +324,67 @@
                             <failOnError>true</failOnError>
                             <xmlOutput>true</xmlOutput>
                             <excludeFilterFile>${project.basedir}/config/spotbugs-exclude.xml</excludeFilterFile>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+            Phase 0 compares the complete public/protected API with the
+            released 3.5.1 artifact. The repository-owned verifier,
+            rather than japicmp's coarse break/no-break switches, adjudicates
+            the generated XML against the exact reviewed MCP removal and
+            incompatibility set.
+        -->
+        <profile>
+            <id>api-diff</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.siom79.japicmp</groupId>
+                        <artifactId>japicmp-maven-plugin</artifactId>
+                        <version>0.26.1</version>
+                        <executions>
+                            <execution>
+                                <id>mcp-api-diff</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>cmp</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <oldVersion>
+                                <dependency>
+                                    <groupId>com.soklet</groupId>
+                                    <artifactId>soklet</artifactId>
+                                    <version>3.5.1</version>
+                                    <type>jar</type>
+                                </dependency>
+                            </oldVersion>
+                            <newVersion>
+                                <file>
+                                    <path>${project.build.directory}/${project.build.finalName}.jar</path>
+                                </file>
+                            </newVersion>
+                            <outputDirectory>${project.build.directory}/japicmp</outputDirectory>
+                            <parameter>
+                                <accessModifier>protected</accessModifier>
+                                <onlyModified>true</onlyModified>
+                                <onlyBinaryIncompatible>false</onlyBinaryIncompatible>
+                                <includeSynthetic>true</includeSynthetic>
+                                <ignoreMissingClasses>false</ignoreMissingClasses>
+                                <ignoreNonResolvableArtifacts>false</ignoreNonResolvableArtifacts>
+                                <breakBuildOnModifications>false</breakBuildOnModifications>
+                                <breakBuildOnBinaryIncompatibleModifications>false</breakBuildOnBinaryIncompatibleModifications>
+                                <breakBuildOnSourceIncompatibleModifications>false</breakBuildOnSourceIncompatibleModifications>
+                                <reportOnlyFilename>true</reportOnlyFilename>
+                                <skipXmlReport>false</skipXmlReport>
+                                <skipHtmlReport>true</skipHtmlReport>
+                                <skipMarkdownReport>true</skipMarkdownReport>
+                                <skipDiffReport>false</skipDiffReport>
+                            </parameter>
                         </configuration>
                     </plugin>
                 </plugins>

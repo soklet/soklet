@@ -1,0 +1,5 @@
+{"id":"C:com/soklet/McpRemovedResult","kind":"class","changes":[{"type":"CLASS_REMOVED","site":"class","binaryCompatible":true,"sourceCompatible":true}]}
+{"id":"F:com/soklet/McpRemovedResult#legacyValue:Ljava/lang/String;","kind":"field","changes":[{"type":"FIELD_REMOVED","site":"field","binaryCompatible":true,"sourceCompatible":true}]}
+{"id":"M:com/soklet/McpRemovedResult#<init>()V","kind":"constructor","changes":[{"type":"CONSTRUCTOR_REMOVED","site":"constructor","binaryCompatible":true,"sourceCompatible":true}]}
+{"id":"M:com/soklet/McpRemovedResult#getHttpRequestResult()Lcom/soklet/HttpRequestResult;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":true,"sourceCompatible":true}]}
+{"id":"M:com/soklet/Soklet#handleMcpRequest(Lcom/soklet/Request;)V","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":true,"sourceCompatible":true}]}

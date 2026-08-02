@@ -17,7 +17,7 @@
 package com.soklet;
 
 /**
- * Reasons why a streaming HTTP response, Server-Sent Event connection, or MCP SSE stream may terminate.
+ * Reasons why a streaming HTTP response or Server-Sent Event connection may terminate.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -54,10 +54,6 @@ public enum StreamTerminationReason {
 	 * The stream was closed due to backpressure.
 	 */
 	BACKPRESSURE,
-	/**
-	 * The stream ended because its owning session was terminated.
-	 */
-	SESSION_TERMINATED,
 	/**
 	 * A write to the stream failed.
 	 */

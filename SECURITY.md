@@ -14,4 +14,4 @@ Security fixes are prioritized for the latest released version of `com.soklet:so
 
 ## Scope
 
-Soklet has zero runtime dependencies, so vulnerabilities in the released artifact are limited to first-party code. Reports against the embedded HTTP, SSE, and MCP transports — including request parsing, connection lifecycle, and resource-limit enforcement — are especially appreciated.
+Soklet has zero runtime dependencies, so vulnerabilities in the released artifact are limited to first-party code. Reports against the embedded HTTP and SSE transports — including request parsing, connection lifecycle, and resource-limit enforcement — are especially appreciated.

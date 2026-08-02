@@ -90,7 +90,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
  */
 @ThreadSafe
 // SSE requires virtual threads: DefaultSseServer refuses to start on a non-VT runtime, so the
-// entire SSE test suite runs only on JDK 21+. HTTP/MCP fallback coverage lives in other tests.
+// entire SSE test suite runs only on JDK 21+. HTTP fallback coverage lives in other tests.
 @EnabledForJreRange(min = JRE.JAVA_21)
 public class SseTests {
 	private static final String TRACEPARENT = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";

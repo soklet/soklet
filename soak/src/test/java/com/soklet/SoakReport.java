@@ -120,21 +120,31 @@ final class SoakReport {
 	@NonNull
 	private static String header() {
 		Runtime.Version version = Runtime.version();
+		SoakProfiles.SelectedProfile profile = SoakProfiles.selected();
 
 		return """
 				# Soklet Soak Report
 
 				- Generated: %s
-				- Mode: %s
+				- Profile: %s
+				- Configuration resource: `%s`
+				- Configuration SHA-256: `%s`
 				- Java: %s
 				- JVM: %s %s
 				- OS: %s %s (%s)
 				- Available processors: %d
 				- Process: %s
 
+				## Canonical Configuration
+
+				```properties
+				%s```
+
 				""".formatted(
 				Instant.now(),
-				"1".equals(System.getenv("SOKLET_SOAK")) ? "soak (SOKLET_SOAK=1)" : "smoke",
+				profile.name(),
+				profile.resourceName(),
+				profile.sha256(),
 				version,
 				System.getProperty("java.vm.name"),
 				System.getProperty("java.vm.version"),
@@ -142,7 +152,8 @@ final class SoakReport {
 				System.getProperty("os.version"),
 				System.getProperty("os.arch"),
 				Runtime.getRuntime().availableProcessors(),
-				ManagementFactory.getRuntimeMXBean().getName());
+				ManagementFactory.getRuntimeMXBean().getName(),
+				profile.canonicalConfiguration());
 	}
 
 	@NonNull

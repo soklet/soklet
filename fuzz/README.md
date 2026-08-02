@@ -16,18 +16,18 @@ Run a short coverage-guided fuzzing session for one target:
 
 ```sh
 JAZZER_FUZZ=1 mvn -f fuzz/pom.xml \
-  -Dtest=McpJsonCodecFuzzTest#parseArbitraryBytesOnlyRejectsWithIllegalArgumentException \
+  -Dtest=RequestParserFuzzTest#parseIncrementalRequestOnlyRejectsWithDeclaredExceptions \
   -Djazzer.max_duration=30s \
   test
 ```
 
 The current targets are:
 
-- `McpJsonCodecFuzzTest`
 - `RequestParserFuzzTest`
 - `DefaultMultipartParserFuzzTest`
 - `HttpDateFuzzTest`
 - `ParameterizedHeaderValueFuzzTest`
+- `MediaRangeFuzzTest`
 - `QueryFormatFuzzTest`
 - `ResponseCookieFuzzTest`
 - `TraceContextFuzzTest`
@@ -37,6 +37,15 @@ The current targets are:
 Checked-in inputs under `src/test/resources/**/<FuzzTest>Inputs/<method>/`
 are curated regression seeds. They are reviewed, named, and should remain small
 enough for fast deterministic replay on every PR and push.
+
+The protocol-neutral fixtures under
+`src/test/resources/com/soklet/json-corpus/` were retained from the removed MCP
+codec for the greenfield JSON implementation. They are not attached to a fuzz
+target during Phase 0. Their compact checksum manifest is verified with:
+
+```sh
+node scripts/verify-json-corpus.mjs
+```
 
 Generated fuzzing output is intentionally ignored:
 
@@ -63,11 +72,11 @@ Pull requests and pushes run deterministic corpus replay with:
 mvn -B -ntp -f fuzz/pom.xml test
 ```
 
-The scheduled/manual nightly job runs as a matrix with one Maven invocation per
-`@FuzzTest` method. Jazzer's JUnit integration runs only one coverage-guided
-fuzz test per JVM when `JAZZER_FUZZ=1`, so each target needs its own matrix slot.
-Each slot restores the latest generated Jazzer corpus, runs coverage-guided
-fuzzing, uploads artifacts, and saves a target-specific corpus cache under a
-run-specific key. The key rotates on every run so nightly exploration can
-compound over time; restore keys keep each target seeded from the newest
-available corpus for the branch.
+The scheduled nightly run, or a manual workflow dispatch, uses a matrix with
+one Maven invocation per `@FuzzTest` method. Jazzer's JUnit integration runs
+only one coverage-guided fuzz test per JVM when `JAZZER_FUZZ=1`, so each target
+needs its own matrix slot. Each slot restores the latest generated Jazzer
+corpus, runs coverage-guided fuzzing, uploads artifacts, and saves a
+target-specific corpus cache under a run-specific key. The key rotates on every
+run so nightly exploration can compound over time; restore keys keep each
+target seeded from the newest available corpus for the branch.

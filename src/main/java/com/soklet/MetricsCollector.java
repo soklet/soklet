@@ -286,66 +286,6 @@ public interface MetricsCollector {
 		// No-op by default
 	}
 
-	/**
-	 * Called after an MCP session is durably created.
-	 */
-	default void didCreateMcpSession(@NonNull Request request,
-																	 @NonNull Class<? extends McpEndpoint> endpointClass,
-																	 @NonNull String sessionId) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after an MCP session is terminated.
-	 */
-	default void didTerminateMcpSession(@NonNull Class<? extends McpEndpoint> endpointClass,
-																			@NonNull String sessionId,
-																			@NonNull Duration sessionDuration,
-																			@NonNull McpSessionTerminationReason terminationReason,
-																			@Nullable Throwable throwable) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after a valid MCP JSON-RPC request begins handling.
-	 */
-	default void didStartMcpRequestHandling(@NonNull Request request,
-																					@NonNull Class<? extends McpEndpoint> endpointClass,
-																					@Nullable String sessionId,
-																					@NonNull String jsonRpcMethod,
-																					@Nullable McpJsonRpcRequestId jsonRpcRequestId) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after MCP JSON-RPC request handling finishes.
-	 */
-	default void didFinishMcpRequestHandling(@NonNull Request request,
-																					 @NonNull Class<? extends McpEndpoint> endpointClass,
-																					 @Nullable String sessionId,
-																					 @NonNull String jsonRpcMethod,
-																					 @Nullable McpJsonRpcRequestId jsonRpcRequestId,
-																					 @NonNull McpRequestOutcome requestOutcome,
-																					 @Nullable McpJsonRpcError jsonRpcError,
-																					 @NonNull Duration duration,
-																					 @NonNull List<@NonNull Throwable> throwables) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after an MCP GET stream is established.
-	 */
-	default void didEstablishMcpSseStream(@NonNull McpSseStream stream) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after an MCP GET stream is terminated.
-	 */
-	default void didTerminateMcpSseStream(@NonNull McpSseStream stream,
-																										@NonNull StreamTermination termination) {
-		// No-op by default
-	}
 
 	/**
 	 * Called before an SSE connection is established.
@@ -833,9 +773,9 @@ public interface MetricsCollector {
 	 * <p>
 	 * Durations are in nanoseconds, sizes are in bytes, and queue depths are raw counts.
 	 * Histogram values are captured as {@link HistogramSnapshot} instances.
-	 * Connection counts report total accepted/rejected connections for the HTTP, SSE, and MCP servers.
+	 * Connection counts report total accepted/rejected connections for the HTTP and SSE servers.
 	 * Transport failures are reported by server type and low-level failure reason.
-	 * Request read failures and request rejections are reported separately for HTTP, SSE, and MCP traffic.
+	 * Request read failures and request rejections are reported separately for HTTP and SSE traffic.
 	 * Instances are typically produced by {@link MetricsCollector#snapshot()} but can also be built
 	 * manually via {@link #builder()}.
 	 *
@@ -848,10 +788,6 @@ public interface MetricsCollector {
 		@NonNull
 		private final Long activeSseStreams;
 		@NonNull
-		private final Long activeMcpSessions;
-		@NonNull
-		private final Long activeMcpSseStreams;
-		@NonNull
 		private final Long httpConnectionsAccepted;
 		@NonNull
 		private final Long httpConnectionsRejected;
@@ -859,10 +795,6 @@ public interface MetricsCollector {
 		private final Long sseConnectionsAccepted;
 		@NonNull
 		private final Long sseConnectionsRejected;
-		@NonNull
-		private final Long mcpConnectionsAccepted;
-		@NonNull
-		private final Long mcpConnectionsRejected;
 		@NonNull
 		private final Map<@NonNull TransportFailureKey, @NonNull Long> transportFailures;
 		@NonNull
@@ -873,10 +805,6 @@ public interface MetricsCollector {
 		private final Map<@NonNull RequestReadFailureKey, @NonNull Long> sseRequestReadFailures;
 		@NonNull
 		private final Map<@NonNull RequestRejectionKey, @NonNull Long> sseRequestRejections;
-		@NonNull
-		private final Map<@NonNull RequestReadFailureKey, @NonNull Long> mcpRequestReadFailures;
-		@NonNull
-		private final Map<@NonNull RequestRejectionKey, @NonNull Long> mcpRequestRejections;
 		@NonNull
 		private final Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
 		@NonNull
@@ -917,14 +845,6 @@ public interface MetricsCollector {
 		private final Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth;
 		@NonNull
 		private final Map<@NonNull SseStreamRouteTerminationKey, @NonNull HistogramSnapshot> sseStreamDurations;
-		@NonNull
-		private final Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull Long> mcpRequests;
-		@NonNull
-		private final Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull HistogramSnapshot> mcpRequestDurations;
-		@NonNull
-		private final Map<@NonNull McpEndpointSessionTerminationKey, @NonNull HistogramSnapshot> mcpSessionDurations;
-		@NonNull
-		private final Map<@NonNull McpEndpointSseStreamTerminationKey, @NonNull HistogramSnapshot> mcpSseStreamDurations;
 
 		/**
 		 * Acquires an "empty" builder for {@link Snapshot} instances.
@@ -941,21 +861,15 @@ public interface MetricsCollector {
 
 			this.activeRequests = requireNonNull(builder.activeRequests);
 			this.activeSseStreams = requireNonNull(builder.activeSseStreams);
-			this.activeMcpSessions = requireNonNull(builder.activeMcpSessions);
-			this.activeMcpSseStreams = requireNonNull(builder.activeMcpSseStreams);
 			this.httpConnectionsAccepted = requireNonNull(builder.httpConnectionsAccepted);
 			this.httpConnectionsRejected = requireNonNull(builder.httpConnectionsRejected);
 			this.sseConnectionsAccepted = requireNonNull(builder.sseConnectionsAccepted);
 			this.sseConnectionsRejected = requireNonNull(builder.sseConnectionsRejected);
-			this.mcpConnectionsAccepted = requireNonNull(builder.mcpConnectionsAccepted);
-			this.mcpConnectionsRejected = requireNonNull(builder.mcpConnectionsRejected);
 			this.transportFailures = copyOrEmpty(builder.transportFailures);
 			this.httpRequestReadFailures = copyOrEmpty(builder.httpRequestReadFailures);
 			this.httpRequestRejections = copyOrEmpty(builder.httpRequestRejections);
 			this.sseRequestReadFailures = copyOrEmpty(builder.sseRequestReadFailures);
 			this.sseRequestRejections = copyOrEmpty(builder.sseRequestRejections);
-			this.mcpRequestReadFailures = copyOrEmpty(builder.mcpRequestReadFailures);
-			this.mcpRequestRejections = copyOrEmpty(builder.mcpRequestRejections);
 			this.httpRequestDurations = copyOrEmpty(builder.httpRequestDurations);
 			this.httpHandlerDurations = copyOrEmpty(builder.httpHandlerDurations);
 			this.httpTimeToFirstByte = copyOrEmpty(builder.httpTimeToFirstByte);
@@ -976,10 +890,6 @@ public interface MetricsCollector {
 			this.sseCommentSizes = copyOrEmpty(builder.sseCommentSizes);
 			this.sseCommentQueueDepth = copyOrEmpty(builder.sseCommentQueueDepth);
 			this.sseStreamDurations = copyOrEmpty(builder.sseStreamDurations);
-			this.mcpRequests = copyOrEmpty(builder.mcpRequests);
-			this.mcpRequestDurations = copyOrEmpty(builder.mcpRequestDurations);
-			this.mcpSessionDurations = copyOrEmpty(builder.mcpSessionDurations);
-			this.mcpSseStreamDurations = copyOrEmpty(builder.mcpSseStreamDurations);
 		}
 
 		/**
@@ -1002,25 +912,6 @@ public interface MetricsCollector {
 			return this.activeSseStreams;
 		}
 
-		/**
-		 * Returns the number of active MCP sessions.
-		 *
-		 * @return the active MCP session count
-		 */
-		@NonNull
-		public Long getActiveMcpSessions() {
-			return this.activeMcpSessions;
-		}
-
-		/**
-		 * Returns the number of active MCP SSE streams.
-		 *
-		 * @return the active MCP SSE stream count
-		 */
-		@NonNull
-		public Long getActiveMcpSseStreams() {
-			return this.activeMcpSseStreams;
-		}
 
 		/**
 		 * Returns the total number of accepted HTTP connections.
@@ -1062,25 +953,6 @@ public interface MetricsCollector {
 			return this.sseConnectionsRejected;
 		}
 
-		/**
-		 * Returns the total number of accepted MCP connections.
-		 *
-		 * @return total accepted MCP connections
-		 */
-		@NonNull
-		public Long getMcpConnectionsAccepted() {
-			return this.mcpConnectionsAccepted;
-		}
-
-		/**
-		 * Returns the total number of rejected MCP connections.
-		 *
-		 * @return total rejected MCP connections
-		 */
-		@NonNull
-		public Long getMcpConnectionsRejected() {
-			return this.mcpConnectionsRejected;
-		}
 
 		/**
 		 * Returns transport failure counters keyed by server type and failure reason.
@@ -1132,25 +1004,6 @@ public interface MetricsCollector {
 			return this.sseRequestRejections;
 		}
 
-		/**
-		 * Returns MCP request read failure counters keyed by failure reason.
-		 *
-		 * @return MCP request read failure counters
-		 */
-		@NonNull
-		public Map<@NonNull RequestReadFailureKey, @NonNull Long> getMcpRequestReadFailures() {
-			return this.mcpRequestReadFailures;
-		}
-
-		/**
-		 * Returns MCP request rejection counters keyed by rejection reason.
-		 *
-		 * @return MCP request rejection counters
-		 */
-		@NonNull
-		public Map<@NonNull RequestRejectionKey, @NonNull Long> getMcpRequestRejections() {
-			return this.mcpRequestRejections;
-		}
 
 		/**
 		 * Returns HTTP request duration histograms keyed by server route and status class.
@@ -1357,45 +1210,6 @@ public interface MetricsCollector {
 			return this.sseStreamDurations;
 		}
 
-		/**
-		 * Returns MCP request outcome counters keyed by endpoint, JSON-RPC method, and outcome.
-		 *
-		 * @return MCP request outcome counters
-		 */
-		@NonNull
-		public Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull Long> getMcpRequests() {
-			return this.mcpRequests;
-		}
-
-		/**
-		 * Returns MCP request duration histograms keyed by endpoint, JSON-RPC method, and outcome.
-		 *
-		 * @return MCP request duration histograms
-		 */
-		@NonNull
-		public Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull HistogramSnapshot> getMcpRequestDurations() {
-			return this.mcpRequestDurations;
-		}
-
-		/**
-		 * Returns MCP session duration histograms keyed by endpoint and termination reason.
-		 *
-		 * @return MCP session duration histograms
-		 */
-		@NonNull
-		public Map<@NonNull McpEndpointSessionTerminationKey, @NonNull HistogramSnapshot> getMcpSessionDurations() {
-			return this.mcpSessionDurations;
-		}
-
-		/**
-		 * Returns MCP SSE stream duration histograms keyed by endpoint and termination reason.
-		 *
-		 * @return MCP SSE stream duration histograms
-		 */
-		@NonNull
-		public Map<@NonNull McpEndpointSseStreamTerminationKey, @NonNull HistogramSnapshot> getMcpSseStreamDurations() {
-			return this.mcpSseStreamDurations;
-		}
 
 		@NonNull
 		private static <K, V> Map<K, V> copyOrEmpty(@Nullable Map<K, V> map) {
@@ -1416,10 +1230,6 @@ public interface MetricsCollector {
 			@NonNull
 			private Long activeSseStreams;
 			@NonNull
-			private Long activeMcpSessions;
-			@NonNull
-			private Long activeMcpSseStreams;
-			@NonNull
 			private Long httpConnectionsAccepted;
 			@NonNull
 			private Long httpConnectionsRejected;
@@ -1427,10 +1237,6 @@ public interface MetricsCollector {
 			private Long sseConnectionsAccepted;
 			@NonNull
 			private Long sseConnectionsRejected;
-			@NonNull
-			private Long mcpConnectionsAccepted;
-			@NonNull
-			private Long mcpConnectionsRejected;
 			@Nullable
 			private Map<@NonNull TransportFailureKey, @NonNull Long> transportFailures;
 			@Nullable
@@ -1441,10 +1247,6 @@ public interface MetricsCollector {
 			private Map<@NonNull RequestReadFailureKey, @NonNull Long> sseRequestReadFailures;
 			@Nullable
 			private Map<@NonNull RequestRejectionKey, @NonNull Long> sseRequestRejections;
-			@Nullable
-			private Map<@NonNull RequestReadFailureKey, @NonNull Long> mcpRequestReadFailures;
-			@Nullable
-			private Map<@NonNull RequestRejectionKey, @NonNull Long> mcpRequestRejections;
 			@Nullable
 			private Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpRequestDurations;
 			@Nullable
@@ -1485,26 +1287,14 @@ public interface MetricsCollector {
 			private Map<@NonNull SseCommentRouteKey, @NonNull HistogramSnapshot> sseCommentQueueDepth;
 			@Nullable
 			private Map<@NonNull SseStreamRouteTerminationKey, @NonNull HistogramSnapshot> sseStreamDurations;
-			@Nullable
-			private Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull Long> mcpRequests;
-			@Nullable
-			private Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull HistogramSnapshot> mcpRequestDurations;
-			@Nullable
-			private Map<@NonNull McpEndpointSessionTerminationKey, @NonNull HistogramSnapshot> mcpSessionDurations;
-			@Nullable
-			private Map<@NonNull McpEndpointSseStreamTerminationKey, @NonNull HistogramSnapshot> mcpSseStreamDurations;
 
 			private Builder() {
 				this.activeRequests = 0L;
 				this.activeSseStreams = 0L;
-				this.activeMcpSessions = 0L;
-				this.activeMcpSseStreams = 0L;
 				this.httpConnectionsAccepted = 0L;
 				this.httpConnectionsRejected = 0L;
 				this.sseConnectionsAccepted = 0L;
 				this.sseConnectionsRejected = 0L;
-				this.mcpConnectionsAccepted = 0L;
-				this.mcpConnectionsRejected = 0L;
 			}
 
 			/**
@@ -1531,29 +1321,6 @@ public interface MetricsCollector {
 				return this;
 			}
 
-			/**
-			 * Sets the active MCP session count.
-			 *
-			 * @param activeMcpSessions the active MCP session count
-			 * @return this builder
-			 */
-			@NonNull
-			public Builder activeMcpSessions(@NonNull Long activeMcpSessions) {
-				this.activeMcpSessions = requireNonNull(activeMcpSessions);
-				return this;
-			}
-
-			/**
-			 * Sets the active MCP SSE stream count.
-			 *
-			 * @param activeMcpSseStreams the active MCP SSE stream count
-			 * @return this builder
-			 */
-			@NonNull
-			public Builder activeMcpSseStreams(@NonNull Long activeMcpSseStreams) {
-				this.activeMcpSseStreams = requireNonNull(activeMcpSseStreams);
-				return this;
-			}
 
 			/**
 			 * Sets the total number of accepted HTTP connections.
@@ -1603,29 +1370,6 @@ public interface MetricsCollector {
 				return this;
 			}
 
-			/**
-			 * Sets the total number of accepted MCP connections.
-			 *
-			 * @param mcpConnectionsAccepted total accepted MCP connections
-			 * @return this builder
-			 */
-			@NonNull
-			public Builder mcpConnectionsAccepted(@NonNull Long mcpConnectionsAccepted) {
-				this.mcpConnectionsAccepted = requireNonNull(mcpConnectionsAccepted);
-				return this;
-			}
-
-			/**
-			 * Sets the total number of rejected MCP connections.
-			 *
-			 * @param mcpConnectionsRejected total rejected MCP connections
-			 * @return this builder
-			 */
-			@NonNull
-			public Builder mcpConnectionsRejected(@NonNull Long mcpConnectionsRejected) {
-				this.mcpConnectionsRejected = requireNonNull(mcpConnectionsRejected);
-				return this;
-			}
 
 			/**
 			 * Sets transport failure counters keyed by server type and failure reason.
@@ -1692,31 +1436,6 @@ public interface MetricsCollector {
 				return this;
 			}
 
-			/**
-			 * Sets MCP request read failure counters keyed by failure reason.
-			 *
-			 * @param mcpRequestReadFailures the MCP request read failure counters
-			 * @return this builder
-			 */
-			@NonNull
-			public Builder mcpRequestReadFailures(
-					@Nullable Map<@NonNull RequestReadFailureKey, @NonNull Long> mcpRequestReadFailures) {
-				this.mcpRequestReadFailures = mcpRequestReadFailures;
-				return this;
-			}
-
-			/**
-			 * Sets MCP request rejection counters keyed by rejection reason.
-			 *
-			 * @param mcpRequestRejections the MCP request rejection counters
-			 * @return this builder
-			 */
-			@NonNull
-			public Builder mcpRequestRejections(
-					@Nullable Map<@NonNull RequestRejectionKey, @NonNull Long> mcpRequestRejections) {
-				this.mcpRequestRejections = mcpRequestRejections;
-				return this;
-			}
 
 			/**
 			 * Sets HTTP request duration histograms keyed by server route and status class.
@@ -1978,57 +1697,6 @@ public interface MetricsCollector {
 				return this;
 			}
 
-			/**
-			 * Sets MCP request outcome counters keyed by endpoint, JSON-RPC method, and outcome.
-			 *
-			 * @param mcpRequests the MCP request outcome counters
-			 * @return this builder
-			 */
-			@NonNull
-			public Builder mcpRequests(
-					@Nullable Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull Long> mcpRequests) {
-				this.mcpRequests = mcpRequests;
-				return this;
-			}
-
-			/**
-			 * Sets MCP request duration histograms keyed by endpoint, JSON-RPC method, and outcome.
-			 *
-			 * @param mcpRequestDurations the MCP request duration histograms
-			 * @return this builder
-			 */
-			@NonNull
-			public Builder mcpRequestDurations(
-					@Nullable Map<@NonNull McpEndpointRequestOutcomeKey, @NonNull HistogramSnapshot> mcpRequestDurations) {
-				this.mcpRequestDurations = mcpRequestDurations;
-				return this;
-			}
-
-			/**
-			 * Sets MCP session duration histograms keyed by endpoint and termination reason.
-			 *
-			 * @param mcpSessionDurations the MCP session duration histograms
-			 * @return this builder
-			 */
-			@NonNull
-			public Builder mcpSessionDurations(
-					@Nullable Map<@NonNull McpEndpointSessionTerminationKey, @NonNull HistogramSnapshot> mcpSessionDurations) {
-				this.mcpSessionDurations = mcpSessionDurations;
-				return this;
-			}
-
-			/**
-			 * Sets MCP SSE stream duration histograms keyed by endpoint and termination reason.
-			 *
-			 * @param mcpSseStreamDurations the MCP SSE stream duration histograms
-			 * @return this builder
-			 */
-			@NonNull
-			public Builder mcpSseStreamDurations(
-					@Nullable Map<@NonNull McpEndpointSseStreamTerminationKey, @NonNull HistogramSnapshot> mcpSseStreamDurations) {
-				this.mcpSseStreamDurations = mcpSseStreamDurations;
-				return this;
-			}
 
 			/**
 			 * Builds a {@link Snapshot} instance.
@@ -2659,46 +2327,6 @@ public interface MetricsCollector {
 		}
 	}
 
-	/**
-	 * Key for metrics grouped by MCP endpoint class, JSON-RPC method, and request outcome.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
-	record McpEndpointRequestOutcomeKey(@NonNull Class<? extends McpEndpoint> endpointClass,
-																			@NonNull String jsonRpcMethod,
-																			@NonNull McpRequestOutcome requestOutcome) {
-		public McpEndpointRequestOutcomeKey {
-			requireNonNull(endpointClass);
-			requireNonNull(jsonRpcMethod);
-			requireNonNull(requestOutcome);
-		}
-	}
-
-	/**
-	 * Key for metrics grouped by MCP endpoint class and session termination reason.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
-	record McpEndpointSessionTerminationKey(@NonNull Class<? extends McpEndpoint> endpointClass,
-																					@NonNull McpSessionTerminationReason terminationReason) {
-		public McpEndpointSessionTerminationKey {
-			requireNonNull(endpointClass);
-			requireNonNull(terminationReason);
-		}
-	}
-
-	/**
-	 * Key for metrics grouped by MCP endpoint class and SSE stream termination reason.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
-	record McpEndpointSseStreamTerminationKey(@NonNull Class<? extends McpEndpoint> endpointClass,
-																				 @NonNull StreamTerminationReason terminationReason) {
-		public McpEndpointSseStreamTerminationKey {
-			requireNonNull(endpointClass);
-			requireNonNull(terminationReason);
-		}
-	}
 
 	/**
 	 * Acquires a threadsafe {@link MetricsCollector} instance with sensible defaults.

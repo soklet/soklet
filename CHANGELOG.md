@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.6.0 (Unreleased)
+
+### Breaking Changes
+
+- Removed the MCP 2025-11-25 implementation and public API as the first step
+  toward greenfield support for MCP 2026-07-28. This is an intentional source-
+  and binary-incompatible change in a minor release.
+
 ## 3.5.1 (2026-07-13)
 
 ### Fixes
