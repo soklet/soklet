@@ -70,6 +70,31 @@
     </dependencies>
 
     <build>
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+            </testResource>
+            <!-- Attach the single checked-in JSON corpus to both fuzz methods without
+                 duplicating its byte-exact fixtures in the source tree. Jazzer discovers
+                 method seeds under ClassNameInputs/methodName. -->
+            <testResource>
+                <directory>src/test/resources/com/soklet/json-corpus</directory>
+                <targetPath>com/soklet/internal/mcp/protocol/McpJsonCodecFuzzTestInputs/strictJsonFuzzRejectsInvalidBytesOnlyWithIllegalArgumentException</targetPath>
+                <includes>
+                    <include>parse/**</include>
+                    <include>round-trip/**</include>
+                </includes>
+            </testResource>
+            <testResource>
+                <directory>src/test/resources/com/soklet/json-corpus</directory>
+                <targetPath>com/soklet/internal/mcp/protocol/McpJsonCodecFuzzTestInputs/strictJsonFuzzRoundTripsStructurally</targetPath>
+                <includes>
+                    <include>parse/**</include>
+                    <include>round-trip/**</include>
+                </includes>
+            </testResource>
+        </testResources>
+
         <plugins>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

@@ -65,6 +65,156 @@ class ConnectionEventLoop {
         void run() throws Exception;
     }
 
+    private static final class PendingRegistration {
+        final SocketChannel socketChannel;
+        final EventLoop.ConnectionAdmission admission;
+        final AtomicBoolean claimed;
+
+        private PendingRegistration(SocketChannel socketChannel, EventLoop.ConnectionAdmission admission) {
+            this.socketChannel = socketChannel;
+            this.admission = admission;
+            this.claimed = new AtomicBoolean();
+        }
+
+        private boolean claim() {
+            return claimed.compareAndSet(false, true);
+        }
+
+        private void closeAndRelease() {
+            CloseUtils.closeQuietly(socketChannel);
+            admission.release();
+        }
+    }
+
+    private enum DispatchState {
+        HANDLING,
+        RESPONSE_PENDING,
+        INVALID_RESPONSE_PENDING,
+        PREPARING,
+        COMMITTED,
+        CANCELED
+    }
+
+    private enum ResponseDisposition {
+        ACCEPTED,
+        CANCELED,
+        DUPLICATE
+    }
+
+    private static final class ResponseOffer {
+        final ResponseDisposition disposition;
+        final StreamTerminationReason discardReason;
+        final @Nullable Throwable discardCause;
+
+        private ResponseOffer(ResponseDisposition disposition, StreamTerminationReason discardReason,
+                              @Nullable Throwable discardCause) {
+            this.disposition = disposition;
+            this.discardReason = discardReason;
+            this.discardCause = discardCause;
+        }
+    }
+
+    private static final class DispatchCancellation {
+        final @Nullable MicrohttpResponse pendingResponse;
+
+        private DispatchCancellation(@Nullable MicrohttpResponse pendingResponse) {
+            this.pendingResponse = pendingResponse;
+        }
+    }
+
+    /**
+     * The ownership ticket for one handler dispatch. Handler callbacks may arrive from any thread, so all
+     * state transitions are synchronized on this object. Connection-level references are still changed only
+     * by the event-loop thread.
+     */
+    private static final class InFlightDispatch {
+        final MicrohttpRequest request;
+        final boolean monitorClientDisconnects;
+        private DispatchState state;
+        private @Nullable MicrohttpResponse pendingResponse;
+        private @Nullable StreamTerminationReason cancelationReason;
+        private @Nullable Throwable cancelationCause;
+
+        private InFlightDispatch(MicrohttpRequest request, boolean monitorClientDisconnects) {
+            this.request = request;
+            this.monitorClientDisconnects = monitorClientDisconnects;
+            this.state = DispatchState.HANDLING;
+        }
+
+        private synchronized ResponseOffer offerResponse(MicrohttpResponse response) {
+            if (state == DispatchState.HANDLING) {
+                pendingResponse = response;
+                state = DispatchState.RESPONSE_PENDING;
+                return new ResponseOffer(ResponseDisposition.ACCEPTED, StreamTerminationReason.INTERNAL_ERROR, null);
+            }
+
+            if (state == DispatchState.CANCELED) {
+                StreamTerminationReason reason = cancelationReason == null
+                        ? StreamTerminationReason.UNKNOWN
+                        : cancelationReason;
+                return new ResponseOffer(ResponseDisposition.CANCELED, reason, cancelationCause);
+            }
+
+            return new ResponseOffer(ResponseDisposition.DUPLICATE, StreamTerminationReason.INTERNAL_ERROR, null);
+        }
+
+        private synchronized ResponseOffer offerNullResponse() {
+            if (state == DispatchState.HANDLING) {
+                state = DispatchState.INVALID_RESPONSE_PENDING;
+                return new ResponseOffer(ResponseDisposition.ACCEPTED, StreamTerminationReason.INTERNAL_ERROR, null);
+            }
+
+            if (state == DispatchState.CANCELED) {
+                StreamTerminationReason reason = cancelationReason == null
+                        ? StreamTerminationReason.UNKNOWN
+                        : cancelationReason;
+                return new ResponseOffer(ResponseDisposition.CANCELED, reason, cancelationCause);
+            }
+
+            return new ResponseOffer(ResponseDisposition.DUPLICATE, StreamTerminationReason.INTERNAL_ERROR, null);
+        }
+
+        private synchronized @Nullable MicrohttpResponse beginPreparation() {
+            if (state != DispatchState.RESPONSE_PENDING) {
+                return null;
+            }
+
+            MicrohttpResponse response = pendingResponse;
+            pendingResponse = null;
+            state = DispatchState.PREPARING;
+            return response;
+        }
+
+        private synchronized void commit() {
+            if (state != DispatchState.PREPARING) {
+                throw new IllegalStateException("Cannot commit response from dispatch state " + state);
+            }
+
+            state = DispatchState.COMMITTED;
+        }
+
+        private synchronized @Nullable DispatchCancellation cancel(StreamTerminationReason reason,
+                                                                    @Nullable Throwable cause) {
+            if (state == DispatchState.COMMITTED || state == DispatchState.CANCELED) {
+                return null;
+            }
+
+            MicrohttpResponse response = pendingResponse;
+            pendingResponse = null;
+            cancelationReason = reason;
+            cancelationCause = cause;
+            state = DispatchState.CANCELED;
+            return new DispatchCancellation(response);
+        }
+
+        private synchronized boolean shouldMonitorClientDisconnects() {
+            return monitorClientDisconnects
+                    && (state == DispatchState.HANDLING
+                    || state == DispatchState.RESPONSE_PENDING
+                    || state == DispatchState.INVALID_RESPONSE_PENDING);
+        }
+    }
+
     private final Options options;
     private final Logger logger;
     private final Handler handler;
@@ -74,10 +224,16 @@ class ConnectionEventLoop {
 
     private final Scheduler timeoutQueue;
     private final Queue<Runnable> taskQueue;
+    private final Queue<PendingRegistration> pendingRegistrations;
     private final ByteBuffer buffer;
     private final Selector selector;
     private final Thread thread;
     private final AtomicInteger connectionCount;
+    private final AtomicInteger pendingRegistrationCount;
+    private final AtomicBoolean registrationsClosed;
+    private final Object lifecycleLock;
+    private boolean started;
+    private boolean closedBeforeStart;
 
     ConnectionEventLoop(
             Options options,
@@ -94,11 +250,23 @@ class ConnectionEventLoop {
         this.draining = draining;
 
         connectionCount = new AtomicInteger();
+        pendingRegistrationCount = new AtomicInteger();
+        registrationsClosed = new AtomicBoolean();
         timeoutQueue = new Scheduler();
         taskQueue = new ConcurrentLinkedQueue<>();
+        pendingRegistrations = new ConcurrentLinkedQueue<>();
         buffer = ByteBuffer.allocateDirect(options.readBufferSize());
-        selector = Selector.open();
-        thread = new Thread(this::run, "connection-event-loop");
+        Selector openedSelector = Selector.open();
+        Thread eventLoopThread;
+        try {
+            eventLoopThread = new Thread(this::run, "connection-event-loop");
+        } catch (RuntimeException | Error throwable) {
+            CloseUtils.closeQuietly(openedSelector);
+            throw throwable;
+        }
+        selector = openedSelector;
+        thread = eventLoopThread;
+        lifecycleLock = new Object();
     }
 
     private class Connection {
@@ -134,6 +302,7 @@ class ConnectionEventLoop {
         final ByteTokenizer byteTokenizer;
         final String id;
         final @Nullable InetSocketAddress remoteAddress;
+        final EventLoop.ConnectionAdmission admission;
         RequestParser requestParser;
         @Nullable
         WritableSource writableSource;
@@ -143,6 +312,8 @@ class ConnectionEventLoop {
         Cancelable requestReadTimeoutTask;
         @Nullable
         Cancelable responseWriteIdleTimeoutTask;
+        @Nullable
+        InFlightDispatch inFlightDispatch;
         boolean requestReadTimeoutBodyPhase;
         long requestReadTimeoutTokenizerMark;
         boolean responseWriteIdleTimeoutEnabled;
@@ -150,19 +321,24 @@ class ConnectionEventLoop {
         boolean headRequest;
         boolean keepAlive;
         boolean closeAfterResponse;
-        boolean requestInFlight;
+        boolean inputHalfClosed;
+        boolean monitorClientDisconnectsDuringStreamingResponse;
+        int streamingResponseBytesDiscarded;
         final AtomicBoolean closed;
 
-        private Connection(SocketChannel socketChannel, SelectionKey selectionKey, @Nullable InetSocketAddress remoteAddress) throws IOException {
+        private Connection(SocketChannel socketChannel, SelectionKey selectionKey,
+                           @Nullable InetSocketAddress remoteAddress,
+                           EventLoop.ConnectionAdmission admission) throws IOException {
             this.socketChannel = socketChannel;
             this.selectionKey = selectionKey;
             byteTokenizer = new ByteTokenizer();
             id = Long.toString(connectionCounter.getAndIncrement());
             this.remoteAddress = remoteAddress;
+            this.admission = admission;
+            closed = new AtomicBoolean(false);
             requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestSize(),
                     options.maxHeaderCount(), options.maxHeadersSize(), options.maxRequestTargetLength());
             scheduleRequestReadTimeoutForCurrentParserState();
-            closed = new AtomicBoolean(false);
         }
 
         private void onRequestReadTimeout() {
@@ -182,8 +358,27 @@ class ConnectionEventLoop {
 
         private void onReadable() {
             if (draining.get()) {
-                failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
-                return;
+                InFlightDispatch dispatch = inFlightDispatch;
+
+                if (dispatch != null) {
+                    closeAfterResponse = true;
+                    if (!dispatch.shouldMonitorClientDisconnects()) {
+                        disableReadInterest();
+                        return;
+                    }
+                    // Keep the explicitly opted-in bounded monitor active until response commitment. This
+                    // detects an abortive disconnect and consumes bounded pipelined bytes, avoiding an RST
+                    // when graceful drain closes the socket after the active response.
+                } else if (writableSource != null) {
+                    closeAfterResponse = true;
+                    if (!monitorClientDisconnectsDuringStreamingResponse) {
+                        disableReadInterest();
+                        return;
+                    }
+                } else {
+                    failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
+                    return;
+                }
             }
 
             try {
@@ -216,11 +411,28 @@ class ConnectionEventLoop {
                             new LogEntry("event", "read_error"),
                             new LogEntry("id", id));
                 }
-                failSafeClose();
+                InFlightDispatch dispatch = inFlightDispatch;
+                if (dispatch != null && dispatch.shouldMonitorClientDisconnects()) {
+                    failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, e);
+                } else if (monitorClientDisconnectsDuringStreamingResponse && writableSource != null) {
+                    failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, e);
+                } else {
+                    failSafeClose();
+                }
             }
         }
 
         private void doOnReadable() throws IOException {
+            InFlightDispatch dispatch = inFlightDispatch;
+            if (dispatch != null && dispatch.shouldMonitorClientDisconnects()) {
+                doOnReadableWhileAwaitingResponse(dispatch);
+                return;
+            }
+            if (monitorClientDisconnectsDuringStreamingResponse && writableSource != null) {
+                doOnReadableDuringStreamingResponse();
+                return;
+            }
+
             buffer.clear();
             int numBytes = socketChannel.read(buffer);
             if (numBytes < 0) {
@@ -229,7 +441,7 @@ class ConnectionEventLoop {
                             new LogEntry("event", "read_close"),
                             new LogEntry("id", id));
                 }
-                failSafeClose();
+                failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, null);
                 return;
             }
             buffer.flip();
@@ -275,6 +487,118 @@ class ConnectionEventLoop {
             }
         }
 
+        private void doOnReadableWhileAwaitingResponse(InFlightDispatch dispatch) throws IOException {
+            if (dispatch != inFlightDispatch || !dispatch.shouldMonitorClientDisconnects()) {
+                disableReadInterest();
+                return;
+            }
+
+            buffer.clear();
+            int remainingCapacity = options.maxRequestSize() - byteTokenizer.size();
+            boolean overflowProbe = remainingCapacity <= 0;
+            buffer.limit(overflowProbe ? 1 : Math.min(buffer.capacity(), remainingCapacity));
+            int numBytes = socketChannel.read(buffer);
+
+            if (numBytes < 0) {
+                if (logger.enabled()) {
+                    logger.log(
+                            new LogEntry("event", "read_half_close_while_response_pending"),
+                            new LogEntry("id", id));
+                }
+                // EOF is only a half-close of the client's sending side. The client may still be waiting
+                // to read responses. Retain and drain complete pipelined requests already in memory, but
+                // never return to socket reads once those bytes are exhausted.
+                inputHalfClosed = true;
+                if (byteTokenizer.size() == 0) {
+                    closeAfterResponse = true;
+                }
+                disableReadInterest();
+                return;
+            }
+
+            if (numBytes == 0) {
+                return;
+            }
+
+            if (overflowProbe) {
+                if (logger.failureEnabled()) {
+                    logger.logFailure(
+                            new LogEntry("event", "exceed_request_max_close"),
+                            new LogEntry("id", id),
+                            new LogEntry("request_size", Long.toString((long) options.maxRequestSize() + 1L)));
+                }
+                failSafeClose(StreamTerminationReason.BACKPRESSURE, null);
+                return;
+            }
+
+            buffer.flip();
+            byteTokenizer.add(buffer);
+
+            if (logger.enabled()) {
+                logger.log(
+                        new LogEntry("event", "read_bytes_while_response_pending"),
+                        new LogEntry("id", id),
+                        new LogEntry("read_bytes", Integer.toString(numBytes)),
+                        new LogEntry("buffered_request_bytes", Integer.toString(byteTokenizer.size())));
+            }
+        }
+
+        private void doOnReadableDuringStreamingResponse() throws IOException {
+            if (!monitorClientDisconnectsDuringStreamingResponse || writableSource == null) {
+                disableReadInterest();
+                return;
+            }
+
+            buffer.clear();
+            int remainingCapacity = options.maxRequestSize() - streamingResponseBytesDiscarded;
+            boolean overflowProbe = remainingCapacity <= 0;
+            buffer.limit(overflowProbe ? 1 : Math.min(buffer.capacity(), remainingCapacity));
+            int numBytes = socketChannel.read(buffer);
+
+            if (numBytes < 0) {
+                if (logger.enabled()) {
+                    logger.log(
+                            new LogEntry("event", "read_half_close_during_streaming_response"),
+                            new LogEntry("id", id));
+                }
+                // EOF closes only the client's sending side. The committed response may continue
+                // writing indefinitely; no future request can arrive on this connection.
+                inputHalfClosed = true;
+                monitorClientDisconnectsDuringStreamingResponse = false;
+                disableReadInterest();
+                return;
+            }
+
+            if (numBytes == 0) {
+                return;
+            }
+
+            if (overflowProbe) {
+                if (logger.failureEnabled()) {
+                    logger.logFailure(
+                            new LogEntry("event", "streaming_response_read_limit_close"),
+                            new LogEntry("id", id),
+                            new LogEntry("discarded_bytes",
+                                    Long.toString((long) options.maxRequestSize() + 1L)));
+                }
+                failSafeClose(StreamTerminationReason.BACKPRESSURE, null);
+                return;
+            }
+
+            streamingResponseBytesDiscarded += numBytes;
+            // These bytes intentionally bypass ByteTokenizer. If this finite stream completes,
+            // close instead of ever treating discarded input as a subsequent HTTP request.
+            closeAfterResponse = true;
+
+            if (logger.enabled()) {
+                logger.log(
+                        new LogEntry("event", "read_bytes_during_streaming_response"),
+                        new LogEntry("id", id),
+                        new LogEntry("read_bytes", Integer.toString(numBytes)),
+                        new LogEntry("discarded_bytes", Integer.toString(streamingResponseBytesDiscarded)));
+            }
+        }
+
         private void respondToRequestTooLarge(RequestTooLargeException exception) {
             respondToRequestTooLarge(exception.reason());
         }
@@ -313,8 +637,7 @@ class ConnectionEventLoop {
             closeAfterResponse = true;
             byteTokenizer.compact();
             requestParser.reset();
-            requestInFlight = true;
-            handler.handle(tooLargeRequest, this::onResponse);
+            dispatchRequest(tooLargeRequest);
         }
 
         private void respondToMalformedRequest() {
@@ -353,17 +676,89 @@ class ConnectionEventLoop {
             }
             MicrohttpRequest request = requestParser.request();
             applyConnectionPolicy(request);
+            if (inputHalfClosed && byteTokenizer.remaining() == 0) {
+                closeAfterResponse = true;
+            }
             byteTokenizer.compact();
             requestParser.reset();
-            requestInFlight = true;
-            handler.handle(request, this::onResponse);
+            dispatchRequest(request);
         }
 
-        private void onResponse(MicrohttpResponse microhttpResponse) {
+        private void dispatchRequest(MicrohttpRequest request) {
+            boolean monitorClientDisconnects;
+
+            try {
+                monitorClientDisconnects = handler.monitorClientDisconnectsBeforeResponse(request);
+            } catch (Throwable throwable) {
+                logThrowable(throwable,
+                        new LogEntry("event", "request_disconnect_monitor_error"),
+                        new LogEntry("id", id));
+                failSafeClose(StreamTerminationReason.INTERNAL_ERROR, throwable);
+                return;
+            }
+
+            InFlightDispatch dispatch = new InFlightDispatch(request, monitorClientDisconnects);
+            inFlightDispatch = dispatch;
+
+            if (monitorClientDisconnects) {
+                enableReadInterestForDisconnectMonitoring();
+            }
+
+            try {
+                handler.handle(request, response -> onResponse(dispatch, response));
+            } catch (Throwable throwable) {
+                logThrowable(throwable,
+                        new LogEntry("event", "request_handler_error"),
+                        new LogEntry("id", id));
+                failSafeClose(StreamTerminationReason.INTERNAL_ERROR, throwable);
+            }
+        }
+
+        private void onResponse(InFlightDispatch dispatch, @Nullable MicrohttpResponse microhttpResponse) {
+            if (microhttpResponse == null) {
+                ResponseOffer offer = dispatch.offerNullResponse();
+
+                if (offer.disposition == ResponseDisposition.ACCEPTED) {
+                    queueConnectionTask("response_ready_error", () -> {
+                        throw new NullPointerException("Handler response callback received null");
+                    });
+                    wakeupSelectorForCallback();
+                } else if (offer.disposition == ResponseDisposition.DUPLICATE) {
+                    logDuplicateResponse();
+                }
+                return;
+            }
+
+            ResponseOffer offer = dispatch.offerResponse(microhttpResponse);
+
+            if (offer.disposition != ResponseDisposition.ACCEPTED) {
+                if (offer.disposition == ResponseDisposition.DUPLICATE) {
+                    logDuplicateResponse();
+                }
+                discardResponse(microhttpResponse, offer.discardReason, offer.discardCause);
+                return;
+            }
+
             // enqueuing the callback invocation and waking the selector
             // ensures that the microhttpResponse callback works properly when
             // invoked inline from the event loop thread or a separate background thread
-            queueConnectionTask("response_ready_error", () -> prepareToWriteResponse(microhttpResponse));
+            queueConnectionTask("response_ready_error", () -> prepareToWriteResponse(dispatch));
+            wakeupSelectorForCallback();
+        }
+
+        private void logDuplicateResponse() {
+            try {
+                if (logger.failureEnabled()) {
+                    logger.logFailure(
+                            new LogEntry("event", "duplicate_response"),
+                            new LogEntry("id", id));
+                }
+            } catch (Throwable ignored) {
+                // Logging must not affect callback ownership.
+            }
+        }
+
+        private void wakeupSelectorForCallback() {
             // selector wakeup is not necessary if callback was invoked within event loop thread
             // since scheduler tasks are processed at the end of every event loop iteration
             if (Thread.currentThread() != thread) {
@@ -371,71 +766,129 @@ class ConnectionEventLoop {
             }
         }
 
-        private void prepareToWriteResponse(MicrohttpResponse microhttpResponse) throws IOException {
-            if (microhttpResponse.streaming() && httpOneDotZero) {
-                microhttpResponse.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
-                microhttpResponse = new MicrohttpResponse(505, "HTTP Version Not Supported",
-                        List.of(new Header(HEADER_CONNECTION, CLOSE)), new byte[0]);
-                closeAfterResponse = true;
-            }
-            if (closed.get()) {
-                microhttpResponse.closeStreamingBody(StreamTerminationReason.SERVER_STOPPING, null);
+        private void prepareToWriteResponse(InFlightDispatch dispatch) throws Exception {
+            MicrohttpResponse microhttpResponse = dispatch.beginPreparation();
+
+            if (microhttpResponse == null) {
                 return;
             }
-            requestInFlight = false;
-            if (mustNotSendBody(microhttpResponse.status())) {
-                microhttpResponse.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
-                microhttpResponse = microhttpResponse.withoutBodyOrFramingHeaders();
+
+            if (closed.get()) {
+                cancelDispatch(dispatch, StreamTerminationReason.SERVER_STOPPING, null);
+                discardResponse(microhttpResponse, StreamTerminationReason.SERVER_STOPPING, null);
+                return;
             }
-            // RFC 9110 §9.3.2: HEAD responses carry no content. The normal marshaling path strips
-            // HEAD bodies before reaching this layer; this guards responses that bypass it (e.g.
-            // canned failsafe responses and error-path marshaling), preserving the hypothetical
-            // Content-Length while omitting the bytes so a keep-alive client cannot desync. Raw
-            // parse-error responses are exempt: they always close the connection and may predate
-            // method parsing. headRequest is set by applyConnectionPolicy at every dispatch site.
-            if (headRequest) {
-                if (microhttpResponse.streaming()) {
+
+            boolean committed = false;
+            boolean bodyOwnershipAttempted = false;
+            boolean monitorStreamingResponse = false;
+
+            try {
+                if (microhttpResponse.streaming() && httpOneDotZero) {
+                    bodyOwnershipAttempted = true;
                     microhttpResponse.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
+                    microhttpResponse = new MicrohttpResponse(505, "HTTP Version Not Supported",
+                            List.of(new Header(HEADER_CONNECTION, CLOSE)), new byte[0]);
+                    closeAfterResponse = true;
+                }
+                if (mustNotSendBody(microhttpResponse.status())) {
+                    bodyOwnershipAttempted = true;
+                    microhttpResponse.closeBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
                     microhttpResponse = microhttpResponse.withoutBodyOrFramingHeaders();
-                } else if (microhttpResponse.bodyLength() > 0) {
-                    microhttpResponse = microhttpResponse.withBodyOmittedForHead();
                 }
-            }
-            if (hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
-                closeAfterResponse = true;
-            }
-            if (draining.get()) {
-                closeAfterResponse = true;
-            }
-            responseWriteIdleTimeoutEnabled = !microhttpResponse.streaming()
-                    && !options.responseWriteIdleTimeout().isZero();
-            String version = httpOneDotZero ? HTTP_1_0 : HTTP_1_1;
-            List<Header> headers = new ArrayList<>();
-            if (httpOneDotZero && keepAlive && !closeAfterResponse) {
-                headers.add(new Header(HEADER_CONNECTION, KEEP_ALIVE));
-            }
-            if (closeAfterResponse && !hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
-                headers.add(new Header(HEADER_CONNECTION, CLOSE));
-            }
-            if (microhttpResponse.streaming()) {
-                if (!microhttpResponse.hasHeader(HEADER_TRANSFER_ENCODING)) {
-                    headers.add(new Header(HEADER_TRANSFER_ENCODING, CHUNKED));
+                // RFC 9110 §9.3.2: HEAD responses carry no content. The normal marshaling path strips
+                // HEAD bodies before reaching this layer; this guards responses that bypass it (e.g.
+                // canned failsafe responses and error-path marshaling), preserving the hypothetical
+                // Content-Length while omitting the bytes so a keep-alive client cannot desync. Raw
+                // parse-error responses are exempt: they always close the connection and may predate
+                // method parsing. headRequest is set by applyConnectionPolicy at every dispatch site.
+                if (headRequest) {
+                    if (microhttpResponse.streaming()) {
+                        bodyOwnershipAttempted = true;
+                        microhttpResponse.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
+                        microhttpResponse = microhttpResponse.withoutBodyOrFramingHeaders();
+                    } else if (microhttpResponse.bodyLength() > 0) {
+                        bodyOwnershipAttempted = true;
+                        microhttpResponse = microhttpResponse.withBodyOmittedForHead();
+                    }
                 }
-            } else if (shouldAddContentLength(microhttpResponse)) {
-                headers.add(new Header(HEADER_CONTENT_LENGTH, Long.toString(microhttpResponse.bodyLength())));
+                if (hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
+                    closeAfterResponse = true;
+                }
+                if (draining.get()) {
+                    closeAfterResponse = true;
+                }
+                if (microhttpResponse.streaming()) {
+                    monitorStreamingResponse =
+                            handler.monitorClientDisconnectsDuringStreamingResponse(dispatch.request);
+                    if (monitorStreamingResponse && byteTokenizer.size() > 0) {
+                        // Bytes already coalesced with the request predate committed monitoring but
+                        // must obey the same no-pipelining contract.
+                        closeAfterResponse = true;
+                    }
+                }
+                responseWriteIdleTimeoutEnabled = !microhttpResponse.streaming()
+                        && !options.responseWriteIdleTimeout().isZero();
+                String version = httpOneDotZero ? HTTP_1_0 : HTTP_1_1;
+                List<Header> headers = new ArrayList<>();
+                if (httpOneDotZero && keepAlive && !closeAfterResponse) {
+                    headers.add(new Header(HEADER_CONNECTION, KEEP_ALIVE));
+                }
+                if (closeAfterResponse && !hasHeaderToken(microhttpResponse.headers(), HEADER_CONNECTION, CLOSE)) {
+                    headers.add(new Header(HEADER_CONNECTION, CLOSE));
+                }
+                if (microhttpResponse.streaming()) {
+                    if (!microhttpResponse.hasHeader(HEADER_TRANSFER_ENCODING)) {
+                        headers.add(new Header(HEADER_TRANSFER_ENCODING, CHUNKED));
+                    }
+                } else if (shouldAddContentLength(microhttpResponse)) {
+                    headers.add(new Header(HEADER_CONTENT_LENGTH, Long.toString(microhttpResponse.bodyLength())));
+                }
+                byte[] serializedHead = microhttpResponse.serializeHead(version, headers);
+                disableReadInterest();
+                bodyOwnershipAttempted = true;
+                WritableSource preparedSource = microhttpResponse.writableSource(serializedHead);
+
+                // Creating the complete source is the last fallible ownership step before commitment.
+                // Once installed, all later failures belong to the source and must not call Handler.cancel.
+                writableSource = preparedSource;
+                dispatch.commit();
+                committed = true;
+                if (inFlightDispatch == dispatch) {
+                    inFlightDispatch = null;
+                }
+                monitorClientDisconnectsDuringStreamingResponse = monitorStreamingResponse;
+                streamingResponseBytesDiscarded = 0;
+                if (monitorStreamingResponse) {
+                    enableReadInterestForDisconnectMonitoring();
+                }
+
+                preparedSource.writeReadyCallback(this::onWritableSourceReady);
+                preparedSource.start();
+                resetResponseWriteIdleTimeoutIfNeeded();
+                if (logger.enabled()) {
+                    logger.log(
+                            new LogEntry("event", "response_ready"),
+                            new LogEntry("id", id),
+                            new LogEntry("num_bytes", Long.toString((long) serializedHead.length + microhttpResponse.bodyLength())));
+                }
+                doOnWritable();
+            } catch (Throwable throwable) {
+                if (!committed) {
+                    cancelDispatch(dispatch, StreamTerminationReason.INTERNAL_ERROR, throwable);
+                    if (!bodyOwnershipAttempted) {
+                        discardResponse(microhttpResponse, StreamTerminationReason.INTERNAL_ERROR, throwable);
+                    }
+                }
+
+                if (throwable instanceof Exception exception) {
+                    throw exception;
+                }
+                if (throwable instanceof Error error) {
+                    throw error;
+                }
+                throw new RuntimeException(throwable);
             }
-            byte[] serializedHead = microhttpResponse.serializeHead(version, headers);
-            writableSource = microhttpResponse.writableSource(serializedHead);
-            writableSource.writeReadyCallback(this::onWritableSourceReady);
-            writableSource.start();
-            resetResponseWriteIdleTimeoutIfNeeded();
-            if (logger.enabled()) {
-                logger.log(
-                        new LogEntry("event", "response_ready"),
-                        new LogEntry("id", id),
-                        new LogEntry("num_bytes", Long.toString((long) serializedHead.length + microhttpResponse.bodyLength())));
-            }
-            doOnWritable();
         }
 
         private void onWritable() {
@@ -484,6 +937,8 @@ class ConnectionEventLoop {
             if (!activeWritableSource.hasRemaining()) { // response fully written
                 activeWritableSource.close();
                 writableSource = null; // done with current write source, remove reference
+                monitorClientDisconnectsDuringStreamingResponse = false;
+                streamingResponseBytesDiscarded = 0;
                 cancelResponseWriteIdleTimeout();
                 if (logger.enabled()) {
                     logger.log(
@@ -523,6 +978,11 @@ class ConnectionEventLoop {
         }
 
         private void onPartialRequestParsed() {
+            if (inputHalfClosed) {
+                failSafeClose();
+                return;
+            }
+
             scheduleRequestReadTimeoutForCurrentParserState();
 
             if (requestParser.consumeContinueExpectation()) {
@@ -624,6 +1084,62 @@ class ConnectionEventLoop {
             }
         }
 
+        private void enableReadInterestForDisconnectMonitoring() {
+            if (!selectionKey.isValid() || inputHalfClosed) {
+                return;
+            }
+
+            if ((selectionKey.interestOps() & SelectionKey.OP_READ) == 0) {
+                selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_READ);
+            }
+        }
+
+        private void disableReadInterest() {
+            if (!selectionKey.isValid()) {
+                return;
+            }
+
+            if ((selectionKey.interestOps() & SelectionKey.OP_READ) != 0) {
+                selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_READ);
+            }
+        }
+
+        private void cancelDispatch(InFlightDispatch dispatch, StreamTerminationReason reason,
+                                    @Nullable Throwable cause) {
+            DispatchCancellation cancellation = dispatch.cancel(reason, cause);
+
+            if (cancellation == null) {
+                return;
+            }
+
+            if (inFlightDispatch == dispatch) {
+                inFlightDispatch = null;
+            }
+
+            try {
+                handler.cancel(dispatch.request, reason, cause);
+            } catch (Throwable throwable) {
+                logThrowable(throwable,
+                        new LogEntry("event", "request_cancel_error"),
+                        new LogEntry("id", id));
+            }
+
+            if (cancellation.pendingResponse != null) {
+                discardResponse(cancellation.pendingResponse, reason, cause);
+            }
+        }
+
+        private void discardResponse(MicrohttpResponse response, StreamTerminationReason reason,
+                                     @Nullable Throwable cause) {
+            try {
+                response.closeBody(reason, cause);
+            } catch (Throwable throwable) {
+                logThrowable(throwable,
+                        new LogEntry("event", "response_discard_error"),
+                        new LogEntry("id", id));
+            }
+        }
+
         private void failSafeClose() {
             failSafeClose(null, null);
         }
@@ -631,27 +1147,45 @@ class ConnectionEventLoop {
         private void failSafeClose(@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable cause) {
             if (!closed.compareAndSet(false, true))
                 return;
-            requestInFlight = false;
-            if (requestReadTimeoutTask != null) {
-                requestReadTimeoutTask.cancel();
-            }
-            cancelResponseWriteIdleTimeout();
-            if (writableSource != null) {
-                if (cancelationReason == null) {
-                    CloseUtils.closeQuietly(writableSource);
-                } else {
+
+            StreamTerminationReason effectiveReason = cancelationReason == null
+                    ? StreamTerminationReason.CLIENT_DISCONNECTED
+                    : cancelationReason;
+            InFlightDispatch dispatch = inFlightDispatch;
+            inFlightDispatch = null;
+
+            try {
+                if (dispatch != null) {
+                    cancelDispatch(dispatch, effectiveReason, cause);
+                }
+                if (requestReadTimeoutTask != null) {
+                    requestReadTimeoutTask.cancel();
+                    requestReadTimeoutTask = null;
+                }
+                cancelResponseWriteIdleTimeout();
+                if (writableSource != null) {
+                    WritableSource source = writableSource;
+                    writableSource = null;
                     try {
-                        writableSource.close(cancelationReason, cause);
-                    } catch (IOException ignore) {
-                        // suppress
+                        source.close(effectiveReason, cause);
+                    } catch (Throwable throwable) {
+                        logThrowable(throwable,
+                                new LogEntry("event", "response_close_error"),
+                                new LogEntry("id", id));
                     }
                 }
-                writableSource = null;
+                continueResponseBuffer = null;
+                monitorClientDisconnectsDuringStreamingResponse = false;
+                streamingResponseBytesDiscarded = 0;
+            } finally {
+                try {
+                    selectionKey.cancel();
+                } finally {
+                    CloseUtils.closeQuietly(socketChannel);
+                    connectionCount.decrementAndGet();
+                    admission.release();
+                }
             }
-            continueResponseBuffer = null;
-            selectionKey.cancel();
-            CloseUtils.closeQuietly(socketChannel);
-            connectionCount.decrementAndGet();
         }
 
         private void scheduleRequestReadTimeoutForCurrentParserState() {
@@ -722,7 +1256,7 @@ class ConnectionEventLoop {
                 logThrowable(throwable,
                         new LogEntry("event", failureEvent),
                         new LogEntry("id", id));
-                failSafeClose();
+                failSafeClose(StreamTerminationReason.INTERNAL_ERROR, throwable);
             }
         }
 
@@ -730,8 +1264,18 @@ class ConnectionEventLoop {
             if (closed.get())
                 return;
 
-            if (requestInFlight || writableSource != null) {
+            InFlightDispatch dispatch = inFlightDispatch;
+
+            if (dispatch != null) {
                 closeAfterResponse = true;
+                if (!dispatch.shouldMonitorClientDisconnects())
+                    disableReadInterest();
+                return;
+            }
+
+            if (writableSource != null) {
+                closeAfterResponse = true;
+                disableReadInterest();
                 return;
             }
 
@@ -799,6 +1343,14 @@ class ConnectionEventLoop {
         return connectionCount.get();
     }
 
+    int numPendingRegistrations() {
+        return pendingRegistrationCount.get();
+    }
+
+    int connectionLoad() {
+        return numConnections() + numPendingRegistrations();
+    }
+
     private static boolean isRemoteClose(@Nullable Throwable throwable) {
         Throwable current = throwable;
 
@@ -830,7 +1382,26 @@ class ConnectionEventLoop {
     }
 
     void start() {
-        thread.start();
+        synchronized (lifecycleLock) {
+            if (closedBeforeStart) {
+                return;
+            }
+            if (started) {
+                throw new IllegalStateException("Connection event loop has already been started.");
+            }
+
+            started = true;
+            try {
+                thread.start();
+            } catch (RuntimeException | Error throwable) {
+                started = false;
+                closedBeforeStart = true;
+                registrationsClosed.set(true);
+                closePendingRegistrations();
+                CloseUtils.closeQuietly(selector);
+                throw throwable;
+            }
+        }
     }
 
     void wakeup() {
@@ -866,6 +1437,8 @@ class ConnectionEventLoop {
             }
             stop.set(true); // stop the world on critical error
         } finally {
+            registrationsClosed.set(true);
+            closePendingRegistrations();
             for (SelectionKey selKey : selector.keys()) {
                 Object attachment = selKey.attachment();
                 if (attachment instanceof Connection connection) {
@@ -915,42 +1488,140 @@ class ConnectionEventLoop {
         }
     }
 
-    void register(SocketChannel socketChannel) {
-        taskQueue.add(() -> {
-            try {
-                doRegister(socketChannel);
-            } catch (Throwable e) {
-                logThrowable(e, new LogEntry("event", "register_error"));
-                CloseUtils.closeQuietly(socketChannel);
-            }
-        });
-        selector.wakeup(); // wakeup event loop thread to process task immediately
-    }
+    void register(SocketChannel socketChannel, EventLoop.ConnectionAdmission admission) {
+        PendingRegistration pendingRegistration = new PendingRegistration(socketChannel, admission);
+        pendingRegistrationCount.incrementAndGet();
+        pendingRegistrations.add(pendingRegistration);
 
-    private void doRegister(SocketChannel socketChannel) throws IOException {
-        if (stop.get() || draining.get()) {
-            CloseUtils.closeQuietly(socketChannel);
+        if (registrationsClosed.get()) {
+            closePendingRegistration(pendingRegistration);
             return;
         }
 
-        socketChannel.configureBlocking(false);
-        SelectionKey selectionKey = socketChannel.register(selector, SelectionKey.OP_READ);
-        SocketAddress socketAddress = socketChannel.getRemoteAddress();
-        InetSocketAddress remoteAddress = socketAddress instanceof InetSocketAddress
-                ? (InetSocketAddress) socketAddress
-                : null;
-        Connection connection = new Connection(socketChannel, selectionKey, remoteAddress);
-        connectionCount.incrementAndGet();
-        selectionKey.attach(connection);
-        if (logger.enabled()) {
-            String remoteAddressString = remoteAddress != null
-                    ? remoteAddress.toString()
-                    : (socketAddress != null ? socketAddress.toString() : "unknown");
-            logger.log(
-                    new LogEntry("event", "accept"),
-                    new LogEntry("remote_address", remoteAddressString),
-                    new LogEntry("id", connection.id));
+        taskQueue.add(() -> processPendingRegistration(pendingRegistration));
+
+        // If shutdown raced with adding the task after its final queue drain, the registering
+        // thread performs the cleanup. The pending ticket makes this idempotent with every other
+        // race outcome.
+        if (registrationsClosed.get()) {
+            closePendingRegistration(pendingRegistration);
         }
+        selector.wakeup(); // wakeup event loop thread to process task immediately
+    }
+
+    private void processPendingRegistration(PendingRegistration pendingRegistration) {
+        if (!claimPendingRegistration(pendingRegistration)) {
+            return;
+        }
+
+        try {
+            if (stop.get() || draining.get() || registrationsClosed.get()) {
+                pendingRegistration.closeAndRelease();
+                return;
+            }
+
+            doRegister(pendingRegistration);
+        } catch (Throwable throwable) {
+            logThrowable(throwable, new LogEntry("event", "register_error"));
+            pendingRegistration.closeAndRelease();
+        }
+    }
+
+    private void doRegister(PendingRegistration pendingRegistration) throws IOException {
+        SocketChannel socketChannel = pendingRegistration.socketChannel;
+        @Nullable SelectionKey selectionKey = null;
+        @Nullable Connection connection = null;
+
+        try {
+            socketChannel.configureBlocking(false);
+            selectionKey = socketChannel.register(selector, SelectionKey.OP_READ);
+            SocketAddress socketAddress = socketChannel.getRemoteAddress();
+            InetSocketAddress remoteAddress = socketAddress instanceof InetSocketAddress
+                    ? (InetSocketAddress) socketAddress
+                    : null;
+            connection = new Connection(socketChannel, selectionKey, remoteAddress, pendingRegistration.admission);
+            connectionCount.incrementAndGet();
+            selectionKey.attach(connection);
+
+            try {
+                if (logger.enabled()) {
+                    String remoteAddressString = remoteAddress != null
+                            ? remoteAddress.toString()
+                            : (socketAddress != null ? socketAddress.toString() : "unknown");
+                    logger.log(
+                            new LogEntry("event", "accept"),
+                            new LogEntry("remote_address", remoteAddressString),
+                            new LogEntry("id", connection.id));
+                }
+            } catch (Throwable throwable) {
+                logThrowable(throwable,
+                        new LogEntry("event", "accept_log_error"),
+                        new LogEntry("id", connection.id));
+            }
+        } catch (Throwable throwable) {
+            if (connection != null) {
+                connection.failSafeClose(StreamTerminationReason.INTERNAL_ERROR, throwable);
+            } else {
+                if (selectionKey != null) {
+                    selectionKey.cancel();
+                }
+                pendingRegistration.closeAndRelease();
+            }
+
+            if (throwable instanceof IOException ioException) {
+                throw ioException;
+            }
+            if (throwable instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (throwable instanceof Error error) {
+                throw error;
+            }
+            throw new IOException("Unexpected connection registration failure", throwable);
+        }
+    }
+
+    private boolean claimPendingRegistration(PendingRegistration pendingRegistration) {
+        if (!pendingRegistration.claim()) {
+            return false;
+        }
+
+        pendingRegistrations.remove(pendingRegistration);
+        pendingRegistrationCount.decrementAndGet();
+        return true;
+    }
+
+    private void closePendingRegistration(PendingRegistration pendingRegistration) {
+        if (claimPendingRegistration(pendingRegistration)) {
+            pendingRegistration.closeAndRelease();
+        }
+    }
+
+    private void closePendingRegistrations() {
+        PendingRegistration pendingRegistration;
+        while ((pendingRegistration = pendingRegistrations.poll()) != null) {
+            if (pendingRegistration.claim()) {
+                pendingRegistrationCount.decrementAndGet();
+                pendingRegistration.closeAndRelease();
+            }
+        }
+    }
+
+    void closeBeforeStart() {
+        synchronized (lifecycleLock) {
+            if (started || closedBeforeStart) {
+                return;
+            }
+
+            closedBeforeStart = true;
+            registrationsClosed.set(true);
+            closePendingRegistrations();
+            CloseUtils.closeQuietly(selector);
+        }
+    }
+
+    boolean resourcesClosed() {
+        return !selector.isOpen();
     }
 
     private void runLoopTask(Runnable task, String failureEvent) {

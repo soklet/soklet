@@ -31,6 +31,7 @@ The current targets are:
 - `QueryFormatFuzzTest`
 - `ResponseCookieFuzzTest`
 - `TraceContextFuzzTest`
+- `McpJsonCodecFuzzTest`
 
 ## Corpus Policy
 
@@ -40,8 +41,10 @@ enough for fast deterministic replay on every PR and push.
 
 The protocol-neutral fixtures under
 `src/test/resources/com/soklet/json-corpus/` were retained from the removed MCP
-codec for the greenfield JSON implementation. They are not attached to a fuzz
-target during Phase 0. Their compact checksum manifest is verified with:
+codec for the greenfield JSON implementation. The fuzz-module resource setup
+attaches that one byte-exact corpus to both `McpJsonCodecFuzzTest` methods at
+build time, without duplicating the source fixtures. Their compact checksum
+manifest is verified by the main codec regression suite and with:
 
 ```sh
 node scripts/verify-json-corpus.mjs

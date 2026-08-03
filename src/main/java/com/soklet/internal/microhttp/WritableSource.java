@@ -26,9 +26,14 @@ import java.nio.channels.SocketChannel;
 /**
  * A bounded response-body writer for the microhttp transport.
  *
+ * <p>All methods invoked by the transport must return without blocking. A source is normally started and
+ * drained on one connection event-loop thread, while the write-ready callback may be invoked from any
+ * thread. Cancellation can close a source before {@link #start()} and can occur on the handler callback
+ * thread, so implementations that interact with producers must make closure thread-safe and idempotent.</p>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-interface WritableSource extends Closeable {
+public interface WritableSource extends Closeable {
     default void start() throws IOException {
         // No-op by default
     }

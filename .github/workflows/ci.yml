@@ -37,8 +37,20 @@ jobs:
           java-version: ${{ matrix.jdk }}
           cache: maven
 
+      - name: Verify pinned JSON Schema Test Suite
+        run: node scripts/json-schema-test-suite/verify.mjs
+
+      - name: Verify pinned Draft 2020-12 meta-schema bundle
+        run: node scripts/json-schema-draft-2020-12/verify.mjs
+
       - name: Run tests
         run: mvn -B -ntp clean test
+
+      - name: Package main JAR
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Verify packaged Draft 2020-12 resources
+        run: node scripts/json-schema-draft-2020-12/verify-jar.mjs --directory target
 
       - name: Build Javadoc
         run: mvn -B -ntp clean javadoc:javadoc
@@ -201,6 +213,10 @@ jobs:
             test_selector: ResponseCookieFuzzTest#fromSetCookieHeaderRepresentationOnlyRejectsWithIllegalArgumentException
           - target_id: trace-context
             test_selector: TraceContextFuzzTest#fromHeaderValuesNeverThrows
+          - target_id: mcp-json-parse
+            test_selector: McpJsonCodecFuzzTest#strictJsonFuzzRejectsInvalidBytesOnlyWithIllegalArgumentException
+          - target_id: mcp-json-round-trip
+            test_selector: McpJsonCodecFuzzTest#strictJsonFuzzRoundTripsStructurally
     steps:
       - name: Check out
         uses: actions/checkout@v6

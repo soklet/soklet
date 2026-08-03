@@ -199,6 +199,10 @@ public final class MicrohttpResponse {
             return;
         }
 
+        closeBody(cancelationReason, cause);
+    }
+
+    void closeBody(StreamTerminationReason cancelationReason, @Nullable Throwable cause) throws IOException {
         WritableSource source = bodySourceFactory.create();
         source.close(cancelationReason, cause);
     }

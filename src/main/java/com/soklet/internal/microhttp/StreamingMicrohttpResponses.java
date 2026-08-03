@@ -58,6 +58,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -77,6 +78,33 @@ public final class StreamingMicrohttpResponses {
 
 	private StreamingMicrohttpResponses() {
 		// Utility class
+	}
+
+	/**
+	 * Creates a streaming response whose body is written directly by the supplied event-driven source.
+	 * The supplier is normally invoked when the transport takes ownership of the response for writing. It is
+	 * also invoked when a canceled, late, or duplicate response must be disposed without being written; in
+	 * that case the returned source is closed without {@link WritableSource#start()} being called. Every
+	 * invocation must return a fresh source whose close operation is safe and non-blocking.
+	 *
+	 * @param status the HTTP status code
+	 * @param reason the HTTP reason phrase
+	 * @param headers the response headers
+	 * @param sourceSupplier supplies a new response-body source
+	 * @return the streaming response
+	 */
+	@NonNull
+	public static MicrohttpResponse withWritableSourceBody(@NonNull Integer status,
+																			 @NonNull String reason,
+																			 @NonNull List<@NonNull Header> headers,
+																			 @NonNull Supplier<? extends @NonNull WritableSource> sourceSupplier) {
+		requireNonNull(status);
+		requireNonNull(reason);
+		requireNonNull(headers);
+		requireNonNull(sourceSupplier);
+
+		return MicrohttpResponse.withStreamingBody(status, reason, headers,
+				() -> requireNonNull(sourceSupplier.get()));
 	}
 
 	static void setTestHooks(@Nullable TestHooks testHooks) {

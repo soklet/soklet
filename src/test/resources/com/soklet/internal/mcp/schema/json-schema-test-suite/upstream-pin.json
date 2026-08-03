@@ -1,0 +1,16 @@
+{
+  "importFormat": 1,
+  "repository": "https://github.com/json-schema-org/JSON-Schema-Test-Suite",
+  "commit": "0c7b65dc16dd8eaa7bd83e21099c76610c3b246a",
+  "archiveSha256": "405fa34d133c5a5dd3280399e0dafa379bcbf5adb17d180bd7b1b1aaa5afaa1b",
+  "importedRoots": [
+    "LICENSE.upstream",
+    "remotes/draft2019-09/ignore-prefixItems.json",
+    "remotes/draft2020-12",
+    "tests/draft2020-12"
+  ],
+  "importedFileCount": 104,
+  "manifestSha256": "70be2fa92b362ee738144c4d581bd6cf45b9f47ef4276a942a49eacf2bbbfa88",
+  "license": "MIT",
+  "licenseSha256": "837402bd25fad9b704265801ca3f92566a98157c1f9a7acd6f446299ba1c305a"
+}
