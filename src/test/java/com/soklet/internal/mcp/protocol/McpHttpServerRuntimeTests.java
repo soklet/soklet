@@ -25,6 +25,7 @@ import com.soklet.HttpMethod;
 import com.soklet.Request;
 import com.soklet.ResourceMethod;
 import com.soklet.internal.microhttp.EventLoop;
+import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.Options;
 import org.junit.jupiter.api.Assumptions;
@@ -35,6 +36,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -49,6 +52,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -173,6 +177,55 @@ public class McpHttpServerRuntimeTests {
 
 			int secondPort = runtime.start().getPort();
 			Assertions.assertEquals(200, discover(secondPort, "2").status());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void submit_after_stop_boundary_is_suppressed_without_publication_or_callback()
+			throws Exception {
+		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
+		AtomicInteger callbacks = new AtomicInteger();
+
+		try {
+			InetSocketAddress address = runtime.start();
+			Field processorField = McpHttpServerRuntime.class.getDeclaredField(
+					"requestProcessor");
+			processorField.setAccessible(true);
+			ThreadPoolExecutor stoppedProcessor = (ThreadPoolExecutor) processorField.get(runtime);
+			Field applicationField = McpHttpServerRuntime.class.getDeclaredField(
+					"applicationExecution");
+			applicationField.setAccessible(true);
+			McpApplicationExecution stoppedApplication =
+					(McpApplicationExecution) applicationField.get(runtime);
+
+			runtime.stop();
+			Assertions.assertTrue(stoppedProcessor.isTerminated());
+			Assertions.assertTrue(stoppedApplication.isTerminated());
+
+			Method submitRequest = McpHttpServerRuntime.class.getDeclaredMethod(
+					"submitRequest", ThreadPoolExecutor.class, McpApplicationExecution.class,
+					InetSocketAddress.class, MicrohttpRequest.class,
+					java.util.function.Consumer.class);
+			submitRequest.setAccessible(true);
+			MicrohttpRequest lateRequest = new MicrohttpRequest(
+					"POST", "/mcp", "HTTP/1.1", List.of(), new byte[0], false,
+					new InetSocketAddress(LOOPBACK, 12_345));
+			submitRequest.invoke(runtime, stoppedProcessor, stoppedApplication, address,
+					lateRequest,
+					(java.util.function.Consumer<MicrohttpResponse>) response ->
+							callbacks.incrementAndGet());
+
+			Assertions.assertEquals(0, callbacks.get(),
+					"A submit that loses the stop boundary must not offer a response.");
+			McpRequestExecutionSnapshot snapshot = runtime.requestExecutionSnapshot();
+			Assertions.assertEquals(0, snapshot.retainedRequestControls());
+			Assertions.assertEquals(0, snapshot.queuedProtocolRequests());
+			Assertions.assertEquals(0, snapshot.activeRequestIds());
+
+			int restartedPort = runtime.start().getPort();
+			Assertions.assertEquals(200, discover(restartedPort, "\"after-late-submit\"").status());
 		} finally {
 			runtime.close();
 		}

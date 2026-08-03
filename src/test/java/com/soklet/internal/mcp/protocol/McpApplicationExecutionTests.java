@@ -26,6 +26,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
@@ -38,6 +39,79 @@ import java.util.function.BooleanSupplier;
 
 @NotThreadSafe
 public class McpApplicationExecutionTests {
+	@Test
+	public void protocol_operation_reservation_and_stop_share_the_execution_boundary()
+			throws Exception {
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				McpApplicationClock.SYSTEM);
+		CountDownLatch reservationEntered = new CountDownLatch(1);
+		CountDownLatch releaseReservation = new CountDownLatch(1);
+		CountDownLatch stopAttempted = new CountDownLatch(1);
+		AtomicInteger supplierInvocations = new AtomicInteger();
+		AtomicReference<Optional<String>> reservation = new AtomicReference<>();
+		AtomicReference<Throwable> reservationFailure = new AtomicReference<>();
+		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+		Thread reservationThread = new Thread(() -> {
+			try {
+				reservation.set(execution.reserveProtocolOperationIfRunning(() -> {
+					supplierInvocations.incrementAndGet();
+					reservationEntered.countDown();
+					awaitLatch(releaseReservation);
+					return "reserved";
+				}));
+			} catch (Throwable throwable) {
+				reservationFailure.set(throwable);
+			}
+		}, "mcp-protocol-operation-reservation-test");
+		Thread stopThread = new Thread(() -> {
+			stopAttempted.countDown();
+			try {
+				execution.stop();
+			} catch (Throwable throwable) {
+				stopFailure.set(throwable);
+			}
+		}, "mcp-protocol-operation-stop-test");
+
+		try {
+			execution.start();
+			reservationThread.start();
+			Assertions.assertTrue(reservationEntered.await(5, TimeUnit.SECONDS));
+
+			stopThread.start();
+			Assertions.assertTrue(stopAttempted.await(5, TimeUnit.SECONDS));
+			awaitCondition(() -> stopThread.getState() == Thread.State.BLOCKED);
+			Assertions.assertTrue(stopThread.isAlive(),
+					"Stop must wait for an in-progress deadline reservation.");
+
+			releaseReservation.countDown();
+			reservationThread.join(TimeUnit.SECONDS.toMillis(5));
+			stopThread.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(reservationThread.isAlive());
+			Assertions.assertFalse(stopThread.isAlive());
+			Assertions.assertNull(reservationFailure.get());
+			Assertions.assertNull(stopFailure.get());
+			Assertions.assertEquals(Optional.of("reserved"), reservation.get(),
+					"A reservation that owns the boundary before stop is allowed to finish.");
+			Assertions.assertEquals(1, supplierInvocations.get());
+
+			Optional<String> afterStop = execution.reserveProtocolOperationIfRunning(() -> {
+				supplierInvocations.incrementAndGet();
+				return "must-not-run";
+			});
+			Assertions.assertTrue(afterStop.isEmpty());
+			Assertions.assertEquals(1, supplierInvocations.get(),
+					"A reservation rejected after stop must not invoke its supplier.");
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		} finally {
+			releaseReservation.countDown();
+			execution.stop();
+			reservationThread.join(TimeUnit.SECONDS.toMillis(5));
+			stopThread.join(TimeUnit.SECONDS.toMillis(5));
+		}
+	}
+
 	@Test
 	public void production_bounds_are_fixed_and_every_configured_bound_is_positive() {
 		McpApplicationExecutionConfiguration defaults =

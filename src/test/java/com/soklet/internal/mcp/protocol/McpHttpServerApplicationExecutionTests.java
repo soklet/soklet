@@ -305,10 +305,60 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	public void application_completion_enforces_the_deadline_without_a_timer_scan()
+			throws Exception {
+		CountDownLatch handlerEntered = new CountDownLatch(1);
+		CountDownLatch releaseHandler = new CountDownLatch(1);
+		AtomicBoolean handlerClockExpired = new AtomicBoolean();
+		AtomicReference<Thread> handlerThread = new AtomicReference<>();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		long expiredTime = Duration.ofSeconds(6).toNanos();
+		McpApplicationClock clock = () -> handlerClockExpired.get()
+				&& Thread.currentThread() == handlerThread.get() ? expiredTime : 0L;
+		McpApplicationRequestRouter router = router(invocation -> {
+			handlerThread.set(Thread.currentThread());
+			handlerInvocations.incrementAndGet();
+			handlerEntered.countDown();
+			releaseHandler.await();
+			return completeResult("too-late");
+		});
+		McpHttpServerRuntime runtime = runtime(router,
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(5), Duration.ofDays(1)), clock);
+		ExecutorService client = Executors.newSingleThreadExecutor();
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> response = client.submit(
+					() -> send(port, "\"application-completion-deadline\""));
+			Assertions.assertTrue(handlerEntered.await(5, TimeUnit.SECONDS),
+					"The completion-deadline handler did not enter.");
+			handlerClockExpired.set(true);
+			releaseHandler.countDown();
+
+			assertExactEmptyDeadlineResponse(response.get(5, TimeUnit.SECONDS));
+			McpApplicationExecutionSnapshot snapshot = awaitSnapshot(runtime,
+					value -> value.activeHandlerSlots() == 0
+							&& value.queuedRequests() == 0
+							&& value.activeRequestIds() == 0
+							&& value.retainedExchanges() == 0);
+			Assertions.assertEquals(1, handlerInvocations.get());
+			Assertions.assertEquals(1, snapshot.deadlineExpirations());
+			Assertions.assertEquals(0, snapshot.protocolDeadlineExpirations());
+		} finally {
+			releaseHandler.countDown();
+			runtime.close();
+			shutdown(client);
+		}
+	}
+
+	@Test
 	public void request_deadline_is_captured_before_protocol_admission_work()
 			throws Exception {
 		CountDownLatch admissionEntered = new CountDownLatch(1);
+		CountDownLatch admissionInterrupted = new CountDownLatch(1);
 		CountDownLatch releaseAdmission = new CountDownLatch(1);
+		CountDownLatch admissionExited = new CountDownLatch(1);
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		ControllableClock clock = new ControllableClock();
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
@@ -319,7 +369,20 @@ public class McpHttpServerApplicationExecutionTests {
 				McpHttpTransportConfiguration.productionDefaults(0),
 				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(), request -> {
 					admissionEntered.countDown();
-					releaseAdmission.await();
+					boolean released = false;
+					try {
+						while (!released) {
+							try {
+								released = releaseAdmission.await(
+										25, TimeUnit.MILLISECONDS);
+							} catch (InterruptedException exception) {
+								admissionInterrupted.countDown();
+								// Deliberately remain in protocol work until released.
+							}
+						}
+					} finally {
+						admissionExited.countDown();
+					}
 					return McpRequestAdmissionDecision.ACCEPT;
 				}), endpoint, router(invocation -> {
 					handlerInvocations.incrementAndGet();
@@ -335,17 +398,380 @@ public class McpHttpServerApplicationExecutionTests {
 			Assertions.assertTrue(admissionEntered.await(5, TimeUnit.SECONDS),
 					"The admission gate did not enter.");
 			clock.advance(Duration.ofSeconds(6));
-			releaseAdmission.countDown();
+			runtime.runApplicationTimerCycle();
 
-			assertExactCapacityResponse(response.get(5, TimeUnit.SECONDS),
-					"\"protocol-delay\"");
+			assertExactEmptyDeadlineResponse(response.get(5, TimeUnit.SECONDS));
+			Assertions.assertTrue(admissionInterrupted.await(5, TimeUnit.SECONDS),
+					"The expired protocol task was not interrupted.");
+			Assertions.assertEquals(1L, admissionExited.getCount(),
+					"The response must be delivered before protocol work exits.");
 			Assertions.assertEquals(0, handlerInvocations.get(),
 					"Protocol-stage work must not reset the absolute deadline.");
+			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
+					&& snapshot.queuedProtocolRequests() == 0
+					&& snapshot.activeRequestIds() == 0);
 			McpApplicationExecutionSnapshot snapshot = awaitSnapshot(runtime,
 					value -> value.retainedExchanges() == 0
 							&& value.activeRequestIds() == 0);
 			Assertions.assertEquals(1, snapshot.deadlineExpirations());
+			Assertions.assertEquals(1, snapshot.protocolDeadlineExpirations());
 			Assertions.assertEquals(0, snapshot.capacityRejections());
+
+			releaseAdmission.countDown();
+			Assertions.assertTrue(admissionExited.await(5, TimeUnit.SECONDS),
+					"The released admission gate did not exit.");
+			Assertions.assertEquals(0, handlerInvocations.get(),
+					"Expired protocol work must not dispatch after it exits.");
+		} finally {
+			releaseAdmission.countDown();
+			runtime.close();
+			shutdown(client);
+		}
+	}
+
+	@Test
+	public void protocol_deadline_comparison_survives_monotonic_clock_wraparound()
+			throws Exception {
+		CountDownLatch admissionEntered = new CountDownLatch(1);
+		CountDownLatch releaseAdmission = new CountDownLatch(1);
+		long initialTime = Long.MAX_VALUE - Duration.ofSeconds(2).toNanos();
+		ControllableClock clock = new ControllableClock(initialTime);
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"deadline-wraparound-test", "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0),
+				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(), request -> {
+					admissionEntered.countDown();
+					boolean released = false;
+					while (!released) {
+						try {
+							released = releaseAdmission.await(25, TimeUnit.MILLISECONDS);
+						} catch (InterruptedException ignored) {
+							// Keep the request alive across the signed long wraparound.
+						}
+					}
+					return McpRequestAdmissionDecision.ACCEPT;
+				}), endpoint, McpApplicationRequestRouter.empty(),
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(5), Duration.ofDays(1)), clock);
+		ExecutorService client = Executors.newSingleThreadExecutor();
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> response = client.submit(
+					() -> send(port, "\"deadline-wrap\"", "server/discover"));
+			Assertions.assertTrue(admissionEntered.await(5, TimeUnit.SECONDS),
+					"The wraparound admission gate did not enter.");
+			clock.advance(Duration.ofSeconds(6));
+			runtime.runApplicationTimerCycle();
+
+			assertExactEmptyDeadlineResponse(response.get(5, TimeUnit.SECONDS));
+			McpApplicationExecutionSnapshot snapshot =
+					runtime.applicationExecutionSnapshot().orElseThrow();
+			Assertions.assertEquals(1, snapshot.protocolDeadlineExpirations());
+		} finally {
+			releaseAdmission.countDown();
+			runtime.close();
+			shutdown(client);
+		}
+	}
+
+	@Test
+	public void deadline_during_cors_authorization_prevents_later_admission()
+			throws Exception {
+		CountDownLatch corsEntered = new CountDownLatch(1);
+		CountDownLatch corsInterrupted = new CountDownLatch(1);
+		CountDownLatch releaseCors = new CountDownLatch(1);
+		CountDownLatch corsExited = new CountDownLatch(1);
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		ControllableClock clock = new ControllableClock();
+		CorsAuthorizer corsAuthorizer = CorsAuthorizer.fromWhitelistAuthorizer(origin -> {
+			corsEntered.countDown();
+			boolean released = false;
+			try {
+				while (!released) {
+					try {
+						released = releaseCors.await(25, TimeUnit.MILLISECONDS);
+					} catch (InterruptedException exception) {
+						corsInterrupted.countDown();
+						// Keep CORS work alive so the timeout must suppress its result.
+					}
+				}
+			} finally {
+				corsExited.countDown();
+			}
+			return true;
+		});
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"cors-deadline-test", "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0),
+				McpHttpEndpointPolicy.forDiscovery(corsAuthorizer, request -> {
+					admissions.incrementAndGet();
+					return McpRequestAdmissionDecision.ACCEPT;
+				}), endpoint, router(invocation -> {
+					handlerInvocations.incrementAndGet();
+					return completeResult("must-not-run");
+				}), new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(5), Duration.ofDays(1)), clock);
+		ExecutorService client = Executors.newSingleThreadExecutor();
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> response = client.submit(() -> sendWithOrigin(
+					port, "\"cors-deadline\"", APPLICATION_METHOD,
+					"https://allowed.example"));
+			Assertions.assertTrue(corsEntered.await(5, TimeUnit.SECONDS),
+					"The CORS authorizer did not enter.");
+			clock.advance(Duration.ofSeconds(6));
+			runtime.runApplicationTimerCycle();
+
+			RawResponse expired = response.get(5, TimeUnit.SECONDS);
+			assertExactEmptyDeadlineResponse(expired);
+			Assertions.assertFalse(expired.hasHeader("Access-Control-Allow-Origin"),
+					"An unfinished CORS decision must not authorize the timeout response.");
+			Assertions.assertTrue(corsInterrupted.await(5, TimeUnit.SECONDS),
+					"The expired CORS task was not interrupted.");
+			Assertions.assertEquals(1L, corsExited.getCount(),
+					"The timeout response must not wait for CORS work to exit.");
+			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+
+			releaseCors.countDown();
+			Assertions.assertTrue(corsExited.await(5, TimeUnit.SECONDS),
+					"The released CORS authorizer did not exit.");
+			Assertions.assertEquals(0, admissions.get(),
+					"A late CORS result must not reach request admission.");
+			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
+					&& snapshot.queuedProtocolRequests() == 0
+					&& snapshot.activeRequestIds() == 0);
+			McpApplicationExecutionSnapshot snapshot =
+					runtime.applicationExecutionSnapshot().orElseThrow();
+			Assertions.assertEquals(1, snapshot.protocolDeadlineExpirations());
+		} finally {
+			releaseCors.countDown();
+			runtime.close();
+			shutdown(client);
+		}
+	}
+
+	@Test
+	public void protocol_processor_backlog_expires_and_releases_canceled_queue_capacity()
+			throws Exception {
+		CountDownLatch firstAdmissionEntered = new CountDownLatch(1);
+		CountDownLatch firstAdmissionInterrupted = new CountDownLatch(1);
+		CountDownLatch releaseFirstAdmission = new CountDownLatch(1);
+		CountDownLatch firstAdmissionExited = new CountDownLatch(1);
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		ControllableClock clock = new ControllableClock();
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"protocol-backlog-test", "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				transportConfiguration(Duration.ofSeconds(5), 1, 1),
+				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(), request -> {
+					int admissionNumber = admissions.incrementAndGet();
+					if (admissionNumber == 1) {
+						firstAdmissionEntered.countDown();
+						boolean released = false;
+						try {
+							while (!released) {
+								try {
+									released = releaseFirstAdmission.await(
+											25, TimeUnit.MILLISECONDS);
+								} catch (InterruptedException exception) {
+									firstAdmissionInterrupted.countDown();
+									// Hold the only protocol worker until the test releases it.
+								}
+							}
+						} finally {
+							firstAdmissionExited.countDown();
+						}
+					}
+					return McpRequestAdmissionDecision.ACCEPT;
+				}), endpoint, router(invocation -> completeResult(
+						"invocation-" + handlerInvocations.incrementAndGet())),
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(5), Duration.ofDays(1)), clock);
+		ExecutorService clients = Executors.newFixedThreadPool(2);
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> active = clients.submit(
+					() -> send(port, "\"protocol-active\""));
+			Assertions.assertTrue(firstAdmissionEntered.await(5, TimeUnit.SECONDS),
+					"The first admission gate did not enter.");
+			Future<RawResponse> queued = clients.submit(
+					() -> send(port, "\"protocol-queued\""));
+			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 2
+					&& snapshot.queuedProtocolRequests() == 1);
+
+			clock.advance(Duration.ofSeconds(6));
+			runtime.runApplicationTimerCycle();
+
+			assertExactEmptyDeadlineResponse(active.get(5, TimeUnit.SECONDS));
+			assertExactEmptyDeadlineResponse(queued.get(5, TimeUnit.SECONDS));
+			Assertions.assertTrue(firstAdmissionInterrupted.await(5, TimeUnit.SECONDS),
+					"The expired active protocol task was not interrupted.");
+			Assertions.assertEquals(1L, firstAdmissionExited.getCount(),
+					"Both responses must be delivered while the first protocol task is blocked.");
+			Assertions.assertEquals(1, admissions.get(),
+					"The canceled queued task must never enter admission.");
+			Assertions.assertEquals(0, handlerInvocations.get(),
+					"Expired protocol requests must never reach application code.");
+			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
+					&& snapshot.queuedProtocolRequests() == 0
+					&& snapshot.activeRequestIds() == 0);
+			McpApplicationExecutionSnapshot expired =
+					runtime.applicationExecutionSnapshot().orElseThrow();
+			Assertions.assertEquals(2, expired.deadlineExpirations());
+			Assertions.assertEquals(2, expired.protocolDeadlineExpirations());
+			Assertions.assertEquals(0, expired.capacityRejections());
+
+			releaseFirstAdmission.countDown();
+			Assertions.assertTrue(firstAdmissionExited.await(5, TimeUnit.SECONDS),
+					"The released first admission gate did not exit.");
+			assertSuccessfulResult(send(port, "\"after-protocol-backlog\""),
+					"\"after-protocol-backlog\"", "invocation-1");
+			Assertions.assertEquals(2, admissions.get());
+			Assertions.assertEquals(1, handlerInvocations.get());
+		} finally {
+			releaseFirstAdmission.countDown();
+			runtime.close();
+			shutdown(clients);
+		}
+	}
+
+	@Test
+	public void framework_discovery_deadline_releases_request_id_for_reuse()
+			throws Exception {
+		CountDownLatch admissionEntered = new CountDownLatch(1);
+		CountDownLatch admissionInterrupted = new CountDownLatch(1);
+		CountDownLatch releaseAdmission = new CountDownLatch(1);
+		CountDownLatch admissionExited = new CountDownLatch(1);
+		AtomicInteger admissions = new AtomicInteger();
+		ControllableClock clock = new ControllableClock();
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"discovery-deadline-test", "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0),
+				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(), request -> {
+					if (admissions.incrementAndGet() == 1) {
+						admissionEntered.countDown();
+						boolean released = false;
+						try {
+							while (!released) {
+								try {
+									released = releaseAdmission.await(
+											25, TimeUnit.MILLISECONDS);
+								} catch (InterruptedException exception) {
+									admissionInterrupted.countDown();
+									// Keep the framework request in protocol work until released.
+								}
+							}
+						} finally {
+							admissionExited.countDown();
+						}
+					}
+					return McpRequestAdmissionDecision.ACCEPT;
+				}), endpoint, McpApplicationRequestRouter.empty(),
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(5), Duration.ofDays(1)), clock);
+		ExecutorService client = Executors.newSingleThreadExecutor();
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> expiredDiscovery = client.submit(
+					() -> send(port, "\"shared-discovery\"", "server/discover"));
+			Assertions.assertTrue(admissionEntered.await(5, TimeUnit.SECONDS),
+					"The discovery admission gate did not enter.");
+			clock.advance(Duration.ofSeconds(6));
+			runtime.runApplicationTimerCycle();
+
+			assertExactEmptyDeadlineResponse(
+					expiredDiscovery.get(5, TimeUnit.SECONDS));
+			Assertions.assertTrue(admissionInterrupted.await(5, TimeUnit.SECONDS),
+					"The expired discovery task was not interrupted.");
+			Assertions.assertEquals(1L, admissionExited.getCount(),
+					"The deadline response must not wait for discovery work to exit.");
+			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
+					&& snapshot.queuedProtocolRequests() == 0
+					&& snapshot.activeRequestIds() == 0);
+			McpApplicationExecutionSnapshot expired =
+					runtime.applicationExecutionSnapshot().orElseThrow();
+			Assertions.assertEquals(1, expired.deadlineExpirations());
+			Assertions.assertEquals(1, expired.protocolDeadlineExpirations());
+
+			releaseAdmission.countDown();
+			Assertions.assertTrue(admissionExited.await(5, TimeUnit.SECONDS),
+					"The released discovery admission gate did not exit.");
+			RawResponse reused = send(
+					port, "\"shared-discovery\"", "server/discover");
+			Assertions.assertEquals(200, reused.status(), reused.bodyText());
+			Assertions.assertEquals(JSON_MEDIA_TYPE,
+					reused.singleHeader("Content-Type"));
+			Assertions.assertTrue(reused.bodyText().contains(
+					"\"id\":\"shared-discovery\""), reused.bodyText());
+			Assertions.assertEquals(2, admissions.get());
+		} finally {
+			releaseAdmission.countDown();
+			runtime.close();
+			shutdown(client);
+		}
+	}
+
+	@Test
+	public void protocol_completion_enforces_the_deadline_without_a_timer_scan()
+			throws Exception {
+		CountDownLatch admissionEntered = new CountDownLatch(1);
+		CountDownLatch releaseAdmission = new CountDownLatch(1);
+		AtomicBoolean workerClockExpired = new AtomicBoolean();
+		AtomicReference<Thread> protocolWorker = new AtomicReference<>();
+		long expiredTime = Duration.ofSeconds(6).toNanos();
+		McpApplicationClock clock = () -> workerClockExpired.get()
+				&& Thread.currentThread() == protocolWorker.get() ? expiredTime : 0L;
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"completion-deadline-test", "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0),
+				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(), request -> {
+					protocolWorker.set(Thread.currentThread());
+					admissionEntered.countDown();
+					releaseAdmission.await();
+					return McpRequestAdmissionDecision.REJECT;
+				}), endpoint, McpApplicationRequestRouter.empty(),
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(5), Duration.ofDays(1)), clock);
+		ExecutorService client = Executors.newSingleThreadExecutor();
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> response = client.submit(
+					() -> send(port, "\"completion-deadline\"", "server/discover"));
+			Assertions.assertTrue(admissionEntered.await(5, TimeUnit.SECONDS),
+					"The completion-deadline admission gate did not enter.");
+			workerClockExpired.set(true);
+			releaseAdmission.countDown();
+
+			assertExactEmptyDeadlineResponse(response.get(5, TimeUnit.SECONDS));
+			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
+					&& snapshot.queuedProtocolRequests() == 0
+					&& snapshot.activeRequestIds() == 0);
+			McpApplicationExecutionSnapshot snapshot =
+					runtime.applicationExecutionSnapshot().orElseThrow();
+			Assertions.assertEquals(1, snapshot.deadlineExpirations());
+			Assertions.assertEquals(1, snapshot.protocolDeadlineExpirations());
 		} finally {
 			releaseAdmission.countDown();
 			runtime.close();
@@ -666,6 +1092,16 @@ public class McpHttpServerApplicationExecutionTests {
 			Duration shutdownTimeout) {
 		McpHttpTransportConfiguration defaults =
 				McpHttpTransportConfiguration.productionDefaults(0);
+		return transportConfiguration(shutdownTimeout,
+				defaults.requestProcessorConcurrency(),
+				defaults.requestProcessorQueueCapacity());
+	}
+
+	private static McpHttpTransportConfiguration transportConfiguration(
+			Duration shutdownTimeout, int requestProcessorConcurrency,
+			int requestProcessorQueueCapacity) {
+		McpHttpTransportConfiguration defaults =
+				McpHttpTransportConfiguration.productionDefaults(0);
 		return new McpHttpTransportConfiguration(
 				defaults.host(), defaults.port(), defaults.selectorResolution(),
 				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
@@ -675,8 +1111,7 @@ public class McpHttpServerApplicationExecutionTests {
 				defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
 				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
 				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
-				defaults.requestProcessorConcurrency(),
-				defaults.requestProcessorQueueCapacity());
+				requestProcessorConcurrency, requestProcessorQueueCapacity);
 	}
 
 	private static McpApplicationExecutionConfiguration executionConfiguration(
@@ -695,7 +1130,17 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	private static RawResponse send(int port, String idJson, String method) throws Exception {
-		try (Socket socket = openRequest(port, idJson, method)) {
+		return send(port, idJson, method, Optional.empty());
+	}
+
+	private static RawResponse sendWithOrigin(int port, String idJson, String method,
+			String origin) throws Exception {
+		return send(port, idJson, method, Optional.of(origin));
+	}
+
+	private static RawResponse send(int port, String idJson, String method,
+			Optional<String> origin) throws Exception {
+		try (Socket socket = openRequest(port, idJson, method, origin)) {
 			socket.setSoTimeout(5_000);
 			ByteArrayOutputStream response = new ByteArrayOutputStream();
 			InputStream input = socket.getInputStream();
@@ -713,6 +1158,11 @@ public class McpHttpServerApplicationExecutionTests {
 
 	private static Socket openRequest(int port, String idJson, String method)
 			throws Exception {
+		return openRequest(port, idJson, method, Optional.empty());
+	}
+
+	private static Socket openRequest(int port, String idJson, String method,
+			Optional<String> origin) throws Exception {
 		byte[] body = requestBody(idJson, method);
 		Socket socket = new Socket();
 		try {
@@ -723,6 +1173,7 @@ public class McpHttpServerApplicationExecutionTests {
 					+ "Accept: " + JSON_MEDIA_TYPE + ", text/event-stream\r\n"
 					+ "MCP-Protocol-Version: " + PROTOCOL_VERSION + "\r\n"
 					+ "Mcp-Method: " + method + "\r\n"
+					+ origin.map(value -> "Origin: " + value + "\r\n").orElse("")
 					+ "Content-Length: " + body.length + "\r\n"
 					+ "Connection: close\r\n\r\n";
 			socket.getOutputStream().write(
@@ -777,6 +1228,31 @@ public class McpHttpServerApplicationExecutionTests {
 		Assertions.assertFalse(response.bodyText().contains("\"data\""), response.bodyText());
 	}
 
+	private static void assertExactEmptyDeadlineResponse(RawResponse response) {
+		Assertions.assertEquals(504, response.status(), response.bodyText());
+		Assertions.assertEquals("no-store", response.singleHeader("Cache-Control"));
+		Assertions.assertEquals(0, response.body().length);
+		Assertions.assertFalse(response.hasHeader("Content-Type"),
+				"An empty deadline response must have no entity metadata.");
+		Assertions.assertFalse(response.hasHeader("Retry-After"),
+				"Retry-After is not part of the fixed deadline response.");
+	}
+
+	private static McpRequestExecutionSnapshot awaitRequestSnapshot(
+			McpHttpServerRuntime runtime,
+			Predicate<McpRequestExecutionSnapshot> condition) throws Exception {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		McpRequestExecutionSnapshot latest = null;
+		do {
+			latest = runtime.requestExecutionSnapshot();
+			if (condition.test(latest))
+				return latest;
+			Thread.sleep(5);
+		} while (System.nanoTime() - deadline < 0L);
+		throw new AssertionError("Timed out waiting for protocol request execution state; latest="
+				+ latest);
+	}
+
 	private static McpApplicationExecutionSnapshot awaitSnapshot(
 			McpHttpServerRuntime runtime,
 			Predicate<McpApplicationExecutionSnapshot> condition) throws Exception {
@@ -799,7 +1275,15 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	private static final class ControllableClock implements McpApplicationClock {
-		private final AtomicLong nanoseconds = new AtomicLong();
+		private final AtomicLong nanoseconds;
+
+		private ControllableClock() {
+			this(0L);
+		}
+
+		private ControllableClock(long initialNanoseconds) {
+			this.nanoseconds = new AtomicLong(initialNanoseconds);
+		}
 
 		@Override
 		public long nanoTime() {

@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -111,6 +112,11 @@ interface McpApplicationClock {
 	McpApplicationClock SYSTEM = System::nanoTime;
 
 	long nanoTime();
+}
+
+@FunctionalInterface
+interface McpProtocolDeadlineCycle {
+	void run(long nowNanos);
 }
 
 interface McpApplicationCancellation {
@@ -216,6 +222,7 @@ record McpApplicationExecutionSnapshot(int configuredHandlerConcurrency,
 		int activeRequestIds, int retainedExchanges, int retainedTransportLeases,
 		long admittedRequests,
 		long capacityRejections, long duplicateIdRejections, long deadlineExpirations,
+		long protocolDeadlineExpirations,
 		long terminalResponses, long abandonedResponses, long responseCleanups,
 		boolean accepting, boolean terminated) {
 }
@@ -244,6 +251,7 @@ final class McpApplicationExecution {
 
 	private final McpApplicationExecutionConfiguration configuration;
 	private final McpApplicationClock clock;
+	private final @Nullable McpProtocolDeadlineCycle protocolDeadlineCycle;
 	private final ExecutorService handlerExecutor;
 	private final McpApplicationHandlerDispatcher dispatcher;
 	private final Object executionBoundaryLock;
@@ -254,6 +262,7 @@ final class McpApplicationExecution {
 	private final AtomicLong capacityRejections;
 	private final AtomicLong duplicateIdRejections;
 	private final AtomicLong deadlineExpirations;
+	private final AtomicLong protocolDeadlineExpirations;
 	private final AtomicLong terminalResponses;
 	private final AtomicLong abandonedResponses;
 	private final AtomicLong responseCleanups;
@@ -270,8 +279,16 @@ final class McpApplicationExecution {
 	McpApplicationExecution(McpApplicationExecutionConfiguration configuration,
 			McpApplicationClock clock,
 			McpApplicationHandlerExecutorFactory executorFactory) {
+		this(configuration, clock, executorFactory, null);
+	}
+
+	McpApplicationExecution(McpApplicationExecutionConfiguration configuration,
+			McpApplicationClock clock,
+			McpApplicationHandlerExecutorFactory executorFactory,
+			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle) {
 		this.configuration = requireNonNull(configuration);
 		this.clock = requireNonNull(clock);
+		this.protocolDeadlineCycle = protocolDeadlineCycle;
 		this.handlerExecutor = requireNonNull(requireNonNull(executorFactory).create(
 				configuration.handlerConcurrency()),
 				"The application handler executor factory returned null.");
@@ -286,6 +303,7 @@ final class McpApplicationExecution {
 		this.capacityRejections = new AtomicLong();
 		this.duplicateIdRejections = new AtomicLong();
 		this.deadlineExpirations = new AtomicLong();
+		this.protocolDeadlineExpirations = new AtomicLong();
 		this.terminalResponses = new AtomicLong();
 		this.abandonedResponses = new AtomicLong();
 		this.responseCleanups = new AtomicLong();
@@ -335,7 +353,7 @@ final class McpApplicationExecution {
 		switch (admission) {
 			case DISPATCHED, QUEUED -> {
 				admittedRequests.incrementAndGet();
-				signalTimer();
+				signalDeadlineTimer();
 			}
 			case REJECTED -> {
 				capacityRejections.incrementAndGet();
@@ -351,6 +369,25 @@ final class McpApplicationExecution {
 		duplicateIdRejections.incrementAndGet();
 	}
 
+	void recordProtocolDeadlineExpiration() {
+		protocolDeadlineExpirations.incrementAndGet();
+		deadlineExpirations.incrementAndGet();
+	}
+
+	/*
+	 * Linearizes a bounded protocol-state mutation with this listener
+	 * generation's stop boundary. Production reservations must not invoke user
+	 * code or perform blocking work while the boundary is held.
+	 */
+	<T> Optional<T> reserveProtocolOperationIfRunning(Supplier<T> reservation) {
+		requireNonNull(reservation);
+		synchronized (executionBoundaryLock) {
+			if (stopped.get())
+				return Optional.empty();
+			return Optional.of(requireNonNull(reservation.get()));
+		}
+	}
+
 	void cancel(MicrohttpRequest request, StreamTerminationReason reason,
 			@Nullable Throwable cause) {
 		Exchange exchange = requestsByIdentity.get(requireNonNull(request));
@@ -360,6 +397,8 @@ final class McpApplicationExecution {
 
 	void runTimerCycle() {
 		long now = clock.nanoTime();
+		if (protocolDeadlineCycle != null)
+			protocolDeadlineCycle.run(now);
 		for (Exchange exchange : retainedExchanges.values()) {
 			try {
 				exchange.onTimer(now);
@@ -390,6 +429,7 @@ final class McpApplicationExecution {
 				capacityRejections.get(),
 				duplicateIdRejections.get(),
 				deadlineExpirations.get(),
+				protocolDeadlineExpirations.get(),
 				terminalResponses.get(),
 				abandonedResponses.get(),
 				responseCleanups.get(),
@@ -472,7 +512,7 @@ final class McpApplicationExecution {
 		}
 	}
 
-	private void signalTimer() {
+	void signalDeadlineTimer() {
 		LockSupport.unpark(timerThread);
 	}
 
@@ -521,7 +561,7 @@ final class McpApplicationExecution {
 
 			try {
 				if (clock.nanoTime() - deadlineNanos >= 0L) {
-					onDeadline();
+					onDeadline(false);
 					return;
 				}
 				if (!beginApplicationInvocation())
@@ -581,23 +621,34 @@ final class McpApplicationExecution {
 		private boolean respond(McpApplicationResponse response) {
 			TransportLease lease;
 			boolean shutdown;
+			boolean deadlineExpired;
 			synchronized (executionBoundaryLock) {
 				shutdown = stopped.get();
 				if (!shutdown) {
-					synchronized (terminalLock) {
-						if (terminalState != TerminalState.OPEN
-								|| cancellation.isCancellationRequested())
-							return false;
-						lease = requireNonNull(transportLease.get(),
-								"An open exchange must retain its transport lease.");
-						terminalState = TerminalState.RESPONSE_OFFERED;
+					deadlineExpired = clock.nanoTime() - deadlineNanos >= 0L;
+					if (!deadlineExpired) {
+						synchronized (terminalLock) {
+							if (terminalState != TerminalState.OPEN
+									|| cancellation.isCancellationRequested())
+								return false;
+							lease = requireNonNull(transportLease.get(),
+									"An open exchange must retain its transport lease.");
+							terminalState = TerminalState.RESPONSE_OFFERED;
+						}
+					} else {
+						lease = null;
 					}
 				} else {
+					deadlineExpired = false;
 					lease = null;
 				}
 			}
 			if (shutdown) {
 				cancel(stoppingReason(), null);
+				return false;
+			}
+			if (deadlineExpired) {
+				onDeadline(false);
 				return false;
 			}
 
@@ -640,6 +691,10 @@ final class McpApplicationExecution {
 		}
 
 		private void onDeadline() {
+			onDeadline(true);
+		}
+
+		private void onDeadline(boolean requestInterrupt) {
 			boolean canceledBeforeDispatch;
 			McpApplicationResponse response;
 			TransportLease lease;
@@ -672,7 +727,7 @@ final class McpApplicationExecution {
 			}
 
 			deadlineExpirations.incrementAndGet();
-			if (!canceledBeforeDispatch)
+			if (!canceledBeforeDispatch && requestInterrupt)
 				ticket().requestInterrupt();
 			boolean accepted = false;
 			try {
