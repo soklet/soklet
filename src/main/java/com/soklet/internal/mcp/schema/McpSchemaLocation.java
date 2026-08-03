@@ -16,23 +16,19 @@
 
 package com.soklet.internal.mcp.schema;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
 
-/**
- * Stable document retrieval URI and decoded JSON Pointer segments.
- */
-record McpSchemaLocation(URI retrievalUri, List<String> pointerSegments) {
+/** Decoded JSON Pointer segments within one Profile 1 document. */
+record McpSchemaLocation(List<String> pointerSegments) {
 	McpSchemaLocation {
-		requireNonNull(retrievalUri);
 		pointerSegments = List.copyOf(requireNonNull(pointerSegments));
 	}
 
-	static McpSchemaLocation root(URI retrievalUri) {
-		return new McpSchemaLocation(retrievalUri, List.of());
+	static McpSchemaLocation root() {
+		return new McpSchemaLocation(List.of());
 	}
 
 	McpSchemaLocation child(String... segments) {
@@ -44,7 +40,7 @@ record McpSchemaLocation(URI retrievalUri, List<String> pointerSegments) {
 		for (String segment : segments)
 			childSegments.add(requireNonNull(segment));
 
-		return new McpSchemaLocation(retrievalUri, childSegments);
+		return new McpSchemaLocation(childSegments);
 	}
 
 	String jsonPointer() {

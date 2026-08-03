@@ -18,6 +18,7 @@ package com.soklet.internal.mcp.schema;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -60,8 +61,10 @@ final class McpSchemaEvaluationContext {
 		return true;
 	}
 
-	void addDiagnostic(McpSchemaDiagnostic diagnostic) {
-		requireNonNull(diagnostic);
+	void addDiagnostic(McpSchemaDiagnostic.Code code,
+			McpSchemaLocation schemaLocation, Optional<String> keyword,
+			Optional<String> missingPropertyName,
+			List<String> instancePointerSegments, String message) {
 		if (diagnosticsTruncated)
 			return;
 		if (diagnostics.size() >= limits.maximumDiagnosticCount()) {
@@ -70,21 +73,20 @@ final class McpSchemaEvaluationContext {
 		}
 		int remainingBytes = limits.maximumDiagnosticUtf8Bytes()
 				- diagnosticUtf8Bytes;
-		long bytes = diagnostic.utf8ByteCountUpTo(remainingBytes);
+		long bytes = McpSchemaDiagnostic.utf8ByteCountUpTo(code, schemaLocation,
+				keyword, missingPropertyName, instancePointerSegments, message,
+				remainingBytes);
 		if (bytes > remainingBytes) {
 			diagnosticsTruncated = true;
 			return;
 		}
-		diagnostics.add(diagnostic);
+		diagnostics.add(new McpSchemaDiagnostic(code, schemaLocation, keyword,
+				missingPropertyName, instancePointerSegments, message));
 		diagnosticUtf8Bytes += (int) bytes;
 	}
 
 	long evaluationOperations() {
 		return evaluationOperations;
-	}
-
-	long referenceTraversals() {
-		return referenceTraversals;
 	}
 
 	List<McpSchemaDiagnostic> diagnostics() {

@@ -91,7 +91,7 @@ final class McpSchemaJsonEquality {
 				for (Map.Entry<String, McpJsonValue> entry
 						: leftObject.members().entrySet())
 					pairs.push(new ValuePair(entry.getValue(),
-							rightObject.members().get(entry.getKey())));
+							requireNonNull(rightObject.members().get(entry.getKey()))));
 				continue;
 			}
 

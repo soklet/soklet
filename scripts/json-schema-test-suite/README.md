@@ -12,6 +12,30 @@ The import is test-only and adds no runtime dependency.
 - Archive SHA-256:
   `405fa34d133c5a5dd3280399e0dafa379bcbf5adb17d180bd7b1b1aaa5afaa1b`
 
+## Profile 1 applicability manifest
+
+The machine-readable selection and claim boundary is
+[`profile-1/manifest.json`](../../src/test/resources/com/soklet/internal/mcp/schema/profile-1/manifest.json).
+It pins Soklet MCP Tool Schema Profile 1's supported keyword shapes, explicit
+exclusions, local-reference policy, upstream files and group indexes, and the
+exact official MCP schema fixture.
+
+For the pinned JSON Schema Test Suite snapshot, the manifest exhaustively
+partitions the reviewed source files as follows:
+
+- **189 groups / 657 cases classified**;
+- **133 groups / 500 cases selected**, all of which compile and evaluate to the
+  upstream expected result; and
+- **56 groups / 157 cases rejected**, with every rejected group failing closed
+  during Profile 1 compilation.
+
+The separately pinned official MCP `json-schema-2020-12` tool fixture has
+SHA-256
+`172e598d4345d7688bafa08e35addf26d6b16cb50db1a36adf6e0352470fd6bc`
+and has **5 valid / 8 invalid** local evaluation cases. Those results prove the
+documented closed profile and exact fixture locally; they do not claim complete
+Draft 2020-12 support or an official MCP server-conformance run.
+
 ## Reproduce the import
 
 Prerequisites are Node.js, `tar`, `curl`, and a SHA-256 utility. Start from a
@@ -42,10 +66,13 @@ manifest.
 4. Import into an absent destination directory and inspect every resulting
    resource change, including the upstream license.
 5. Update and review the expected manifest digest, license digest, file count,
-   required/optional/remote counts, and official group/case counts.
+   required/optional/remote counts, and the Profile 1 applicability manifest's
+   exhaustive group/case partition.
 6. Run the Node verifier and the complete Maven test suite before accepting the
    new pin.
 
-The official Draft 2020-12 meta-schema and its `meta/*` resources are not part
-of this upstream archive. They require a separate, checksum-pinned built-in
-bundle before Soklet can run the full offline schema-validation gate.
+Soklet 3.6.0 uses this corpus selectively for its documented closed MCP schema
+profile. The checked-in applicability manifest names every reviewed upstream
+group as selected or rejected. Passing the selection and rejecting the excluded
+schemas is evidence for the closed profile only; it is not a claim of full JSON
+Schema Draft 2020-12 conformance.

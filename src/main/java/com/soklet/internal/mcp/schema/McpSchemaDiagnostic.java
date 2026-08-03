@@ -32,7 +32,10 @@ record McpSchemaDiagnostic(Code code, McpSchemaLocation schemaLocation,
 		TYPE_MISMATCH,
 		CONST_MISMATCH,
 		ENUM_MISMATCH,
-		REQUIRED_PROPERTY_MISSING
+		REQUIRED_PROPERTY_MISSING,
+		MINIMUM_MISMATCH,
+		MAXIMUM_MISMATCH,
+		ANY_OF_MISMATCH
 	}
 
 	McpSchemaDiagnostic {
@@ -63,14 +66,24 @@ record McpSchemaDiagnostic(Code code, McpSchemaLocation schemaLocation,
 	}
 
 	long utf8ByteCountUpTo(long maximum) {
+		return utf8ByteCountUpTo(code, schemaLocation, keyword,
+				missingPropertyName, instancePointerSegments, message, maximum);
+	}
+
+	static long utf8ByteCountUpTo(Code code,
+			McpSchemaLocation schemaLocation, Optional<String> keyword,
+			Optional<String> missingPropertyName,
+			List<String> instancePointerSegments, String message, long maximum) {
+		requireNonNull(code);
+		requireNonNull(schemaLocation);
+		requireNonNull(keyword);
+		requireNonNull(missingPropertyName);
+		requireNonNull(instancePointerSegments);
+		requireNonNull(message);
 		if (maximum < 0)
 			throw new IllegalArgumentException("maximum must not be negative.");
 		long bytes = 0;
 		bytes = addField(code.name(), bytes, maximum);
-		if (bytes > maximum)
-			return bytes;
-		bytes = addField(schemaLocation.retrievalUri().toASCIIString(), bytes,
-				maximum);
 		if (bytes > maximum)
 			return bytes;
 		bytes = addJsonPointerField(schemaLocation.pointerSegments(), bytes,

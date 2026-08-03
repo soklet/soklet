@@ -15,6 +15,11 @@
  */
 
 /**
- * Internal, bounded JSON Schema Draft 2020-12 support for MCP.
+ * Internal compiler and bounded evaluator for Soklet MCP Tool Schema
+ * Profile 1.
+ *
+ * <p>This package deliberately implements a closed, single-document subset of
+ * JSON Schema Draft 2020-12 for MCP tool input and output schemas. It is not a
+ * general-purpose JSON Schema engine.</p>
  */
 package com.soklet.internal.mcp.schema;

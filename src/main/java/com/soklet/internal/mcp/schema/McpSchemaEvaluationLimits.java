@@ -21,29 +21,72 @@ package com.soklet.internal.mcp.schema;
  *
  * <p>Static references consume the reference-traversal budget. Pending work
  * has a separate allocation-first bound so branching reference cycles cannot
- * grow the evaluator stack until memory exhaustion. The dynamic-scope limit
- * is reserved for the later dynamic-reference slice. Matcher steps remain a
- * separate future matcher-owned budget.</p>
+ * grow evaluator work until memory exhaustion.</p>
  */
 record McpSchemaEvaluationLimits(long maximumEvaluationOperations,
 		long maximumReferenceTraversals, int maximumPendingTaskCount,
-		int maximumDynamicScopeDepth,
 		int maximumDiagnosticCount, int maximumDiagnosticUtf8Bytes) {
+	private static final long MAXIMUM_SUPPORTED_EVALUATION_OPERATIONS =
+			10_000_000;
+	private static final long MAXIMUM_SUPPORTED_REFERENCE_TRAVERSALS =
+			1_000_000;
+	private static final int MAXIMUM_SUPPORTED_PENDING_TASK_COUNT = 256;
+	private static final int MAXIMUM_SUPPORTED_DIAGNOSTIC_COUNT = 1_000;
+	private static final int MAXIMUM_SUPPORTED_DIAGNOSTIC_UTF8_BYTES =
+			1_024 * 1_024;
+	private static final McpSchemaEvaluationLimits PRODUCTION_DEFAULTS =
+			new McpSchemaEvaluationLimits(1_000_000, 100_000, 128, 100,
+					64 * 1_024);
+	private static final McpSchemaEvaluationLimits MAXIMUM_SUPPORTED =
+			new McpSchemaEvaluationLimits(
+					MAXIMUM_SUPPORTED_EVALUATION_OPERATIONS,
+					MAXIMUM_SUPPORTED_REFERENCE_TRAVERSALS,
+					MAXIMUM_SUPPORTED_PENDING_TASK_COUNT,
+					MAXIMUM_SUPPORTED_DIAGNOSTIC_COUNT,
+					MAXIMUM_SUPPORTED_DIAGNOSTIC_UTF8_BYTES);
+
 	McpSchemaEvaluationLimits {
 		requirePositive(maximumEvaluationOperations,
 				"maximumEvaluationOperations");
 		requirePositive(maximumReferenceTraversals,
 				"maximumReferenceTraversals");
 		requirePositive(maximumPendingTaskCount, "maximumPendingTaskCount");
-		requirePositive(maximumDynamicScopeDepth,
-				"maximumDynamicScopeDepth");
 		requirePositive(maximumDiagnosticCount, "maximumDiagnosticCount");
 		requirePositive(maximumDiagnosticUtf8Bytes,
 				"maximumDiagnosticUtf8Bytes");
+		requireAtMost(maximumEvaluationOperations,
+				MAXIMUM_SUPPORTED_EVALUATION_OPERATIONS,
+				"maximumEvaluationOperations");
+		requireAtMost(maximumReferenceTraversals,
+				MAXIMUM_SUPPORTED_REFERENCE_TRAVERSALS,
+				"maximumReferenceTraversals");
+		requireAtMost(maximumPendingTaskCount,
+				MAXIMUM_SUPPORTED_PENDING_TASK_COUNT,
+				"maximumPendingTaskCount");
+		requireAtMost(maximumDiagnosticCount,
+				MAXIMUM_SUPPORTED_DIAGNOSTIC_COUNT,
+				"maximumDiagnosticCount");
+		requireAtMost(maximumDiagnosticUtf8Bytes,
+				MAXIMUM_SUPPORTED_DIAGNOSTIC_UTF8_BYTES,
+				"maximumDiagnosticUtf8Bytes");
+	}
+
+	static McpSchemaEvaluationLimits productionDefaults() {
+		return PRODUCTION_DEFAULTS;
+	}
+
+	static McpSchemaEvaluationLimits maximumSupported() {
+		return MAXIMUM_SUPPORTED;
 	}
 
 	private static void requirePositive(long value, String name) {
 		if (value <= 0)
 			throw new IllegalArgumentException(name + " must be positive.");
+	}
+
+	private static void requireAtMost(long value, long maximum, String name) {
+		if (value > maximum)
+			throw new IllegalArgumentException(name + " must not exceed "
+					+ maximum + ".");
 	}
 }

@@ -1,0 +1,95 @@
+{
+  "valid": [
+    {
+      "description": "email branch when contact method is absent",
+      "instance": { "email": "a@example.test" }
+    },
+    {
+      "description": "explicit email branch",
+      "instance": {
+        "contactMethod": "email",
+        "email": "a@example.test"
+      }
+    },
+    {
+      "description": "explicit phone branch",
+      "instance": {
+        "contactMethod": "phone",
+        "phone": "555-0100"
+      }
+    },
+    {
+      "description": "both contact properties with no selector",
+      "instance": {
+        "phone": "555-0100",
+        "email": "a@example.test"
+      }
+    },
+    {
+      "description": "referenced address object",
+      "instance": {
+        "email": "a@example.test",
+        "name": "Ada",
+        "address": {
+          "street": "1 Main St",
+          "city": "Boston"
+        }
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "description": "missing both contact properties",
+      "instance": {}
+    },
+    {
+      "description": "absent selector takes the else branch",
+      "instance": { "phone": "555-0100" }
+    },
+    {
+      "description": "phone selector requires phone",
+      "instance": {
+        "contactMethod": "phone",
+        "email": "a@example.test"
+      }
+    },
+    {
+      "description": "email selector requires email",
+      "instance": {
+        "contactMethod": "email",
+        "phone": "555-0100"
+      }
+    },
+    {
+      "description": "selector must be in the enum",
+      "instance": {
+        "contactMethod": "sms",
+        "email": "a@example.test"
+      }
+    },
+    {
+      "description": "root rejects additional properties",
+      "instance": {
+        "email": "a@example.test",
+        "extra": true
+      }
+    },
+    {
+      "description": "name must be a string",
+      "instance": {
+        "email": "a@example.test",
+        "name": 1
+      }
+    },
+    {
+      "description": "referenced address members retain their types",
+      "instance": {
+        "email": "a@example.test",
+        "address": {
+          "street": 1,
+          "city": "Boston"
+        }
+      }
+    }
+  ]
+}

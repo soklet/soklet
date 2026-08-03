@@ -16,11 +16,19 @@
 
 package com.soklet.internal.mcp.schema;
 
-/**
- * A hard evaluator budget whose exhaustion prevents a validity decision.
- */
-enum McpSchemaEvaluationLimit {
-	EVALUATION_OPERATIONS,
-	REFERENCE_TRAVERSALS,
-	PENDING_TASKS
+import static java.util.Objects.requireNonNull;
+
+/** Type-model limit failure that the shared resolver attaches to its path. */
+final class McpTypedTypeModelLimitException extends IllegalArgumentException {
+	private final McpSchemaCompilationException.Limit limit;
+
+	McpTypedTypeModelLimitException(McpSchemaCompilationException.Limit limit,
+			String message) {
+		super(requireNonNull(message));
+		this.limit = requireNonNull(limit);
+	}
+
+	McpSchemaCompilationException.Limit limit() {
+		return limit;
+	}
 }

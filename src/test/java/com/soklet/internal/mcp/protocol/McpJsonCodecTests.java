@@ -249,6 +249,27 @@ public class McpJsonCodecTests {
 	}
 
 	@Test
+	public void productionJsonDepthAccepts128AndRejects129() {
+		McpJsonCodec production = new McpJsonCodec(
+				McpJsonLimits.productionDefaults());
+		McpJsonValue depth128Value = new McpJsonNumber(0L);
+		String depth128Json = "0";
+		for (int depth = 1; depth < 128; ++depth) {
+			depth128Value = new McpJsonArray(List.of(depth128Value));
+			depth128Json = '[' + depth128Json + ']';
+		}
+
+		Assertions.assertEquals(depth128Value, production.parse(depth128Json));
+		Assertions.assertEquals(depth128Json, production.toJson(depth128Value));
+		McpJsonValue depth129Value = new McpJsonArray(List.of(depth128Value));
+		String depth129Json = '[' + depth128Json + ']';
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> production.parse(depth129Json));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> production.toJson(depth129Value));
+	}
+
+	@Test
 	public void strictJsonParserEnforcesRawTokenAndDecodedStringBounds() {
 		McpJsonCodec exactCodec = new McpJsonCodec(
 				new McpJsonLimits(64, 4, 6, 4, 16, 16, 16, 64));
@@ -319,10 +340,15 @@ public class McpJsonCodecTests {
 
 	@Test
 	public void strictJsonCodecReplaysTheRetainedCorpus() throws IOException {
+		McpJsonCodec production = new McpJsonCodec(
+				McpJsonLimits.productionDefaults());
 		for (String fixture : List.of(
 				"parse/array.json", "parse/object.json", "parse/string-escapes.json",
 				"parse/surrogate-pair.json", "parse/deep-array.json", "parse/exponent-limit.json"))
-			Assertions.assertDoesNotThrow(() -> CODEC.parse(corpus(fixture)), fixture);
+			Assertions.assertDoesNotThrow(() -> {
+				CODEC.parse(corpus(fixture));
+				production.parse(corpus(fixture));
+			}, fixture);
 
 		for (String fixture : List.of(
 				"parse/canonical-exponent-overflow.json",
@@ -401,6 +427,25 @@ public class McpJsonCodecTests {
 				() -> new McpJsonLimits(1, 1, 1, 1, 1, -1, 1, 1));
 	}
 
+	@Test
+	public void productionJsonLimitsAndHardCeilingsAreFrozen() {
+		Assertions.assertEquals(new McpJsonLimits(
+				4 * 1_024 * 1_024, 128, 1_024 * 1_024, 1_024 * 1_024,
+				1_024, 10_000, 100_000, 4 * 1_024 * 1_024),
+				McpJsonLimits.productionDefaults());
+		int[] maximum = {16 * 1_024 * 1_024, 256, 4 * 1_024 * 1_024,
+				4 * 1_024 * 1_024, 4_096, 100_000, 1_000_000,
+				16 * 1_024 * 1_024};
+		Assertions.assertEquals(jsonLimits(maximum),
+				McpJsonLimits.maximumSupported());
+		for (int index = 0; index < maximum.length; ++index) {
+			int[] oneOver = maximum.clone();
+			oneOver[index]++;
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> jsonLimits(oneOver), "field " + index);
+		}
+	}
+
 	private static void assertMalformed(String json) {
 		Assertions.assertThrows(IllegalArgumentException.class, () -> CODEC.parse(json), json);
 	}
@@ -428,5 +473,10 @@ public class McpJsonCodecTests {
 				LIMITS.maximumTokenLengthInCharacters(), LIMITS.maximumStringLengthInCharacters(),
 				LIMITS.maximumNumberLengthInCharacters(), LIMITS.maximumExponentMagnitude(),
 				LIMITS.maximumNodeCount(), maximumOutputBytes);
+	}
+
+	private static McpJsonLimits jsonLimits(int[] values) {
+		return new McpJsonLimits(values[0], values[1], values[2], values[3],
+				values[4], values[5], values[6], values[7]);
 	}
 }

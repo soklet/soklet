@@ -40,17 +40,11 @@ jobs:
       - name: Verify pinned JSON Schema Test Suite
         run: node scripts/json-schema-test-suite/verify.mjs
 
-      - name: Verify pinned Draft 2020-12 meta-schema bundle
-        run: node scripts/json-schema-draft-2020-12/verify.mjs
-
       - name: Run tests
         run: mvn -B -ntp clean test
 
       - name: Package main JAR
         run: mvn -B -ntp -DskipTests package
-
-      - name: Verify packaged Draft 2020-12 resources
-        run: node scripts/json-schema-draft-2020-12/verify-jar.mjs --directory target
 
       - name: Build Javadoc
         run: mvn -B -ntp clean javadoc:javadoc

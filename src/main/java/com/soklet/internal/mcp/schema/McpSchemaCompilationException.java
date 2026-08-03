@@ -16,24 +16,20 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-/**
- * Typed, bounded failure produced while compiling schema resources.
- */
+/** Typed, bounded failure produced while compiling a Profile 1 document. */
 final class McpSchemaCompilationException extends IllegalArgumentException {
 	enum Kind {
-		INVALID_RETRIEVAL_URI,
-		DUPLICATE_RESOURCE_IDENTIFIER,
 		INVALID_SCHEMA,
 		INVALID_KEYWORD_VALUE,
 		MISPLACED_DIALECT,
 		UNSUPPORTED_DIALECT,
-		UNSUPPORTED_VOCABULARY,
 		UNSUPPORTED_KEYWORD,
-		INVALID_IDENTIFIER,
 		INVALID_ANCHOR,
 		DUPLICATE_ANCHOR,
 		INVALID_REFERENCE,
@@ -42,17 +38,17 @@ final class McpSchemaCompilationException extends IllegalArgumentException {
 	}
 
 	enum Limit {
-		DOCUMENT_COUNT,
 		SCHEMA_NODE_COUNT,
 		SCHEMA_DEPTH,
 		KEYWORD_COUNT,
-		RESOURCE_COUNT,
-		RESOURCE_IDENTIFIER_COUNT,
 		ANCHOR_COUNT,
 		REFERENCE_COUNT,
-		URI_LENGTH,
+		ANCHOR_NAME_LENGTH,
+		REFERENCE_LENGTH,
 		POINTER_SEGMENT_COUNT,
-		VOCABULARY_COUNT
+		COLLECTION_ENTRY_COUNT,
+		NAME_LENGTH,
+		POINTER_SEGMENT_LENGTH
 	}
 
 	private final Kind kind;
@@ -61,13 +57,13 @@ final class McpSchemaCompilationException extends IllegalArgumentException {
 	private final Optional<String> keyword;
 
 	McpSchemaCompilationException(Kind kind, String message,
-			McpSchemaLocation location, String keyword) {
+			@Nullable McpSchemaLocation location, @Nullable String keyword) {
 		this(kind, message, Optional.empty(), Optional.ofNullable(location),
 				Optional.ofNullable(keyword));
 	}
 
 	McpSchemaCompilationException(Limit limit, String message,
-			McpSchemaLocation location, String keyword) {
+			@Nullable McpSchemaLocation location, @Nullable String keyword) {
 		this(Kind.LIMIT_EXCEEDED, message, Optional.of(requireNonNull(limit)),
 				Optional.ofNullable(location), Optional.ofNullable(keyword));
 	}
