@@ -23,6 +23,7 @@ import com.soklet.CorsResponse;
 import com.soklet.HttpMethod;
 import com.soklet.MediaRange;
 import com.soklet.Request;
+import com.soklet.StreamTerminationReason;
 import com.soklet.internal.microhttp.ConnectionListener;
 import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.Handler;
@@ -54,6 +55,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
@@ -66,9 +68,11 @@ import java.util.function.Consumer;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Package-private production runtime for the first Phase 3 Streamable HTTP
- * slice. It owns a listener that is independent from Soklet's application
- * HTTP server and currently dispatches only framework-owned discovery.
+ * Package-private production runtime for the Phase 3 Streamable HTTP slices.
+ * It owns a listener that is independent from Soklet's application HTTP
+ * server, handles framework-owned discovery, and hands registered operations
+ * to the bounded application execution runtime without retaining a protocol
+ * request-processing thread.
  */
 final class McpHttpServerRuntime implements AutoCloseable {
 	private static final String CONTENT_TYPE = "Content-Type";
@@ -96,29 +100,67 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private final McpJsonRpcEnvelopeCodec envelopeCodec;
 	private final McpRequestWireMapper requestWireMapper;
 	private final McpServerCapabilityRegistry capabilityRegistry;
+	private final McpApplicationRequestRouter applicationRouter;
+	private final McpApplicationExecutionConfiguration applicationConfiguration;
+	private final McpApplicationClock applicationClock;
+	private final McpApplicationHandlerExecutorFactory applicationExecutorFactory;
 	private final Object lifecycleLock;
-	private final Map<MicrohttpRequest, FutureTask<Void>> requestTasks;
+	private final Map<MicrohttpRequest, RequestControl> requestControls;
+	private final ConcurrentHashMap<McpJsonRpcId, RequestControl> activeRequestIds;
 	private final AtomicLong processorThreadSequence;
 	private LifecycleState lifecycleState;
 	private @Nullable EventLoop eventLoop;
 	private @Nullable EventLoop residualEventLoop;
 	private @Nullable ThreadPoolExecutor requestProcessor;
 	private @Nullable ThreadPoolExecutor residualRequestProcessor;
+	private @Nullable McpApplicationExecution applicationExecution;
+	private @Nullable McpApplicationExecution residualApplicationExecution;
 	private @Nullable InetSocketAddress boundAddress;
 	private @Nullable AtomicReference<ListenerState> currentReadiness;
 
 	McpHttpServerRuntime(McpHttpTransportConfiguration transportConfiguration,
 			McpHttpEndpointPolicy endpointPolicy, McpNormalizedEndpoint endpoint) {
 		this(transportConfiguration, endpointPolicy, endpoint,
-				McpJsonLimits.productionDefaults());
+				McpJsonLimits.productionDefaults(), McpApplicationRequestRouter.empty(),
+				McpApplicationExecutionConfiguration.productionDefaults(),
+				McpApplicationClock.SYSTEM,
+				McpApplicationHandlerExecutorFactory.production());
 	}
 
 	McpHttpServerRuntime(McpHttpTransportConfiguration transportConfiguration,
 			McpHttpEndpointPolicy endpointPolicy, McpNormalizedEndpoint endpoint,
 			McpJsonLimits jsonLimits) {
+		this(transportConfiguration, endpointPolicy, endpoint, jsonLimits,
+				McpApplicationRequestRouter.empty(),
+				McpApplicationExecutionConfiguration.productionDefaults(),
+				McpApplicationClock.SYSTEM,
+				McpApplicationHandlerExecutorFactory.production());
+	}
+
+	McpHttpServerRuntime(McpHttpTransportConfiguration transportConfiguration,
+			McpHttpEndpointPolicy endpointPolicy, McpNormalizedEndpoint endpoint,
+			McpApplicationRequestRouter applicationRouter,
+			McpApplicationExecutionConfiguration applicationConfiguration,
+			McpApplicationClock applicationClock) {
+		this(transportConfiguration, endpointPolicy, endpoint,
+				McpJsonLimits.productionDefaults(), applicationRouter,
+				applicationConfiguration, applicationClock,
+				McpApplicationHandlerExecutorFactory.production());
+	}
+
+	McpHttpServerRuntime(McpHttpTransportConfiguration transportConfiguration,
+			McpHttpEndpointPolicy endpointPolicy, McpNormalizedEndpoint endpoint,
+			McpJsonLimits jsonLimits, McpApplicationRequestRouter applicationRouter,
+			McpApplicationExecutionConfiguration applicationConfiguration,
+			McpApplicationClock applicationClock,
+			McpApplicationHandlerExecutorFactory applicationExecutorFactory) {
 		this.transportConfiguration = requireNonNull(transportConfiguration);
 		this.endpointPolicy = requireNonNull(endpointPolicy);
 		this.jsonLimits = requireNonNull(jsonLimits);
+		this.applicationRouter = requireNonNull(applicationRouter);
+		this.applicationConfiguration = requireNonNull(applicationConfiguration);
+		this.applicationClock = requireNonNull(applicationClock);
+		this.applicationExecutorFactory = requireNonNull(applicationExecutorFactory);
 		validateConfiguredAllowedHosts();
 
 		if (transportConfiguration.maximumRequestBodyBytes()
@@ -132,7 +174,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		this.capabilityRegistry = McpServerCapabilityRegistry.fromEndpoint(
 				requireNonNull(endpoint));
 		this.lifecycleLock = new Object();
-		this.requestTasks = Collections.synchronizedMap(new IdentityHashMap<>());
+		this.requestControls = Collections.synchronizedMap(new IdentityHashMap<>());
+		this.activeRequestIds = new ConcurrentHashMap<>();
 		this.processorThreadSequence = new AtomicLong();
 		this.lifecycleState = LifecycleState.STOPPED;
 	}
@@ -147,6 +190,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							"Cannot start MCP server while residual handler executions remain");
 				residualRequestProcessor = null;
 			}
+			if (residualApplicationExecution != null) {
+				if (!residualApplicationExecution.isTerminated())
+					throw new IllegalStateException(
+							"Cannot start MCP server while residual handler executions remain");
+				residualApplicationExecution = null;
+			}
 			if (residualEventLoop != null) {
 				if (!residualEventLoop.isTerminated())
 					throw new IllegalStateException(
@@ -155,13 +204,21 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			lifecycleState = LifecycleState.STARTING;
-			ThreadPoolExecutor candidateProcessor = newRequestProcessor();
+			ThreadPoolExecutor candidateProcessor = null;
+			McpApplicationExecution candidateApplicationExecution = null;
 			AtomicReference<ListenerState> candidateReadiness =
 					new AtomicReference<>(ListenerState.STARTING);
 			AtomicReference<InetSocketAddress> candidateAddress = new AtomicReference<>();
 			EventLoop candidateEventLoop = null;
 
 			try {
+				candidateProcessor = newRequestProcessor();
+				candidateApplicationExecution = new McpApplicationExecution(
+						applicationConfiguration, applicationClock,
+						applicationExecutorFactory);
+				ThreadPoolExecutor readyProcessor = candidateProcessor;
+				McpApplicationExecution readyApplicationExecution =
+						candidateApplicationExecution;
 				Handler handler = new Handler() {
 					@Override
 					public void handle(MicrohttpRequest request,
@@ -171,7 +228,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							return;
 						}
 
-						submitRequest(candidateProcessor, candidateAddress.get(), request, callback);
+						submitRequest(readyProcessor, readyApplicationExecution,
+							candidateAddress.get(), request, callback);
 					}
 
 					@Override
@@ -181,9 +239,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 					@Override
 					public void cancel(MicrohttpRequest request,
-							com.soklet.StreamTerminationReason reason,
+							StreamTerminationReason reason,
 							@Nullable Throwable cause) {
-						cancelRequest(request);
+						cancelRequest(request, reason, cause);
 					}
 				};
 				Options options = microhttpOptions();
@@ -192,8 +250,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				InetSocketAddress effectiveAddress = candidateEventLoop.getLocalAddress();
 				candidateAddress.set(effectiveAddress);
 				candidateEventLoop.start();
+				candidateApplicationExecution.start();
 
 				this.requestProcessor = candidateProcessor;
+				this.applicationExecution = candidateApplicationExecution;
 				this.eventLoop = candidateEventLoop;
 				this.boundAddress = effectiveAddress;
 				this.currentReadiness = candidateReadiness;
@@ -204,8 +264,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return effectiveAddress;
 			} catch (IOException | RuntimeException | Error throwable) {
 				candidateReadiness.set(ListenerState.TERMINATED);
-				closeFailedStart(candidateEventLoop, candidateProcessor);
+				closeFailedStart(candidateEventLoop, candidateProcessor,
+						candidateApplicationExecution);
 				this.requestProcessor = null;
+				this.applicationExecution = null;
 				this.eventLoop = null;
 				this.boundAddress = null;
 				this.currentReadiness = null;
@@ -218,6 +280,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	void stop() {
 		EventLoop eventLoopToStop;
 		ThreadPoolExecutor processorToStop;
+		McpApplicationExecution applicationToStop;
 		boolean interrupted = false;
 
 		synchronized (lifecycleLock) {
@@ -245,16 +308,23 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				currentReadiness.set(ListenerState.TERMINATED);
 			eventLoopToStop = requireNonNull(eventLoop);
 			processorToStop = requireNonNull(requestProcessor);
+			applicationToStop = requireNonNull(applicationExecution);
 		}
 
 		boolean eventLoopTerminated = false;
+		boolean applicationTerminated = false;
 		try {
 			long shutdownStartedAt = System.nanoTime();
 			long shutdownTimeoutNanos = transportConfiguration.shutdownTimeout().toNanos();
-			cancelAllRequests();
+			eventLoopToStop.stopAccepting();
+			// Close application admission and atomically drain its queue before
+			// interrupting active work. Otherwise an interrupted active handler can
+			// promote queued application code during shutdown.
+			applicationToStop.stop();
+			cancelAllRequests(StreamTerminationReason.SERVER_STOPPING, null);
 			eventLoopToStop.stop();
 			processorToStop.shutdownNow();
-			cancelAllRequests();
+			cancelAllRequests(StreamTerminationReason.SERVER_STOPPING, null);
 
 			while (!eventLoopTerminated) {
 				long remainingNanos = remainingShutdownNanos(
@@ -282,6 +352,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					interrupted = true;
 				}
 			}
+
+			while (!applicationTerminated) {
+				long remainingNanos = remainingShutdownNanos(
+						shutdownStartedAt, shutdownTimeoutNanos);
+				if (remainingNanos <= 0L)
+					break;
+				try {
+					applicationTerminated = applicationToStop.awaitTermination(
+							Duration.ofNanos(remainingNanos));
+				} catch (InterruptedException exception) {
+					interrupted = true;
+				}
+			}
 		} finally {
 			synchronized (lifecycleLock) {
 				eventLoop = null;
@@ -290,6 +373,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				requestProcessor = null;
 				residualRequestProcessor = processorToStop.isTerminated()
 						? null : processorToStop;
+				applicationExecution = null;
+				residualApplicationExecution = applicationTerminated
+						|| applicationToStop.isTerminated() ? null : applicationToStop;
 				boundAddress = null;
 				currentReadiness = null;
 				lifecycleState = LifecycleState.STOPPED;
@@ -320,6 +406,24 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					? Optional.of(requireNonNull(boundAddress))
 					: Optional.empty();
 		}
+	}
+
+	Optional<McpApplicationExecutionSnapshot> applicationExecutionSnapshot() {
+		synchronized (lifecycleLock) {
+			McpApplicationExecution execution = applicationExecution != null
+					? applicationExecution : residualApplicationExecution;
+			return execution == null ? Optional.empty()
+					: Optional.of(execution.snapshot(activeRequestIds.size()));
+		}
+	}
+
+	void runApplicationTimerCycle() {
+		McpApplicationExecution execution;
+		synchronized (lifecycleLock) {
+			execution = requireNonNull(applicationExecution,
+					"The MCP application execution runtime is not started.");
+		}
+		execution.runTimerCycle();
 	}
 
 	@Override
@@ -400,6 +504,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	private void handleUnexpectedTermination(EventLoop terminatedEventLoop) {
 		ThreadPoolExecutor processorToStop = null;
+		McpApplicationExecution applicationToStop = null;
 
 		synchronized (lifecycleLock) {
 			if (eventLoop != terminatedEventLoop || lifecycleState != LifecycleState.STARTED)
@@ -408,14 +513,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			lifecycleState = LifecycleState.FAILED;
 			boundAddress = null;
 			processorToStop = requestProcessor;
+			applicationToStop = applicationExecution;
 		}
 
-		cancelAllRequests();
+		if (applicationToStop != null)
+			applicationToStop.stop(StreamTerminationReason.INTERNAL_ERROR);
+		cancelAllRequests(StreamTerminationReason.INTERNAL_ERROR, null);
 		if (processorToStop != null)
 			processorToStop.shutdownNow();
+		cancelAllRequests(StreamTerminationReason.INTERNAL_ERROR, null);
 	}
 
 	private void submitRequest(ThreadPoolExecutor processor,
+			McpApplicationExecution application,
 			@Nullable InetSocketAddress effectiveAddress, MicrohttpRequest request,
 			Consumer<MicrohttpResponse> callback) {
 		requireNonNull(request);
@@ -426,56 +536,60 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return;
 		}
 
-		AtomicReference<FutureTask<Void>> taskReference = new AtomicReference<>();
+		// nanoTime may wrap; every comparison uses subtraction and the configured
+		// positive duration is constrained to the signed nanosecond range.
+		long deadlineNanos = applicationClock.nanoTime()
+				+ applicationConfiguration.requestDeadline().toNanos();
+		RequestControl requestControl = new RequestControl(request, deadlineNanos);
 		FutureTask<Void> task = new FutureTask<>(() -> {
-			try {
-				callback.accept(processRequest(effectiveAddress, request));
-			} finally {
-				requestTasks.remove(request, taskReference.get());
-			}
+			MicrohttpResponse response = processRequest(effectiveAddress, request,
+					callback, requestControl, application);
+			requestControl.completeProtocol(response, callback);
 			return null;
 		});
-		taskReference.set(task);
-		requestTasks.put(request, task);
+		requestControl.bindTask(task);
+		requestControls.put(request, requestControl);
 
 		try {
 			processor.execute(task);
 		} catch (RejectedExecutionException exception) {
-			requestTasks.remove(request, task);
-			callback.accept(emptyResponse(503, "Service Unavailable", List.of()));
+			requestControl.completeProtocol(
+					emptyResponse(503, "Service Unavailable", List.of()), callback);
 		}
 	}
 
-	private void cancelRequest(MicrohttpRequest request) {
-		FutureTask<Void> task = requestTasks.remove(request);
-
-		if (task != null)
-			task.cancel(true);
+	private void cancelRequest(MicrohttpRequest request,
+			StreamTerminationReason reason, @Nullable Throwable cause) {
+		RequestControl requestControl = requestControls.get(request);
+		if (requestControl != null)
+			requestControl.cancel(reason, cause);
 	}
 
-	private void cancelAllRequests() {
-		List<FutureTask<Void>> tasks;
-
-		synchronized (requestTasks) {
-			tasks = List.copyOf(requestTasks.values());
-			requestTasks.clear();
+	private void cancelAllRequests(StreamTerminationReason reason,
+			@Nullable Throwable cause) {
+		List<RequestControl> controls;
+		synchronized (requestControls) {
+			controls = List.copyOf(requestControls.values());
 		}
-
-		for (FutureTask<Void> task : tasks)
-			task.cancel(true);
+		for (RequestControl control : controls)
+			control.cancel(reason, cause);
 	}
 
-	private MicrohttpResponse processRequest(InetSocketAddress effectiveAddress,
-			MicrohttpRequest request) {
+	private @Nullable MicrohttpResponse processRequest(InetSocketAddress effectiveAddress,
+			MicrohttpRequest request, Consumer<MicrohttpResponse> callback,
+			RequestControl requestControl, McpApplicationExecution application) {
 		try {
-			return processRequestSafely(effectiveAddress, request);
+			return processRequestSafely(effectiveAddress, request, callback,
+					requestControl, application);
 		} catch (Throwable throwable) {
 			return emptyResponse(500, "Internal Server Error", List.of());
 		}
 	}
 
-	private MicrohttpResponse processRequestSafely(InetSocketAddress effectiveAddress,
-			MicrohttpRequest request) {
+	private @Nullable MicrohttpResponse processRequestSafely(
+			InetSocketAddress effectiveAddress, MicrohttpRequest request,
+			Consumer<MicrohttpResponse> callback, RequestControl requestControl,
+			McpApplicationExecution application) {
 		if (request.contentTooLarge()
 				|| request.body().length > transportConfiguration.maximumRequestBodyBytes())
 			return emptyResponse(413, "Content Too Large", List.of());
@@ -559,10 +673,24 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					McpJsonRpcError.unsupportedProtocolVersion(requestedProtocolVersion),
 					corsHeaders);
 
-		if (!"server/discover".equals(mappedRequest.method()))
+		RequestIdRegistration idRegistration =
+				requestControl.registerRequestId(mappedRequest.id());
+		if (idRegistration == RequestIdRegistration.TERMINATED)
+			return null;
+		if (idRegistration == RequestIdRegistration.DUPLICATE) {
+			application.recordDuplicateIdRejection();
+			return applicationResponse(
+					McpApplicationResponse.duplicateRequestId(mappedRequest.id()),
+					mappedRequest.id(), corsHeaders);
+		}
+
+		boolean discoveryRequest = "server/discover".equals(mappedRequest.method());
+		Optional<McpApplicationRequestHandler> applicationHandler =
+				applicationRouter.resolve(mappedRequest.method());
+		if (!discoveryRequest && applicationHandler.isEmpty())
 			return methodNotFound(mappedRequest, corsHeaders);
 
-		if (!mappedRequest.params().fields().members().isEmpty())
+		if (discoveryRequest && !mappedRequest.params().fields().members().isEmpty())
 			return jsonRpcError(400, "Bad Request", Optional.of(mappedRequest.id()),
 					new McpJsonRpcError(McpJsonRpcError.INVALID_PARAMS,
 							"Invalid params", Optional.empty()), corsHeaders);
@@ -580,10 +708,44 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (admissionDecision == McpRequestAdmissionDecision.REJECT)
 			return emptyResponse(403, "Forbidden", corsHeaders);
 
-		McpJsonRpcMessage.ResultResponse response = new McpJsonRpcMessage.ResultResponse(
-				mappedRequest.id(), capabilityRegistry.discoverResult().toWireResult(),
-				McpJsonObject.empty());
-		return jsonResponse(200, "OK", envelopeCodec.encode(response), corsHeaders);
+		if (discoveryRequest) {
+			McpJsonRpcMessage.ResultResponse response = new McpJsonRpcMessage.ResultResponse(
+					mappedRequest.id(), capabilityRegistry.discoverResult().toWireResult(),
+					McpJsonObject.empty());
+			return jsonResponse(200, "OK", envelopeCodec.encode(response), corsHeaders);
+		}
+
+		requestControl.handoff(application, () -> application.dispatch(
+				request, mappedRequest, applicationHandler.orElseThrow(),
+				requestControl.deadlineNanos(),
+				response -> requestControl.writeApplicationResponse(
+						applicationResponse(response, mappedRequest.id(), corsHeaders),
+						callback),
+				requestControl::applicationTerminated));
+		return null;
+	}
+
+	private MicrohttpResponse applicationResponse(McpApplicationResponse response,
+			McpJsonRpcId requestId, List<Header> additionalHeaders) {
+		requireNonNull(response);
+		requireNonNull(requestId);
+		requireNonNull(additionalHeaders);
+
+		MicrohttpResponse httpResponse;
+		try {
+			httpResponse = response.message()
+					.map(message -> jsonResponse(response.status(), response.reason(),
+							envelopeCodec.encode(message), additionalHeaders))
+					.orElseGet(() -> emptyResponse(
+							response.status(), response.reason(), additionalHeaders));
+		} catch (Throwable throwable) {
+			McpJsonRpcError error = new McpJsonRpcError(
+					McpJsonRpcError.INTERNAL_ERROR, "Internal error", Optional.empty());
+			httpResponse = jsonRpcError(500, "Internal Server Error",
+					Optional.of(requestId), error, additionalHeaders);
+		}
+
+		return httpResponse;
 	}
 
 	private MicrohttpResponse processPreflight(MicrohttpRequest request,
@@ -1347,16 +1509,253 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	private void closeFailedStart(@Nullable EventLoop failedEventLoop,
-			ThreadPoolExecutor failedProcessor) {
+			@Nullable ThreadPoolExecutor failedProcessor,
+			@Nullable McpApplicationExecution failedApplicationExecution) {
+		boolean interrupted = false;
+		long cleanupStartedAt = System.nanoTime();
+		long cleanupTimeoutNanos = transportConfiguration.shutdownTimeout().toNanos();
+
 		if (failedEventLoop != null) {
-			failedEventLoop.stop();
 			try {
-				failedEventLoop.join();
-			} catch (InterruptedException exception) {
-				Thread.currentThread().interrupt();
+				failedEventLoop.stop();
+			} catch (Throwable ignored) {
+				// Preserve the startup failure; residual state below blocks unsafe reuse.
 			}
 		}
-		failedProcessor.shutdownNow();
+		if (failedApplicationExecution != null) {
+			try {
+				failedApplicationExecution.stop();
+			} catch (Throwable ignored) {
+				// Preserve the startup failure; residual state below blocks unsafe reuse.
+			}
+		}
+		if (failedProcessor != null) {
+			try {
+				failedProcessor.shutdownNow();
+			} catch (Throwable ignored) {
+				// Preserve the startup failure; residual state below blocks unsafe reuse.
+			}
+		}
+
+		while (failedEventLoop != null && !failedEventLoop.isTerminated()) {
+			long remainingNanos = remainingShutdownNanos(
+					cleanupStartedAt, cleanupTimeoutNanos);
+			if (remainingNanos <= 0L)
+				break;
+			try {
+				if (failedEventLoop.join(Duration.ofNanos(remainingNanos)))
+					break;
+			} catch (InterruptedException exception) {
+				interrupted = true;
+			}
+		}
+
+		while (failedProcessor != null && !failedProcessor.isTerminated()) {
+			long remainingNanos = remainingShutdownNanos(
+					cleanupStartedAt, cleanupTimeoutNanos);
+			if (remainingNanos <= 0L)
+				break;
+			try {
+				failedProcessor.awaitTermination(remainingNanos, TimeUnit.NANOSECONDS);
+			} catch (InterruptedException exception) {
+				interrupted = true;
+			}
+		}
+
+		while (failedApplicationExecution != null
+				&& !failedApplicationExecution.isTerminated()) {
+			long remainingNanos = remainingShutdownNanos(
+					cleanupStartedAt, cleanupTimeoutNanos);
+			if (remainingNanos <= 0L)
+				break;
+			try {
+				if (failedApplicationExecution.awaitTermination(
+						Duration.ofNanos(remainingNanos)))
+					break;
+			} catch (InterruptedException exception) {
+				interrupted = true;
+			}
+		}
+
+		if (failedEventLoop != null && !failedEventLoop.isTerminated())
+			residualEventLoop = failedEventLoop;
+		if (failedProcessor != null && !failedProcessor.isTerminated())
+			residualRequestProcessor = failedProcessor;
+		if (failedApplicationExecution != null
+				&& !failedApplicationExecution.isTerminated())
+			residualApplicationExecution = failedApplicationExecution;
+
+		if (interrupted)
+			Thread.currentThread().interrupt();
+	}
+
+	/**
+	 * Arbitrates protocol-task ownership against asynchronous application
+	 * ownership for one transport request. Handoff invokes registration while
+	 * holding the lock so cancellation cannot fall into the gap between the two
+	 * owners.
+	 */
+	private final class RequestControl {
+		private final MicrohttpRequest request;
+		private final long deadlineNanos;
+		private final Object lock;
+		private @Nullable FutureTask<Void> protocolTask;
+		private @Nullable McpApplicationExecution owningApplication;
+		private @Nullable McpJsonRpcId registeredRequestId;
+		private boolean applicationOwned;
+		private boolean canceled;
+		private boolean terminal;
+
+		private RequestControl(MicrohttpRequest request, long deadlineNanos) {
+			this.request = requireNonNull(request);
+			this.deadlineNanos = deadlineNanos;
+			this.lock = new Object();
+		}
+
+		private long deadlineNanos() {
+			return deadlineNanos;
+		}
+
+		private RequestIdRegistration registerRequestId(McpJsonRpcId requestId) {
+			requireNonNull(requestId);
+			synchronized (lock) {
+				if (canceled || terminal)
+					return RequestIdRegistration.TERMINATED;
+				if (registeredRequestId != null)
+					throw new IllegalStateException("The request ID is already registered.");
+				if (activeRequestIds.putIfAbsent(requestId, this) != null)
+					return RequestIdRegistration.DUPLICATE;
+				registeredRequestId = requestId;
+				return RequestIdRegistration.REGISTERED;
+			}
+		}
+
+		private void bindTask(FutureTask<Void> task) {
+			synchronized (lock) {
+				if (protocolTask != null)
+					throw new IllegalStateException("The protocol task is already bound.");
+				protocolTask = requireNonNull(task);
+			}
+		}
+
+		private boolean handoff(McpApplicationExecution application,
+				Runnable registration) {
+			requireNonNull(application);
+			requireNonNull(registration);
+
+			synchronized (lock) {
+				if (canceled || terminal)
+					return false;
+
+				applicationOwned = true;
+				owningApplication = application;
+				try {
+					registration.run();
+				} catch (Throwable throwable) {
+					if (!terminal) {
+						applicationOwned = false;
+						owningApplication = null;
+					}
+					throw throwable;
+				}
+				return true;
+			}
+		}
+
+		private void completeProtocol(@Nullable MicrohttpResponse response,
+				Consumer<MicrohttpResponse> callback) {
+			boolean writeResponse;
+			synchronized (lock) {
+				protocolTask = null;
+				if (applicationOwned || terminal)
+					return;
+
+				terminal = true;
+				writeResponse = !canceled && response != null;
+				releaseRequestId();
+			}
+
+			requestControls.remove(request, this);
+			if (writeResponse)
+				callback.accept(requireNonNull(response));
+		}
+
+		private boolean writeApplicationResponse(MicrohttpResponse response,
+				Consumer<MicrohttpResponse> callback) {
+			requireNonNull(response);
+			requireNonNull(callback);
+			synchronized (lock) {
+				if (!applicationOwned || canceled || terminal)
+					return false;
+
+				applicationOwned = false;
+				owningApplication = null;
+				terminal = true;
+				protocolTask = null;
+				releaseRequestId();
+			}
+
+			requestControls.remove(request, this);
+			try {
+				callback.accept(response);
+			} catch (Throwable ignored) {
+				// The terminal reservation remains authoritative if transport delivery fails.
+			}
+			return true;
+		}
+
+		private void cancel(StreamTerminationReason reason, @Nullable Throwable cause) {
+			FutureTask<Void> task;
+			boolean remove;
+			synchronized (lock) {
+				if (terminal)
+					return;
+
+				canceled = true;
+				task = protocolTask;
+				remove = !applicationOwned;
+				if (applicationOwned) {
+					// Application cancellation runs under the ownership lock. Its
+					// terminal cleanup is reentrant, and this closes the gap in which a
+					// queued deadline or handler response could otherwise win after the
+					// transport had already marked this control canceled.
+					requireNonNull(owningApplication,
+							"Application ownership requires an execution runtime.")
+							.cancel(request, requireNonNull(reason), cause);
+				} else {
+					terminal = true;
+					releaseRequestId();
+				}
+			}
+
+			if (task != null)
+				task.cancel(true);
+			if (remove)
+				requestControls.remove(request, this);
+		}
+
+		private void applicationTerminated() {
+			synchronized (lock) {
+				applicationOwned = false;
+				owningApplication = null;
+				terminal = true;
+				releaseRequestId();
+			}
+			requestControls.remove(request, this);
+		}
+
+		private void releaseRequestId() {
+			McpJsonRpcId requestId = registeredRequestId;
+			registeredRequestId = null;
+			if (requestId != null)
+				activeRequestIds.remove(requestId, this);
+		}
+	}
+
+	private enum RequestIdRegistration {
+		REGISTERED,
+		DUPLICATE,
+		TERMINATED
 	}
 
 	private enum LifecycleState {
