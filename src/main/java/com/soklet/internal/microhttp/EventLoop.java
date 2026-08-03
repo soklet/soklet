@@ -34,6 +34,7 @@ public class EventLoop {
     private final AtomicBoolean stopAccepting;
     private final AtomicBoolean stopConnections;
     private final AtomicBoolean draining;
+    private final AtomicBoolean unexpectedTerminationNotified;
     private final AtomicInteger admittedConnections;
     private final ServerSocketChannel serverSocketChannel;
     private final List<ConnectionEventLoop> connectionEventLoops;
@@ -93,6 +94,7 @@ public class EventLoop {
         stopAccepting = new AtomicBoolean();
         stopConnections = new AtomicBoolean();
         draining = new AtomicBoolean();
+        unexpectedTerminationNotified = new AtomicBoolean();
         admittedConnections = new AtomicInteger();
         lifecycleLock = new Object();
 
@@ -101,7 +103,8 @@ public class EventLoop {
         try {
             for (int i = 0; i < options.concurrency(); i++) {
                 connectionEventLoops.add(new ConnectionEventLoop(
-                        options, logger, handler, connectionCounter, stopConnections, draining));
+                        options, logger, handler, connectionCounter, stopConnections, draining,
+                        this::handleUnexpectedTermination));
             }
         } catch (IOException | RuntimeException | Error throwable) {
             connectionEventLoops.forEach(ConnectionEventLoop::closeBeforeStart);
@@ -153,7 +156,21 @@ public class EventLoop {
     }
 
     public int getPort() throws IOException {
-        return serverSocketChannel.getLocalAddress() instanceof InetSocketAddress a ? a.getPort() : -1;
+        return getLocalAddress().getPort();
+    }
+
+    /**
+     * Returns the effective local address of the bound listener. This is authoritative when
+     * port zero was requested and avoids reconstructing diagnostics from configured values.
+     */
+    public InetSocketAddress getLocalAddress() throws IOException {
+        SocketAddress localAddress = serverSocketChannel.getLocalAddress();
+
+        if (localAddress instanceof InetSocketAddress inetSocketAddress) {
+            return inetSocketAddress;
+        }
+
+        throw new IOException("The event loop is not bound to an internet socket address.");
     }
 
     public void start() {
@@ -195,17 +212,26 @@ public class EventLoop {
             } catch (Throwable ignored) {
                 // No safe fallback sink is available from the accept-loop thread.
             }
-            stopAccepting.set(true);
-            stopConnections.set(true); // stop the world on critical error
-            connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
-            try {
-                connectionListener.didTerminateEventLoop(this, throwable);
-            } catch (Throwable ignored) {
-                // No safe fallback sink is available from the accept-loop thread.
-            }
+            handleUnexpectedTermination(throwable);
         } finally {
             CloseUtils.closeQuietly(selector);
             CloseUtils.closeQuietly(serverSocketChannel);
+        }
+    }
+
+    private void handleUnexpectedTermination(Throwable throwable) {
+        stopAccepting.set(true);
+        stopConnections.set(true);
+        selector.wakeup();
+        connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
+        if (!unexpectedTerminationNotified.compareAndSet(false, true)) {
+            return;
+        }
+
+        try {
+            connectionListener.didTerminateEventLoop(this, throwable);
+        } catch (Throwable ignored) {
+            // No safe fallback sink is available from an event-loop thread.
         }
     }
 
@@ -369,6 +395,20 @@ public class EventLoop {
         joinConnectionLoops();
     }
 
+    public boolean join(Duration timeout) throws InterruptedException {
+        long timeoutNanos = Math.max(0L, timeout.toNanos());
+        long deadlineNanos = System.nanoTime() + timeoutNanos;
+        if (!joinThread(thread, deadlineNanos)) {
+            return false;
+        }
+        for (ConnectionEventLoop connectionEventLoop : connectionEventLoops) {
+            if (!connectionEventLoop.joinUntil(deadlineNanos)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public void joinAcceptLoop() throws InterruptedException {
         thread.join();
     }
@@ -377,6 +417,25 @@ public class EventLoop {
         for (ConnectionEventLoop connectionEventLoop : connectionEventLoops) {
             connectionEventLoop.join();
         }
+    }
+
+    public boolean isTerminated() {
+        return !thread.isAlive()
+                && connectionEventLoops.stream().allMatch(ConnectionEventLoop::isTerminated);
+    }
+
+    private boolean joinThread(Thread threadToJoin, long deadlineNanos)
+            throws InterruptedException {
+        while (threadToJoin.isAlive()) {
+            long remainingNanos = deadlineNanos - System.nanoTime();
+            if (remainingNanos <= 0L) {
+                return false;
+            }
+            long millis = remainingNanos / 1_000_000L;
+            int nanos = (int) (remainingNanos % 1_000_000L);
+            threadToJoin.join(millis, nanos);
+        }
+        return true;
     }
 
     public boolean awaitConnectionsDrained(Duration timeout) throws InterruptedException {

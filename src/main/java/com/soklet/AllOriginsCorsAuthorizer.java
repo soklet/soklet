@@ -22,6 +22,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -81,9 +82,27 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);
 
+		return authorizePreflight(corsPreflight, availableResourceMethodsByHttpMethod.keySet());
+	}
+
+	@NonNull
+	@Override
+	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																														@NonNull CorsPreflight corsPreflight,
+																														@NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
+		requireNonNull(request);
+		requireNonNull(corsPreflight);
+		requireNonNull(availableHttpMethods);
+
+		return authorizePreflight(corsPreflight, availableHttpMethods);
+	}
+
+	@NonNull
+	private Optional<CorsPreflightResponse> authorizePreflight(@NonNull CorsPreflight corsPreflight,
+																														 @NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
 		// Reflect the requested header names (no "*"), allow methods for the resource, and set a cache TTL.
 		return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(corsPreflight.getOrigin())
-				.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
+				.accessControlAllowMethods(availableHttpMethods)
 				.accessControlAllowHeaders(corsPreflight.getAccessControlRequestHeaders())
 				.accessControlMaxAge(DEFAULT_ACCESS_CONTROL_MAX_AGE)
 				.accessControlAllowCredentials(true)

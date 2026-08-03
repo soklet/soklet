@@ -9,6 +9,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
@@ -24,6 +25,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * This class represents an independent, threaded event loop for managing a group of connections.
@@ -221,6 +223,11 @@ class ConnectionEventLoop {
     private final AtomicLong connectionCounter;
     private final AtomicBoolean stop;
     private final AtomicBoolean draining;
+    private final Consumer<Throwable> unexpectedTerminationHandler;
+    private final byte[] badRequestResponse;
+    private final byte[] expectationFailedResponse;
+    private final byte[] requestHeaderFieldsTooLargeResponse;
+    private final byte[] requestUriTooLongResponse;
 
     private final Scheduler timeoutQueue;
     private final Queue<Runnable> taskQueue;
@@ -241,13 +248,20 @@ class ConnectionEventLoop {
             Handler handler,
             AtomicLong connectionCounter,
             AtomicBoolean stop,
-            AtomicBoolean draining) throws IOException {
+            AtomicBoolean draining,
+            Consumer<Throwable> unexpectedTerminationHandler) throws IOException {
         this.options = options;
         this.logger = logger;
         this.handler = handler;
         this.connectionCounter = connectionCounter;
         this.stop = stop;
         this.draining = draining;
+        this.unexpectedTerminationHandler = unexpectedTerminationHandler;
+        this.badRequestResponse = rawErrorResponse(400, "Bad Request");
+        this.expectationFailedResponse = rawErrorResponse(417, "Expectation Failed");
+        this.requestHeaderFieldsTooLargeResponse = rawErrorResponse(
+                431, "Request Header Fields Too Large");
+        this.requestUriTooLongResponse = rawErrorResponse(414, "URI Too Long");
 
         connectionCount = new AtomicInteger();
         pendingRegistrationCount = new AtomicInteger();
@@ -281,18 +295,6 @@ class ConnectionEventLoop {
         static final String CLOSE = "close";
         static final String CHUNKED = "chunked";
 
-        static final byte[] BAD_REQUEST_RESPONSE =
-                "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
-                        .getBytes(StandardCharsets.US_ASCII);
-        static final byte[] EXPECTATION_FAILED_RESPONSE =
-                "HTTP/1.1 417 Expectation Failed\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
-                        .getBytes(StandardCharsets.US_ASCII);
-        static final byte[] REQUEST_HEADER_FIELDS_TOO_LARGE_RESPONSE =
-                "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
-                        .getBytes(StandardCharsets.US_ASCII);
-        static final byte[] REQUEST_URI_TOO_LONG_RESPONSE =
-                "HTTP/1.1 414 URI Too Long\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
-                        .getBytes(StandardCharsets.US_ASCII);
         static final byte[] CONTINUE_RESPONSE =
                 "HTTP/1.1 100 Continue\r\n\r\n"
                         .getBytes(StandardCharsets.US_ASCII);
@@ -336,7 +338,7 @@ class ConnectionEventLoop {
             this.remoteAddress = remoteAddress;
             this.admission = admission;
             closed = new AtomicBoolean(false);
-            requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestSize(),
+            requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestBodySize(),
                     options.maxHeaderCount(), options.maxHeadersSize(), options.maxRequestTargetLength());
             scheduleRequestReadTimeoutForCurrentParserState();
         }
@@ -605,12 +607,12 @@ class ConnectionEventLoop {
 
         private void respondToRequestTooLarge(RequestTooLargeException.Reason reason) {
             if (reason == RequestTooLargeException.Reason.HEADERS) {
-                respondWithRawError(REQUEST_HEADER_FIELDS_TOO_LARGE_RESPONSE);
+                respondWithRawError(requestHeaderFieldsTooLargeResponse);
                 return;
             }
 
             if (reason == RequestTooLargeException.Reason.URI_TOO_LONG) {
-                respondWithRawError(REQUEST_URI_TOO_LONG_RESPONSE);
+                respondWithRawError(requestUriTooLongResponse);
                 return;
             }
 
@@ -641,11 +643,11 @@ class ConnectionEventLoop {
         }
 
         private void respondToMalformedRequest() {
-            respondWithRawError(BAD_REQUEST_RESPONSE);
+            respondWithRawError(badRequestResponse);
         }
 
         private void respondToExpectationFailed() {
-            respondWithRawError(EXPECTATION_FAILED_RESPONSE);
+            respondWithRawError(expectationFailedResponse);
         }
 
         private void respondWithRawError(byte[] response) {
@@ -1412,6 +1414,22 @@ class ConnectionEventLoop {
         thread.join();
     }
 
+    boolean joinUntil(long deadlineNanos) throws InterruptedException {
+        while (thread.isAlive()) {
+            long remainingNanos = deadlineNanos - System.nanoTime();
+            if (remainingNanos <= 0L)
+                return false;
+            long millis = remainingNanos / 1_000_000L;
+            int nanos = (int) (remainingNanos % 1_000_000L);
+            thread.join(millis, nanos);
+        }
+        return true;
+    }
+
+    boolean isTerminated() {
+        return !thread.isAlive();
+    }
+
     void beginDrain() {
         taskQueue.add(() -> {
             for (SelectionKey selKey : selector.keys()) {
@@ -1436,17 +1454,68 @@ class ConnectionEventLoop {
                 // No safe fallback sink is available from the connection-event-loop thread.
             }
             stop.set(true); // stop the world on critical error
+            try {
+                unexpectedTerminationHandler.accept(throwable);
+            } catch (Throwable ignored) {
+                // The parent event loop owns reporting; no secondary failure may escape here.
+            }
         } finally {
             registrationsClosed.set(true);
             closePendingRegistrations();
-            for (SelectionKey selKey : selector.keys()) {
-                Object attachment = selKey.attachment();
-                if (attachment instanceof Connection connection) {
-                    connection.failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
+            try {
+                for (SelectionKey selKey : selector.keys()) {
+                    Object attachment = selKey.attachment();
+                    if (attachment instanceof Connection connection) {
+                        connection.failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
+                    }
                 }
+            } catch (ClosedSelectorException ignored) {
+                // A fatal selector failure may already have closed it.
             }
             CloseUtils.closeQuietly(selector);
         }
+    }
+
+    private byte[] rawErrorResponse(int status, String reason) {
+        StringBuilder response = new StringBuilder()
+                .append("HTTP/1.1 ").append(status).append(' ').append(reason).append("\r\n")
+                .append("Connection: close\r\n")
+                .append("Content-Length: 0\r\n");
+        for (Header header : options.earlyErrorResponseHeaders()) {
+            if (!validEarlyErrorHeader(header))
+                throw new IllegalArgumentException("Invalid early-error response header.");
+            response.append(header.name()).append(": ").append(header.value()).append("\r\n");
+        }
+        response.append("\r\n");
+        return response.toString().getBytes(StandardCharsets.US_ASCII);
+    }
+
+    private boolean validEarlyErrorHeader(Header header) {
+        if (header == null || header.name() == null || header.value() == null
+                || header.name().isEmpty())
+            return false;
+
+        String name = header.name();
+        if ("connection".equalsIgnoreCase(name)
+                || "content-length".equalsIgnoreCase(name)
+                || "transfer-encoding".equalsIgnoreCase(name))
+            return false;
+
+        for (int index = 0; index < name.length(); index++) {
+            char character = name.charAt(index);
+            if (!(character >= '0' && character <= '9')
+                    && !(character >= 'A' && character <= 'Z')
+                    && !(character >= 'a' && character <= 'z')
+                    && "!#$%&'*+-.^_`|~".indexOf(character) < 0)
+                return false;
+        }
+
+        for (int index = 0; index < header.value().length(); index++) {
+            char character = header.value().charAt(index);
+            if (character < 0x20 || character > 0x7E)
+                return false;
+        }
+        return true;
     }
 
     private void doStart() throws IOException {

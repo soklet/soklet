@@ -67,6 +67,26 @@ public interface CorsAuthorizer {
 																										 @NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod);
 
 	/**
+	 * Authorizes a <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">CORS preflight</a> request for a transport that is not backed by Soklet <em>Resource Methods</em>.
+	 * <p>
+	 * The default implementation rejects the request. Implementations must explicitly override this method to authorize preflight requests for transport-neutral HTTP endpoints.
+	 *
+	 * @param request              the preflight request to authorize
+	 * @param corsPreflight        the CORS preflight data provided in the request
+	 * @param availableHttpMethods HTTP methods that are available to serve requests according to parameters specified by the preflight data
+	 * @return a {@link CorsPreflightResponse} if authorized, or {@link Optional#empty()} if not authorized
+	 */
+	@NonNull
+	default Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																				 @NonNull CorsPreflight corsPreflight,
+																				 @NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
+		requireNonNull(request);
+		requireNonNull(corsPreflight);
+		requireNonNull(availableHttpMethods);
+		return Optional.empty();
+	}
+
+	/**
 	 * Acquires a threadsafe {@link CorsAuthorizer} configured to permit all cross-domain requests <strong>regardless of {@code Origin}</strong>.
 	 * <p>
 	 * The returned instance is guaranteed to be a JVM-wide singleton.

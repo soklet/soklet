@@ -3,6 +3,9 @@ package com.soklet.internal.microhttp;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
+import java.util.List;
+
+import static java.util.Objects.requireNonNull;
 
 public class OptionsBuilder {
     private String host;
@@ -19,11 +22,13 @@ public class OptionsBuilder {
     private int readBufferSize;
     private int acceptLength;
     private int maxRequestSize;
+    private int maxRequestBodySize;
     private int maxHeaderCount;
     private int maxHeadersSize;
     private int maxRequestTargetLength;
     private int maxConnections;
     private int concurrency;
+    private List<Header> earlyErrorResponseHeaders;
 
     private OptionsBuilder() {
         this.host = "localhost";
@@ -37,11 +42,13 @@ public class OptionsBuilder {
         this.readBufferSize = 1_024 * 64;
         this.acceptLength = 0;
         this.maxRequestSize = 1_024 * 1_024;
+        this.maxRequestBodySize = this.maxRequestSize;
         this.maxHeaderCount = 100;
         this.maxHeadersSize = 64 * 1_024;
         this.maxRequestTargetLength = 8_192;
         this.maxConnections = 0;
         this.concurrency = Runtime.getRuntime().availableProcessors();
+        this.earlyErrorResponseHeaders = List.of();
     }
 
     public static OptionsBuilder newBuilder() {
@@ -49,6 +56,13 @@ public class OptionsBuilder {
     }
 
     public Options build() {
+        if (this.maxRequestSize < 1)
+            throw new IllegalArgumentException("Maximum aggregate request size must be positive.");
+        if (this.maxRequestBodySize < 1)
+            throw new IllegalArgumentException("Maximum request-body size must be positive.");
+        if (this.maxRequestBodySize > this.maxRequestSize)
+            throw new IllegalArgumentException("Maximum request-body size must not exceed the aggregate request size.");
+
         return new Options(this.host,
             this.port,
             this.reuseAddr,
@@ -60,11 +74,13 @@ public class OptionsBuilder {
             this.readBufferSize,
             this.acceptLength,
             this.maxRequestSize,
+            this.maxRequestBodySize,
             this.maxHeaderCount,
             this.maxHeadersSize,
             this.maxRequestTargetLength,
             this.maxConnections,
-            this.concurrency);
+            this.concurrency,
+            this.earlyErrorResponseHeaders);
     }
 
     public OptionsBuilder withHost(String host) {
@@ -119,6 +135,16 @@ public class OptionsBuilder {
 
     public OptionsBuilder withMaxRequestSize(int maxRequestSize) {
         this.maxRequestSize = maxRequestSize;
+        this.maxRequestBodySize = maxRequestSize;
+        return this;
+    }
+
+    /**
+     * Sets the body-only request limit independently from the aggregate buffered-request limit.
+     * Calling {@link #withMaxRequestSize(int)} afterward resets this value to the aggregate limit.
+     */
+    public OptionsBuilder withMaxRequestBodySize(int maxRequestBodySize) {
+        this.maxRequestBodySize = maxRequestBodySize;
         return this;
     }
 
@@ -144,6 +170,15 @@ public class OptionsBuilder {
 
     public OptionsBuilder withConcurrency(int concurrency) {
         this.concurrency = concurrency;
+        return this;
+    }
+
+    /**
+     * Adds fixed response headers to parser-owned HTTP errors that occur before request dispatch.
+     */
+    public OptionsBuilder withEarlyErrorResponseHeaders(List<Header> headers) {
+        requireNonNull(headers);
+        this.earlyErrorResponseHeaders = List.copyOf(headers);
         return this;
     }
 }

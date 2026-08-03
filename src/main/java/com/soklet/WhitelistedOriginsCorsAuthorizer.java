@@ -137,6 +137,24 @@ public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<
 		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);
 
+		return authorizePreflight(corsPreflight, availableResourceMethodsByHttpMethod.keySet());
+	}
+
+	@NonNull
+	@Override
+	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																														@NonNull CorsPreflight corsPreflight,
+																														@NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
+		requireNonNull(request);
+		requireNonNull(corsPreflight);
+		requireNonNull(availableHttpMethods);
+
+		return authorizePreflight(corsPreflight, availableHttpMethods);
+	}
+
+	@NonNull
+	private Optional<CorsPreflightResponse> authorizePreflight(@NonNull CorsPreflight corsPreflight,
+																														 @NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
 		String origin = normalizeOrigin(corsPreflight.getOrigin());
 
 		if (isSuspiciousOrigin(origin))
@@ -149,7 +167,7 @@ public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<
 			Boolean accessControlAllowCredentials = getAllowCredentialsResolver().apply(origin);
 
 			return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(corsPreflight.getOrigin())
-					.accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
+					.accessControlAllowMethods(availableHttpMethods)
 					.accessControlAllowHeaders(corsPreflight.getAccessControlRequestHeaders())
 					.accessControlAllowCredentials(accessControlAllowCredentials)
 					.accessControlMaxAge(DEFAULT_ACCESS_CONTROL_MAX_AGE)

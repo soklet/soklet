@@ -21,6 +21,7 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -74,6 +75,18 @@ class NoOriginsCorsAuthorizer implements CorsAuthorizer {
 		requireNonNull(request);
 		requireNonNull(corsPreflight);
 		requireNonNull(availableResourceMethodsByHttpMethod);
+
+		return Optional.empty();
+	}
+
+	@NonNull
+	@Override
+	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																														@NonNull CorsPreflight corsPreflight,
+																														@NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
+		requireNonNull(request);
+		requireNonNull(corsPreflight);
+		requireNonNull(availableHttpMethods);
 
 		return Optional.empty();
 	}

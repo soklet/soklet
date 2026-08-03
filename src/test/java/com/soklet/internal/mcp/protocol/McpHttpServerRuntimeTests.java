@@ -1,0 +1,907 @@
+/*
+ * Copyright 2022-2026 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.soklet.internal.mcp.protocol;
+
+import com.soklet.CorsAuthorizer;
+import com.soklet.Cors;
+import com.soklet.CorsPreflight;
+import com.soklet.CorsPreflightResponse;
+import com.soklet.CorsResponse;
+import com.soklet.HttpMethod;
+import com.soklet.Request;
+import com.soklet.ResourceMethod;
+import com.soklet.internal.microhttp.EventLoop;
+import com.soklet.internal.microhttp.MicrohttpResponse;
+import com.soklet.internal.microhttp.Options;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import javax.annotation.concurrent.NotThreadSafe;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+
+@NotThreadSafe
+public class McpHttpServerRuntimeTests {
+	private static final String LOOPBACK = "127.0.0.1";
+	private static final String PROTOCOL_VERSION = "2026-07-28";
+	private static final String DISCOVER_METHOD = "server/discover";
+
+	@Test
+	public void construction_does_not_bind_and_failed_start_is_restartable() throws Exception {
+		try (ServerSocket occupied = new ServerSocket()) {
+			occupied.setReuseAddress(false);
+			occupied.bind(new InetSocketAddress(LOOPBACK, 0));
+			int port = occupied.getLocalPort();
+			McpHttpServerRuntime runtime = runtime(configuration(port), defaultPolicy());
+
+			Assertions.assertFalse(runtime.isStarted());
+			Assertions.assertTrue(runtime.boundAddress().isEmpty());
+			Assertions.assertThrows(IOException.class, runtime::start);
+			Assertions.assertFalse(runtime.isStarted());
+			Assertions.assertTrue(runtime.boundAddress().isEmpty());
+
+			occupied.close();
+			try {
+				InetSocketAddress address = runtime.start();
+				Assertions.assertEquals(port, address.getPort());
+				Assertions.assertEquals(200, discover(port, "\"after-bind-failure\"").status());
+			} finally {
+				runtime.close();
+			}
+		}
+	}
+
+	@Test
+	public void discovery_works_as_the_first_request_and_preserves_id_types() throws Exception {
+		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
+
+		try {
+			InetSocketAddress address = runtime.start();
+			Assertions.assertTrue(address.getPort() > 0);
+			Assertions.assertEquals(address, runtime.boundAddress().orElseThrow());
+
+			RawResponse stringResponse = discover(address.getPort(), "\"discover-string\"");
+			RawResponse integerResponse = discover(address.getPort(), "42");
+
+			assertDiscoveryResponse(stringResponse, "\"discover-string\"");
+			assertDiscoveryResponse(integerResponse, "42");
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void mcp_and_ordinary_http_listeners_are_independent() throws Exception {
+		EventLoop ordinary = new EventLoop(Options.builder()
+				.withHost(LOOPBACK)
+				.withPort(0)
+				.withConcurrency(1)
+				.build(), (request, callback) -> callback.accept(new MicrohttpResponse(
+				200, "OK", List.of(), "ordinary".getBytes(StandardCharsets.UTF_8))));
+		McpHttpServerRuntime mcp = runtime(configuration(0), defaultPolicy());
+
+		try {
+			ordinary.start();
+			int ordinaryPort = ordinary.getPort();
+			int mcpPort = mcp.start().getPort();
+			Assertions.assertNotEquals(ordinaryPort, mcpPort);
+			Assertions.assertEquals("ordinary", send(ordinaryPort, "GET", "/",
+					List.of(new HeaderLine("Host", LOOPBACK + ":" + ordinaryPort)),
+					new byte[0]).bodyText());
+			Assertions.assertEquals(200, discover(mcpPort, "1").status());
+
+			ordinary.stop();
+			ordinary.join();
+			Assertions.assertEquals(200, discover(mcpPort, "2").status());
+		} finally {
+			ordinary.stop();
+			ordinary.join();
+			mcp.close();
+		}
+	}
+
+	@Test
+	public void alternating_mcp_instances_keep_discovery_state_independent()
+			throws Exception {
+		McpHttpServerRuntime first = runtime(configuration(0), defaultPolicy(), "first");
+		McpHttpServerRuntime second = runtime(configuration(0), defaultPolicy(), "second");
+
+		try {
+			int firstPort = first.start().getPort();
+			int secondPort = second.start().getPort();
+			for (int index = 0; index < 10; index++) {
+				RawResponse firstResponse = discover(firstPort, Integer.toString(index * 2));
+				RawResponse secondResponse = discover(secondPort,
+						Integer.toString(index * 2 + 1));
+				Assertions.assertTrue(firstResponse.bodyText().contains("\"name\":\"first\""),
+						firstResponse.bodyText());
+				Assertions.assertTrue(secondResponse.bodyText().contains("\"name\":\"second\""),
+						secondResponse.bodyText());
+			}
+		} finally {
+			first.close();
+			second.close();
+		}
+	}
+
+	@Test
+	public void lifecycle_is_idempotent_and_restartable_with_a_fresh_listener() throws Exception {
+		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
+		try {
+			runtime.stop();
+			int firstPort = runtime.start().getPort();
+			Assertions.assertThrows(IllegalStateException.class, runtime::start);
+			Assertions.assertEquals(200, discover(firstPort, "1").status());
+			runtime.stop();
+			runtime.stop();
+			Assertions.assertFalse(runtime.isStarted());
+			Assertions.assertTrue(runtime.boundAddress().isEmpty());
+
+			int secondPort = runtime.start().getPort();
+			Assertions.assertEquals(200, discover(secondPort, "2").status());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void residual_admission_work_blocks_restart_until_it_really_exits()
+			throws Exception {
+		CountDownLatch admissionStarted = new CountDownLatch(1);
+		AtomicBoolean releaseAdmission = new AtomicBoolean();
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(), request -> {
+					admissionStarted.countDown();
+					while (!releaseAdmission.get()) {
+						try {
+							Thread.sleep(10L);
+						} catch (InterruptedException ignored) {
+							// Deliberately model uncooperative application code.
+						}
+					}
+					return McpRequestAdmissionDecision.ACCEPT;
+				});
+		McpHttpServerRuntime runtime = runtime(
+				configurationWithShutdownTimeout(0, Duration.ofMillis(50)), policy);
+		Thread client = null;
+
+		try {
+			int port = runtime.start().getPort();
+			client = new Thread(() -> {
+				try {
+					discover(port, "1");
+				} catch (Throwable ignored) {
+					// Shutdown is expected to close this client-visible exchange.
+				}
+			}, "mcp-residual-admission-client");
+			client.start();
+			Assertions.assertTrue(admissionStarted.await(2, TimeUnit.SECONDS));
+
+			AtomicReference<Throwable> firstStopFailure = new AtomicReference<>();
+			AtomicReference<Throwable> secondStopFailure = new AtomicReference<>();
+			CountDownLatch stopReady = new CountDownLatch(2);
+			CountDownLatch stopTogether = new CountDownLatch(1);
+			Thread firstStop = stoppingThread(runtime, stopReady, stopTogether,
+					firstStopFailure, "mcp-first-stop");
+			Thread secondStop = stoppingThread(runtime, stopReady, stopTogether,
+					secondStopFailure, "mcp-second-stop");
+			firstStop.start();
+			secondStop.start();
+			Assertions.assertTrue(stopReady.await(2, TimeUnit.SECONDS));
+			stopTogether.countDown();
+			firstStop.join(2_000L);
+			secondStop.join(2_000L);
+			Assertions.assertFalse(firstStop.isAlive());
+			Assertions.assertFalse(secondStop.isAlive());
+			Assertions.assertNull(firstStopFailure.get());
+			Assertions.assertNull(secondStopFailure.get());
+			IllegalStateException exception = Assertions.assertThrows(
+					IllegalStateException.class, runtime::start);
+			Assertions.assertEquals(
+					"Cannot start MCP server while residual handler executions remain",
+					exception.getMessage());
+
+			releaseAdmission.set(true);
+			boolean restarted = false;
+			for (int attempt = 0; attempt < 200 && !restarted; attempt++) {
+				try {
+					runtime.start();
+					restarted = true;
+				} catch (IllegalStateException residual) {
+					Thread.sleep(10L);
+				}
+			}
+			Assertions.assertTrue(restarted, "Residual admission work did not drain.");
+		} finally {
+			releaseAdmission.set(true);
+			runtime.close();
+			if (client != null)
+				client.join(2_000L);
+		}
+	}
+
+	@Test
+	public void routing_host_method_and_content_negotiation_fail_before_protocol_dispatch()
+			throws Exception {
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger corsOriginChecks = new AtomicInteger();
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.fromWhitelistAuthorizer(origin -> {
+					corsOriginChecks.incrementAndGet();
+					return true;
+				}), request -> {
+					admissions.incrementAndGet();
+					return McpRequestAdmissionDecision.ACCEPT;
+				});
+		McpHttpServerRuntime runtime = runtime(configuration(0), policy);
+
+		try {
+			int port = runtime.start().getPort();
+			byte[] malformedJson = "not-json".getBytes(StandardCharsets.UTF_8);
+			Assertions.assertEquals(404, send(port, "POST", "/not-mcp",
+					standardHeaders(port, DISCOVER_METHOD), malformedJson).status());
+			Assertions.assertEquals(421, send(port, "POST", "/mcp",
+					replaceHeader(standardHeaders(port, DISCOVER_METHOD), "Host",
+							"evil.example:" + port), malformedJson).status());
+			Assertions.assertEquals(405, send(port, "GET", "/mcp",
+					List.of(new HeaderLine("Host", LOOPBACK + ":" + port)),
+					new byte[0]).status());
+			Assertions.assertEquals(421, send(port, "BREW", "/mcp",
+					replaceHeader(standardHeaders(port, DISCOVER_METHOD), "Host",
+							"evil.example:" + port), new byte[0]).status());
+			Assertions.assertEquals(403, send(port, "BREW", "/mcp",
+					append(standardHeaders(port, DISCOVER_METHOD),
+							new HeaderLine("Origin", "null")), new byte[0]).status());
+			Assertions.assertEquals(403, send(port, "BREW", "/mcp",
+					append(standardHeaders(port, DISCOVER_METHOD),
+							new HeaderLine("Origin", "https://evil.example")),
+					new byte[0]).status());
+			Assertions.assertEquals(405, send(port, "post", "/mcp",
+					standardHeaders(port, DISCOVER_METHOD), new byte[0]).status());
+			Assertions.assertEquals(405, send(port, "OPTIONS", "/mcp",
+					List.of(new HeaderLine("Host", LOOPBACK + ":" + port)),
+					new byte[0]).status());
+
+			List<HeaderLine> wrongContentType = replaceHeader(
+					standardHeaders(port, DISCOVER_METHOD), "Content-Type", "text/plain");
+			Assertions.assertEquals(415, send(port, "POST", "/mcp",
+					wrongContentType, discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION)).status());
+
+			List<HeaderLine> jsonOnlyAccept = replaceHeader(
+					standardHeaders(port, DISCOVER_METHOD), "Accept", JSON_MEDIA_TYPE);
+			Assertions.assertEquals(406, send(port, "POST", "/mcp", jsonOnlyAccept,
+					discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION)).status());
+
+			List<HeaderLine> explicitJsonRejection = replaceHeader(
+					standardHeaders(port, DISCOVER_METHOD), "Accept",
+					"*/*;q=1, application/json;q=0");
+			Assertions.assertEquals(406, send(port, "POST", "/mcp",
+					explicitJsonRejection,
+					discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION)).status());
+			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(0, corsOriginChecks.get(),
+					"Unknown wire methods must not be presented to CORS as fabricated POSTs.");
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void accept_negotiation_is_strict_and_uses_most_specific_quality()
+			throws Exception {
+		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
+
+		try {
+			int port = runtime.start().getPort();
+			byte[] body = discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION);
+			for (String accepted : List.of(
+					"application/json, text/event-stream",
+					"*/*",
+					"application/*, text/*",
+					"application/json;q=1, text/event-stream;q=0.5")) {
+				RawResponse response = send(port, "POST", "/mcp",
+						replaceHeader(standardHeaders(port, DISCOVER_METHOD),
+								"Accept", accepted), body);
+				Assertions.assertEquals(200, response.status(), accepted);
+			}
+
+			for (String rejected : List.of(
+					"application/json",
+					"text/event-stream",
+					"*/*;q=1, application/json;q=0",
+					"*/*;q=2",
+					"*/*;q=0.1234",
+					"application/json;q=1, text/event-stream;q=.5",
+					"*/*;q=1;q=0",
+					"*/*;q",
+					"*/*;q=\"1\"",
+					"application/json;charset=utf-8, text/event-stream")) {
+				RawResponse response = send(port, "POST", "/mcp",
+						replaceHeader(standardHeaders(port, DISCOVER_METHOD),
+								"Accept", rejected), body);
+				Assertions.assertEquals(406, response.status(), rejected);
+			}
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void parser_owned_errors_also_disable_caching() throws Exception {
+		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
+
+		try {
+			int port = runtime.start().getPort();
+			RawResponse missingHost = send(port, "POST", "/mcp",
+					removeHeader(standardHeaders(port, DISCOVER_METHOD), "Host"),
+					new byte[0]);
+			Assertions.assertEquals(400, missingHost.status());
+			Assertions.assertEquals("no-store", missingHost.singleHeader("Cache-Control"));
+
+			RawResponse duplicateHost = send(port, "POST", "/mcp",
+					append(standardHeaders(port, DISCOVER_METHOD),
+							new HeaderLine("Host", LOOPBACK + ":" + port)), new byte[0]);
+			Assertions.assertEquals(400, duplicateHost.status());
+			Assertions.assertEquals("no-store", duplicateHost.singleHeader("Cache-Control"));
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void ipv6_loopback_bind_authorizes_its_effective_authority()
+			throws Exception {
+		Assumptions.assumeTrue(ipv6LoopbackAvailable(), "IPv6 loopback is unavailable.");
+		McpHttpServerRuntime runtime = runtime(configurationWithHost(0, "::1"),
+				defaultPolicy());
+
+		try {
+			int port = runtime.start().getPort();
+			for (String authority : List.of(
+					"[::1]:" + port, "[0:0:0:0:0:0:0:1]:" + port)) {
+				RawResponse response = send("::1", port, "POST", "/mcp",
+						replaceHeader(standardHeaders(port, DISCOVER_METHOD),
+								"Host", authority),
+						discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION));
+				Assertions.assertEquals(200, response.status(), authority);
+			}
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void invalid_configured_hosts_fail_before_the_listener_is_created() {
+		for (String invalidHost : List.of(
+				"example.com:443", "https://example.com", " example.com", "exa_mple")) {
+			McpHttpEndpointPolicy policy = new McpHttpEndpointPolicy("/mcp",
+					Set.of(invalidHost), McpAbsentOriginPolicy.ALLOW,
+					CorsAuthorizer.rejectAllInstance(),
+					request -> McpRequestAdmissionDecision.ACCEPT);
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> runtime(configuration(0), policy), invalidHost);
+		}
+	}
+
+	@Test
+	public void transport_durations_must_fit_monotonic_nanosecond_accounting() {
+		McpHttpTransportConfiguration defaults = configuration(0);
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new McpHttpTransportConfiguration(
+						defaults.host(), defaults.port(), defaults.selectorResolution(),
+						defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
+						defaults.responseWriteIdleTimeout(),
+						Duration.ofSeconds(Long.MAX_VALUE), defaults.readBufferSize(),
+						defaults.acceptBacklog(), defaults.maximumAggregateRequestBytes(),
+						defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
+						defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
+						defaults.maximumConnections(),
+						defaults.connectionWriterConcurrency(),
+						defaults.requestProcessorConcurrency(),
+						defaults.requestProcessorQueueCapacity()));
+	}
+
+	@Test
+	public void cors_rejects_present_origins_by_default_and_reuses_shared_authorizer()
+			throws Exception {
+		McpHttpServerRuntime rejecting = runtime(configuration(0), defaultPolicy());
+		try {
+			int port = rejecting.start().getPort();
+			List<HeaderLine> headers = append(standardHeaders(port, DISCOVER_METHOD),
+					new HeaderLine("Origin", "https://allowed.example"));
+			Assertions.assertEquals(403, send(port, "POST", "/mcp", headers,
+					discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION)).status());
+		} finally {
+			rejecting.close();
+		}
+
+		AtomicInteger admissions = new AtomicInteger();
+		McpHttpEndpointPolicy allowingPolicy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://allowed.example")),
+				request -> {
+					admissions.incrementAndGet();
+					return McpRequestAdmissionDecision.ACCEPT;
+				});
+		McpHttpServerRuntime allowing = runtime(configuration(0), allowingPolicy);
+		try {
+			int port = allowing.start().getPort();
+			List<HeaderLine> headers = append(standardHeaders(port, DISCOVER_METHOD),
+					new HeaderLine("Origin", "https://allowed.example"));
+			RawResponse accepted = send(port, "POST", "/mcp", headers,
+					discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION));
+			Assertions.assertEquals(200, accepted.status());
+			Assertions.assertEquals("https://allowed.example",
+					accepted.singleHeader("Access-Control-Allow-Origin"));
+			Assertions.assertEquals(1, admissions.get());
+
+			RawResponse preflight = send(port, "OPTIONS", "/mcp", List.of(
+					new HeaderLine("Host", LOOPBACK + ":" + port),
+					new HeaderLine("Origin", "https://allowed.example"),
+					new HeaderLine("Access-Control-Request-Method", "POST"),
+					new HeaderLine("Access-Control-Request-Headers",
+							"Content-Type, MCP-Protocol-Version, Mcp-Method")), new byte[0]);
+			Assertions.assertEquals(204, preflight.status());
+			Assertions.assertEquals("POST, OPTIONS",
+					preflight.singleHeader("Access-Control-Allow-Methods"));
+			Assertions.assertEquals("no-store", preflight.singleHeader("Cache-Control"));
+			Assertions.assertEquals(1, admissions.get());
+
+			RawResponse invalidPreflight = send(port, "OPTIONS", "/mcp", List.of(
+					new HeaderLine("Host", LOOPBACK + ":" + port),
+					new HeaderLine("Origin", "https://allowed.example"),
+					new HeaderLine("Access-Control-Request-Method", "POST"),
+					new HeaderLine("Access-Control-Request-Headers", "X-Not-Mcp")),
+					new byte[0]);
+			Assertions.assertEquals(403, invalidPreflight.status());
+			Assertions.assertEquals(1, admissions.get());
+		} finally {
+			allowing.close();
+		}
+	}
+
+	@Test
+	public void absent_origin_policy_and_cors_hook_failures_fail_closed()
+			throws Exception {
+		AtomicInteger admissions = new AtomicInteger();
+		McpHttpEndpointPolicy requireOrigin = new McpHttpEndpointPolicy("/mcp", Set.of(),
+				McpAbsentOriginPolicy.REQUIRE_ORIGIN, CorsAuthorizer.acceptAllInstance(),
+				request -> {
+					admissions.incrementAndGet();
+					return McpRequestAdmissionDecision.ACCEPT;
+				});
+		McpHttpServerRuntime requiring = runtime(configuration(0), requireOrigin);
+		try {
+			int port = requiring.start().getPort();
+			Assertions.assertEquals(403, discover(port, "1").status());
+			Assertions.assertEquals(0, admissions.get());
+		} finally {
+			requiring.close();
+		}
+
+		for (CorsAuthorizer authorizer : List.of(
+				faultingCorsAuthorizer(false), faultingCorsAuthorizer(true))) {
+			McpHttpServerRuntime runtime = runtime(configuration(0),
+					McpHttpEndpointPolicy.forDiscovery(authorizer,
+							request -> McpRequestAdmissionDecision.ACCEPT));
+			try {
+				int port = runtime.start().getPort();
+				RawResponse response = send(port, "POST", "/mcp",
+						append(standardHeaders(port, DISCOVER_METHOD),
+								new HeaderLine("Origin", "https://allowed.example")),
+						discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION));
+				Assertions.assertEquals(500, response.status());
+				Assertions.assertEquals(0, response.body().length);
+				Assertions.assertFalse(
+						response.headers().containsKey("access-control-allow-origin"));
+
+				RawResponse preflightResponse = send(port, "OPTIONS", "/mcp", List.of(
+						new HeaderLine("Host", LOOPBACK + ":" + port),
+						new HeaderLine("Origin", "https://allowed.example"),
+						new HeaderLine("Access-Control-Request-Method", "POST"),
+						new HeaderLine("Access-Control-Request-Headers",
+								"Content-Type, MCP-Protocol-Version, Mcp-Method")),
+						new byte[0]);
+				Assertions.assertEquals(500, preflightResponse.status());
+				Assertions.assertEquals(0, preflightResponse.body().length);
+				Assertions.assertFalse(preflightResponse.headers()
+						.containsKey("access-control-allow-origin"));
+			} finally {
+				runtime.close();
+			}
+		}
+	}
+
+	@Test
+	public void modern_header_metadata_and_method_failures_have_deterministic_errors()
+			throws Exception {
+		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
+
+		try {
+			int port = runtime.start().getPort();
+			RawResponse missingProtocolVersionHeader = send(port, "POST", "/mcp",
+					removeHeader(standardHeaders(port, DISCOVER_METHOD),
+							"MCP-Protocol-Version"),
+					discoverBody("\"version-header\"", DISCOVER_METHOD,
+							PROTOCOL_VERSION));
+			assertJsonRpcError(missingProtocolVersionHeader, 400, -32020,
+					"\"version-header\"");
+
+			RawResponse missingMethodHeader = send(port, "POST", "/mcp",
+					removeHeader(standardHeaders(port, DISCOVER_METHOD), "Mcp-Method"),
+					discoverBody("\"header\"", DISCOVER_METHOD, PROTOCOL_VERSION));
+			assertJsonRpcError(missingMethodHeader, 400, -32020, "\"header\"");
+
+			RawResponse headerMismatch = send(port, "POST", "/mcp",
+					standardHeaders(port, DISCOVER_METHOD),
+					discoverBody("1", DISCOVER_METHOD, "2025-11-25"));
+			assertJsonRpcError(headerMismatch, 400, -32020, "1");
+
+			List<HeaderLine> unsupportedHeaders = replaceHeader(
+					standardHeaders(port, DISCOVER_METHOD), "MCP-Protocol-Version",
+					"2025-11-25");
+			RawResponse unsupported = send(port, "POST", "/mcp", unsupportedHeaders,
+					discoverBody("2", DISCOVER_METHOD, "2025-11-25"));
+			assertJsonRpcError(unsupported, 400, -32022, "2");
+			Assertions.assertTrue(unsupported.bodyText().contains("\"supported\":[\"2026-07-28\"]"));
+
+			String unknownMethod = "example/unknown";
+			RawResponse unknown = send(port, "POST", "/mcp",
+					replaceHeader(standardHeaders(port, DISCOVER_METHOD),
+							"Mcp-Method", unknownMethod),
+					discoverBody("3", unknownMethod, PROTOCOL_VERSION));
+			assertJsonRpcError(unknown, 404, -32601, "3");
+
+			RawResponse legacy = send(port, "POST", "/mcp",
+					replaceHeader(standardHeaders(port, DISCOVER_METHOD),
+							"Mcp-Method", "initialize"),
+					discoverBody("4", "initialize", PROTOCOL_VERSION));
+			assertJsonRpcError(legacy, 404, -32601, "4");
+			Assertions.assertTrue(legacy.bodyText().contains(PROTOCOL_VERSION));
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void request_body_limit_has_an_exact_body_only_boundary() throws Exception {
+		int maximumBodyBytes = 512;
+		McpHttpServerRuntime runtime = runtime(configuration(0, maximumBodyBytes),
+				defaultPolicy());
+
+		try {
+			int port = runtime.start().getPort();
+			byte[] valid = paddedDiscoverBody(maximumBodyBytes);
+			Assertions.assertEquals(maximumBodyBytes, valid.length);
+			Assertions.assertEquals(200, send(port, "POST", "/mcp",
+					standardHeaders(port, DISCOVER_METHOD), valid).status());
+
+			byte[] oneOver = Arrays.copyOf(valid, valid.length + 1);
+			oneOver[oneOver.length - 1] = ' ';
+			Assertions.assertEquals(413, send(port, "POST", "/mcp",
+					standardHeaders(port, DISCOVER_METHOD), oneOver).status());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	private static McpHttpServerRuntime runtime(McpHttpTransportConfiguration configuration,
+			McpHttpEndpointPolicy policy) {
+		return runtime(configuration, policy, "test-server");
+	}
+
+	private static McpHttpServerRuntime runtime(McpHttpTransportConfiguration configuration,
+			McpHttpEndpointPolicy policy, String serverName) {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(serverName, "3.6.0-SNAPSHOT"))
+				.build();
+		return new McpHttpServerRuntime(configuration, policy, endpoint);
+	}
+
+	private static McpHttpEndpointPolicy defaultPolicy() {
+		return McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
+				request -> McpRequestAdmissionDecision.ACCEPT);
+	}
+
+	private static McpHttpTransportConfiguration configuration(int port) {
+		return McpHttpTransportConfiguration.productionDefaults(port);
+	}
+
+	private static McpHttpTransportConfiguration configuration(int port,
+			int maximumBodyBytes) {
+		McpHttpTransportConfiguration defaults = configuration(port);
+		return new McpHttpTransportConfiguration(
+				defaults.host(), defaults.port(), defaults.selectorResolution(),
+				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
+				defaults.responseWriteIdleTimeout(), defaults.shutdownTimeout(),
+				defaults.readBufferSize(), defaults.acceptBacklog(),
+				maximumBodyBytes + defaults.maximumHeaderBytes()
+						+ defaults.maximumRequestTargetBytes() + 1_024,
+				maximumBodyBytes, defaults.maximumHeaderCount(),
+				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
+				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
+				defaults.requestProcessorConcurrency(),
+				defaults.requestProcessorQueueCapacity());
+	}
+
+	private static McpHttpTransportConfiguration configurationWithHost(int port,
+			String host) {
+		McpHttpTransportConfiguration defaults = configuration(port);
+		return new McpHttpTransportConfiguration(
+				host, defaults.port(), defaults.selectorResolution(),
+				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
+				defaults.responseWriteIdleTimeout(), defaults.shutdownTimeout(),
+				defaults.readBufferSize(), defaults.acceptBacklog(),
+				defaults.maximumAggregateRequestBytes(),
+				defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
+				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
+				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
+				defaults.requestProcessorConcurrency(),
+				defaults.requestProcessorQueueCapacity());
+	}
+
+	private static McpHttpTransportConfiguration configurationWithShutdownTimeout(
+			int port, Duration shutdownTimeout) {
+		McpHttpTransportConfiguration defaults = configuration(port);
+		return new McpHttpTransportConfiguration(
+				defaults.host(), defaults.port(), defaults.selectorResolution(),
+				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
+				defaults.responseWriteIdleTimeout(), shutdownTimeout,
+				defaults.readBufferSize(), defaults.acceptBacklog(),
+				defaults.maximumAggregateRequestBytes(),
+				defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
+				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
+				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
+				defaults.requestProcessorConcurrency(),
+				defaults.requestProcessorQueueCapacity());
+	}
+
+	private static RawResponse discover(int port, String idJson) throws Exception {
+		return send(port, "POST", "/mcp", standardHeaders(port, DISCOVER_METHOD),
+				discoverBody(idJson, DISCOVER_METHOD, PROTOCOL_VERSION));
+	}
+
+	private static byte[] discoverBody(String idJson, String method, String protocolVersion) {
+		return ("{\"jsonrpc\":\"2.0\",\"id\":" + idJson
+				+ ",\"method\":\"" + method + "\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\"" + protocolVersion + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}")
+				.getBytes(StandardCharsets.UTF_8);
+	}
+
+	private static byte[] paddedDiscoverBody(int size) {
+		byte[] body = discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION);
+		if (body.length > size)
+			throw new IllegalArgumentException("Requested test body is too small.");
+		byte[] paddedBody = Arrays.copyOf(body, size);
+		Arrays.fill(paddedBody, body.length, paddedBody.length, (byte) ' ');
+		return paddedBody;
+	}
+
+	private static List<HeaderLine> standardHeaders(int port, String method) {
+		return List.of(
+				new HeaderLine("Host", LOOPBACK + ":" + port),
+				new HeaderLine("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8"),
+				new HeaderLine("Accept", JSON_MEDIA_TYPE + ", text/event-stream"),
+				new HeaderLine("MCP-Protocol-Version", PROTOCOL_VERSION),
+				new HeaderLine("Mcp-Method", method));
+	}
+
+	private static List<HeaderLine> replaceHeader(List<HeaderLine> headers,
+			String name, String value) {
+		List<HeaderLine> replaced = new ArrayList<>();
+		boolean found = false;
+		for (HeaderLine header : headers) {
+			if (header.name().equalsIgnoreCase(name)) {
+				if (!found)
+					replaced.add(new HeaderLine(header.name(), value));
+				found = true;
+			} else {
+				replaced.add(header);
+			}
+		}
+		if (!found)
+			replaced.add(new HeaderLine(name, value));
+		return List.copyOf(replaced);
+	}
+
+	private static List<HeaderLine> removeHeader(List<HeaderLine> headers, String name) {
+		return headers.stream().filter(header -> !header.name().equalsIgnoreCase(name)).toList();
+	}
+
+	private static List<HeaderLine> append(List<HeaderLine> headers, HeaderLine header) {
+		List<HeaderLine> appended = new ArrayList<>(headers);
+		appended.add(header);
+		return List.copyOf(appended);
+	}
+
+	private static RawResponse send(int port, String method, String path,
+			List<HeaderLine> headers, byte[] body) throws Exception {
+		return send(LOOPBACK, port, method, path, headers, body);
+	}
+
+	private static RawResponse send(String host, int port, String method, String path,
+			List<HeaderLine> headers, byte[] body) throws Exception {
+		try (Socket socket = new Socket()) {
+			socket.connect(new InetSocketAddress(host, port), 3_000);
+			socket.setSoTimeout(5_000);
+			StringBuilder requestHead = new StringBuilder()
+					.append(method).append(' ').append(path).append(" HTTP/1.1\r\n");
+			for (HeaderLine header : headers)
+				requestHead.append(header.name()).append(": ")
+						.append(header.value()).append("\r\n");
+			requestHead.append("Content-Length: ").append(body.length).append("\r\n")
+					.append("Connection: close\r\n\r\n");
+			socket.getOutputStream().write(
+					requestHead.toString().getBytes(StandardCharsets.ISO_8859_1));
+			socket.getOutputStream().write(body);
+			socket.getOutputStream().flush();
+
+			ByteArrayOutputStream response = new ByteArrayOutputStream();
+			InputStream input = socket.getInputStream();
+			byte[] buffer = new byte[4_096];
+			int read;
+			while ((read = input.read(buffer)) >= 0)
+				response.write(buffer, 0, read);
+
+			return RawResponse.parse(response.toByteArray());
+		}
+	}
+
+	private static boolean ipv6LoopbackAvailable() {
+		try (ServerSocket socket = new ServerSocket()) {
+			socket.bind(new InetSocketAddress("::1", 0));
+			return true;
+		} catch (IOException exception) {
+			return false;
+		}
+	}
+
+	private static CorsAuthorizer faultingCorsAuthorizer(boolean throwsException) {
+		return new CorsAuthorizer() {
+			@Override
+			public Optional<CorsResponse> authorize(Request request, Cors cors) {
+				if (throwsException)
+					throw new IllegalStateException("deliberate CORS test failure");
+				return null;
+			}
+
+			@Override
+			public Optional<CorsPreflightResponse> authorizePreflight(Request request,
+					CorsPreflight corsPreflight,
+					Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
+				return Optional.empty();
+			}
+
+			@Override
+			public Optional<CorsPreflightResponse> authorizePreflight(Request request,
+					CorsPreflight corsPreflight, Set<HttpMethod> availableHttpMethods) {
+				if (throwsException)
+					throw new IllegalStateException("deliberate CORS test failure");
+				return null;
+			}
+		};
+	}
+
+	private static Thread stoppingThread(McpHttpServerRuntime runtime,
+			CountDownLatch ready, CountDownLatch start, AtomicReference<Throwable> failure,
+			String name) {
+		return new Thread(() -> {
+			ready.countDown();
+			try {
+				start.await();
+				runtime.stop();
+			} catch (Throwable throwable) {
+				failure.set(throwable);
+			}
+		}, name);
+	}
+
+	private static void assertDiscoveryResponse(RawResponse response, String idJson) {
+		Assertions.assertEquals(200, response.status(), response.bodyText());
+		Assertions.assertEquals(JSON_MEDIA_TYPE, response.singleHeader("Content-Type"));
+		Assertions.assertEquals("no-store", response.singleHeader("Cache-Control"));
+		String body = response.bodyText();
+		Assertions.assertTrue(body.contains("\"id\":" + idJson), body);
+		Assertions.assertTrue(body.contains("\"resultType\":\"complete\""), body);
+		Assertions.assertTrue(body.contains("\"supportedVersions\":[\"2026-07-28\"]"), body);
+		Assertions.assertTrue(body.contains("\"capabilities\":{}"), body);
+		Assertions.assertTrue(body.contains("\"ttlMs\":0"), body);
+		Assertions.assertTrue(body.contains("\"cacheScope\":\"private\""), body);
+		Assertions.assertTrue(body.contains("\"io.modelcontextprotocol/serverInfo\""), body);
+	}
+
+	private static void assertJsonRpcError(RawResponse response, int status, int code,
+			String idJson) {
+		Assertions.assertEquals(status, response.status(), response.bodyText());
+		Assertions.assertTrue(response.bodyText().contains("\"id\":" + idJson),
+				response.bodyText());
+		Assertions.assertTrue(response.bodyText().contains("\"code\":" + code),
+				response.bodyText());
+		Assertions.assertEquals("no-store", response.singleHeader("Cache-Control"));
+	}
+
+	private static final String JSON_MEDIA_TYPE = "application/json";
+
+	private record HeaderLine(String name, String value) {
+	}
+
+	private record RawResponse(int status, Map<String, List<String>> headers, byte[] body) {
+		private static RawResponse parse(byte[] bytes) {
+			byte[] delimiter = "\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1);
+			int boundary = indexOf(bytes, delimiter);
+			if (boundary < 0)
+				throw new AssertionError("Response did not contain a complete HTTP head.");
+
+			String head = new String(bytes, 0, boundary, StandardCharsets.ISO_8859_1);
+			String[] lines = head.split("\r\n");
+			String[] statusParts = lines[0].split(" ", 3);
+			Map<String, List<String>> headers = new LinkedHashMap<>();
+			for (int index = 1; index < lines.length; index++) {
+				int colon = lines[index].indexOf(':');
+				String name = lines[index].substring(0, colon).toLowerCase(Locale.ROOT);
+				String value = lines[index].substring(colon + 1).trim();
+				headers.computeIfAbsent(name, ignored -> new ArrayList<>()).add(value);
+			}
+			return new RawResponse(Integer.parseInt(statusParts[1]),
+					Map.copyOf(headers), Arrays.copyOfRange(bytes,
+							boundary + delimiter.length, bytes.length));
+		}
+
+		private String bodyText() {
+			return new String(body, StandardCharsets.UTF_8);
+		}
+
+		private String singleHeader(String name) {
+			List<String> values = headers.get(name.toLowerCase(Locale.ROOT));
+			if (values == null || values.size() != 1)
+				throw new AssertionError("Expected exactly one " + name + " header, found " + values);
+			return values.get(0);
+		}
+
+		private static int indexOf(byte[] bytes, byte[] target) {
+			outer:
+			for (int offset = 0; offset <= bytes.length - target.length; offset++) {
+				for (int index = 0; index < target.length; index++) {
+					if (bytes[offset + index] != target[index])
+						continue outer;
+				}
+				return offset;
+			}
+			return -1;
+		}
+	}
+}
