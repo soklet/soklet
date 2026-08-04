@@ -1105,13 +1105,15 @@ public class McpHttpServerApplicationExecutionTests {
 		return new McpHttpTransportConfiguration(
 				defaults.host(), defaults.port(), defaults.selectorResolution(),
 				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
-				defaults.responseWriteIdleTimeout(), shutdownTimeout,
+				defaults.responseWriteIdleTimeout(), defaults.keepAliveInterval(),
+				shutdownTimeout,
 				defaults.readBufferSize(), defaults.acceptBacklog(),
 				defaults.maximumAggregateRequestBytes(),
 				defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
 				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
 				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
-				requestProcessorConcurrency, requestProcessorQueueCapacity);
+				requestProcessorConcurrency, requestProcessorQueueCapacity,
+				defaults.streamQueueCapacity());
 	}
 
 	private static McpApplicationExecutionConfiguration executionConfiguration(

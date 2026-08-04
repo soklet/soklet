@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.schema;
 
 import com.soklet.internal.mcp.protocol.McpJsonObject;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
 
 import static java.util.Objects.requireNonNull;
 
@@ -27,13 +28,16 @@ final class McpCompiledTypedSchema {
 	private final McpTypedSchemaShape shape;
 	private final McpJsonObject document;
 	private final McpToolSchemaProfileProgram program;
+	private final McpMirroredHeaderPlan mirroredHeaderPlan;
 	private final byte[] serializedDocument;
 
 	McpCompiledTypedSchema(McpTypedSchemaShape shape, McpJsonObject document,
-			McpToolSchemaProfileProgram program, byte[] serializedDocument) {
+			McpToolSchemaProfileProgram program,
+			McpMirroredHeaderPlan mirroredHeaderPlan, byte[] serializedDocument) {
 		this.shape = requireNonNull(shape);
 		this.document = requireNonNull(document);
 		this.program = requireNonNull(program);
+		this.mirroredHeaderPlan = requireNonNull(mirroredHeaderPlan);
 		this.serializedDocument = requireNonNull(serializedDocument).clone();
 	}
 
@@ -47,6 +51,10 @@ final class McpCompiledTypedSchema {
 
 	McpToolSchemaProfileProgram program() {
 		return program;
+	}
+
+	McpMirroredHeaderPlan mirroredHeaderPlan() {
+		return mirroredHeaderPlan;
 	}
 
 	byte[] serializedDocument() {

@@ -874,7 +874,10 @@ class ConnectionEventLoop {
                             new LogEntry("id", id),
                             new LogEntry("num_bytes", Long.toString((long) serializedHead.length + microhttpResponse.bodyLength())));
                 }
-                doOnWritable();
+                // Ownership is committed before the first socket write. Route that write through
+                // the same failure classifier as later selector- and callback-driven writes so a
+                // scheduling detail cannot change the source's termination reason.
+                onWritable();
             } catch (Throwable throwable) {
                 if (!committed) {
                     cancelDispatch(dispatch, StreamTerminationReason.INTERNAL_ERROR, throwable);
@@ -906,7 +909,7 @@ class ConnectionEventLoop {
                             new LogEntry("event", "write_error"),
                             new LogEntry("id", id));
                 }
-                failSafeClose();
+                failSafeClose(StreamTerminationReason.WRITE_FAILED, e);
             }
         }
 
@@ -918,7 +921,7 @@ class ConnectionEventLoop {
                 if ((selectionKey.interestOps() & SelectionKey.OP_WRITE) == 0) {
                     selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
                 }
-                doOnWritable();
+                onWritable();
             });
             if (Thread.currentThread() != thread) {
                 selector.wakeup();

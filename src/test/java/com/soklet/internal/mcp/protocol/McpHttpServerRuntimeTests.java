@@ -374,6 +374,30 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	public void mcp_listener_accepts_only_http_1_1() throws Exception {
+		AtomicInteger admissions = new AtomicInteger();
+		McpHttpServerRuntime runtime = runtime(configuration(0),
+				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
+						ignored -> {
+							admissions.incrementAndGet();
+							return McpAdmissionDecision.acceptedAnonymous();
+						}));
+
+		try {
+			int port = runtime.start().getPort();
+			RawResponse response = sendVersion(port, "POST", "/mcp", "HTTP/1.0",
+					standardHeaders(port, DISCOVER_METHOD),
+					discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION));
+			Assertions.assertEquals(505, response.status());
+			Assertions.assertEquals(0, response.body().length);
+			Assertions.assertEquals("no-store", response.singleHeader("Cache-Control"));
+			Assertions.assertEquals(0, admissions.get());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void accept_negotiation_is_strict_and_uses_most_specific_quality()
 			throws Exception {
 		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
@@ -478,14 +502,30 @@ public class McpHttpServerRuntimeTests {
 						defaults.host(), defaults.port(), defaults.selectorResolution(),
 						defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
 						defaults.responseWriteIdleTimeout(),
-						Duration.ofSeconds(Long.MAX_VALUE), defaults.readBufferSize(),
+						defaults.keepAliveInterval(), Duration.ofSeconds(Long.MAX_VALUE),
+						defaults.readBufferSize(),
 						defaults.acceptBacklog(), defaults.maximumAggregateRequestBytes(),
 						defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
 						defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
 						defaults.maximumConnections(),
 						defaults.connectionWriterConcurrency(),
 						defaults.requestProcessorConcurrency(),
-						defaults.requestProcessorQueueCapacity()));
+						defaults.requestProcessorQueueCapacity(),
+						defaults.streamQueueCapacity()));
+	}
+
+	@Test
+	public void streaming_configuration_requires_finite_capacity_and_early_keep_alive() {
+		McpHttpTransportConfiguration defaults = configuration(0);
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> configurationWithStreaming(
+						defaults.responseWriteIdleTimeout(),
+						defaults.responseWriteIdleTimeout(),
+						defaults.streamQueueCapacity()));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> configurationWithStreaming(
+						defaults.keepAliveInterval(),
+						defaults.responseWriteIdleTimeout(), 0));
 	}
 
 	@Test
@@ -543,6 +583,106 @@ public class McpHttpServerRuntimeTests {
 			Assertions.assertEquals(1, admissions.get());
 		} finally {
 			allowing.close();
+		}
+	}
+
+	@Test
+	public void cors_preflight_allows_only_registered_custom_mirrored_headers()
+			throws Exception {
+		McpMirroredHeaderPlan mirroredHeaders = new McpMirroredHeaderPlan(List.of(
+				new McpMirroredHeaderDeclaration("Tenant", List.of("tenant"),
+						McpMirroredHeaderValueType.STRING)));
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"cors-header-test", "3.6.0-SNAPSHOT"))
+				.tool(new McpNormalizedOperation("lookup", McpInputRequestPlan.empty(),
+						mirroredHeaders))
+				.build();
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://allowed.example")),
+				ignored -> McpAdmissionDecision.acceptedAnonymous());
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				configuration(0), policy, endpoint);
+
+		try {
+			int port = runtime.start().getPort();
+			RawResponse accepted = send(port, "OPTIONS", "/mcp", List.of(
+					new HeaderLine("Host", LOOPBACK + ":" + port),
+					new HeaderLine("Origin", "https://allowed.example"),
+					new HeaderLine("Access-Control-Request-Method", "POST"),
+					new HeaderLine("Access-Control-Request-Headers",
+							"Content-Type, MCP-Protocol-Version, Mcp-Method, "
+									+ "Mcp-Name, mcp-param-tenant")), new byte[0]);
+			Assertions.assertEquals(204, accepted.status());
+
+			RawResponse unregistered = send(port, "OPTIONS", "/mcp", List.of(
+					new HeaderLine("Host", LOOPBACK + ":" + port),
+					new HeaderLine("Origin", "https://allowed.example"),
+					new HeaderLine("Access-Control-Request-Method", "POST"),
+					new HeaderLine("Access-Control-Request-Headers",
+							"Mcp-Param-Unregistered")), new byte[0]);
+			Assertions.assertEquals(403, unregistered.status());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void cors_preflight_honors_authorizer_narrowed_methods_and_headers()
+			throws Exception {
+		CorsAuthorizer authorizer = preflightAuthorizer(
+				Set.of(HttpMethod.POST), Set.of("Content-Type"));
+		McpHttpServerRuntime runtime = runtime(configuration(0),
+				McpHttpEndpointPolicy.forDiscovery(authorizer,
+						ignored -> McpRequestAdmissionDecision.ACCEPT));
+
+		try {
+			int port = runtime.start().getPort();
+			RawResponse response = send(port, "OPTIONS", "/mcp", List.of(
+					new HeaderLine("Host", LOOPBACK + ":" + port),
+					new HeaderLine("Origin", "https://allowed.example"),
+					new HeaderLine("Access-Control-Request-Method", "POST"),
+					new HeaderLine("Access-Control-Request-Headers",
+							"Content-Type, Authorization, MCP-Protocol-Version")),
+					new byte[0]);
+
+			Assertions.assertEquals(204, response.status());
+			Assertions.assertEquals("POST",
+					response.singleHeader("Access-Control-Allow-Methods"));
+			Assertions.assertEquals("Content-Type",
+					response.singleHeader("Access-Control-Allow-Headers"));
+			Assertions.assertFalse(response.singleHeader("Access-Control-Allow-Headers")
+					.contains("Authorization"));
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void cors_preflight_fails_closed_for_authorizer_values_outside_mcp_surface()
+			throws Exception {
+		for (CorsAuthorizer authorizer : List.of(
+				preflightAuthorizer(Set.of(HttpMethod.DELETE), Set.of()),
+				preflightAuthorizer(Set.of(HttpMethod.POST), Set.of("X-Not-Mcp")))) {
+			McpHttpServerRuntime runtime = runtime(configuration(0),
+					McpHttpEndpointPolicy.forDiscovery(authorizer,
+							ignored -> McpRequestAdmissionDecision.ACCEPT));
+			try {
+				int port = runtime.start().getPort();
+				RawResponse response = send(port, "OPTIONS", "/mcp", List.of(
+						new HeaderLine("Host", LOOPBACK + ":" + port),
+						new HeaderLine("Origin", "https://allowed.example"),
+						new HeaderLine("Access-Control-Request-Method", "POST"),
+						new HeaderLine("Access-Control-Request-Headers", "Content-Type")),
+						new byte[0]);
+
+				Assertions.assertEquals(500, response.status());
+				Assertions.assertEquals(0, response.body().length);
+				Assertions.assertFalse(response.headers()
+						.containsKey("access-control-allow-origin"));
+			} finally {
+				runtime.close();
+			}
 		}
 	}
 
@@ -699,7 +839,8 @@ public class McpHttpServerRuntimeTests {
 		return new McpHttpTransportConfiguration(
 				defaults.host(), defaults.port(), defaults.selectorResolution(),
 				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
-				defaults.responseWriteIdleTimeout(), defaults.shutdownTimeout(),
+				defaults.responseWriteIdleTimeout(), defaults.keepAliveInterval(),
+				defaults.shutdownTimeout(),
 				defaults.readBufferSize(), defaults.acceptBacklog(),
 				maximumBodyBytes + defaults.maximumHeaderBytes()
 						+ defaults.maximumRequestTargetBytes() + 1_024,
@@ -707,7 +848,7 @@ public class McpHttpServerRuntimeTests {
 				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
 				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
 				defaults.requestProcessorConcurrency(),
-				defaults.requestProcessorQueueCapacity());
+				defaults.requestProcessorQueueCapacity(), defaults.streamQueueCapacity());
 	}
 
 	private static McpHttpTransportConfiguration configurationWithHost(int port,
@@ -716,14 +857,15 @@ public class McpHttpServerRuntimeTests {
 		return new McpHttpTransportConfiguration(
 				host, defaults.port(), defaults.selectorResolution(),
 				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
-				defaults.responseWriteIdleTimeout(), defaults.shutdownTimeout(),
+				defaults.responseWriteIdleTimeout(), defaults.keepAliveInterval(),
+				defaults.shutdownTimeout(),
 				defaults.readBufferSize(), defaults.acceptBacklog(),
 				defaults.maximumAggregateRequestBytes(),
 				defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
 				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
 				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
 				defaults.requestProcessorConcurrency(),
-				defaults.requestProcessorQueueCapacity());
+				defaults.requestProcessorQueueCapacity(), defaults.streamQueueCapacity());
 	}
 
 	private static McpHttpTransportConfiguration configurationWithShutdownTimeout(
@@ -732,14 +874,32 @@ public class McpHttpServerRuntimeTests {
 		return new McpHttpTransportConfiguration(
 				defaults.host(), defaults.port(), defaults.selectorResolution(),
 				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
-				defaults.responseWriteIdleTimeout(), shutdownTimeout,
+				defaults.responseWriteIdleTimeout(), defaults.keepAliveInterval(),
+				shutdownTimeout,
 				defaults.readBufferSize(), defaults.acceptBacklog(),
 				defaults.maximumAggregateRequestBytes(),
 				defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
 				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
 				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
 				defaults.requestProcessorConcurrency(),
-				defaults.requestProcessorQueueCapacity());
+				defaults.requestProcessorQueueCapacity(), defaults.streamQueueCapacity());
+	}
+
+	private static McpHttpTransportConfiguration configurationWithStreaming(
+			Duration keepAliveInterval, Duration responseWriteIdleTimeout,
+			int streamQueueCapacity) {
+		McpHttpTransportConfiguration defaults = configuration(0);
+		return new McpHttpTransportConfiguration(
+				defaults.host(), defaults.port(), defaults.selectorResolution(),
+				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
+				responseWriteIdleTimeout, keepAliveInterval, defaults.shutdownTimeout(),
+				defaults.readBufferSize(), defaults.acceptBacklog(),
+				defaults.maximumAggregateRequestBytes(),
+				defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
+				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
+				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
+				defaults.requestProcessorConcurrency(),
+				defaults.requestProcessorQueueCapacity(), streamQueueCapacity);
 	}
 
 	private static RawResponse discover(int port, String idJson) throws Exception {
@@ -803,16 +963,27 @@ public class McpHttpServerRuntimeTests {
 
 	private static RawResponse send(int port, String method, String path,
 			List<HeaderLine> headers, byte[] body) throws Exception {
-		return send(LOOPBACK, port, method, path, headers, body);
+		return send(LOOPBACK, port, method, path, "HTTP/1.1", headers, body);
+	}
+
+	private static RawResponse sendVersion(int port, String method, String path,
+			String version, List<HeaderLine> headers, byte[] body) throws Exception {
+		return send(LOOPBACK, port, method, path, version, headers, body);
 	}
 
 	private static RawResponse send(String host, int port, String method, String path,
 			List<HeaderLine> headers, byte[] body) throws Exception {
+		return send(host, port, method, path, "HTTP/1.1", headers, body);
+	}
+
+	private static RawResponse send(String host, int port, String method, String path,
+			String version, List<HeaderLine> headers, byte[] body) throws Exception {
 		try (Socket socket = new Socket()) {
 			socket.connect(new InetSocketAddress(host, port), 3_000);
 			socket.setSoTimeout(5_000);
 			StringBuilder requestHead = new StringBuilder()
-					.append(method).append(' ').append(path).append(" HTTP/1.1\r\n");
+					.append(method).append(' ').append(path).append(' ')
+					.append(version).append("\r\n");
 			for (HeaderLine header : headers)
 				requestHead.append(header.name()).append(": ")
 						.append(header.value()).append("\r\n");
@@ -865,6 +1036,33 @@ public class McpHttpServerRuntimeTests {
 				if (throwsException)
 					throw new IllegalStateException("deliberate CORS test failure");
 				return null;
+			}
+		};
+	}
+
+	private static CorsAuthorizer preflightAuthorizer(Set<HttpMethod> allowedMethods,
+			Set<String> allowedHeaders) {
+		return new CorsAuthorizer() {
+			@Override
+			public Optional<CorsResponse> authorize(Request request, Cors cors) {
+				return Optional.empty();
+			}
+
+			@Override
+			public Optional<CorsPreflightResponse> authorizePreflight(Request request,
+					CorsPreflight corsPreflight,
+					Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod) {
+				return Optional.empty();
+			}
+
+			@Override
+			public Optional<CorsPreflightResponse> authorizePreflight(Request request,
+					CorsPreflight corsPreflight, Set<HttpMethod> availableHttpMethods) {
+				return Optional.of(CorsPreflightResponse
+						.withAccessControlAllowOrigin(corsPreflight.getOrigin())
+						.accessControlAllowMethods(allowedMethods)
+						.accessControlAllowHeaders(allowedHeaders)
+						.build());
 			}
 		};
 	}

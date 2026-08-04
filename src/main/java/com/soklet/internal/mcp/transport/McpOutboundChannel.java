@@ -29,19 +29,20 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Queue;
+import java.util.function.LongSupplier;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
-final class McpOutboundChannel implements WritableSource {
-	enum OfferResult {
+public final class McpOutboundChannel {
+	public enum OfferResult {
 		ACCEPTED,
 		FULL,
 		TOO_LARGE,
 		CLOSED
 	}
 
-	interface Listener {
+	public interface Listener {
 		void didWrite(long byteCount, long timestampNanos);
 
 		void didApplyBackpressure();
@@ -49,7 +50,7 @@ final class McpOutboundChannel implements WritableSource {
 		void didTerminate(StreamTerminationReason reason, @Nullable Throwable cause);
 	}
 
-	record Snapshot(int frameCapacity, int byteCapacity, int terminalByteCapacity,
+	public record Snapshot(int frameCapacity, int byteCapacity, int terminalByteCapacity,
 			int bufferedFrames, int bufferedBytes, int terminalBytes,
 			int maximumObservedBufferedFrames, int maximumObservedBufferedBytes,
 			boolean terminalReserved, boolean started, boolean closed) {
@@ -62,7 +63,7 @@ final class McpOutboundChannel implements WritableSource {
 	private final int frameCapacity;
 	private final int byteCapacity;
 	private final int terminalByteCapacity;
-	private final McpMonotonicClock clock;
+	private final LongSupplier nanoTimeSupplier;
 	private final Listener listener;
 	private final Queue<Chunk> chunks;
 	private Runnable writeReadyCallback;
@@ -83,8 +84,8 @@ final class McpOutboundChannel implements WritableSource {
 	private boolean closed;
 	private boolean terminationNotified;
 
-	McpOutboundChannel(int frameCapacity, int byteCapacity, int terminalByteCapacity,
-			McpMonotonicClock clock, Listener listener) {
+	public McpOutboundChannel(int frameCapacity, int byteCapacity, int terminalByteCapacity,
+			LongSupplier nanoTimeSupplier, Listener listener) {
 		if (frameCapacity < 1)
 			throw new IllegalArgumentException("Outbound frame capacity must be > 0.");
 
@@ -98,13 +99,13 @@ final class McpOutboundChannel implements WritableSource {
 		this.frameCapacity = frameCapacity;
 		this.byteCapacity = byteCapacity;
 		this.terminalByteCapacity = terminalByteCapacity;
-		this.clock = requireNonNull(clock);
+		this.nanoTimeSupplier = requireNonNull(nanoTimeSupplier);
 		this.listener = requireNonNull(listener);
 		this.chunks = new ArrayDeque<>(frameCapacity);
 		this.writeReadyCallback = McpOutboundChannel::noOp;
 	}
 
-	void enqueue(byte[] payload) throws InterruptedException {
+	public void enqueue(byte[] payload) throws InterruptedException {
 		requireNonNull(payload);
 
 		if (payload.length == 0)
@@ -137,7 +138,7 @@ final class McpOutboundChannel implements WritableSource {
 		wake.run();
 	}
 
-	OfferResult offer(byte[] payload) {
+	public OfferResult offer(byte[] payload) {
 		requireNonNull(payload);
 
 		if (payload.length == 0)
@@ -164,7 +165,7 @@ final class McpOutboundChannel implements WritableSource {
 		return OfferResult.ACCEPTED;
 	}
 
-	boolean complete(byte[] terminalPayload) {
+	public boolean complete(byte[] terminalPayload) {
 		requireNonNull(terminalPayload);
 		Runnable wake;
 
@@ -189,7 +190,7 @@ final class McpOutboundChannel implements WritableSource {
 		return true;
 	}
 
-	boolean fail(StreamTerminationReason reason, @Nullable Throwable cause) {
+	public boolean fail(StreamTerminationReason reason, @Nullable Throwable cause) {
 		requireNonNull(reason);
 		Runnable wake;
 		boolean notify;
@@ -198,24 +199,58 @@ final class McpOutboundChannel implements WritableSource {
 			if (closed || terminalWritten || failure != null)
 				return false;
 
-			failure = cause instanceof IOException ioException
-					? ioException
-					: new IOException("MCP response stream terminated: " + reason, cause);
-			terminalReserved = true;
-			clearBufferedData();
+			reserveFailure(reason, cause);
 			wake = reserveWakeIfNeeded();
 			notify = reserveTerminationNotification();
-			lock.notifyAll();
 		}
 
-		if (notify)
-			listener.didTerminate(reason, cause);
-
-		wake.run();
+		finishFailure(reason, cause, wake, notify);
 		return true;
 	}
 
-	long responseWriteIdleDeadlineNanos(long timeoutNanos) {
+	public boolean failIfDeadlineExpired(long nowNanos, long deadlineNanos,
+			StreamTerminationReason reason, @Nullable Throwable cause) {
+		requireNonNull(reason);
+		Runnable wake;
+		boolean notify;
+
+		synchronized (lock) {
+			if (closed || terminalWritten || failure != null
+					|| nowNanos - deadlineNanos < 0L)
+				return false;
+
+			reserveFailure(reason, cause);
+			wake = reserveWakeIfNeeded();
+			notify = reserveTerminationNotification();
+		}
+
+		finishFailure(reason, cause, wake, notify);
+		return true;
+	}
+
+	public boolean failIfWriteIdleExpired(long nowNanos, long timeoutNanos,
+			StreamTerminationReason reason, @Nullable Throwable cause) {
+		if (timeoutNanos <= 0L)
+			throw new IllegalArgumentException("Write-idle timeout must be positive.");
+		requireNonNull(reason);
+		Runnable wake;
+		boolean notify;
+
+		synchronized (lock) {
+			if (!started || closed || terminalWritten || failure != null
+					|| nowNanos - saturatingAdd(lastWriteAtNanos, timeoutNanos) < 0L)
+				return false;
+
+			reserveFailure(reason, cause);
+			wake = reserveWakeIfNeeded();
+			notify = reserveTerminationNotification();
+		}
+
+		finishFailure(reason, cause, wake, notify);
+		return true;
+	}
+
+	public long responseWriteIdleDeadlineNanos(long timeoutNanos) {
 		synchronized (lock) {
 			if (!started || closed || terminalWritten || failure != null)
 				return Long.MAX_VALUE;
@@ -224,7 +259,7 @@ final class McpOutboundChannel implements WritableSource {
 		}
 	}
 
-	Snapshot snapshot() {
+	public Snapshot snapshot() {
 		synchronized (lock) {
 			return new Snapshot(
 					frameCapacity,
@@ -241,8 +276,20 @@ final class McpOutboundChannel implements WritableSource {
 		}
 	}
 
-	@Override
-	public void start() {
+	/**
+	 * Returns a fresh Microhttp body-source facade backed by this channel.
+	 *
+	 * <p>Each invocation returns a distinct facade so a Microhttp response-body
+	 * supplier can satisfy its fresh-source contract. All facades delegate to
+	 * this channel's single thread-safe lifecycle.</p>
+	 *
+	 * @return a fresh writable-source facade
+	 */
+	public WritableSource newWritableSource() {
+		return new WritableSourceFacade();
+	}
+
+	private void start() {
 		Runnable wake;
 
 		synchronized (lock) {
@@ -250,15 +297,14 @@ final class McpOutboundChannel implements WritableSource {
 				return;
 
 			started = true;
-			lastWriteAtNanos = clock.nanoTime();
+			lastWriteAtNanos = nanoTimeSupplier.getAsLong();
 			wake = reserveWakeIfNeeded();
 		}
 
 		wake.run();
 	}
 
-	@Override
-	public void writeReadyCallback(@Nullable Runnable callback) {
+	private void writeReadyCallback(@Nullable Runnable callback) {
 		Runnable wake;
 
 		synchronized (lock) {
@@ -270,8 +316,7 @@ final class McpOutboundChannel implements WritableSource {
 		wake.run();
 	}
 
-	@Override
-	public long writeTo(SocketChannel socketChannel, long maximumBytes) throws IOException {
+	private long writeTo(SocketChannel socketChannel, long maximumBytes) throws IOException {
 		requireNonNull(socketChannel);
 
 		if (maximumBytes <= 0L)
@@ -331,7 +376,7 @@ final class McpOutboundChannel implements WritableSource {
 			}
 
 			if (written > 0L) {
-				writeTimestamp = clock.nanoTime();
+				writeTimestamp = nanoTimeSupplier.getAsLong();
 				lastWriteAtNanos = writeTimestamp;
 			}
 		}
@@ -345,8 +390,7 @@ final class McpOutboundChannel implements WritableSource {
 		return written;
 	}
 
-	@Override
-	public boolean hasRemaining() {
+	private boolean hasRemaining() {
 		synchronized (lock) {
 			return failure != null
 					|| currentChunk != null
@@ -356,19 +400,16 @@ final class McpOutboundChannel implements WritableSource {
 		}
 	}
 
-	@Override
-	public boolean isReadyToWrite() {
+	private boolean isReadyToWrite() {
 		synchronized (lock) {
 			return failure != null || currentChunk != null || !chunks.isEmpty() || terminalChunk != null;
 		}
 	}
 
-	@Override
-	public void close() {
+	private void close() {
 		close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
 	}
 
-	@Override
 	public void close(@Nullable StreamTerminationReason reason, @Nullable Throwable cause) {
 		StreamTerminationReason effectiveReason = reason == null
 				? StreamTerminationReason.CLIENT_DISCONNECTED
@@ -387,6 +428,43 @@ final class McpOutboundChannel implements WritableSource {
 
 		if (notify)
 			listener.didTerminate(terminalWritten ? StreamTerminationReason.COMPLETED : effectiveReason, cause);
+	}
+
+	private final class WritableSourceFacade implements WritableSource {
+		@Override
+		public void start() {
+			McpOutboundChannel.this.start();
+		}
+
+		@Override
+		public void writeReadyCallback(@Nullable Runnable callback) {
+			McpOutboundChannel.this.writeReadyCallback(callback);
+		}
+
+		@Override
+		public long writeTo(SocketChannel socketChannel, long maximumBytes) throws IOException {
+			return McpOutboundChannel.this.writeTo(socketChannel, maximumBytes);
+		}
+
+		@Override
+		public boolean hasRemaining() {
+			return McpOutboundChannel.this.hasRemaining();
+		}
+
+		@Override
+		public boolean isReadyToWrite() {
+			return McpOutboundChannel.this.isReadyToWrite();
+		}
+
+		@Override
+		public void close() {
+			McpOutboundChannel.this.close();
+		}
+
+		@Override
+		public void close(@Nullable StreamTerminationReason reason, @Nullable Throwable cause) {
+			McpOutboundChannel.this.close(reason, cause);
+		}
 	}
 
 	private boolean hasRegularCapacity(int payloadBytes) {
@@ -423,6 +501,23 @@ final class McpOutboundChannel implements WritableSource {
 
 		terminationNotified = true;
 		return true;
+	}
+
+	private void reserveFailure(StreamTerminationReason reason,
+			@Nullable Throwable cause) {
+		failure = cause instanceof IOException ioException
+				? ioException
+				: new IOException("MCP response stream terminated: " + reason, cause);
+		terminalReserved = true;
+		clearBufferedData();
+		lock.notifyAll();
+	}
+
+	private void finishFailure(StreamTerminationReason reason,
+			@Nullable Throwable cause, Runnable wake, boolean notify) {
+		if (notify)
+			listener.didTerminate(reason, cause);
+		wake.run();
 	}
 
 	private void clearBufferedData() {

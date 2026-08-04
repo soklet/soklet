@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.transport;
 
 import com.soklet.StreamTerminationReason;
+import com.soklet.internal.microhttp.WritableSource;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -125,7 +126,11 @@ public class McpTransportPrimitiveTests {
 	public void outbound_channel_enforces_dual_bounds_and_preserves_terminal_lane() throws Exception {
 		RecordingChannelListener listener = new RecordingChannelListener();
 		McpOutboundChannel channel = new McpOutboundChannel(2, 6, 4, () -> 17L, listener);
+		WritableSource source = channel.newWritableSource();
+		WritableSource secondSource = channel.newWritableSource();
 		AtomicInteger wakeCount = new AtomicInteger();
+		Assertions.assertNotSame(source, secondSource,
+				"each Microhttp supplier invocation requires a fresh facade");
 
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED, channel.offer(ascii("one")));
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED, channel.offer(ascii("two")));
@@ -139,14 +144,14 @@ public class McpTransportPrimitiveTests {
 		Assertions.assertEquals(3, full.terminalBytes());
 		Assertions.assertTrue(full.terminalReserved());
 
-		channel.writeReadyCallback(wakeCount::incrementAndGet);
-		channel.start();
+		source.writeReadyCallback(wakeCount::incrementAndGet);
+		source.start();
 		Assertions.assertEquals(1, wakeCount.get(), "writer wakeups must be coalesced");
 		PartialWriteSocketChannel socketChannel = new PartialWriteSocketChannel(1);
 
-		while (channel.hasRemaining()) {
-			long written = channel.writeTo(socketChannel, 2L);
-			Assertions.assertTrue(written > 0L || channel.isReadyToWrite(), "ready channel made no progress");
+		while (source.hasRemaining()) {
+			long written = source.writeTo(socketChannel, 2L);
+			Assertions.assertTrue(written > 0L || source.isReadyToWrite(), "ready channel made no progress");
 		}
 
 		Assertions.assertEquals("3\r\none\r\n3\r\ntwo\r\n3\r\nend\r\n0\r\n\r\n",
@@ -155,14 +160,38 @@ public class McpTransportPrimitiveTests {
 		Assertions.assertEquals(StreamTerminationReason.COMPLETED, listener.terminationReason.get());
 		Assertions.assertEquals(0, channel.snapshot().bufferedFrames());
 		Assertions.assertEquals(0, channel.snapshot().bufferedBytes());
-		channel.close();
+		secondSource.close();
+		Assertions.assertTrue(channel.snapshot().closed());
 		Assertions.assertEquals(1, listener.terminationCount.get());
+	}
+
+	@Test
+	public void outbound_channel_facade_close_terminates_shared_channel_once() throws Exception {
+		RecordingChannelListener listener = new RecordingChannelListener();
+		McpOutboundChannel channel = new McpOutboundChannel(1, 3, 4, System::nanoTime, listener);
+		WritableSource firstSource = channel.newWritableSource();
+		WritableSource secondSource = channel.newWritableSource();
+		IOException cause = new IOException("client closed");
+
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED, channel.offer(ascii("one")));
+		firstSource.close(StreamTerminationReason.CLIENT_DISCONNECTED, cause);
+		secondSource.close(StreamTerminationReason.SERVER_STOPPING, null);
+
+		Assertions.assertTrue(channel.snapshot().closed());
+		Assertions.assertFalse(firstSource.hasRemaining());
+		Assertions.assertFalse(secondSource.hasRemaining());
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.CLOSED, channel.offer(ascii("two")));
+		Assertions.assertFalse(channel.complete(ascii("end")));
+		Assertions.assertEquals(1, listener.terminationCount.get());
+		Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, listener.terminationReason.get());
+		Assertions.assertSame(cause, listener.terminationCause.get());
 	}
 
 	@Test
 	public void outbound_channel_backpressures_one_producer_with_bounded_retention() throws Exception {
 		RecordingChannelListener listener = new RecordingChannelListener();
 		McpOutboundChannel channel = new McpOutboundChannel(1, 3, 4, System::nanoTime, listener);
+		WritableSource source = channel.newWritableSource();
 		channel.enqueue(ascii("one"));
 		CountDownLatch secondEnqueued = new CountDownLatch(1);
 		AtomicReference<Throwable> producerFailure = new AtomicReference<>();
@@ -183,17 +212,69 @@ public class McpTransportPrimitiveTests {
 			Assertions.assertEquals(1L, secondEnqueued.getCount());
 
 			PartialWriteSocketChannel socketChannel = new PartialWriteSocketChannel(64);
-			channel.writeTo(socketChannel, 64L);
+			source.writeTo(socketChannel, 64L);
 			Assertions.assertTrue(secondEnqueued.await(3, TimeUnit.SECONDS));
 			Assertions.assertNull(producerFailure.get());
 			Assertions.assertEquals(1, channel.snapshot().bufferedFrames());
 			Assertions.assertEquals(3, channel.snapshot().bufferedBytes());
 		} finally {
-			channel.close(StreamTerminationReason.SERVER_STOPPING, null);
+			source.close(StreamTerminationReason.SERVER_STOPPING, null);
 			producer.interrupt();
 			producer.join(Duration.ofSeconds(3).toMillis());
 			Assertions.assertFalse(producer.isAlive());
 		}
+	}
+
+	@Test
+	public void conditional_timeouts_linearize_with_writes_and_terminal_completion()
+			throws Exception {
+		AtomicInteger now = new AtomicInteger();
+		RecordingChannelListener idleListener = new RecordingChannelListener();
+		McpOutboundChannel idleChannel = new McpOutboundChannel(
+				2, 16, 16, now::get, idleListener);
+		var idleSource = idleChannel.newWritableSource();
+		idleChannel.offer(ascii("one"));
+		idleSource.writeReadyCallback(() -> {
+			// The test drives writes directly.
+		});
+		idleSource.start();
+		now.set(5);
+		idleSource.writeTo(new PartialWriteSocketChannel(64), 64L);
+		Assertions.assertFalse(idleChannel.failIfWriteIdleExpired(
+				14L, 10L, StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null));
+		Assertions.assertTrue(idleChannel.failIfWriteIdleExpired(
+				15L, 10L, StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null));
+		Assertions.assertEquals(StreamTerminationReason.RESPONSE_IDLE_TIMEOUT,
+				idleListener.terminationReason.get());
+
+		RecordingChannelListener completedListener = new RecordingChannelListener();
+		McpOutboundChannel completed = new McpOutboundChannel(
+				1, 16, 16, now::get, completedListener);
+		var completedSource = completed.newWritableSource();
+		Assertions.assertTrue(completed.complete(ascii("done")));
+		completedSource.writeReadyCallback(() -> {
+			// The test drives writes directly.
+		});
+		completedSource.start();
+		PartialWriteSocketChannel completedSocket = new PartialWriteSocketChannel(64);
+		while (completedSource.hasRemaining())
+			completedSource.writeTo(completedSocket, 64L);
+		Assertions.assertEquals(StreamTerminationReason.COMPLETED,
+				completedListener.terminationReason.get());
+		Assertions.assertFalse(completed.failIfDeadlineExpired(
+				20L, 10L, StreamTerminationReason.RESPONSE_TIMEOUT, null),
+				"A fully written terminal response must beat a later deadline.");
+
+		RecordingChannelListener deadlineListener = new RecordingChannelListener();
+		McpOutboundChannel deadline = new McpOutboundChannel(
+				1, 16, 16, now::get, deadlineListener);
+		Assertions.assertTrue(deadline.complete(ascii("stale")));
+		Assertions.assertTrue(deadline.failIfDeadlineExpired(
+				10L, 10L, StreamTerminationReason.RESPONSE_TIMEOUT, null),
+				"The deadline must discard a terminal that has not drained.");
+		Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
+				deadlineListener.terminationReason.get());
+		Assertions.assertEquals(0, deadline.snapshot().terminalBytes());
 	}
 
 	private static void awaitCondition(Condition condition) throws Exception {
@@ -224,6 +305,7 @@ public class McpTransportPrimitiveTests {
 		private final CountDownLatch backpressure = new CountDownLatch(1);
 		private final AtomicInteger terminationCount = new AtomicInteger();
 		private final AtomicReference<StreamTerminationReason> terminationReason = new AtomicReference<>();
+		private final AtomicReference<Throwable> terminationCause = new AtomicReference<>();
 
 		@Override
 		public void didWrite(long byteCount, long timestampNanos) {
@@ -238,6 +320,7 @@ public class McpTransportPrimitiveTests {
 		@Override
 		public void didTerminate(StreamTerminationReason reason, @Nullable Throwable cause) {
 			terminationReason.compareAndSet(null, reason);
+			terminationCause.set(cause);
 			terminationCount.incrementAndGet();
 		}
 	}

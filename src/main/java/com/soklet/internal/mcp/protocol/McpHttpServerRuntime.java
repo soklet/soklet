@@ -23,7 +23,9 @@ import com.soklet.CorsResponse;
 import com.soklet.HttpMethod;
 import com.soklet.MediaRange;
 import com.soklet.Request;
+import com.soklet.StatusCode;
 import com.soklet.StreamTerminationReason;
+import com.soklet.internal.mcp.transport.McpOutboundChannel;
 import com.soklet.internal.microhttp.ConnectionListener;
 import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.Handler;
@@ -68,7 +70,12 @@ import java.util.function.Consumer;
 import static java.util.Objects.requireNonNull;
 
 record McpRequestExecutionSnapshot(int retainedRequestControls,
-		int queuedProtocolRequests, int activeRequestIds) {
+		int queuedProtocolRequests, int activeRequestIds,
+		int activeResponseStreams, long bufferedStreamFrames,
+		long bufferedStreamBytes, long terminalStreamBytes,
+		int maximumObservedBufferedFramesPerStream,
+		int maximumObservedBufferedBytesPerStream,
+		long unknownMirroredHeaderOccurrences) {
 }
 
 /**
@@ -85,10 +92,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private static final String ORIGIN = "Origin";
 	private static final String MCP_PROTOCOL_VERSION = "MCP-Protocol-Version";
 	private static final String MCP_METHOD = "Mcp-Method";
+	private static final String MCP_NAME = "Mcp-Name";
 	private static final String CACHE_CONTROL = "Cache-Control";
 	private static final String CACHE_CONTROL_NO_STORE = "no-store";
+	private static final String RETRY_AFTER = "Retry-After";
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final String SSE_MEDIA_TYPE = "text/event-stream";
+	private static final int SOKLET_RATE_LIMITED = -31999;
+	private static final int SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER = -31998;
+	private static final Set<String> FRAMEWORK_OWNED_POLICY_HEADERS = Set.of(
+			"cache-control", "connection", "content-encoding", "content-length",
+			"content-type", "keep-alive", "proxy-authenticate",
+			"proxy-authorization", "proxy-connection", "te", "trailer",
+			"transfer-encoding", "upgrade", "retry-after");
 	private static final Set<HttpMethod> MCP_HTTP_METHODS =
 			Set.of(HttpMethod.POST, HttpMethod.OPTIONS);
 	private static final Set<String> MCP_PREFLIGHT_REQUEST_HEADERS = Set.of(
@@ -103,6 +119,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private final McpJsonLimits jsonLimits;
 	private final McpJsonRpcEnvelopeCodec envelopeCodec;
 	private final McpRequestWireMapper requestWireMapper;
+	private final McpMirroredHeaderCodec mirroredHeaderCodec;
+	private final McpCustomMirroredHeaderValidator customMirroredHeaderValidator;
+	private final McpNormalizedEndpoint endpoint;
 	private final McpServerCapabilityRegistry capabilityRegistry;
 	private final McpApplicationRequestRouter applicationRouter;
 	private final McpApplicationExecutionConfiguration applicationConfiguration;
@@ -112,6 +131,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private final Map<MicrohttpRequest, RequestControl> requestControls;
 	private final ConcurrentHashMap<McpJsonRpcId, RequestControl> activeRequestIds;
 	private final AtomicLong processorThreadSequence;
+	private final AtomicLong unknownMirroredHeaderOccurrences;
 	private LifecycleState lifecycleState;
 	private @Nullable EventLoop eventLoop;
 	private @Nullable EventLoop residualEventLoop;
@@ -175,12 +195,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpJsonCodec jsonCodec = new McpJsonCodec(jsonLimits);
 		this.envelopeCodec = new McpJsonRpcEnvelopeCodec(jsonCodec);
 		this.requestWireMapper = new McpRequestWireMapper(jsonLimits);
-		this.capabilityRegistry = McpServerCapabilityRegistry.fromEndpoint(
-				requireNonNull(endpoint));
+		this.mirroredHeaderCodec = new McpMirroredHeaderCodec(Math.min(
+				McpMirroredHeaderCodec.DEFAULT_MAXIMUM_DECODED_BYTES,
+				transportConfiguration.maximumHeaderBytes()));
+		this.customMirroredHeaderValidator =
+				new McpCustomMirroredHeaderValidator(mirroredHeaderCodec);
+		this.endpoint = requireNonNull(endpoint);
+		this.capabilityRegistry = McpServerCapabilityRegistry.fromEndpoint(endpoint);
 		this.lifecycleLock = new Object();
 		this.requestControls = Collections.synchronizedMap(new IdentityHashMap<>());
 		this.activeRequestIds = new ConcurrentHashMap<>();
 		this.processorThreadSequence = new AtomicLong();
+		this.unknownMirroredHeaderOccurrences = new AtomicLong();
 		this.lifecycleState = LifecycleState.STOPPED;
 	}
 
@@ -219,7 +245,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				candidateProcessor = newRequestProcessor();
 				candidateApplicationExecution = new McpApplicationExecution(
 						applicationConfiguration, applicationClock,
-						applicationExecutorFactory, this::runProtocolDeadlineCycle);
+						applicationExecutorFactory, this::runProtocolDeadlineCycle,
+						endpointPolicy.requestInterceptor());
 				ThreadPoolExecutor readyProcessor = candidateProcessor;
 				McpApplicationExecution readyApplicationExecution =
 						candidateApplicationExecution;
@@ -238,6 +265,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 					@Override
 					public boolean monitorClientDisconnectsBeforeResponse(MicrohttpRequest request) {
+						return true;
+					}
+
+					@Override
+					public boolean monitorClientDisconnectsDuringStreamingResponse(
+							MicrohttpRequest request) {
 						return true;
 					}
 
@@ -398,6 +431,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				? 0L : shutdownTimeoutNanos - elapsedNanos;
 	}
 
+	private long saturatingAdd(long left, long right) {
+		long result = left + right;
+		return ((left ^ result) & (right ^ result)) < 0
+				? Long.MAX_VALUE : result;
+	}
+
 	boolean isStarted() {
 		synchronized (lifecycleLock) {
 			return lifecycleState == LifecycleState.STARTED;
@@ -425,9 +464,38 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		synchronized (lifecycleLock) {
 			ThreadPoolExecutor processor = requestProcessor != null
 					? requestProcessor : residualRequestProcessor;
-			return new McpRequestExecutionSnapshot(requestControls.size(),
+			List<RequestControl> controls;
+			synchronized (requestControls) {
+				controls = List.copyOf(requestControls.values());
+			}
+			int activeStreams = 0;
+			long bufferedFrames = 0L;
+			long bufferedBytes = 0L;
+			long terminalBytes = 0L;
+			int maximumObservedFrames = 0;
+			int maximumObservedBytes = 0;
+			for (RequestControl control : controls) {
+				Optional<McpOutboundChannel.Snapshot> streamSnapshot =
+						control.streamSnapshot();
+				if (streamSnapshot.isEmpty())
+					continue;
+				McpOutboundChannel.Snapshot stream = streamSnapshot.orElseThrow();
+				if (!stream.closed())
+					activeStreams++;
+				bufferedFrames += stream.bufferedFrames();
+				bufferedBytes += stream.bufferedBytes();
+				terminalBytes += stream.terminalBytes();
+				maximumObservedFrames = Math.max(maximumObservedFrames,
+						stream.maximumObservedBufferedFrames());
+				maximumObservedBytes = Math.max(maximumObservedBytes,
+						stream.maximumObservedBufferedBytes());
+			}
+			return new McpRequestExecutionSnapshot(controls.size(),
 					processor == null ? 0 : processor.getQueue().size(),
-					activeRequestIds.size());
+					activeRequestIds.size(), activeStreams, bufferedFrames,
+					bufferedBytes, terminalBytes, maximumObservedFrames,
+					maximumObservedBytes,
+					unknownMirroredHeaderOccurrences.get());
 		}
 	}
 
@@ -675,6 +743,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return wireDecodingFailure(exception, null, corsHeaders);
 		}
 
+		if (envelope instanceof McpJsonRpcEnvelope.Notification notification)
+			return processNotification(request, sokletRequest, notification,
+					corsHeaders, requestControl);
+
 		if (!(envelope instanceof McpJsonRpcEnvelope.Request wireRequest))
 			return jsonRpcError(400, "Bad Request", Optional.empty(),
 					new McpJsonRpcError(McpJsonRpcError.INVALID_REQUEST,
@@ -684,6 +756,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				request, wireRequest, corsHeaders);
 		if (mirroredHeaderFailure != null)
 			return mirroredHeaderFailure;
+
+		McpCustomMirroredHeaderValidation customHeaderValidation =
+				customMirroredHeaderValidator.validate(request.headers(), wireRequest,
+						capabilityRegistry,
+						endpointPolicy.unknownMirroredHeaderPolicy());
+		recordUnknownMirroredHeaders(customHeaderValidation.unknownHeaderCount());
+		if (customHeaderValidation.outcome()
+				== McpCustomMirroredHeaderOutcome.HEADER_MISMATCH)
+			return headerMismatch(wireRequest.id(), corsHeaders);
+		if (customHeaderValidation.outcome()
+				== McpCustomMirroredHeaderOutcome.STRICT_UNKNOWN)
+			return strictUnknownMirroredHeader(wireRequest.id(), corsHeaders);
 
 		McpJsonRpcMessage.Request mappedRequest;
 		try {
@@ -727,20 +811,54 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
-		McpRequestAdmissionDecision admissionDecision;
+		McpAdmissionContext admissionContext = new McpAdmissionContext(
+				sokletRequest, endpoint, Map.of(), mappedRequest.method(), false,
+				Optional.of(mappedRequest.id()), requestedProtocolVersion,
+				Optional.empty(), mappedRequest.params().metadata().clientInformation(),
+				Optional.of(mappedRequest.params().metadata().clientCapabilities()));
+		McpAdmissionDecision admissionDecision;
 		try {
-			admissionDecision = endpointPolicy.requestAdmissionGate().admit(sokletRequest);
+			admissionDecision = endpointPolicy.requestAdmissionPolicy().admit(admissionContext);
 		} catch (Throwable throwable) {
-			return emptyResponse(500, "Internal Server Error", List.of());
+			return policyHookInternalError(mappedRequest.id(), corsHeaders);
 		}
-
-		if (admissionDecision == null)
-			return emptyResponse(500, "Internal Server Error", List.of());
-
-		if (admissionDecision == McpRequestAdmissionDecision.REJECT)
-			return emptyResponse(403, "Forbidden", corsHeaders);
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
+		if (admissionDecision == null)
+			return policyHookInternalError(mappedRequest.id(), corsHeaders);
+
+		if (admissionDecision instanceof McpAdmissionDecision.Rejected rejected) {
+			try {
+				return admissionRejection(mappedRequest.id(), rejected.rejection(), corsHeaders);
+			} catch (IllegalArgumentException exception) {
+				return policyHookInternalError(mappedRequest.id(), corsHeaders);
+			}
+		}
+		McpAdmissionIdentity admittedIdentity =
+				((McpAdmissionDecision.Accepted) admissionDecision).identity();
+		McpEffectiveAdmissionIdentity effectiveIdentity =
+				McpEffectiveAdmissionIdentity.resolve(endpoint, endpointPolicy.path(),
+						admittedIdentity);
+		if (!requestControl.protocolProcessingAllowed())
+			return null;
+
+		if (endpointPolicy.requestRateLimiter().isPresent()) {
+			McpRateLimitDecision rateLimitDecision;
+			try {
+				rateLimitDecision = endpointPolicy.requestRateLimiter().orElseThrow().acquire(
+						new McpRateLimitContext(sokletRequest, endpoint, effectiveIdentity,
+								McpRateLimitTarget.REQUEST, mappedRequest.method(),
+								Optional.empty()));
+			} catch (Throwable throwable) {
+				return policyHookInternalError(mappedRequest.id(), corsHeaders);
+			}
+			if (!requestControl.protocolProcessingAllowed())
+				return null;
+			if (rateLimitDecision == null)
+				return policyHookInternalError(mappedRequest.id(), corsHeaders);
+			if (rateLimitDecision instanceof McpRateLimitDecision.Denied denied)
+				return rateLimited(mappedRequest.id(), denied.retryAfter(), corsHeaders);
+		}
 
 		if (discoveryRequest) {
 			McpJsonRpcMessage.ResultResponse response = new McpJsonRpcMessage.ResultResponse(
@@ -750,12 +868,128 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		requestControl.handoff(application, () -> application.dispatch(
-				request, mappedRequest, applicationHandler.orElseThrow(),
+				request, mappedRequest, effectiveIdentity,
+				applicationHandler.orElseThrow(),
 				requestControl.deadlineNanos(),
-				response -> requestControl.writeApplicationResponse(
-						applicationResponse(response, mappedRequest.id(), corsHeaders)),
+				new McpApplicationResponseWriter() {
+					@Override
+					public boolean write(McpApplicationResponse response) {
+						return requestControl.writeApplicationResponse(response,
+								mappedRequest.id(), corsHeaders);
+					}
+
+					@Override
+					public boolean writeNotification(
+							McpJsonRpcMessage.Notification notification)
+							throws InterruptedException {
+						return requestControl.writeApplicationNotification(
+								notification, corsHeaders);
+					}
+				},
 				requestControl::applicationTerminated));
 		return null;
+	}
+
+	private void recordUnknownMirroredHeaders(int occurrences) {
+		if (occurrences == 0)
+			return;
+		unknownMirroredHeaderOccurrences.getAndUpdate(current ->
+				current > Long.MAX_VALUE - occurrences
+						? Long.MAX_VALUE : current + occurrences);
+	}
+
+	private @Nullable MicrohttpResponse processNotification(MicrohttpRequest request,
+			Request sokletRequest, McpJsonRpcEnvelope.Notification notification,
+			List<Header> corsHeaders, RequestControl requestControl) {
+		boolean cancellationNotification =
+				"notifications/cancelled".equals(notification.method());
+		if (!cancellationNotification && !validPresentNotificationMetadata(notification))
+			return emptyResponse(400, "Bad Request", corsHeaders);
+
+		List<String> protocolVersions = headerValues(request, MCP_PROTOCOL_VERSION);
+		if (protocolVersions.size() != 1)
+			return emptyResponse(400, "Bad Request", corsHeaders);
+		String protocolVersion = protocolVersions.get(0);
+		try {
+			mirroredHeaderCodec.requirePlainString(protocolVersion);
+		} catch (IllegalArgumentException exception) {
+			return emptyResponse(400, "Bad Request", corsHeaders);
+		}
+		if (!McpProtocolVersion.SUPPORTED.contains(protocolVersion))
+			return emptyResponse(400, "Bad Request", corsHeaders);
+
+		if (!requestControl.protocolProcessingAllowed())
+			return null;
+		McpAdmissionContext admissionContext = new McpAdmissionContext(
+				sokletRequest, endpoint, Map.of(), notification.method(), true,
+				Optional.empty(), protocolVersion, Optional.empty(), Optional.empty(),
+				Optional.empty());
+		McpAdmissionDecision admissionDecision;
+		try {
+			admissionDecision = endpointPolicy.requestAdmissionPolicy().admit(admissionContext);
+		} catch (Throwable throwable) {
+			return emptyResponse(500, "Internal Server Error", corsHeaders);
+		}
+		if (!requestControl.protocolProcessingAllowed())
+			return null;
+		if (admissionDecision == null)
+			return emptyResponse(500, "Internal Server Error", corsHeaders);
+
+		if (admissionDecision instanceof McpAdmissionDecision.Rejected rejected) {
+			try {
+				return notificationAdmissionRejection(rejected.rejection(), corsHeaders);
+			} catch (IllegalArgumentException exception) {
+				return emptyResponse(500, "Internal Server Error", corsHeaders);
+			}
+		}
+		McpAdmissionIdentity admittedIdentity =
+				((McpAdmissionDecision.Accepted) admissionDecision).identity();
+		McpEffectiveAdmissionIdentity effectiveIdentity =
+				McpEffectiveAdmissionIdentity.resolve(endpoint, endpointPolicy.path(),
+						admittedIdentity);
+		if (!requestControl.protocolProcessingAllowed())
+			return null;
+
+		if (endpointPolicy.requestRateLimiter().isPresent()) {
+			McpRateLimitDecision rateLimitDecision;
+			try {
+				rateLimitDecision = endpointPolicy.requestRateLimiter().orElseThrow().acquire(
+						new McpRateLimitContext(sokletRequest, endpoint, effectiveIdentity,
+								McpRateLimitTarget.REQUEST, notification.method(),
+								Optional.empty()));
+			} catch (Throwable throwable) {
+				return emptyResponse(500, "Internal Server Error", corsHeaders);
+			}
+			if (!requestControl.protocolProcessingAllowed())
+				return null;
+			if (rateLimitDecision == null)
+				return emptyResponse(500, "Internal Server Error", corsHeaders);
+			if (rateLimitDecision instanceof McpRateLimitDecision.Denied denied)
+				return notificationRateLimited(denied.retryAfter(), corsHeaders);
+		}
+
+		return cancellationNotification
+				? emptyResponse(202, "Accepted", corsHeaders)
+				: emptyResponse(400, "Bad Request", corsHeaders);
+	}
+
+	private boolean validPresentNotificationMetadata(
+			McpJsonRpcEnvelope.Notification notification) {
+		Optional<McpJsonValue> params = notification.params();
+		if (params.isEmpty() || !(params.orElseThrow() instanceof McpJsonObject object)
+				|| !object.members().containsKey("_meta"))
+			return true;
+
+		McpJsonValue metadataValue = object.members().get("_meta");
+		if (!(metadataValue instanceof McpJsonObject metadata))
+			return false;
+
+		try {
+			McpProtocolSupport.requireInboundMetadataFields(metadata, Set.of());
+			return true;
+		} catch (IllegalArgumentException exception) {
+			return false;
+		}
 	}
 
 	private MicrohttpResponse applicationResponse(McpApplicationResponse response,
@@ -781,6 +1015,142 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return httpResponse;
 	}
 
+	private MicrohttpResponse policyHookInternalError(McpJsonRpcId requestId,
+			List<Header> corsHeaders) {
+		return jsonRpcError(500, "Internal Server Error", Optional.of(requestId),
+				new McpJsonRpcError(McpJsonRpcError.INTERNAL_ERROR,
+						"Internal error", Optional.empty()), corsHeaders);
+	}
+
+	private MicrohttpResponse admissionRejection(McpJsonRpcId requestId,
+			McpRequestRejection rejection, List<Header> corsHeaders) {
+		requireNonNull(requestId);
+		requireNonNull(rejection);
+		requireNonNull(corsHeaders);
+		if (!applicationErrorCodeAllowed(rejection.jsonRpcError().code()))
+			throw new IllegalArgumentException(
+					"Admission rejection used a reserved error code.");
+
+		List<Header> headers = new ArrayList<>(corsHeaders);
+		headers.addAll(validatedPolicyHeaders(rejection.headers()));
+		String reason = StatusCode.fromStatusCode(rejection.statusCode())
+				.map(StatusCode::getReasonPhrase)
+				.orElse("Admission Rejected");
+		return jsonRpcError(rejection.statusCode(), reason, Optional.of(requestId),
+				rejection.jsonRpcError(), List.copyOf(headers));
+	}
+
+	private MicrohttpResponse notificationAdmissionRejection(
+			McpRequestRejection rejection, List<Header> corsHeaders) {
+		requireNonNull(rejection);
+		requireNonNull(corsHeaders);
+		if (!applicationErrorCodeAllowed(rejection.jsonRpcError().code()))
+			throw new IllegalArgumentException(
+					"Admission rejection used a reserved error code.");
+
+		List<Header> headers = new ArrayList<>(corsHeaders);
+		headers.addAll(validatedPolicyHeaders(rejection.headers()));
+		String reason = StatusCode.fromStatusCode(rejection.statusCode())
+				.map(StatusCode::getReasonPhrase)
+				.orElse("Admission Rejected");
+		return emptyResponse(rejection.statusCode(), reason, List.copyOf(headers));
+	}
+
+	private MicrohttpResponse rateLimited(McpJsonRpcId requestId,
+			Duration retryAfter, List<Header> corsHeaders) {
+		requireNonNull(retryAfter);
+		if (retryAfter.isNegative())
+			throw new IllegalArgumentException("Retry-After must not be negative.");
+		List<Header> headers = new ArrayList<>(corsHeaders.size() + 1);
+		headers.addAll(corsHeaders);
+		headers.add(new Header(RETRY_AFTER, retryAfterSeconds(retryAfter)));
+		return jsonRpcError(429, "Too Many Requests", Optional.of(requestId),
+				new McpJsonRpcError(SOKLET_RATE_LIMITED, "Rate limited", Optional.empty()),
+				List.copyOf(headers));
+	}
+
+	private MicrohttpResponse notificationRateLimited(Duration retryAfter,
+			List<Header> corsHeaders) {
+		requireNonNull(retryAfter);
+		if (retryAfter.isNegative())
+			throw new IllegalArgumentException("Retry-After must not be negative.");
+		List<Header> headers = new ArrayList<>(corsHeaders.size() + 1);
+		headers.addAll(corsHeaders);
+		headers.add(new Header(RETRY_AFTER, retryAfterSeconds(retryAfter)));
+		return emptyResponse(429, "Too Many Requests", List.copyOf(headers));
+	}
+
+	private String retryAfterSeconds(Duration retryAfter) {
+		long seconds = retryAfter.getSeconds();
+		if (retryAfter.getNano() > 0 && seconds < Long.MAX_VALUE)
+			seconds++;
+		return Long.toString(seconds);
+	}
+
+	private boolean applicationErrorCodeAllowed(int code) {
+		return (code < -32_768 || code > -32_000)
+				&& code != SOKLET_RATE_LIMITED
+				&& code != SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER;
+	}
+
+	private List<Header> validatedPolicyHeaders(
+			Map<String, List<String>> policyHeaders) {
+		List<Header> headers = new ArrayList<>();
+		Set<String> normalizedNames = new LinkedHashSet<>();
+		long encodedBytes = 0L;
+		for (Map.Entry<String, List<String>> entry : policyHeaders.entrySet()) {
+			String name = requireNonNull(entry.getKey());
+			String lowerName = name.toLowerCase(Locale.ROOT);
+			if (!validHeaderName(name)
+					|| !normalizedNames.add(lowerName)
+					|| FRAMEWORK_OWNED_POLICY_HEADERS.contains(lowerName)
+					|| lowerName.startsWith("access-control-"))
+				throw new IllegalArgumentException(
+						"Admission rejection contains an unsafe response header.");
+
+			List<String> values = requireNonNull(entry.getValue());
+			if (values.isEmpty())
+				throw new IllegalArgumentException(
+						"Admission rejection header values must not be empty.");
+			for (String value : values) {
+				requireNonNull(value);
+				if (!validHeaderValue(value))
+					throw new IllegalArgumentException(
+							"Admission rejection contains an unsafe response header value.");
+				encodedBytes += name.length() + value.length() + 4L;
+				if (headers.size() >= transportConfiguration.maximumHeaderCount()
+						|| encodedBytes > transportConfiguration.maximumHeaderBytes())
+					throw new IllegalArgumentException(
+							"Admission rejection response headers exceed the configured bounds.");
+				headers.add(new Header(name, value));
+			}
+		}
+		return List.copyOf(headers);
+	}
+
+	private boolean validHeaderName(String name) {
+		if (name.isEmpty())
+			return false;
+		for (int index = 0; index < name.length(); index++) {
+			char character = name.charAt(index);
+			if (!(character >= '0' && character <= '9')
+					&& !(character >= 'A' && character <= 'Z')
+					&& !(character >= 'a' && character <= 'z')
+					&& "!#$%&'*+-.^_`|~".indexOf(character) < 0)
+				return false;
+		}
+		return true;
+	}
+
+	private boolean validHeaderValue(String value) {
+		for (int index = 0; index < value.length(); index++) {
+			char character = value.charAt(index);
+			if (character != '\t' && (character < 0x20 || character > 0x7E))
+				return false;
+		}
+		return true;
+	}
+
 	private MicrohttpResponse processPreflight(MicrohttpRequest request,
 			Request sokletRequest) {
 		List<String> origins = headerValues(request, ORIGIN);
@@ -799,7 +1169,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Optional<Set<String>> requestedHeaders = requestedPreflightHeaders(request);
 		if (requestedHeaders.isEmpty()
 				|| !containsOnlyIgnoreCase(requestedHeaders.orElseThrow(),
-						MCP_PREFLIGHT_REQUEST_HEADERS))
+						mcpPreflightRequestHeaders()))
 			return emptyResponse(403, "Forbidden", List.of());
 
 		CorsPreflight preflight = CorsPreflight.with(origins.get(0), HttpMethod.POST,
@@ -825,15 +1195,31 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (allowedOrigin.isEmpty())
 			return emptyResponse(500, "Internal Server Error", List.of());
 
+		Set<HttpMethod> allowedMethods = authorization.getAccessControlAllowMethods();
+		Set<String> allowedHeaders = authorization.getAccessControlAllowHeaders();
+		if (!MCP_HTTP_METHODS.containsAll(allowedMethods)
+				|| !validCorsAllowedHeaders(allowedHeaders))
+			return emptyResponse(500, "Internal Server Error", List.of());
+
 		List<Header> headers = new ArrayList<>();
 		headers.add(new Header("Access-Control-Allow-Origin", allowedOrigin.orElseThrow()));
 		if (Boolean.TRUE.equals(
 				authorization.getAccessControlAllowCredentials().orElse(null)))
 			headers.add(new Header("Access-Control-Allow-Credentials", "true"));
-		headers.add(new Header("Access-Control-Allow-Methods", "POST, OPTIONS"));
-		if (!requestedHeaders.orElseThrow().isEmpty())
+		List<String> allowedMethodNames = new ArrayList<>();
+		for (HttpMethod method : List.of(HttpMethod.POST, HttpMethod.OPTIONS)) {
+			if (allowedMethods.contains(method))
+				allowedMethodNames.add(method.name());
+		}
+		if (!allowedMethodNames.isEmpty())
+			headers.add(new Header("Access-Control-Allow-Methods",
+					String.join(", ", allowedMethodNames)));
+		if (!allowedHeaders.isEmpty()) {
+			List<String> sortedAllowedHeaders = new ArrayList<>(allowedHeaders);
+			sortedAllowedHeaders.sort(String.CASE_INSENSITIVE_ORDER);
 			headers.add(new Header("Access-Control-Allow-Headers",
-					String.join(", ", requestedHeaders.orElseThrow())));
+					String.join(", ", sortedAllowedHeaders)));
+		}
 		authorization.getAccessControlMaxAge().ifPresent(maximumAge -> {
 			if (!maximumAge.isNegative() && !maximumAge.isZero())
 				headers.add(new Header("Access-Control-Max-Age",
@@ -843,6 +1229,23 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			headers.add(new Header("Vary",
 					"Origin, Access-Control-Request-Method, Access-Control-Request-Headers"));
 		return emptyResponse(204, "No Content", headers);
+	}
+
+	private boolean validCorsAllowedHeaders(Set<String> allowedHeaders) {
+		Set<String> normalizedNames = new LinkedHashSet<>();
+		for (String name : allowedHeaders) {
+			if (!validHeaderName(name)
+					|| !containsOnlyIgnoreCase(Set.of(name), mcpPreflightRequestHeaders())
+					|| !normalizedNames.add(name.toLowerCase(Locale.ROOT)))
+				return false;
+		}
+		return true;
+	}
+
+	private Set<String> mcpPreflightRequestHeaders() {
+		Set<String> headers = new LinkedHashSet<>(MCP_PREFLIGHT_REQUEST_HEADERS);
+		headers.addAll(capabilityRegistry.customMirroredHeaderNames());
+		return Set.copyOf(headers);
 	}
 
 	private CorsAuthorization authorizeCors(MicrohttpRequest request,
@@ -1080,18 +1483,70 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpJsonRpcEnvelope.Request wireRequest, List<Header> corsHeaders) {
 		List<String> protocolVersions = headerValues(request, MCP_PROTOCOL_VERSION);
 		List<String> methods = headerValues(request, MCP_METHOD);
+		List<String> names = headerValues(request, MCP_NAME);
 
-		if (protocolVersions.size() != 1 || methods.size() != 1
-				|| !methods.get(0).equals(wireRequest.method()))
+		if (protocolVersions.size() != 1 || methods.size() != 1)
+			return headerMismatch(wireRequest.id(), corsHeaders);
+		try {
+			mirroredHeaderCodec.requirePlainString(protocolVersions.get(0));
+			mirroredHeaderCodec.requirePlainString(methods.get(0));
+		} catch (IllegalArgumentException exception) {
+			return headerMismatch(wireRequest.id(), corsHeaders);
+		}
+		if (!methods.get(0).equals(wireRequest.method()))
 			return headerMismatch(wireRequest.id(), corsHeaders);
 
+		Optional<String> expectedName = standardMirroredName(wireRequest);
+		if (requiresMcpName(wireRequest.method())) {
+			if (names.size() != 1 || expectedName.isEmpty())
+				return headerMismatch(wireRequest.id(), corsHeaders);
+
+			String decodedName;
+			try {
+				decodedName = mirroredHeaderCodec.decodeString(names.get(0));
+			} catch (IllegalArgumentException exception) {
+				return headerMismatch(wireRequest.id(), corsHeaders);
+			}
+			if (!decodedName.equals(expectedName.orElseThrow()))
+				return headerMismatch(wireRequest.id(), corsHeaders);
+		} else if (!names.isEmpty()) {
+			return headerMismatch(wireRequest.id(), corsHeaders);
+		}
+
 		return null;
+	}
+
+	private boolean requiresMcpName(String method) {
+		return "tools/call".equals(method)
+				|| "prompts/get".equals(method)
+				|| "resources/read".equals(method);
+	}
+
+	private Optional<String> standardMirroredName(
+			McpJsonRpcEnvelope.Request wireRequest) {
+		if (!requiresMcpName(wireRequest.method())
+				|| wireRequest.params().isEmpty()
+				|| !(wireRequest.params().orElseThrow() instanceof McpJsonObject params))
+			return Optional.empty();
+
+		String fieldName = "resources/read".equals(wireRequest.method()) ? "uri" : "name";
+		McpJsonValue value = params.members().get(fieldName);
+		return value instanceof McpJsonString string
+				? Optional.of(string.value())
+				: Optional.empty();
 	}
 
 	private MicrohttpResponse headerMismatch(McpJsonRpcId id, List<Header> corsHeaders) {
 		return jsonRpcError(400, "Bad Request", Optional.of(id),
 				new McpJsonRpcError(McpJsonRpcError.HEADER_MISMATCH,
 						"Header mismatch", Optional.empty()), corsHeaders);
+	}
+
+	private MicrohttpResponse strictUnknownMirroredHeader(McpJsonRpcId id,
+			List<Header> corsHeaders) {
+		return jsonRpcError(400, "Bad Request", Optional.of(id),
+				new McpJsonRpcError(SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER,
+						"Unknown mirrored header", Optional.empty()), corsHeaders);
 	}
 
 	private MicrohttpResponse methodNotFound(McpJsonRpcMessage.Request request,
@@ -1637,8 +2092,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private @Nullable FutureTask<Void> protocolTask;
 		private @Nullable Consumer<MicrohttpResponse> responseCallback;
 		private @Nullable McpJsonRpcId registeredRequestId;
+		private @Nullable McpRequestSseStream responseStream;
 		private List<Header> deadlineResponseHeaders;
+		private long nextKeepAliveNanos;
 		private boolean applicationOwned;
+		private boolean streamTerminalResponseOwned;
+		private boolean streamAbortOwned;
 		private boolean canceled;
 		private boolean terminal;
 
@@ -1828,27 +2287,128 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						requireNonNull(reservation.response()));
 		}
 
-		private boolean writeApplicationResponse(MicrohttpResponse response) {
-			requireNonNull(response);
-			Consumer<MicrohttpResponse> callback;
+		private boolean writeApplicationNotification(
+				McpJsonRpcMessage.Notification notification,
+				List<Header> additionalHeaders) throws InterruptedException {
+			requireNonNull(notification);
+			requireNonNull(additionalHeaders);
+			McpRequestSseStream stream;
+			Consumer<MicrohttpResponse> callback = null;
+			boolean firstMessage = false;
+
 			synchronized (lock) {
-				if (!applicationOwned || canceled || terminal)
+				if (!applicationOwned || streamAbortOwned || canceled || terminal)
+					return false;
+
+				stream = responseStream;
+				if (stream == null) {
+					stream = newResponseStream();
+					McpOutboundChannel.OfferResult result =
+							stream.offerMessage(notification);
+					if (result != McpOutboundChannel.OfferResult.ACCEPTED)
+						throw new IllegalStateException(
+								"A new MCP response stream could not accept its first message.");
+
+					responseStream = stream;
+					firstMessage = true;
+					nextKeepAliveNanos = saturatingAdd(applicationClock.nanoTime(),
+							transportConfiguration.keepAliveInterval().toNanos());
+					callback = takeResponseCallback();
+				}
+			}
+
+			if (firstMessage) {
+				try {
+					requireNonNull(callback).accept(stream.response(additionalHeaders));
+				} catch (Throwable throwable) {
+					stream.fail(StreamTerminationReason.INTERNAL_ERROR, throwable);
+					return false;
+				}
+				return true;
+			}
+
+			stream.enqueueMessage(notification);
+			return true;
+		}
+
+		private boolean writeApplicationResponse(McpApplicationResponse response,
+				McpJsonRpcId requestId, List<Header> additionalHeaders) {
+			requireNonNull(response);
+			requireNonNull(requestId);
+			requireNonNull(additionalHeaders);
+			Consumer<MicrohttpResponse> callback = null;
+			McpRequestSseStream stream;
+			MicrohttpResponse jsonResponse = null;
+
+			synchronized (lock) {
+				if (!applicationOwned || streamAbortOwned || canceled || terminal)
 					return false;
 
 				applicationOwned = false;
-				terminal = true;
 				protocolTask = null;
-				callback = takeResponseCallback();
-				releaseRequestId();
+				stream = responseStream;
+				if (stream == null) {
+					terminal = true;
+					callback = takeResponseCallback();
+					releaseRequestId();
+				} else
+					streamTerminalResponseOwned = true;
 			}
 
-			requestControls.remove(request, this);
-			deliverResponse(callback, response);
-			return true;
+			if (stream == null) {
+				jsonResponse = applicationResponse(
+						response, requestId, additionalHeaders);
+				requestControls.remove(request, this);
+				deliverResponse(requireNonNull(callback), requireNonNull(jsonResponse));
+				return true;
+			}
+
+			if (response.message().isEmpty())
+				return stream.fail(StreamTerminationReason.RESPONSE_TIMEOUT, null);
+
+			try {
+				return stream.completeMessage(response.message().orElseThrow());
+			} catch (Throwable throwable) {
+				return stream.fail(StreamTerminationReason.INTERNAL_ERROR, throwable);
+			}
+		}
+
+		private McpRequestSseStream newResponseStream() {
+			return new McpRequestSseStream(
+					transportConfiguration.streamQueueCapacity(),
+					jsonLimits,
+					envelopeCodec,
+					applicationClock,
+					new McpOutboundChannel.Listener() {
+						@Override
+						public void didWrite(long byteCount, long timestampNanos) {
+							// The channel owns its write-idle timestamp.
+						}
+
+						@Override
+						public void didApplyBackpressure() {
+							// Phase 3 records the bound through deterministic tests;
+							// public metrics arrive with the observability slice.
+						}
+
+						@Override
+						public void didTerminate(StreamTerminationReason reason,
+								@Nullable Throwable cause) {
+							streamTerminated(reason, cause);
+						}
+					});
+		}
+
+		private Optional<McpOutboundChannel.Snapshot> streamSnapshot() {
+			synchronized (lock) {
+				return responseStream == null ? Optional.empty()
+						: Optional.of(responseStream.snapshot());
+			}
 		}
 
 		private void cancel(StreamTerminationReason reason, @Nullable Throwable cause) {
 			FutureTask<Void> task;
+			McpRequestSseStream stream;
 			boolean remove;
 			synchronized (lock) {
 				if (terminal)
@@ -1857,6 +2417,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				canceled = true;
 				task = protocolTask;
 				protocolTask = null;
+				stream = responseStream;
 				remove = !applicationOwned;
 				if (applicationOwned) {
 					// Application cancellation runs under the ownership lock. Its
@@ -1882,11 +2443,54 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				task.cancel(true);
 				processor.remove(task);
 			}
+			if (stream != null)
+				stream.close(reason, cause);
 			if (remove)
 				requestControls.remove(request, this);
 		}
 
 		private void onTimer(long nowNanos) {
+			McpRequestSseStream stream;
+			synchronized (lock) {
+				if (terminal || canceled)
+					return;
+				stream = responseStream;
+			}
+
+			if (stream != null) {
+				if (stream.failIfDeadlineExpired(nowNanos, deadlineNanos,
+						StreamTerminationReason.RESPONSE_TIMEOUT, null)) {
+					application.recordStreamDeadlineExpiration();
+					return;
+				}
+				if (stream.failIfWriteIdleExpired(nowNanos,
+						transportConfiguration.responseWriteIdleTimeout().toNanos(),
+						StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null))
+					return;
+
+				boolean terminateForBackpressure = false;
+				synchronized (lock) {
+					if (terminal || canceled || responseStream != stream
+							|| streamTerminalResponseOwned || streamAbortOwned
+							|| nowNanos - deadlineNanos >= 0L)
+						return;
+					if (nowNanos - nextKeepAliveNanos >= 0L) {
+						McpOutboundChannel.OfferResult result = stream.offerKeepAlive();
+						if (result == McpOutboundChannel.OfferResult.ACCEPTED) {
+							nextKeepAliveNanos = saturatingAdd(nowNanos,
+									transportConfiguration.keepAliveInterval().toNanos());
+						} else if (result == McpOutboundChannel.OfferResult.FULL
+								|| result == McpOutboundChannel.OfferResult.TOO_LARGE) {
+							streamAbortOwned = true;
+							terminateForBackpressure = true;
+						}
+					}
+				}
+				if (terminateForBackpressure)
+					stream.fail(StreamTerminationReason.BACKPRESSURE, null);
+				return;
+			}
+
 			if (nowNanos - deadlineNanos < 0L)
 				return;
 
@@ -1902,6 +2506,30 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			finishProtocolDeadline(expiration);
+		}
+
+		private void streamTerminated(StreamTerminationReason reason,
+				@Nullable Throwable cause) {
+			requireNonNull(reason);
+			boolean cancelApplication;
+			synchronized (lock) {
+				if (terminal)
+					return;
+
+				cancelApplication = applicationOwned
+						&& reason != StreamTerminationReason.COMPLETED;
+				if (reason != StreamTerminationReason.COMPLETED)
+					canceled = true;
+				applicationOwned = false;
+				terminal = true;
+				protocolTask = null;
+				responseCallback = null;
+				releaseRequestId();
+			}
+
+			requestControls.remove(request, this);
+			if (cancelApplication)
+				application.cancel(request, reason, cause);
 		}
 
 		private ProtocolDeadlineExpiration detachProtocolDeadline(boolean cancelTask) {
@@ -1928,14 +2556,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void applicationTerminated() {
+			boolean remove;
 			synchronized (lock) {
 				applicationOwned = false;
-				terminal = true;
 				protocolTask = null;
-				responseCallback = null;
-				releaseRequestId();
+				remove = responseStream == null || canceled || terminal;
+				if (remove) {
+					terminal = true;
+					responseCallback = null;
+					releaseRequestId();
+				}
 			}
-			requestControls.remove(request, this);
+			if (remove)
+				requestControls.remove(request, this);
 		}
 
 		private Consumer<MicrohttpResponse> takeResponseCallback() {

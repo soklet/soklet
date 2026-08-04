@@ -18,6 +18,8 @@ package com.soklet.internal.mcp.schema;
 
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderDeclaration;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderValueType;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -112,6 +114,59 @@ class McpTypedSchemaCompilerTests {
 		assertEquals(McpSchemaCompilationException.Kind.INVALID_KEYWORD_VALUE,
 				exception.kind());
 		assertEquals(Optional.of("x-mcp-header"), exception.keyword());
+	}
+
+	@Test
+	void retainsTheValidatedMirroredHeaderPlanForToolInputs() {
+		FakeTypeModel model = new FakeTypeModel();
+		model.add("string", new McpTypedTypeDescriptor.Scalar<>(
+				McpTypedSchemaScalar.STRING));
+		model.add("int", new McpTypedTypeDescriptor.Scalar<>(
+				McpTypedSchemaScalar.INT));
+		model.add("routing", new McpTypedTypeDescriptor.RecordValue<>(
+				"example.Routing", List.of(new McpTypedTypeDescriptor
+						.RecordComponent<>("shard", "int", Optional.empty(),
+						Optional.empty(), Optional.of("Shard")))));
+		model.add("arguments", new McpTypedTypeDescriptor.RecordValue<>(
+				"example.Arguments", List.of(
+						new McpTypedTypeDescriptor.RecordComponent<>(
+								"tenant", "string", Optional.empty(), Optional.empty(),
+								Optional.of("Tenant")),
+						component("routing", "routing"))));
+		McpTypedSchemaCompiler<String> compiler = compiler(model,
+				new McpJsonCodec(productionJsonLimits()));
+
+		McpCompiledTypedSchema input = compiler.compileToolInput("arguments");
+		assertEquals(List.of(
+				new McpMirroredHeaderDeclaration("Shard",
+						List.of("routing", "shard"),
+						McpMirroredHeaderValueType.INTEGER),
+				new McpMirroredHeaderDeclaration("Tenant", List.of("tenant"),
+						McpMirroredHeaderValueType.STRING)),
+				input.mirroredHeaderPlan().declarations());
+	}
+
+	@Test
+	void rejectsMirroredHeadersForGenericSchemasAndToolOutputs() {
+		FakeTypeModel model = new FakeTypeModel();
+		model.add("string", new McpTypedTypeDescriptor.Scalar<>(
+				McpTypedSchemaScalar.STRING));
+		model.add("arguments", new McpTypedTypeDescriptor.RecordValue<>(
+				"example.Arguments", List.of(new McpTypedTypeDescriptor
+				.RecordComponent<>("tenant", "string", Optional.empty(),
+				Optional.empty(), Optional.of("Tenant")))));
+		McpTypedSchemaCompiler<String> compiler = compiler(model,
+				new McpJsonCodec(productionJsonLimits()));
+
+		for (Runnable compilation : List.<Runnable>of(
+				() -> compiler.compileSchema("arguments"),
+				() -> compiler.compileToolOutput("arguments"))) {
+			McpSchemaCompilationException exception = assertThrows(
+					McpSchemaCompilationException.class, compilation::run);
+			assertEquals(McpSchemaCompilationException.Kind.INVALID_KEYWORD_VALUE,
+					exception.kind());
+			assertEquals(Optional.of("x-mcp-header"), exception.keyword());
+		}
 	}
 
 	private McpTypedSchemaCompiler<String> compiler(FakeTypeModel model,

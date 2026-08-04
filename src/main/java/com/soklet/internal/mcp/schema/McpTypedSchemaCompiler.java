@@ -18,6 +18,7 @@ package com.soklet.internal.mcp.schema;
 
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
 
 import java.util.List;
 
@@ -86,12 +87,15 @@ final class McpTypedSchemaCompiler<T> {
 		}
 
 		McpToolSchemaProfileProgram program = profileCompiler.compile(document);
+		McpMirroredHeaderPlan mirroredHeaderPlan = McpMirroredHeaderPlan.empty();
 		if (use == Use.TOOL_INPUT)
-			useValidator.validateToolInput(program);
+			mirroredHeaderPlan = useValidator.validateToolInput(program);
 		else if (use == Use.TOOL_OUTPUT)
 			useValidator.validateToolOutput(program);
+		else
+			useValidator.validateSchema(program);
 		return new McpCompiledTypedSchema(shape, document, program,
-				serializedDocument);
+				mirroredHeaderPlan, serializedDocument);
 	}
 
 	private enum Use {

@@ -16,10 +16,16 @@
 
 package com.soklet.internal.mcp.schema;
 
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderDeclaration;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderValueType;
+
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -27,11 +33,11 @@ import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Applies the tool-input and tool-output use constraints that are intentionally
- * separate from Profile 1 document compilation.
+ * Applies schema-use constraints that are intentionally separate from Profile
+ * 1 document compilation.
  */
 final class McpSchemaUseValidator {
-	void validateToolInput(McpToolSchemaProfileProgram program) {
+	McpMirroredHeaderPlan validateToolInput(McpToolSchemaProfileProgram program) {
 		requireNonNull(program);
 		McpToolSchemaProfileNode root = program.node(program.rootNodeId());
 		if (root.directType().orElse(null) != McpSchemaType.OBJECT)
@@ -43,6 +49,7 @@ final class McpSchemaUseValidator {
 				staticallyReachableProperties(program);
 		Map<String, McpSchemaLocation> locationsByLowercaseHeader =
 				new LinkedHashMap<>();
+		List<McpMirroredHeaderDeclaration> declarations = new ArrayList<>();
 		for (McpToolSchemaProfileNode node : program.nodes()) {
 			String header = program.declaredHeadersBySchemaPointer().get(
 					node.location().jsonPointer());
@@ -72,16 +79,36 @@ final class McpSchemaUseValidator {
 			if (previous != null)
 				throw invalidHeader(node,
 						"x-mcp-header names must be unique case-insensitively within one tool input schema.");
+			declarations.add(new McpMirroredHeaderDeclaration(header,
+					argumentPropertyPath(node.location()), switch (directType) {
+						case STRING -> McpMirroredHeaderValueType.STRING;
+						case BOOLEAN -> McpMirroredHeaderValueType.BOOLEAN;
+						case INTEGER -> McpMirroredHeaderValueType.INTEGER;
+						default -> throw new IllegalStateException(
+								"Validated mirrored-header type is not primitive.");
+					}));
 		}
+		return new McpMirroredHeaderPlan(declarations);
 	}
 
 	void validateToolOutput(McpToolSchemaProfileProgram program) {
+		rejectMirroredHeaders(program,
+				"x-mcp-header is not permitted in a tool output schema.");
+	}
+
+	void validateSchema(McpToolSchemaProfileProgram program) {
+		rejectMirroredHeaders(program,
+				"x-mcp-header is permitted only in a tool input schema.");
+	}
+
+	private void rejectMirroredHeaders(McpToolSchemaProfileProgram program,
+			String message) {
 		requireNonNull(program);
+		requireNonNull(message);
 		for (McpToolSchemaProfileNode node : program.nodes()) {
 			if (program.declaredHeadersBySchemaPointer().containsKey(
 					node.location().jsonPointer()))
-				throw invalidHeader(node,
-						"x-mcp-header is not permitted in a tool output schema.");
+				throw invalidHeader(node, message);
 		}
 	}
 
@@ -104,6 +131,21 @@ final class McpSchemaUseValidator {
 			Deque<McpSchemaNodeId> destination) {
 		for (McpSchemaNodeId property : node.propertySchemas().values())
 			destination.addLast(property);
+	}
+
+	private List<String> argumentPropertyPath(McpSchemaLocation location) {
+		List<String> segments = location.pointerSegments();
+		if (segments.isEmpty() || segments.size() % 2 != 0)
+			throw new IllegalStateException(
+					"A reachable mirrored property has an invalid schema path.");
+		List<String> properties = new ArrayList<>(segments.size() / 2);
+		for (int index = 0; index < segments.size(); index += 2) {
+			if (!"properties".equals(segments.get(index)))
+				throw new IllegalStateException(
+						"A reachable mirrored property left the properties chain.");
+			properties.add(segments.get(index + 1));
+		}
+		return List.copyOf(properties);
 	}
 
 	private boolean isHttpToken(String value) {

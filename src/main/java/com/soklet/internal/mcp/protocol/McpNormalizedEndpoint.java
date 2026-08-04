@@ -56,6 +56,8 @@ final class McpNormalizedEndpoint {
 		this.exactResources = immutableOperations(builder.exactResources, "exact resource URI");
 		this.resourceTemplates = immutableOperations(
 				builder.resourceTemplates, "resource URI template");
+		validateToolOnlyMirroredHeaders(this.prompts, this.exactResources,
+				this.resourceTemplates);
 		validateDistinctResources(this.exactResources, this.resourceTemplates);
 		this.customResourceListHandler = builder.customResourceListHandler;
 		this.subscriptions = builder.subscriptions;
@@ -141,6 +143,18 @@ final class McpNormalizedEndpoint {
 			if (!resourceIdentities.add(resourceTemplate.name()))
 				throw new IllegalArgumentException(
 						"Duplicate resource identity '" + resourceTemplate.name() + "'.");
+		}
+	}
+
+	@SafeVarargs
+	private static void validateToolOnlyMirroredHeaders(
+			List<McpNormalizedOperation>... operationGroups) {
+		for (List<McpNormalizedOperation> operations : operationGroups) {
+			for (McpNormalizedOperation operation : operations) {
+				if (!operation.mirroredHeaderPlan().declarations().isEmpty())
+					throw new IllegalArgumentException(
+							"Custom mirrored headers are supported only for tools.");
+			}
 		}
 	}
 
@@ -236,14 +250,21 @@ final class McpNormalizedEndpoint {
 	}
 }
 
-record McpNormalizedOperation(String name, McpInputRequestPlan inputRequestPlan) {
+record McpNormalizedOperation(String name, McpInputRequestPlan inputRequestPlan,
+		McpMirroredHeaderPlan mirroredHeaderPlan) {
+	McpNormalizedOperation(String name, McpInputRequestPlan inputRequestPlan) {
+		this(name, inputRequestPlan, McpMirroredHeaderPlan.empty());
+	}
+
 	McpNormalizedOperation {
 		name = McpProtocolSupport.requireNonBlank(name, "Operation name");
 		requireNonNull(inputRequestPlan);
+		requireNonNull(mirroredHeaderPlan);
 	}
 
 	static McpNormalizedOperation named(String name) {
-		return new McpNormalizedOperation(name, McpInputRequestPlan.empty());
+		return new McpNormalizedOperation(name, McpInputRequestPlan.empty(),
+				McpMirroredHeaderPlan.empty());
 	}
 }
 

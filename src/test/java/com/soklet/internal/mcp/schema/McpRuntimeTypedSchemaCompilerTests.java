@@ -44,6 +44,8 @@ class McpRuntimeTypedSchemaCompilerTests {
 	void atomicallyCompilesInputSchemaAndMatchingIntrinsicBinding() {
 		McpCompiledRuntimeTypedSchema<Arguments> compiled = compiler()
 				.compileToolInput(Arguments.class);
+		assertEquals(compiled.schema().mirroredHeaderPlan(),
+				compiled.mirroredHeaderPlan());
 		Map<String, McpJsonValue> members = new LinkedHashMap<>();
 		members.put("query", new McpJsonString(" exact "));
 		members.put("limits", new McpJsonArray(List.of(

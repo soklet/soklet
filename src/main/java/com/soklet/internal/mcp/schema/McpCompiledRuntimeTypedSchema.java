@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.schema;
 
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
 
 import static java.util.Objects.requireNonNull;
 
@@ -40,6 +41,10 @@ final class McpCompiledRuntimeTypedSchema<T> {
 
 	McpCompiledTypedSchema schema() {
 		return schema;
+	}
+
+	McpMirroredHeaderPlan mirroredHeaderPlan() {
+		return schema.mirroredHeaderPlan();
 	}
 
 	T fromJson(McpJsonValue value) {

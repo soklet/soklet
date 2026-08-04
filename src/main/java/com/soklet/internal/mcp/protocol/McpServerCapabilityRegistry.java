@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.protocol;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -35,6 +36,8 @@ final class McpServerCapabilityRegistry {
 	private final List<String> exactResourceUris;
 	private final List<String> resourceTemplates;
 	private final Map<McpOperationKey, McpInputRequestPlan> inputRequestPlans;
+	private final Map<String, McpMirroredHeaderPlan> toolMirroredHeaderPlans;
+	private final Set<String> customMirroredHeaderNames;
 	private final McpDiscoverResult discoverResult;
 
 	static McpServerCapabilityRegistry fromEndpoint(McpNormalizedEndpoint endpoint) {
@@ -48,6 +51,8 @@ final class McpServerCapabilityRegistry {
 		this.exactResourceUris = namesOf(endpoint.exactResources());
 		this.resourceTemplates = namesOf(endpoint.resourceTemplates());
 		this.inputRequestPlans = inputRequestPlans(endpoint);
+		this.toolMirroredHeaderPlans = toolMirroredHeaderPlans(endpoint);
+		this.customMirroredHeaderNames = customMirroredHeaderNames(endpoint);
 
 		Optional<McpImmutableCatalogCapability> toolsCapability = tools.isEmpty()
 				? Optional.empty()
@@ -113,6 +118,14 @@ final class McpServerCapabilityRegistry {
 				new McpOperationKey(operationKind, operationName)));
 	}
 
+	Optional<McpMirroredHeaderPlan> toolMirroredHeaderPlan(String toolName) {
+		return Optional.ofNullable(toolMirroredHeaderPlans.get(requireNonNull(toolName)));
+	}
+
+	Set<String> customMirroredHeaderNames() {
+		return customMirroredHeaderNames;
+	}
+
 	McpDiscoverResult discoverResult() {
 		return discoverResult;
 	}
@@ -144,6 +157,28 @@ final class McpServerCapabilityRegistry {
 					resourceTemplate.inputRequestPlan());
 
 		return Collections.unmodifiableMap(plans);
+	}
+
+	private static Map<String, McpMirroredHeaderPlan> toolMirroredHeaderPlans(
+			McpNormalizedEndpoint endpoint) {
+		Map<String, McpMirroredHeaderPlan> plans = new LinkedHashMap<>();
+		for (McpNormalizedOperation tool : endpoint.tools())
+			plans.put(tool.name(), tool.mirroredHeaderPlan());
+		return Collections.unmodifiableMap(plans);
+	}
+
+	private static Set<String> customMirroredHeaderNames(
+			McpNormalizedEndpoint endpoint) {
+		Map<String, String> namesByLowercase = new LinkedHashMap<>();
+		for (McpNormalizedOperation tool : endpoint.tools()) {
+			for (McpMirroredHeaderDeclaration declaration
+					: tool.mirroredHeaderPlan().declarations())
+				namesByLowercase.putIfAbsent(
+						declaration.headerName().toLowerCase(Locale.ROOT),
+						declaration.headerName());
+		}
+		return Collections.unmodifiableSet(
+				new java.util.LinkedHashSet<>(namesByLowercase.values()));
 	}
 }
 

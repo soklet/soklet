@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -156,6 +157,62 @@ public class ConnectionEventLoopDispatchTests {
 					"GET /healthy HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
 			Assertions.assertTrue(healthyResponse.endsWith("healthy"), healthyResponse);
 		} finally {
+			eventLoop.stop();
+			eventLoop.join();
+		}
+	}
+
+	@Test
+	public void initialWriteFailureAfterCommitClosesSourceWithWriteFailed() throws Exception {
+		assertCommittedWriteFailure(false);
+	}
+
+	@Test
+	public void callbackWriteFailureAfterCommitClosesSourceWithWriteFailed() throws Exception {
+		assertCommittedWriteFailure(true);
+	}
+
+	private void assertCommittedWriteFailure(boolean deferFailureUntilCallback) throws Exception {
+		FailingWriteWritableSource source = new FailingWriteWritableSource(deferFailureUntilCallback);
+		AtomicInteger cancelCount = new AtomicInteger();
+		Handler handler = new Handler() {
+			@Override
+			public void handle(MicrohttpRequest request, Consumer<MicrohttpResponse> callback) {
+				callback.accept(StreamingMicrohttpResponses.withWritableSourceBody(
+						200, "OK", List.of(), () -> source));
+			}
+
+			@Override
+			public void cancel(MicrohttpRequest request, StreamTerminationReason reason,
+									 @Nullable Throwable cause) {
+				cancelCount.incrementAndGet();
+			}
+		};
+		EventLoop eventLoop = new EventLoop(testOptions(), handler);
+		Socket socket = null;
+
+		try {
+			eventLoop.start();
+			socket = new Socket("localhost", eventLoop.getPort());
+			socket.getOutputStream().write(ascii(
+					"GET /write-failure HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+			socket.getOutputStream().flush();
+
+			Assertions.assertTrue(source.started.await(3, TimeUnit.SECONDS));
+			Assertions.assertTrue(source.firstWriteAttempt.await(3, TimeUnit.SECONDS));
+			if (deferFailureUntilCallback)
+				source.triggerFailure();
+
+			Assertions.assertTrue(source.closed.await(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(1, source.closeCount.get());
+			Assertions.assertEquals(StreamTerminationReason.WRITE_FAILED,
+					source.closeReason.get());
+			Assertions.assertSame(source.failure, source.closeCause.get());
+			Assertions.assertEquals(0, cancelCount.get(),
+					"installed response source owns post-commit write failure");
+		} finally {
+			if (socket != null)
+				socket.close();
 			eventLoop.stop();
 			eventLoop.join();
 		}
@@ -1009,6 +1066,85 @@ public class ConnectionEventLoopDispatchTests {
 
 		private void recordClose(@Nullable StreamTerminationReason reason) {
 			closeReason.compareAndSet(null, reason);
+			closeCount.incrementAndGet();
+			closed.countDown();
+		}
+	}
+
+	private static final class FailingWriteWritableSource implements WritableSource {
+		private final IOException failure;
+		private final CountDownLatch started;
+		private final CountDownLatch firstWriteAttempt;
+		private final CountDownLatch closed;
+		private final AtomicBoolean failWrites;
+		private final AtomicReference<Runnable> writeReadyCallback;
+		private final AtomicInteger closeCount;
+		private final AtomicReference<StreamTerminationReason> closeReason;
+		private final AtomicReference<Throwable> closeCause;
+
+		private FailingWriteWritableSource(boolean deferFailureUntilCallback) {
+			this.failure = new IOException("write failed");
+			this.started = new CountDownLatch(1);
+			this.firstWriteAttempt = new CountDownLatch(1);
+			this.closed = new CountDownLatch(1);
+			this.failWrites = new AtomicBoolean(!deferFailureUntilCallback);
+			this.writeReadyCallback = new AtomicReference<>();
+			this.closeCount = new AtomicInteger();
+			this.closeReason = new AtomicReference<>();
+			this.closeCause = new AtomicReference<>();
+		}
+
+		@Override
+		public void start() {
+			started.countDown();
+		}
+
+		@Override
+		public void writeReadyCallback(Runnable callback) {
+			writeReadyCallback.set(callback);
+		}
+
+		@Override
+		public long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException {
+			firstWriteAttempt.countDown();
+			if (failWrites.get())
+				throw failure;
+
+			return 0L;
+		}
+
+		@Override
+		public boolean hasRemaining() {
+			return true;
+		}
+
+		@Override
+		public boolean isReadyToWrite() {
+			return failWrites.get();
+		}
+
+		@Override
+		public void close() {
+			recordClose(null, null);
+		}
+
+		@Override
+		public void close(@Nullable StreamTerminationReason reason, @Nullable Throwable cause) {
+			recordClose(reason, cause);
+		}
+
+		private void triggerFailure() {
+			failWrites.set(true);
+			Runnable callback = writeReadyCallback.get();
+			if (callback == null)
+				throw new IllegalStateException("Write-ready callback was not installed.");
+			callback.run();
+		}
+
+		private void recordClose(@Nullable StreamTerminationReason reason,
+				@Nullable Throwable cause) {
+			closeReason.compareAndSet(null, reason);
+			closeCause.compareAndSet(null, cause);
 			closeCount.incrementAndGet();
 			closed.countDown();
 		}

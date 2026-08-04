@@ -268,6 +268,35 @@ public class McpServerCapabilityRegistryTests {
 	}
 
 	@Test
+	public void mirrored_header_plans_are_indexed_per_tool_with_a_cors_union() {
+		McpMirroredHeaderPlan firstPlan = new McpMirroredHeaderPlan(List.of(
+				new McpMirroredHeaderDeclaration("Tenant", List.of("tenant"),
+						McpMirroredHeaderValueType.STRING)));
+		McpMirroredHeaderPlan secondPlan = new McpMirroredHeaderPlan(List.of(
+				new McpMirroredHeaderDeclaration("Region", List.of("region"),
+						McpMirroredHeaderValueType.STRING),
+				new McpMirroredHeaderDeclaration("tenant", List.of("account"),
+						McpMirroredHeaderValueType.STRING)));
+		McpServerCapabilityRegistry registry = McpServerCapabilityRegistry.fromEndpoint(
+				endpointBuilder()
+						.tool(new McpNormalizedOperation("first",
+								McpInputRequestPlan.empty(), firstPlan))
+						.tool(new McpNormalizedOperation("second",
+								McpInputRequestPlan.empty(), secondPlan))
+						.build());
+
+		Assertions.assertEquals(Optional.of(firstPlan),
+				registry.toolMirroredHeaderPlan("first"));
+		Assertions.assertEquals(Optional.of(secondPlan),
+				registry.toolMirroredHeaderPlan("second"));
+		Assertions.assertTrue(registry.toolMirroredHeaderPlan("absent").isEmpty());
+		Assertions.assertEquals(Set.of("Mcp-Param-Tenant", "Mcp-Param-Region"),
+				registry.customMirroredHeaderNames());
+		Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> registry.customMirroredHeaderNames().add("Mcp-Param-Mutation"));
+	}
+
+	@Test
 	public void duplicate_catalog_names_fail_during_normalization() {
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> endpointBuilder()
@@ -284,6 +313,23 @@ public class McpServerCapabilityRegistryTests {
 						.exactResource("catalog://items/1")
 						.resourceTemplate("catalog://items/1")
 						.build());
+
+		McpMirroredHeaderPlan mirroredHeaders = new McpMirroredHeaderPlan(List.of(
+				new McpMirroredHeaderDeclaration("Tenant", List.of("tenant"),
+						McpMirroredHeaderValueType.STRING)));
+		for (java.util.function.Consumer<McpNormalizedEndpoint.Builder> registration
+				: List.<java.util.function.Consumer<McpNormalizedEndpoint.Builder>>of(
+					builder -> builder.prompt(new McpNormalizedOperation("prompt",
+							McpInputRequestPlan.empty(), mirroredHeaders)),
+					builder -> builder.exactResource(new McpNormalizedOperation(
+							"catalog://item", McpInputRequestPlan.empty(), mirroredHeaders)),
+					builder -> builder.resourceTemplate(new McpNormalizedOperation(
+							"catalog://{item}", McpInputRequestPlan.empty(), mirroredHeaders))))
+			Assertions.assertThrows(IllegalArgumentException.class, () -> {
+				McpNormalizedEndpoint.Builder builder = endpointBuilder();
+				registration.accept(builder);
+				builder.build();
+			});
 	}
 
 	@Test

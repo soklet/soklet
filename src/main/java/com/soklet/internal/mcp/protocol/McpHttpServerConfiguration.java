@@ -17,10 +17,10 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
-import com.soklet.Request;
 
 import java.time.Duration;
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
@@ -31,12 +31,13 @@ import static java.util.Objects.requireNonNull;
  */
 record McpHttpTransportConfiguration(String host, int port, Duration selectorResolution,
 		Duration requestHeaderTimeout, Duration requestBodyTimeout,
-		Duration responseWriteIdleTimeout, Duration shutdownTimeout,
+		Duration responseWriteIdleTimeout, Duration keepAliveInterval,
+		Duration shutdownTimeout,
 		int readBufferSize, int acceptBacklog, int maximumAggregateRequestBytes,
 		int maximumRequestBodyBytes, int maximumHeaderCount, int maximumHeaderBytes,
 		int maximumRequestTargetBytes, int maximumConnections,
 		int connectionWriterConcurrency, int requestProcessorConcurrency,
-		int requestProcessorQueueCapacity) {
+		int requestProcessorQueueCapacity, int streamQueueCapacity) {
 	private static final int MEBIBYTE = 1_024 * 1_024;
 	private static final int DEFAULT_MAXIMUM_REQUEST_BODY_BYTES = 4 * MEBIBYTE;
 	private static final int DEFAULT_MAXIMUM_HEADER_BYTES = 64 * 1_024;
@@ -56,7 +57,11 @@ record McpHttpTransportConfiguration(String host, int port, Duration selectorRes
 		positive(requestHeaderTimeout, "Request-header timeout");
 		positive(requestBodyTimeout, "Request-body timeout");
 		positive(responseWriteIdleTimeout, "Response write-idle timeout");
+		positive(keepAliveInterval, "Keep-alive interval");
 		positive(shutdownTimeout, "Shutdown timeout");
+		if (keepAliveInterval.compareTo(responseWriteIdleTimeout) >= 0)
+			throw new IllegalArgumentException(
+					"Keep-alive interval must be shorter than the response write-idle timeout.");
 		positive(readBufferSize, "Read-buffer size");
 		positive(acceptBacklog, "Accept backlog");
 		positive(maximumAggregateRequestBytes, "Maximum aggregate request bytes");
@@ -68,6 +73,7 @@ record McpHttpTransportConfiguration(String host, int port, Duration selectorRes
 		positive(connectionWriterConcurrency, "Connection-writer concurrency");
 		positive(requestProcessorConcurrency, "Request-processor concurrency");
 		positive(requestProcessorQueueCapacity, "Request-processor queue capacity");
+		positive(streamQueueCapacity, "Stream queue capacity");
 
 		long requiredAggregateBytes = (long) maximumRequestBodyBytes
 				+ maximumHeaderBytes + maximumRequestTargetBytes
@@ -86,6 +92,7 @@ record McpHttpTransportConfiguration(String host, int port, Duration selectorRes
 				Duration.ofSeconds(60),
 				Duration.ofSeconds(60),
 				Duration.ofSeconds(60),
+				Duration.ofSeconds(15),
 				Duration.ofSeconds(5),
 				64 * 1_024,
 				8_192,
@@ -97,7 +104,8 @@ record McpHttpTransportConfiguration(String host, int port, Duration selectorRes
 				8_192,
 				1,
 				32,
-				128);
+				128,
+				64);
 	}
 
 	private static String requireNonBlank(String value, String description) {
@@ -131,7 +139,28 @@ record McpHttpTransportConfiguration(String host, int port, Duration selectorRes
 
 record McpHttpEndpointPolicy(String path, Set<String> allowedHosts,
 		McpAbsentOriginPolicy absentOriginPolicy, CorsAuthorizer corsAuthorizer,
-		McpRequestAdmissionGate requestAdmissionGate) {
+		McpRequestAdmissionPolicy requestAdmissionPolicy,
+		Optional<McpRateLimiter> requestRateLimiter,
+		McpApplicationRequestInterceptor requestInterceptor,
+		McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy) {
+	McpHttpEndpointPolicy(String path, Set<String> allowedHosts,
+			McpAbsentOriginPolicy absentOriginPolicy, CorsAuthorizer corsAuthorizer,
+			McpRequestAdmissionPolicy requestAdmissionPolicy,
+			Optional<McpRateLimiter> requestRateLimiter,
+			McpApplicationRequestInterceptor requestInterceptor) {
+		this(path, allowedHosts, absentOriginPolicy, corsAuthorizer,
+				requestAdmissionPolicy, requestRateLimiter, requestInterceptor,
+				McpUnknownMirroredHeaderPolicy.IGNORE);
+	}
+
+	McpHttpEndpointPolicy(String path, Set<String> allowedHosts,
+			McpAbsentOriginPolicy absentOriginPolicy, CorsAuthorizer corsAuthorizer,
+			McpRequestAdmissionPolicy requestAdmissionPolicy) {
+		this(path, allowedHosts, absentOriginPolicy, corsAuthorizer,
+				requestAdmissionPolicy, Optional.empty(),
+				McpApplicationRequestInterceptor.passThroughInstance());
+	}
+
 	McpHttpEndpointPolicy {
 		path = requireNonNull(path);
 
@@ -149,13 +178,47 @@ record McpHttpEndpointPolicy(String path, Set<String> allowedHosts,
 		allowedHosts = Set.copyOf(copiedHosts);
 		requireNonNull(absentOriginPolicy);
 		requireNonNull(corsAuthorizer);
-		requireNonNull(requestAdmissionGate);
+		requireNonNull(requestAdmissionPolicy);
+		requireNonNull(requestRateLimiter);
+		requireNonNull(requestInterceptor);
+		requireNonNull(unknownMirroredHeaderPolicy);
 	}
 
 	static McpHttpEndpointPolicy forDiscovery(CorsAuthorizer corsAuthorizer,
-			McpRequestAdmissionGate requestAdmissionGate) {
+			McpRequestAdmissionPolicy requestAdmissionPolicy) {
 		return new McpHttpEndpointPolicy("/mcp", Set.of(),
-				McpAbsentOriginPolicy.ALLOW, corsAuthorizer, requestAdmissionGate);
+				McpAbsentOriginPolicy.ALLOW, corsAuthorizer, requestAdmissionPolicy);
+	}
+
+	McpHttpEndpointPolicy withRequestRateLimiter(McpRateLimiter requestRateLimiter) {
+		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
+				corsAuthorizer, requestAdmissionPolicy,
+				Optional.of(requireNonNull(requestRateLimiter)), requestInterceptor,
+				unknownMirroredHeaderPolicy);
+	}
+
+	McpHttpEndpointPolicy withRequestInterceptor(
+			McpApplicationRequestInterceptor requestInterceptor) {
+		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
+				corsAuthorizer, requestAdmissionPolicy, requestRateLimiter,
+				requireNonNull(requestInterceptor), unknownMirroredHeaderPolicy);
+	}
+
+	McpHttpEndpointPolicy withUnknownMirroredHeaderPolicy(
+			McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy) {
+		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
+				corsAuthorizer, requestAdmissionPolicy, requestRateLimiter,
+				requestInterceptor, requireNonNull(unknownMirroredHeaderPolicy));
+	}
+
+	@Override
+	public String toString() {
+		return "McpHttpEndpointPolicy[path=" + path
+				+ ", allowedHostCount=" + allowedHosts.size()
+				+ ", absentOriginPolicy=" + absentOriginPolicy
+				+ ", requestRateLimiterPresent=" + requestRateLimiter.isPresent()
+				+ ", unknownMirroredHeaderPolicy=" + unknownMirroredHeaderPolicy
+				+ "]";
 	}
 }
 
@@ -164,12 +227,7 @@ enum McpAbsentOriginPolicy {
 	REQUIRE_ORIGIN
 }
 
-@FunctionalInterface
-interface McpRequestAdmissionGate {
-	McpRequestAdmissionDecision admit(Request request) throws Exception;
-}
-
-enum McpRequestAdmissionDecision {
-	ACCEPT,
-	REJECT
+enum McpUnknownMirroredHeaderPolicy {
+	IGNORE,
+	REJECT_REQUESTS
 }

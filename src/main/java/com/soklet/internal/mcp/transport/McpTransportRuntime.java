@@ -551,7 +551,7 @@ final class McpTransportRuntime implements AutoCloseable {
 					configuration.outboundFrameCapacity(),
 					configuration.outboundByteCapacity(),
 					configuration.terminalByteCapacity(),
-					clock,
+					clock::nanoTime,
 					new McpOutboundChannel.Listener() {
 						@Override
 						public void didWrite(long byteCount, long timestampNanos) {
@@ -604,7 +604,7 @@ final class McpTransportRuntime implements AutoCloseable {
 							new Header("Content-Type", "text/event-stream"),
 							new Header("Cache-Control", "no-cache"),
 							new Header("Connection", "close")),
-					() -> channel));
+					channel::newWritableSource));
 
 			if (cancellation.get() != null)
 				return;

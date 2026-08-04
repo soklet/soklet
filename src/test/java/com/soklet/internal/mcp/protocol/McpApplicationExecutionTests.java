@@ -153,7 +153,7 @@ public class McpApplicationExecutionTests {
 
 		try {
 			execution.start();
-			execution.dispatch(transportRequest, request, invocation -> {
+			execution.dispatch(transportRequest, request, admissionIdentity(), invocation -> {
 				handlerInvocations.incrementAndGet();
 				return McpWireResult.complete(McpJsonObject.empty());
 			}, System.nanoTime() + TimeUnit.SECONDS.toNanos(30), response -> {
@@ -206,7 +206,8 @@ public class McpApplicationExecutionTests {
 		AtomicInteger cleanups = new AtomicInteger();
 
 		execution.start();
-		execution.dispatch(transportRequest(), request("start-after-stop"), invocation -> {
+		execution.dispatch(transportRequest(), request("start-after-stop"),
+				admissionIdentity(), invocation -> {
 			handlerInvocations.incrementAndGet();
 			return McpWireResult.complete(McpJsonObject.empty());
 		}, System.nanoTime() + TimeUnit.SECONDS.toNanos(30), response -> {
@@ -247,7 +248,8 @@ public class McpApplicationExecutionTests {
 
 		try {
 			execution.start();
-			execution.dispatch(transportRequest(), request("already-expired"), invocation -> {
+			execution.dispatch(transportRequest(), request("already-expired"),
+					admissionIdentity(), invocation -> {
 				handlerInvocations.incrementAndGet();
 				return McpWireResult.complete(McpJsonObject.empty());
 			}, 99L, value -> {
@@ -287,6 +289,7 @@ public class McpApplicationExecutionTests {
 		try {
 			execution.start();
 			execution.dispatch(transportRequest, request("cancel-during-rejection"),
+					admissionIdentity(),
 					invocation -> {
 						handlerInvocations.incrementAndGet();
 						return McpWireResult.complete(McpJsonObject.empty());
@@ -337,6 +340,7 @@ public class McpApplicationExecutionTests {
 			Thread dispatch = new Thread(() -> {
 				dispatchThread.set(Thread.currentThread());
 				execution.dispatch(transportRequest(), request("pre-admission-deadline"),
+						admissionIdentity(),
 						invocation -> {
 							handlerInvocations.incrementAndGet();
 							return McpWireResult.complete(McpJsonObject.empty());
@@ -384,6 +388,15 @@ public class McpApplicationExecutionTests {
 	private static MicrohttpRequest transportRequest() {
 		return new MicrohttpRequest("POST", "/mcp", "HTTP/1.1", List.of(),
 				new byte[0], false, new InetSocketAddress("127.0.0.1", 12345));
+	}
+
+	private static McpEffectiveAdmissionIdentity admissionIdentity() {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"application-execution-test", "3.6.0-SNAPSHOT"))
+				.build();
+		return McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp",
+				McpAdmissionIdentity.anonymousInstance());
 	}
 
 	private static McpJsonRpcMessage.Request request(String id) {

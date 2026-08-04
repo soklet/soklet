@@ -19,6 +19,9 @@ package com.soklet.internal.mcp.schema;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderDeclaration;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderValueType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -74,6 +77,25 @@ public class McpSchemaUseValidatorTests {
 	}
 
 	@Test
+	public void genericSchemaAcceptsAnyProfileRootButRejectsEveryHeaderDeclaration() {
+		validateSchema("{\"type\":\"string\"}");
+		validateSchema("{\"type\":\"array\",\"items\":{\"type\":\"integer\"}}");
+		validateSchema("{\"type\":\"object\"}");
+
+		for (String schema : List.of(
+				"{\"type\":\"string\",\"x-mcp-header\":\"Root\"}",
+				"{\"type\":\"object\",\"properties\":{\"x\":{"
+						+ "\"type\":\"string\",\"x-mcp-header\":\"X\"}}}",
+				"{\"type\":\"array\",\"items\":{\"type\":\"string\","
+						+ "\"x-mcp-header\":\"X\"}}")) {
+			McpSchemaCompilationException exception =
+					assertSchemaRejected(schema);
+			Assertions.assertEquals("x-mcp-header",
+					exception.keyword().orElseThrow(), schema);
+		}
+	}
+
+	@Test
 	public void inputHeadersMayUseOnlyPropertiesChainsFromTheRoot() {
 		validateInput("""
 				{"type":"object","properties":{
@@ -100,6 +122,29 @@ public class McpSchemaUseValidatorTests {
 						+ "\"x-mcp-header\":\"X\"}},\"properties\":{\"x\":{"
 						+ "\"$ref\":\"#/$defs/x\"}}}"))
 			assertInputRejected(schema);
+	}
+
+	@Test
+	public void inputValidationReturnsTheExactDeterministicRuntimePlan() {
+		McpMirroredHeaderPlan plan = VALIDATOR.validateToolInput(compile("""
+				{"type":"object","properties":{
+				  "tenant":{"type":"string","x-mcp-header":"Tenant"},
+				  "routing":{"type":"object","properties":{
+				    "dryRun":{"type":"boolean","x-mcp-header":"Dry-Run"},
+				    "shard":{"type":"integer","x-mcp-header":"Shard"}}}
+				}}
+				"""));
+
+		Assertions.assertEquals(List.of(
+				new McpMirroredHeaderDeclaration("Dry-Run",
+						List.of("routing", "dryRun"),
+						McpMirroredHeaderValueType.BOOLEAN),
+				new McpMirroredHeaderDeclaration("Shard",
+						List.of("routing", "shard"),
+						McpMirroredHeaderValueType.INTEGER),
+				new McpMirroredHeaderDeclaration("Tenant", List.of("tenant"),
+						McpMirroredHeaderValueType.STRING)),
+				plan.declarations());
 	}
 
 	@Test
@@ -158,6 +203,10 @@ public class McpSchemaUseValidatorTests {
 		VALIDATOR.validateToolOutput(compile(schema));
 	}
 
+	private static void validateSchema(String schema) {
+		VALIDATOR.validateSchema(compile(schema));
+	}
+
 	private static McpSchemaCompilationException assertInputRejected(
 			String schema) {
 		return Assertions.assertThrows(McpSchemaCompilationException.class,
@@ -168,6 +217,12 @@ public class McpSchemaUseValidatorTests {
 			String schema) {
 		return Assertions.assertThrows(McpSchemaCompilationException.class,
 				() -> validateOutput(schema), schema);
+	}
+
+	private static McpSchemaCompilationException assertSchemaRejected(
+			String schema) {
+		return Assertions.assertThrows(McpSchemaCompilationException.class,
+				() -> validateSchema(schema), schema);
 	}
 
 	private static McpToolSchemaProfileProgram compile(String schema) {

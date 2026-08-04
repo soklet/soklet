@@ -149,16 +149,26 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 
 final class McpApplicationInvocation {
 	private final McpJsonRpcMessage.Request request;
+	private final McpEffectiveAdmissionIdentity admissionIdentity;
 	private final McpApplicationCancellation cancellation;
+	private final McpApplicationNotificationWriter notificationWriter;
 
 	McpApplicationInvocation(McpJsonRpcMessage.Request request,
-			McpApplicationCancellation cancellation) {
+			McpEffectiveAdmissionIdentity admissionIdentity,
+			McpApplicationCancellation cancellation,
+			McpApplicationNotificationWriter notificationWriter) {
 		this.request = requireNonNull(request);
+		this.admissionIdentity = requireNonNull(admissionIdentity);
 		this.cancellation = requireNonNull(cancellation);
+		this.notificationWriter = requireNonNull(notificationWriter);
 	}
 
 	McpJsonRpcMessage.Request request() {
 		return request;
+	}
+
+	McpEffectiveAdmissionIdentity admissionIdentity() {
+		return admissionIdentity;
 	}
 
 	boolean isCancellationRequested() {
@@ -168,6 +178,17 @@ final class McpApplicationInvocation {
 	Optional<StreamTerminationReason> cancellationReason() {
 		return cancellation.reason();
 	}
+
+	boolean sendNotification(McpJsonRpcMessage.Notification notification)
+			throws InterruptedException {
+		return notificationWriter.write(requireNonNull(notification));
+	}
+}
+
+@FunctionalInterface
+interface McpApplicationNotificationWriter {
+	boolean write(McpJsonRpcMessage.Notification notification)
+			throws InterruptedException;
 }
 
 record McpApplicationResponse(int status, String reason,
@@ -214,6 +235,11 @@ record McpApplicationResponse(int status, String reason,
 @FunctionalInterface
 interface McpApplicationResponseWriter {
 	boolean write(McpApplicationResponse response);
+
+	default boolean writeNotification(McpJsonRpcMessage.Notification notification)
+			throws InterruptedException {
+		return false;
+	}
 }
 
 record McpApplicationExecutionSnapshot(int configuredHandlerConcurrency,
@@ -252,6 +278,7 @@ final class McpApplicationExecution {
 	private final McpApplicationExecutionConfiguration configuration;
 	private final McpApplicationClock clock;
 	private final @Nullable McpProtocolDeadlineCycle protocolDeadlineCycle;
+	private final McpApplicationRequestInterceptor requestInterceptor;
 	private final ExecutorService handlerExecutor;
 	private final McpApplicationHandlerDispatcher dispatcher;
 	private final Object executionBoundaryLock;
@@ -286,9 +313,19 @@ final class McpApplicationExecution {
 			McpApplicationClock clock,
 			McpApplicationHandlerExecutorFactory executorFactory,
 			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle) {
+		this(configuration, clock, executorFactory, protocolDeadlineCycle,
+				McpApplicationRequestInterceptor.passThroughInstance());
+	}
+
+	McpApplicationExecution(McpApplicationExecutionConfiguration configuration,
+			McpApplicationClock clock,
+			McpApplicationHandlerExecutorFactory executorFactory,
+			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
+			McpApplicationRequestInterceptor requestInterceptor) {
 		this.configuration = requireNonNull(configuration);
 		this.clock = requireNonNull(clock);
 		this.protocolDeadlineCycle = protocolDeadlineCycle;
+		this.requestInterceptor = requireNonNull(requestInterceptor);
 		this.handlerExecutor = requireNonNull(requireNonNull(executorFactory).create(
 				configuration.handlerConcurrency()),
 				"The application handler executor factory returned null.");
@@ -321,11 +358,14 @@ final class McpApplicationExecution {
 	}
 
 	void dispatch(MicrohttpRequest transportRequest,
-			McpJsonRpcMessage.Request request, McpApplicationRequestHandler handler,
+			McpJsonRpcMessage.Request request,
+			McpEffectiveAdmissionIdentity admissionIdentity,
+			McpApplicationRequestHandler handler,
 			long deadlineNanos, McpApplicationResponseWriter responseWriter,
 			Runnable terminalCleanup) {
 		requireNonNull(transportRequest);
 		requireNonNull(request);
+		requireNonNull(admissionIdentity);
 		requireNonNull(handler);
 		requireNonNull(responseWriter);
 		requireNonNull(terminalCleanup);
@@ -336,8 +376,8 @@ final class McpApplicationExecution {
 		}
 
 		long exchangeId = exchangeSequence.incrementAndGet();
-		Exchange exchange = new Exchange(exchangeId, transportRequest, request, handler,
-				deadlineNanos, responseWriter, terminalCleanup);
+		Exchange exchange = new Exchange(exchangeId, transportRequest, request,
+				admissionIdentity, handler, deadlineNanos, responseWriter, terminalCleanup);
 
 		McpApplicationHandlerDispatcher.Ticket ticket = dispatcher.newTicket(
 				exchange::runHandler, exchange::submissionFailed);
@@ -371,6 +411,10 @@ final class McpApplicationExecution {
 
 	void recordProtocolDeadlineExpiration() {
 		protocolDeadlineExpirations.incrementAndGet();
+		deadlineExpirations.incrementAndGet();
+	}
+
+	void recordStreamDeadlineExpiration() {
 		deadlineExpirations.incrementAndGet();
 	}
 
@@ -524,6 +568,7 @@ final class McpApplicationExecution {
 	private final class Exchange {
 		private final long exchangeId;
 		private final McpJsonRpcMessage.Request request;
+		private final McpEffectiveAdmissionIdentity admissionIdentity;
 		private final McpApplicationRequestHandler handler;
 		private final long deadlineNanos;
 		private final AtomicReference<TransportLease> transportLease;
@@ -532,14 +577,18 @@ final class McpApplicationExecution {
 		private final AtomicBoolean handlerRunning;
 		private final AtomicBoolean handlerFinished;
 		private TerminalState terminalState;
+		private boolean handlerEntryCommitted;
 		private McpApplicationHandlerDispatcher.@Nullable Ticket ticket;
 
 		private Exchange(long exchangeId, MicrohttpRequest transportRequest,
-				McpJsonRpcMessage.Request request, McpApplicationRequestHandler handler,
+				McpJsonRpcMessage.Request request,
+				McpEffectiveAdmissionIdentity admissionIdentity,
+				McpApplicationRequestHandler handler,
 				long deadlineNanos, McpApplicationResponseWriter responseWriter,
 				Runnable terminalCleanup) {
 			this.exchangeId = exchangeId;
 			this.request = request;
+			this.admissionIdentity = admissionIdentity;
 			this.handler = handler;
 			this.deadlineNanos = deadlineNanos;
 			this.transportLease = new AtomicReference<>(new TransportLease(
@@ -549,6 +598,7 @@ final class McpApplicationExecution {
 			this.handlerRunning = new AtomicBoolean();
 			this.handlerFinished = new AtomicBoolean();
 			this.terminalState = TerminalState.OPEN;
+			this.handlerEntryCommitted = false;
 		}
 
 		private void bindTicket(McpApplicationHandlerDispatcher.Ticket ticket) {
@@ -567,10 +617,34 @@ final class McpApplicationExecution {
 				if (!beginApplicationInvocation())
 					return;
 
-				McpWireResult result = handler.handle(
-						new McpApplicationInvocation(request, cancellation));
+				McpApplicationInvocation invocation = new McpApplicationInvocation(
+						request, admissionIdentity, cancellation, this::writeNotification);
+				AtomicBoolean handlerInvoked = new AtomicBoolean();
+				AtomicBoolean interceptorActive = new AtomicBoolean(true);
+				Thread interceptorThread = Thread.currentThread();
+				McpWireResult result;
+				try {
+					result = requestInterceptor.intercept(invocation, () -> {
+						if (!interceptorActive.get())
+							throw new IllegalStateException(
+									"An MCP interceptor continuation cannot be invoked after interception returns.");
+						if (Thread.currentThread() != interceptorThread)
+							throw new IllegalStateException(
+									"An MCP interceptor continuation must be invoked on the interceptor thread.");
+						if (!handlerInvoked.compareAndSet(false, true))
+							throw new IllegalStateException(
+									"An MCP interceptor continuation may be invoked only once.");
+						if (!commitDownstreamInvocation())
+							throw new InterruptedException(
+									"The MCP request was canceled before handler invocation.");
+						return handler.handle(invocation);
+					});
+				} finally {
+					interceptorActive.set(false);
+				}
 				if (result == null)
-					throw new IllegalStateException("An MCP application handler returned null.");
+					throw new IllegalStateException(
+							"An MCP application interceptor or handler returned null.");
 				respond(McpApplicationResponse.success(request.id(), result));
 			} catch (InterruptedException exception) {
 				Thread.currentThread().interrupt();
@@ -597,6 +671,33 @@ final class McpApplicationExecution {
 						if (terminalState != TerminalState.OPEN
 								|| cancellation.isCancellationRequested())
 							return false;
+					}
+				}
+			}
+
+			if (shutdown)
+				cancel(stoppingReason(), null);
+			return !shutdown;
+		}
+
+		private boolean commitDownstreamInvocation() {
+			if (clock.nanoTime() - deadlineNanos >= 0L) {
+				onDeadline(false);
+				return false;
+			}
+
+			boolean shutdown;
+			synchronized (executionBoundaryLock) {
+				shutdown = stopped.get();
+				if (!shutdown) {
+					synchronized (terminalLock) {
+						if (terminalState != TerminalState.OPEN
+								|| cancellation.isCancellationRequested())
+							return false;
+						if (handlerEntryCommitted)
+							throw new IllegalStateException(
+									"An MCP handler entry cannot be committed twice.");
+						handlerEntryCommitted = true;
 					}
 				}
 			}
@@ -665,6 +766,45 @@ final class McpApplicationExecution {
 				releaseResponseOwnership();
 			}
 			return accepted;
+		}
+
+		private boolean writeNotification(McpJsonRpcMessage.Notification notification)
+				throws InterruptedException {
+			requireNonNull(notification);
+			TransportLease lease;
+			boolean shutdown;
+			boolean deadlineExpired;
+			synchronized (executionBoundaryLock) {
+				shutdown = stopped.get();
+				if (!shutdown) {
+					deadlineExpired = clock.nanoTime() - deadlineNanos >= 0L;
+					if (!deadlineExpired) {
+						synchronized (terminalLock) {
+							if (terminalState != TerminalState.OPEN
+									|| cancellation.isCancellationRequested())
+								return false;
+							lease = requireNonNull(transportLease.get(),
+									"An open exchange must retain its transport lease.");
+						}
+					} else {
+						lease = null;
+					}
+				} else {
+					deadlineExpired = false;
+					lease = null;
+				}
+			}
+			if (shutdown) {
+				cancel(stoppingReason(), null);
+				return false;
+			}
+			if (deadlineExpired) {
+				onDeadline(false);
+				return false;
+			}
+
+			return requireNonNull(lease).responseWriter()
+					.writeNotification(notification);
 		}
 
 		private void cancel(StreamTerminationReason reason, @Nullable Throwable cause) {
