@@ -76,6 +76,25 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	McpRequestAdmissionPolicy getRequestAdmissionPolicy();
 
 	/**
+	 * Returns the server-level application-handler interceptor. When omitted
+	 * during construction this is {@link McpHandlerInterceptor#defaultInstance()}.
+	 *
+	 * @return handler interceptor
+	 */
+	@NonNull
+	McpHandlerInterceptor getHandlerInterceptor();
+
+	/**
+	 * Returns the server-level tool-output sanitizer. When omitted during
+	 * construction this is
+	 * {@link McpToolOutputSanitizer#passThroughInstance()}.
+	 *
+	 * @return tool-output sanitizer
+	 */
+	@NonNull
+	McpToolOutputSanitizer getToolOutputSanitizer();
+
+	/**
 	 * Returns the optional limiter applied once to every admitted request or
 	 * notification.
 	 *
@@ -177,6 +196,10 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		private McpHandlerResolver handlerResolver;
 		@Nullable
 		private McpRequestAdmissionPolicy requestAdmissionPolicy;
+		@NonNull
+		private McpHandlerInterceptor handlerInterceptor;
+		@NonNull
+		private McpToolOutputSanitizer toolOutputSanitizer;
 		@Nullable
 		private CorsAuthorizer corsAuthorizer;
 		@Nullable
@@ -201,6 +224,9 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 			this.absentOriginPolicy = McpAbsentOriginPolicy.ALLOW;
 			this.allowedHosts = Set.of();
 			this.rateLimiterRegistry = McpRateLimiterRegistry.emptyInstance();
+			this.handlerInterceptor = McpHandlerInterceptor.defaultInstance();
+			this.toolOutputSanitizer =
+					McpToolOutputSanitizer.passThroughInstance();
 		}
 
 		/**
@@ -349,6 +375,36 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		}
 
 		/**
+		 * Configures the server-level application-handler interceptor. The default
+		 * invokes the downstream continuation without transforming its result. Soklet
+		 * may invoke one interceptor instance concurrently for independent handlers.
+		 *
+		 * @param handlerInterceptor application-owned handler interceptor
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder handlerInterceptor(
+				@NonNull McpHandlerInterceptor handlerInterceptor) {
+			this.handlerInterceptor = requireNonNull(handlerInterceptor);
+			return this;
+		}
+
+		/**
+		 * Configures the server-level complete tool-output sanitizer. The default
+		 * preserves output unchanged. Soklet may invoke one sanitizer instance
+		 * concurrently for independent tool calls.
+		 *
+		 * @param toolOutputSanitizer application-owned tool-output sanitizer
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder toolOutputSanitizer(
+				@NonNull McpToolOutputSanitizer toolOutputSanitizer) {
+			this.toolOutputSanitizer = requireNonNull(toolOutputSanitizer);
+			return this;
+		}
+
+		/**
 		 * Configures the optional limiter applied once to every admitted MCP
 		 * request or notification.
 		 *
@@ -471,7 +527,8 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 					this.requestHandlerQueueCapacity, this.requestTimeout,
 					this.requestHandlerExecutorServiceSupplier,
 					this.handlerResolver,
-					this.requestAdmissionPolicy, this.corsAuthorizer,
+					this.requestAdmissionPolicy, this.handlerInterceptor,
+					this.toolOutputSanitizer, this.corsAuthorizer,
 					this.absentOriginPolicy, this.allowedHosts,
 					this.requestRateLimiter, this.toolRateLimiter,
 					this.rateLimiterRegistry);

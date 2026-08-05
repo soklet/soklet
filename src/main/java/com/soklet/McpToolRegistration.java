@@ -69,6 +69,8 @@ public final class McpToolRegistration<A> {
 	@Nullable
 	private final McpSchema outputSchema;
 	@Nullable
+	private final McpRuntimeTypedSchemaBridge<?> outputSchemaBridge;
+	@Nullable
 	private final McpToolAnnotations annotations;
 	@Nullable
 	private final String rateLimiterName;
@@ -110,6 +112,7 @@ public final class McpToolRegistration<A> {
 		this.inputSchema = state.inputSchema;
 		this.outputType = state.outputType;
 		this.outputSchema = state.outputSchema;
+		this.outputSchemaBridge = state.outputSchemaBridge;
 		this.annotations = state.annotations;
 		this.rateLimiterName = state.rateLimiterName;
 		this.rateLimiter = state.rateLimiter;
@@ -258,6 +261,17 @@ public final class McpToolRegistration<A> {
 				new DefaultToolCallContext<>(arguments, rawArguments);
 		return requireNonNull(this.handler.handle(request, call, features),
 				"The MCP tool handler returned null.");
+	}
+
+	/**
+	 * Validates structured output against the compiled schema retained by a
+	 * typed-completion registration. Advanced registrations have no output
+	 * schema and therefore accept every structured JSON value here.
+	 */
+	boolean isStructuredOutputValid(@NonNull McpJsonValue structuredOutput) {
+		requireNonNull(structuredOutput);
+		return this.outputSchemaBridge == null
+				|| this.outputSchemaBridge.isValid(structuredOutput);
 	}
 
 	@NonNull
@@ -465,7 +479,8 @@ public final class McpToolRegistration<A> {
 				R result = requireNonNull(
 						handler.handle(request, call, features),
 						"The MCP complete tool handler returned null.");
-				McpJsonValue structuredContent = this.outputBridge.encode(result);
+				McpJsonValue structuredContent =
+						this.outputBridge.encodeForDeferredValidation(result);
 				return McpCompleteResult.fromToolStructuredContent(
 						structuredContent);
 			};
@@ -474,6 +489,7 @@ public final class McpToolRegistration<A> {
 					new McpSchema(this.inputBridge.getSchemaDocument()),
 					this.resultType,
 					new McpSchema(this.outputBridge.getSchemaDocument()),
+					this.outputBridge,
 					normalizedHandler, this.inputBridge::decode);
 			return new CompleteBuilder<>(state);
 		}
@@ -514,7 +530,7 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		public Builder<A> handler(@NonNull McpToolHandler<A> handler) {
 			RegistrationState<A> state = new RegistrationState<>(this.name,
-					this.argumentType, this.inputSchema, null, null,
+					this.argumentType, this.inputSchema, null, null, null,
 					requireNonNull(handler), this.argumentDecoder);
 			return new Builder<>(state);
 		}
@@ -805,6 +821,8 @@ public final class McpToolRegistration<A> {
 		private final Type outputType;
 		@Nullable
 		private final McpSchema outputSchema;
+		@Nullable
+		private final McpRuntimeTypedSchemaBridge<?> outputSchemaBridge;
 		@NonNull
 		private final McpToolHandler<A> handler;
 		@NonNull
@@ -828,6 +846,7 @@ public final class McpToolRegistration<A> {
 		private RegistrationState(@NonNull String name,
 				@NonNull Type argumentType, @NonNull McpSchema inputSchema,
 				@Nullable Type outputType, @Nullable McpSchema outputSchema,
+				@Nullable McpRuntimeTypedSchemaBridge<?> outputSchemaBridge,
 				@NonNull McpToolHandler<A> handler,
 				@NonNull ArgumentDecoder<A> argumentDecoder) {
 			this.name = requireNonNull(name);
@@ -835,11 +854,14 @@ public final class McpToolRegistration<A> {
 			this.inputSchema = requireNonNull(inputSchema);
 			this.outputType = outputType;
 			this.outputSchema = outputSchema;
+			this.outputSchemaBridge = outputSchemaBridge;
 			this.handler = requireNonNull(handler);
 			this.argumentDecoder = requireNonNull(argumentDecoder);
-			if ((this.outputType == null) != (this.outputSchema == null))
+			if ((this.outputType == null) != (this.outputSchema == null)
+					|| (this.outputSchema == null)
+					!= (this.outputSchemaBridge == null))
 				throw new IllegalArgumentException(
-						"Output type and schema must be present together.");
+						"Output type, schema, and bridge must be present together.");
 		}
 	}
 }

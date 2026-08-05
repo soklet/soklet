@@ -316,6 +316,11 @@ class McpToolRegistrationTests {
 			}
 
 			@Override
+			public Optional<String> getOperationName() {
+				return Optional.empty();
+			}
+
+			@Override
 			public Optional<McpImplementation> getClientInfo() {
 				return Optional.empty();
 			}

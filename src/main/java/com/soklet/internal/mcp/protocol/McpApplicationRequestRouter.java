@@ -614,17 +614,21 @@ final class McpApplicationInvocation {
 	private final McpApplicationCancellation cancellation;
 	@NonNull
 	private final McpApplicationNotificationWriter notificationWriter;
+	@NonNull
+	private final McpApplicationHandlerEntryGuard handlerEntryGuard;
 
 	McpApplicationInvocation(@Nullable Request sokletRequest,
 			McpJsonRpcMessage.@NonNull Request request,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull McpApplicationCancellation cancellation,
-			@NonNull McpApplicationNotificationWriter notificationWriter) {
+			@NonNull McpApplicationNotificationWriter notificationWriter,
+			@NonNull McpApplicationHandlerEntryGuard handlerEntryGuard) {
 		this.sokletRequest = sokletRequest;
 		this.request = requireNonNull(request);
 		this.admissionIdentity = requireNonNull(admissionIdentity);
 		this.cancellation = requireNonNull(cancellation);
 		this.notificationWriter = requireNonNull(notificationWriter);
+		this.handlerEntryGuard = requireNonNull(handlerEntryGuard);
 	}
 
 	McpJsonRpcMessage.@NonNull Request request() {
@@ -654,6 +658,10 @@ final class McpApplicationInvocation {
 			throws InterruptedException {
 		return notificationWriter.write(requireNonNull(notification));
 	}
+
+	void requireHandlerEntry() throws InterruptedException {
+		handlerEntryGuard.requireEntry();
+	}
 }
 
 /**
@@ -664,6 +672,18 @@ final class McpApplicationInvocation {
 interface McpApplicationNotificationWriter {
 	boolean write(McpJsonRpcMessage.@NonNull Notification notification)
 			throws InterruptedException;
+}
+
+/**
+ * Commits entry into the public application handler at the request's current
+ * cancellation and deadline boundary.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+@FunctionalInterface
+interface McpApplicationHandlerEntryGuard {
+	void requireEntry() throws InterruptedException;
 }
 
 /**
@@ -1174,6 +1194,7 @@ final class McpApplicationExecution {
 		@NonNull
 		private TerminalState terminalState;
 		private boolean handlerEntryCommitted;
+		private boolean publicHandlerEntryCommitted;
 		private McpApplicationHandlerDispatcher.@Nullable Ticket ticket;
 
 		private Exchange(long exchangeId, @NonNull MicrohttpRequest transportRequest,
@@ -1200,6 +1221,7 @@ final class McpApplicationExecution {
 			this.handlerFinished = new AtomicBoolean();
 			this.terminalState = TerminalState.OPEN;
 			this.handlerEntryCommitted = false;
+			this.publicHandlerEntryCommitted = false;
 		}
 
 		private void bindTicket(
@@ -1221,7 +1243,7 @@ final class McpApplicationExecution {
 
 				McpApplicationInvocation invocation = new McpApplicationInvocation(
 						sokletRequest, request, admissionIdentity, cancellation,
-						this::writeNotification);
+						this::writeNotification, this::requirePublicHandlerEntry);
 				AtomicBoolean handlerInvoked = new AtomicBoolean();
 				AtomicBoolean interceptorActive = new AtomicBoolean(true);
 				Thread interceptorThread = Thread.currentThread();
@@ -1315,6 +1337,40 @@ final class McpApplicationExecution {
 			if (shutdown)
 				cancel(stoppingReason(), null);
 			return !shutdown;
+		}
+
+		private void requirePublicHandlerEntry() throws InterruptedException {
+			if (clock.nanoTime() - deadlineNanos >= 0L) {
+				onDeadline(false);
+				throw new InterruptedException(
+						"The MCP request deadline expired before public handler entry.");
+			}
+
+			boolean shutdown;
+			synchronized (executionBoundaryLock) {
+				shutdown = stopped.get();
+				if (!shutdown) {
+					synchronized (terminalLock) {
+						if (terminalState != TerminalState.OPEN
+								|| cancellation.isCancellationRequested())
+							throw new InterruptedException(
+									"The MCP request was canceled before public handler entry.");
+						if (!handlerEntryCommitted)
+							throw new IllegalStateException(
+									"Public MCP handler entry requires a committed downstream invocation.");
+						if (publicHandlerEntryCommitted)
+							throw new IllegalStateException(
+									"Public MCP handler entry cannot be committed twice.");
+						publicHandlerEntryCommitted = true;
+					}
+				}
+			}
+
+			if (shutdown) {
+				cancel(stoppingReason(), null);
+				throw new InterruptedException(
+						"The MCP server stopped before public handler entry.");
+			}
 		}
 
 		private void submissionFailed(@NonNull Throwable throwable) {

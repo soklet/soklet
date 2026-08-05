@@ -179,9 +179,9 @@ class McpRequestPropagationTests {
 			@NonNull McpJsonObject metadata) {
 		return new ToolInvocation(request, endpoint(), Map.of(), "tools/call",
 				McpRequestId.fromString("request"), "2026-07-28", "propagation",
-				Optional.empty(), McpJsonObject.emptyInstance(), metadata,
-				McpAdmissionIdentity.anonymousInstance(),
-				McpJsonObject.emptyInstance());
+					Optional.empty(), McpJsonObject.emptyInstance(), metadata,
+					McpAdmissionIdentity.anonymousInstance(),
+					McpJsonObject.emptyInstance(), () -> {});
 	}
 
 	private static McpEndpoint endpoint() {

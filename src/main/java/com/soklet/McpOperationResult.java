@@ -19,10 +19,12 @@ package com.soklet;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Open result spine for programmatic MCP handlers.
+ * Open result spine for programmatic MCP handlers and handler interception.
  *
- * <p>Soklet accepts only framework-recognized implementations. Applications
- * should not implement this interface directly.
+ * <p>Soklet accepts only framework-recognized implementations, including
+ * {@link McpCompleteResult} and {@link McpResourcePage}. Applications should
+ * not implement this interface directly. Each MCP method accepts only its
+ * corresponding result implementation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

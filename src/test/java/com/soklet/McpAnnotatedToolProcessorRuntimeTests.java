@@ -169,6 +169,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				AtomicInteger endpointLimiterInvocations = new AtomicInteger();
 				AtomicInteger toolLimiterInvocations = new AtomicInteger();
 				AtomicInteger fallbackLimiterInvocations = new AtomicInteger();
+				AtomicInteger handlerInterceptorInvocations = new AtomicInteger();
 				McpRateLimiterRegistry registry = McpRateLimiterRegistry.builder()
 						.rateLimiter("catalog-endpoint", context -> {
 							endpointLimiterInvocations.incrementAndGet();
@@ -182,7 +183,12 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				McpServer server = serverBuilder(resolver, context -> {
 					fallbackLimiterInvocations.incrementAndGet();
 					return McpRateLimitDecision.fromAllowed();
-				}).rateLimiterRegistry(registry).build();
+				}).rateLimiterRegistry(registry)
+						.handlerInterceptor((context, invocation) -> {
+							handlerInterceptorInvocations.incrementAndGet();
+							return invocation.invoke();
+						})
+						.build();
 				try {
 					server.start();
 					int port = server.getDiagnostics().getBoundAddress()
@@ -200,6 +206,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					Assertions.assertTrue(listResponse.body().contains(
 							"\"query-text\""), listResponse.body());
 					Assertions.assertEquals(0, providedInstances.get());
+					Assertions.assertEquals(0,
+							handlerInterceptorInvocations.get());
 
 					HttpResponse<String> promptListResponse = send(port,
 							"prompts/list",
@@ -217,6 +225,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							"\"name\":\"subject\""),
 							promptListResponse.body());
 					Assertions.assertEquals(0, providedInstances.get());
+					Assertions.assertEquals(0,
+							handlerInterceptorInvocations.get());
 
 					HttpResponse<String> callResponse = send(port, "tools/call",
 							"{\"jsonrpc\":\"2.0\",\"id\":\"annotated-call\","
@@ -242,6 +252,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					Assertions.assertEquals(1, toolLimiterInvocations.get());
 					Assertions.assertEquals(0,
 							fallbackLimiterInvocations.get());
+					Assertions.assertEquals(1,
+							handlerInterceptorInvocations.get());
 
 					HttpResponse<String> promptResponse = send(port, "prompts/get",
 							"{\"jsonrpc\":\"2.0\",\"id\":\"annotated-prompt\","
@@ -260,6 +272,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					Assertions.assertEquals(1, toolLimiterInvocations.get());
 					Assertions.assertEquals(0,
 							fallbackLimiterInvocations.get());
+					Assertions.assertEquals(2,
+							handlerInterceptorInvocations.get());
 				} finally {
 					server.stop();
 				}

@@ -26,6 +26,8 @@ com.soklet.McpEmbeddedResource
 com.soklet.McpEmbeddedResource$Builder
 com.soklet.McpEndpoint
 com.soklet.McpEndpoint$Builder
+com.soklet.McpHandlerInterceptor
+com.soklet.McpHandlerInvocation
 com.soklet.McpHandlerResolver
 com.soklet.McpIcon
 com.soklet.McpIcon$Builder
@@ -106,6 +108,7 @@ com.soklet.McpToolCallContext
 com.soklet.McpToolHandler
 com.soklet.McpToolOutput
 com.soklet.McpToolOutput$Builder
+com.soklet.McpToolOutputSanitizer
 com.soklet.McpToolRegistration
 com.soklet.McpToolRegistration$Builder
 com.soklet.McpToolRegistration$CompleteBuilder

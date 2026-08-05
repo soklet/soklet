@@ -39,7 +39,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class McpResourcePage {
+public final class McpResourcePage implements McpOperationResult {
 	@NonNull
 	private final List<@NonNull McpResourceDescriptor> resources;
 	@NonNull

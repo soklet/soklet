@@ -724,6 +724,18 @@ public final class McpServerRuntimeBridge {
 	}
 
 	/**
+	 * Internal-only guard that commits entry into a public application handler.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	@FunctionalInterface
+	public interface HandlerEntryGuard {
+		/** Commits handler entry or fails when the request is no longer active. */
+		void requireEntry() throws InterruptedException;
+	}
+
+	/**
 	 * Erased invocation input for one resource read.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -739,7 +751,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull String uri,
-			@NonNull Map<@NonNull String, @NonNull String> templateVariables) {
+			@NonNull Map<@NonNull String, @NonNull String> templateVariables,
+			@NonNull HandlerEntryGuard handlerEntryGuard) {
 		/** Validates and snapshots the erased invocation. */
 		public ResourceInvocation {
 			requireNonNull(request);
@@ -759,6 +772,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(admissionIdentity);
 			uri = McpProtocolSupport.requireNonBlank(uri, "Resource URI");
 			templateVariables = Map.copyOf(requireNonNull(templateVariables));
+			requireNonNull(handlerEntryGuard);
 		}
 	}
 
@@ -778,7 +792,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull Optional<@NonNull String> cursor,
-			@NonNull List<@NonNull McpJsonObject> registeredResourceDescriptors) {
+			@NonNull List<@NonNull McpJsonObject> registeredResourceDescriptors,
+			@NonNull HandlerEntryGuard handlerEntryGuard) {
 		/** Validates and snapshots the erased invocation. */
 		public ResourceListInvocation {
 			requireNonNull(request);
@@ -797,6 +812,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(cursor);
 			registeredResourceDescriptors = List.copyOf(
 					requireNonNull(registeredResourceDescriptors));
+			requireNonNull(handlerEntryGuard);
 		}
 	}
 
@@ -977,7 +993,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject clientCapabilitiesJson,
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpAdmissionIdentity admissionIdentity,
-			@NonNull McpJsonObject rawArguments) {
+			@NonNull McpJsonObject rawArguments,
+			@NonNull HandlerEntryGuard handlerEntryGuard) {
 		public ToolInvocation {
 			requireNonNull(request);
 			requireNonNull(endpoint);
@@ -995,6 +1012,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(requestMetadata);
 			requireNonNull(admissionIdentity);
 			requireNonNull(rawArguments);
+			requireNonNull(handlerEntryGuard);
 		}
 
 		@Override
@@ -1025,7 +1043,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject clientCapabilitiesJson,
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpAdmissionIdentity admissionIdentity,
-			@NonNull McpJsonObject rawArguments) {
+			@NonNull McpJsonObject rawArguments,
+			@NonNull HandlerEntryGuard handlerEntryGuard) {
 		public PromptInvocation {
 			requireNonNull(request);
 			requireNonNull(endpoint);
@@ -1043,6 +1062,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(requestMetadata);
 			requireNonNull(admissionIdentity);
 			requireNonNull(rawArguments);
+			requireNonNull(handlerEntryGuard);
 		}
 
 		@Override
@@ -1111,7 +1131,8 @@ public final class McpServerRuntimeBridge {
 		}
 
 		/**
-		 * Explicit advanced result fields preserved without synthesized content.
+		 * Complete tool-result fields. The bridge may append the configured
+		 * structured-content compatibility mirror before wire serialization.
 		 *
 		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 		 */
@@ -1352,7 +1373,8 @@ public final class McpServerRuntimeBridge {
 						requestMetadata.clientCapabilities().toJsonObject()),
 				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
-				(McpJsonObject) toPublic(arguments));
+				(McpJsonObject) toPublic(arguments),
+				invocation::requireHandlerEntry);
 		ToolInvocationResult result = requireNonNull(
 				toolPlan.invoker().invoke(toolInvocation),
 				"The MCP tool invoker returned null.");
@@ -1365,6 +1387,8 @@ public final class McpServerRuntimeBridge {
 		if (result instanceof ToolInvocationResult.Complete complete) {
 			resultFields = (com.soklet.internal.mcp.protocol.McpJsonObject)
 					toInternal(complete.resultFields());
+			if (toolPlan.mirrorStructuredContentAsText())
+				resultFields = withStructuredContentTextMirror(resultFields);
 			resultMetadata = (com.soklet.internal.mcp.protocol.McpJsonObject)
 					toInternal(complete.metadata());
 		} else if (result instanceof ToolInvocationResult.Structured structured) {
@@ -1399,6 +1423,38 @@ public final class McpServerRuntimeBridge {
 				metadata.isEmpty() ? Optional.empty() : Optional.of(metadata));
 	}
 
+	private static com.soklet.internal.mcp.protocol.@NonNull McpJsonObject
+	withStructuredContentTextMirror(
+			com.soklet.internal.mcp.protocol.@NonNull McpJsonObject resultFields) {
+		com.soklet.internal.mcp.protocol.McpJsonValue structuredContent =
+				resultFields.members().get("structuredContent");
+		if (structuredContent == null)
+			return resultFields;
+
+		com.soklet.internal.mcp.protocol.McpJsonValue contentValue =
+				resultFields.members().get("content");
+		if (!(contentValue instanceof com.soklet.internal.mcp.protocol.McpJsonArray
+				contentArray))
+			throw new IllegalArgumentException(
+					"MCP tool output content must be an array.");
+
+		List<com.soklet.internal.mcp.protocol.McpJsonValue> content =
+				new ArrayList<>(contentArray.values());
+		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> textBlock =
+				new LinkedHashMap<>();
+		textBlock.put("type",
+				new com.soklet.internal.mcp.protocol.McpJsonString("text"));
+		textBlock.put("text", new com.soklet.internal.mcp.protocol.McpJsonString(
+				CANONICAL_JSON_CODEC.toJson(structuredContent)));
+		content.add(new com.soklet.internal.mcp.protocol.McpJsonObject(textBlock));
+
+		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> fields =
+				new LinkedHashMap<>(resultFields.members());
+		fields.put("content",
+				new com.soklet.internal.mcp.protocol.McpJsonArray(content));
+		return new com.soklet.internal.mcp.protocol.McpJsonObject(fields);
+	}
+
 	@NonNull
 	private static McpWireResult invokePrompt(@NonNull PromptPlan promptPlan,
 			@NonNull McpApplicationInvocation invocation,
@@ -1421,7 +1477,8 @@ public final class McpServerRuntimeBridge {
 						requestMetadata.clientCapabilities().toJsonObject()),
 				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
-				(McpJsonObject) toPublic(arguments));
+				(McpJsonObject) toPublic(arguments),
+				invocation::requireHandlerEntry);
 		PromptInvocationResult result = requireNonNull(
 				promptPlan.invoker().invoke(promptInvocation),
 				"The MCP prompt invoker returned null.");
@@ -1462,7 +1519,8 @@ public final class McpServerRuntimeBridge {
 						requestMetadata.clientCapabilities().toJsonObject()),
 				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
-				internalInvocation.uri(), internalInvocation.templateVariables());
+				internalInvocation.uri(), internalInvocation.templateVariables(),
+				invocation::requireHandlerEntry);
 		ResourceInvocationResult result = requireNonNull(
 				resourcePlan.invoker().invoke(resourceInvocation),
 				"The MCP resource invoker returned null.");
@@ -1503,7 +1561,8 @@ public final class McpServerRuntimeBridge {
 						requestMetadata.clientCapabilities().toJsonObject()),
 				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
-				internalInvocation.cursor(), registeredDescriptors);
+				internalInvocation.cursor(), registeredDescriptors,
+				invocation::requireHandlerEntry);
 		ResourceListInvocationResult result = requireNonNull(
 				resourceListPlan.invoker().orElseThrow().invoke(listInvocation),
 				"The MCP resource-list invoker returned null.");

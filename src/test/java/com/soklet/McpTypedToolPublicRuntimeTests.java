@@ -59,6 +59,7 @@ public class McpTypedToolPublicRuntimeTests {
 		CountDownLatch firstHandlerEntered = new CountDownLatch(1);
 		CountDownLatch releaseFirstHandler = new CountDownLatch(1);
 		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger handlerInterceptorInvocations = new AtomicInteger();
 		AtomicInteger activeHandlers = new AtomicInteger();
 		AtomicInteger maximumActiveHandlers = new AtomicInteger();
 		AtomicInteger supplierInvocations = new AtomicInteger();
@@ -95,6 +96,10 @@ public class McpTypedToolPublicRuntimeTests {
 				.requestAdmissionPolicy(
 						McpRequestAdmissionPolicy.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.handlerInterceptor((context, invocation) -> {
+					handlerInterceptorInvocations.incrementAndGet();
+					return invocation.invoke();
+				})
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.requestHandlerConcurrency(1)
@@ -152,6 +157,8 @@ public class McpTypedToolPublicRuntimeTests {
 					.filter(response -> response.statusCode() == 503)
 					.count());
 			Assertions.assertEquals(2, handlerInvocations.get());
+			Assertions.assertEquals(2, handlerInterceptorInvocations.get(),
+					"A capacity-rejected request must not reach public interception.");
 			Assertions.assertEquals(1, maximumActiveHandlers.get(),
 					"A roomy custom executor must not bypass Soklet's slot bound.");
 			Assertions.assertEquals(1, supplierInvocations.get());
@@ -215,6 +222,17 @@ public class McpTypedToolPublicRuntimeTests {
 				})
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
+				.handlerInterceptor((context, invocation) -> {
+					String operation = context.getOperationName().orElseThrow();
+					stages.add("interceptor-before:" + operation);
+					McpOperationResult result = invocation.invoke();
+					stages.add("interceptor-after:" + operation);
+					return result;
+				})
+				.toolOutputSanitizer((request, toolName, rawArguments, output) -> {
+					stages.add("sanitizer:" + toolName);
+					return output;
+				})
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
@@ -273,7 +291,10 @@ public class McpTypedToolPublicRuntimeTests {
 			assertContains(structuredContent, "\"score\":7");
 			Assertions.assertEquals(List.of("admission:" + TOOL_NAME,
 					"request:" + TOOL_NAME, "tool:" + TOOL_NAME,
-					"handler:" + TOOL_NAME), stages);
+					"interceptor-before:" + TOOL_NAME,
+					"handler:" + TOOL_NAME,
+					"interceptor-after:" + TOOL_NAME,
+					"sanitizer:" + TOOL_NAME), stages);
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(new SearchArguments(" exact ", List.of(2, 5)),
 					observedArguments.get());
@@ -296,7 +317,8 @@ public class McpTypedToolPublicRuntimeTests {
 					"tools/call", TOOL_NAME);
 			assertError(invalidResponse, 400, -32602, "invalid-1");
 			Assertions.assertEquals(List.of("admission:" + TOOL_NAME,
-					"request:" + TOOL_NAME, "tool:" + TOOL_NAME), stages);
+					"request:" + TOOL_NAME, "tool:" + TOOL_NAME,
+					"interceptor-before:" + TOOL_NAME), stages);
 			Assertions.assertEquals(1, handlerInvocations.get());
 
 			stages.clear();

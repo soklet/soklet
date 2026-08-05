@@ -22,6 +22,7 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.AdmissionInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CachePlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CacheScope;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.HandlerEntryGuard;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptArgumentPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocationResult;
@@ -43,6 +44,7 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolPlan;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -57,6 +59,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 
@@ -80,6 +83,10 @@ final class DefaultMcpServer implements McpServer {
 	private final McpHandlerResolver handlerResolver;
 	@NonNull
 	private final McpRequestAdmissionPolicy requestAdmissionPolicy;
+	@NonNull
+	private final McpHandlerInterceptor handlerInterceptor;
+	@NonNull
+	private final McpToolOutputSanitizer toolOutputSanitizer;
 	@Nullable
 	private final McpRateLimiter requestRateLimiter;
 	@Nullable
@@ -103,6 +110,8 @@ final class DefaultMcpServer implements McpServer {
 					requestHandlerExecutorServiceSupplier,
 			@NonNull McpHandlerResolver handlerResolver,
 			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy,
+			@NonNull McpHandlerInterceptor handlerInterceptor,
+			@NonNull McpToolOutputSanitizer toolOutputSanitizer,
 			@Nullable CorsAuthorizer configuredCorsAuthorizer,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
 			@NonNull Set<@NonNull String> allowedHosts,
@@ -113,6 +122,8 @@ final class DefaultMcpServer implements McpServer {
 		this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
 		this.handlerResolver = requireNonNull(handlerResolver);
 		this.requestAdmissionPolicy = requireNonNull(requestAdmissionPolicy);
+		this.handlerInterceptor = requireNonNull(handlerInterceptor);
+		this.toolOutputSanitizer = requireNonNull(toolOutputSanitizer);
 		this.requestRateLimiter = requestRateLimiter;
 		this.toolRateLimiter = toolRateLimiter;
 		this.rateLimiterRegistry = requireNonNull(rateLimiterRegistry);
@@ -234,6 +245,18 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	public McpRequestAdmissionPolicy getRequestAdmissionPolicy() {
 		return this.requestAdmissionPolicy;
+	}
+
+	@Override
+	@NonNull
+	public McpHandlerInterceptor getHandlerInterceptor() {
+		return this.handlerInterceptor;
+	}
+
+	@Override
+	@NonNull
+	public McpToolOutputSanitizer getToolOutputSanitizer() {
+		return this.toolOutputSanitizer;
 	}
 
 	@Override
@@ -364,14 +387,17 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@NonNull
-	private static <A> ToolInvocationResult invokeTool(
+	private <A> ToolInvocationResult invokeTool(
 			@NonNull McpToolRegistration<A> tool,
 			@NonNull ToolInvocation invocation) throws Exception {
+		DefaultMcpRequestContext requestContext =
+				new DefaultMcpRequestContext(invocation);
 		McpOperationResult result;
 		try {
-			result = tool.invoke(new DefaultMcpRequestContext(invocation),
-					invocation.rawArguments(),
-					McpInvocationFeatures.fromFeatures(Map.of()));
+			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
+					() -> tool.invoke(
+							requestContext, invocation.rawArguments(),
+							McpInvocationFeatures.fromFeatures(Map.of())));
 		} catch (McpInvalidToolArgumentsException exception) {
 			return ToolInvocationResult.invalidInput();
 		}
@@ -383,26 +409,39 @@ final class DefaultMcpServer implements McpServer {
 		if (!(completeResult.getPayload() instanceof McpToolOutput output))
 			throw new IllegalArgumentException(
 					"An MCP tool handler must return tool output.");
+		McpToolOutput sanitizedOutput = requireNonNull(
+				this.toolOutputSanitizer.sanitize(requestContext, tool.getName(),
+						invocation.rawArguments(), output),
+				"The MCP tool-output sanitizer returned null.");
 
-		Optional<McpJsonValue> structuredContent = output.getStructuredContent();
-		if (structuredContent.isPresent() && output.getContent().isEmpty()
-				&& !output.isError())
+		Optional<McpJsonValue> structuredContent =
+				sanitizedOutput.getStructuredContent();
+		if (structuredContent.isPresent()
+				&& !tool.isStructuredOutputValid(structuredContent.orElseThrow()))
+			throw new IllegalArgumentException(
+					"MCP structured tool output does not satisfy its output schema.");
+		if (structuredContent.isPresent()
+				&& sanitizedOutput.getContent().isEmpty()
+				&& !sanitizedOutput.isError())
 			return ToolInvocationResult.structured(structuredContent.orElseThrow(),
 					completeResult.getMetadata());
 
-		return ToolInvocationResult.complete(toolOutputFields(output),
+		return ToolInvocationResult.complete(toolOutputFields(sanitizedOutput),
 				completeResult.getMetadata());
 	}
 
 	@NonNull
-	private static PromptInvocationResult invokePrompt(
+	private PromptInvocationResult invokePrompt(
 			@NonNull McpPromptRegistration prompt,
 			@NonNull PromptInvocation invocation) throws Exception {
+		DefaultMcpRequestContext requestContext =
+				new DefaultMcpRequestContext(invocation);
 		McpOperationResult result;
 		try {
-			result = prompt.invoke(new DefaultMcpRequestContext(invocation),
-					invocation.rawArguments(),
-					McpInvocationFeatures.fromFeatures(Map.of()));
+			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
+					() -> prompt.invoke(
+							requestContext, invocation.rawArguments(),
+							McpInvocationFeatures.fromFeatures(Map.of())));
 		} catch (McpInvalidPromptArgumentsException exception) {
 			return PromptInvocationResult.invalidInput();
 		}
@@ -420,17 +459,27 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@NonNull
-	private static ResourceInvocationResult invokeResource(
+	private ResourceInvocationResult invokeResource(
 			@NonNull McpResourceRegistration resource,
 			@NonNull ResourceInvocation invocation) throws Exception {
+		DefaultMcpRequestContext requestContext =
+				new DefaultMcpRequestContext(invocation);
 		McpOperationResult result;
 		try {
-			result = requireNonNull(resource.getHandler().handle(
-					new DefaultMcpRequestContext(invocation),
-					new DefaultMcpResourceReadContext(invocation),
-					McpInvocationFeatures.fromFeatures(Map.of())),
-					"The MCP resource handler returned null.");
-		} catch (McpJsonRpcException exception) {
+			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
+					() -> {
+						try {
+							return requireNonNull(
+									resource.getHandler().handle(requestContext,
+											new DefaultMcpResourceReadContext(invocation),
+											McpInvocationFeatures.fromFeatures(Map.of())),
+									"The MCP resource handler returned null.");
+						} catch (McpJsonRpcException exception) {
+							throw new ApplicationHandlerJsonRpcException(
+									exception.getError());
+						}
+					});
+		} catch (ApplicationHandlerJsonRpcException exception) {
 			McpJsonRpcError error = exception.getError();
 			return ResourceInvocationResult.jsonRpcError(error.getCode(),
 					error.getMessage(), error.getData());
@@ -449,26 +498,99 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@NonNull
-	private static ResourceListInvocationResult invokeResourceList(
+	private McpOperationResult interceptHandler(
+			@NonNull McpRequestContext requestContext,
+			@NonNull HandlerEntryGuard handlerEntryGuard,
+			@NonNull McpHandlerInvocation downstream) throws Exception {
+		requireNonNull(requestContext);
+		requireNonNull(handlerEntryGuard);
+		requireNonNull(downstream);
+		AtomicBoolean active = new AtomicBoolean(true);
+		AtomicBoolean invoked = new AtomicBoolean();
+		Thread interceptorThread = Thread.currentThread();
+		McpOperationResult result;
+		try {
+			result = this.handlerInterceptor.interceptHandler(requestContext, () -> {
+				if (!active.get())
+					throw new IllegalStateException(
+							"An MCP interceptor continuation cannot be invoked after interception returns.");
+				if (Thread.currentThread() != interceptorThread)
+					throw new IllegalStateException(
+							"An MCP interceptor continuation must be invoked on the interceptor thread.");
+				if (!invoked.compareAndSet(false, true))
+					throw new IllegalStateException(
+							"An MCP interceptor continuation may be invoked only once.");
+				handlerEntryGuard.requireEntry();
+				return requireNonNull(downstream.invoke(),
+						"The MCP downstream handler returned null.");
+			});
+		} finally {
+			active.set(false);
+		}
+		return requireNonNull(result,
+				"The MCP handler interceptor returned null.");
+	}
+
+	@NonNull
+	private ResourceListInvocationResult invokeResourceList(
 			@NonNull McpResourceListHandler handler,
 			@NonNull List<@NonNull McpResourceDescriptor> registeredDescriptors,
 			@NonNull ResourceListInvocation invocation) throws Exception {
-		McpResourcePage page;
+		DefaultMcpRequestContext requestContext =
+				new DefaultMcpRequestContext(invocation);
+		McpOperationResult result;
 		try {
-			page = requireNonNull(handler.handle(
-					new DefaultMcpRequestContext(invocation),
-					new DefaultMcpResourceListContext(invocation.cursor(),
-							registeredDescriptors),
-					McpInvocationFeatures.fromFeatures(Map.of())),
-					"The MCP resource-list handler returned null.");
-		} catch (McpJsonRpcException exception) {
+			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
+					() -> {
+						try {
+							return requireNonNull(
+									handler.handle(requestContext,
+											new DefaultMcpResourceListContext(
+													invocation.cursor(),
+													registeredDescriptors),
+											McpInvocationFeatures.fromFeatures(Map.of())),
+									"The MCP resource-list handler returned null.");
+						} catch (McpJsonRpcException exception) {
+							throw new ApplicationHandlerJsonRpcException(
+									exception.getError());
+						}
+					});
+		} catch (ApplicationHandlerJsonRpcException exception) {
 			McpJsonRpcError error = exception.getError();
 			return ResourceListInvocationResult.jsonRpcError(error.getCode(),
 					error.getMessage(), error.getData());
 		}
+		if (!(result instanceof McpResourcePage page))
+			throw new IllegalArgumentException(
+					"An MCP resource-list handler must return a resource page.");
 
 		return ResourceListInvocationResult.complete(resourcePageFields(page),
 				page.getMetadata());
+	}
+
+	/**
+	 * Internal control signal that distinguishes an intentional JSON-RPC error
+	 * thrown by an application handler from one thrown by its interceptor.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@NotThreadSafe
+	private static final class ApplicationHandlerJsonRpcException
+			extends Exception {
+		private static final long serialVersionUID = 1L;
+		@NonNull
+		private final McpJsonRpcError error;
+
+		private ApplicationHandlerJsonRpcException(
+				@NonNull McpJsonRpcError error) {
+			super(null, null, false, false);
+			this.error = requireNonNull(error);
+		}
+
+		@NonNull
+		private McpJsonRpcError getError() {
+			return this.error;
+		}
 	}
 
 	@NonNull
@@ -995,7 +1117,7 @@ final class DefaultMcpRateLimitContext implements McpRateLimitContext {
 }
 
 /**
- * Immutable public tool-handler request context projection.
+ * Immutable public application-handler request context projection.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -1018,6 +1140,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	@NonNull
 	private final String protocolVersion;
 	@NonNull
+	private final Optional<@NonNull String> operationName;
+	@NonNull
 	private final Optional<@NonNull McpImplementation> clientInformation;
 	@NonNull
 	private final McpJsonObject requestMetadata;
@@ -1035,6 +1159,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
 				invocation.requestId(), invocation.protocolVersion(),
+				Optional.of(invocation.operationName()),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(), invocation.admissionIdentity());
 	}
@@ -1044,6 +1169,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
 				invocation.requestId(), invocation.protocolVersion(),
+				Optional.of(invocation.operationName()),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(), invocation.admissionIdentity());
 	}
@@ -1053,6 +1179,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
 				invocation.requestId(), invocation.protocolVersion(),
+				Optional.of(invocation.operationName()),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(), invocation.admissionIdentity());
 	}
@@ -1062,6 +1189,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
 				invocation.requestId(), invocation.protocolVersion(),
+				Optional.empty(),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(), invocation.admissionIdentity());
 	}
@@ -1072,6 +1200,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
 			@NonNull String jsonRpcMethod, @NonNull McpRequestId requestId,
 			@NonNull String protocolVersion,
+			@NonNull Optional<@NonNull String> operationName,
 			@NonNull Optional<@NonNull McpImplementation> clientInformation,
 			@NonNull McpJsonObject clientCapabilitiesJson,
 			@NonNull McpJsonObject requestMetadata,
@@ -1083,6 +1212,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		this.jsonRpcMethod = requireNonNull(jsonRpcMethod);
 		this.requestId = requireNonNull(requestId);
 		this.protocolVersion = requireNonNull(protocolVersion);
+		this.operationName = requireNonNull(operationName);
 		this.clientInformation = requireNonNull(clientInformation);
 		this.requestMetadata = requireNonNull(requestMetadata);
 		this.admissionIdentity = requireNonNull(admissionIdentity);
@@ -1117,6 +1247,9 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	}
 	@Override public @NonNull String getProtocolVersion() {
 		return this.protocolVersion;
+	}
+	@Override public @NonNull Optional<@NonNull String> getOperationName() {
+		return this.operationName;
 	}
 	@Override public @NonNull Optional<@NonNull McpImplementation> getClientInfo() {
 		return this.clientInformation;

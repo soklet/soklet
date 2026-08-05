@@ -175,6 +175,24 @@ public final class McpRuntimeTypedSchemaBridge<T> {
 		return toPublic(internalValue);
 	}
 
+	/**
+	 * Encodes a Java value with the compiled intrinsic binding while deferring
+	 * schema evaluation to a later pipeline stage.
+	 *
+	 * <p>This production seam permits semantic tool-output sanitization to run
+	 * before the final value is evaluated against the advertised output schema.
+	 * Binding and public-JSON conversion remain synchronous and bounded.</p>
+	 *
+	 * @param value the Java value to encode
+	 * @return the encoded JSON value
+	 * @throws IllegalArgumentException if {@code value} is {@code null} or cannot
+	 *                                  be encoded by the compiled binding
+	 */
+	@NonNull
+	public McpJsonValue encodeForDeferredValidation(@NonNull T value) {
+		return toPublic(this.compiledSchema.toJson(value));
+	}
+
 	@NonNull
 	private McpSchemaValidationOutcome validationOutcome(
 			com.soklet.internal.mcp.protocol.@NonNull McpJsonValue value) {

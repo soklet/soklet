@@ -58,6 +58,19 @@ public interface McpRequestContext {
 	String getProtocolVersion();
 
 	/**
+	 * Returns the selected application operation: a tool name, prompt name, or
+	 * requested resource URI. Custom resource-list handling has no narrower
+	 * operation name.
+	 *
+	 * <p>This value is useful for application observation but is not safe as an
+	 * unbounded built-in metric label.</p>
+	 *
+	 * @return selected operation name, or the empty optional
+	 */
+	@NonNull
+	Optional<@NonNull String> getOperationName();
+
+	/**
 	 * Returns client implementation metadata supplied during initialization.
 	 * This value is informational and is not an authenticated identity.
 	 *

@@ -269,6 +269,9 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			@Override public String getProtocolVersion() {
 				return "2026-07-28";
 			}
+			@Override public Optional<String> getOperationName() {
+				return Optional.empty();
+			}
 			@Override public Optional<McpImplementation> getClientInfo() {
 				return Optional.empty();
 			}

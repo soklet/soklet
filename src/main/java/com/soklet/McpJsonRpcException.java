@@ -26,7 +26,9 @@ import static java.util.Objects.requireNonNull;
  * Signals an intentional client-visible JSON-RPC error from an MCP handler.
  *
  * <p>Unexpected application failures should be allowed to propagate normally
- * so Soklet can map them to its safe internal-error response.
+ * so Soklet can map them to its safe internal-error response. An exception
+ * thrown by an {@link McpHandlerInterceptor} is never treated as a handler
+ * error and fails closed even when it is an instance of this class.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
